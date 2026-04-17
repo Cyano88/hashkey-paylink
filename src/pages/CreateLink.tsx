@@ -11,26 +11,36 @@ import {
   Sparkles,
   Info,
 } from 'lucide-react'
-import { isAddress } from 'viem'
-import { cn, truncateAddress, formatHSK, copyToClipboard } from '../lib/utils'
+import { cn, truncateAddress, formatAmount, copyToClipboard, isValidRecipient } from '../lib/utils'
+import { CHAIN_META, type ChainKey } from '../lib/chains'
+
+const CHAINS: ChainKey[] = ['base', 'starknet', 'hashkey']
 
 export default function CreateLink() {
+  const [chain, setChain] = useState<ChainKey>('hashkey')
   const [to, setTo] = useState('')
   const [amt, setAmt] = useState('')
   const [memo, setMemo] = useState('')
   const [generatedLink, setGeneratedLink] = useState('')
   const [copied, setCopied] = useState(false)
 
+  const meta = CHAIN_META[chain]
+
   // Validation helpers
   const addrDirty = to.length > 0
   const amtDirty = amt.length > 0
-  const isValidAddr = isAddress(to)
+  const isValidAddr = isValidRecipient(to, chain)
   const isValidAmt = amtDirty && parseFloat(amt) > 0 && !isNaN(parseFloat(amt))
   const canGenerate = isValidAddr && isValidAmt
 
+  function handleChainSwitch(c: ChainKey) {
+    setChain(c)
+    setGeneratedLink('')
+  }
+
   function handleGenerate() {
     if (!canGenerate) return
-    const params = new URLSearchParams({ to, amt })
+    const params = new URLSearchParams({ to, amt, chain })
     if (memo.trim()) params.set('memo', memo.trim())
     setGeneratedLink(`${window.location.origin}/pay?${params.toString()}`)
   }
@@ -42,7 +52,6 @@ export default function CreateLink() {
     setTimeout(() => setCopied(false), 2500)
   }
 
-  // Reset form & link
   function handleReset() {
     setTo('')
     setAmt('')
@@ -51,25 +60,75 @@ export default function CreateLink() {
     setCopied(false)
   }
 
+  const addrErrorMsg =
+    chain === 'starknet'
+      ? 'Invalid Starknet address format'
+      : 'Invalid Ethereum address format'
+
   return (
     <div className="mx-auto max-w-lg animate-fade-in">
       {/* ── Hero ──────────────────────────────────────────────────────── */}
       <div className="mb-8 text-center">
         <span className="mb-4 inline-flex items-center gap-1.5 rounded-full border border-blue-100 bg-blue-50 px-3.5 py-1.5 text-xs font-semibold text-[#0071E3]">
           <Sparkles className="h-3.5 w-3.5" />
-          PayFi on HashKey Chain
+          Multi-Chain PayFi
         </span>
         <h1 className="text-3xl font-bold tracking-tight text-gray-900 sm:text-[2.25rem]">
-          Create a Payment Link
+          Create a Hash PayLink
         </h1>
         <p className="mt-2 text-[15px] text-gray-500 text-balance">
-          Request HSK from anyone — no app, no signup, just a link.
+          Request USDC or HSK from anyone — no app, no signup, just a link.
         </p>
       </div>
 
       {/* ── Form card ─────────────────────────────────────────────────── */}
       <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-card">
         <div className="space-y-5 p-6 sm:p-8">
+
+          {/* ── Tri-Chain Toggle ──────────────────────────────────────── */}
+          <div className="flex justify-center">
+            <div className="inline-flex items-center gap-1 rounded-xl border border-gray-200 bg-gray-100/80 p-1">
+              {CHAINS.map((c) => {
+                const m = CHAIN_META[c]
+                const isActive = chain === c
+                return (
+                  <button
+                    key={c}
+                    onClick={() => handleChainSwitch(c)}
+                    className={cn(
+                      'flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all duration-150',
+                      isActive
+                        ? m.toggleActive
+                        : 'text-gray-500 hover:text-gray-800',
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        'h-1.5 w-1.5 rounded-full transition-colors',
+                        isActive ? 'bg-white/80' : m.dotColor,
+                      )}
+                    />
+                    {m.label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Engine badge */}
+          <div className="flex justify-center">
+            <span
+              className={cn(
+                'inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-medium transition-all',
+                meta.badgeBorder,
+                meta.badgeBg,
+                meta.badgeText,
+              )}
+            >
+              <span className={cn('h-1.5 w-1.5 rounded-full', meta.dotColor)} />
+              {meta.engineLabel}
+            </span>
+          </div>
 
           {/* Recipient Address */}
           <fieldset className="space-y-1.5">
@@ -79,7 +138,7 @@ export default function CreateLink() {
             </label>
             <input
               type="text"
-              placeholder="0x..."
+              placeholder="0x…"
               value={to}
               onChange={(e) => {
                 setTo(e.target.value.trim())
@@ -99,7 +158,7 @@ export default function CreateLink() {
             />
             {addrDirty && !isValidAddr && (
               <p className="flex items-center gap-1 text-xs text-red-500">
-                <Info className="h-3 w-3" /> Invalid Ethereum address format
+                <Info className="h-3 w-3" /> {addrErrorMsg}
               </p>
             )}
             {isValidAddr && (
@@ -127,7 +186,7 @@ export default function CreateLink() {
                   setGeneratedLink('')
                 }}
                 className={cn(
-                  'w-full rounded-xl border bg-gray-50/60 px-4 py-3 pr-16 text-sm',
+                  'w-full rounded-xl border bg-gray-50/60 px-4 py-3 pr-20 text-sm',
                   'placeholder:text-gray-400 transition-all focus:bg-white focus:outline-none focus:ring-2',
                   amtDirty && !isValidAmt
                     ? 'border-red-300 focus:ring-red-100'
@@ -135,7 +194,7 @@ export default function CreateLink() {
                 )}
               />
               <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-gray-400">
-                HSK
+                {meta.asset}
               </span>
             </div>
             {amtDirty && !isValidAmt && (
@@ -213,13 +272,19 @@ export default function CreateLink() {
                 Preview
               </p>
               <div className="flex items-baseline gap-1.5">
-                <span className="text-2xl font-bold text-gray-900">{formatHSK(amt)}</span>
-                <span className="text-sm font-medium text-gray-500">HSK</span>
+                <span className="text-2xl font-bold text-gray-900">
+                  {formatAmount(amt, meta.decimals)}
+                </span>
+                <span className="text-sm font-medium text-gray-500">{meta.asset}</span>
               </div>
               <div className="flex gap-x-4 text-xs text-gray-500 flex-wrap">
                 <span>
                   To:{' '}
                   <span className="font-mono text-gray-700">{truncateAddress(to, 8)}</span>
+                </span>
+                <span>
+                  Chain:{' '}
+                  <span className="font-medium text-gray-700">{meta.label}</span>
                 </span>
                 {memo && (
                   <span>

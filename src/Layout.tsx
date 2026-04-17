@@ -19,17 +19,17 @@ export default function Layout() {
               ⬡
             </div>
             <span className="text-[15px] font-semibold tracking-tight text-gray-900">
-              HashKey{' '}
+              Hash{' '}
               <span className="text-[#0071E3]">PayLink</span>
             </span>
           </Link>
 
           {/* Right side */}
           <div className="flex items-center gap-3">
-            {/* Testnet badge */}
+            {/* Mainnet badge */}
             <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              Testnet · Chain 133
+              🟢 Mainnet
             </span>
 
             {/* RainbowKit connect button */}
@@ -57,16 +57,31 @@ export default function Layout() {
             <p className="text-center text-xs text-gray-400">
               Built on{' '}
               <a
-                href="https://hashkey-testnet.socialscan.io"
+                href="https://explorer.hsk.xyz"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="font-medium text-gray-500 underline-offset-2 hover:underline transition-colors"
               >
-                HashKey Chain Testnet
+                HashKey Chain
               </a>
               {' · '}
-              RPC: hashkey.drpc.org{' · '}
-              Chain ID 133
+              <a
+                href="https://basescan.org"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-gray-500 underline-offset-2 hover:underline transition-colors"
+              >
+                Base
+              </a>
+              {' · '}
+              <a
+                href="https://starkscan.co"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-gray-500 underline-offset-2 hover:underline transition-colors"
+              >
+                Starknet
+              </a>
             </p>
           </div>
         </footer>
