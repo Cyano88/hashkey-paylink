@@ -21,8 +21,10 @@ import {
   Copy,
   CheckCheck,
   Wallet,
+  AlertTriangle,
 } from 'lucide-react'
 import { CHAIN_META, type ChainKey } from '../lib/chains'
+import { useStarknet } from '../lib/StarknetContext'
 import {
   cn,
   truncateAddress,
@@ -30,7 +32,6 @@ import {
   memoToHex,
   encodeErc20Transfer,
   copyToClipboard,
-  isValidRecipient,
 } from '../lib/utils'
 
 const CHAINS: ChainKey[] = ['base', 'starknet', 'hashkey']
@@ -39,7 +40,7 @@ const CHAINS: ChainKey[] = ['base', 'starknet', 'hashkey']
 const STARKNET_RPC = 'https://starknet-mainnet.public.blastapi.io'
 
 async function pollStarknetReceipt(txHash: string, signal: AbortSignal): Promise<void> {
-  const deadline = Date.now() + 3 * 60_000 // 3-minute max
+  const deadline = Date.now() + 3 * 60_000
   while (Date.now() < deadline && !signal.aborted) {
     await new Promise((r) => setTimeout(r, 4000))
     if (signal.aborted) break
@@ -63,24 +64,32 @@ async function pollStarknetReceipt(txHash: string, signal: AbortSignal): Promise
       }
     } catch (err) {
       if ((err as Error)?.name === 'AbortError') break
-      // Keep polling on transient errors
     }
   }
-  if (!signal.aborted) return // treat timeout as accepted (optimistic)
+  if (!signal.aborted) return // optimistic accept on timeout
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
 export default function PaymentPage() {
   const [searchParams] = useSearchParams()
-  const to = searchParams.get('to') ?? ''
-  const amt = searchParams.get('amt') ?? ''
-  const memo = searchParams.get('memo') ?? ''
-  const chainParam = searchParams.get('chain') as ChainKey | null
 
-  // Active chain (pre-selected from URL, user can override)
+  // ── Parse URL params — support new ?evm=&stark= and legacy ?to=&chain= ──
+  const evmParam   = searchParams.get('evm')   ?? searchParams.get('to') ?? ''
+  const starkParam = searchParams.get('stark')  ?? ''
+  const amt        = searchParams.get('amt')    ?? ''
+  const memo       = searchParams.get('memo')   ?? ''
+
+  // Backward-compat: if old ?chain=starknet&to=0x... treat `to` as stark address
+  const legacyChain = searchParams.get('chain') as ChainKey | null
+  const resolvedStark = starkParam || (legacyChain === 'starknet' ? evmParam : '')
+  const resolvedEvm   = legacyChain === 'starknet' ? '' : evmParam
+
+  // ── Active chain (default: first chain that has an address) ─────────────
   const [chain, setChain] = useState<ChainKey>(() => {
-    if (chainParam === 'base' || chainParam === 'starknet' || chainParam === 'hashkey')
-      return chainParam
+    if (legacyChain === 'base' || legacyChain === 'starknet' || legacyChain === 'hashkey')
+      return legacyChain
+    if (resolvedEvm)   return 'hashkey'
+    if (resolvedStark) return 'starknet'
     return 'hashkey'
   })
 
@@ -103,29 +112,34 @@ export default function PaymentPage() {
   const { isLoading: isEvmConfirming, isSuccess: isEvmConfirmed } =
     useWaitForTransactionReceipt({ hash: evmTxHash })
 
-  // ── Starknet state ────────────────────────────────────────────────────────
-  const [starkAccount, setStarkAccount] = useState<string | null>(null)
-  const [starkTxHash, setStarkTxHash] = useState<string | null>(null)
-  const [isStarkConnecting, setIsStarkConnecting] = useState(false)
-  const [isStarkPending, setIsStarkPending] = useState(false)
-  const [isStarkConfirming, setIsStarkConfirming] = useState(false)
-  const [isStarkConfirmed, setIsStarkConfirmed] = useState(false)
-  const [starkError, setStarkError] = useState<string | null>(null)
+  // ── Starknet state (shared via context + local tx state) ─────────────────
+  const { address: starkAccount, isConnecting: isStarkConnecting, connect: connectStarknet } = useStarknet()
+  const [starkTxHash,       setStarkTxHash]       = useState<string | null>(null)
+  const [isStarkPending,    setIsStarkPending]     = useState(false)
+  const [isStarkConfirming, setIsStarkConfirming]  = useState(false)
+  const [isStarkConfirmed,  setIsStarkConfirmed]   = useState(false)
+  const [starkError,        setStarkError]         = useState<string | null>(null)
   const starkPollAbort = useRef<AbortController | null>(null)
 
-  // ── Derived state ────────────────────────────────────────────────────────
-  const isEvmChain = chain !== 'starknet'
+  // ── Derived ──────────────────────────────────────────────────────────────
+  const isEvmChain   = chain !== 'starknet'
   const targetChainId = chain === 'base' ? CHAIN_META.base.chainId : CHAIN_META.hashkey.chainId
   const isCorrectNetwork = isEvmChain ? chainId === targetChainId : true
-
-  const isValidParams =
-    isValidRecipient(to, chain) &&
-    !isNaN(parseFloat(amt)) &&
-    parseFloat(amt) > 0
-
   const meta = CHAIN_META[chain]
 
-  // ── Reset tx state when chain changes ────────────────────────────────────
+  // The recipient for the selected chain
+  const activeRecipient = chain === 'starknet' ? resolvedStark : resolvedEvm
+
+  // Safety net: Starknet selected but no stark address was provided
+  const missingStark = chain === 'starknet' && !resolvedStark
+
+  // Payer page is "valid" if we have at least one address + valid amount
+  const isValidParams =
+    !isNaN(parseFloat(amt)) &&
+    parseFloat(amt) > 0 &&
+    (isAddress(resolvedEvm) || !!resolvedStark)
+
+  // ── Reset tx state on chain switch ───────────────────────────────────────
   function handleChainSwitch(c: ChainKey) {
     setChain(c)
     resetEvmSend()
@@ -137,58 +151,31 @@ export default function PaymentPage() {
     starkPollAbort.current?.abort()
   }
 
-  // ── Auto-switch EVM network when connected ───────────────────────────────
+  // ── Auto-switch EVM network ───────────────────────────────────────────────
   useEffect(() => {
     if (isEvmChain && isConnected && !isCorrectNetwork && !isSwitching) {
       switchChain({ chainId: targetChainId })
     }
   }, [isEvmChain, isConnected, isCorrectNetwork, isSwitching, switchChain, targetChainId])
 
-  // ── Starknet connect ─────────────────────────────────────────────────────
-  async function connectStarknet() {
-    const provider = window.starknet
-    if (!provider) {
-      setStarkError('No Starknet wallet found. Install ArgentX or Braavos.')
-      return
-    }
-    setIsStarkConnecting(true)
-    setStarkError(null)
-    try {
-      const accounts = await provider.enable()
-      setStarkAccount(accounts[0] ?? provider.selectedAddress ?? null)
-    } catch {
-      setStarkError('Wallet connection rejected.')
-    } finally {
-      setIsStarkConnecting(false)
-    }
-  }
-
   // ── Payment handler ──────────────────────────────────────────────────────
   function handlePay() {
-    if (!isValidParams) return
+    if (!activeRecipient) return
 
     if (chain === 'base') {
-      // ERC-20 USDC transfer via EIP-7702 compatible wallet.
-      // Memo bytes are appended to calldata (stored on-chain, ignored by ERC-20 contract).
       const data = encodeErc20Transfer(
-        to as `0x${string}`,
+        activeRecipient as `0x${string}`,
         amt,
         CHAIN_META.base.decimals,
         memo,
       )
-      sendTransaction({
-        to: CHAIN_META.base.tokenAddress,
-        data,
-        value: 0n,
-        // Gas sponsorship via Coinbase Smart Wallet + VITE_COINBASE_PAYMASTER_URL
-        // is handled transparently by the wallet when connected with Coinbase Smart Wallet.
-      })
+      sendTransaction({ to: CHAIN_META.base.tokenAddress, data, value: 0n })
     } else if (chain === 'starknet') {
       handleStarknetPay()
     } else {
-      // HashKey Chain 177 — native HSK transfer
+      // HashKey: native HSK
       sendTransaction({
-        to: to as `0x${string}`,
+        to: activeRecipient as `0x${string}`,
         value: parseEther(amt),
         chainId: CHAIN_META.hashkey.chainId,
         ...(memo.trim() ? { data: memoToHex(memo.trim()) } : {}),
@@ -198,41 +185,25 @@ export default function PaymentPage() {
 
   async function handleStarknetPay() {
     const provider = window.starknet
-    if (!provider?.account) {
-      setStarkError('Wallet not connected.')
-      return
-    }
+    if (!provider?.account) { setStarkError('Wallet not connected.'); return }
     setIsStarkPending(true)
     setStarkError(null)
-
     try {
-      // Encode USDC amount as uint256 (low 128, high 128)
       const amountUnits = BigInt(Math.round(parseFloat(amt) * 1e6))
-      const low = '0x' + (amountUnits & BigInt('0xffffffffffffffffffffffffffffffff')).toString(16)
+      const low  = '0x' + (amountUnits & BigInt('0xffffffffffffffffffffffffffffffff')).toString(16)
       const high = '0x0'
-
-      // AVNU Paymaster: Starknet wallets supporting AVNU paymaster will
-      // sponsor gas automatically via the paymaster protocol (ERC-4337 on Starknet).
-      const result = await provider.account.execute([
-        {
-          contractAddress: CHAIN_META.starknet.tokenAddress,
-          entrypoint: 'transfer',
-          calldata: [to, low, high],
-        },
-      ])
-
+      const result = await provider.account.execute([{
+        contractAddress: CHAIN_META.starknet.tokenAddress,
+        entrypoint: 'transfer',
+        calldata: [resolvedStark, low, high],
+      }])
       setStarkTxHash(result.transaction_hash)
       setIsStarkPending(false)
       setIsStarkConfirming(true)
-
-      // Poll for L2 acceptance
       const ctrl = new AbortController()
       starkPollAbort.current = ctrl
       await pollStarknetReceipt(result.transaction_hash, ctrl.signal)
-      if (!ctrl.signal.aborted) {
-        setIsStarkConfirming(false)
-        setIsStarkConfirmed(true)
-      }
+      if (!ctrl.signal.aborted) { setIsStarkConfirming(false); setIsStarkConfirmed(true) }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Transaction rejected'
       setStarkError(msg.slice(0, 160))
@@ -249,13 +220,13 @@ export default function PaymentPage() {
     setTimeout(() => setHashCopied(false), 2000)
   }
 
-  // ── Unified success / tx state ───────────────────────────────────────────
-  const isConfirmed = chain === 'starknet' ? isStarkConfirmed : isEvmConfirmed
-  const txHash = chain === 'starknet' ? starkTxHash : evmTxHash
-  const isWalletPending = chain === 'starknet' ? isStarkPending : isEvmWalletPending
-  const isConfirming = chain === 'starknet' ? isStarkConfirming : isEvmConfirming
-  const isSendError = chain !== 'starknet' ? isEvmSendError : !!starkError
-  const sendErrorMsg =
+  // ── Unified state aliases ────────────────────────────────────────────────
+  const isConfirmed    = chain === 'starknet' ? isStarkConfirmed      : isEvmConfirmed
+  const txHash         = chain === 'starknet' ? starkTxHash           : evmTxHash
+  const isWalletPending = chain === 'starknet' ? isStarkPending        : isEvmWalletPending
+  const isConfirming   = chain === 'starknet' ? isStarkConfirming     : isEvmConfirming
+  const isSendError    = chain !== 'starknet' ? isEvmSendError        : !!starkError
+  const sendErrorMsg   =
     chain === 'starknet'
       ? starkError
       : (evmSendError?.message ?? 'An unknown error occurred').slice(0, 140)
@@ -263,7 +234,7 @@ export default function PaymentPage() {
   // ────────────────────────────────────────────────────────────────────────────
   //  INVALID PARAMS STATE
   // ────────────────────────────────────────────────────────────────────────────
-  if (!isValidRecipient(to, 'hashkey') && !isValidRecipient(to, 'starknet') && !to) {
+  if (!isValidParams) {
     return (
       <div className="mx-auto max-w-md animate-fade-in">
         <div className="overflow-hidden rounded-2xl border border-red-100 bg-white shadow-card">
@@ -280,7 +251,7 @@ export default function PaymentPage() {
             <p className="mb-4 text-xs text-gray-400">
               A valid link looks like:{' '}
               <code className="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-[11px] text-gray-600">
-                /pay?to=0x…&amp;amt=10&amp;chain=base&amp;memo=Coffee
+                /pay?evm=0x…&amp;amt=10&amp;memo=Coffee
               </code>
             </p>
             <Link
@@ -300,10 +271,7 @@ export default function PaymentPage() {
   //  SUCCESS STATE
   // ────────────────────────────────────────────────────────────────────────────
   if (isConfirmed && txHash) {
-    const explorerTxUrl =
-      chain === 'starknet'
-        ? `${CHAIN_META.starknet.explorerUrl}/tx/${txHash}`
-        : `${meta.explorerUrl}/tx/${txHash}`
+    const explorerTxUrl = `${meta.explorerUrl}/tx/${txHash}`
 
     return (
       <div className="mx-auto max-w-md animate-scale-in">
@@ -328,22 +296,18 @@ export default function PaymentPage() {
           {/* Details */}
           <div className="p-6 space-y-4">
             <div className="divide-y divide-gray-100 rounded-xl border border-gray-100 bg-gray-50/60 overflow-hidden">
-              <Row label="Amount" value={`${formatAmount(amt, meta.decimals)} ${meta.asset}`} mono={false} />
-              <Row label="Recipient" value={truncateAddress(to, 8)} mono />
-              <Row label="Network" value={meta.label} mono={false} />
+              <Row label="Amount"    value={`${formatAmount(amt, meta.decimals)} ${meta.asset}`} mono={false} />
+              <Row label="Recipient" value={truncateAddress(activeRecipient, 8)} mono />
+              <Row label="Network"   value={meta.label} mono={false} />
               {memo && <Row label="Memo" value={`"${memo}"`} mono={false} />}
               <div className="flex items-center justify-between px-4 py-3">
                 <span className="text-sm text-gray-500">Tx Hash</span>
                 <div className="flex items-center gap-2">
-                  <span className="font-mono text-xs text-gray-700">
-                    {truncateAddress(txHash, 8)}
-                  </span>
+                  <span className="font-mono text-xs text-gray-700">{truncateAddress(txHash, 8)}</span>
                   <button onClick={handleCopyHash} className="text-gray-400 hover:text-gray-600 transition-colors">
-                    {hashCopied ? (
-                      <CheckCheck className="h-3.5 w-3.5 text-emerald-500" />
-                    ) : (
-                      <Copy className="h-3.5 w-3.5" />
-                    )}
+                    {hashCopied
+                      ? <CheckCheck className="h-3.5 w-3.5 text-emerald-500" />
+                      : <Copy className="h-3.5 w-3.5" />}
                   </button>
                 </div>
               </div>
@@ -390,31 +354,37 @@ export default function PaymentPage() {
         className="overflow-hidden rounded-2xl border bg-white transition-all duration-300"
         style={{
           boxShadow: `0 4px 24px -4px rgba(0,0,0,0.08), ${meta.glowStyle}`,
-          borderColor: meta.accentColor + '26', // 15% opacity
+          borderColor: meta.accentColor + '26',
         }}
       >
-        {/* ── Tri-Chain Toggle (top of card) ─────────────────────────── */}
+        {/* ── Tri-Chain Toggle ─────────────────────────────────────────── */}
         <div className="flex justify-center pt-5 pb-0 px-6">
           <div className="inline-flex items-center gap-1 rounded-xl border border-gray-200 bg-gray-100/80 p-1">
             {CHAINS.map((c) => {
               const m = CHAIN_META[c]
               const isActive = chain === c
+              // Dim Starknet if no stark address was provided
+              const unavailable = c === 'starknet' && !resolvedStark
               return (
                 <button
                   key={c}
                   onClick={() => handleChainSwitch(c)}
                   className={cn(
                     'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all duration-150',
-                    isActive ? m.toggleActive : 'text-gray-500 hover:text-gray-800',
+                    isActive
+                      ? m.toggleActive
+                      : unavailable
+                      ? 'cursor-pointer text-gray-400 hover:text-gray-600'
+                      : 'text-gray-500 hover:text-gray-800',
                   )}
                 >
-                  <span
-                    className={cn(
-                      'h-1.5 w-1.5 rounded-full transition-colors',
-                      isActive ? 'bg-white/80' : m.dotColor,
-                    )}
-                  />
+                  <span className={cn('h-1.5 w-1.5 rounded-full transition-colors',
+                    isActive ? 'bg-white/80' : unavailable ? 'bg-gray-300' : m.dotColor,
+                  )} />
                   {m.label}
+                  {unavailable && !isActive && (
+                    <span className="text-[9px] font-normal opacity-60">N/A</span>
+                  )}
                 </button>
               )
             })}
@@ -444,7 +414,7 @@ export default function PaymentPage() {
         <div className="p-6 space-y-5">
           {/* Transaction details */}
           <div className="divide-y divide-gray-100 overflow-hidden rounded-xl border border-gray-100">
-            <Row label="To" value={truncateAddress(to, 8)} mono />
+            <Row label="To" value={activeRecipient ? truncateAddress(activeRecipient, 8) : '—'} mono />
             <Row
               label="Network"
               value={
@@ -459,22 +429,44 @@ export default function PaymentPage() {
             )}
             <Row
               label="Engine"
-              value={
-                <span className={cn('text-xs font-medium', meta.badgeText)}>
-                  {meta.engineLabel}
-                </span>
-              }
+              value={<span className={cn('text-xs font-medium', meta.badgeText)}>{meta.engineLabel}</span>}
             />
             {memo && (
-              <Row
-                label="Memo (on-chain)"
-                value={memo.length > 28 ? memo.slice(0, 28) + '…' : memo}
-              />
+              <Row label="Memo (on-chain)" value={memo.length > 28 ? memo.slice(0, 28) + '…' : memo} />
             )}
           </div>
 
+          {/* ── ⚠️ Missing Starknet address safety net ─────────────────── */}
+          {missingStark && (
+            <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 animate-fade-in">
+              <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-500" />
+              <div>
+                <p className="text-sm font-semibold text-amber-800">
+                  Receiver has not set a Starknet address
+                </p>
+                <p className="mt-0.5 text-xs text-amber-700">
+                  Please request a Starknet address from the receiver, or pay via{' '}
+                  <button
+                    onClick={() => handleChainSwitch('base')}
+                    className="font-semibold underline underline-offset-2 hover:text-amber-900"
+                  >
+                    Base
+                  </button>
+                  {' '}or{' '}
+                  <button
+                    onClick={() => handleChainSwitch('hashkey')}
+                    className="font-semibold underline underline-offset-2 hover:text-amber-900"
+                  >
+                    HashKey
+                  </button>
+                  .
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* ── EVM: Wrong network warning ───────────────────────────── */}
-          {isEvmChain && isConnected && !isCorrectNetwork && (
+          {isEvmChain && isConnected && !isCorrectNetwork && !missingStark && (
             <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 animate-fade-in">
               <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-500" />
               <div className="flex-1 space-y-2">
@@ -487,32 +479,26 @@ export default function PaymentPage() {
                   disabled={isSwitching}
                   className="flex items-center gap-1.5 text-xs font-bold text-amber-800 hover:text-amber-900 transition-colors"
                 >
-                  {isSwitching ? (
-                    <><Loader2 className="h-3 w-3 animate-spin" /> Switching…</>
-                  ) : (
-                    <><RefreshCw className="h-3 w-3" /> Switch now</>
-                  )}
+                  {isSwitching
+                    ? <><Loader2 className="h-3 w-3 animate-spin" /> Switching…</>
+                    : <><RefreshCw className="h-3 w-3" /> Switch now</>}
                 </button>
               </div>
             </div>
           )}
 
           {/* ── Starknet: no wallet installed ────────────────────────── */}
-          {chain === 'starknet' && !window.starknet && (
+          {chain === 'starknet' && !resolvedStark && !window.starknet && (
             <div className="flex items-start gap-3 rounded-xl border border-purple-200 bg-purple-50 p-4 animate-fade-in">
               <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-purple-500" />
               <div>
                 <p className="text-sm font-semibold text-purple-800">No Starknet Wallet</p>
                 <p className="text-xs text-purple-700 mt-0.5">
                   Install{' '}
-                  <a href="https://www.argent.xyz/argent-x" target="_blank" rel="noopener noreferrer" className="underline">
-                    ArgentX
-                  </a>{' '}
-                  or{' '}
-                  <a href="https://www.braavos.app" target="_blank" rel="noopener noreferrer" className="underline">
-                    Braavos
-                  </a>{' '}
-                  to pay with Starknet.
+                  <a href="https://www.argent.xyz/argent-x" target="_blank" rel="noopener noreferrer" className="underline">ArgentX</a>
+                  {' '}or{' '}
+                  <a href="https://www.braavos.app" target="_blank" rel="noopener noreferrer" className="underline">Braavos</a>
+                  {' '}to pay with Starknet.
                 </p>
               </div>
             </div>
@@ -529,10 +515,7 @@ export default function PaymentPage() {
                   {(sendErrorMsg?.length ?? 0) > 140 ? '…' : ''}
                 </p>
                 <button
-                  onClick={() => {
-                    resetEvmSend()
-                    setStarkError(null)
-                  }}
+                  onClick={() => { resetEvmSend(); setStarkError(null) }}
                   className="mt-2 text-xs font-bold text-red-700 hover:text-red-900 transition-colors"
                 >
                   Try again
@@ -542,8 +525,17 @@ export default function PaymentPage() {
           )}
 
           {/* ── Primary CTA ─────────────────────────────────────────── */}
-          {chain === 'starknet' ? (
-            // Starknet flow (independent of wagmi)
+          {missingStark ? (
+            // Can't pay via Starknet if no stark address — CTA is disabled
+            <button
+              disabled
+              className="flex w-full cursor-not-allowed items-center justify-center gap-2 rounded-xl bg-gray-100 px-6 py-4 text-sm font-semibold text-gray-400"
+            >
+              <AlertTriangle className="h-4 w-4" />
+              No Starknet Address Available
+            </button>
+          ) : chain === 'starknet' ? (
+            // Starknet flow
             !starkAccount ? (
               <div className="space-y-2">
                 <button
@@ -551,11 +543,9 @@ export default function PaymentPage() {
                   disabled={isStarkConnecting || !window.starknet}
                   className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#8B5CF6] px-6 py-4 text-sm font-semibold text-white transition-all hover:bg-[#7C3AED] active:scale-[0.98] disabled:opacity-60"
                 >
-                  {isStarkConnecting ? (
-                    <><Loader2 className="h-4 w-4 animate-spin" /> Connecting…</>
-                  ) : (
-                    <><Wallet className="h-4 w-4" /> Connect Starknet Wallet</>
-                  )}
+                  {isStarkConnecting
+                    ? <><Loader2 className="h-4 w-4 animate-spin" /> Connecting…</>
+                    : <><Wallet className="h-4 w-4" /> Connect Starknet Wallet</>}
                 </button>
                 <p className="text-center text-xs text-gray-400">
                   ArgentX, Braavos & other Starknet wallets
@@ -572,13 +562,9 @@ export default function PaymentPage() {
                     : 'bg-[#8B5CF6] text-white hover:bg-[#7C3AED] shadow-button active:scale-[0.98]',
                 )}
               >
-                {isStarkPending ? (
-                  <><Loader2 className="h-4 w-4 animate-spin" /> Confirm in Wallet…</>
-                ) : isStarkConfirming ? (
-                  <><Loader2 className="h-4 w-4 animate-spin" /> Confirming on Chain…</>
-                ) : (
-                  <><Zap className="h-4 w-4" /> Pay {formatAmount(amt, 6)} USDC</>
-                )}
+                {isStarkPending   ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirm in Wallet…</>
+                : isStarkConfirming ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirming on Chain…</>
+                : <><Zap className="h-4 w-4" /> Pay {formatAmount(amt, 6)} USDC</>}
               </button>
             )
           ) : !isConnected ? (
@@ -598,11 +584,9 @@ export default function PaymentPage() {
               disabled={isSwitching}
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-amber-500 px-6 py-4 text-sm font-semibold text-white transition-all hover:bg-amber-600 active:scale-[0.98] disabled:opacity-70"
             >
-              {isSwitching ? (
-                <><Loader2 className="h-4 w-4 animate-spin" /> Switching Network…</>
-              ) : (
-                <><RefreshCw className="h-4 w-4" /> Switch to {meta.label}</>
-              )}
+              {isSwitching
+                ? <><Loader2 className="h-4 w-4 animate-spin" /> Switching Network…</>
+                : <><RefreshCw className="h-4 w-4" /> Switch to {meta.label}</>}
             </button>
           ) : (
             // EVM: ready to pay
@@ -616,13 +600,9 @@ export default function PaymentPage() {
                   : 'bg-black text-white shadow-button hover:bg-gray-800 hover:shadow-md active:scale-[0.98]',
               )}
             >
-              {isWalletPending ? (
-                <><Loader2 className="h-4 w-4 animate-spin" /> Confirm in Wallet…</>
-              ) : isConfirming ? (
-                <><Loader2 className="h-4 w-4 animate-spin" /> Confirming on Chain…</>
-              ) : (
-                <><Zap className="h-4 w-4" /> Pay {formatAmount(amt, meta.decimals)} {meta.asset}</>
-              )}
+              {isWalletPending  ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirm in Wallet…</>
+              : isConfirming    ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirming on Chain…</>
+              : <><Zap className="h-4 w-4" /> Pay {formatAmount(amt, meta.decimals)} {meta.asset}</>}
             </button>
           )}
 
@@ -670,12 +650,7 @@ function Row({
     <div className="flex items-center justify-between bg-gray-50/60 px-4 py-3">
       <span className="text-sm text-gray-500">{label}</span>
       {typeof value === 'string' ? (
-        <span
-          className={cn(
-            'text-sm text-gray-800',
-            mono ? 'font-mono text-xs' : 'font-medium',
-          )}
-        >
+        <span className={cn('text-sm text-gray-800', mono ? 'font-mono text-xs' : 'font-medium')}>
           {value}
         </span>
       ) : (

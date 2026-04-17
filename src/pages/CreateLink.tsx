@@ -1,46 +1,64 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useAccount } from 'wagmi'
 import {
   Link2,
   Copy,
   CheckCheck,
   ArrowRight,
-  Wallet,
   Tag,
   Coins,
   ExternalLink,
   Sparkles,
   Info,
+  XCircle,
 } from 'lucide-react'
-import { cn, truncateAddress, formatAmount, copyToClipboard, isValidRecipient } from '../lib/utils'
-import { CHAIN_META, type ChainKey } from '../lib/chains'
+import { isAddress } from 'viem'
+import { cn, truncateAddress, formatAmount, copyToClipboard } from '../lib/utils'
+import { useStarknet } from '../lib/StarknetContext'
 
-const CHAINS: ChainKey[] = ['base', 'starknet', 'hashkey']
+// ─── Starknet address: 0x followed by 1–64 hex chars ────────────────────────
+const isValidStarkAddr = (v: string) => /^0x[0-9a-fA-F]{1,64}$/.test(v)
 
 export default function CreateLink() {
-  const [chain, setChain] = useState<ChainKey>('hashkey')
-  const [to, setTo] = useState('')
+  const [evmAddr, setEvmAddr] = useState('')
+  const [starkAddr, setStarkAddr] = useState('')
   const [amt, setAmt] = useState('')
   const [memo, setMemo] = useState('')
   const [generatedLink, setGeneratedLink] = useState('')
   const [copied, setCopied] = useState(false)
 
-  const meta = CHAIN_META[chain]
+  // ── Connected wallet auto-fill ─────────────────────────────────────────
+  const { address: connectedEvm } = useAccount()
+  const { address: connectedStark } = useStarknet()
 
-  // Validation helpers
-  const addrDirty = to.length > 0
-  const amtDirty = amt.length > 0
-  const isValidAddr = isValidRecipient(to, chain)
+  useEffect(() => {
+    if (connectedEvm && evmAddr === '') setEvmAddr(connectedEvm)
+  }, [connectedEvm])  // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (connectedStark && starkAddr === '') setStarkAddr(connectedStark)
+  }, [connectedStark])  // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Validation ─────────────────────────────────────────────────────────
+  const evmDirty   = evmAddr.length > 0
+  const starkDirty = starkAddr.length > 0
+  const amtDirty   = amt.length > 0
+
+  const evmValid   = isAddress(evmAddr)          // strict: 0x + 40 hex
+  const starkValid = isValidStarkAddr(starkAddr)  // 0x + 1–64 hex
   const isValidAmt = amtDirty && parseFloat(amt) > 0 && !isNaN(parseFloat(amt))
-  const canGenerate = isValidAddr && isValidAmt
 
-  function handleChainSwitch(c: ChainKey) {
-    setChain(c)
-    setGeneratedLink('')
-  }
+  // Need ≥1 valid address, no dirty-invalid fields, valid amount
+  const hasAtLeastOne  = evmValid || starkValid
+  const noInvalidInput = (!evmDirty || evmValid) && (!starkDirty || starkValid)
+  const canGenerate    = hasAtLeastOne && noInvalidInput && isValidAmt
 
+  // ── Handlers ──────────────────────────────────────────────────────────
   function handleGenerate() {
     if (!canGenerate) return
-    const params = new URLSearchParams({ to, amt, chain })
+    const params = new URLSearchParams({ amt })
+    if (evmValid)    params.set('evm', evmAddr)
+    if (starkValid)  params.set('stark', starkAddr)
     if (memo.trim()) params.set('memo', memo.trim())
     setGeneratedLink(`${window.location.origin}/pay?${params.toString()}`)
   }
@@ -53,17 +71,13 @@ export default function CreateLink() {
   }
 
   function handleReset() {
-    setTo('')
+    setEvmAddr('')
+    setStarkAddr('')
     setAmt('')
     setMemo('')
     setGeneratedLink('')
     setCopied(false)
   }
-
-  const addrErrorMsg =
-    chain === 'starknet'
-      ? 'Invalid Starknet address format'
-      : 'Invalid Ethereum address format'
 
   return (
     <div className="mx-auto max-w-lg animate-fade-in">
@@ -85,90 +99,103 @@ export default function CreateLink() {
       <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-card">
         <div className="space-y-5 p-6 sm:p-8">
 
-          {/* ── Tri-Chain Toggle ──────────────────────────────────────── */}
-          <div className="flex justify-center">
-            <div className="inline-flex items-center gap-1 rounded-xl border border-gray-200 bg-gray-100/80 p-1">
-              {CHAINS.map((c) => {
-                const m = CHAIN_META[c]
-                const isActive = chain === c
-                return (
-                  <button
-                    key={c}
-                    onClick={() => handleChainSwitch(c)}
-                    className={cn(
-                      'flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all duration-150',
-                      isActive
-                        ? m.toggleActive
-                        : 'text-gray-500 hover:text-gray-800',
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        'h-1.5 w-1.5 rounded-full transition-colors',
-                        isActive ? 'bg-white/80' : m.dotColor,
-                      )}
-                    />
-                    {m.label}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-
-          {/* Engine badge */}
-          <div className="flex justify-center">
-            <span
-              className={cn(
-                'inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-medium transition-all',
-                meta.badgeBorder,
-                meta.badgeBg,
-                meta.badgeText,
-              )}
-            >
-              <span className={cn('h-1.5 w-1.5 rounded-full', meta.dotColor)} />
-              {meta.engineLabel}
-            </span>
-          </div>
-
-          {/* Recipient Address */}
+          {/* ── EVM Address ──────────────────────────────────────────── */}
           <fieldset className="space-y-1.5">
-            <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
-              <Wallet className="h-3.5 w-3.5 text-gray-400" />
-              Recipient Address
+            <label className="flex items-center justify-between">
+              <span className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                {/* Blue + Gold dots = Base + HashKey */}
+                <span className="flex items-center gap-0.5">
+                  <span className="h-2 w-2 rounded-full bg-[#0052FF]" />
+                  <span className="h-2 w-2 rounded-full bg-[#C9A227]" />
+                </span>
+                EVM Address
+              </span>
+              <span className="text-[11px] font-medium text-gray-400">Base · HashKey</span>
             </label>
-            <input
-              type="text"
-              placeholder="0x…"
-              value={to}
-              onChange={(e) => {
-                setTo(e.target.value.trim())
-                setGeneratedLink('')
-              }}
-              spellCheck={false}
-              autoComplete="off"
-              className={cn(
-                'w-full rounded-xl border bg-gray-50/60 px-4 py-3 font-mono text-sm',
-                'placeholder:text-gray-400 transition-all focus:bg-white focus:outline-none focus:ring-2',
-                addrDirty && !isValidAddr
-                  ? 'border-red-300 text-red-600 focus:ring-red-100'
-                  : isValidAddr
-                  ? 'border-emerald-300 text-gray-900 focus:ring-emerald-100'
-                  : 'border-gray-200 text-gray-900 focus:border-[#0071E3]/40 focus:ring-[#0071E3]/15',
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="0x… (40 hex chars)"
+                value={evmAddr}
+                onChange={(e) => { setEvmAddr(e.target.value.trim()); setGeneratedLink('') }}
+                spellCheck={false}
+                autoComplete="off"
+                className={cn(
+                  'w-full rounded-xl border bg-gray-50/60 px-4 py-3 font-mono text-sm',
+                  'placeholder:text-gray-400 transition-all focus:bg-white focus:outline-none focus:ring-2',
+                  evmDirty && !evmValid
+                    ? 'border-red-300 pr-10 text-red-600 focus:ring-red-100'
+                    : evmValid
+                    ? 'border-emerald-300 text-gray-900 focus:ring-emerald-100'
+                    : 'border-gray-200 text-gray-900 focus:border-[#0071E3]/40 focus:ring-[#0071E3]/15',
+                )}
+              />
+              {evmDirty && !evmValid && (
+                <XCircle className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-red-400" />
               )}
-            />
-            {addrDirty && !isValidAddr && (
+            </div>
+            {evmDirty && !evmValid && (
               <p className="flex items-center gap-1 text-xs text-red-500">
-                <Info className="h-3 w-3" /> {addrErrorMsg}
+                <Info className="h-3 w-3" /> Must be a valid EVM address (0x + 40 hex chars)
               </p>
             )}
-            {isValidAddr && (
+            {evmValid && (
               <p className="flex items-center gap-1 text-xs text-emerald-600">
-                <CheckCheck className="h-3 w-3" /> {truncateAddress(to, 8)}
+                <CheckCheck className="h-3 w-3" />
+                {connectedEvm && evmAddr.toLowerCase() === connectedEvm.toLowerCase()
+                  ? `Auto-filled · ${truncateAddress(evmAddr, 8)}`
+                  : truncateAddress(evmAddr, 8)}
               </p>
             )}
           </fieldset>
 
-          {/* Amount */}
+          {/* ── Starknet Address ─────────────────────────────────────── */}
+          <fieldset className="space-y-1.5">
+            <label className="flex items-center justify-between">
+              <span className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                <span className="h-2 w-2 rounded-full bg-[#8B5CF6]" />
+                Starknet Address
+              </span>
+              <span className="text-[11px] font-medium text-gray-400">optional · Starknet Mainnet</span>
+            </label>
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="0x… (up to 64 hex chars)"
+                value={starkAddr}
+                onChange={(e) => { setStarkAddr(e.target.value.trim()); setGeneratedLink('') }}
+                spellCheck={false}
+                autoComplete="off"
+                className={cn(
+                  'w-full rounded-xl border bg-gray-50/60 px-4 py-3 font-mono text-sm',
+                  'placeholder:text-gray-400 transition-all focus:bg-white focus:outline-none focus:ring-2',
+                  starkDirty && !starkValid
+                    ? 'border-red-300 pr-10 text-red-600 focus:ring-red-100'
+                    : starkValid
+                    ? 'border-purple-300 text-gray-900 focus:ring-purple-100'
+                    : 'border-gray-200 text-gray-900 focus:border-[#8B5CF6]/40 focus:ring-[#8B5CF6]/15',
+                )}
+              />
+              {starkDirty && !starkValid && (
+                <XCircle className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-red-400" />
+              )}
+            </div>
+            {starkDirty && !starkValid && (
+              <p className="flex items-center gap-1 text-xs text-red-500">
+                <Info className="h-3 w-3" /> Must be a valid Starknet address (0x + hex)
+              </p>
+            )}
+            {starkValid && (
+              <p className="flex items-center gap-1 text-xs text-purple-600">
+                <CheckCheck className="h-3 w-3" />
+                {connectedStark && starkAddr.toLowerCase() === connectedStark.toLowerCase()
+                  ? `Auto-filled · ${truncateAddress(starkAddr, 8)}`
+                  : truncateAddress(starkAddr, 8)}
+              </p>
+            )}
+          </fieldset>
+
+          {/* ── Amount ───────────────────────────────────────────────── */}
           <fieldset className="space-y-1.5">
             <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
               <Coins className="h-3.5 w-3.5 text-gray-400" />
@@ -181,20 +208,17 @@ export default function CreateLink() {
                 min="0"
                 step="any"
                 value={amt}
-                onChange={(e) => {
-                  setAmt(e.target.value)
-                  setGeneratedLink('')
-                }}
+                onChange={(e) => { setAmt(e.target.value); setGeneratedLink('') }}
                 className={cn(
-                  'w-full rounded-xl border bg-gray-50/60 px-4 py-3 pr-20 text-sm',
+                  'w-full rounded-xl border bg-gray-50/60 px-4 py-3 pr-28 text-sm',
                   'placeholder:text-gray-400 transition-all focus:bg-white focus:outline-none focus:ring-2',
                   amtDirty && !isValidAmt
                     ? 'border-red-300 focus:ring-red-100'
                     : 'border-gray-200 focus:border-[#0071E3]/40 focus:ring-[#0071E3]/15',
                 )}
               />
-              <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-gray-400">
-                {meta.asset}
+              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-semibold text-gray-400 whitespace-nowrap">
+                USDC · HSK
               </span>
             </div>
             {amtDirty && !isValidAmt && (
@@ -202,9 +226,14 @@ export default function CreateLink() {
                 <Info className="h-3 w-3" /> Enter a valid amount greater than 0
               </p>
             )}
+            {!amtDirty && (
+              <p className="text-[11px] text-gray-400">
+                USDC on Base/Starknet · HSK on HashKey — payer chooses the chain
+              </p>
+            )}
           </fieldset>
 
-          {/* Memo */}
+          {/* ── Memo ─────────────────────────────────────────────────── */}
           <fieldset className="space-y-1.5">
             <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
               <Tag className="h-3.5 w-3.5 text-gray-400" />
@@ -216,15 +245,12 @@ export default function CreateLink() {
               placeholder="Coffee, Invoice #042, Split dinner…"
               value={memo}
               maxLength={100}
-              onChange={(e) => {
-                setMemo(e.target.value)
-                setGeneratedLink('')
-              }}
+              onChange={(e) => { setMemo(e.target.value); setGeneratedLink('') }}
               className="w-full rounded-xl border border-gray-200 bg-gray-50/60 px-4 py-3 text-sm placeholder:text-gray-400 transition-all focus:border-[#0071E3]/40 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0071E3]/15"
             />
           </fieldset>
 
-          {/* Generate button */}
+          {/* ── Generate button ───────────────────────────────────────── */}
           <button
             onClick={handleGenerate}
             disabled={!canGenerate}
@@ -239,6 +265,13 @@ export default function CreateLink() {
             Generate Payment Link
             {canGenerate && <ArrowRight className="h-4 w-4" />}
           </button>
+
+          {/* Hint when nothing is filled yet */}
+          {!canGenerate && !evmDirty && !starkDirty && (
+            <p className="text-center text-xs text-gray-400">
+              At least one address is required
+            </p>
+          )}
         </div>
 
         {/* ── Generated link panel ─────────────────────────────────────── */}
@@ -273,24 +306,33 @@ export default function CreateLink() {
               </p>
               <div className="flex items-baseline gap-1.5">
                 <span className="text-2xl font-bold text-gray-900">
-                  {formatAmount(amt, meta.decimals)}
+                  {formatAmount(amt, 18)}
                 </span>
-                <span className="text-sm font-medium text-gray-500">{meta.asset}</span>
+                <span className="text-sm font-medium text-gray-500">USDC · HSK</span>
               </div>
-              <div className="flex gap-x-4 text-xs text-gray-500 flex-wrap">
-                <span>
-                  To:{' '}
-                  <span className="font-mono text-gray-700">{truncateAddress(to, 8)}</span>
-                </span>
-                <span>
-                  Chain:{' '}
-                  <span className="font-medium text-gray-700">{meta.label}</span>
-                </span>
+              <div className="space-y-1">
+                {evmValid && (
+                  <div className="flex items-center gap-2 text-xs text-gray-500">
+                    <span className="flex gap-0.5">
+                      <span className="h-1.5 w-1.5 rounded-full bg-[#0052FF]" />
+                      <span className="h-1.5 w-1.5 rounded-full bg-[#C9A227]" />
+                    </span>
+                    <span>Base / HashKey:</span>
+                    <span className="font-mono text-gray-700">{truncateAddress(evmAddr, 8)}</span>
+                  </div>
+                )}
+                {starkValid && (
+                  <div className="flex items-center gap-2 text-xs text-gray-500">
+                    <span className="h-1.5 w-1.5 rounded-full bg-[#8B5CF6]" />
+                    <span>Starknet:</span>
+                    <span className="font-mono text-gray-700">{truncateAddress(starkAddr, 8)}</span>
+                  </div>
+                )}
                 {memo && (
-                  <span>
-                    Memo:{' '}
-                    <span className="font-medium text-gray-700">"{memo}"</span>
-                  </span>
+                  <div className="flex items-center gap-2 text-xs text-gray-500">
+                    <span className="h-1.5 w-1.5 rounded-full bg-gray-300" />
+                    <span>Memo: <span className="font-medium text-gray-700">"{memo}"</span></span>
+                  </div>
                 )}
               </div>
             </div>
@@ -335,9 +377,9 @@ export default function CreateLink() {
           </p>
           <div className="grid grid-cols-3 gap-3">
             {[
-              { n: '1', title: 'Enter details', body: 'Address, amount & optional memo' },
+              { n: '1', title: 'Enter details', body: 'Your EVM + Starknet addresses & amount' },
               { n: '2', title: 'Share the link', body: 'Send via message, email or QR' },
-              { n: '3', title: 'Get paid', body: 'They connect & confirm in one tap' },
+              { n: '3', title: 'Get paid', body: 'They pick a chain & confirm in one tap' },
             ].map(({ n, title, body }) => (
               <div
                 key={n}

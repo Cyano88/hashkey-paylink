@@ -9,6 +9,7 @@ import './index.css'
 
 import App from './App'
 import { wagmiConfig } from './lib/wagmi'
+import { StarknetProvider } from './lib/StarknetContext'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -33,7 +34,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           })}
           coolMode
         >
-          <App />
+              <StarknetProvider>
+                <App />
+              </StarknetProvider>
         </RainbowKitProvider>
       </QueryClientProvider>
     </WagmiProvider>

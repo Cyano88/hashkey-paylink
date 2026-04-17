@@ -1,9 +1,13 @@
 import { Outlet, Link, useLocation } from 'react-router-dom'
 import { ConnectButton } from '@rainbow-me/rainbowkit'
+import { Loader2 } from 'lucide-react'
+import { useStarknet } from './lib/StarknetContext'
+import { truncateAddress } from './lib/utils'
 
 export default function Layout() {
   const { pathname } = useLocation()
   const isPayPage = pathname === '/pay'
+  const { address: starkAddress, isConnecting: isStarkConnecting, connect: connectStarknet } = useStarknet()
 
   return (
     <div className="min-h-screen bg-[#F5F5F7] font-inter flex flex-col">
@@ -25,14 +29,38 @@ export default function Layout() {
           </Link>
 
           {/* Right side */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             {/* Mainnet badge */}
             <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
               🟢 Mainnet
             </span>
 
-            {/* RainbowKit connect button */}
+            {/* ── Starknet connection indicator / button ─────────────── */}
+            {starkAddress ? (
+              /* Connected: show truncated address chip */
+              <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-purple-200 bg-purple-50 px-2.5 py-1 text-xs font-medium text-purple-700">
+                <span className="h-1.5 w-1.5 rounded-full bg-purple-500" />
+                {truncateAddress(starkAddress, 4)}
+              </span>
+            ) : (
+              /* Not connected: compact connect button */
+              <button
+                onClick={connectStarknet}
+                disabled={isStarkConnecting}
+                title="Connect Starknet wallet (ArgentX / Braavos)"
+                className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-purple-200 bg-white px-2.5 py-1 text-xs font-medium text-purple-600 hover:bg-purple-50 transition-colors disabled:opacity-60"
+              >
+                {isStarkConnecting ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <span className="h-1.5 w-1.5 rounded-full bg-purple-300" />
+                )}
+                Starknet
+              </button>
+            )}
+
+            {/* RainbowKit EVM connect button */}
             <ConnectButton
               showBalance={false}
               chainStatus="icon"
