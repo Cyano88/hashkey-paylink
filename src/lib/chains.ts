@@ -6,8 +6,12 @@ export type ChainKey = 'base' | 'starknet' | 'hashkey' | 'arc'
 // ─── Platform fee engine ─────────────────────────────────────────────────────
 /** 0.5 % platform fee in basis points (50 bps). Collected via FeeRouter on settlement. */
 export const PLATFORM_FEE_BPS = 50
-/** Treasury address — replace with your deployed FeeRouter before mainnet use */
-export const PLATFORM_TREASURY = '0xFEEf3e28e0A7F27b0c1f7f68A0cC65b3b3A6f5D' as `0x${string}`
+/** EVM treasury — receives 0.5% fee on Base, HashKey, Arc */
+export const EVM_TREASURY = '0xcE5dF9e1115F81a2Fc2F65941B20B820d508e753' as `0x${string}`
+/** Starknet treasury — receives 0.5% fee on Starknet */
+export const STARK_TREASURY = '0x0483AB5539B281c08777F1C8337Beeba05c2610feDcbA191B989E35eDc2767C3'
+/** @deprecated — use EVM_TREASURY or STARK_TREASURY */
+export const PLATFORM_TREASURY = EVM_TREASURY
 
 // ─── HashKey Mainnet (Chain 177) ────────────────────────────────────────────
 export const hashkeyMainnet = defineChain({

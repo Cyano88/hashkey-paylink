@@ -8,7 +8,7 @@ import {
   useWaitForTransactionReceipt,
 } from 'wagmi'
 import { ConnectButton, useConnectModal } from '@rainbow-me/rainbowkit'
-import { parseEther, isAddress } from 'viem'
+import { parseEther, parseUnits, isAddress, encodeFunctionData } from 'viem'
 import {
   ArrowLeft,
   CheckCircle2,
@@ -23,7 +23,7 @@ import {
   Wallet,
   AlertTriangle,
 } from 'lucide-react'
-import { CHAIN_META, PLATFORM_FEE_BPS, type ChainKey } from '../lib/chains'
+import { CHAIN_META, PLATFORM_FEE_BPS, EVM_TREASURY, STARK_TREASURY, type ChainKey } from '../lib/chains'
 import { useStarknet } from '../lib/StarknetContext'
 import {
   cn,
@@ -38,6 +38,13 @@ const CHAINS: ChainKey[] = ['base', 'starknet', 'hashkey', 'arc']
 
 // ─── Starknet RPC for polling tx status ─────────────────────────────────────
 const STARKNET_RPC = 'https://starknet-mainnet.public.blastapi.io'
+
+// ─── Minimal ERC-20 transfer ABI (used for fee tx encoding) ─────────────────
+const ERC20_TRANSFER_ABI = [{
+  name: 'transfer', type: 'function' as const, stateMutability: 'nonpayable' as const,
+  inputs: [{ name: 'to', type: 'address' }, { name: 'amount', type: 'uint256' }],
+  outputs: [{ type: 'bool' }],
+}] as const
 
 async function pollStarknetReceipt(txHash: string, signal: AbortSignal): Promise<void> {
   const deadline = Date.now() + 3 * 60_000
@@ -113,6 +120,14 @@ export default function PaymentPage() {
   const { isLoading: isEvmConfirming, isSuccess: isEvmConfirmed } =
     useWaitForTransactionReceipt({ hash: evmTxHash })
 
+  // ── Fee tx (EVM) — sent automatically after main tx confirms ─────────────
+  const {
+    sendTransaction: sendFeeTx,
+    data: feeTxHash,
+    reset: resetFeeTx,
+  } = useSendTransaction()
+  const feeTriggered = useRef(false)
+
   // ── Starknet state (shared via context + local tx state) ─────────────────
   const { address: starkAccount, isConnecting: isStarkConnecting, connect: connectStarknet } = useStarknet()
   const [starkTxHash,       setStarkTxHash]       = useState<string | null>(null)
@@ -158,6 +173,8 @@ export default function PaymentPage() {
     setIsStarkConfirmed(false)
     setStarkError(null)
     starkPollAbort.current?.abort()
+    feeTriggered.current = false
+    resetFeeTx()
 
     // Auto-trigger connection if user switches to a chain they aren't on
     if (c === 'starknet' && !starkAccount) {
@@ -174,16 +191,58 @@ export default function PaymentPage() {
     }
   }, [isEvmChain, isConnected, isCorrectNetwork, isSwitching, switchChain, targetChainId])
 
+  // ── Auto-send platform fee after main EVM tx confirms ────────────────────
+  useEffect(() => {
+    if (!isEvmChain || !isEvmConfirmed || feeTriggered.current) return
+    feeTriggered.current = true
+
+    const feeBps = BigInt(PLATFORM_FEE_BPS)
+
+    if (chain === 'base' || chain === 'arc') {
+      const meta_ = chain === 'arc' ? CHAIN_META.arc : CHAIN_META.base
+      const totalUnits = parseUnits(amt, meta_.decimals)
+      const feeUnits = totalUnits * feeBps / 10_000n
+      if (feeUnits > 0n) {
+        sendFeeTx({
+          to: meta_.tokenAddress,
+          data: encodeFunctionData({
+            abi: ERC20_TRANSFER_ABI,
+            functionName: 'transfer',
+            args: [EVM_TREASURY, feeUnits],
+          }),
+          value: 0n,
+          chainId: targetChainId,
+        })
+      }
+    } else if (chain === 'hashkey') {
+      const totalNative = parseEther(amt)
+      const feeNative = totalNative * feeBps / 10_000n
+      if (feeNative > 0n) {
+        sendFeeTx({
+          to: EVM_TREASURY,
+          value: feeNative,
+          chainId: CHAIN_META.hashkey.chainId,
+        })
+      }
+    }
+  }, [isEvmConfirmed]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Payment handler ──────────────────────────────────────────────────────
   function handlePay() {
     if (!activeRecipient) return
 
+    const feeBps = BigInt(PLATFORM_FEE_BPS)
+
     if (chain === 'base' || chain === 'arc') {
-      // ERC-20 USDC transfer — same ABI on Base and Arc
+      // Send 99.5% to recipient — fee tx auto-fires after confirmation
       const meta_ = chain === 'arc' ? CHAIN_META.arc : CHAIN_META.base
+      const totalUnits = parseUnits(amt, meta_.decimals)
+      const feeUnits = totalUnits * feeBps / 10_000n
+      const recipientUnits = totalUnits - feeUnits
       const data = encodeErc20Transfer(
         activeRecipient as `0x${string}`,
-        amt,
+        // format back to decimal string for encodeErc20Transfer
+        (Number(recipientUnits) / 10 ** meta_.decimals).toString(),
         meta_.decimals,
         memo,
       )
@@ -191,10 +250,13 @@ export default function PaymentPage() {
     } else if (chain === 'starknet') {
       handleStarknetPay()
     } else {
-      // HashKey: native HSK
+      // HashKey: native HSK — send 99.5% to recipient, fee tx auto-fires after
+      const totalNative = parseEther(amt)
+      const feeNative = totalNative * feeBps / 10_000n
+      const recipientNative = totalNative - feeNative
       sendTransaction({
         to: activeRecipient as `0x${string}`,
-        value: parseEther(amt),
+        value: recipientNative,
         chainId: CHAIN_META.hashkey.chainId,
         ...(memo.trim() ? { data: memoToHex(memo.trim()) } : {}),
       })
@@ -207,14 +269,31 @@ export default function PaymentPage() {
     setIsStarkPending(true)
     setStarkError(null)
     try {
-      const amountUnits = BigInt(Math.round(parseFloat(amt) * 1e6))
-      const low  = '0x' + (amountUnits & BigInt('0xffffffffffffffffffffffffffffffff')).toString(16)
-      const high = '0x0'
-      const result = await provider.account.execute([{
-        contractAddress: CHAIN_META.starknet.tokenAddress,
-        entrypoint: 'transfer',
-        calldata: [resolvedStark, low, high],
-      }])
+      const totalUnits = BigInt(Math.round(parseFloat(amt) * 1e6))
+      const feeUnits   = totalUnits * BigInt(PLATFORM_FEE_BPS) / 10_000n
+      const recipUnits = totalUnits - feeUnits
+
+      // Encode uint256 as [low_128, high_128] for Starknet
+      const toU256 = (n: bigint) => ({
+        low:  '0x' + (n & BigInt('0xffffffffffffffffffffffffffffffff')).toString(16),
+        high: '0x0',
+      })
+      const recip = toU256(recipUnits)
+      const fee   = toU256(feeUnits)
+
+      // Starknet natively supports multicall — batch both transfers in ONE tx
+      const result = await provider.account.execute([
+        {
+          contractAddress: CHAIN_META.starknet.tokenAddress,
+          entrypoint: 'transfer',
+          calldata: [resolvedStark, recip.low, recip.high],
+        },
+        {
+          contractAddress: CHAIN_META.starknet.tokenAddress,
+          entrypoint: 'transfer',
+          calldata: [STARK_TREASURY, fee.low, fee.high],
+        },
+      ])
       setStarkTxHash(result.transaction_hash)
       setIsStarkPending(false)
       setIsStarkConfirming(true)
@@ -468,17 +547,17 @@ export default function PaymentPage() {
               label="Engine"
               value={<span className={cn('text-xs font-medium', meta.badgeText)}>{meta.engineLabel}</span>}
             />
-            {/* Platform fee row */}
-            <Row
-              label="Platform fee (0.5%)"
-              value={
-                <span className="text-xs text-gray-500">
-                  {feeAmount > 0
-                    ? `${feeAmount.toFixed(meta.decimals <= 6 ? 4 : 6)} ${meta.asset}`
-                    : '—'}
-                </span>
-              }
-            />
+            {/* Platform fee — invoice detail style */}
+            <div className="flex items-center justify-between bg-gray-50/60 px-4 py-2 border-t border-dashed border-gray-100">
+              <span className="text-[11px] font-normal text-slate-400 tracking-wide">
+                Platform fee (0.5%)
+              </span>
+              <span className="font-mono text-[11px] text-slate-400">
+                {feeAmount > 0
+                  ? `${feeAmount.toFixed(meta.decimals <= 6 ? 4 : 6)} ${meta.asset}`
+                  : '—'}
+              </span>
+            </div>
             {memo && (
               <Row label="Memo (on-chain)" value={memo.length > 28 ? memo.slice(0, 28) + '…' : memo} />
             )}
@@ -661,6 +740,16 @@ export default function PaymentPage() {
           </p>
         </div>
       </div>
+
+      {/* ── Fee tx submitted (background, silent) ─────────────────────── */}
+      {feeTxHash && isEvmConfirmed && (
+        <div className="mt-2 flex items-center gap-2 rounded-xl border border-slate-100 bg-slate-50/80 px-4 py-2 animate-fade-in">
+          <span className="h-1.5 w-1.5 rounded-full bg-slate-300 shrink-0" />
+          <p className="text-[11px] text-slate-400 truncate font-mono">
+            Fee tx: {feeTxHash.slice(0, 18)}…
+          </p>
+        </div>
+      )}
 
       {/* ── Pending tx banner ─────────────────────────────────────────── */}
       {txHash && !isConfirmed && (
