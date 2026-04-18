@@ -1,0 +1,54 @@
+{
+  "name": "@hashpaylink/sdk",
+  "version": "1.0.0",
+  "description": "The Stripe of the Modular Future. One line of code to accept stablecoins across Arc, Base, Starknet, and HashKey.",
+  "author": "Hash PayLink Contributors",
+  "license": "MIT",
+  "homepage": "https://hash-paylink.vercel.app",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Cyano88/hashkey-paylink.git",
+    "directory": "packages/sdk"
+  },
+  "keywords": [
+    "web3", "payments", "stablecoins", "usdc", "arc", "base", "starknet",
+    "hashkey", "payfi", "react", "wagmi", "crypto", "defi"
+  ],
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "react": ">=18",
+    "react-dom": ">=18",
+    "viem": ">=2",
+    "wagmi": ">=2"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.1",
+    "@types/react-dom": "^18.3.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.5.3"
+  },
+  "dependencies": {
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.414.0",
+    "tailwind-merge": "^2.4.0"
+  }
+}

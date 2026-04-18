@@ -4,3 +4,10 @@ dist/
 .env.local
 .DS_Store
 *.log
+.vercel
+
+# Temp API response files
+*.json
+!package.json
+!tsconfig.json
+!tsconfig.node.json

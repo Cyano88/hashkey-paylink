@@ -1,0 +1,82 @@
+import { defineChain } from 'viem'
+import { base } from 'viem/chains'
+
+export type ChainKey = 'base' | 'starknet' | 'hashkey' | 'arc'
+
+export const PLATFORM_FEE_BPS = 50
+export const PLATFORM_TREASURY = '0xFEEf3e28e0A7F27b0c1f7f68A0cC65b3b3A6f5D' as `0x${string}`
+
+export const hashkeyMainnet = defineChain({
+  id: 177,
+  name: 'HashKey Chain',
+  nativeCurrency: { decimals: 18, name: 'HashKey', symbol: 'HSK' },
+  rpcUrls: {
+    default: { http: ['https://mainnet.hsk.xyz'] },
+    public:  { http: ['https://mainnet.hsk.xyz'] },
+  },
+  blockExplorers: {
+    default: { name: 'HashKey Explorer', url: 'https://explorer.hsk.xyz', apiUrl: 'https://explorer.hsk.xyz/api' },
+  },
+})
+
+// Arc Testnet (Chain ID 5042002) — swap for mainnet values when Arc mainnet launches
+export const arcChain = defineChain({
+  id: 5042002,
+  name: 'Arc Testnet',
+  nativeCurrency: { decimals: 18, name: 'USD Coin', symbol: 'USDC' },
+  rpcUrls: {
+    default: { http: ['https://rpc.testnet.arc.network'] },
+    public:  { http: ['https://rpc.testnet.arc.network', 'https://arc-testnet.drpc.org'] },
+  },
+  blockExplorers: {
+    default: { name: 'Arcscan', url: 'https://testnet.arcscan.app', apiUrl: 'https://testnet.arcscan.app/api' },
+  },
+  testnet: true,
+})
+
+export { base as baseMainnet }
+
+export const CHAIN_META = {
+  base: {
+    key: 'base' as const, label: 'Base', asset: 'USDC', decimals: 6, chainId: base.id,
+    tokenAddress: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' as `0x${string}`,
+    explorerUrl: 'https://basescan.org', explorerName: 'Basescan',
+    glowStyle: '0 0 52px -8px rgba(0,82,255,0.25), 0 0 0 1px rgba(0,82,255,0.12)',
+    accentColor: '#0052FF', badgeBg: 'bg-blue-50', badgeText: 'text-blue-700',
+    badgeBorder: 'border-blue-200', toggleActive: 'bg-[#0052FF] text-white shadow-sm',
+    headerBg: 'from-blue-50 to-sky-50', dotColor: 'bg-blue-500',
+    engineLabel: 'EIP-7702 · Gas Sponsored',
+  },
+  starknet: {
+    key: 'starknet' as const, label: 'Starknet', asset: 'USDC', decimals: 6,
+    tokenAddress: '0x033068F6539f8e6e6b131e6B2B814e6c34A5224bC66947c47DaB9dFeE93b35fb',
+    explorerUrl: 'https://starkscan.co', explorerName: 'Starkscan',
+    glowStyle: '0 0 52px -8px rgba(139,92,246,0.25), 0 0 0 1px rgba(139,92,246,0.12)',
+    accentColor: '#8B5CF6', badgeBg: 'bg-purple-50', badgeText: 'text-purple-700',
+    badgeBorder: 'border-purple-200', toggleActive: 'bg-[#8B5CF6] text-white shadow-sm',
+    headerBg: 'from-purple-50 to-violet-50', dotColor: 'bg-purple-500',
+    engineLabel: 'AVNU Paymaster · Gas Sponsored',
+  },
+  hashkey: {
+    key: 'hashkey' as const, label: 'HashKey', asset: 'HSK', decimals: 18, chainId: 177,
+    explorerUrl: 'https://explorer.hsk.xyz', explorerName: 'HashKey Explorer',
+    glowStyle: '0 0 52px -8px rgba(201,162,39,0.28), 0 0 0 1px rgba(201,162,39,0.15)',
+    accentColor: '#C9A227', badgeBg: 'bg-amber-50', badgeText: 'text-amber-700',
+    badgeBorder: 'border-amber-200', toggleActive: 'bg-[#C9A227] text-white shadow-sm',
+    headerBg: 'from-amber-50 to-yellow-50', dotColor: 'bg-amber-400',
+    engineLabel: 'HashKey Mainnet · Native HSK',
+  },
+  arc: {
+    key: 'arc' as const, label: 'Arc', asset: 'USDC', decimals: 6, chainId: 5042002,
+    // Update tokenAddress to mainnet Circle USDC when Arc mainnet launches
+    // Ref: https://docs.arc.network/arc/references/contract-addresses
+    tokenAddress: '0x0000000000000000000000000000000000000001' as `0x${string}`,
+    explorerUrl: 'https://testnet.arcscan.app', explorerName: 'Arcscan',
+    glowStyle: '0 0 52px -8px rgba(124,58,237,0.30), 0 0 0 1px rgba(124,58,237,0.14)',
+    accentColor: '#7C3AED', badgeBg: 'bg-violet-50', badgeText: 'text-violet-700',
+    badgeBorder: 'border-violet-200', toggleActive: 'bg-[#7C3AED] text-white shadow-sm',
+    headerBg: 'from-violet-50 to-purple-50', dotColor: 'bg-violet-500',
+    engineLabel: 'Arc Testnet · Native USDC Gas',
+    isTestnet: true,
+  },
+} as const
