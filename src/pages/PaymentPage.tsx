@@ -6,9 +6,11 @@ import {
   useSwitchChain,
   useSendTransaction,
   useWaitForTransactionReceipt,
+  useSignTypedData,
+  useReadContract,
 } from 'wagmi'
 import { ConnectButton, useConnectModal } from '@rainbow-me/rainbowkit'
-import { parseEther, parseUnits, isAddress, encodeFunctionData } from 'viem'
+import { parseEther, parseUnits, isAddress, encodeFunctionData, parseSignature } from 'viem'
 import {
   ArrowLeft,
   CheckCircle2,
@@ -30,7 +32,6 @@ import {
   truncateAddress,
   formatAmount,
   memoToHex,
-  encodeErc20Transfer,
   copyToClipboard,
 } from '../lib/utils'
 
@@ -39,11 +40,83 @@ const CHAINS: ChainKey[] = ['base', 'starknet', 'hashkey', 'arc']
 // ─── Starknet RPC for polling tx status ─────────────────────────────────────
 const STARKNET_RPC = 'https://starknet-mainnet.public.blastapi.io'
 
-// ─── Minimal ERC-20 transfer ABI (used for fee tx encoding) ─────────────────
-const ERC20_TRANSFER_ABI = [{
-  name: 'transfer', type: 'function' as const, stateMutability: 'nonpayable' as const,
-  inputs: [{ name: 'to', type: 'address' }, { name: 'amount', type: 'uint256' }],
+// ─── Multicall3 — deployed at same address on all EVM chains ────────────────
+const MULTICALL3_ADDRESS = '0xcA11bde05977b3631167028862bE2a173976CA11' as `0x${string}`
+
+// ─── Multicall3 aggregate3 (ERC-20 permit + transferFrom) ───────────────────
+const MULTICALL3_AGGREGATE3_ABI = [{
+  name: 'aggregate3',
+  type: 'function' as const,
+  stateMutability: 'payable' as const,
+  inputs: [{
+    name: 'calls', type: 'tuple[]',
+    components: [
+      { name: 'target',       type: 'address' },
+      { name: 'allowFailure', type: 'bool'    },
+      { name: 'callData',     type: 'bytes'   },
+    ],
+  }],
+  outputs: [{
+    name: 'returnData', type: 'tuple[]',
+    components: [
+      { name: 'success',    type: 'bool'  },
+      { name: 'returnData', type: 'bytes' },
+    ],
+  }],
+}] as const
+
+// ─── Multicall3 aggregate3Value (native token split, e.g. HSK) ──────────────
+const MULTICALL3_AGGREGATE3VALUE_ABI = [{
+  name: 'aggregate3Value',
+  type: 'function' as const,
+  stateMutability: 'payable' as const,
+  inputs: [{
+    name: 'calls', type: 'tuple[]',
+    components: [
+      { name: 'target',       type: 'address' },
+      { name: 'allowFailure', type: 'bool'    },
+      { name: 'value',        type: 'uint256' },
+      { name: 'callData',     type: 'bytes'   },
+    ],
+  }],
+  outputs: [{
+    name: 'returnData', type: 'tuple[]',
+    components: [
+      { name: 'success',    type: 'bool'  },
+      { name: 'returnData', type: 'bytes' },
+    ],
+  }],
+}] as const
+
+// ─── EIP-2612 permit + ERC-20 transferFrom ABIs ─────────────────────────────
+const ERC20_PERMIT_ABI = [{
+  name: 'permit', type: 'function' as const, stateMutability: 'nonpayable' as const,
+  inputs: [
+    { name: 'owner',    type: 'address' },
+    { name: 'spender',  type: 'address' },
+    { name: 'value',    type: 'uint256' },
+    { name: 'deadline', type: 'uint256' },
+    { name: 'v',        type: 'uint8'   },
+    { name: 'r',        type: 'bytes32' },
+    { name: 's',        type: 'bytes32' },
+  ],
+  outputs: [],
+}] as const
+
+const ERC20_TRANSFER_FROM_ABI = [{
+  name: 'transferFrom', type: 'function' as const, stateMutability: 'nonpayable' as const,
+  inputs: [
+    { name: 'from',   type: 'address' },
+    { name: 'to',     type: 'address' },
+    { name: 'amount', type: 'uint256' },
+  ],
   outputs: [{ type: 'bool' }],
+}] as const
+
+const NONCES_ABI = [{
+  name: 'nonces', type: 'function' as const, stateMutability: 'view' as const,
+  inputs: [{ name: 'owner', type: 'address' }],
+  outputs: [{ name: '', type: 'uint256' }],
 }] as const
 
 async function pollStarknetReceipt(txHash: string, signal: AbortSignal): Promise<void> {
@@ -102,8 +175,8 @@ export default function PaymentPage() {
 
   const [hashCopied, setHashCopied] = useState(false)
 
-  // ── EVM hooks (Base + HashKey) ───────────────────────────────────────────
-  const { isConnected } = useAccount()
+  // ── EVM hooks (Base + HashKey + Arc) ────────────────────────────────────
+  const { isConnected, address } = useAccount()
   const chainId = useChainId()
   const { switchChain, isPending: isSwitching } = useSwitchChain()
   const { openConnectModal } = useConnectModal()
@@ -120,13 +193,22 @@ export default function PaymentPage() {
   const { isLoading: isEvmConfirming, isSuccess: isEvmConfirmed } =
     useWaitForTransactionReceipt({ hash: evmTxHash })
 
-  // ── Fee tx (EVM) — sent automatically after main tx confirms ─────────────
+  // ── EIP-2612 permit signing ──────────────────────────────────────────────
   const {
-    sendTransaction: sendFeeTx,
-    data: feeTxHash,
-    reset: resetFeeTx,
-  } = useSendTransaction()
-  const feeTriggered = useRef(false)
+    signTypedDataAsync,
+    isPending: isSignPending,
+    reset: resetPermitSign,
+  } = useSignTypedData()
+
+  // ── Read current USDC nonce for permit (ERC-20 chains only) ─────────────
+  const { data: permitNonce } = useReadContract({
+    address: chain === 'base' ? CHAIN_META.base.tokenAddress : CHAIN_META.arc.tokenAddress,
+    abi: NONCES_ABI,
+    functionName: 'nonces',
+    args: [address ?? '0x0000000000000000000000000000000000000000'],
+    chainId: (chain === 'base' ? CHAIN_META.base.chainId : CHAIN_META.arc.chainId) as number,
+    query: { enabled: (chain === 'base' || chain === 'arc') && !!address },
+  })
 
   // ── Starknet state (shared via context + local tx state) ─────────────────
   const { address: starkAccount, isConnecting: isStarkConnecting, connect: connectStarknet } = useStarknet()
@@ -140,7 +222,6 @@ export default function PaymentPage() {
   // ── Fee engine ────────────────────────────────────────────────────────────
   const feeMultiplier  = PLATFORM_FEE_BPS / 10_000          // 0.005
   const feeAmount      = (parseFloat(amt) || 0) * feeMultiplier
-  const recipientAmt   = (parseFloat(amt) || 0) * (1 - feeMultiplier)
 
   // ── Derived ──────────────────────────────────────────────────────────────
   const isEvmChain    = chain !== 'starknet'
@@ -167,14 +248,13 @@ export default function PaymentPage() {
   function handleChainSwitch(c: ChainKey) {
     setChain(c)
     resetEvmSend()
+    resetPermitSign()
     setStarkTxHash(null)
     setIsStarkPending(false)
     setIsStarkConfirming(false)
     setIsStarkConfirmed(false)
     setStarkError(null)
     starkPollAbort.current?.abort()
-    feeTriggered.current = false
-    resetFeeTx()
 
     // Auto-trigger connection if user switches to a chain they aren't on
     if (c === 'starknet' && !starkAccount) {
@@ -191,76 +271,134 @@ export default function PaymentPage() {
     }
   }, [isEvmChain, isConnected, isCorrectNetwork, isSwitching, switchChain, targetChainId])
 
-  // ── Auto-send platform fee after main EVM tx confirms ────────────────────
-  useEffect(() => {
-    if (!isEvmChain || !isEvmConfirmed || feeTriggered.current) return
-    feeTriggered.current = true
-
-    const feeBps = BigInt(PLATFORM_FEE_BPS)
-
-    if (chain === 'base' || chain === 'arc') {
-      const meta_ = chain === 'arc' ? CHAIN_META.arc : CHAIN_META.base
-      const totalUnits = parseUnits(amt, meta_.decimals)
-      const feeUnits = totalUnits * feeBps / 10_000n
-      if (feeUnits > 0n) {
-        sendFeeTx({
-          to: meta_.tokenAddress,
-          data: encodeFunctionData({
-            abi: ERC20_TRANSFER_ABI,
-            functionName: 'transfer',
-            args: [EVM_TREASURY, feeUnits],
-          }),
-          value: 0n,
-          chainId: targetChainId,
-        })
-      }
-    } else if (chain === 'hashkey') {
-      const totalNative = parseEther(amt)
-      const feeNative = totalNative * feeBps / 10_000n
-      if (feeNative > 0n) {
-        sendFeeTx({
-          to: EVM_TREASURY,
-          value: feeNative,
-          chainId: CHAIN_META.hashkey.chainId,
-        })
-      }
-    }
-  }, [isEvmConfirmed]) // eslint-disable-line react-hooks/exhaustive-deps
-
   // ── Payment handler ──────────────────────────────────────────────────────
-  function handlePay() {
+  async function handlePay() {
     if (!activeRecipient) return
 
-    const feeBps = BigInt(PLATFORM_FEE_BPS)
-
     if (chain === 'base' || chain === 'arc') {
-      // Send 99.5% to recipient — fee tx auto-fires after confirmation
-      const meta_ = chain === 'arc' ? CHAIN_META.arc : CHAIN_META.base
-      const totalUnits = parseUnits(amt, meta_.decimals)
-      const feeUnits = totalUnits * feeBps / 10_000n
-      const recipientUnits = totalUnits - feeUnits
-      const data = encodeErc20Transfer(
-        activeRecipient as `0x${string}`,
-        // format back to decimal string for encodeErc20Transfer
-        (Number(recipientUnits) / 10 ** meta_.decimals).toString(),
-        meta_.decimals,
-        memo,
-      )
-      sendTransaction({ to: meta_.tokenAddress, data, value: 0n, chainId: targetChainId })
+      await handleEvmPermitPay()
     } else if (chain === 'starknet') {
       handleStarknetPay()
     } else {
-      // HashKey: native HSK — send 99.5% to recipient, fee tx auto-fires after
-      const totalNative = parseEther(amt)
-      const feeNative = totalNative * feeBps / 10_000n
-      const recipientNative = totalNative - feeNative
-      sendTransaction({
-        to: activeRecipient as `0x${string}`,
-        value: recipientNative,
-        chainId: CHAIN_META.hashkey.chainId,
-        ...(memo.trim() ? { data: memoToHex(memo.trim()) } : {}),
-      })
+      handleHashKeyPay()
     }
+  }
+
+  // ── ERC-20: EIP-2612 Permit + Multicall3 — one signature, one transaction ─
+  async function handleEvmPermitPay() {
+    if (!address) return
+    const meta_ = chain === 'arc' ? CHAIN_META.arc : CHAIN_META.base
+    const tokenAddress = meta_.tokenAddress
+    const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600) // 1 hour
+
+    const totalUnits    = parseUnits(amt, meta_.decimals)
+    const feeBps        = BigInt(PLATFORM_FEE_BPS)
+    const feeUnits      = totalUnits * feeBps / 10_000n
+    const recipientUnits = totalUnits - feeUnits
+    const nonce         = permitNonce ?? 0n
+
+    try {
+      // Step 1 — off-chain permit signature (gasless, just a wallet sign prompt)
+      const sig = await signTypedDataAsync({
+        domain: {
+          name: 'USD Coin',
+          version: '2',
+          chainId: targetChainId,
+          verifyingContract: tokenAddress,
+        },
+        types: {
+          Permit: [
+            { name: 'owner',    type: 'address' },
+            { name: 'spender',  type: 'address' },
+            { name: 'value',    type: 'uint256' },
+            { name: 'nonce',    type: 'uint256' },
+            { name: 'deadline', type: 'uint256' },
+          ],
+        },
+        primaryType: 'Permit',
+        message: {
+          owner:    address,
+          spender:  MULTICALL3_ADDRESS,
+          value:    totalUnits,
+          nonce,
+          deadline,
+        },
+      })
+
+      // Step 2 — decompose compact signature into v / r / s
+      const { v, r, s } = parseSignature(sig)
+
+      // Step 3 — single multicall3 tx: permit → transferFrom(recipient) → transferFrom(treasury)
+      sendTransaction({
+        to:      MULTICALL3_ADDRESS,
+        value:   0n,
+        chainId: targetChainId,
+        data: encodeFunctionData({
+          abi:          MULTICALL3_AGGREGATE3_ABI,
+          functionName: 'aggregate3',
+          args: [[
+            {
+              target:       tokenAddress,
+              allowFailure: false,
+              callData:     encodeFunctionData({
+                abi: ERC20_PERMIT_ABI, functionName: 'permit',
+                args: [address, MULTICALL3_ADDRESS, totalUnits, deadline, Number(v), r, s],
+              }),
+            },
+            {
+              target:       tokenAddress,
+              allowFailure: false,
+              callData:     encodeFunctionData({
+                abi: ERC20_TRANSFER_FROM_ABI, functionName: 'transferFrom',
+                args: [address, activeRecipient as `0x${string}`, recipientUnits],
+              }),
+            },
+            {
+              target:       tokenAddress,
+              allowFailure: false,
+              callData:     encodeFunctionData({
+                abi: ERC20_TRANSFER_FROM_ABI, functionName: 'transferFrom',
+                args: [address, EVM_TREASURY, feeUnits],
+              }),
+            },
+          ]],
+        }),
+      })
+    } catch {
+      // User rejected permit signature — button returns to idle state
+    }
+  }
+
+  // ── HashKey native HSK: aggregate3Value — one tx, no permit needed ────────
+  function handleHashKeyPay() {
+    const totalNative    = parseEther(amt)
+    const feeBps         = BigInt(PLATFORM_FEE_BPS)
+    const feeNative      = totalNative * feeBps / 10_000n
+    const recipientNative = totalNative - feeNative
+
+    sendTransaction({
+      to:      MULTICALL3_ADDRESS,
+      value:   totalNative,
+      chainId: CHAIN_META.hashkey.chainId,
+      data: encodeFunctionData({
+        abi:          MULTICALL3_AGGREGATE3VALUE_ABI,
+        functionName: 'aggregate3Value',
+        args: [[
+          {
+            target:       activeRecipient as `0x${string}`,
+            allowFailure: false,
+            value:        recipientNative,
+            callData:     (memo.trim() ? memoToHex(memo.trim()) : '0x') as `0x${string}`,
+          },
+          {
+            target:       EVM_TREASURY,
+            allowFailure: false,
+            value:        feeNative,
+            callData:     '0x',
+          },
+        ]],
+      }),
+    })
   }
 
   async function handleStarknetPay() {
@@ -318,12 +456,12 @@ export default function PaymentPage() {
   }
 
   // ── Unified state aliases ────────────────────────────────────────────────
-  const isConfirmed    = chain === 'starknet' ? isStarkConfirmed      : isEvmConfirmed
-  const txHash         = chain === 'starknet' ? starkTxHash           : evmTxHash
-  const isWalletPending = chain === 'starknet' ? isStarkPending        : isEvmWalletPending
-  const isConfirming   = chain === 'starknet' ? isStarkConfirming     : isEvmConfirming
-  const isSendError    = chain !== 'starknet' ? isEvmSendError        : !!starkError
-  const sendErrorMsg   =
+  const isConfirmed     = chain === 'starknet' ? isStarkConfirmed  : isEvmConfirmed
+  const txHash          = chain === 'starknet' ? starkTxHash       : evmTxHash
+  const isWalletPending = chain === 'starknet' ? isStarkPending    : isEvmWalletPending || isSignPending
+  const isConfirming    = chain === 'starknet' ? isStarkConfirming : isEvmConfirming
+  const isSendError     = chain !== 'starknet' ? isEvmSendError    : !!starkError
+  const sendErrorMsg    =
     chain === 'starknet'
       ? starkError
       : (evmSendError?.message ?? 'An unknown error occurred').slice(0, 140)
@@ -727,8 +865,9 @@ export default function PaymentPage() {
                   : 'bg-black text-white shadow-button hover:bg-gray-800 hover:shadow-md active:scale-[0.98]',
               )}
             >
-              {isWalletPending  ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirm in Wallet…</>
-              : isConfirming    ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirming on Chain…</>
+              {isSignPending      ? <><Loader2 className="h-4 w-4 animate-spin" /> Sign Permit in Wallet…</>
+              : isEvmWalletPending ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirm in Wallet…</>
+              : isConfirming       ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirming on Chain…</>
               : <><Zap className="h-4 w-4" /> Pay {formatAmount(amt, meta.decimals)} {meta.asset} on {meta.label}</>}
             </button>
           )}
@@ -740,16 +879,6 @@ export default function PaymentPage() {
           </p>
         </div>
       </div>
-
-      {/* ── Fee tx submitted (background, silent) ─────────────────────── */}
-      {feeTxHash && isEvmConfirmed && (
-        <div className="mt-2 flex items-center gap-2 rounded-xl border border-slate-100 bg-slate-50/80 px-4 py-2 animate-fade-in">
-          <span className="h-1.5 w-1.5 rounded-full bg-slate-300 shrink-0" />
-          <p className="text-[11px] text-slate-400 truncate font-mono">
-            Fee tx: {feeTxHash.slice(0, 18)}…
-          </p>
-        </div>
-      )}
 
       {/* ── Pending tx banner ─────────────────────────────────────────── */}
       {txHash && !isConfirmed && (

@@ -10,6 +10,6 @@
  */
 
 export { PayLinkButton } from './PayLinkButton'
-export { CHAIN_META, PLATFORM_FEE_BPS, PLATFORM_TREASURY, arcChain, hashkeyMainnet } from './chains'
+export { CHAIN_META, PLATFORM_FEE_BPS, PLATFORM_TREASURY, MULTICALL3_ADDRESS, arcChain, hashkeyMainnet } from './chains'
 export type { ChainKey } from './chains'
 export type { PayLinkButtonProps, PaymentSuccessParams, UsePayLinkReturn } from './types'

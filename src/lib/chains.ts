@@ -8,6 +8,8 @@ export type ChainKey = 'base' | 'starknet' | 'hashkey' | 'arc'
 export const PLATFORM_FEE_BPS = 50
 /** EVM treasury — receives 0.5% fee on Base, HashKey, Arc */
 export const EVM_TREASURY = '0xcE5dF9e1115F81a2Fc2F65941B20B820d508e753' as `0x${string}`
+/** Multicall3 — canonical address on all EVM chains; used for atomic permit+split */
+export const MULTICALL3_ADDRESS = '0xcA11bde05977b3631167028862bE2a173976CA11' as `0x${string}`
 /** Starknet treasury — receives 0.5% fee on Starknet */
 export const STARK_TREASURY = '0x0483AB5539B281c08777F1C8337Beeba05c2610feDcbA191B989E35eDc2767C3'
 /** @deprecated — use EVM_TREASURY or STARK_TREASURY */
