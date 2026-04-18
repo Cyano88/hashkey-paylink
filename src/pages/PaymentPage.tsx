@@ -174,6 +174,7 @@ export default function PaymentPage() {
   })
 
   const [hashCopied, setHashCopied] = useState(false)
+  const [addrCopied, setAddrCopied] = useState(false)
 
   // ── EVM hooks (Base + HashKey + Arc) ────────────────────────────────────
   const { isConnected, address } = useAccount()
@@ -455,6 +456,13 @@ export default function PaymentPage() {
     setTimeout(() => setHashCopied(false), 2000)
   }
 
+  async function handleCopyAddress() {
+    if (!activeRecipient) return
+    await copyToClipboard(activeRecipient)
+    setAddrCopied(true)
+    setTimeout(() => setAddrCopied(false), 3000)
+  }
+
   // ── Unified state aliases ────────────────────────────────────────────────
   const isConfirmed     = chain === 'starknet' ? isStarkConfirmed  : isEvmConfirmed
   const txHash          = chain === 'starknet' ? starkTxHash       : evmTxHash
@@ -598,28 +606,38 @@ export default function PaymentPage() {
             {CHAINS.map((c) => {
               const m = CHAIN_META[c]
               const isActive = chain === c
-              const unavailable = c === 'starknet' && !resolvedStark
+              const unavailable =
+                (c === 'starknet' && !resolvedStark) ||
+                (c !== 'starknet' && !resolvedEvm)
               return (
-                <button
-                  key={c}
-                  onClick={() => handleChainSwitch(c)}
-                  className={cn(
-                    'flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all duration-150',
-                    isActive
-                      ? m.toggleActive
-                      : unavailable
-                      ? 'cursor-pointer text-gray-400 hover:text-gray-600'
-                      : 'text-gray-500 hover:text-gray-800',
-                  )}
-                >
-                  <span className={cn('h-1.5 w-1.5 rounded-full transition-colors',
-                    isActive ? 'bg-white/80' : unavailable ? 'bg-gray-300' : m.dotColor,
-                  )} />
-                  {m.label}
+                <div key={c} className="relative group">
+                  <button
+                    onClick={() => !unavailable && handleChainSwitch(c)}
+                    disabled={unavailable && !isActive}
+                    className={cn(
+                      'flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all duration-150',
+                      isActive
+                        ? m.toggleActive
+                        : unavailable
+                        ? 'cursor-not-allowed text-gray-300'
+                        : 'cursor-pointer text-gray-500 hover:text-gray-800',
+                    )}
+                  >
+                    <span className={cn('h-1.5 w-1.5 rounded-full transition-colors',
+                      isActive ? 'bg-white/80' : unavailable ? 'bg-gray-200' : m.dotColor,
+                    )} />
+                    {m.label}
+                  </button>
+                  {/* Tooltip — only on unavailable pills */}
                   {unavailable && !isActive && (
-                    <span className="text-[9px] font-normal opacity-60">N/A</span>
+                    <div className="pointer-events-none absolute bottom-full left-1/2 mb-2 hidden -translate-x-1/2 group-hover:flex flex-col items-center z-20">
+                      <div className="whitespace-nowrap rounded-lg bg-gray-900/90 px-2.5 py-1.5 text-[10px] text-white shadow-lg">
+                        Recipient address not provided for this chain
+                      </div>
+                      <div className="border-4 border-transparent border-t-gray-900/90" />
+                    </div>
                   )}
-                </button>
+                </div>
               )
             })}
           </div>
@@ -665,7 +683,26 @@ export default function PaymentPage() {
         <div className="p-6 space-y-5">
           {/* Transaction details */}
           <div className="divide-y divide-gray-100 overflow-hidden rounded-xl border border-gray-100">
-            <Row label="To" value={activeRecipient ? truncateAddress(activeRecipient, 8) : '—'} mono />
+            {/* To — copy button visible regardless of wallet connection */}
+            <div className="flex items-center justify-between bg-gray-50/60 px-4 py-3">
+              <span className="text-sm text-gray-500">To</span>
+              <div className="flex items-center gap-1.5">
+                <span className="font-mono text-xs text-gray-800">
+                  {activeRecipient ? truncateAddress(activeRecipient, 8) : '—'}
+                </span>
+                {activeRecipient && (
+                  <button
+                    onClick={handleCopyAddress}
+                    title="Copy address"
+                    className="flex items-center justify-center rounded-md p-1 text-gray-400 transition-all hover:bg-gray-200/70 hover:text-gray-700 active:scale-90"
+                  >
+                    {addrCopied
+                      ? <CheckCheck className="h-3.5 w-3.5 text-emerald-500" />
+                      : <Copy className="h-3.5 w-3.5" />}
+                  </button>
+                )}
+              </div>
+            </div>
             <Row
               label="Network"
               value={
@@ -700,6 +737,16 @@ export default function PaymentPage() {
               <Row label="Memo (on-chain)" value={memo.length > 28 ? memo.slice(0, 28) + '…' : memo} />
             )}
           </div>
+
+          {/* ── Vault routing note — fades in after address is copied ─── */}
+          {addrCopied && (
+            <div className="flex items-start gap-2 rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2.5 animate-fade-in">
+              <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
+              <p className="text-[11px] leading-relaxed text-slate-400 italic">
+                Funds sent to this address are automatically routed to the recipient via Hash PayLink's secure vault.
+              </p>
+            </div>
+          )}
 
           {/* ── ⚠️ Missing Starknet address safety net ─────────────────── */}
           {missingStark && (
