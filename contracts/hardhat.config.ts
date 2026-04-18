@@ -18,7 +18,7 @@ const config: HardhatUserConfig = {
 
   // .sol files live one level up in contracts/
   paths: {
-    sources:   '.',
+    sources:   './contracts',
     tests:     './test',
     artifacts: './artifacts',
     cache:     './cache',

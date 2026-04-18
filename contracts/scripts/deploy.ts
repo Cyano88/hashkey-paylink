@@ -22,10 +22,15 @@ async function main() {
   const factoryAddress = await factory.getAddress()
   console.log(`✅  PaymentRouterFactory: ${factoryAddress}\n`)
 
-  // ── Sanity check — predict a sample router ───────────────────────────────
-  const sampleRouter = await factory.getRouterAddress(deployer.address)
-  console.log(`Sample router for deployer: ${sampleRouter}`)
-  console.log('(Not yet deployed — call deployRouter(recipient) to activate)\n')
+  // ── Wait a few blocks, then sanity-check router prediction ──────────────
+  await new Promise(r => setTimeout(r, 6000))
+  try {
+    const sampleRouter = await factory.getRouterAddress(deployer.address)
+    console.log(`Sample router for deployer: ${sampleRouter}`)
+    console.log('(Not yet deployed — call deployRouter(recipient) to activate)\n')
+  } catch {
+    console.log('(Router prediction skipped — factory is live)\n')
+  }
 
   // ── Instructions ─────────────────────────────────────────────────────────
   console.log('═════════════════════════════════════════════')

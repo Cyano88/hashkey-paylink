@@ -15,9 +15,9 @@
 
 // ─── Factory addresses — fill in after deploying each chain ──────────────────
 export const ROUTER_FACTORY: Partial<Record<'base' | 'hashkey' | 'arc', `0x${string}`>> = {
-  // base:    '0x...',   // npm run deploy:base
-  // hashkey: '0x...',   // npm run deploy:hashkey
-  // arc:     '0x...',   // npm run deploy:arc
+  base:    '0x9439D7f770B2AEBAD9d0D05f2C713F0dB6b812ba',
+  hashkey: '0x9439D7f770B2AEBAD9d0D05f2C713F0dB6b812ba',
+  arc:     '0x9439D7f770B2AEBAD9d0D05f2C713F0dB6b812ba',
 }
 
 // ─── ABIs ────────────────────────────────────────────────────────────────────
