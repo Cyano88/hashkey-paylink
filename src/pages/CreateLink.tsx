@@ -15,9 +15,12 @@ import {
 import { isAddress } from 'viem'
 import { cn, truncateAddress, formatAmount, copyToClipboard } from '../lib/utils'
 import { useStarknet } from '../lib/StarknetContext'
+import { CHAIN_META, type ChainKey } from '../lib/chains'
 
-// ─── Starknet address: 0x followed by 1–64 hex chars ────────────────────────
-const isValidStarkAddr = (v: string) => /^0x[0-9a-fA-F]{1,64}$/.test(v)
+// ─── Starknet address: 0x followed by exactly 64 hex chars ──────────────────
+const isValidStarkAddr = (v: string) => /^0x[0-9a-fA-F]{64}$/.test(v)
+
+const CHAINS: ChainKey[] = ['base', 'starknet', 'hashkey', 'arc']
 
 export default function CreateLink() {
   const [evmAddr, setEvmAddr] = useState('')
@@ -26,6 +29,7 @@ export default function CreateLink() {
   const [memo, setMemo] = useState('')
   const [generatedLink, setGeneratedLink] = useState('')
   const [copied, setCopied] = useState(false)
+  const [previewChain, setPreviewChain] = useState<ChainKey>('base')
 
   // ── Connected wallet auto-fill ─────────────────────────────────────────
   const { address: connectedEvm } = useAccount()
@@ -93,6 +97,46 @@ export default function CreateLink() {
         <p className="mt-2 text-[15px] text-gray-500 text-balance">
           Request USDC or HSK from anyone — no app, no signup, just a link.
         </p>
+
+        {/* ── Chain preview toggle ──────────────────────────────────── */}
+        <div className="mt-5 flex flex-col items-center gap-2.5">
+          {/* Pill row — flex-wrap so 4 pills stay readable on mobile */}
+          <div className="flex flex-wrap items-center justify-center gap-1 rounded-xl border border-gray-200 bg-gray-100/80 p-1 max-w-xs sm:max-w-none sm:inline-flex">
+            {CHAINS.map((c) => {
+              const m = CHAIN_META[c]
+              const isActive = previewChain === c
+              return (
+                <button
+                  key={c}
+                  onClick={() => setPreviewChain(c)}
+                  className={cn(
+                    'flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all duration-150',
+                    isActive ? m.toggleActive : 'text-gray-500 hover:text-gray-800',
+                  )}
+                >
+                  <span className={cn(
+                    'h-1.5 w-1.5 rounded-full transition-colors',
+                    isActive ? 'bg-white/80' : m.dotColor,
+                  )} />
+                  {m.label}
+                </button>
+              )
+            })}
+          </div>
+          {/* Engine detail sub-badge */}
+          {(() => {
+            const m = CHAIN_META[previewChain]
+            return (
+              <span className={cn(
+                'inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-semibold transition-all duration-200',
+                m.badgeBg, m.badgeText, m.badgeBorder,
+              )}>
+                <span className={cn('h-1.5 w-1.5 rounded-full', m.dotColor)} />
+                {m.engineLabel}
+              </span>
+            )
+          })()}
+        </div>
       </div>
 
       {/* ── Form card ─────────────────────────────────────────────────── */}
@@ -161,7 +205,7 @@ export default function CreateLink() {
             <div className="relative">
               <input
                 type="text"
-                placeholder="0x… (up to 64 hex chars)"
+                placeholder="0x… (exactly 64 hex chars)"
                 value={starkAddr}
                 onChange={(e) => { setStarkAddr(e.target.value.trim()); setGeneratedLink('') }}
                 spellCheck={false}
@@ -182,7 +226,7 @@ export default function CreateLink() {
             </div>
             {starkDirty && !starkValid && (
               <p className="flex items-center gap-1 text-xs text-red-500">
-                <Info className="h-3 w-3" /> Must be a valid Starknet address (0x + hex)
+                <Info className="h-3 w-3" /> ⚠️ Error: Must be a valid 64-character Starknet address.
               </p>
             )}
             {starkValid && (

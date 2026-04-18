@@ -1,7 +1,13 @@
 import { defineChain } from 'viem'
 import { base } from 'viem/chains'
 
-export type ChainKey = 'base' | 'starknet' | 'hashkey'
+export type ChainKey = 'base' | 'starknet' | 'hashkey' | 'arc'
+
+// ─── Platform fee engine ─────────────────────────────────────────────────────
+/** 0.5 % platform fee in basis points (50 bps). Collected via FeeRouter on settlement. */
+export const PLATFORM_FEE_BPS = 50
+/** Treasury address — replace with your deployed FeeRouter before mainnet use */
+export const PLATFORM_TREASURY = '0xFEEf3e28e0A7F27b0c1f7f68A0cC65b3b3A6f5D' as `0x${string}`
 
 // ─── HashKey Mainnet (Chain 177) ────────────────────────────────────────────
 export const hashkeyMainnet = defineChain({
@@ -22,6 +28,51 @@ export const hashkeyMainnet = defineChain({
 })
 
 export { base as baseMainnet }
+
+// ─── Arc Chain (Economic OS) ─────────────────────────────────────────────────
+//
+// STATUS: TESTNET (Chain ID 5042002, public since Oct 2025)
+//
+// TO UPGRADE TO MAINNET when Arc goes live:
+//   1. Update id, rpcUrls, blockExplorers below (swap testnet → mainnet values)
+//   2. Update CHAIN_META.arc.tokenAddress to the mainnet Circle USDC deployment
+//   3. Update CHAIN_META.arc.explorerUrl / explorerName
+//   4. Update wagmi.ts transport to the mainnet RPC
+//
+// Arc uses USDC as its native gas token (not ETH).
+// nativeCurrency.decimals = 18 (gas accounting), ERC-20 USDC uses 6 decimals.
+//
+export const arcChain = defineChain({
+  id: 5042002,
+  name: 'Arc Testnet',
+  nativeCurrency: { decimals: 18, name: 'USD Coin', symbol: 'USDC' },
+  rpcUrls: {
+    default: { http: ['https://rpc.testnet.arc.network'] },
+    public:  { http: ['https://rpc.testnet.arc.network', 'https://arc-testnet.drpc.org'] },
+  },
+  blockExplorers: {
+    default: {
+      name: 'Arcscan',
+      url: 'https://testnet.arcscan.app',
+      apiUrl: 'https://testnet.arcscan.app/api',
+    },
+  },
+  testnet: true,
+})
+
+// ─── Mainnet values — uncomment + swap in above when Arc mainnet launches ─────
+// export const arcChain = defineChain({
+//   id: /* Arc Mainnet Chain ID — TBA */,
+//   name: 'Arc',
+//   nativeCurrency: { decimals: 18, name: 'USD Coin', symbol: 'USDC' },
+//   rpcUrls: {
+//     default: { http: ['https://rpc.arc.network'] },
+//     public:  { http: ['https://rpc.arc.network'] },
+//   },
+//   blockExplorers: {
+//     default: { name: 'Arcscan', url: 'https://arcscan.app', apiUrl: 'https://arcscan.app/api' },
+//   },
+// })
 
 // ─── Per-chain metadata ──────────────────────────────────────────────────────
 export const CHAIN_META = {
@@ -82,6 +133,29 @@ export const CHAIN_META = {
     toggleActive: 'bg-[#C9A227] text-white shadow-sm',
     headerBg: 'from-amber-50 to-yellow-50',
     dotColor: 'bg-amber-400',
-    engineLabel: 'Native HSK · Chain 177',
+    engineLabel: 'HashKey Mainnet · Native HSK',
+  },
+  arc: {
+    key: 'arc' as const,
+    label: 'Arc',
+    asset: 'USDC',
+    decimals: 6,
+    chainId: 5042002,
+    // Circle USDC on Arc Testnet — update to mainnet address when Arc launches
+    // Ref: https://docs.arc.network/arc/references/contract-addresses
+    tokenAddress: '0x0000000000000000000000000000000000000001' as `0x${string}`,
+    explorerUrl: 'https://testnet.arcscan.app',
+    explorerName: 'Arcscan',
+    // Glow: Violet (Arc brand)
+    glowStyle: '0 0 52px -8px rgba(124,58,237,0.30), 0 0 0 1px rgba(124,58,237,0.14)',
+    accentColor: '#7C3AED',
+    badgeBg: 'bg-violet-50',
+    badgeText: 'text-violet-700',
+    badgeBorder: 'border-violet-200',
+    toggleActive: 'bg-[#7C3AED] text-white shadow-sm',
+    headerBg: 'from-violet-50 to-purple-50',
+    dotColor: 'bg-violet-500',
+    engineLabel: 'Arc Testnet · Native USDC Gas',
+    isTestnet: true,
   },
 } as const

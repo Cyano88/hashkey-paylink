@@ -7,7 +7,7 @@ import {
   useSendTransaction,
   useWaitForTransactionReceipt,
 } from 'wagmi'
-import { ConnectButton } from '@rainbow-me/rainbowkit'
+import { ConnectButton, useConnectModal } from '@rainbow-me/rainbowkit'
 import { parseEther, isAddress } from 'viem'
 import {
   ArrowLeft,
@@ -23,7 +23,7 @@ import {
   Wallet,
   AlertTriangle,
 } from 'lucide-react'
-import { CHAIN_META, type ChainKey } from '../lib/chains'
+import { CHAIN_META, PLATFORM_FEE_BPS, type ChainKey } from '../lib/chains'
 import { useStarknet } from '../lib/StarknetContext'
 import {
   cn,
@@ -34,7 +34,7 @@ import {
   copyToClipboard,
 } from '../lib/utils'
 
-const CHAINS: ChainKey[] = ['base', 'starknet', 'hashkey']
+const CHAINS: ChainKey[] = ['base', 'starknet', 'hashkey', 'arc']
 
 // ─── Starknet RPC for polling tx status ─────────────────────────────────────
 const STARKNET_RPC = 'https://starknet-mainnet.public.blastapi.io'
@@ -99,6 +99,7 @@ export default function PaymentPage() {
   const { isConnected } = useAccount()
   const chainId = useChainId()
   const { switchChain, isPending: isSwitching } = useSwitchChain()
+  const { openConnectModal } = useConnectModal()
 
   const {
     sendTransaction,
@@ -121,9 +122,17 @@ export default function PaymentPage() {
   const [starkError,        setStarkError]         = useState<string | null>(null)
   const starkPollAbort = useRef<AbortController | null>(null)
 
+  // ── Fee engine ────────────────────────────────────────────────────────────
+  const feeMultiplier  = PLATFORM_FEE_BPS / 10_000          // 0.005
+  const feeAmount      = (parseFloat(amt) || 0) * feeMultiplier
+  const recipientAmt   = (parseFloat(amt) || 0) * (1 - feeMultiplier)
+
   // ── Derived ──────────────────────────────────────────────────────────────
-  const isEvmChain   = chain !== 'starknet'
-  const targetChainId = chain === 'base' ? CHAIN_META.base.chainId : CHAIN_META.hashkey.chainId
+  const isEvmChain    = chain !== 'starknet'
+  const targetChainId =
+    chain === 'base'    ? CHAIN_META.base.chainId :
+    chain === 'arc'     ? CHAIN_META.arc.chainId  :
+    CHAIN_META.hashkey.chainId
   const isCorrectNetwork = isEvmChain ? chainId === targetChainId : true
   const meta = CHAIN_META[chain]
 
@@ -139,7 +148,7 @@ export default function PaymentPage() {
     parseFloat(amt) > 0 &&
     (isAddress(resolvedEvm) || !!resolvedStark)
 
-  // ── Reset tx state on chain switch ───────────────────────────────────────
+  // ── Reset tx state on chain switch + auto-connection triggers ────────────
   function handleChainSwitch(c: ChainKey) {
     setChain(c)
     resetEvmSend()
@@ -149,6 +158,13 @@ export default function PaymentPage() {
     setIsStarkConfirmed(false)
     setStarkError(null)
     starkPollAbort.current?.abort()
+
+    // Auto-trigger connection if user switches to a chain they aren't on
+    if (c === 'starknet' && !starkAccount) {
+      connectStarknet()
+    } else if (c !== 'starknet' && !isConnected) {
+      openConnectModal?.()
+    }
   }
 
   // ── Auto-switch EVM network ───────────────────────────────────────────────
@@ -162,14 +178,16 @@ export default function PaymentPage() {
   function handlePay() {
     if (!activeRecipient) return
 
-    if (chain === 'base') {
+    if (chain === 'base' || chain === 'arc') {
+      // ERC-20 USDC transfer — same ABI on Base and Arc
+      const meta_ = chain === 'arc' ? CHAIN_META.arc : CHAIN_META.base
       const data = encodeErc20Transfer(
         activeRecipient as `0x${string}`,
         amt,
-        CHAIN_META.base.decimals,
+        meta_.decimals,
         memo,
       )
-      sendTransaction({ to: CHAIN_META.base.tokenAddress, data, value: 0n })
+      sendTransaction({ to: meta_.tokenAddress, data, value: 0n, chainId: targetChainId })
     } else if (chain === 'starknet') {
       handleStarknetPay()
     } else {
@@ -357,20 +375,19 @@ export default function PaymentPage() {
           borderColor: meta.accentColor + '26',
         }}
       >
-        {/* ── Tri-Chain Toggle ─────────────────────────────────────────── */}
-        <div className="flex justify-center pt-5 pb-0 px-6">
-          <div className="inline-flex items-center gap-1 rounded-xl border border-gray-200 bg-gray-100/80 p-1">
+        {/* ── Quad-Chain Toggle — flex-wrap so 4 pills fit on mobile ──── */}
+        <div className="flex justify-center pt-5 pb-0 px-4">
+          <div className="flex flex-wrap items-center justify-center gap-1 rounded-xl border border-gray-200 bg-gray-100/80 p-1 max-w-xs sm:max-w-none">
             {CHAINS.map((c) => {
               const m = CHAIN_META[c]
               const isActive = chain === c
-              // Dim Starknet if no stark address was provided
               const unavailable = c === 'starknet' && !resolvedStark
               return (
                 <button
                   key={c}
                   onClick={() => handleChainSwitch(c)}
                   className={cn(
-                    'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all duration-150',
+                    'flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all duration-150',
                     isActive
                       ? m.toggleActive
                       : unavailable
@@ -391,11 +408,28 @@ export default function PaymentPage() {
           </div>
         </div>
 
-        {/* Amount header */}
+        {/* Amount header — Arc mode gets special branding */}
         <div className={cn('border-b border-gray-100 bg-gradient-to-br p-6 text-center mt-4', meta.headerBg)}>
-          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-widest text-gray-400">
-            Payment Request
-          </p>
+          {chain === 'arc' ? (
+            <div className="mb-2 flex flex-wrap items-center justify-center gap-2">
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#7C3AED] text-white text-xs font-bold shadow-sm">
+                ⬡
+              </span>
+              <span className="text-xs font-bold tracking-wide text-violet-700">
+                Arc Economic OS
+              </span>
+              <span className="rounded-full border border-violet-200 bg-violet-100 px-2 py-0.5 text-[10px] font-semibold text-violet-600">
+                Sub-second finality
+              </span>
+              <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-600">
+                Testnet
+              </span>
+            </div>
+          ) : (
+            <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-widest text-gray-400">
+              Payment Request
+            </p>
+          )}
           <div className="flex items-baseline justify-center gap-2">
             <span className="text-[2.75rem] font-bold leading-none tracking-tight text-gray-900">
               {formatAmount(amt, meta.decimals)}
@@ -420,7 +454,10 @@ export default function PaymentPage() {
               value={
                 <span className="flex items-center gap-1.5 text-sm font-medium text-gray-800">
                   <span className={cn('h-2 w-2 rounded-full', meta.dotColor)} />
-                  {chain === 'base' ? 'Base Mainnet' : chain === 'starknet' ? 'Starknet Mainnet' : 'HashKey Chain'}
+                  {chain === 'base' ? 'Base Mainnet'
+                    : chain === 'starknet' ? 'Starknet Mainnet'
+                    : chain === 'arc' ? 'Arc Economic OS'
+                    : 'HashKey Chain'}
                 </span>
               }
             />
@@ -430,6 +467,17 @@ export default function PaymentPage() {
             <Row
               label="Engine"
               value={<span className={cn('text-xs font-medium', meta.badgeText)}>{meta.engineLabel}</span>}
+            />
+            {/* Platform fee row */}
+            <Row
+              label="Platform fee (0.5%)"
+              value={
+                <span className="text-xs text-gray-500">
+                  {feeAmount > 0
+                    ? `${feeAmount.toFixed(meta.decimals <= 6 ? 4 : 6)} ${meta.asset}`
+                    : '—'}
+                </span>
+              }
             />
             {memo && (
               <Row label="Memo (on-chain)" value={memo.length > 28 ? memo.slice(0, 28) + '…' : memo} />
@@ -564,7 +612,7 @@ export default function PaymentPage() {
               >
                 {isStarkPending   ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirm in Wallet…</>
                 : isStarkConfirming ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirming on Chain…</>
-                : <><Zap className="h-4 w-4" /> Pay {formatAmount(amt, 6)} USDC</>}
+                : <><Zap className="h-4 w-4" /> Pay {formatAmount(amt, 6)} USDC on {meta.label}</>}
               </button>
             )
           ) : !isConnected ? (
@@ -602,7 +650,7 @@ export default function PaymentPage() {
             >
               {isWalletPending  ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirm in Wallet…</>
               : isConfirming    ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirming on Chain…</>
-              : <><Zap className="h-4 w-4" /> Pay {formatAmount(amt, meta.decimals)} {meta.asset}</>}
+              : <><Zap className="h-4 w-4" /> Pay {formatAmount(amt, meta.decimals)} {meta.asset} on {meta.label}</>}
             </button>
           )}
 
