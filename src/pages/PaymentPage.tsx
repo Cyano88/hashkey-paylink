@@ -1032,39 +1032,6 @@ export default function PaymentPage() {
         <div className="p-6 space-y-5">
           {/* Transaction details */}
           <div className="divide-y divide-gray-100 overflow-hidden rounded-xl border border-gray-100">
-            {/* To row — copy always visible */}
-            <div className="flex items-center justify-between bg-gray-50/60 px-4 py-3">
-              <span className="text-sm text-gray-500">To</span>
-              <div className="flex items-center gap-1.5">
-                {/* Router badge — only when confirmed deployed */}
-                {isRouterAddress && routerDeployed === true && (
-                  <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-700 tracking-wide">
-                    Router
-                  </span>
-                )}
-                {/* Deploying indicator */}
-                {isRouterAddress && routerDeployed === null && (
-                  <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[9px] font-semibold text-gray-400 tracking-wide">
-                    …
-                  </span>
-                )}
-                <span className="font-mono text-xs text-gray-800">
-                  {displayAddress ? truncateAddress(displayAddress, 8) : '—'}
-                </span>
-                {displayAddress && (
-                  <button
-                    onClick={handleCopyAddress}
-                    title="Copy address"
-                    className="flex items-center justify-center rounded-md p-1 text-gray-400 transition-all hover:bg-gray-200/70 hover:text-gray-700 active:scale-90"
-                  >
-                    {addrCopied
-                      ? <CheckCheck className="h-3.5 w-3.5 text-emerald-500" />
-                      : <Copy className="h-3.5 w-3.5" />}
-                  </button>
-                )}
-              </div>
-            </div>
-
             <Row
               label="Network"
               value={
@@ -1144,7 +1111,9 @@ export default function PaymentPage() {
                     </div>
                     <p className="text-[11px] font-medium text-emerald-700">Monitoring for USDC — detects in under 3 seconds</p>
                   </div>
-                  <p className="text-center text-xs text-gray-500">Send any amount of USDC to this address</p>
+                  <p className="text-center text-xs text-gray-500">
+                    Send exact amount of USDC on {chain === 'base' ? 'Base' : chain === 'arc' ? 'Arc' : meta.label} network to this address
+                  </p>
                   <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3.5">
                     <p className="min-w-0 flex-1 break-all font-mono text-xs text-gray-800">{directVault}</p>
                     <button
@@ -1156,67 +1125,21 @@ export default function PaymentPage() {
                         : <><Copy className="h-3.5 w-3.5" /> Copy</>}
                     </button>
                   </div>
-                  <p className="text-center text-[11px] text-gray-400">
-                    Funds are automatically split on arrival — 99.5% to recipient · 0.5% fee
-                  </p>
                 </div>
               )}
             </div>
           )}
 
-          {/* Wallet-mode only: vault status, listener, pay button */}
-          {payMode === 'wallet' && displayAddress && chain !== 'starknet' && (
-            <div className="space-y-1.5">
-              {isRouterAddress && routerDeployed === false && (
-                <div className="flex items-start gap-2 rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2.5">
-                  <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
-                  <p className="text-[11px] leading-relaxed text-slate-500">
-                    Payment vault activating — your payment will be routed automatically once confirmed.
-                  </p>
-                </div>
-              )}
-              {isRouterAddress && routerDeployed === true && (
-                <div className="flex items-start gap-2 rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2.5">
-                  <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-400" />
-                  <p className="text-[11px] leading-relaxed text-slate-400 italic">
-                    Funds sent to this vault are automatically split — 99.5% to recipient, 0.5% fee.
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
 
-          {/* Real-time listener indicator + "Check Status" after 15 s */}
-          {payMode === 'wallet' && !isConfirmed && chain !== 'starknet' && (
-            <div className="space-y-2">
-              <div className="flex items-center gap-2.5 rounded-xl border border-emerald-100 bg-emerald-50/60 px-3 py-2.5">
-                <div className="relative flex h-2.5 w-2.5 shrink-0">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
-                </div>
-                <p className="text-[11px] font-medium text-emerald-700">
-                  {evmTxHash && !isEvmConfirmed
-                    ? 'Transaction Found! Finalizing…'
-                    : 'Listening — detects in under 3 seconds'}
-                </p>
-                <Radio className="ml-auto h-3 w-3 text-emerald-400" />
+          {/* Tx finalizing indicator — wallet mode only, after tx submitted */}
+          {payMode === 'wallet' && evmTxHash && !isEvmConfirmed && chain !== 'starknet' && (
+            <div className="flex items-center gap-2.5 rounded-xl border border-emerald-100 bg-emerald-50/60 px-3 py-2.5">
+              <div className="relative flex h-2.5 w-2.5 shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
               </div>
-              {showCheckButton && (
-                <div className="text-center">
-                  {isManualChecking ? (
-                    <span className="inline-flex items-center gap-1 text-[11px] text-gray-400">
-                      <Loader2 className="h-3 w-3 animate-spin" /> Checking…
-                    </span>
-                  ) : (
-                    <button
-                      onClick={handleManualCheck}
-                      className="text-[11px] text-gray-400 underline underline-offset-2 hover:text-gray-600 transition-colors"
-                    >
-                      Payment not detected? Click to manually verify
-                    </button>
-                  )}
-                </div>
-              )}
+              <p className="text-[11px] font-medium text-emerald-700">Transaction Found! Finalizing…</p>
+              <Radio className="ml-auto h-3 w-3 text-emerald-400" />
             </div>
           )}
 
@@ -1294,18 +1217,8 @@ export default function PaymentPage() {
               </button>
             )
           ) : !isConnected ? (
-            <div className="space-y-3">
-              {/* Disconnected — show connect for wallet pay, plus manual option */}
-              <div className="flex justify-center"><ConnectButton label="Connect Wallet to Pay" /></div>
-              <div className="flex items-center gap-3">
-                <div className="h-px flex-1 bg-gray-100" />
-                <span className="text-[11px] text-gray-400 font-medium">or send manually</span>
-                <div className="h-px flex-1 bg-gray-100" />
-              </div>
-              <p className="text-center text-[11px] text-gray-500 leading-relaxed">
-                Copy the address above and send <span className="font-semibold">exact amount</span> from any wallet or exchange.<br />
-                Payment will be detected automatically.
-              </p>
+            <div className="flex justify-center">
+              <ConnectButton label="Connect Wallet to Pay" />
             </div>
           ) : !isCorrectNetwork ? (
             <button onClick={() => switchChain({ chainId: targetChainId })} disabled={isSwitching}
