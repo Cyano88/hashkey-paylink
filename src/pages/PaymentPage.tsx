@@ -1164,8 +1164,8 @@ export default function PaymentPage() {
             </div>
           )}
 
-          {/* Vault status info (no amber clutter — just the shield line) */}
-          {displayAddress && chain !== 'starknet' && (
+          {/* Wallet-mode only: vault status, listener, pay button */}
+          {payMode === 'wallet' && displayAddress && chain !== 'starknet' && (
             <div className="space-y-1.5">
               {isRouterAddress && routerDeployed === false && (
                 <div className="flex items-start gap-2 rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2.5">
@@ -1187,7 +1187,7 @@ export default function PaymentPage() {
           )}
 
           {/* Real-time listener indicator + "Check Status" after 15 s */}
-          {!isConfirmed && chain !== 'starknet' && (
+          {payMode === 'wallet' && !isConfirmed && chain !== 'starknet' && (
             <div className="space-y-2">
               <div className="flex items-center gap-2.5 rounded-xl border border-emerald-100 bg-emerald-50/60 px-3 py-2.5">
                 <div className="relative flex h-2.5 w-2.5 shrink-0">
@@ -1252,7 +1252,7 @@ export default function PaymentPage() {
           )}
 
           {/* Send error */}
-          {isSendError && (
+          {payMode === 'wallet' && isSendError && (
             <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4">
               <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-red-500" />
               <div className="flex-1">
@@ -1266,8 +1266,8 @@ export default function PaymentPage() {
             </div>
           )}
 
-          {/* ── Primary CTA ───────────────────────────────────────────── */}
-          {missingStark ? (
+          {/* ── Primary CTA (wallet mode only) ───────────────────────── */}
+          {payMode === 'wallet' && missingStark ? (
             <button disabled className="flex w-full cursor-not-allowed items-center justify-center gap-2 rounded-xl bg-gray-100 px-6 py-4 text-sm font-semibold text-gray-400">
               <AlertTriangle className="h-4 w-4" />
               No Starknet Address Available
