@@ -1,0 +1,44 @@
+# Render deployment configuration — https://render.com/docs/render-yaml
+# One Web Service: serves the Vite frontend AND all /api/* routes via Express.
+
+services:
+  - type: web
+    name: hashkey-paylink
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npx tsx server.ts
+    healthCheckPath: /api/relay-v2   # Render will POST → 405, which is fine (service is up)
+    envVars:
+      - key: NODE_ENV
+        value: production
+
+      # ── Frontend (baked in at build time by Vite) ──────────────────────────
+      - key: VITE_WALLETCONNECT_PROJECT_ID
+        sync: false                   # set manually in Render dashboard
+      - key: VITE_FACTORY_V2
+        value: "0x706C84aB768DBf60a84b717e4c49498BEf78b0cD"
+      - key: VITE_RPC_URL
+        sync: false                   # your Alchemy frontend RPC key
+
+      # ── V2 relayer (api/relay-v2.ts) ──────────────────────────────────────
+      - key: PAYLINK_FACTORY_V2
+        value: "0x706C84aB768DBf60a84b717e4c49498BEf78b0cD"
+      - key: RELAYER_PRIVATE_KEY
+        sync: false                   # 0x-prefixed — ROTATE before adding here
+      - key: PRIVATE_RPC_URL
+        sync: false                   # Alchemy backend RPC key (high rate limit)
+
+      # ── V1 sweep keeper (api/sweep.ts + api/sweep-keeper.ts) ──────────────
+      - key: KEEPER_PRIVATE_KEY
+        sync: false                   # 0x-prefixed keeper wallet private key
+      - key: CRON_SECRET
+        sync: false                   # random string; authenticate sweep-keeper cron
+      - key: FACTORY_FROM_BLOCK
+        value: "29500000"             # Base block the V1 factory was deployed at
+
+# ── External cron (sweep-keeper) ──────────────────────────────────────────────
+# Render free tier does not include cron jobs.
+# Continue using cron-job.org (free) pointing to:
+#   GET https://<your-render-app>.onrender.com/api/sweep-keeper
+#   Header: Authorization: Bearer <CRON_SECRET>
