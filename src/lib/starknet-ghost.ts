@@ -15,8 +15,8 @@
 
 import { hash, ec, num } from 'starknet'
 
-// ec.starkCurve.pedersen is the two-element Pedersen hash in starknet.js v6
-// hash.calculateContractAddressFromHash computes the contract address from salt+class+calldata+deployer
+// Use hash.computePedersenHash (top-level hash module) — safe in both ESM/CJS bundles.
+// ec.starkCurve.pedersen exists in CJS/Node but is not reliably present in the Vite ESM build.
 
 /** OZ Account v0.8.1 Sierra class hash — declared on Starknet Mainnet. */
 export const OZ_ACCOUNT_CLASS_HASH =
@@ -40,8 +40,8 @@ export function computeStarkGhostAddress(
   linkId:        string,
   recipientStark: string,
 ): StarkGhostResult {
-  // 1. Deterministic seed — Pedersen(linkId, recipientStark) via starkCurve
-  const seed      = ec.starkCurve.pedersen(linkId, recipientStark)
+  // 1. Deterministic seed — Pedersen(linkId, recipientStark)
+  const seed      = hash.computePedersenHash(linkId, recipientStark)
   // 2. Grind ensures the key is in the valid STARK curve scalar range
   const privateKey = ec.starkCurve.grindKey(seed)
   // 3. Derive the STARK public key from the private key

@@ -537,8 +537,10 @@ export default function PaymentPage() {
       setStarkDirectAddr(address)
       setDirectStatus('waiting')
       directRelayedRef.current = false
-    } catch {
-      setDirectError('Failed to compute ghost address')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error('[starknet-ghost] computeStarkGhostAddress failed:', msg)
+      setDirectError(`Ghost address error: ${msg.slice(0, 120)}`)
       setDirectStatus('error')
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps

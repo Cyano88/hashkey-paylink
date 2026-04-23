@@ -65,7 +65,8 @@ const MAX_GAS_USDC = 100_000n  // 0.10 USDC ceiling
  *   salt = publicKey, deployer = 0x0, calldata = [publicKey]
  */
 function deriveGhost(linkId: string, recipientStark: string, classHash: string) {
-  const seed     = ec.starkCurve.pedersen(linkId, recipientStark)
+  // hash.computePedersenHash — consistent with the frontend starknet-ghost.ts
+  const seed     = hash.computePedersenHash(linkId, recipientStark)
   const privKey  = ec.starkCurve.grindKey(seed)
   const pubKey   = ec.starkCurve.getStarkKey(privKey)
   const calldata = CallData.compile({ publicKey: pubKey })
