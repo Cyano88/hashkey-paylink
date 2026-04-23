@@ -37,6 +37,7 @@ import {
   ROUTER_SWEEP_ABI,
   FACTORY_V2_ADDRESSES,
 } from '../lib/router'
+import { RpcProvider as StarkRpcProvider } from 'starknet'
 import { useStarknet } from '../lib/StarknetContext'
 import { computeStarkGhostAddress } from '../lib/starknet-ghost'
 import { cn, truncateAddress, formatAmount, memoToHex, copyToClipboard } from '../lib/utils'
@@ -46,8 +47,8 @@ const CHAINS: ChainKey[] = ['base', 'starknet', 'hashkey', 'arc']
 // ─── Starknet RPC ─────────────────────────────────────────────────────────────
 const STARKNET_RPC = 'https://starknet-mainnet.public.blastapi.io'
 
-// selector = keccak256('balanceOf') mod p (Starknet Keccak)
-const BALANCEOF_SELECTOR = '0x2e4263afad30923c891518314c3c95dbe830a16874e8abc5777a9a20b54c76e'
+/** Singleton provider — reused across every poll tick to avoid re-initialisation overhead. */
+const STARK_PROVIDER = new StarkRpcProvider({ nodeUrl: STARKNET_RPC })
 
 // ─── Multicall3 ──────────────────────────────────────────────────────────────
 const MULTICALL3_ADDRESS = '0xcA11bde05977b3631167028862bE2a173976CA11' as `0x${string}`
@@ -132,25 +133,26 @@ async function pollStarknetReceipt(txHash: string, signal: AbortSignal): Promise
   }
 }
 
-/** Polls USDC balance at a Starknet address via JSON-RPC. Returns balance in token units. */
+/**
+ * Queries USDC balance at a Starknet address using starknet.js RpcProvider.
+ * Tries `balanceOf` (Cairo 0 / StarkGate contracts) then `balance_of` (Cairo 1 SNIP-2).
+ * Returns the low-felt of the Uint256 result (sufficient for USDC amounts).
+ */
 async function starkUsdcBalance(tokenAddress: string, accountAddress: string): Promise<bigint> {
-  const res = await fetch(STARKNET_RPC, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      method:  'starknet_call',
-      params:  [{
-        contract_address:    tokenAddress,
-        entry_point_selector: BALANCEOF_SELECTOR,
-        calldata:             [accountAddress],
-      }, 'latest'],
-      id: 1,
-    }),
-  })
-  const json = await res.json()
-  // balanceOf returns Uint256 [low, high]; USDC amounts fit entirely in low
-  return BigInt(json?.result?.[0] ?? '0x0')
+  for (const entrypoint of ['balanceOf', 'balance_of']) {
+    try {
+      const result = await STARK_PROVIDER.callContract({
+        contractAddress: tokenAddress,
+        entrypoint,
+        calldata: [accountAddress],
+      })
+      // balanceOf/balance_of returns Uint256 [low, high]; USDC amounts fit in low
+      return BigInt(result[0] ?? '0x0')
+    } catch {
+      // Wrong entrypoint name — try the other variant
+    }
+  }
+  throw new Error(`balanceOf failed for token ${tokenAddress}`)
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -557,6 +559,7 @@ export default function PaymentPage() {
       if (directRelayedRef.current) return
       try {
         const balance = await starkUsdcBalance(tokenAddr, starkDirectAddr)
+        console.log('[starknet-poll] ghost balance:', balance.toString(), 'µUSDC at', starkDirectAddr)
         if (balance > 0n && !directRelayedRef.current) {
           directRelayedRef.current = true
           if (directPollRef.current) clearInterval(directPollRef.current)
@@ -584,7 +587,9 @@ export default function PaymentPage() {
               setDirectStatus('error')
             })
         }
-      } catch { /* rpc hiccup — retry next tick */ }
+      } catch (err) {
+        console.error('[starknet-poll] balance check error:', err)
+      }
     }
 
     directPollRef.current = setInterval(check, 3000)
