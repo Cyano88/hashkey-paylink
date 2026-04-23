@@ -49,11 +49,10 @@ const FEE_BPS = 50n  // 0.5 %
 
 /**
  * Maximum USDC (6 decimals) AVNU may charge for gas.
- * Passed as maxGasTokenAmount in the build request.
- * Actual fee is much lower (~$0.001–$0.05); the cap prevents over-billing.
+ * Starknet gas is cheap — typical cost is well under $0.01.
  * We reserve this from the balance before computing the recipient payout.
  */
-const MAX_GAS_USDC = 100_000n  // 0.10 USDC ceiling
+const MAX_GAS_USDC = 10_000n  // 0.01 USDC ceiling
 
 // ─── Ghost address derivation ────────────────────────────────────────────────
 
@@ -158,12 +157,14 @@ export default async function handler(req: Request, res: Response) {
   if (balance === 0n) {
     return res.status(400).json({ ok: false, error: 'No USDC found at ghost address yet' })
   }
-  if (balance <= MAX_GAS_USDC) {
+  if (balance < MAX_GAS_USDC) {
     return res.status(400).json({
       ok:    false,
-      error: `Balance ${balance} µUSDC is too low to cover the max gas reserve (${MAX_GAS_USDC} µUSDC = 0.10 USDC)`,
+      error: `Balance ${balance} µUSDC is too low (minimum ${MAX_GAS_USDC} µUSDC needed for gas reserve)`,
     })
   }
+
+  console.log(`[relay-starknet] ghost ${ghostAddr} balance=${balance}µUSDC recipient=${recipientStark}`)
 
   // ── Compute payout split ─────────────────────────────────────────────────
   // Reserve MAX_GAS_USDC for AVNU gas. AVNU will include its actual fee
@@ -220,6 +221,7 @@ export default async function handler(req: Request, res: Response) {
     }
 
     buildData = (await buildRes.json()) as AvnuBuildResponse
+    console.log(`[relay-starknet] AVNU build ok — requestId=${buildData.requestId} gasTokenAmount=${buildData.gasTokenAmount}`)
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error('[relay-starknet] AVNU build error:', msg)
