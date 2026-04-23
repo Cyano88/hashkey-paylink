@@ -2,21 +2,23 @@
  * Starknet Direct Send — ghost address computation.
  *
  * Derives a deterministic OpenZeppelin Account address from a (linkId, recipientStark)
- * pair using Pedersen hashing and the STARK curve. The address is "counterfactual" —
- * it is valid on Starknet Mainnet before the account is ever deployed, so USDC can be
- * sent there from any source (CEX, cold wallet, browser wallet) in advance.
+ * pair. The address is "counterfactual" — valid on Starknet before the account is ever
+ * deployed, so USDC can be sent there from any source in advance.
  *
  * Deployment convention (matches OZ Account standard):
- *   salt        = publicKey
- *   classHash   = OZ_ACCOUNT_CLASS_HASH
- *   calldata    = [publicKey]
- *   deployer    = 0x0  (account self-deployment)
+ *   salt      = publicKey
+ *   classHash = OZ_ACCOUNT_CLASS_HASH
+ *   calldata  = [publicKey]
+ *   deployer  = 0x0
  */
 
 import { hash, ec, num } from 'starknet'
 
-// Use hash.computePedersenHash (top-level hash module) — safe in both ESM/CJS bundles.
-// ec.starkCurve.pedersen exists in CJS/Node but is not reliably present in the Vite ESM build.
+/**
+ * Starknet field prime — all Pedersen inputs must be strictly less than this.
+ * P = 2^251 + 17·2^192 + 1
+ */
+const STARK_P = BigInt('0x800000000000011000000000000000000000000000000000000000000000001')
 
 /** OZ Account v0.8.1 Sierra class hash — declared on Starknet Mainnet. */
 export const OZ_ACCOUNT_CLASS_HASH =
@@ -33,26 +35,36 @@ export interface StarkGhostResult {
 
 /**
  * Computes a deterministic ghost OZ Account address for a (linkId, recipientStark) pair.
- * Both frontend (display) and backend relay (deploy + sweep) call the same function
- * to guarantee they compute the identical address.
+ * Identical logic runs on both the frontend and the relay backend so the address always
+ * matches.
+ *
+ * linkId is a 32-byte EVM-style random hex (256 bits) which can exceed the Starknet
+ * field prime. We reduce both inputs mod P before hashing so the Pedersen validation
+ * never throws.
  */
 export function computeStarkGhostAddress(
-  linkId:        string,
+  linkId:         string,
   recipientStark: string,
 ): StarkGhostResult {
-  // 1. Deterministic seed — Pedersen(linkId, recipientStark)
-  const seed      = hash.computePedersenHash(linkId, recipientStark)
-  // 2. Grind ensures the key is in the valid STARK curve scalar range
-  const privateKey = ec.starkCurve.grindKey(seed)
-  // 3. Derive the STARK public key from the private key
-  const publicKey  = ec.starkCurve.getStarkKey(privateKey)
+  // 1. Reduce inputs to valid felt252 range before Pedersen (P = Starknet field prime)
+  const linkIdFelt = num.toHex(BigInt(linkId) % STARK_P)
+  const recipFelt  = num.toHex(BigInt(recipientStark) % STARK_P)
 
-  // 4. Compute the OZ Account address using the standard OZ deployment convention
+  // 2. Deterministic seed — Pedersen(linkIdFelt, recipFelt)
+  const seed = hash.computePedersenHash(linkIdFelt, recipFelt)
+
+  // 3. Grind ensures the result is in the valid STARK curve scalar range
+  const privateKey = ec.starkCurve.grindKey(seed)
+
+  // 4. Derive the STARK public key
+  const publicKey = ec.starkCurve.getStarkKey(privateKey)
+
+  // 5. OZ Account address — standard convention: salt = publicKey, deployer = 0
   const rawAddress = hash.calculateContractAddressFromHash(
-    publicKey,           // salt = publicKey (OZ convention)
+    publicKey,
     OZ_ACCOUNT_CLASS_HASH,
-    [publicKey],         // constructor calldata = [publicKey]
-    '0x0',               // deployer = 0 (no deployer for account deployment)
+    [publicKey],
+    '0x0',
   )
 
   return {

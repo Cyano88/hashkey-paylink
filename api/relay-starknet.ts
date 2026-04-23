@@ -64,9 +64,14 @@ const MAX_GAS_USDC = 100_000n  // 0.10 USDC ceiling
  * Convention (OZ Account standard):
  *   salt = publicKey, deployer = 0x0, calldata = [publicKey]
  */
+/** Starknet field prime — inputs must be < P for Pedersen to accept them. */
+const STARK_P = BigInt('0x800000000000011000000000000000000000000000000000000000000000001')
+
 function deriveGhost(linkId: string, recipientStark: string, classHash: string) {
-  // hash.computePedersenHash — consistent with the frontend starknet-ghost.ts
-  const seed     = hash.computePedersenHash(linkId, recipientStark)
+  // Reduce inputs to valid felt252 range — linkId is 32-byte EVM hex (can exceed P)
+  const linkIdFelt = num.toHex(BigInt(linkId) % STARK_P)
+  const recipFelt  = num.toHex(BigInt(recipientStark) % STARK_P)
+  const seed     = hash.computePedersenHash(linkIdFelt, recipFelt)
   const privKey  = ec.starkCurve.grindKey(seed)
   const pubKey   = ec.starkCurve.getStarkKey(privKey)
   const calldata = CallData.compile({ publicKey: pubKey })
