@@ -1,0 +1,41 @@
+/**
+ * /api/starknet-balance
+ *
+ * Server-side proxy for Starknet balanceOf calls.
+ * The browser cannot call Starknet RPCs directly (CORS), so the frontend
+ * calls this endpoint instead. The server has no CORS restrictions.
+ *
+ * Body: { tokenAddress: string, accountAddress: string }
+ * Response: { ok: true, balance: string (hex) }
+ */
+
+import type { Request, Response } from 'express'
+import { RpcProvider } from 'starknet'
+
+export default async function handler(req: Request, res: Response) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ ok: false, error: 'Method not allowed' })
+  }
+
+  const { tokenAddress, accountAddress } = (req.body ?? {}) as Record<string, string>
+  if (!tokenAddress || !accountAddress) {
+    return res.status(400).json({ ok: false, error: 'tokenAddress and accountAddress required' })
+  }
+
+  const rpcUrl   = process.env.STARKNET_RPC_URL ?? 'https://starknet-mainnet.public.blastapi.io'
+  const provider = new RpcProvider({ nodeUrl: rpcUrl })
+
+  for (const entrypoint of ['balanceOf', 'balance_of']) {
+    try {
+      const result = await provider.callContract({
+        contractAddress: tokenAddress,
+        entrypoint,
+        calldata: [accountAddress],
+      })
+      // balanceOf returns Uint256 [low, high]; USDC amounts always fit in low
+      return res.json({ ok: true, balance: result[0] ?? '0x0' })
+    } catch { /* try the other entrypoint variant */ }
+  }
+
+  return res.status(500).json({ ok: false, error: 'balanceOf call failed for both entrypoints' })
+}

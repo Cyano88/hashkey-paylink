@@ -37,7 +37,6 @@ import {
   ROUTER_SWEEP_ABI,
   FACTORY_V2_ADDRESSES,
 } from '../lib/router'
-import { RpcProvider as StarkRpcProvider } from 'starknet'
 import { useStarknet } from '../lib/StarknetContext'
 import { computeStarkGhostAddress } from '../lib/starknet-ghost'
 import { cn, truncateAddress, formatAmount, memoToHex, copyToClipboard } from '../lib/utils'
@@ -46,9 +45,6 @@ const CHAINS: ChainKey[] = ['base', 'starknet', 'hashkey', 'arc']
 
 // ─── Starknet RPC ─────────────────────────────────────────────────────────────
 const STARKNET_RPC = 'https://starknet-mainnet.public.blastapi.io'
-
-/** Singleton provider — reused across every poll tick to avoid re-initialisation overhead. */
-const STARK_PROVIDER = new StarkRpcProvider({ nodeUrl: STARKNET_RPC })
 
 // ─── Multicall3 ──────────────────────────────────────────────────────────────
 const MULTICALL3_ADDRESS = '0xcA11bde05977b3631167028862bE2a173976CA11' as `0x${string}`
@@ -134,25 +130,18 @@ async function pollStarknetReceipt(txHash: string, signal: AbortSignal): Promise
 }
 
 /**
- * Queries USDC balance at a Starknet address using starknet.js RpcProvider.
- * Tries `balanceOf` (Cairo 0 / StarkGate contracts) then `balance_of` (Cairo 1 SNIP-2).
- * Returns the low-felt of the Uint256 result (sufficient for USDC amounts).
+ * Queries USDC balance via our own backend proxy (/api/starknet-balance).
+ * Direct browser→Starknet RPC calls are blocked by CORS; the backend proxy has no such restriction.
  */
 async function starkUsdcBalance(tokenAddress: string, accountAddress: string): Promise<bigint> {
-  for (const entrypoint of ['balanceOf', 'balance_of']) {
-    try {
-      const result = await STARK_PROVIDER.callContract({
-        contractAddress: tokenAddress,
-        entrypoint,
-        calldata: [accountAddress],
-      })
-      // balanceOf/balance_of returns Uint256 [low, high]; USDC amounts fit in low
-      return BigInt(result[0] ?? '0x0')
-    } catch {
-      // Wrong entrypoint name — try the other variant
-    }
-  }
-  throw new Error(`balanceOf failed for token ${tokenAddress}`)
+  const res = await fetch('/api/starknet-balance', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ tokenAddress, accountAddress }),
+  })
+  const data = await res.json() as { ok: boolean; balance?: string; error?: string }
+  if (!data.ok) throw new Error(data.error ?? 'starknet-balance API failed')
+  return BigInt(data.balance ?? '0x0')
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
