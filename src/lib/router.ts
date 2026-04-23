@@ -87,8 +87,18 @@ export const ERC20_BALANCE_OF_ABI = [{
 
 // ─── V2: PayLinkFactoryV2 (Direct Send / Ghost Address flow) ─────────────────
 
-/** Deployed PayLinkFactoryV2 address on Base mainnet. Set VITE_FACTORY_V2 in env. */
-export const FACTORY_V2_ADDRESS = (import.meta.env.VITE_FACTORY_V2 ?? '') as `0x${string}`
+/**
+ * Per-chain PayLinkFactoryV2 addresses.
+ * Arc falls back to VITE_FACTORY_V2 if VITE_FACTORY_V2_ARC is not set
+ * (useful when the contract is deployed at the same address on both chains).
+ */
+export const FACTORY_V2_ADDRESSES: Partial<Record<'base' | 'arc', `0x${string}`>> = {
+  base: (import.meta.env.VITE_FACTORY_V2     ?? '') as `0x${string}`,
+  arc:  (import.meta.env.VITE_FACTORY_V2_ARC ?? import.meta.env.VITE_FACTORY_V2 ?? '') as `0x${string}`,
+}
+
+/** Convenience alias — Base factory address (backward compat). */
+export const FACTORY_V2_ADDRESS = FACTORY_V2_ADDRESSES.base ?? ('' as `0x${string}`)
 
 /** Emitted by PayLinkFactoryV2.relay() after a successful ghost-vault sweep */
 export const PAYMENT_RELAYED_ABI = [{

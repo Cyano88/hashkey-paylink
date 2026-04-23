@@ -35,16 +35,19 @@ import {
   ERC20_TRANSFER_ABI,
   ERC20_BALANCE_OF_ABI,
   ROUTER_SWEEP_ABI,
-  FACTORY_V2_ADDRESS,
-  FACTORY_V2_GET_VAULT_ABI,
+  FACTORY_V2_ADDRESSES,
 } from '../lib/router'
 import { useStarknet } from '../lib/StarknetContext'
+import { computeStarkGhostAddress } from '../lib/starknet-ghost'
 import { cn, truncateAddress, formatAmount, memoToHex, copyToClipboard } from '../lib/utils'
 
 const CHAINS: ChainKey[] = ['base', 'starknet', 'hashkey', 'arc']
 
 // ─── Starknet RPC ─────────────────────────────────────────────────────────────
 const STARKNET_RPC = 'https://starknet-mainnet.public.blastapi.io'
+
+// selector = keccak256('balanceOf') mod p (Starknet Keccak)
+const BALANCEOF_SELECTOR = '0x2e4263afad30923c891518314c3c95dbe830a16874e8abc5777a9a20b54c76e'
 
 // ─── Multicall3 ──────────────────────────────────────────────────────────────
 const MULTICALL3_ADDRESS = '0xcA11bde05977b3631167028862bE2a173976CA11' as `0x${string}`
@@ -129,6 +132,27 @@ async function pollStarknetReceipt(txHash: string, signal: AbortSignal): Promise
   }
 }
 
+/** Polls USDC balance at a Starknet address via JSON-RPC. Returns balance in token units. */
+async function starkUsdcBalance(tokenAddress: string, accountAddress: string): Promise<bigint> {
+  const res = await fetch(STARKNET_RPC, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      method:  'starknet_call',
+      params:  [{
+        contract_address:    tokenAddress,
+        entry_point_selector: BALANCEOF_SELECTOR,
+        calldata:             [accountAddress],
+      }, 'latest'],
+      id: 1,
+    }),
+  })
+  const json = await res.json()
+  // balanceOf returns Uint256 [low, high]; USDC amounts fit entirely in low
+  return BigInt(json?.result?.[0] ?? '0x0')
+}
+
 // ─── Component ───────────────────────────────────────────────────────────────
 export default function PaymentPage() {
   const [searchParams] = useSearchParams()
@@ -156,15 +180,17 @@ export default function PaymentPage() {
   const [receivedAmount,    setReceivedAmount]    = useState<bigint | null>(null)
   const [showCheckButton,   setShowCheckButton]   = useState(false)
   const [isManualChecking,  setIsManualChecking]  = useState(false)
-  // Keeper sweep state — tracks the automatic on-chain distribution after detection
   const [sweepState,        setSweepState]        = useState<'idle' | 'calling' | 'pending_profitability' | 'done' | 'failed'>('idle')
   const [sweepTxHash,       setSweepTxHash]       = useState<string | null>(null)
   const [sweepBalanceUsdc,  setSweepBalanceUsdc]  = useState<number | null>(null)
 
-  // ── Direct Send (V2) state ────────────────────────────────────────────────
+  // ── Direct Send state (shared across Base, Arc, Starknet) ────────────────
   const [payMode,          setPayMode]          = useState<'wallet' | 'direct'>('wallet')
-  const [directLinkId,     setDirectLinkId]     = useState<`0x${string}` | null>(null)
+  const [directLinkId,     setDirectLinkId]     = useState<string | null>(null)
+  // EVM chains (Base / Arc): the CREATE2 ghost vault address
   const [directVault,      setDirectVault]      = useState<`0x${string}` | null>(null)
+  // Starknet: the counterfactual OZ account address
+  const [starkDirectAddr,  setStarkDirectAddr]  = useState<string | null>(null)
   const [directStatus,     setDirectStatus]     = useState<'idle' | 'waiting' | 'relaying' | 'success' | 'error'>('idle')
   const [directTxHash,     setDirectTxHash]     = useState<string | null>(null)
   const [directError,      setDirectError]      = useState<string | null>(null)
@@ -177,7 +203,7 @@ export default function PaymentPage() {
   const [routerAddr,    setRouterAddr]    = useState<`0x${string}` | null>(null)
   const [routerDeployed, setRouterDeployed] = useState<boolean | null>(null)
 
-  // ── Stale-closure guards (refs mirror state for use inside async callbacks) ─
+  // ── Stale-closure guards ─────────────────────────────────────────────────
   const detectedRef = useRef(false)
   useEffect(() => { detectedRef.current = manualPayDetected }, [manualPayDetected])
 
@@ -230,7 +256,6 @@ export default function PaymentPage() {
   const feeAmount        = (parseFloat(amt) || 0) * (PLATFORM_FEE_BPS / 10_000)
 
   const activeRecipient = chain === 'starknet' ? resolvedStark : resolvedEvm
-  // Always show router address (predicted even before deploy) — raw wallet fallback only for Starknet
   const displayAddress  = (chain !== 'starknet' && routerAddr) ? routerAddr : activeRecipient
   const isRouterAddress = chain !== 'starknet' && !!routerAddr
 
@@ -240,7 +265,12 @@ export default function PaymentPage() {
     !isNaN(parseFloat(amt)) && parseFloat(amt) > 0 &&
     (isAddress(resolvedEvm) || !!resolvedStark)
 
-  // ── Step 1: Predict router address + check deployment (no wallet needed) ─
+  // Whether Direct Send is available for the current chain
+  const canDirectSend =
+    ((chain === 'base' || chain === 'arc') && isAddress(resolvedEvm) && !!FACTORY_V2_ADDRESSES[chain as 'base' | 'arc']) ||
+    (chain === 'starknet' && !!resolvedStark)
+
+  // ── Step 1: Predict router address + check deployment ────────────────────
   useEffect(() => {
     if (!resolvedEvm || chain === 'starknet') {
       setRouterAddr(null)
@@ -278,7 +308,7 @@ export default function PaymentPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resolvedEvm, chain])
 
-  // ── Step 2: Real-time payment listener (viem — no wallet needed) ──────────
+  // ── Step 2: Real-time payment listener ───────────────────────────────────
   useEffect(() => {
     if (manualPayDetected || chain === 'starknet' || !resolvedEvm) return
 
@@ -290,7 +320,6 @@ export default function PaymentPage() {
     let hskTimer:        ReturnType<typeof setInterval> | undefined
 
     if (chain === 'hashkey') {
-      // ── Native HSK: poll recipient balance every 2 s ───────────────────
       let initialBalance: bigint | null = null
       const requestedWei = parseEther(amt || '0')
 
@@ -299,7 +328,6 @@ export default function PaymentPage() {
         try {
           const bal = await client.getBalance({ address: resolvedEvm as `0x${string}` })
           if (initialBalance === null) { initialBalance = bal; return }
-          // 1% tolerance — trigger if within 1% of requested amount
           if (bal > initialBalance && bal >= initialBalance + requestedWei * 99n / 100n) {
             const received = bal - initialBalance
             setReceivedAmount(received)
@@ -310,7 +338,6 @@ export default function PaymentPage() {
       }, 2_000)
 
     } else {
-      // ── USDC (Base / Arc): watch Transfer + PaymentRouted ─────────────
       const tokenAddress = chain === 'base'
         ? CHAIN_META.base.tokenAddress
         : CHAIN_META.arc.tokenAddress
@@ -318,7 +345,6 @@ export default function PaymentPage() {
       const watchTarget = (routerAddr ?? resolvedEvm) as `0x${string}`
       const requestedUnits = parseUnits(amt || '0', meta.decimals)
 
-      // Transfer event → fires the instant USDC arrives (before sweep)
       unwatchTransfer = client.watchContractEvent({
         address:         tokenAddress,
         abi:             ERC20_TRANSFER_ABI,
@@ -330,9 +356,7 @@ export default function PaymentPage() {
           const log   = logs[0]
           if (!log)   return
           const value = (log.args as { value?: bigint }).value ?? 0n
-          // 1% tolerance — accept if within 1% of requested amount
           if (value >= requestedUnits * 99n / 100n) {
-            // If going via router: recipient will get 99.5% after sweep
             setReceivedAmount(isRouterAddress ? value * 9950n / 10000n : value)
             setManualTxHash(log.transactionHash ?? null)
             setManualPayDetected(true)
@@ -340,7 +364,6 @@ export default function PaymentPage() {
         },
       })
 
-      // PaymentRouted event → fires after keeper/wallet calls sweep; updates exact amount
       if (routerAddr) {
         unwatchRouted = client.watchContractEvent({
           address:         routerAddr,
@@ -368,8 +391,7 @@ export default function PaymentPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chain, resolvedEvm, routerAddr, manualPayDetected, amt])
 
-  // ── Auto-sweep via keeper API — fires the instant USDC is detected at router ─
-  // Keeper wallet pays gas, so recipient gets funds without being online or connected.
+  // ── Auto-sweep keeper ─────────────────────────────────────────────────────
   useEffect(() => {
     if (!manualPayDetected || !isRouterAddress || !routerAddr || chain === 'hashkey') return
     setSweepState('calling')
@@ -395,17 +417,18 @@ export default function PaymentPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [manualPayDetected])
 
-  // ── V2: Reset payMode when switching to non-USDC chains ─────────────────
+  // ── Reset payMode when switching to HashKey (no Direct Send available) ───
   useEffect(() => {
-    if (chain === 'starknet' || chain === 'hashkey') setPayMode('wallet')
+    if (chain === 'hashkey') setPayMode('wallet')
   }, [chain])
 
-  // ── V2: Generate linkId + compute ghost vault address ─────────────────────
+  // ── V2 EVM: Generate linkId + compute ghost vault address ─────────────────
   useEffect(() => {
-    if (payMode !== 'direct' || !resolvedEvm || chain === 'starknet' || chain === 'hashkey') return
-    if (!FACTORY_V2_ADDRESS) return
+    if (payMode !== 'direct') return
+    if (chain === 'starknet' || chain === 'hashkey') return
+    const factoryAddr = FACTORY_V2_ADDRESSES[chain as 'base' | 'arc']
+    if (!factoryAddr || !resolvedEvm) return
 
-    // Reuse linkId from URL if present, otherwise generate a fresh one
     const params  = new URLSearchParams(window.location.search)
     const idParam = params.get('id')
     let linkId: `0x${string}`
@@ -419,12 +442,17 @@ export default function PaymentPage() {
     }
     setDirectLinkId(linkId)
 
+    // Use chain-specific client and factory address
+    const client = EVM_CLIENTS[chain as 'base' | 'arc']
     let cancelled = false
-    EVM_CLIENTS.base.readContract({
-      address: FACTORY_V2_ADDRESS,
-      abi:     FACTORY_V2_GET_VAULT_ABI,
+    client.readContract({
+      address:      factoryAddr,
+      abi:          [{ name: 'getVaultAddress', type: 'function' as const, stateMutability: 'view' as const,
+        inputs: [{ name: 'linkId', type: 'bytes32' as const }, { name: 'recipient', type: 'address' as const }],
+        outputs: [{ name: '', type: 'address' as const }],
+      }],
       functionName: 'getVaultAddress',
-      args:    [linkId, resolvedEvm as `0x${string}`],
+      args:         [linkId, resolvedEvm as `0x${string}`],
     }).then(addr => {
       if (!cancelled) {
         setDirectVault(addr as `0x${string}`)
@@ -436,15 +464,20 @@ export default function PaymentPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [payMode, resolvedEvm, chain])
 
-  // ── V2: Poll USDC balance at vault address; trigger relay on arrival ───────
+  // ── V2 EVM: Poll USDC balance at ghost vault; trigger relay on arrival ────
   useEffect(() => {
     if (directStatus !== 'waiting' || !directVault || !directLinkId) return
+    if (chain === 'starknet' || chain === 'hashkey') return
+
+    const evmChain = chain as 'base' | 'arc'
+    const client   = EVM_CLIENTS[evmChain]
+    const token    = CHAIN_META[evmChain].tokenAddress
 
     const check = async () => {
       if (directRelayedRef.current) return
       try {
-        const balance = await EVM_CLIENTS.base.readContract({
-          address:      CHAIN_META.base.tokenAddress,
+        const balance = await client.readContract({
+          address:      token,
           abi:          ERC20_BALANCE_OF_ABI,
           functionName: 'balanceOf',
           args:         [directVault],
@@ -456,7 +489,7 @@ export default function PaymentPage() {
           fetch('/api/relay-v2', {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ linkId: directLinkId, recipient: resolvedEvm }),
+            body:    JSON.stringify({ linkId: directLinkId, recipient: resolvedEvm, chain: evmChain }),
           })
             .then(r => r.json())
             .then((data: { ok: boolean; txHash?: string; error?: string }) => {
@@ -480,15 +513,90 @@ export default function PaymentPage() {
     check()
     return () => { if (directPollRef.current) clearInterval(directPollRef.current) }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [directStatus, directVault, directLinkId])
+  }, [directStatus, directVault, directLinkId, chain])
 
-  // ── Manual claim fallback — wallet signs the sweep if keeper failed ────────
+  // ── V2 Starknet: Compute ghost OZ account address ─────────────────────────
+  useEffect(() => {
+    if (payMode !== 'direct' || chain !== 'starknet' || !resolvedStark) return
+
+    const params  = new URLSearchParams(window.location.search)
+    const idParam = params.get('id')
+    let linkId: string
+    if (idParam && /^0x[0-9a-fA-F]{64}$/.test(idParam)) {
+      linkId = idParam
+    } else {
+      const bytes = crypto.getRandomValues(new Uint8Array(32))
+      linkId = '0x' + Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')
+      params.set('id', linkId)
+      window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`)
+    }
+    setDirectLinkId(linkId)
+
+    try {
+      const { address } = computeStarkGhostAddress(linkId, resolvedStark)
+      setStarkDirectAddr(address)
+      setDirectStatus('waiting')
+      directRelayedRef.current = false
+    } catch {
+      setDirectError('Failed to compute ghost address')
+      setDirectStatus('error')
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [payMode, chain, resolvedStark])
+
+  // ── V2 Starknet: Poll USDC balance at ghost address; trigger relay ────────
+  useEffect(() => {
+    if (directStatus !== 'waiting' || !starkDirectAddr || !directLinkId) return
+    if (chain !== 'starknet') return
+
+    const tokenAddr = CHAIN_META.starknet.tokenAddress
+
+    const check = async () => {
+      if (directRelayedRef.current) return
+      try {
+        const balance = await starkUsdcBalance(tokenAddr, starkDirectAddr)
+        if (balance > 0n && !directRelayedRef.current) {
+          directRelayedRef.current = true
+          if (directPollRef.current) clearInterval(directPollRef.current)
+          setDirectStatus('relaying')
+          fetch('/api/relay-starknet', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ linkId: directLinkId, recipientStark: resolvedStark }),
+          })
+            .then(r => r.json())
+            .then((data: { ok: boolean; txHash?: string; error?: string }) => {
+              if (data.ok && data.txHash) {
+                setDirectTxHash(data.txHash)
+                setDirectStatus('success')
+                // Surface as detected payment so full success screen renders
+                setManualTxHash(data.txHash as `0x${string}`)
+                setManualPayDetected(true)
+              } else {
+                setDirectError(data.error ?? 'Relay failed')
+                setDirectStatus('error')
+              }
+            })
+            .catch((e: Error) => {
+              setDirectError(e.message ?? 'Relay failed')
+              setDirectStatus('error')
+            })
+        }
+      } catch { /* rpc hiccup — retry next tick */ }
+    }
+
+    directPollRef.current = setInterval(check, 3000)
+    check()
+    return () => { if (directPollRef.current) clearInterval(directPollRef.current) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [directStatus, starkDirectAddr, directLinkId, chain])
+
+  // ── Manual claim fallback ─────────────────────────────────────────────────
   async function handleManualClaim() {
     if (!routerAddr || !isRouterAddress) return
     const tokenAddress = chain === 'base' ? CHAIN_META.base.tokenAddress : CHAIN_META.arc.tokenAddress
     setSweepState('calling')
     try {
-      // Try keeper API first (retry) — keeps it gasless
       const res  = await fetch('/api/sweep', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -501,7 +609,6 @@ export default function PaymentPage() {
         return
       }
     } catch { /* fall through to wallet sweep */ }
-    // Fallback: sign from connected wallet
     if (isConnected) {
       callSweep({
         address:      routerAddr,
@@ -516,7 +623,7 @@ export default function PaymentPage() {
     }
   }
 
-  // ── "Check Status" button — appears after 15 s if no payment detected ────
+  // ── "Check Status" button ─────────────────────────────────────────────────
   useEffect(() => {
     if (manualPayDetected || chain === 'starknet' || !resolvedEvm) return
     setShowCheckButton(false)
@@ -525,7 +632,6 @@ export default function PaymentPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chain, resolvedEvm, manualPayDetected])
 
-  // ── Manual "Check Status" — reads on-chain balance directly ──────────────
   async function handleManualCheck() {
     if (!resolvedEvm || chain === 'starknet') return
     setIsManualChecking(true)
@@ -561,7 +667,7 @@ export default function PaymentPage() {
       switchChain({ chainId: targetChainId })
   }, [isEvmChain, isConnected, isCorrectNetwork, isSwitching, switchChain, targetChainId])
 
-  // ── Chain switch — no wallet popup, just update UI ────────────────────────
+  // ── Chain switch ──────────────────────────────────────────────────────────
   function handleChainSwitch(c: ChainKey) {
     if (isHskOnly && c !== 'hashkey') return
     if (c === chain) return
@@ -574,7 +680,11 @@ export default function PaymentPage() {
     setManualPayDetected(false); setManualTxHash(null); setReceivedAmount(null)
     setRouterAddr(null); setRouterDeployed(null); setShowCheckButton(false)
     setSweepState('idle'); setSweepTxHash(null); setSweepBalanceUsdc(null)
-    // Auto-switch network if wallet is already connected (no popup otherwise)
+    // Reset direct send state
+    setDirectLinkId(null); setDirectVault(null); setStarkDirectAddr(null)
+    setDirectStatus('idle'); setDirectTxHash(null); setDirectError(null)
+    directRelayedRef.current = false
+    if (directPollRef.current) { clearInterval(directPollRef.current); directPollRef.current = null }
     if (isConnected && c !== 'starknet') {
       const cid =
         c === 'base'    ? CHAIN_META.base.chainId    :
@@ -718,6 +828,12 @@ export default function PaymentPage() {
                           ? 'Transaction reverted. The permit may have expired or your USDC balance was insufficient.'
                           : (evmSendError?.message ?? 'An unknown error occurred').slice(0, 140)
 
+  // ── Direct Send display address ───────────────────────────────────────────
+  const directDisplayAddr = chain === 'starknet' ? starkDirectAddr : directVault
+
+  // ── openConnectModal unused lint suppression ──────────────────────────────
+  void openConnectModal
+
   // ────────────────────────────────────────────────────────────────────────────
   //  INVALID PARAMS
   // ────────────────────────────────────────────────────────────────────────────
@@ -753,15 +869,18 @@ export default function PaymentPage() {
   //  SUCCESS STATE
   // ────────────────────────────────────────────────────────────────────────────
   if (isConfirmed) {
-    const explorerTxUrl  = txHash      ? `${meta.explorerUrl}/tx/${txHash}`      : null
+    const explorerTxUrl    = txHash      ? `${meta.explorerUrl}/tx/${txHash}`      : null
     const sweepExplorerUrl = sweepTxHash ? `${meta.explorerUrl}/tx/${sweepTxHash}` : null
+    void explorerTxUrl
+    void sweepExplorerUrl
+
     const recipientAmt   = receivedAmount != null
       ? Number(receivedAmount) / Math.pow(10, meta.decimals)
       : null
     const requested = parseFloat(amt)
     const isOver    = recipientAmt != null && recipientAmt > requested * 1.001
 
-    // Distribution status copy for router payments
+    // isRouterAddress already implies chain !== 'starknet'; only exclude hashkey separately
     const showSweepStatus = isRouterAddress && chain !== 'hashkey'
     const sweepLabel =
       sweepState === 'calling'               ? 'Distributing funds…' :
@@ -769,11 +888,9 @@ export default function PaymentPage() {
       sweepState === 'pending_profitability' ? 'Payment Secured — Optimizing network route for delivery…' :
       sweepState === 'failed'                ? 'Auto-distribution failed' : null
 
-    // Batch intelligence: router had more USDC than requested (previous pending balance)
     const requestedUsdc = parseFloat(amt) || 0
     const isBatch = sweepBalanceUsdc != null && sweepBalanceUsdc > requestedUsdc * 1.01
 
-    // Explorer link: HSK → payer's tx; USDC → keeper's sweep tx
     const primaryExplorerUrl = chain === 'hashkey'
       ? (txHash ? `${meta.explorerUrl}/tx/${txHash}` : null)
       : (sweepTxHash ? `${meta.explorerUrl}/tx/${sweepTxHash}` : txHash ? `${meta.explorerUrl}/tx/${txHash}` : null)
@@ -816,7 +933,6 @@ export default function PaymentPage() {
           </div>
 
           <div className="p-6 space-y-4">
-            {/* Distribution status strip */}
             {showSweepStatus && sweepLabel && (
               <div className={cn(
                 'flex items-center gap-2.5 rounded-xl border px-3.5 py-2.5',
@@ -845,7 +961,6 @@ export default function PaymentPage() {
                 )}
               </div>
             )}
-            {/* Batch intelligence note */}
             {showSweepStatus && isBatch && sweepState === 'done' && (
               <div className="rounded-xl border border-blue-100 bg-blue-50 px-3.5 py-2.5">
                 <p className="text-[11px] text-blue-700 font-medium">
@@ -855,7 +970,6 @@ export default function PaymentPage() {
               </div>
             )}
 
-            {/* Manual Claim fallback — shown if keeper failed */}
             {showSweepStatus && sweepState === 'failed' && (
               <div className="rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-3 space-y-2">
                 <p className="text-[11px] text-amber-700 font-medium">
@@ -931,7 +1045,7 @@ export default function PaymentPage() {
         className="overflow-hidden rounded-2xl border bg-white transition-all duration-300"
         style={{ boxShadow: `0 4px 24px -4px rgba(0,0,0,0.08), ${meta.glowStyle}`, borderColor: meta.accentColor + '26' }}
       >
-        {/* ── Chain toggle ──────────────────────────────────────────────── */}
+        {/* ── Chain toggle ─────────────────────────────────────────────── */}
         <div className="flex justify-center pt-5 pb-0 px-4">
           <div className="flex flex-wrap items-center justify-center gap-1 rounded-xl border border-gray-200 bg-gray-100/80 p-1 max-w-xs sm:max-w-none">
             {CHAINS.map((c) => {
@@ -976,8 +1090,8 @@ export default function PaymentPage() {
           </div>
         </div>
 
-        {/* ── Pay mode toggle (Base / Arc USDC chains only) ─────────────── */}
-        {(chain === 'base' || chain === 'arc') && isAddress(resolvedEvm) && FACTORY_V2_ADDRESS && (
+        {/* ── Pay mode toggle (Base, Arc USDC, Starknet) ───────────────── */}
+        {canDirectSend && (
           <div className="flex justify-center px-4 pt-3">
             <div className="flex rounded-xl border border-gray-200 bg-gray-100/80 p-0.5 text-xs font-semibold">
               <button
@@ -1053,12 +1167,15 @@ export default function PaymentPage() {
             {memo && <Row label="Memo (on-chain)" value={memo.length > 28 ? memo.slice(0, 28) + '…' : memo} />}
           </div>
 
-          {/* ── Direct Send panel (V2) ───────────────────────────────────── */}
-          {payMode === 'direct' && (chain === 'base' || chain === 'arc') && (
+          {/* ── Direct Send panel (Base / Arc / Starknet) ────────────────── */}
+          {payMode === 'direct' && (chain === 'base' || chain === 'arc' || chain === 'starknet') && (
             <div className="space-y-3">
-              {!directVault ? (
+              {/* Loading ghost address */}
+              {!directDisplayAddr && directStatus !== 'error' ? (
                 <div className="animate-pulse h-14 rounded-xl bg-gray-100" />
               ) : directStatus === 'success' ? (
+                /* EVM Direct Send success is surfaced via manualPayDetected → full screen */
+                /* For Starknet this branch is unreachable since we set manualPayDetected */
                 <div className="space-y-3">
                   <div className="flex items-center gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
                     <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
@@ -1083,7 +1200,11 @@ export default function PaymentPage() {
               ) : directStatus === 'relaying' ? (
                 <div className="flex items-center gap-3 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3.5">
                   <Loader2 className="h-4 w-4 shrink-0 animate-spin text-blue-500" />
-                  <p className="text-sm font-medium text-blue-700">Relaying payment — broadcasting transaction…</p>
+                  <p className="text-sm font-medium text-blue-700">
+                    {chain === 'starknet'
+                      ? 'Deploying ghost vault & routing USDC on Starknet…'
+                      : 'Relaying payment — broadcasting transaction…'}
+                  </p>
                 </div>
               ) : directStatus === 'error' ? (
                 <div className="space-y-3">
@@ -1095,7 +1216,11 @@ export default function PaymentPage() {
                     </div>
                   </div>
                   <button
-                    onClick={() => { directRelayedRef.current = false; setDirectStatus('waiting'); setDirectError(null) }}
+                    onClick={() => {
+                      directRelayedRef.current = false
+                      setDirectStatus('waiting')
+                      setDirectError(null)
+                    }}
                     className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white hover:bg-gray-800 transition-all active:scale-[0.98]"
                   >
                     Retry
@@ -1109,15 +1234,21 @@ export default function PaymentPage() {
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                       <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
                     </div>
-                    <p className="text-[11px] font-medium text-emerald-700">Monitoring for USDC — detects in under 3 seconds</p>
+                    <p className="text-[11px] font-medium text-emerald-700">
+                      {chain === 'starknet'
+                        ? 'Monitoring for USDC on Starknet — detects in under 3 seconds'
+                        : 'Monitoring for USDC — detects in under 3 seconds'}
+                    </p>
                   </div>
                   <p className="text-center text-xs text-gray-500">
-                    Send exact amount of USDC on {chain === 'base' ? 'Base' : chain === 'arc' ? 'Arc' : meta.label} network to this address
+                    Send exact amount of {meta.asset} on{' '}
+                    {chain === 'base' ? 'Base' : chain === 'arc' ? 'Arc' : 'Starknet'}{' '}
+                    network to this address
                   </p>
                   <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3.5">
-                    <p className="min-w-0 flex-1 break-all font-mono text-xs text-gray-800">{directVault}</p>
+                    <p className="min-w-0 flex-1 break-all font-mono text-xs text-gray-800">{directDisplayAddr}</p>
                     <button
-                      onClick={() => { navigator.clipboard.writeText(directVault!); setDirectAddrCopied(true); setTimeout(() => setDirectAddrCopied(false), 2500) }}
+                      onClick={() => { navigator.clipboard.writeText(directDisplayAddr!); setDirectAddrCopied(true); setTimeout(() => setDirectAddrCopied(false), 2500) }}
                       className="ml-2 shrink-0 flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 transition-all active:scale-90"
                     >
                       {directAddrCopied
@@ -1125,11 +1256,15 @@ export default function PaymentPage() {
                         : <><Copy className="h-3.5 w-3.5" /> Copy</>}
                     </button>
                   </div>
+                  {chain === 'starknet' && (
+                    <p className="text-center text-[10px] text-purple-500 font-medium">
+                      Ghost OZ Account · USDC auto-routes on arrival · no wallet needed
+                    </p>
+                  )}
                 </div>
               )}
             </div>
           )}
-
 
           {/* Tx finalizing indicator — wallet mode only, after tx submitted */}
           {payMode === 'wallet' && evmTxHash && !isEvmConfirmed && chain !== 'starknet' && (
@@ -1160,7 +1295,7 @@ export default function PaymentPage() {
           )}
 
           {/* Wrong network */}
-          {isEvmChain && isConnected && !isCorrectNetwork && !missingStark && (
+          {isEvmChain && isConnected && !isCorrectNetwork && !missingStark && payMode === 'wallet' && (
             <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
               <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-500" />
               <div className="flex-1 space-y-2">
@@ -1189,13 +1324,13 @@ export default function PaymentPage() {
             </div>
           )}
 
-          {/* ── Primary CTA (wallet mode only) ───────────────────────── */}
+          {/* ── Primary CTA (wallet mode only) ────────────────────────── */}
           {payMode === 'wallet' && missingStark ? (
             <button disabled className="flex w-full cursor-not-allowed items-center justify-center gap-2 rounded-xl bg-gray-100 px-6 py-4 text-sm font-semibold text-gray-400">
               <AlertTriangle className="h-4 w-4" />
               No Starknet Address Available
             </button>
-          ) : chain === 'starknet' ? (
+          ) : payMode === 'wallet' && chain === 'starknet' ? (
             !starkAccount ? (
               <div className="space-y-2">
                 <button onClick={connectStarknet} disabled={isStarkConnecting || !window.starknet}
@@ -1216,16 +1351,16 @@ export default function PaymentPage() {
                 : <><Zap className="h-4 w-4" /> Pay {formatAmount(amt, 6)} USDC on Starknet</>}
               </button>
             )
-          ) : !isConnected ? (
+          ) : payMode === 'wallet' && !isConnected ? (
             <div className="flex justify-center">
               <ConnectButton label="Connect Wallet to Pay" />
             </div>
-          ) : !isCorrectNetwork ? (
+          ) : payMode === 'wallet' && !isCorrectNetwork ? (
             <button onClick={() => switchChain({ chainId: targetChainId })} disabled={isSwitching}
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-amber-500 px-6 py-4 text-sm font-semibold text-white transition-all hover:bg-amber-600 active:scale-[0.98] disabled:opacity-70">
               {isSwitching ? <><Loader2 className="h-4 w-4 animate-spin" /> Switching…</> : <><RefreshCw className="h-4 w-4" /> Switch to {meta.label}</>}
             </button>
-          ) : (
+          ) : payMode === 'wallet' ? (
             <button onClick={handlePay} disabled={isWalletPending || isConfirming}
               className={cn(
                 'flex w-full items-center justify-center gap-2 rounded-xl px-6 py-4 text-sm font-semibold transition-all',
@@ -1238,7 +1373,7 @@ export default function PaymentPage() {
               : isSweeping          ? <><Loader2 className="h-4 w-4 animate-spin" /> Routing payment…</>
               : <><Zap className="h-4 w-4" /> Pay {formatAmount(amt, meta.decimals)} {meta.asset} on {meta.label}</>}
             </button>
-          )}
+          ) : null /* direct mode — no CTA button, address panel above handles it */ }
 
           <p className="flex items-center justify-center gap-1.5 text-xs text-gray-400">
             <ShieldCheck className="h-3.5 w-3.5" />
@@ -1258,6 +1393,20 @@ export default function PaymentPage() {
           <a href={`${meta.explorerUrl}/tx/${txHash}`} target="_blank" rel="noopener noreferrer">
             <ExternalLink className="h-4 w-4 text-blue-400 hover:text-blue-700 transition-colors" />
           </a>
+        </div>
+      )}
+
+      {/* Manual check button */}
+      {showCheckButton && !manualPayDetected && chain !== 'starknet' && payMode === 'wallet' && (
+        <div className="mt-4 flex justify-center">
+          <button
+            onClick={handleManualCheck}
+            disabled={isManualChecking}
+            className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-all active:scale-[0.98] disabled:opacity-50"
+          >
+            <RefreshCw className={cn('h-3.5 w-3.5', isManualChecking && 'animate-spin')} />
+            {isManualChecking ? 'Checking…' : 'Check Payment Status'}
+          </button>
         </div>
       )}
     </div>

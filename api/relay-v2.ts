@@ -35,9 +35,18 @@ import {
   http,
   isAddress,
   parseAbi,
+  defineChain,
 } from 'viem'
 import { base } from 'viem/chains'
 import { privateKeyToAccount } from 'viem/accounts'
+
+// ─── Arc Testnet chain definition (mirrors src/lib/chains.ts) ────────────────
+const arcChain = defineChain({
+  id: 5042002,
+  name: 'Arc Testnet',
+  nativeCurrency: { decimals: 18, name: 'USD Coin', symbol: 'USDC' },
+  rpcUrls: { default: { http: ['https://rpc.testnet.arc.network'] } },
+})
 
 // ─── ABI (relay function only) ────────────────────────────────────────────────
 
@@ -100,18 +109,9 @@ export default async function handler(req: Request, res: Response) {
     return res.status(405).json({ ok: false, error: 'Method not allowed' })
   }
 
-  // ── Env checks ──────────────────────────────────────────────────────────────
-  const rawKey     = process.env.RELAYER_PRIVATE_KEY
-  const rpcUrl     = process.env.PRIVATE_RPC_URL
-  const factoryAddr = process.env.PAYLINK_FACTORY_V2
-
-  if (!rawKey)      return res.status(500).json({ ok: false, error: 'RELAYER_PRIVATE_KEY not configured' })
-  if (!rpcUrl)      return res.status(500).json({ ok: false, error: 'PRIVATE_RPC_URL not configured' })
-  if (!factoryAddr) return res.status(500).json({ ok: false, error: 'PAYLINK_FACTORY_V2 not configured' })
-  if (!isAddress(factoryAddr)) return res.status(500).json({ ok: false, error: 'PAYLINK_FACTORY_V2 is not a valid address' })
-
   // ── Input validation ────────────────────────────────────────────────────────
-  const { linkId, recipient } = req.body ?? {}
+  const { linkId, recipient, chain: chainParam = 'base' } = (req.body ?? {}) as Record<string, string>
+  const chainKey = chainParam === 'arc' ? 'arc' : 'base'
 
   if (!isBytes32(linkId)) {
     return res.status(400).json({ ok: false, error: 'linkId must be a 0x-prefixed 32-byte hex string' })
@@ -120,16 +120,32 @@ export default async function handler(req: Request, res: Response) {
     return res.status(400).json({ ok: false, error: 'recipient must be a valid EVM address' })
   }
 
+  // ── Env checks ──────────────────────────────────────────────────────────────
+  const rawKey = process.env.RELAYER_PRIVATE_KEY
+  // Arc uses its own RPC and factory vars if set, otherwise falls back to Base vars
+  const rpcUrl     = chainKey === 'arc'
+    ? (process.env.PRIVATE_RPC_URL_ARC ?? process.env.PRIVATE_RPC_URL)
+    : process.env.PRIVATE_RPC_URL
+  const factoryAddr = chainKey === 'arc'
+    ? (process.env.PAYLINK_FACTORY_V2_ARC ?? process.env.PAYLINK_FACTORY_V2)
+    : process.env.PAYLINK_FACTORY_V2
+
+  if (!rawKey)      return res.status(500).json({ ok: false, error: 'RELAYER_PRIVATE_KEY not configured' })
+  if (!rpcUrl)      return res.status(500).json({ ok: false, error: 'PRIVATE_RPC_URL not configured' })
+  if (!factoryAddr) return res.status(500).json({ ok: false, error: `PAYLINK_FACTORY_V2${chainKey === 'arc' ? '_ARC' : ''} not configured` })
+  if (!isAddress(factoryAddr)) return res.status(500).json({ ok: false, error: 'Factory address is not a valid EVM address' })
+
   // ── Clients — key is only held in memory for the duration of this call ───────
   const account = privateKeyToAccount(rawKey as `0x${string}`)
+  const viemChain = chainKey === 'arc' ? arcChain : base
 
   const publicClient = createPublicClient({
-    chain:     base,
+    chain:     viemChain,
     transport: http(rpcUrl),
   })
   const walletClient = createWalletClient({
     account,
-    chain:     base,
+    chain:     viemChain,
     transport: http(rpcUrl),
   })
 
