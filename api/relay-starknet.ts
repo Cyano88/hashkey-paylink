@@ -54,20 +54,22 @@ function safeBigInt(v: unknown): bigint {
 // Bypass Account.execute entirely — starknet.js v6.24.x ignores resourceBounds
 // and falls back to V1 (max_fee) even when resourceBounds is provided.
 
-async function getRelayerNonce(rpcUrl: string, addr: string): Promise<string> {
+async function getRelayerNonce(rpcUrl: string, addr: string): Promise<bigint> {
+  // Lava (and most Starknet RPC nodes) require block_id as a plain string tag,
+  // not wrapped in an object.  { block_number: 'latest' } is rejected as invalid.
   const r = await fetch(rpcUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       jsonrpc: '2.0', id: 1,
       method: 'starknet_getNonce',
-      params: [{ block_number: 'latest' }, addr],
+      params: ['latest', addr],
     }),
     signal: AbortSignal.timeout(10_000),
   })
   const d = await r.json() as { result?: string; error?: unknown }
-  if (d.error) throw new Error(`getNonce failed: ${JSON.stringify(d.error).slice(0, 100)}`)
-  return d.result ?? '0x0'
+  if (d.error) throw new Error(`getNonce failed: ${JSON.stringify(d.error).slice(0, 150)}`)
+  return safeBigInt(d.result ?? '0x0')
 }
 
 type V3Bounds = {
@@ -366,19 +368,30 @@ export default async function handler(req: Request, res: Response) {
 
     const relayerSigner = new Signer(relayerPrivKey)
 
+    // Fetch relayer nonce once — derive sweep nonce from it to avoid a second RPC call.
+    // Ghost nonce is irrelevant here: we're sending an INVOKE from the relayer, not the ghost.
+    let relayerNonce: bigint
+    try {
+      relayerNonce = await getRelayerNonce(rpcUrl, relayerAddr)
+      console.log(`[relay-starknet] nuclear: relayer nonce=${num.toHex(relayerNonce)}`)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      return res.status(502).json({ ok: false, error: `Relayer getNonce failed: ${msg.slice(0, 200)}` })
+    }
+
     // Deploy ghost via UDC if not yet on-chain
     if (!isDeployed) {
       try {
         console.log('[relay-starknet] nuclear: deploying ghost via UDC...')
-        const deployNonce = await getRelayerNonce(rpcUrl, relayerAddr)
         const deployTx = await rawInvokeV3(rpcUrl, relayerSigner, relayerAddr, [{
           contractAddress: UDC_ADDRESS,
           entrypoint:      'deployContract',
           calldata:        [classHash, pubKey, '0x0', '0x1', pubKey],
-        }], deployNonce, V3_BOUNDS)
+        }], num.toHex(relayerNonce), V3_BOUNDS)
         console.log(`[relay-starknet] nuclear: ghost deploy tx=${deployTx}`)
         await provider.waitForTransaction(deployTx, { retryInterval: 2000 })
         console.log('[relay-starknet] nuclear: ghost deployed')
+        relayerNonce += 1n   // increment locally — sweep uses the next nonce
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
         console.error('[relay-starknet] nuclear: ghost deploy failed:', msg)
@@ -468,12 +481,11 @@ export default async function handler(req: Request, res: Response) {
     ]
 
     try {
-      const sweepNonce = await getRelayerNonce(rpcUrl, relayerAddr)
       const sweepTx = await rawInvokeV3(rpcUrl, relayerSigner, relayerAddr, [{
         contractAddress: ghostAddr,
         entrypoint:      'execute_from_outside_v2',
         calldata:        outsideExecCalldata,
-      }], sweepNonce, V3_BOUNDS)
+      }], num.toHex(relayerNonce), V3_BOUNDS)
       console.log(`[relay-starknet] nuclear: swept ${payout}µ→recipient ${platformFee}µ→fee tx=${sweepTx}`)
       return res.status(200).json({ ok: true, txHash: sweepTx })
     } catch (err) {
