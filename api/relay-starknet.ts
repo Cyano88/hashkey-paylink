@@ -271,12 +271,36 @@ export default async function handler(req: Request, res: Response) {
   const [feeLow,     feeHigh    ] = toU256Calldata(platformFee)
   const [gasLow,     gasHigh    ] = toU256Calldata(gasReimbUsdc)
 
-  // ── Deployment check ───────────────────────────────────────────────────────
+  // ── Deploy relayer account if needed (one-time, DEPLOY_ACCOUNT tx) ────────
+  // A fresh OZ Account is counterfactual until explicitly deployed. starknet.js
+  // DEPLOY_ACCOUNT works even before the account exists — it is self-bootstrapping.
+  const relayerDeployed = (await provider.getClassAt(relayerAddr, 'latest').catch(() => null)) != null
+  if (!relayerDeployed) {
+    console.log(`[relay-starknet] relayer not deployed — sending DEPLOY_ACCOUNT...`)
+    try {
+      const relayerForDeploy = new Account(provider, relayerAddr, relayerPrivKey)
+      const relayerPubKey    = ec.starkCurve.getStarkKey(relayerPrivKey)
+      const deployRes = await relayerForDeploy.deployAccount({
+        classHash:           classHash,
+        constructorCalldata: CallData.compile({ publicKey: relayerPubKey }),
+        addressSalt:         relayerPubKey,
+      }, { maxFee: 10_000_000_000_000_000n })  // 0.01 STRK ceiling
+      console.log(`[relay-starknet] relayer deploy tx=${deployRes.transaction_hash} — waiting...`)
+      await provider.waitForTransaction(deployRes.transaction_hash)
+      console.log(`[relay-starknet] relayer deployed!`)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error('[relay-starknet] relayer deploy failed:', msg)
+      return res.status(502).json({ ok: false, error: `Relayer deploy failed: ${msg.slice(0, 200)}` })
+    }
+  }
+
+  // ── Ghost account deployment check ────────────────────────────────────────
   let isDeployed = false
   try {
     isDeployed = (await provider.getClassAt(ghostAddr, 'latest').catch(() => null)) != null
   } catch { /* assume not deployed */ }
-  console.log(`[relay-starknet] deployed=${isDeployed}`)
+  console.log(`[relay-starknet] ghost deployed=${isDeployed}`)
 
   // ── Build SNIP-9 v2 OutsideExecution ──────────────────────────────────────
   const executeBefore = BigInt(Math.floor(Date.now() / 1000) + 3600)
