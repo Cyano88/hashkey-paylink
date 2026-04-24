@@ -559,13 +559,18 @@ export default function PaymentPage() {
             body:    JSON.stringify({ linkId: directLinkId, recipientStark: resolvedStark }),
           })
             .then(r => r.json())
-            .then((data: { ok: boolean; txHash?: string; error?: string }) => {
+            .then((data: { ok: boolean; txHash?: string; error?: string; code?: string }) => {
               if (data.ok && data.txHash) {
                 setDirectTxHash(data.txHash)
                 setDirectStatus('success')
                 // Surface as detected payment so full success screen renders
                 setManualTxHash(data.txHash as `0x${string}`)
                 setManualPayDetected(true)
+              } else if (data.code === 'LEGACY_USDC') {
+                // User sent legacy StarkGate USDC instead of Circle USDC
+                directRelayedRef.current = false  // allow retry after user resends
+                setDirectError('Wrong USDC version detected. Please send Circle USDC (not legacy StarkGate USDC) to this address — it\'s the same address, just use the correct token in your wallet.')
+                setDirectStatus('error')
               } else {
                 setDirectError(data.error ?? 'Relay failed')
                 setDirectStatus('error')

@@ -35,7 +35,7 @@ const USDC_OLD = '0x033068f6539f8e6e6b131e6b2b814e6c34a5224bc66947c47dab9dfee93b
 const STARK_TREASURY = '0x0483AB5539B281c08777F1C8337Beeba05c2610feDcbA191B989E35eDc2767C3'
 
 const FEE_BPS             = 50n
-const MAX_GAS_REIMB_USDC  = 10_000n  // 0.01 USDC gas reimb ceiling
+const MAX_GAS_REIMB_USDC  = 50_000n  // 0.05 USDC gas reimb ceiling (generous for AVNU gasless)
 const MIN_BALANCE         = 20_000n  // 0.02 USDC minimum
 
 const STARK_P = BigInt('0x800000000000011000000000000000000000000000000000000000000000001')
@@ -125,22 +125,39 @@ export default async function handler(req: Request, res: Response) {
 
   const provider = new RpcProvider({ nodeUrl: rpcUrl, blockIdentifier: 'latest' })
 
-  // ── USDC balance — try Circle native then legacy StarkGate ────────────────
+  // ── USDC balance — Circle USDC is the primary required token ─────────────
+  // Check Circle USDC first. If only legacy is found, surface a clear warning
+  // so the UI can guide the user to resend with the correct token.
   let balance   = 0n
   let usdcToken = USDC_NEW
-  for (const token of [USDC_NEW, USDC_OLD]) {
+
+  try {
+    const r = await provider.callContract(
+      { contractAddress: USDC_NEW, entrypoint: 'balanceOf', calldata: [ghostAddr] }, 'latest',
+    )
+    balance = BigInt(r[0] ?? '0x0')
+    console.log(`[relay-starknet] Circle USDC balance=${balance}µ at ${ghostAddr}`)
+  } catch { /* rpc hiccup */ }
+
+  if (balance === 0n) {
+    // Check if legacy USDC was sent instead
     try {
       const r = await provider.callContract(
-        { contractAddress: token, entrypoint: 'balanceOf', calldata: [ghostAddr] }, 'latest',
+        { contractAddress: USDC_OLD, entrypoint: 'balanceOf', calldata: [ghostAddr] }, 'latest',
       )
-      const bal = BigInt(r[0] ?? '0x0')
-      console.log(`[relay-starknet] ${token.slice(0, 10)}… balance=${bal}µ at ${ghostAddr}`)
-      if (bal > 0n) { balance = bal; usdcToken = token; break }
-    } catch { /* try next */ }
+      const legacyBal = BigInt(r[0] ?? '0x0')
+      if (legacyBal > 0n) {
+        console.warn(`[relay-starknet] legacy USDC detected: ${legacyBal}µ — Circle USDC required`)
+        return res.status(400).json({
+          ok:   false,
+          code: 'LEGACY_USDC',
+          error: `Legacy StarkGate USDC detected (${legacyBal} µUSDC). Please send Circle USDC (0x053c91…) — it is the only token AVNU supports for gas.`,
+        })
+      }
+    } catch { /* ignore */ }
+    return res.status(400).json({ ok: false, error: 'No Circle USDC found at ghost address yet' })
   }
 
-  if (balance === 0n)
-    return res.status(400).json({ ok: false, error: 'No USDC found at ghost address yet' })
   if (balance < MIN_BALANCE)
     return res.status(400).json({ ok: false, error: `Balance ${balance} µUSDC too low` })
 
