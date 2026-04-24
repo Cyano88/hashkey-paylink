@@ -153,11 +153,10 @@ export default async function handler(req: Request, res: Response) {
   console.log(`[relay-starknet] ghost=${ghostAddr} balance=${balance}µUSDC recipient=${recipientStark}`)
 
   // ── Payout split ──────────────────────────────────────────────────────────
-  // AVNU prepends its gas transfer into the signed bundle; reserve MAX_GAS_USDC
-  // so that gas + our transfers fit within the ghost account's balance.
-  const spendable   = balance - MAX_GAS_USDC
-  const platformFee = spendable * FEE_BPS / 10_000n
-  const payout      = spendable - platformFee
+  // Sponsored mode: AVNU pays gas from pre-funded STRK credits — no USDC
+  // deducted from the ghost balance. Full balance goes to recipient + treasury.
+  const platformFee = balance * FEE_BPS / 10_000n
+  const payout      = balance - platformFee
 
   const [payoutLow, payoutHigh] = toU256Calldata(payout)
   const [feeLow,    feeHigh   ] = toU256Calldata(platformFee)
@@ -176,11 +175,14 @@ export default async function handler(req: Request, res: Response) {
     { contractAddress: USDC_NEW, entrypoint: 'transfer', calldata: [STARK_TREASURY,  feeLow,    feeHigh   ] },
   ]
 
+  const avnuKey = process.env.AVNU_API_KEY
+  console.log(`[relay-starknet] avnuKey=${avnuKey ? 'set' : 'NOT SET'}`)
+
   const buildBody: Record<string, unknown> = {
-    userAddress:       ghostAddr,
+    userAddress: ghostAddr,
     calls,
-    gasTokenAddress:   USDC_NEW,          // Circle USDC — AVNU-supported gas token
-    maxGasTokenAmount: MAX_GAS_USDC.toString(),
+    // Sponsored mode — AVNU pays gas from pre-funded STRK credits on the API key.
+    // No gasTokenAddress needed; API key identifies the sponsor account.
   }
 
   if (!isDeployed) {
@@ -192,11 +194,14 @@ export default async function handler(req: Request, res: Response) {
     }
   }
 
+  const avnuHeaders: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (avnuKey) { avnuHeaders['api-key'] = avnuKey; avnuHeaders['x-api-key'] = avnuKey }
+
   let buildData: AvnuBuildResponse
   try {
     const buildRes = await fetch(`${AVNU_BASE}/paymaster/v1/build-typed-data`, {
       method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: avnuHeaders,
       body:    JSON.stringify(buildBody),
       signal:  AbortSignal.timeout(15_000),
     })
@@ -243,7 +248,7 @@ export default async function handler(req: Request, res: Response) {
   try {
     const execRes = await fetch(`${AVNU_BASE}/paymaster/v1/execute`, {
       method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: avnuHeaders,
       body:    JSON.stringify({ requestId, signature }),
       signal:  AbortSignal.timeout(20_000),
     })
