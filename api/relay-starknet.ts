@@ -104,7 +104,11 @@ interface AvnuExecuteResponse {
 
 function avnuHeaders(apiKey?: string): Record<string, string> {
   const h: Record<string, string> = { 'Content-Type': 'application/json' }
-  if (apiKey) h['x-api-key'] = apiKey
+  if (apiKey) {
+    // AVNU paymaster uses 'api-key' header (not 'x-api-key')
+    h['api-key'] = apiKey
+    h['x-api-key'] = apiKey  // send both; harmless if one is ignored
+  }
   return h
 }
 
@@ -125,6 +129,7 @@ export default async function handler(req: Request, res: Response) {
   const rpcUrl    = process.env.STARKNET_RPC_URL    ?? DEFAULT_RPC_URL
   const classHash = process.env.STARKNET_OZ_CLASS_HASH ?? DEFAULT_CLASS_HASH
   const avnuKey   = process.env.AVNU_API_KEY  // optional
+  console.log(`[relay-starknet] avnuKey=${avnuKey ? `set(${avnuKey.slice(0,6)}...)` : 'NOT SET'}`)
 
   // ── Input validation ────────────────────────────────────────────────────────
   const { linkId, recipientStark } = (req.body ?? {}) as Record<string, string>
