@@ -199,6 +199,17 @@ export default async function handler(req: Request, res: Response) {
     })
   }
 
+  // Validate the relayer private key is within the Starknet curve order.
+  // ArgentX exports Ethereum-format keys (256-bit) which can exceed the order.
+  const STARK_CURVE_ORDER = BigInt('0x0800000000000010FFFFFFFFFFFFFFFFB781126DCAE7B2321E66A241ADC64D2F')
+  const relayerKeyBig = BigInt(relayerPrivKey.startsWith('0x') ? relayerPrivKey : '0x' + relayerPrivKey)
+  if (relayerKeyBig >= STARK_CURVE_ORDER || relayerKeyBig === 0n) {
+    return res.status(500).json({
+      ok: false,
+      error: 'STARKNET_RELAYER_PRIVATE_KEY exceeds the Starknet curve order — generate a fresh keypair via the gen-stark-relayer script',
+    })
+  }
+
   // ── Input validation ───────────────────────────────────────────────────────
   const { linkId, recipientStark } = (req.body ?? {}) as Record<string, string>
   if (!linkId || !/^0x[0-9a-fA-F]{64}$/.test(linkId))
