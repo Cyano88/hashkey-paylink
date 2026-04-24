@@ -108,45 +108,33 @@ export default async function handler(req: Request, res: Response) {
 
   const provider = new RpcProvider({ nodeUrl: rpcUrl })
 
-  // ── Check Circle USDC balance (primary) ───────────────────────────────────
-  let balance = 0n
-  try {
-    const result = await provider.callContract({
-      contractAddress: USDC_NEW,
-      entrypoint:      'balanceOf',
-      calldata:        [ghostAddr],
-    }, 'latest')
-    balance = BigInt(result[0] ?? '0x0')
-    console.log(`[relay-starknet] Circle USDC balance=${balance}µUSDC at ${ghostAddr}`)
-  } catch (err) {
-    console.warn('[relay-starknet] Circle USDC balanceOf failed:', err)
-  }
+  // ── USDC balance — accept both Circle native and legacy StarkGate ─────────
+  // In sponsored mode AVNU pays gas in STRK from API key credits, so any USDC
+  // variant can be transferred. Check both contracts, use whichever has funds.
+  let balance   = 0n
+  let usdcToken = USDC_NEW
 
-  // If no Circle USDC, check legacy — surface a helpful error if found there
-  if (balance === 0n) {
+  for (const token of [USDC_NEW, USDC_OLD]) {
     try {
-      const result = await provider.callContract({
-        contractAddress: USDC_OLD,
-        entrypoint:      'balanceOf',
-        calldata:        [ghostAddr],
-      }, 'latest')
-      const legacyBal = BigInt(result[0] ?? '0x0')
-      if (legacyBal > 0n) {
-        console.warn(`[relay-starknet] legacy USDC found (${legacyBal}µUSDC) — Circle USDC required`)
-        return res.status(400).json({
-          ok:    false,
-          error: `Found ${legacyBal} µUSDC of legacy StarkGate USDC. Please send Circle USDC (0x053c91…) instead — it is the gas token AVNU supports.`,
-        })
-      }
-    } catch { /* ignore */ }
-
-    return res.status(400).json({ ok: false, error: 'No Circle USDC found at ghost address yet' })
+      const result = await provider.callContract(
+        { contractAddress: token, entrypoint: 'balanceOf', calldata: [ghostAddr] },
+        'latest',
+      )
+      const bal = BigInt(result[0] ?? '0x0')
+      console.log(`[relay-starknet] token=${token.slice(0,10)}… balance=${bal}µUSDC at ${ghostAddr}`)
+      if (bal > 0n) { balance = bal; usdcToken = token; break }
+    } catch (err) {
+      console.warn(`[relay-starknet] balanceOf failed for ${token.slice(0,10)}…:`, err)
+    }
   }
 
-  if (balance <= MAX_GAS_USDC) {
+  if (balance === 0n)
+    return res.status(400).json({ ok: false, error: 'No USDC found at ghost address yet' })
+
+  if (balance <= MIN_BALANCE) {
     return res.status(400).json({
       ok:    false,
-      error: `Balance ${balance} µUSDC is too low — need more than ${MAX_GAS_USDC} µUSDC to cover gas`,
+      error: `Balance ${balance} µUSDC is too low to relay`,
     })
   }
 
@@ -171,8 +159,8 @@ export default async function handler(req: Request, res: Response) {
 
   // ── AVNU build-typed-data ─────────────────────────────────────────────────
   const calls: AvnuCall[] = [
-    { contractAddress: USDC_NEW, entrypoint: 'transfer', calldata: [recipientStark, payoutLow, payoutHigh] },
-    { contractAddress: USDC_NEW, entrypoint: 'transfer', calldata: [STARK_TREASURY,  feeLow,    feeHigh   ] },
+    { contractAddress: usdcToken, entrypoint: 'transfer', calldata: [recipientStark, payoutLow, payoutHigh] },
+    { contractAddress: usdcToken, entrypoint: 'transfer', calldata: [STARK_TREASURY,  feeLow,    feeHigh   ] },
   ]
 
   const avnuKey = process.env.AVNU_API_KEY
