@@ -281,20 +281,21 @@ export default async function handler(req: Request, res: Response) {
   const [feeLow,     feeHigh    ] = toU256Calldata(platformFee)
   const [gasLow,     gasHigh    ] = toU256Calldata(gasReimbUsdc)
 
-  // ── Deploy relayer account if needed (one-time, DEPLOY_ACCOUNT tx) ────────
-  // A fresh OZ Account is counterfactual until explicitly deployed. starknet.js
-  // DEPLOY_ACCOUNT works even before the account exists — it is self-bootstrapping.
+  const relayer = new Account(provider, relayerAddr, relayerPrivKey)
+
+  // ── Step 1: Deploy relayer account if needed (one-time DEPLOY_ACCOUNT tx) ─
+  // DEPLOY_ACCOUNT is self-bootstrapping — works before account exists.
+  // No explicit fee: starknet.js auto-estimates correctly for this tx type.
   const relayerDeployed = (await provider.getClassAt(relayerAddr, 'latest').catch(() => null)) != null
   if (!relayerDeployed) {
     console.log(`[relay-starknet] relayer not deployed — sending DEPLOY_ACCOUNT...`)
     try {
-      const relayerForDeploy = new Account(provider, relayerAddr, relayerPrivKey)
-      const relayerPubKey    = ec.starkCurve.getStarkKey(relayerPrivKey)
-      const deployRes = await relayerForDeploy.deployAccount({
+      const relayerPubKey = ec.starkCurve.getStarkKey(relayerPrivKey)
+      const deployRes = await relayer.deployAccount({
         classHash:           classHash,
         constructorCalldata: CallData.compile({ publicKey: relayerPubKey }),
         addressSalt:         relayerPubKey,
-      }, { resourceBounds: V3_RESOURCE_BOUNDS })
+      })
       console.log(`[relay-starknet] relayer deploy tx=${deployRes.transaction_hash} — waiting...`)
       await provider.waitForTransaction(deployRes.transaction_hash)
       console.log(`[relay-starknet] relayer deployed!`)
@@ -305,12 +306,27 @@ export default async function handler(req: Request, res: Response) {
     }
   }
 
-  // ── Ghost account deployment check ────────────────────────────────────────
-  let isDeployed = false
-  try {
-    isDeployed = (await provider.getClassAt(ghostAddr, 'latest').catch(() => null)) != null
-  } catch { /* assume not deployed */ }
+  // ── Step 2: Deploy ghost account if needed (UDC call, separate tx) ────────
+  // Kept separate so fee estimation only involves deployed contracts.
+  const isDeployed = (await provider.getClassAt(ghostAddr, 'latest').catch(() => null)) != null
   console.log(`[relay-starknet] ghost deployed=${isDeployed}`)
+  if (!isDeployed) {
+    console.log(`[relay-starknet] deploying ghost via UDC...`)
+    try {
+      const ghostDeployRes = await relayer.execute([{
+        contractAddress: UDC_ADDRESS,
+        entrypoint:      'deployContract',
+        calldata: [classHash, pubKey, '0x0', '0x1', pubKey],
+      }])
+      console.log(`[relay-starknet] ghost deploy tx=${ghostDeployRes.transaction_hash} — waiting...`)
+      await provider.waitForTransaction(ghostDeployRes.transaction_hash)
+      console.log(`[relay-starknet] ghost deployed!`)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error('[relay-starknet] ghost deploy failed:', msg)
+      return res.status(502).json({ ok: false, error: `Ghost deploy failed: ${msg.slice(0, 200)}` })
+    }
+  }
 
   // ── Build SNIP-9 v2 OutsideExecution ──────────────────────────────────────
   const executeBefore = BigInt(Math.floor(Date.now() / 1000) + 3600)
@@ -351,43 +367,20 @@ export default async function handler(req: Request, res: Response) {
   ]
 
   // ── Relayer multicall: [deploy if needed] + execute_from_outside_v2 ───────
-  const relayerCalls = []
-
-  if (!isDeployed) {
-    console.log(`[relay-starknet] adding UDC deploy call`)
-    relayerCalls.push({
-      contractAddress: UDC_ADDRESS,
-      entrypoint:      'deployContract',
-      calldata: [
-        classHash,  // class_hash
-        pubKey,     // salt = pubKey  (OZ convention)
-        '0x0',      // unique = false → deployer = 0x0
-        '0x1',      // constructor calldata length = 1
-        pubKey,     // calldata[0] = publicKey
-      ],
-    })
-  }
-
-  relayerCalls.push({
-    contractAddress: ghostAddr,
-    entrypoint:      'execute_from_outside_v2',
-    calldata:        executeCalldata,
-  })
-
-  // ── Submit from relayer (pays STRK gas) ────────────────────────────────────
+  // ── Step 3: execute_from_outside_v2 — ghost is now deployed ─────────────
+  // Single call only — fee estimation works because ghost contract now exists.
   let txHash: string
   try {
-    const relayer = new Account(provider, relayerAddr, relayerPrivKey)
-    // resourceBounds forces v3 tx format and skips fee estimation — estimation
-    // fails when the multicall contains a UDC deploy + call on not-yet-deployed
-    // ghost account. Generous ceilings; unused gas is refunded.
-    const { transaction_hash } = await relayer.execute(relayerCalls, {
-      resourceBounds: V3_RESOURCE_BOUNDS,
-    })
+    const { transaction_hash } = await relayer.execute([{
+      contractAddress: ghostAddr,
+      entrypoint:      'execute_from_outside_v2',
+      calldata:        executeCalldata,
+    }])
+    txHash = transaction_hash
     console.log(`[relay-starknet] submitted tx=${txHash}`)
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    console.error('[relay-starknet] relayer execute failed:', msg)
+    console.error('[relay-starknet] execute_from_outside_v2 failed:', msg)
     return res.status(502).json({ ok: false, error: `Relay failed: ${msg.slice(0, 300)}` })
   }
 
