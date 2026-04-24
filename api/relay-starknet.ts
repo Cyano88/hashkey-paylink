@@ -40,8 +40,10 @@ const DEFAULT_RPC_URL    = 'https://rpc.starknet.lava.build'
 /** OZ Account v0.8.1 Sierra class hash — declared on Starknet Mainnet */
 const DEFAULT_CLASS_HASH = '0x061dac032f228abef9c6626f995015233097ae253a7f72d68552db02f2971b8f'
 
-/** USDC on Starknet Mainnet — StarkGate bridged from Ethereum (matches CHAIN_META.starknet.tokenAddress) */
-const USDC_STARKNET  = '0x053c91253bc9682c04929ca02ed00b3e423f6710d2ee7e0d5ebb06f3ecf368a8'
+/** Circle native USDC on Starknet Mainnet */
+const USDC_NEW = '0x053c91253bc9682c04929ca02ed00b3e423f6710d2ee7e0d5ebb06f3ecf368a8'
+/** Legacy StarkGate bridged USDC — older wallets still hold this */
+const USDC_OLD = '0x033068f6539f8e6e6b131e6b2b814e6c34a5224bc66947c47dab9dfee93b35fb'
 /** Platform treasury — receives 0.5 % fee */
 const STARK_TREASURY = '0x0483AB5539B281c08777F1C8337Beeba05c2610feDcbA191B989E35eDc2767C3'
 
@@ -138,20 +140,26 @@ export default async function handler(req: Request, res: Response) {
   const { privKey: ghostPrivKey, pubKey, address: ghostAddr } =
     deriveGhost(linkId, recipientStark, classHash)
 
-  // ── Confirm USDC balance ─────────────────────────────────────────────────
-  let balance: bigint
-  try {
-    const provider = new RpcProvider({ nodeUrl: rpcUrl })
-    const result   = await provider.callContract({
-      contractAddress: USDC_STARKNET,
-      entrypoint:      'balanceOf',
-      calldata:        [ghostAddr],
-    }, 'latest')
-    // balanceOf returns Uint256 [low, high]; USDC amounts always fit in low
-    balance = BigInt(result[0] ?? '0x0')
-  } catch (err) {
-    console.error('[relay-starknet] balanceOf failed:', err)
-    return res.status(500).json({ ok: false, error: 'Failed to read USDC balance from Starknet' })
+  // ── Confirm USDC balance — check both known USDC contracts ──────────────
+  // Starknet has two USDC contracts: Circle native (new) and legacy StarkGate (old).
+  // We detect whichever one has funds and use it for the relay transfers.
+  const provider = new RpcProvider({ nodeUrl: rpcUrl })
+  let balance   = 0n
+  let usdcToken = USDC_NEW  // default; overridden if old contract has funds
+
+  for (const token of [USDC_NEW, USDC_OLD]) {
+    try {
+      const result = await provider.callContract({
+        contractAddress: token,
+        entrypoint:      'balanceOf',
+        calldata:        [ghostAddr],
+      }, 'latest')
+      const bal = BigInt(result[0] ?? '0x0')
+      console.log(`[relay-starknet] token=${token} balance=${bal}µUSDC at ${ghostAddr}`)
+      if (bal > 0n) { balance = bal; usdcToken = token; break }
+    } catch (err) {
+      console.warn(`[relay-starknet] balanceOf failed for ${token}:`, err)
+    }
   }
 
   if (balance === 0n) {
@@ -164,7 +172,7 @@ export default async function handler(req: Request, res: Response) {
     })
   }
 
-  console.log(`[relay-starknet] ghost ${ghostAddr} balance=${balance}µUSDC recipient=${recipientStark}`)
+  console.log(`[relay-starknet] ghost ${ghostAddr} balance=${balance}µUSDC usdcToken=${usdcToken} recipient=${recipientStark}`)
 
   // ── Compute payout split ─────────────────────────────────────────────────
   // Reserve MAX_GAS_USDC for AVNU gas. AVNU will include its actual fee
@@ -180,12 +188,12 @@ export default async function handler(req: Request, res: Response) {
 
   const calls: AvnuCall[] = [
     {
-      contractAddress: USDC_STARKNET,
+      contractAddress: usdcToken,
       entrypoint:      'transfer',
       calldata:        [recipientStark, payoutLow, payoutHigh],
     },
     {
-      contractAddress: USDC_STARKNET,
+      contractAddress: usdcToken,
       entrypoint:      'transfer',
       calldata:        [STARK_TREASURY, feeLow, feeHigh],
     },
@@ -205,7 +213,7 @@ export default async function handler(req: Request, res: Response) {
     const buildBody: Record<string, unknown> = {
       userAddress:       ghostAddr,
       calls,
-      gasTokenAddress:   USDC_STARKNET,
+      gasTokenAddress:   usdcToken,
       maxGasTokenAmount: MAX_GAS_USDC.toString(),
     }
 
