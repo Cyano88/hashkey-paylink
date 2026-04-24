@@ -175,11 +175,12 @@ export default async function handler(req: Request, res: Response) {
   console.log(`[relay-starknet] ghost ${ghostAddr} balance=${balance}µUSDC usdcToken=${usdcToken} recipient=${recipientStark}`)
 
   // ── Compute payout split ─────────────────────────────────────────────────
-  // We attempt AVNU free gas sponsorship first; if accepted, the full balance
-  // is spendable (no gas reserve needed). If AVNU charges gas from the token,
-  // it inserts its own transfer call before ours, so our amounts stay the same.
-  const platformFee  = balance * FEE_BPS / 10_000n
-  const payout       = balance - platformFee
+  // AVNU prepends its gas-fee transfer to the signed bundle when charging gas
+  // from the account. Our calls must sum to ≤ balance − gas so the account can
+  // cover everything. MAX_GAS_USDC is a ceiling; actual cost is far lower.
+  const spendable   = balance - MAX_GAS_USDC
+  const platformFee = spendable * FEE_BPS / 10_000n
+  const payout      = spendable - platformFee
 
   // ── Build AVNU paymaster transaction ────────────────────────────────────
   const [payoutLow,  payoutHigh ] = toU256Calldata(payout)
@@ -241,7 +242,7 @@ export default async function handler(req: Request, res: Response) {
     // Attempt 1: free gas sponsorship
     let buildRes = await tryBuild(false)
     // Attempt 2: charge gas from ghost account balance if free mode not available
-    if (!buildRes.ok && (buildRes.status === 404 || buildRes.status === 400)) {
+    if (!buildRes.ok && (buildRes.status === 401 || buildRes.status === 404 || buildRes.status === 400)) {
       console.log(`[relay-starknet] free gas rejected (${buildRes.status}), retrying with gasToken`)
       buildRes = await tryBuild(true)
     }
