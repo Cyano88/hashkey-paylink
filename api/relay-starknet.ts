@@ -1,32 +1,27 @@
 /**
  * /api/relay-starknet
  *
- * Starknet Direct Send relay — AVNU Paymaster edition.
- * Fully gas-free: no STRK pre-funding, no relayer wallet required.
+ * Starknet Direct Send relay — AVNU Gasless (user pays gas in USDC) mode.
+ * No API key required. Gas is deducted from the deposited USDC balance.
  *
  * ── Flow ──────────────────────────────────────────────────────────────────────
  *  1. Re-derive the ghost OZ Account address from (linkId, recipientStark).
- *  2. Confirm USDC has arrived at the ghost address (via Starknet RPC).
- *  3. Call AVNU /paymaster/v1/build:
- *       • Includes OZ Account deployment params (class hash, salt, calldata)
- *         so AVNU deploys the ghost account atomically if needed.
- *       • Includes our USDC split calls (recipient 99.5% + treasury 0.5%).
- *       • AVNU embeds its own gas-fee transfer into the signed call bundle
- *         and charges USDC from the ghost account's balance.
- *       • Returns a SNIP-9 v2 OutsideExecution typed-data blob to sign.
- *  4. Compute the typed-data message hash, sign with the ghost's STARK
- *     private key (ec.starkCurve.sign — compatible with OZ Account v0.8.1
- *     is_valid_signature which expects [r, s]).
- *  5. POST to AVNU /paymaster/v1/execute with {requestId, signature}.
- *     AVNU broadcasts the transaction and returns the tx hash.
+ *  2. Confirm Circle USDC has arrived at the ghost address.
+ *  3. POST to AVNU /paymaster/v1/build-typed-data:
+ *       • gasTokenAddress = Circle USDC (supported AVNU gas token, no key needed)
+ *       • AVNU prepends its gas-fee transfer into the signed bundle and deducts
+ *         from the ghost account's USDC balance.
+ *       • deploymentData deploys the ghost OZ account atomically if needed.
+ *       • Returns a SNIP-9 v2 OutsideExecution typed-data blob.
+ *  4. Sign the typed-data hash with the ghost's STARK private key [r, s].
+ *  5. POST to AVNU /paymaster/v1/execute → returns tx hash.
  *
  * ── Required env vars ─────────────────────────────────────────────────────────
- *  STARKNET_RPC_URL         Starknet RPC for balance check (default: Blast public)
- *  AVNU_API_KEY             Optional — AVNU API key for higher rate limits
- *  STARKNET_OZ_CLASS_HASH   Optional — override OZ Account v0.8.1 class hash
+ *  STARKNET_RPC_URL        Starknet RPC (default: Lava public)
+ *  STARKNET_OZ_CLASS_HASH  Optional — override OZ Account v0.8.1 class hash
  *
- * No STRK wallet needed. Gas is sponsored by AVNU and reimbursed in USDC
- * from the ghost account's own balance.
+ * Payers must send Circle USDC (0x053c91...) — the gas token AVNU supports.
+ * Legacy StarkGate USDC (0x033068...) is detected and rejected with a clear msg.
  */
 
 import type { Request, Response } from 'express'
@@ -34,89 +29,57 @@ import { typedData as starkTypedData, hash, ec, CallData, num, RpcProvider } fro
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const AVNU_BASE = 'https://starknet.api.avnu.fi'
+const AVNU_BASE       = 'https://starknet.api.avnu.fi'
+const DEFAULT_RPC_URL = 'https://rpc.starknet.lava.build'
 
-const DEFAULT_RPC_URL    = 'https://rpc.starknet.lava.build'
 /** OZ Account v0.8.1 Sierra class hash — declared on Starknet Mainnet */
 const DEFAULT_CLASS_HASH = '0x061dac032f228abef9c6626f995015233097ae253a7f72d68552db02f2971b8f'
 
-/** Circle native USDC on Starknet Mainnet */
+/** Circle native USDC — the AVNU-supported gas token */
 const USDC_NEW = '0x053c91253bc9682c04929ca02ed00b3e423f6710d2ee7e0d5ebb06f3ecf368a8'
-/** Legacy StarkGate bridged USDC — older wallets still hold this */
+/** Legacy StarkGate USDC — detected so we can surface a clear error */
 const USDC_OLD = '0x033068f6539f8e6e6b131e6b2b814e6c34a5224bc66947c47dab9dfee93b35fb'
+
 /** Platform treasury — receives 0.5 % fee */
 const STARK_TREASURY = '0x0483AB5539B281c08777F1C8337Beeba05c2610feDcbA191B989E35eDc2767C3'
 
-const FEE_BPS = 50n  // 0.5 %
+const FEE_BPS     = 50n       // 0.5 %
+const MAX_GAS_USDC = 10_000n  // 0.01 USDC ceiling reserved for AVNU gas
 
-/**
- * Maximum USDC (6 decimals) AVNU may charge for gas.
- * Starknet gas is cheap — typical cost is well under $0.01.
- * We reserve this from the balance before computing the recipient payout.
- */
-const MAX_GAS_USDC = 10_000n  // 0.01 USDC ceiling
+/** Starknet field prime — Pedersen inputs must be < P */
+const STARK_P = BigInt('0x800000000000011000000000000000000000000000000000000000000000001')
 
 // ─── Ghost address derivation ────────────────────────────────────────────────
 
-/**
- * Re-derives the ghost OZ Account address using the same deterministic math
- * as starknet-ghost.ts on the frontend. Must match exactly.
- *
- * Convention (OZ Account standard):
- *   salt = publicKey, deployer = 0x0, calldata = [publicKey]
- */
-/** Starknet field prime — inputs must be < P for Pedersen to accept them. */
-const STARK_P = BigInt('0x800000000000011000000000000000000000000000000000000000000000001')
-
 function deriveGhost(linkId: string, recipientStark: string, classHash: string) {
-  // Reduce inputs to valid felt252 range — linkId is 32-byte EVM hex (can exceed P)
   const linkIdFelt = num.toHex(BigInt(linkId) % STARK_P)
   const recipFelt  = num.toHex(BigInt(recipientStark) % STARK_P)
-  const seed     = hash.computePedersenHash(linkIdFelt, recipFelt)
-  const privKey  = ec.starkCurve.grindKey(seed)
-  const pubKey   = ec.starkCurve.getStarkKey(privKey)
+  const seed    = hash.computePedersenHash(linkIdFelt, recipFelt)
+  const privKey = ec.starkCurve.grindKey(seed)
+  const pubKey  = ec.starkCurve.getStarkKey(privKey)
   const calldata = CallData.compile({ publicKey: pubKey })
   const rawAddr  = hash.calculateContractAddressFromHash(pubKey, classHash, calldata, '0x0')
   return { privKey, pubKey, address: num.toHex(rawAddr) }
 }
 
-// ─── AVNU Paymaster helpers ──────────────────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
-/** AVNU call shape expected by the paymaster /build endpoint */
-interface AvnuCall {
-  contractAddress: string
-  entrypoint:      string
-  calldata:        string[]  // hex felts
+function toU256Calldata(amount: bigint): [string, string] {
+  return [
+    num.toHex(amount & BigInt('0xffffffffffffffffffffffffffffffff')),
+    num.toHex(amount >> 128n),
+  ]
 }
 
-/** Shape returned by AVNU /paymaster/v1/build */
+interface AvnuCall { contractAddress: string; entrypoint: string; calldata: string[] }
 interface AvnuBuildResponse {
   requestId:      string
-  typedData:      Record<string, unknown>  // SNIP-9 v2 OutsideExecution typed data
-  gasTokenAmount: string  // USDC micro-units AVNU will charge
+  typedData:      Record<string, unknown>
+  gasTokenAmount: string
 }
-
-/** Shape returned by AVNU /paymaster/v1/execute */
 interface AvnuExecuteResponse {
-  transactionHash?: string
-  transaction_hash?: string  // some API versions use snake_case
-}
-
-function avnuHeaders(apiKey?: string): Record<string, string> {
-  const h: Record<string, string> = { 'Content-Type': 'application/json' }
-  if (apiKey) {
-    // AVNU paymaster uses 'api-key' header (not 'x-api-key')
-    h['api-key'] = apiKey
-    h['x-api-key'] = apiKey  // send both; harmless if one is ignored
-  }
-  return h
-}
-
-/** Convert a bigint amount to the [low_hex, high_hex] pair Cairo u256 expects */
-function toU256Calldata(amount: bigint): [string, string] {
-  const low  = amount & BigInt('0xffffffffffffffffffffffffffffffff')
-  const high = amount >> 128n
-  return [num.toHex(low), num.toHex(high)]
+  transactionHash?:  string
+  transaction_hash?: string
 }
 
 // ─── Handler ─────────────────────────────────────────────────────────────────
@@ -126,12 +89,10 @@ export default async function handler(req: Request, res: Response) {
     return res.status(405).json({ ok: false, error: 'Method not allowed' })
   }
 
-  const rpcUrl    = process.env.STARKNET_RPC_URL    ?? DEFAULT_RPC_URL
+  const rpcUrl    = process.env.STARKNET_RPC_URL       ?? DEFAULT_RPC_URL
   const classHash = process.env.STARKNET_OZ_CLASS_HASH ?? DEFAULT_CLASS_HASH
-  const avnuKey   = process.env.AVNU_API_KEY  // optional
-  console.log(`[relay-starknet] avnuKey=${avnuKey ? `set(${avnuKey.slice(0,6)}...)` : 'NOT SET'}`)
 
-  // ── Input validation ────────────────────────────────────────────────────────
+  // ── Input validation ──────────────────────────────────────────────────────
   const { linkId, recipientStark } = (req.body ?? {}) as Record<string, string>
 
   if (!linkId || !/^0x[0-9a-fA-F]{64}$/.test(linkId)) {
@@ -141,130 +102,116 @@ export default async function handler(req: Request, res: Response) {
     return res.status(400).json({ ok: false, error: 'recipientStark must be a valid Starknet address' })
   }
 
-  // ── Derive ghost address ─────────────────────────────────────────────────
+  // ── Derive ghost address ──────────────────────────────────────────────────
   const { privKey: ghostPrivKey, pubKey, address: ghostAddr } =
     deriveGhost(linkId, recipientStark, classHash)
 
-  // ── Confirm USDC balance — check both known USDC contracts ──────────────
-  // Starknet has two USDC contracts: Circle native (new) and legacy StarkGate (old).
-  // We detect whichever one has funds and use it for the relay transfers.
   const provider = new RpcProvider({ nodeUrl: rpcUrl })
-  let balance   = 0n
-  let usdcToken = USDC_NEW  // default; overridden if old contract has funds
 
-  for (const token of [USDC_NEW, USDC_OLD]) {
+  // ── Check Circle USDC balance (primary) ───────────────────────────────────
+  let balance = 0n
+  try {
+    const result = await provider.callContract({
+      contractAddress: USDC_NEW,
+      entrypoint:      'balanceOf',
+      calldata:        [ghostAddr],
+    }, 'latest')
+    balance = BigInt(result[0] ?? '0x0')
+    console.log(`[relay-starknet] Circle USDC balance=${balance}µUSDC at ${ghostAddr}`)
+  } catch (err) {
+    console.warn('[relay-starknet] Circle USDC balanceOf failed:', err)
+  }
+
+  // If no Circle USDC, check legacy — surface a helpful error if found there
+  if (balance === 0n) {
     try {
       const result = await provider.callContract({
-        contractAddress: token,
+        contractAddress: USDC_OLD,
         entrypoint:      'balanceOf',
         calldata:        [ghostAddr],
       }, 'latest')
-      const bal = BigInt(result[0] ?? '0x0')
-      console.log(`[relay-starknet] token=${token} balance=${bal}µUSDC at ${ghostAddr}`)
-      if (bal > 0n) { balance = bal; usdcToken = token; break }
-    } catch (err) {
-      console.warn(`[relay-starknet] balanceOf failed for ${token}:`, err)
-    }
+      const legacyBal = BigInt(result[0] ?? '0x0')
+      if (legacyBal > 0n) {
+        console.warn(`[relay-starknet] legacy USDC found (${legacyBal}µUSDC) — Circle USDC required`)
+        return res.status(400).json({
+          ok:    false,
+          error: `Found ${legacyBal} µUSDC of legacy StarkGate USDC. Please send Circle USDC (0x053c91…) instead — it is the gas token AVNU supports.`,
+        })
+      }
+    } catch { /* ignore */ }
+
+    return res.status(400).json({ ok: false, error: 'No Circle USDC found at ghost address yet' })
   }
 
-  if (balance === 0n) {
-    return res.status(400).json({ ok: false, error: 'No USDC found at ghost address yet' })
-  }
-  if (balance < MAX_GAS_USDC) {
+  if (balance <= MAX_GAS_USDC) {
     return res.status(400).json({
       ok:    false,
-      error: `Balance ${balance} µUSDC is too low (minimum ${MAX_GAS_USDC} µUSDC needed for gas reserve)`,
+      error: `Balance ${balance} µUSDC is too low — need more than ${MAX_GAS_USDC} µUSDC to cover gas`,
     })
   }
 
-  console.log(`[relay-starknet] ghost ${ghostAddr} balance=${balance}µUSDC usdcToken=${usdcToken} recipient=${recipientStark}`)
+  console.log(`[relay-starknet] ghost=${ghostAddr} balance=${balance}µUSDC recipient=${recipientStark}`)
 
-  // ── Compute payout split ─────────────────────────────────────────────────
-  // With AVNU API key, gas is sponsored for free so the full balance is
-  // spendable. Without a key, AVNU would charge gas from the token balance
-  // and we'd need to reserve MAX_GAS_USDC — but legacy USDC is not a valid
-  // AVNU gas token anyway, so a key is required for the ghost vault flow.
-  const spendable   = avnuKey ? balance : balance - MAX_GAS_USDC
+  // ── Payout split ──────────────────────────────────────────────────────────
+  // AVNU prepends its gas transfer into the signed bundle; reserve MAX_GAS_USDC
+  // so that gas + our transfers fit within the ghost account's balance.
+  const spendable   = balance - MAX_GAS_USDC
   const platformFee = spendable * FEE_BPS / 10_000n
   const payout      = spendable - platformFee
 
-  // ── Build AVNU paymaster transaction ────────────────────────────────────
-  const [payoutLow,  payoutHigh ] = toU256Calldata(payout)
-  const [feeLow,     feeHigh    ] = toU256Calldata(platformFee)
+  const [payoutLow, payoutHigh] = toU256Calldata(payout)
+  const [feeLow,    feeHigh   ] = toU256Calldata(platformFee)
 
+  // ── Check deployment status ───────────────────────────────────────────────
+  let isDeployed = false
+  try {
+    const code = await provider.getClassAt(ghostAddr, 'latest').catch(() => null)
+    isDeployed = code != null
+  } catch { /* assume not deployed */ }
+  console.log(`[relay-starknet] ghost account deployed=${isDeployed}`)
+
+  // ── AVNU build-typed-data ─────────────────────────────────────────────────
   const calls: AvnuCall[] = [
-    {
-      contractAddress: usdcToken,
-      entrypoint:      'transfer',
-      calldata:        [recipientStark, payoutLow, payoutHigh],
-    },
-    {
-      contractAddress: usdcToken,
-      entrypoint:      'transfer',
-      calldata:        [STARK_TREASURY, feeLow, feeHigh],
-    },
+    { contractAddress: USDC_NEW, entrypoint: 'transfer', calldata: [recipientStark, payoutLow, payoutHigh] },
+    { contractAddress: USDC_NEW, entrypoint: 'transfer', calldata: [STARK_TREASURY,  feeLow,    feeHigh   ] },
   ]
+
+  const buildBody: Record<string, unknown> = {
+    userAddress:       ghostAddr,
+    calls,
+    gasTokenAddress:   USDC_NEW,          // Circle USDC — AVNU-supported gas token
+    maxGasTokenAmount: MAX_GAS_USDC.toString(),
+  }
+
+  if (!isDeployed) {
+    buildBody.deploymentData = {
+      classHash,
+      salt:     pubKey,    // OZ convention: salt = pubKey
+      unique:   false,     // deployer = 0x0 → address matches our derivation
+      calldata: [pubKey],  // OZ Account constructor: [publicKey]
+    }
+  }
 
   let buildData: AvnuBuildResponse
   try {
-    // Check if the ghost account is already deployed — omit deploymentData if so.
-    let isDeployed = false
-    try {
-      const code = await provider.getClassAt(ghostAddr, 'latest').catch(() => null)
-      isDeployed = code != null
-    } catch { /* assume not deployed */ }
-    console.log(`[relay-starknet] ghost account deployed=${isDeployed}`)
-
-    const deploymentData = isDeployed ? undefined : {
-      classHash,
-      salt:     pubKey,   // OZ convention: salt = pubKey
-      unique:   false,    // deployer = 0x0
-      calldata: [pubKey], // OZ Account constructor: [publicKey]
-    }
-
-    // AVNU Paymaster v1 — correct endpoint is /paymaster/v1/build-typed-data.
-    // We first try without a gasTokenAddress (AVNU-sponsored / free gas) so any
-    // USDC variant is accepted. If that returns 404/400 we retry charging the
-    // detected usdcToken from the ghost account's balance.
-    const tryBuild = async (chargeGasToken: boolean) => {
-      const body: Record<string, unknown> = {
-        userAddress: ghostAddr,
-        calls,
-        ...(chargeGasToken && {
-          gasTokenAddress:   usdcToken,
-          maxGasTokenAmount: MAX_GAS_USDC.toString(),
-        }),
-        ...(deploymentData && { deploymentData }),
-      }
-      console.log(`[relay-starknet] AVNU build attempt chargeGas=${chargeGasToken}`)
-      return fetch(`${AVNU_BASE}/paymaster/v1/build-typed-data`, {
-        method:  'POST',
-        headers: avnuHeaders(avnuKey),
-        body:    JSON.stringify(body),
-        signal:  AbortSignal.timeout(15_000),
-      })
-    }
-
-    // With an API key, AVNU sponsors gas for free — no gasToken needed.
-    // Without a key, AVNU requires a supported gas token; legacy USDC is not
-    // supported, so we still attempt sponsored first and log clearly if it fails.
-    let buildRes = await tryBuild(false)
-    if (!buildRes.ok && !avnuKey && (buildRes.status === 401 || buildRes.status === 400)) {
-      console.log(`[relay-starknet] free gas rejected (${buildRes.status}), retrying with gasToken`)
-      buildRes = await tryBuild(true)
-    }
+    const buildRes = await fetch(`${AVNU_BASE}/paymaster/v1/build-typed-data`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(buildBody),
+      signal:  AbortSignal.timeout(15_000),
+    })
 
     if (!buildRes.ok) {
       const errBody = await buildRes.text().catch(() => '')
       console.error('[relay-starknet] AVNU build failed:', buildRes.status, errBody)
       return res.status(502).json({
         ok:    false,
-        error: `AVNU build failed (${buildRes.status}): ${errBody.slice(0, 200)}`,
+        error: `AVNU build failed (${buildRes.status}): ${errBody.slice(0, 300)}`,
       })
     }
 
     buildData = (await buildRes.json()) as AvnuBuildResponse
-    console.log(`[relay-starknet] AVNU build ok — requestId=${buildData.requestId} gasTokenAmount=${buildData.gasTokenAmount}`)
+    console.log(`[relay-starknet] AVNU build ok requestId=${buildData.requestId} gas=${buildData.gasTokenAmount}µUSDC`)
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error('[relay-starknet] AVNU build error:', msg)
@@ -276,13 +223,7 @@ export default async function handler(req: Request, res: Response) {
     return res.status(502).json({ ok: false, error: 'AVNU build response missing requestId or typedData' })
   }
 
-  // ── Sign the SNIP-9 OutsideExecution typed data ──────────────────────────
-  // starknet.js getMessageHash computes:
-  //   hash = pedersen(domain_separator, message_hash)
-  // as per SNIP-9 v2 / SNIP-12 revised spec.
-  //
-  // OZ Account v0.8.1 is_valid_signature expects exactly [r, s] (2 felts)
-  // and verifies via check_ecdsa_signature(hash, public_key, r, s).
+  // ── Sign the SNIP-9 v2 OutsideExecution typed data ───────────────────────
   let signature: [string, string]
   try {
     const msgHash = starkTypedData.getMessageHash(
@@ -297,12 +238,12 @@ export default async function handler(req: Request, res: Response) {
     return res.status(500).json({ ok: false, error: `Signing failed: ${msg.slice(0, 200)}` })
   }
 
-  // ── Execute via AVNU ─────────────────────────────────────────────────────
+  // ── Execute via AVNU ──────────────────────────────────────────────────────
   let txHash: string
   try {
     const execRes = await fetch(`${AVNU_BASE}/paymaster/v1/execute`, {
       method:  'POST',
-      headers: avnuHeaders(avnuKey),
+      headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ requestId, signature }),
       signal:  AbortSignal.timeout(20_000),
     })
@@ -312,12 +253,11 @@ export default async function handler(req: Request, res: Response) {
       console.error('[relay-starknet] AVNU execute failed:', execRes.status, errBody)
       return res.status(502).json({
         ok:    false,
-        error: `AVNU execute failed (${execRes.status}): ${errBody.slice(0, 200)}`,
+        error: `AVNU execute failed (${execRes.status}): ${errBody.slice(0, 300)}`,
       })
     }
 
     const execData = (await execRes.json()) as AvnuExecuteResponse
-    // AVNU returns camelCase or snake_case depending on API version
     txHash = execData.transactionHash ?? execData.transaction_hash ?? ''
 
     if (!txHash) {
