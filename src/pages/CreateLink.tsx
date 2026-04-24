@@ -46,6 +46,8 @@ export default function CreateLink() {
   const [generatedLink, setGeneratedLink] = useState('')
   const [copied,        setCopied]        = useState(false)
   const [selectedNet,  setPreviewChain]  = useState<ChainKey>('base')
+  // Derived early so useEffect hooks below can reference it without TDZ error
+  const isEvmNet = selectedNet !== 'starknet'
   const [vaultStep,     setVaultStep]     = useState<VaultStep>('idle')
   const [deployError,   setDeployError]   = useState<string | null>(null)
   // Background check — null=checking, true=deployed, false=not deployed
@@ -131,7 +133,6 @@ export default function CreateLink() {
   const starkValid = isValidStarkAddr(starkAddr)
   const isValidAmt = amtDirty && parseFloat(amt) > 0 && !isNaN(parseFloat(amt))
 
-  const isEvmNet    = selectedNet !== 'starknet'
   const canGenerate = isValidAmt && (isEvmNet ? evmValid : starkValid)
 
   // ── Build link URL ─────────────────────────────────────────────────────
