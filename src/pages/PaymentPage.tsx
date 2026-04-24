@@ -1237,9 +1237,9 @@ export default function PaymentPage() {
                     </p>
                   </div>
                   <p className="text-center text-xs text-gray-500">
-                    Send exact amount of {meta.asset} on{' '}
-                    {chain === 'base' ? 'Base' : chain === 'arc' ? 'Arc' : 'Starknet'}{' '}
-                    network to this address
+                    Send {chain === 'starknet' ? 'Circle USDC' : `${meta.asset}`} on{' '}
+                    {chain === 'base' ? 'Base' : chain === 'arc' ? 'Arc' : 'Starknet Mainnet'}{' '}
+                    to this address
                   </p>
                   <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3.5">
                     <p className="min-w-0 flex-1 break-all font-mono text-xs text-gray-800">{directDisplayAddr}</p>
@@ -1254,7 +1254,7 @@ export default function PaymentPage() {
                   </div>
                   {chain === 'starknet' && (
                     <p className="text-center text-[10px] text-purple-500 font-medium">
-                      Ghost OZ Account · USDC auto-routes on arrival · no wallet needed
+                      Send Circle USDC (not legacy) · auto-routed on arrival · no wallet needed
                     </p>
                   )}
                 </div>

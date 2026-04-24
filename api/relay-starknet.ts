@@ -187,13 +187,19 @@ export default async function handler(req: Request, res: Response) {
   // 1. Sponsored with API key (x-paymaster-api-key header, no gasToken)
   // 2. No API key (AVNU public/free tier)
   // 3. Gasless — ghost pays gas in Circle USDC (0x053c91); best for new deposits
+  // Gasless body: always use Circle USDC as gas token regardless of which
+  // USDC variant the ghost holds — AVNU only accepts the new Circle USDC.
+  const gaslessBody = {
+    ...buildBody,
+    gasTokenAddress:   USDC_NEW,
+    maxGasTokenAmount: MAX_GAS_REIMB_USDC.toString(),
+  }
+
   const buildAttempts = [
-    { label: 'sponsored+key',  body: buildBody,                             headers: avnuHeaders(avnuKey) },
-    { label: 'sponsored+nokey',body: buildBody,                             headers: avnuHeaders()        },
-    { label: 'gasless+USDC',   body: { ...buildBody,                        headers: avnuHeaders(),
-        gasTokenAddress:   USDC_NEW,
-        maxGasTokenAmount: MAX_GAS_REIMB_USDC.toString(),
-      }, headers: avnuHeaders() },
+    { label: 'sponsored+key',   body: buildBody,   headers: avnuHeaders(avnuKey) },
+    { label: 'sponsored+nokey', body: buildBody,   headers: avnuHeaders()        },
+    { label: 'gasless+USDC',    body: gaslessBody, headers: avnuHeaders(avnuKey) },
+    { label: 'gasless+nokey',   body: gaslessBody, headers: avnuHeaders()        },
   ]
 
   let buildData: AvnuBuildResponse | null = null
