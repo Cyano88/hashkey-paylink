@@ -283,27 +283,20 @@ export default async function handler(req: Request, res: Response) {
 
   const relayer = new Account(provider, relayerAddr, relayerPrivKey)
 
-  // ── Step 1: Deploy relayer account if needed (one-time DEPLOY_ACCOUNT tx) ─
-  // DEPLOY_ACCOUNT is self-bootstrapping — works before account exists.
-  // No explicit fee: starknet.js auto-estimates correctly for this tx type.
+  // ── Step 1: Verify relayer is deployed ────────────────────────────────────
+  // The relayer OZ Account must be deployed before it can send INVOKE txs.
+  // Deploy it once manually via ArgentX → Starkscan UDC write interface:
+  //   UDC: 0x041a78e741e5af2fec34b695679bc6891742439f7afb8484ecd7766661ad02bf
+  //   classHash: 0x061dac032f228abef9c6626f995015233097ae253a7f72d68552db02f2971b8f
+  //   salt: <relayerPubKey>   unique: 0   calldata: [<relayerPubKey>]
   const relayerDeployed = (await provider.getClassAt(relayerAddr, 'latest').catch(() => null)) != null
   if (!relayerDeployed) {
-    console.log(`[relay-starknet] relayer not deployed — sending DEPLOY_ACCOUNT...`)
-    try {
-      const relayerPubKey = ec.starkCurve.getStarkKey(relayerPrivKey)
-      const deployRes = await relayer.deployAccount({
-        classHash:           classHash,
-        constructorCalldata: CallData.compile({ publicKey: relayerPubKey }),
-        addressSalt:         relayerPubKey,
-      }, { nonce: 0 })  // undeployed account always has nonce 0 — skip the getNonce RPC call
-      console.log(`[relay-starknet] relayer deploy tx=${deployRes.transaction_hash} — waiting...`)
-      await provider.waitForTransaction(deployRes.transaction_hash)
-      console.log(`[relay-starknet] relayer deployed!`)
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      console.error('[relay-starknet] relayer deploy failed:', msg)
-      return res.status(502).json({ ok: false, error: `Relayer deploy failed: ${msg.slice(0, 200)}` })
-    }
+    const relayerPubKey = ec.starkCurve.getStarkKey(relayerPrivKey)
+    console.error(`[relay-starknet] relayer ${relayerAddr} not deployed! Deploy via UDC with salt=${relayerPubKey}`)
+    return res.status(500).json({
+      ok: false,
+      error: `Relayer account not deployed. Go to Starkscan → UDC (0x041a78…) → Write → deployContract. classHash=0x061dac…, salt=${relayerPubKey}, unique=0, calldata=[${relayerPubKey}]`,
+    })
   }
 
   // ── Step 2: Deploy ghost account if needed (UDC call, separate tx) ────────
