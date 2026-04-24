@@ -295,7 +295,7 @@ export default async function handler(req: Request, res: Response) {
         classHash:           classHash,
         constructorCalldata: CallData.compile({ publicKey: relayerPubKey }),
         addressSalt:         relayerPubKey,
-      })
+      }, { nonce: 0 })  // undeployed account always has nonce 0 — skip the getNonce RPC call
       console.log(`[relay-starknet] relayer deploy tx=${deployRes.transaction_hash} — waiting...`)
       await provider.waitForTransaction(deployRes.transaction_hash)
       console.log(`[relay-starknet] relayer deployed!`)
