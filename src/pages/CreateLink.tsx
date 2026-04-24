@@ -332,14 +332,6 @@ export default function CreateLink() {
                 {connectedEvm && evmAddr.toLowerCase() === connectedEvm.toLowerCase()
                   ? `Auto-filled · ${truncateAddress(evmAddr, 8)}`
                   : truncateAddress(evmAddr, 8)}
-                {routerDeployed === true && (
-                  <span className="ml-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 border border-emerald-200">
-                    Vault Active
-                  </span>
-                )}
-                {routerDeployed === null && evmValid && (
-                  <span className="ml-1 text-[10px] text-gray-400">checking vault…</span>
-                )}
               </p>
             )}
           </fieldset>}
@@ -698,9 +690,9 @@ export default function CreateLink() {
           </p>
           <div className="grid grid-cols-3 gap-3">
             {[
-              { n: '1', title: 'Enter details',   body: 'Your EVM + Starknet addresses & amount' },
-              { n: '2', title: 'Activate vault',   body: 'One-time on-chain setup · ~$0.01 gas' },
-              { n: '3', title: 'Get paid',         body: 'Anyone pays from any wallet or exchange' },
+              { n: '1', title: 'Enter details',   body: 'Your EVM or Starknet wallet address' },
+              { n: '2', title: 'Enter amount',    body: 'USDC or HSK' },
+              { n: '3', title: 'Get paid',        body: 'Anyone pays from any wallet or exchange' },
             ].map(({ n, title, body }) => (
               <div key={n} className="rounded-xl border border-gray-100 bg-white p-4 text-center shadow-sm">
                 <div className="mx-auto mb-2.5 flex h-7 w-7 items-center justify-center rounded-full bg-gray-100 text-xs font-bold text-gray-600">
