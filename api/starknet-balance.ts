@@ -22,7 +22,7 @@ export default async function handler(req: Request, res: Response) {
     return res.status(400).json({ ok: false, error: 'tokenAddress and accountAddress required' })
   }
 
-  const rpcUrl   = process.env.STARKNET_RPC_URL ?? 'https://starknet-mainnet.public.blastapi.io'
+  const rpcUrl   = process.env.STARKNET_RPC_URL ?? 'https://rpc.starknet.lava.build'
   const provider = new RpcProvider({ nodeUrl: rpcUrl })
 
   console.log(`[starknet-balance] checking token=${tokenAddress} account=${accountAddress}`)

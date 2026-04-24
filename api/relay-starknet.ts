@@ -36,7 +36,7 @@ import { typedData as starkTypedData, hash, ec, CallData, num, RpcProvider } fro
 
 const AVNU_BASE = 'https://starknet.api.avnu.fi'
 
-const DEFAULT_RPC_URL    = 'https://starknet-mainnet.public.blastapi.io'
+const DEFAULT_RPC_URL    = 'https://rpc.starknet.lava.build'
 /** OZ Account v0.8.1 Sierra class hash — declared on Starknet Mainnet */
 const DEFAULT_CLASS_HASH = '0x061dac032f228abef9c6626f995015233097ae253a7f72d68552db02f2971b8f'
 

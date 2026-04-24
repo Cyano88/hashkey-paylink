@@ -44,7 +44,7 @@ import { cn, truncateAddress, formatAmount, memoToHex, copyToClipboard } from '.
 const CHAINS: ChainKey[] = ['base', 'starknet', 'hashkey', 'arc']
 
 // ─── Starknet RPC ─────────────────────────────────────────────────────────────
-const STARKNET_RPC = 'https://starknet-mainnet.public.blastapi.io'
+const STARKNET_RPC = 'https://rpc.starknet.lava.build'
 
 // ─── Multicall3 ──────────────────────────────────────────────────────────────
 const MULTICALL3_ADDRESS = '0xcA11bde05977b3631167028862bE2a173976CA11' as `0x${string}`
