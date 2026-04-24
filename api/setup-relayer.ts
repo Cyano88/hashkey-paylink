@@ -12,6 +12,7 @@
 
 import type { Request, Response } from 'express'
 import { ec, num, hash, constants } from 'starknet'
+import { poseidonHashMany } from '@scure/starknet'
 
 const DEFAULT_RPC_URL    = 'https://rpc.starknet.lava.build'
 const DEFAULT_CLASS_HASH = '0x061dac032f228abef9c6626f995015233097ae253a7f72d68552db02f2971b8f'
@@ -22,38 +23,31 @@ const RESOURCE_BOUNDS = {
   l2_gas:      { max_amount: '0x3D0900', max_price_per_unit: '0x174876e800'     },
 }
 
-// Pack (name_felt || max_amount || max_price) into one felt for the Poseidon fee hash.
-// Layout: name at bits 192+, max_amount at bits 128-191, max_price at bits 0-127.
-function encodeResourceBound(nameFelt: bigint, maxAmount: bigint, maxPrice: bigint): bigint {
-  return (nameFelt << 192n) | (maxAmount << 128n) | maxPrice
-}
-
-// Starknet SNIP-8: V3 DEPLOY_ACCOUNT Poseidon hash.
-// Bypasses starknet.js v6.24.x which incorrectly uses V1 Pedersen here.
+// Starknet V3 DEPLOY_ACCOUNT Poseidon hash — matches starknet.js hashFeeField/hashDAMode exactly.
+// Two bugs in previous version: (1) L1_DATA was included in feeHash but starknet.js only
+// uses L1_GAS + L2_GAS; (2) daHash was poseidon([0,0]) but is actually a bitshift: (nonce<<32)+fee.
 function computeDeployAccountV3Hash(
   contractAddress: string,
   classHash: string,
   constructorCalldata: string[],
   salt: string,
 ): string {
-  // Wrapper: computePoseidonHashOnElements returns hex — convert to bigint for nesting
-  const ph = (elems: bigint[]): bigint =>
-    BigInt(hash.computePoseidonHashOnElements(elems))
+  const ph = (elems: bigint[]): bigint => poseidonHashMany(elems)
 
-  // ASCII felt encodings for resource bound names
-  const L1_GAS_NAME  = 0x4c315f474153n      // "L1_GAS"
-  const L1_DATA_NAME = 0x4c315f44415441n    // "L1_DATA"
-  const L2_GAS_NAME  = 0x4c325f474153n      // "L2_GAS"
+  const L1_GAS_NAME = 0x4c315f474153n      // encodeShortString("L1_GAS")
+  const L2_GAS_NAME = 0x4c325f474153n      // encodeShortString("L2_GAS")
+  const RES_OFFS    = 192n                  // MAX_AMOUNT_BITS(64) + MAX_PRICE_BITS(128)
+  const PRICE_BITS  = 128n
 
-  const feeHash = ph([
-    0n,   // tip
-    encodeResourceBound(L1_GAS_NAME,  BigInt(RESOURCE_BOUNDS.l1_gas.max_amount),      BigInt(RESOURCE_BOUNDS.l1_gas.max_price_per_unit)),
-    encodeResourceBound(L1_DATA_NAME, BigInt(RESOURCE_BOUNDS.l1_data_gas.max_amount), BigInt(RESOURCE_BOUNDS.l1_data_gas.max_price_per_unit)),
-    encodeResourceBound(L2_GAS_NAME,  BigInt(RESOURCE_BOUNDS.l2_gas.max_amount),      BigInt(RESOURCE_BOUNDS.l2_gas.max_price_per_unit)),
-  ])
+  // hashFeeField: poseidon([tip, L1_enc, L2_enc]) — no L1_DATA
+  const l1Enc   = (L1_GAS_NAME << RES_OFFS) + (BigInt(RESOURCE_BOUNDS.l1_gas.max_amount) << PRICE_BITS) + BigInt(RESOURCE_BOUNDS.l1_gas.max_price_per_unit)
+  const l2Enc   = (L2_GAS_NAME << RES_OFFS) + (BigInt(RESOURCE_BOUNDS.l2_gas.max_amount) << PRICE_BITS) + BigInt(RESOURCE_BOUNDS.l2_gas.max_price_per_unit)
+  const feeHash = ph([0n, l1Enc, l2Enc])
 
-  const paymasterHash = ph([])          // empty paymaster data
-  const daHash        = ph([0n, 0n])    // nonce_da=L1=0, fee_da=L1=0
+  // hashDAMode: (nonceDA << 32) + feeDA — for L1/L1 both are 0, result is 0n
+  const daHash = 0n
+
+  const paymasterHash = ph([])  // poseidon of empty paymaster data
   const calldataHash  = ph(constructorCalldata.map(v => BigInt(v)))
 
   const txHash = ph([
@@ -63,11 +57,11 @@ function computeDeployAccountV3Hash(
     feeHash,
     paymasterHash,
     BigInt(constants.StarknetChainId.SN_MAIN),
-    0n,                                          // nonce (always 0 for new account)
+    0n,                                          // nonce
     daHash,
     calldataHash,
     BigInt(classHash),
-    BigInt(salt),                                // pub_key used as salt
+    BigInt(salt),
   ])
 
   return num.toHex(txHash)
