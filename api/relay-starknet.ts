@@ -21,7 +21,7 @@
  */
 
 import type { Request, Response } from 'express'
-import { typedData as starkTypedData, hash, ec, CallData, num, RpcProvider, Account } from 'starknet'
+import { typedData as starkTypedData, hash, ec, CallData, num, RpcProvider, Signer, constants } from 'starknet'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -48,6 +48,100 @@ const STARK_P = BigInt('0x800000000000011000000000000000000000000000000000000000
 function safeBigInt(v: unknown): bigint {
   if (v === undefined || v === null) return 0n
   try { return BigInt(v as string | number | bigint) } catch { return 0n }
+}
+
+// ─── Raw V3 INVOKE helpers ────────────────────────────────────────────────────
+// Bypass Account.execute entirely — starknet.js v6.24.x ignores resourceBounds
+// and falls back to V1 (max_fee) even when resourceBounds is provided.
+
+async function getRelayerNonce(rpcUrl: string, addr: string): Promise<string> {
+  const r = await fetch(rpcUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      jsonrpc: '2.0', id: 1,
+      method: 'starknet_getNonce',
+      params: [{ block_number: 'latest' }, addr],
+    }),
+    signal: AbortSignal.timeout(10_000),
+  })
+  const d = await r.json() as { result?: string; error?: unknown }
+  if (d.error) throw new Error(`getNonce failed: ${JSON.stringify(d.error).slice(0, 100)}`)
+  return d.result ?? '0x0'
+}
+
+type V3Bounds = {
+  l1_gas:      { max_amount: string; max_price_per_unit: string }
+  l1_data_gas: { max_amount: string; max_price_per_unit: string }
+  l2_gas:      { max_amount: string; max_price_per_unit: string }
+}
+
+async function rawInvokeV3(
+  rpcUrl:        string,
+  signer:        Signer,
+  senderAddress: string,
+  calls: Array<{ contractAddress: string; entrypoint: string; calldata: string[] }>,
+  nonce:         string,
+  resourceBounds: V3Bounds,
+): Promise<string> {
+  // Cairo 1 multicall encoding for __execute__
+  const calldata: string[] = [num.toHex(BigInt(calls.length))]
+  for (const c of calls) {
+    calldata.push(c.contractAddress)
+    calldata.push(hash.getSelectorFromName(c.entrypoint))
+    calldata.push(num.toHex(BigInt(c.calldata.length)))
+    calldata.push(...c.calldata)
+  }
+
+  // Signer computes V3 Poseidon hash over the same calldata encoding and signs it
+  const rawSig = await signer.signTransaction(calls, {
+    walletAddress:              senderAddress,
+    chainId:                    constants.StarknetChainId.SN_MAIN,
+    nonce,
+    version:                    constants.TRANSACTION_VERSION.V3,
+    resourceBounds,
+    tip:                        '0x0',
+    paymasterData:              [],
+    accountDeploymentData:      [],
+    nonceDataAvailabilityMode:  'L1',
+    feeDataAvailabilityMode:    'L1',
+  } as Parameters<typeof signer.signTransaction>[1])
+
+  const sigHex = Array.isArray(rawSig)
+    ? (rawSig as unknown[]).map(s => num.toHex(safeBigInt(s)))
+    : [num.toHex(safeBigInt((rawSig as any).r)), num.toHex(safeBigInt((rawSig as any).s))]
+
+  const rpcRes = await fetch(rpcUrl, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      jsonrpc: '2.0', id: 10,
+      method: 'starknet_addInvokeTransaction',
+      params: {
+        invoke_transaction: {
+          type:                         'INVOKE',
+          version:                      '0x3',
+          sender_address:               senderAddress,
+          calldata,
+          nonce,
+          resource_bounds:              resourceBounds,
+          tip:                          '0x0',
+          paymaster_data:               [],
+          account_deployment_data:      [],
+          nonce_data_availability_mode: 'L1',
+          fee_data_availability_mode:   'L1',
+          signature:                    sigHex,
+        },
+      },
+    }),
+    signal: AbortSignal.timeout(20_000),
+  })
+
+  const rpcData = await rpcRes.json() as { result?: { transaction_hash: string }; error?: unknown }
+  if (rpcData.error) throw new Error(JSON.stringify(rpcData.error).slice(0, 300))
+  const txHash = rpcData.result?.transaction_hash
+  if (!txHash) throw new Error('No transaction_hash in V3 INVOKE response')
+  return txHash
 }
 
 // ─── Gas reimbursement ────────────────────────────────────────────────────────
@@ -264,47 +358,26 @@ export default async function handler(req: Request, res: Response) {
     }
     const relayerPrivKey = relayerPrivKeyRaw.startsWith('0x') ? relayerPrivKeyRaw : '0x' + relayerPrivKeyRaw
 
-    // Hardcoded V3 resource bounds — Starknet gas is ~$0.0002, these are very generous.
-    // Defined before Account so the mock can close over them.
-    const V3_BOUNDS = {
+    const V3_BOUNDS: V3Bounds = {
       l1_gas:      { max_amount: '0x40',     max_price_per_unit: '0x10000000000000' },
       l1_data_gas: { max_amount: '0x400',    max_price_per_unit: '0x10000000000'    },
       l2_gas:      { max_amount: '0x3D0900', max_price_per_unit: '0x174876e800'     },
     }
 
-    // Stub that returns hardcoded bounds — no RPC call, no BigInt parse bug.
-    // starknet.js v6.24.x estimateFee calls simulateTransaction with a V1 query;
-    // Lava returns a V3 response and starknet.js throws "Cannot convert undefined to BigInt".
-    const hardcodedEstimate = {
-      overall_fee: 1_000_000_000_000_000n,
-      unit: 'FRI',
-      gas_consumed: safeBigInt('0x40'),
-      gas_price:    safeBigInt('0x10000000000000'),
-      data_gas_consumed: safeBigInt('0x400'),
-      data_gas_price:    safeBigInt('0x10000000000'),
-      suggestedMaxFee: 1_000_000_000_000_000n,
-      resourceBounds: V3_BOUNDS,
-    }
-
-    const relayer = new Account(provider, relayerAddr, relayerPrivKey)
-    ;(relayer as any).estimateFee          = async () => hardcodedEstimate
-    ;(relayer as any).estimateInvokeFee    = async () => hardcodedEstimate
-    ;(relayer as any).getInvokeEstimateFee = async () => [hardcodedEstimate]
+    const relayerSigner = new Signer(relayerPrivKey)
 
     // Deploy ghost via UDC if not yet on-chain
     if (!isDeployed) {
       try {
         console.log('[relay-starknet] nuclear: deploying ghost via UDC...')
-        const deployRes = await relayer.execute(
-          [{
-            contractAddress: UDC_ADDRESS,
-            entrypoint:      'deployContract',
-            calldata:        [classHash, pubKey, '0x0', '0x1', pubKey],
-          }],
-          { resourceBounds: V3_BOUNDS },
-        )
-        console.log(`[relay-starknet] nuclear: ghost deploy tx=${deployRes.transaction_hash}`)
-        await provider.waitForTransaction(deployRes.transaction_hash, { retryInterval: 2000 })
+        const deployNonce = await getRelayerNonce(rpcUrl, relayerAddr)
+        const deployTx = await rawInvokeV3(rpcUrl, relayerSigner, relayerAddr, [{
+          contractAddress: UDC_ADDRESS,
+          entrypoint:      'deployContract',
+          calldata:        [classHash, pubKey, '0x0', '0x1', pubKey],
+        }], deployNonce, V3_BOUNDS)
+        console.log(`[relay-starknet] nuclear: ghost deploy tx=${deployTx}`)
+        await provider.waitForTransaction(deployTx, { retryInterval: 2000 })
         console.log('[relay-starknet] nuclear: ghost deployed')
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
@@ -395,16 +468,14 @@ export default async function handler(req: Request, res: Response) {
     ]
 
     try {
-      const execRes = await relayer.execute(
-        [{
-          contractAddress: ghostAddr,
-          entrypoint:      'execute_from_outside_v2',
-          calldata:        outsideExecCalldata,
-        }],
-        { resourceBounds: V3_BOUNDS },
-      )
-      console.log(`[relay-starknet] nuclear: swept ${payout}µ→recipient ${platformFee}µ→fee tx=${execRes.transaction_hash}`)
-      return res.status(200).json({ ok: true, txHash: execRes.transaction_hash })
+      const sweepNonce = await getRelayerNonce(rpcUrl, relayerAddr)
+      const sweepTx = await rawInvokeV3(rpcUrl, relayerSigner, relayerAddr, [{
+        contractAddress: ghostAddr,
+        entrypoint:      'execute_from_outside_v2',
+        calldata:        outsideExecCalldata,
+      }], sweepNonce, V3_BOUNDS)
+      console.log(`[relay-starknet] nuclear: swept ${payout}µ→recipient ${platformFee}µ→fee tx=${sweepTx}`)
+      return res.status(200).json({ ok: true, txHash: sweepTx })
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       console.error('[relay-starknet] nuclear: execute failed:', msg)
