@@ -175,10 +175,11 @@ export default async function handler(req: Request, res: Response) {
   console.log(`[relay-starknet] ghost ${ghostAddr} balance=${balance}µUSDC usdcToken=${usdcToken} recipient=${recipientStark}`)
 
   // ── Compute payout split ─────────────────────────────────────────────────
-  // AVNU prepends its gas-fee transfer to the signed bundle when charging gas
-  // from the account. Our calls must sum to ≤ balance − gas so the account can
-  // cover everything. MAX_GAS_USDC is a ceiling; actual cost is far lower.
-  const spendable   = balance - MAX_GAS_USDC
+  // With AVNU API key, gas is sponsored for free so the full balance is
+  // spendable. Without a key, AVNU would charge gas from the token balance
+  // and we'd need to reserve MAX_GAS_USDC — but legacy USDC is not a valid
+  // AVNU gas token anyway, so a key is required for the ghost vault flow.
+  const spendable   = avnuKey ? balance : balance - MAX_GAS_USDC
   const platformFee = spendable * FEE_BPS / 10_000n
   const payout      = spendable - platformFee
 
@@ -239,10 +240,11 @@ export default async function handler(req: Request, res: Response) {
       })
     }
 
-    // Attempt 1: free gas sponsorship
+    // With an API key, AVNU sponsors gas for free — no gasToken needed.
+    // Without a key, AVNU requires a supported gas token; legacy USDC is not
+    // supported, so we still attempt sponsored first and log clearly if it fails.
     let buildRes = await tryBuild(false)
-    // Attempt 2: charge gas from ghost account balance if free mode not available
-    if (!buildRes.ok && (buildRes.status === 401 || buildRes.status === 404 || buildRes.status === 400)) {
+    if (!buildRes.ok && !avnuKey && (buildRes.status === 401 || buildRes.status === 400)) {
       console.log(`[relay-starknet] free gas rejected (${buildRes.status}), retrying with gasToken`)
       buildRes = await tryBuild(true)
     }
