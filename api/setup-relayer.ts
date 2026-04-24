@@ -46,10 +46,12 @@ export default async function handler(req: Request, res: Response) {
   const constructorCalldata = [pubKey]
 
   // ── Build DEPLOY_ACCOUNT v3 transaction ───────────────────────────────────
+  // max_price ceilings — actual cost is tiny (<0.01 STRK); ceilings just need
+  // to exceed current network gas prices (L1 gas can spike above 100k Gwei).
   const resourceBounds = {
-    l1_gas:      { max_amount: '0x800',     max_price_per_unit: '0x174876e800' },
-    l1_data_gas: { max_amount: '0x800',     max_price_per_unit: '0x174876e800' },
-    l2_gas:      { max_amount: '0x5f5e100', max_price_per_unit: '0x174876e800' },
+    l1_gas:      { max_amount: '0x800',    max_price_per_unit: '0x10000000000000'  }, // 2.8M Gwei ceiling
+    l1_data_gas: { max_amount: '0x800',    max_price_per_unit: '0x100000000000'    }, // 17k Gwei ceiling
+    l2_gas:      { max_amount: '0x3D0900', max_price_per_unit: '0x174876e800'      }, // 100 Gwei, 4M units
   }
 
   // Compute the transaction hash for DEPLOY_ACCOUNT v3.
