@@ -45,6 +45,7 @@ const STARK_TREASURY = '0x0483AB5539B281c08777F1C8337Beeba05c2610feDcbA191B989E3
 
 const FEE_BPS     = 50n       // 0.5 %
 const MAX_GAS_USDC = 10_000n  // 0.01 USDC ceiling reserved for AVNU gas
+const MIN_BALANCE  =  1_000n  // 0.001 USDC minimum worth relaying
 
 /** Starknet field prime — Pedersen inputs must be < P */
 const STARK_P = BigInt('0x800000000000011000000000000000000000000000000000000000000000001')
