@@ -107,7 +107,7 @@ export const CHAIN_META = {
     label: 'Starknet',
     asset: 'USDC',
     decimals: 6,
-    // USDC on Starknet Mainnet — StarkGate bridged from Ethereum (Circle, widely used)
+    // Circle native USDC on Starknet Mainnet — required for AVNU gasless payments
     tokenAddress: '0x053c91253bc9682c04929ca02ed00b3e423f6710d2ee7e0d5ebb06f3ecf368a8',
     explorerUrl: 'https://starkscan.co',
     explorerName: 'Starkscan',

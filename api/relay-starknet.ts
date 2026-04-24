@@ -29,7 +29,9 @@ const AVNU_BASE        = 'https://starknet.api.avnu.fi'
 const DEFAULT_RPC_URL  = 'https://rpc.starknet.lava.build'
 const DEFAULT_CLASS_HASH = '0x061dac032f228abef9c6626f995015233097ae253a7f72d68552db02f2971b8f'
 
+/** Circle native USDC — the ONLY token used in the Direct Send flow */
 const USDC_NEW = '0x053c91253bc9682c04929ca02ed00b3e423f6710d2ee7e0d5ebb06f3ecf368a8'
+/** Legacy StarkGate USDC — detected only to surface a helpful error */
 const USDC_OLD = '0x033068f6539f8e6e6b131e6b2b814e6c34a5224bc66947c47dab9dfee93b35fb'
 
 const STARK_TREASURY = '0x0483AB5539B281c08777F1C8337Beeba05c2610feDcbA191B989E35eDc2767C3'
@@ -125,12 +127,8 @@ export default async function handler(req: Request, res: Response) {
 
   const provider = new RpcProvider({ nodeUrl: rpcUrl, blockIdentifier: 'latest' })
 
-  // ── USDC balance — Circle USDC is the primary required token ─────────────
-  // Check Circle USDC first. If only legacy is found, surface a clear warning
-  // so the UI can guide the user to resend with the correct token.
-  let balance   = 0n
-  let usdcToken = USDC_NEW
-
+  // ── Circle USDC balance ───────────────────────────────────────────────────
+  let balance = 0n
   try {
     const r = await provider.callContract(
       { contractAddress: USDC_NEW, entrypoint: 'balanceOf', calldata: [ghostAddr] }, 'latest',
@@ -140,18 +138,18 @@ export default async function handler(req: Request, res: Response) {
   } catch { /* rpc hiccup */ }
 
   if (balance === 0n) {
-    // Check if legacy USDC was sent instead
+    // Check if legacy USDC (0x0330…) was mistakenly sent — give a clear UI hint
     try {
       const r = await provider.callContract(
         { contractAddress: USDC_OLD, entrypoint: 'balanceOf', calldata: [ghostAddr] }, 'latest',
       )
       const legacyBal = BigInt(r[0] ?? '0x0')
       if (legacyBal > 0n) {
-        console.warn(`[relay-starknet] legacy USDC detected: ${legacyBal}µ — Circle USDC required`)
+        console.warn(`[relay-starknet] legacy USDC ${legacyBal}µ found — Circle USDC required`)
         return res.status(400).json({
           ok:   false,
           code: 'LEGACY_USDC',
-          error: `Legacy StarkGate USDC detected (${legacyBal} µUSDC). Please send Circle USDC (0x053c91…) — it is the only token AVNU supports for gas.`,
+          error: `Legacy StarkGate USDC detected (${legacyBal} µUSDC). Please send Circle USDC (0x053c91…) to this same address.`,
         })
       }
     } catch { /* ignore */ }
@@ -161,7 +159,7 @@ export default async function handler(req: Request, res: Response) {
   if (balance < MIN_BALANCE)
     return res.status(400).json({ ok: false, error: `Balance ${balance} µUSDC too low` })
 
-  console.log(`[relay-starknet] ghost=${ghostAddr} balance=${balance}µ token=${usdcToken.slice(0,10)}… recipient=${recipientStark}`)
+  console.log(`[relay-starknet] ghost=${ghostAddr} balance=${balance}µ token=${USDC_NEW.slice(0,10)}… recipient=${recipientStark}`)
 
   // ── Gas reimbursement + payout split ──────────────────────────────────────
   const gasReimbUsdc = await calcGasReimbUsdc().catch(() => MAX_GAS_REIMB_USDC)
@@ -181,9 +179,9 @@ export default async function handler(req: Request, res: Response) {
 
   // ── AVNU build-typed-data ─────────────────────────────────────────────────
   const calls: AvnuCall[] = [
-    { contractAddress: usdcToken, entrypoint: 'transfer', calldata: [recipientStark, payoutLow, payoutHigh] },
-    { contractAddress: usdcToken, entrypoint: 'transfer', calldata: [STARK_TREASURY,  feeLow,    feeHigh   ] },
-    { contractAddress: usdcToken, entrypoint: 'transfer', calldata: [STARK_TREASURY,  gasLow,    gasHigh   ] },
+    { contractAddress: USDC_NEW, entrypoint: 'transfer', calldata: [recipientStark, payoutLow, payoutHigh] },
+    { contractAddress: USDC_NEW, entrypoint: 'transfer', calldata: [STARK_TREASURY,  feeLow,    feeHigh   ] },
+    { contractAddress: USDC_NEW, entrypoint: 'transfer', calldata: [STARK_TREASURY,  gasLow,    gasHigh   ] },
   ]
 
   const buildBody: Record<string, unknown> = {
