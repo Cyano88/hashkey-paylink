@@ -193,22 +193,38 @@ export default async function handler(req: Request, res: Response) {
 
   let buildData: AvnuBuildResponse
   try {
+    // Check if the ghost account is already deployed — omit deploymentData if so.
+    // An undeployed counterfactual account has no bytecode (returns '0x' or null).
+    let isDeployed = false
+    try {
+      const code = await provider.getClassAt(ghostAddr).catch(() => null)
+      isDeployed = code != null
+    } catch { /* assume not deployed */ }
+    console.log(`[relay-starknet] ghost account deployed=${isDeployed}`)
+
+    const buildBody: Record<string, unknown> = {
+      userAddress:       ghostAddr,
+      calls,
+      gasTokenAddress:   USDC_STARKNET,
+      maxGasTokenAmount: MAX_GAS_USDC.toString(),
+    }
+
+    if (!isDeployed) {
+      // AVNU deploys the ghost OZ account atomically when deploymentData is present.
+      // unique=false means deployer=0x0, matching the OZ Account standard.
+      buildBody.deploymentData = {
+        classHash,
+        salt:     pubKey,    // OZ convention: salt = pubKey
+        unique:   false,
+        calldata: [pubKey],  // OZ Account constructor: [publicKey]
+      }
+    }
+
     const buildRes = await fetch(`${AVNU_BASE}/paymaster/v1/build`, {
       method:  'POST',
       headers: avnuHeaders(avnuKey),
-      body:    JSON.stringify({
-        userAddress:      ghostAddr,
-        calls,
-        gasTokenAddress:  USDC_STARKNET,
-        maxGasTokenAmount: MAX_GAS_USDC.toString(),
-        // ── Account deployment parameters ──────────────────────────────────
-        // AVNU deploys the ghost OZ account atomically when these are present.
-        // If the account is already deployed, AVNU ignores these fields.
-        accountClassHash:             classHash,
-        accountAddressSalt:           pubKey,     // OZ convention: salt = pubKey
-        accountConstructorCalldata:   [pubKey],   // OZ Account constructor: [publicKey]
-      }),
-      signal: AbortSignal.timeout(15_000),
+      body:    JSON.stringify(buildBody),
+      signal:  AbortSignal.timeout(15_000),
     })
 
     if (!buildRes.ok) {

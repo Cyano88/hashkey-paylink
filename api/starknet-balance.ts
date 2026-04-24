@@ -25,6 +25,8 @@ export default async function handler(req: Request, res: Response) {
   const rpcUrl   = process.env.STARKNET_RPC_URL ?? 'https://starknet-mainnet.public.blastapi.io'
   const provider = new RpcProvider({ nodeUrl: rpcUrl })
 
+  console.log(`[starknet-balance] checking token=${tokenAddress} account=${accountAddress}`)
+
   for (const entrypoint of ['balanceOf', 'balance_of']) {
     try {
       const result = await provider.callContract({
@@ -33,9 +35,14 @@ export default async function handler(req: Request, res: Response) {
         calldata: [accountAddress],
       })
       // balanceOf returns Uint256 [low, high]; USDC amounts always fit in low
-      return res.json({ ok: true, balance: result[0] ?? '0x0' })
-    } catch { /* try the other entrypoint variant */ }
+      const balance = result[0] ?? '0x0'
+      console.log(`[starknet-balance] balance=${balance} (entrypoint=${entrypoint}) for ${accountAddress}`)
+      return res.json({ ok: true, balance })
+    } catch (err) {
+      console.log(`[starknet-balance] ${entrypoint} failed:`, err instanceof Error ? err.message : String(err))
+    }
   }
 
+  console.error(`[starknet-balance] both entrypoints failed for ${accountAddress}`)
   return res.status(500).json({ ok: false, error: 'balanceOf call failed for both entrypoints' })
 }
