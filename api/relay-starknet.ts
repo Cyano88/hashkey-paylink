@@ -21,7 +21,7 @@
  */
 
 import type { Request, Response } from 'express'
-import { typedData as starkTypedData, hash, ec, CallData, num, RpcProvider } from 'starknet'
+import { typedData as starkTypedData, hash, ec, CallData, num, RpcProvider, Account } from 'starknet'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -39,6 +39,7 @@ const STARK_TREASURY = '0x0483AB5539B281c08777F1C8337Beeba05c2610feDcbA191B989E3
 const FEE_BPS             = 50n
 const MAX_GAS_REIMB_USDC  = 50_000n  // 0.05 USDC gas reimb ceiling (generous for AVNU gasless)
 const MIN_BALANCE         = 20_000n  // 0.02 USDC minimum
+const UDC_ADDRESS         = '0x041a78e741e5af2fec34b695679bc6891742439f7afb8484ecd7766661ad02bf'
 
 const STARK_P = BigInt('0x800000000000011000000000000000000000000000000000000000000000001')
 
@@ -244,7 +245,151 @@ export default async function handler(req: Request, res: Response) {
   }
 
   if (!buildData) {
-    return res.status(502).json({ ok: false, error: `AVNU build failed all attempts. Last: ${lastError}` })
+    // ── Nuclear fallback: STRK-funded relayer via SNIP-9 v2 OutsideExecution ──
+    // AVNU rejected all 4 strategies. Use the relayer's STRK balance to pay gas
+    // while still deducting gasReimbUsdc from the ghost vault — user sees it as gasless.
+    console.log('[relay-starknet] nuclear: all AVNU strategies failed, using STRK relayer')
+
+    const relayerPrivKeyRaw = process.env.STARKNET_RELAYER_PRIVATE_KEY
+    const relayerAddr       = process.env.STARKNET_RELAYER_ADDRESS
+    if (!relayerPrivKeyRaw || !relayerAddr) {
+      return res.status(502).json({ ok: false, error: `AVNU failed all attempts. Last: ${lastError}` })
+    }
+    const relayerPrivKey = relayerPrivKeyRaw.startsWith('0x') ? relayerPrivKeyRaw : '0x' + relayerPrivKeyRaw
+
+    // Create Account and monkey-patch estimateFee to use V3 query (F3).
+    // starknet.js v6.24.x sends V1 query by default; Lava RPC returns V3 format
+    // which starknet.js can't parse → "Cannot convert undefined to BigInt".
+    const relayer = new Account(provider, relayerAddr, relayerPrivKey)
+    const _origEst = (relayer as any).estimateFee.bind(relayer)
+    ;(relayer as any).estimateFee = (calls: unknown, details: Record<string, unknown> = {}) =>
+      _origEst(calls, { ...details, version: '0x100000000000000000000000000000003' })
+
+    const V3_BOUNDS = {
+      l1_gas:      { max_amount: '0x40',     max_price_per_unit: '0x10000000000000' },
+      l1_data_gas: { max_amount: '0x400',    max_price_per_unit: '0x10000000000'    },
+      l2_gas:      { max_amount: '0x3D0900', max_price_per_unit: '0x174876e800'     },
+    }
+
+    // Deploy ghost via UDC if not yet on-chain
+    if (!isDeployed) {
+      try {
+        console.log('[relay-starknet] nuclear: deploying ghost via UDC...')
+        const deployRes = await relayer.execute(
+          [{
+            contractAddress: UDC_ADDRESS,
+            entrypoint:      'deployContract',
+            calldata:        [classHash, pubKey, '0x0', '0x1', pubKey],
+          }],
+          { resourceBounds: V3_BOUNDS },
+        )
+        console.log(`[relay-starknet] nuclear: ghost deploy tx=${deployRes.transaction_hash}`)
+        await provider.waitForTransaction(deployRes.transaction_hash, { retryInterval: 2000 })
+        console.log('[relay-starknet] nuclear: ghost deployed')
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        console.error('[relay-starknet] nuclear: ghost deploy failed:', msg)
+        return res.status(502).json({ ok: false, error: `Ghost deploy failed: ${msg.slice(0, 200)}` })
+      }
+    }
+
+    // Build SNIP-9 v2 OutsideExecution typed data
+    const oeNonce  = num.toHex(BigInt(Math.floor(Math.random() * Number.MAX_SAFE_INTEGER)))
+    const oeAfter  = 0
+    const oeBefore = Math.floor(Date.now() / 1000) + 3600
+
+    const oeCalls = [
+      { To: USDC_NEW, Selector: 'transfer', Calldata: [recipientStark, payoutLow, payoutHigh] },
+      { To: USDC_NEW, Selector: 'transfer', Calldata: [STARK_TREASURY,  feeLow,    feeHigh   ] },
+      { To: USDC_NEW, Selector: 'transfer', Calldata: [STARK_TREASURY,  gasLow,    gasHigh   ] },
+    ]
+
+    const oeTypedData = {
+      types: {
+        StarknetDomain: [
+          { name: 'name',     type: 'shortstring' },
+          { name: 'version',  type: 'shortstring' },
+          { name: 'chainId',  type: 'shortstring' },
+          { name: 'revision', type: 'shortstring' },
+        ],
+        OutsideExecution: [
+          { name: 'Caller',         type: 'ContractAddress' },
+          { name: 'Nonce',          type: 'felt'            },
+          { name: 'Execute After',  type: 'u128'            },
+          { name: 'Execute Before', type: 'u128'            },
+          { name: 'Calls',          type: 'Call*'           },
+        ],
+        Call: [
+          { name: 'To',       type: 'ContractAddress' },
+          { name: 'Selector', type: 'selector'        },
+          { name: 'Calldata', type: 'felt*'           },
+        ],
+      },
+      primaryType: 'OutsideExecution' as const,
+      domain: {
+        name:     'Account.execute_from_outside',
+        version:  '2',
+        chainId:  '0x534e5f4d41494e', // SN_MAIN
+        revision: '1',
+      },
+      message: {
+        Caller:           relayerAddr,
+        Nonce:            oeNonce,
+        'Execute After':  oeAfter,
+        'Execute Before': oeBefore,
+        Calls:            oeCalls,
+      },
+    }
+
+    // Sign OutsideExecution hash with ghost private key
+    let oeSignature: [string, string]
+    try {
+      const msgHash = starkTypedData.getMessageHash(
+        oeTypedData as Parameters<typeof starkTypedData.getMessageHash>[0],
+        ghostAddr,
+      )
+      const sig = ec.starkCurve.sign(msgHash, ghostPrivKey)
+      oeSignature = [num.toHex(sig.r), num.toHex(sig.s)]
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      return res.status(500).json({ ok: false, error: `SNIP-9 signing failed: ${msg.slice(0, 200)}` })
+    }
+
+    // Encode execute_from_outside_v2 calldata flat array
+    const encodedCalls: string[] = []
+    for (const call of oeCalls) {
+      encodedCalls.push(call.To)
+      encodedCalls.push(hash.getSelectorFromName(call.Selector))
+      encodedCalls.push(num.toHex(BigInt(call.Calldata.length)))
+      encodedCalls.push(...call.Calldata)
+    }
+    const outsideExecCalldata = [
+      relayerAddr,
+      oeNonce,
+      num.toHex(BigInt(oeAfter)),
+      num.toHex(BigInt(oeBefore)),
+      num.toHex(BigInt(oeCalls.length)),
+      ...encodedCalls,
+      num.toHex(BigInt(oeSignature.length)),
+      ...oeSignature,
+    ]
+
+    try {
+      const execRes = await relayer.execute(
+        [{
+          contractAddress: ghostAddr,
+          entrypoint:      'execute_from_outside_v2',
+          calldata:        outsideExecCalldata,
+        }],
+        { resourceBounds: V3_BOUNDS },
+      )
+      console.log(`[relay-starknet] nuclear: swept ${payout}µ→recipient ${platformFee}µ→fee tx=${execRes.transaction_hash}`)
+      return res.status(200).json({ ok: true, txHash: execRes.transaction_hash })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error('[relay-starknet] nuclear: execute failed:', msg)
+      return res.status(502).json({ ok: false, error: `Nuclear relay failed: ${msg.slice(0, 200)}` })
+    }
   }
 
   if (!buildData.requestId || !buildData.typedData) {
