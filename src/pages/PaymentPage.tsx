@@ -153,15 +153,21 @@ export default function PaymentPage() {
   const amt         = searchParams.get('amt')    ?? ''
   const memo        = searchParams.get('memo')   ?? ''
   const legacyChain = searchParams.get('chain')  as ChainKey | null
+  const netParam    = searchParams.get('net')    as ChainKey | null
 
   const resolvedStark = starkParam || (legacyChain === 'starknet' ? evmParam : '')
   const resolvedEvm   = legacyChain === 'starknet' ? '' : evmParam
 
+  // netParam (from new link format) takes priority; legacy chain param as fallback
   const [chain, setChain] = useState<ChainKey>(() => {
+    if (netParam === 'base' || netParam === 'starknet' || netParam === 'hashkey' || netParam === 'arc') return netParam
     if (legacyChain === 'base' || legacyChain === 'starknet' || legacyChain === 'hashkey' || legacyChain === 'arc') return legacyChain
     if (resolvedStark && !resolvedEvm) return 'starknet'
     return 'base'
   })
+
+  // Network is locked when link was generated with an explicit ?net= param
+  const netLocked = !!netParam
 
   // ── UI state ──────────────────────────────────────────────────────────────
   const [hashCopied,        setHashCopied]       = useState(false)
@@ -258,8 +264,7 @@ export default function PaymentPage() {
 
   // Whether Direct Send is available for the current chain
   const canDirectSend =
-    ((chain === 'base' || chain === 'arc') && isAddress(resolvedEvm) && !!FACTORY_V2_ADDRESSES[chain as 'base' | 'arc']) ||
-    (chain === 'starknet' && !!resolvedStark)
+    (chain === 'base' || chain === 'arc') && isAddress(resolvedEvm) && !!FACTORY_V2_ADDRESSES[chain as 'base' | 'arc']
 
   // ── Step 1: Predict router address + check deployment ────────────────────
   useEffect(() => {
@@ -506,91 +511,6 @@ export default function PaymentPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [directStatus, directVault, directLinkId, chain])
 
-  // ── V2 Starknet: Compute ghost OZ account address ─────────────────────────
-  useEffect(() => {
-    if (payMode !== 'direct' || chain !== 'starknet' || !resolvedStark) return
-
-    const params  = new URLSearchParams(window.location.search)
-    const idParam = params.get('id')
-    let linkId: string
-    if (idParam && /^0x[0-9a-fA-F]{64}$/.test(idParam)) {
-      linkId = idParam
-    } else {
-      const bytes = crypto.getRandomValues(new Uint8Array(32))
-      linkId = '0x' + Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')
-      params.set('id', linkId)
-      window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`)
-    }
-    setDirectLinkId(linkId)
-
-    try {
-      const { address } = computeStarkGhostAddress(linkId, resolvedStark)
-      setStarkDirectAddr(address)
-      setDirectStatus('waiting')
-      directRelayedRef.current = false
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      console.error('[starknet-ghost] computeStarkGhostAddress failed:', msg)
-      setDirectError(`Ghost address error: ${msg.slice(0, 120)}`)
-      setDirectStatus('error')
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [payMode, chain, resolvedStark])
-
-  // ── V2 Starknet: Poll USDC balance at ghost address; trigger relay ────────
-  useEffect(() => {
-    if (directStatus !== 'waiting' || !starkDirectAddr || !directLinkId) return
-    if (chain !== 'starknet') return
-
-    const tokenAddr = CHAIN_META.starknet.tokenAddress
-
-    const check = async () => {
-      if (directRelayedRef.current) return
-      try {
-        const balance = await starkUsdcBalance(tokenAddr, starkDirectAddr)
-        console.log('[starknet-poll] ghost balance:', balance.toString(), 'µUSDC at', starkDirectAddr)
-        if (balance > 0n && !directRelayedRef.current) {
-          directRelayedRef.current = true
-          if (directPollRef.current) clearInterval(directPollRef.current)
-          setDirectStatus('relaying')
-          fetch('/api/relay-starknet', {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ linkId: directLinkId, recipientStark: resolvedStark }),
-          })
-            .then(r => r.json())
-            .then((data: { ok: boolean; txHash?: string; error?: string; code?: string }) => {
-              if (data.ok && data.txHash) {
-                setDirectTxHash(data.txHash)
-                setDirectStatus('success')
-                // Surface as detected payment so full success screen renders
-                setManualTxHash(data.txHash as `0x${string}`)
-                setManualPayDetected(true)
-              } else if (data.code === 'LEGACY_USDC') {
-                // User sent legacy StarkGate USDC instead of Circle USDC
-                directRelayedRef.current = false  // allow retry after user resends
-                setDirectError('Wrong USDC version detected. Please send Circle USDC (not legacy StarkGate USDC) to this address — it\'s the same address, just use the correct token in your wallet.')
-                setDirectStatus('error')
-              } else {
-                setDirectError(data.error ?? 'Relay failed')
-                setDirectStatus('error')
-              }
-            })
-            .catch((e: Error) => {
-              setDirectError(e.message ?? 'Relay failed')
-              setDirectStatus('error')
-            })
-        }
-      } catch (err) {
-        console.error('[starknet-poll] balance check error:', err)
-      }
-    }
-
-    directPollRef.current = setInterval(check, 3000)
-    check()
-    return () => { if (directPollRef.current) clearInterval(directPollRef.current) }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [directStatus, starkDirectAddr, directLinkId, chain])
 
   // ── Manual claim fallback ─────────────────────────────────────────────────
   async function handleManualClaim() {
@@ -1063,12 +983,12 @@ export default function PaymentPage() {
               return (
                 <div key={c} className="relative group">
                   <button
-                    onClick={() => !unavailable && handleChainSwitch(c)}
-                    disabled={unavailable && !isActive}
+                    onClick={() => !unavailable && !netLocked && handleChainSwitch(c)}
+                    disabled={(unavailable && !isActive) || (netLocked && !isActive)}
                     className={cn(
                       'flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all duration-150',
-                      isActive     ? m.toggleActive
-                      : unavailable ? 'cursor-not-allowed text-gray-300'
+                      isActive                  ? m.toggleActive
+                      : unavailable || netLocked ? 'cursor-not-allowed text-gray-300'
                       : 'cursor-pointer text-gray-500 hover:text-gray-800',
                     )}
                   >
@@ -1168,8 +1088,8 @@ export default function PaymentPage() {
             {memo && <Row label="Memo (on-chain)" value={memo.length > 28 ? memo.slice(0, 28) + '…' : memo} />}
           </div>
 
-          {/* ── Direct Send panel (Base / Arc / Starknet) ────────────────── */}
-          {payMode === 'direct' && (chain === 'base' || chain === 'arc' || chain === 'starknet') && (
+          {/* ── Direct Send panel (Base / Arc) ───────────────────────────── */}
+          {payMode === 'direct' && (chain === 'base' || chain === 'arc') && (
             <div className="space-y-3">
               {/* Loading ghost address */}
               {!directDisplayAddr && directStatus !== 'error' ? (
@@ -1201,11 +1121,7 @@ export default function PaymentPage() {
               ) : directStatus === 'relaying' ? (
                 <div className="flex items-center gap-3 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3.5">
                   <Loader2 className="h-4 w-4 shrink-0 animate-spin text-blue-500" />
-                  <p className="text-sm font-medium text-blue-700">
-                    {chain === 'starknet'
-                      ? 'Deploying ghost vault & routing USDC on Starknet…'
-                      : 'Relaying payment — broadcasting transaction…'}
-                  </p>
+                  <p className="text-sm font-medium text-blue-700">Relaying payment — broadcasting transaction…</p>
                 </div>
               ) : directStatus === 'error' ? (
                 <div className="space-y-3">
@@ -1235,16 +1151,10 @@ export default function PaymentPage() {
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                       <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
                     </div>
-                    <p className="text-[11px] font-medium text-emerald-700">
-                      {chain === 'starknet'
-                        ? 'Monitoring for USDC on Starknet — detects in under 3 seconds'
-                        : 'Monitoring for USDC — detects in under 3 seconds'}
-                    </p>
+                    <p className="text-[11px] font-medium text-emerald-700">Monitoring for USDC — detects in under 3 seconds</p>
                   </div>
                   <p className="text-center text-xs text-gray-500">
-                    Send {chain === 'starknet' ? 'Circle USDC' : `${meta.asset}`} on{' '}
-                    {chain === 'base' ? 'Base' : chain === 'arc' ? 'Arc' : 'Starknet Mainnet'}{' '}
-                    to this address
+                    Send {meta.asset} on {meta.label} to this address
                   </p>
                   <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3.5">
                     <p className="min-w-0 flex-1 break-all font-mono text-xs text-gray-800">{directDisplayAddr}</p>
@@ -1257,11 +1167,6 @@ export default function PaymentPage() {
                         : <><Copy className="h-3.5 w-3.5" /> Copy</>}
                     </button>
                   </div>
-                  {chain === 'starknet' && (
-                    <p className="text-center text-[10px] text-purple-500 font-medium">
-                      Send Circle USDC (not legacy) · auto-routed on arrival · no wallet needed
-                    </p>
-                  )}
                 </div>
               )}
             </div>

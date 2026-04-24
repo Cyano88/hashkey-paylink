@@ -45,7 +45,7 @@ export default function CreateLink() {
   const [memo,          setMemo]          = useState('')
   const [generatedLink, setGeneratedLink] = useState('')
   const [copied,        setCopied]        = useState(false)
-  const [previewChain,  setPreviewChain]  = useState<ChainKey>('base')
+  const [selectedNet,  setPreviewChain]  = useState<ChainKey>('base')
   const [vaultStep,     setVaultStep]     = useState<VaultStep>('idle')
   const [deployError,   setDeployError]   = useState<string | null>(null)
   // Background check — null=checking, true=deployed, false=not deployed
@@ -82,12 +82,12 @@ export default function CreateLink() {
 
   // ── Connected wallet auto-fill ─────────────────────────────────────────
   useEffect(() => {
-    if (connectedEvm && evmAddr === '') setEvmAddr(connectedEvm)
-  }, [connectedEvm])  // eslint-disable-line react-hooks/exhaustive-deps
+    if (connectedEvm && evmAddr === '' && isEvmNet) setEvmAddr(connectedEvm)
+  }, [connectedEvm, isEvmNet])  // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (connectedStark && starkAddr === '') setStarkAddr(connectedStark)
-  }, [connectedStark])  // eslint-disable-line react-hooks/exhaustive-deps
+    if (connectedStark && starkAddr === '' && !isEvmNet) setStarkAddr(connectedStark)
+  }, [connectedStark, isEvmNet])  // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Reset vault step when address changes ─────────────────────────────
   useEffect(() => {
@@ -131,15 +131,14 @@ export default function CreateLink() {
   const starkValid = isValidStarkAddr(starkAddr)
   const isValidAmt = amtDirty && parseFloat(amt) > 0 && !isNaN(parseFloat(amt))
 
-  const hasAtLeastOne  = evmValid || starkValid
-  const noInvalidInput = (!evmDirty || evmValid) && (!starkDirty || starkValid)
-  const canGenerate    = hasAtLeastOne && noInvalidInput && isValidAmt
+  const isEvmNet    = selectedNet !== 'starknet'
+  const canGenerate = isValidAmt && (isEvmNet ? evmValid : starkValid)
 
   // ── Build link URL ─────────────────────────────────────────────────────
   function buildLink() {
-    const params = new URLSearchParams({ amt })
-    if (evmValid)    params.set('evm', evmAddr)
-    if (starkValid)  params.set('stark', starkAddr)
+    const params = new URLSearchParams({ amt, net: selectedNet })
+    if (isEvmNet) params.set('evm', evmAddr)
+    else          params.set('stark', starkAddr)
     if (memo.trim()) params.set('memo', memo.trim())
     return `${window.location.origin}/pay?${params.toString()}`
   }
@@ -249,7 +248,7 @@ export default function CreateLink() {
           <div className="flex flex-wrap items-center justify-center gap-1 rounded-xl border border-gray-200 bg-gray-100/80 p-1 max-w-xs sm:max-w-none sm:inline-flex">
             {CHAINS.map((c) => {
               const m = CHAIN_META[c]
-              const isActive = previewChain === c
+              const isActive = selectedNet === c
               return (
                 <button
                   key={c}
@@ -269,7 +268,7 @@ export default function CreateLink() {
             })}
           </div>
           {(() => {
-            const m = CHAIN_META[previewChain]
+            const m = CHAIN_META[selectedNet]
             return (
               <span className={cn(
                 'inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-semibold transition-all duration-200',
@@ -287,8 +286,8 @@ export default function CreateLink() {
       <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-card">
         <div className="space-y-5 p-6 sm:p-8">
 
-          {/* ── EVM Address ──────────────────────────────────────────── */}
-          <fieldset className="space-y-1.5">
+          {/* ── EVM Address — Base / HashKey / Arc ───────────────────── */}
+          {isEvmNet && <fieldset className="space-y-1.5">
             <label className="flex items-center justify-between">
               <span className="flex items-center gap-2 text-sm font-medium text-gray-700">
                 <span className="flex items-center gap-0.5">
@@ -342,16 +341,16 @@ export default function CreateLink() {
                 )}
               </p>
             )}
-          </fieldset>
+          </fieldset>}
 
-          {/* ── Starknet Address ─────────────────────────────────────── */}
-          <fieldset className="space-y-1.5">
+          {/* ── Starknet Address — Starknet only ─────────────────────── */}
+          {!isEvmNet && <fieldset className="space-y-1.5">
             <label className="flex items-center justify-between">
               <span className="flex items-center gap-2 text-sm font-medium text-gray-700">
                 <span className="h-2 w-2 rounded-full bg-[#8B5CF6]" />
                 Starknet Address
               </span>
-              <span className="text-[11px] font-medium text-gray-400">optional · Starknet Mainnet</span>
+              <span className="text-[11px] font-medium text-gray-400">Starknet Mainnet · WalletConnect</span>
             </label>
             <div className="relative">
               <input
@@ -388,7 +387,7 @@ export default function CreateLink() {
                   : truncateAddress(starkAddr, 8)}
               </p>
             )}
-          </fieldset>
+          </fieldset>}
 
           {/* ── Amount ───────────────────────────────────────────────── */}
           <fieldset className="space-y-1.5">
@@ -470,9 +469,9 @@ export default function CreateLink() {
             </div>
           )}
 
-          {!canGenerate && !evmDirty && !starkDirty && vaultStep === 'idle' && (
+          {!canGenerate && !(isEvmNet ? evmDirty : starkDirty) && vaultStep === 'idle' && (
             <p className="text-center text-xs text-gray-400">
-              At least one address is required
+              Enter a {isEvmNet ? 'wallet' : 'Starknet'} address to continue
             </p>
           )}
         </div>
