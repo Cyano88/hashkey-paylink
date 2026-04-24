@@ -43,6 +43,13 @@ const UDC_ADDRESS         = '0x041a78e741e5af2fec34b695679bc6891742439f7afb8484e
 
 const STARK_P = BigInt('0x800000000000011000000000000000000000000000000000000000000000001')
 
+// ─── BigInt guard ─────────────────────────────────────────────────────────────
+/** Converts any value to bigint, returning 0n instead of throwing on undefined/null. */
+function safeBigInt(v: unknown): bigint {
+  if (v === undefined || v === null) return 0n
+  try { return BigInt(v as string | number | bigint) } catch { return 0n }
+}
+
 // ─── Gas reimbursement ────────────────────────────────────────────────────────
 
 async function getStrkPriceUsd(): Promise<number> {
@@ -257,19 +264,32 @@ export default async function handler(req: Request, res: Response) {
     }
     const relayerPrivKey = relayerPrivKeyRaw.startsWith('0x') ? relayerPrivKeyRaw : '0x' + relayerPrivKeyRaw
 
-    // Create Account and monkey-patch estimateFee to use V3 query (F3).
-    // starknet.js v6.24.x sends V1 query by default; Lava RPC returns V3 format
-    // which starknet.js can't parse → "Cannot convert undefined to BigInt".
-    const relayer = new Account(provider, relayerAddr, relayerPrivKey)
-    const _origEst = (relayer as any).estimateFee.bind(relayer)
-    ;(relayer as any).estimateFee = (calls: unknown, details: Record<string, unknown> = {}) =>
-      _origEst(calls, { ...details, version: '0x100000000000000000000000000000003' })
-
+    // Hardcoded V3 resource bounds — Starknet gas is ~$0.0002, these are very generous.
+    // Defined before Account so the mock can close over them.
     const V3_BOUNDS = {
       l1_gas:      { max_amount: '0x40',     max_price_per_unit: '0x10000000000000' },
       l1_data_gas: { max_amount: '0x400',    max_price_per_unit: '0x10000000000'    },
       l2_gas:      { max_amount: '0x3D0900', max_price_per_unit: '0x174876e800'     },
     }
+
+    // Stub that returns hardcoded bounds — no RPC call, no BigInt parse bug.
+    // starknet.js v6.24.x estimateFee calls simulateTransaction with a V1 query;
+    // Lava returns a V3 response and starknet.js throws "Cannot convert undefined to BigInt".
+    const hardcodedEstimate = {
+      overall_fee: 1_000_000_000_000_000n,
+      unit: 'FRI',
+      gas_consumed: safeBigInt('0x40'),
+      gas_price:    safeBigInt('0x10000000000000'),
+      data_gas_consumed: safeBigInt('0x400'),
+      data_gas_price:    safeBigInt('0x10000000000'),
+      suggestedMaxFee: 1_000_000_000_000_000n,
+      resourceBounds: V3_BOUNDS,
+    }
+
+    const relayer = new Account(provider, relayerAddr, relayerPrivKey)
+    ;(relayer as any).estimateFee          = async () => hardcodedEstimate
+    ;(relayer as any).estimateInvokeFee    = async () => hardcodedEstimate
+    ;(relayer as any).getInvokeEstimateFee = async () => [hardcodedEstimate]
 
     // Deploy ghost via UDC if not yet on-chain
     if (!isDeployed) {
