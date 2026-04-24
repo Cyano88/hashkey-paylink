@@ -46,12 +46,13 @@ export default async function handler(req: Request, res: Response) {
   const constructorCalldata = [pubKey]
 
   // ── Build DEPLOY_ACCOUNT v3 transaction ───────────────────────────────────
-  // max_price ceilings — actual cost is tiny (<0.01 STRK); ceilings just need
-  // to exceed current network gas prices (L1 gas can spike above 100k Gwei).
+  // Ceilings: max_amount × max_price must fit within relayer STRK balance.
+  // L1 gas spikes to ~120k Gwei; use small amounts since DEPLOY_ACCOUNT uses very few L1 units.
+  // Combined ceiling: ~0.7 STRK well within the relayer balance.
   const resourceBounds = {
-    l1_gas:      { max_amount: '0x800',    max_price_per_unit: '0x10000000000000'  }, // 2.8M Gwei ceiling
-    l1_data_gas: { max_amount: '0x800',    max_price_per_unit: '0x100000000000'    }, // 17k Gwei ceiling
-    l2_gas:      { max_amount: '0x3D0900', max_price_per_unit: '0x174876e800'      }, // 100 Gwei, 4M units
+    l1_gas:      { max_amount: '0x40',     max_price_per_unit: '0x10000000000000'  }, // 64 units × 4.5M Gwei = 0.29 STRK
+    l1_data_gas: { max_amount: '0x400',    max_price_per_unit: '0x10000000000'     }, // 1024 units × 17k Gwei = 0.001 STRK
+    l2_gas:      { max_amount: '0x3D0900', max_price_per_unit: '0x174876e800'      }, // 4M units × 100 Gwei  = 0.04 STRK
   }
 
   // Compute the transaction hash for DEPLOY_ACCOUNT v3.
