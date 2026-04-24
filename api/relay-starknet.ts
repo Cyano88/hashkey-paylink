@@ -58,13 +58,15 @@ const MIN_BALANCE         = 20_000n       // 0.02 USDC minimum (covers gas reimb
 const STARK_P = BigInt('0x800000000000011000000000000000000000000000000000000000000000001')
 
 /**
- * V3 transaction resource bounds — replaces deprecated maxFee.
- * L1 gas covers calldata DA; L2 gas covers execution.
- * Generous ceilings; unused gas is refunded.
+ * V3 transaction resource bounds passed to all relayer.execute() calls to skip
+ * starknet.js fee estimation (which uses deprecated v1 query and fails on modern RPCs).
+ * Ceilings are generous; actual cost is refunded. Total ≈ 0.7 STRK max.
+ * L1 gas price ceiling covers current mainnet spikes (~120k Gwei).
  */
-const V3_RESOURCE_BOUNDS: { l1_gas: ResourceBounds; l2_gas: ResourceBounds } = {
-  l1_gas: { max_amount: '0x2000',    max_price_per_unit: '0x174876e800' }, // 8 k units @ 100 Gwei
-  l2_gas: { max_amount: '0x5f5e100', max_price_per_unit: '0x2540be400'  }, // 100 M units @ 10 Gwei
+const V3_RESOURCE_BOUNDS = {
+  l1_gas:      { max_amount: '0x40',     max_price_per_unit: '0x10000000000000'  }, // 64 units  × 4.5M Gwei
+  l1_data_gas: { max_amount: '0x400',    max_price_per_unit: '0x10000000000'     }, // 1024 units× 17k  Gwei
+  l2_gas:      { max_amount: '0x3D0900', max_price_per_unit: '0x174876e800'      }, // 4M units  × 100  Gwei
 }
 
 // ─── Gas reimbursement ────────────────────────────────────────────────────────
@@ -310,7 +312,7 @@ export default async function handler(req: Request, res: Response) {
         contractAddress: UDC_ADDRESS,
         entrypoint:      'deployContract',
         calldata: [classHash, pubKey, '0x0', '0x1', pubKey],
-      }])
+      }], { resourceBounds: V3_RESOURCE_BOUNDS })
       console.log(`[relay-starknet] ghost deploy tx=${ghostDeployRes.transaction_hash} — waiting...`)
       await provider.waitForTransaction(ghostDeployRes.transaction_hash)
       console.log(`[relay-starknet] ghost deployed!`)
@@ -368,7 +370,7 @@ export default async function handler(req: Request, res: Response) {
       contractAddress: ghostAddr,
       entrypoint:      'execute_from_outside_v2',
       calldata:        executeCalldata,
-    }])
+    }], { resourceBounds: V3_RESOURCE_BOUNDS })
     txHash = transaction_hash
     console.log(`[relay-starknet] submitted tx=${txHash}`)
   } catch (err) {
