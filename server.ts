@@ -14,6 +14,7 @@ import { dirname, join } from 'path'
 import relayV2Handler       from './api/relay-v2.js'
 import relayStarknetHandler from './api/relay-starknet.js'
 import starkBalanceHandler  from './api/starknet-balance.js'
+import setupRelayerHandler  from './api/setup-relayer.js'
 import sweepHandler         from './api/sweep.js'
 import keeperHandler        from './api/sweep-keeper.js'
 
@@ -27,6 +28,7 @@ app.use(express.json())
 app.post('/api/relay-v2',          relayV2Handler)
 app.post('/api/relay-starknet',    relayStarknetHandler)
 app.post('/api/starknet-balance',  starkBalanceHandler)
+app.get('/api/setup-starknet-relayer', setupRelayerHandler)
 app.all('/api/sweep',              sweepHandler)       // frontend uses POST; cron can use GET
 app.get('/api/sweep-keeper',       keeperHandler)
 
