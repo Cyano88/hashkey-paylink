@@ -49,7 +49,7 @@ export default async function handler(req: Request, res: Response) {
   const resourceBounds = {
     l1_gas:      { max_amount: '0x800',     max_price_per_unit: '0x174876e800' },
     l1_data_gas: { max_amount: '0x800',     max_price_per_unit: '0x174876e800' },
-    l2_gas:      { max_amount: '0x5f5e100', max_price_per_unit: '0x2540be400'  },
+    l2_gas:      { max_amount: '0x5f5e100', max_price_per_unit: '0x174876e800' },
   }
 
   // Compute the transaction hash for DEPLOY_ACCOUNT v3.
