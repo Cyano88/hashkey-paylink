@@ -28,7 +28,7 @@
 import type { Request, Response } from 'express'
 import {
   typedData as starkTypedData,
-  hash, ec, CallData, num, RpcProvider, Account,
+  hash, ec, CallData, num, RpcProvider, Account, type ResourceBounds,
 } from 'starknet'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -56,6 +56,16 @@ const MAX_GAS_REIMB_USDC  = 10_000n       // 0.01 USDC hard ceiling
 const MIN_BALANCE         = 20_000n       // 0.02 USDC minimum (covers gas reimb + fee)
 
 const STARK_P = BigInt('0x800000000000011000000000000000000000000000000000000000000000001')
+
+/**
+ * V3 transaction resource bounds — replaces deprecated maxFee.
+ * L1 gas covers calldata DA; L2 gas covers execution.
+ * Generous ceilings; unused gas is refunded.
+ */
+const V3_RESOURCE_BOUNDS: { l1_gas: ResourceBounds; l2_gas: ResourceBounds } = {
+  l1_gas: { max_amount: '0x2000',    max_price_per_unit: '0x174876e800' }, // 8 k units @ 100 Gwei
+  l2_gas: { max_amount: '0x5f5e100', max_price_per_unit: '0x2540be400'  }, // 100 M units @ 10 Gwei
+}
 
 // ─── Gas reimbursement ────────────────────────────────────────────────────────
 
@@ -284,7 +294,7 @@ export default async function handler(req: Request, res: Response) {
         classHash:           classHash,
         constructorCalldata: CallData.compile({ publicKey: relayerPubKey }),
         addressSalt:         relayerPubKey,
-      }, { maxFee: 10_000_000_000_000_000n })  // 0.01 STRK ceiling
+      }, { resourceBounds: V3_RESOURCE_BOUNDS })
       console.log(`[relay-starknet] relayer deploy tx=${deployRes.transaction_hash} — waiting...`)
       await provider.waitForTransaction(deployRes.transaction_hash)
       console.log(`[relay-starknet] relayer deployed!`)
@@ -368,12 +378,11 @@ export default async function handler(req: Request, res: Response) {
   let txHash: string
   try {
     const relayer = new Account(provider, relayerAddr, relayerPrivKey)
-    // Provide explicit maxFee to skip starknet_estimateFee — estimation fails
-    // when the multicall includes a UDC deploy followed by a call on the
-    // not-yet-deployed ghost account. 0.01 STRK is a generous ceiling;
-    // actual cost is ~0.001 STRK. Unused fee is refunded.
+    // resourceBounds forces v3 tx format and skips fee estimation — estimation
+    // fails when the multicall contains a UDC deploy + call on not-yet-deployed
+    // ghost account. Generous ceilings; unused gas is refunded.
     const { transaction_hash } = await relayer.execute(relayerCalls, {
-      maxFee: 10_000_000_000_000_000n,  // 0.01 STRK in fri (10^16)
+      resourceBounds: V3_RESOURCE_BOUNDS,
     })
     console.log(`[relay-starknet] submitted tx=${txHash}`)
   } catch (err) {
