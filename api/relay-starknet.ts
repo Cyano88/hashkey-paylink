@@ -210,7 +210,8 @@ export default async function handler(req: Request, res: Response) {
   const { privKey: ghostPrivKey, pubKey, address: ghostAddr } =
     deriveGhost(linkId, recipientStark, classHash)
 
-  const provider = new RpcProvider({ nodeUrl: rpcUrl })
+  // blockIdentifier: 'latest' — Lava (and most public RPCs) reject 'pending' queries
+  const provider = new RpcProvider({ nodeUrl: rpcUrl, blockIdentifier: 'latest' })
 
   // ── USDC balance — try Circle native then legacy StarkGate ────────────────
   let balance   = 0n
