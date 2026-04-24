@@ -33,7 +33,7 @@ export default async function handler(req: Request, res: Response) {
         contractAddress: tokenAddress,
         entrypoint,
         calldata: [accountAddress],
-      })
+      }, 'latest')
       // balanceOf returns Uint256 [low, high]; USDC amounts always fit in low
       const balance = result[0] ?? '0x0'
       console.log(`[starknet-balance] balance=${balance} (entrypoint=${entrypoint}) for ${accountAddress}`)

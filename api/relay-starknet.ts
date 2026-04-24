@@ -146,7 +146,7 @@ export default async function handler(req: Request, res: Response) {
       contractAddress: USDC_STARKNET,
       entrypoint:      'balanceOf',
       calldata:        [ghostAddr],
-    })
+    }, 'latest')
     // balanceOf returns Uint256 [low, high]; USDC amounts always fit in low
     balance = BigInt(result[0] ?? '0x0')
   } catch (err) {
@@ -197,7 +197,7 @@ export default async function handler(req: Request, res: Response) {
     // An undeployed counterfactual account has no bytecode (returns '0x' or null).
     let isDeployed = false
     try {
-      const code = await provider.getClassAt(ghostAddr).catch(() => null)
+      const code = await provider.getClassAt(ghostAddr, 'latest').catch(() => null)
       isDeployed = code != null
     } catch { /* assume not deployed */ }
     console.log(`[relay-starknet] ghost account deployed=${isDeployed}`)
