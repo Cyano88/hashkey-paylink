@@ -187,7 +187,8 @@ export default async function handler(req: Request, res: Response) {
 
   const rpcUrl         = process.env.STARKNET_RPC_URL             ?? DEFAULT_RPC_URL
   const classHash      = process.env.STARKNET_OZ_CLASS_HASH       ?? DEFAULT_CLASS_HASH
-  const relayerPrivKey = process.env.STARKNET_RELAYER_PRIVATE_KEY
+  const rawRelayerKey  = process.env.STARKNET_RELAYER_PRIVATE_KEY ?? ''
+  const relayerPrivKey = rawRelayerKey.startsWith('0x') ? rawRelayerKey : '0x' + rawRelayerKey
   const relayerAddr    = process.env.STARKNET_RELAYER_ADDRESS
 
   console.log(`[relay-starknet] relayer=${relayerAddr ? relayerAddr.slice(0, 12) + '…' : 'NOT SET'}`)
