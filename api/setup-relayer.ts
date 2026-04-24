@@ -11,7 +11,7 @@
  */
 
 import type { Request, Response } from 'express'
-import { ec, num, hash, CallData, constants } from 'starknet'
+import { ec, num, hash, constants } from 'starknet'
 
 const DEFAULT_RPC_URL    = 'https://rpc.starknet.lava.build'
 const DEFAULT_CLASS_HASH = '0x061dac032f228abef9c6626f995015233097ae253a7f72d68552db02f2971b8f'
@@ -104,8 +104,10 @@ export default async function handler(req: Request, res: Response) {
   }
 
   // ── Derive public key and calldata ────────────────────────────────────────
+  // Use [pubKey] directly — CallData.compile returns a decimal string (75 chars)
+  // which Lava RPC rejects; the RPC expects 0x-prefixed hex.
   const pubKey = ec.starkCurve.getStarkKey(privKey)
-  const constructorCalldata = CallData.compile({ publicKey: pubKey })
+  const constructorCalldata = [pubKey]   // hex string — matches what RPC expects
   console.log(`[setup-relayer] pubKey=${pubKey} addr=${relayerAddr}`)
 
   // ── Compute V3 hash and sign ──────────────────────────────────────────────
