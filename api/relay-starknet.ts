@@ -332,8 +332,13 @@ export default async function handler(req: Request, res: Response) {
   let txHash: string
   try {
     const relayer = new Account(provider, relayerAddr, relayerPrivKey)
-    const { transaction_hash } = await relayer.execute(relayerCalls)
-    txHash = transaction_hash
+    // Provide explicit maxFee to skip starknet_estimateFee — estimation fails
+    // when the multicall includes a UDC deploy followed by a call on the
+    // not-yet-deployed ghost account. 0.01 STRK is a generous ceiling;
+    // actual cost is ~0.001 STRK. Unused fee is refunded.
+    const { transaction_hash } = await relayer.execute(relayerCalls, {
+      maxFee: 10_000_000_000_000_000n,  // 0.01 STRK in fri (10^16)
+    })
     console.log(`[relay-starknet] submitted tx=${txHash}`)
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
