@@ -10,7 +10,7 @@
  */
 
 import type { Request, Response } from 'express'
-import { ec, num, hash, CallData, constants } from 'starknet'
+import { ec, num, hash, CallData, constants, Signer } from 'starknet'
 
 const DEFAULT_RPC_URL    = 'https://rpc.starknet.lava.build'
 const DEFAULT_CLASS_HASH = '0x061dac032f228abef9c6626f995015233097ae253a7f72d68552db02f2971b8f'
@@ -58,13 +58,10 @@ export default async function handler(req: Request, res: Response) {
   // and hope the RPC accepts it (some nodes are lenient about version tags).
   let txHash: string
   try {
-    // Try v3 path via the Account signer details
-    const { RpcProvider, Account } = await import('starknet')
-    const provider = new RpcProvider({ nodeUrl: rpcUrl, blockIdentifier: 'latest' })
-    const tempAccount = new Account(provider, relayerAddr, relayerPrivKey)
+    // Use Signer directly — signDeployAccountTransaction lives on Signer, not Account
+    const signer = new Signer(relayerPrivKey)
 
-    // signDeployAccountTransaction computes the correct hash and signs it
-    const sig = await tempAccount.signDeployAccountTransaction({
+    const sig = await signer.signDeployAccountTransaction({
       classHash,
       contractAddress:      relayerAddr,
       addressSalt:          pubKey,
@@ -77,7 +74,7 @@ export default async function handler(req: Request, res: Response) {
       paymasterData:        [],
       nonceDataAvailabilityMode: 'L1',
       feeDataAvailabilityMode:   'L1',
-    } as Parameters<typeof tempAccount.signDeployAccountTransaction>[0])
+    } as Parameters<typeof signer.signDeployAccountTransaction>[0])
 
     // sig is [r, s] as hex or bigint
     const sigHex = Array.isArray(sig)
