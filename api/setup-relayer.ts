@@ -90,22 +90,22 @@ export default async function handler(req: Request, res: Response) {
       body: JSON.stringify({
         jsonrpc: '2.0', id: 2,
         method: 'starknet_addDeployAccountTransaction',
-        params: [{
+        params: {
           deploy_account_transaction: {
-            type:                      'DEPLOY_ACCOUNT',
-            version:                   '0x3',
-            class_hash:                classHash,
-            contract_address_salt:     pubKey,
-            constructor_calldata:      constructorCalldata,
-            nonce:                     '0x0',
-            resource_bounds:           resourceBounds,
-            tip:                       '0x0',
-            paymaster_data:            [],
-            fee_data_availability_mode: 'L1',
+            type:                        'DEPLOY_ACCOUNT',
+            version:                     '0x3',
+            class_hash:                  classHash,
+            contract_address_salt:       pubKey,
+            constructor_calldata:        constructorCalldata,
+            nonce:                       '0x0',
+            resource_bounds:             resourceBounds,
+            tip:                         '0x0',
+            paymaster_data:              [],
+            fee_data_availability_mode:  'L1',
             nonce_data_availability_mode: 'L1',
-            signature:                 sigHex,
+            signature:                   sigHex,
           },
-        }],
+        },
       }),
     })
 
