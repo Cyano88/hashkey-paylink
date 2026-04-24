@@ -89,12 +89,14 @@ interface AvnuCall { contractAddress: string; entrypoint: string; calldata: stri
 interface AvnuBuildResponse { requestId: string; typedData: Record<string, unknown>; gasTokenAmount?: string }
 interface AvnuExecuteResponse { transactionHash?: string; transaction_hash?: string }
 
-function avnuHeaders(apiKey: string): Record<string, string> {
-  return {
-    'Content-Type': 'application/json',
-    'api-key':      apiKey,
-    'x-api-key':    apiKey,
+function avnuHeaders(apiKey?: string): Record<string, string> {
+  const h: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (apiKey) {
+    h['x-paymaster-api-key'] = apiKey  // correct AVNU paymaster header
+    h['x-api-key']           = apiKey  // fallback alias
+    h['api-key']             = apiKey  // fallback alias
   }
+  return h
 }
 
 // ─── Handler ─────────────────────────────────────────────────────────────────
@@ -108,11 +110,7 @@ export default async function handler(req: Request, res: Response) {
   const classHash = process.env.STARKNET_OZ_CLASS_HASH ?? DEFAULT_CLASS_HASH
   const avnuKey   = process.env.AVNU_API_KEY
 
-  if (!avnuKey) {
-    return res.status(500).json({ ok: false, error: 'AVNU_API_KEY not set — add it in Render env vars' })
-  }
-
-  console.log(`[relay-starknet] avnuKey=${avnuKey.slice(0, 8)}…`)
+  console.log(`[relay-starknet] avnuKey=${avnuKey ? avnuKey.slice(0, 8) + '…' : 'NOT SET (will try public mode)'}`)
 
   // ── Input validation ──────────────────────────────────────────────────────
   const { linkId, recipientStark } = (req.body ?? {}) as Record<string, string>
@@ -185,24 +183,47 @@ export default async function handler(req: Request, res: Response) {
     }
   }
 
-  let buildData: AvnuBuildResponse
-  try {
-    const buildRes = await fetch(`${AVNU_BASE}/paymaster/v1/build-typed-data`, {
-      method:  'POST',
-      headers: avnuHeaders(avnuKey),
-      body:    JSON.stringify(buildBody),
-      signal:  AbortSignal.timeout(15_000),
-    })
-    if (!buildRes.ok) {
-      const errBody = await buildRes.text().catch(() => '')
-      console.error('[relay-starknet] AVNU build failed:', buildRes.status, errBody)
-      return res.status(502).json({ ok: false, error: `AVNU build failed (${buildRes.status}): ${errBody.slice(0, 300)}` })
+  // ── AVNU build — three strategies in order ────────────────────────────────
+  // 1. Sponsored with API key (x-paymaster-api-key header, no gasToken)
+  // 2. No API key (AVNU public/free tier)
+  // 3. Gasless — ghost pays gas in Circle USDC (0x053c91); best for new deposits
+  const buildAttempts = [
+    { label: 'sponsored+key',  body: buildBody,                             headers: avnuHeaders(avnuKey) },
+    { label: 'sponsored+nokey',body: buildBody,                             headers: avnuHeaders()        },
+    { label: 'gasless+USDC',   body: { ...buildBody,                        headers: avnuHeaders(),
+        gasTokenAddress:   USDC_NEW,
+        maxGasTokenAmount: MAX_GAS_REIMB_USDC.toString(),
+      }, headers: avnuHeaders() },
+  ]
+
+  let buildData: AvnuBuildResponse | null = null
+  let lastError = ''
+
+  for (const attempt of buildAttempts) {
+    try {
+      const res = await fetch(`${AVNU_BASE}/paymaster/v1/build-typed-data`, {
+        method:  'POST',
+        headers: attempt.headers,
+        body:    JSON.stringify(attempt.body),
+        signal:  AbortSignal.timeout(15_000),
+      })
+      const text = await res.text()
+      console.log(`[relay-starknet] AVNU build [${attempt.label}] status=${res.status}`)
+      if (res.ok) {
+        buildData = JSON.parse(text) as AvnuBuildResponse
+        console.log(`[relay-starknet] AVNU build ok requestId=${buildData.requestId} via ${attempt.label}`)
+        break
+      }
+      lastError = `(${res.status}) ${text.slice(0, 200)}`
+      console.warn(`[relay-starknet] AVNU build [${attempt.label}] failed: ${lastError}`)
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : String(err)
+      console.warn(`[relay-starknet] AVNU build [${attempt.label}] error: ${lastError}`)
     }
-    buildData = (await buildRes.json()) as AvnuBuildResponse
-    console.log(`[relay-starknet] AVNU build ok requestId=${buildData.requestId}`)
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    return res.status(502).json({ ok: false, error: `AVNU build error: ${msg.slice(0, 200)}` })
+  }
+
+  if (!buildData) {
+    return res.status(502).json({ ok: false, error: `AVNU build failed all attempts. Last: ${lastError}` })
   }
 
   if (!buildData.requestId || !buildData.typedData) {
