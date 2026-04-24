@@ -12,7 +12,6 @@
 
 import type { Request, Response } from 'express'
 import { ec, num, hash, constants } from 'starknet'
-import { poseidonHashMany } from '@scure/starknet'
 
 const DEFAULT_RPC_URL    = 'https://rpc.starknet.lava.build'
 const DEFAULT_CLASS_HASH = '0x061dac032f228abef9c6626f995015233097ae253a7f72d68552db02f2971b8f'
@@ -32,7 +31,7 @@ function computeDeployAccountV3Hash(
   constructorCalldata: string[],
   salt: string,
 ): string {
-  const ph = (elems: bigint[]): bigint => poseidonHashMany(elems)
+  const ph = (elems: bigint[]): bigint => BigInt(hash.computePoseidonHashOnElements(elems))
 
   const L1_GAS_NAME = 0x4c315f474153n      // encodeShortString("L1_GAS")
   const L2_GAS_NAME = 0x4c325f474153n      // encodeShortString("L2_GAS")
