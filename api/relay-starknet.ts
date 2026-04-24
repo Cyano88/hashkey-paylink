@@ -175,12 +175,11 @@ export default async function handler(req: Request, res: Response) {
   console.log(`[relay-starknet] ghost ${ghostAddr} balance=${balance}µUSDC usdcToken=${usdcToken} recipient=${recipientStark}`)
 
   // ── Compute payout split ─────────────────────────────────────────────────
-  // Reserve MAX_GAS_USDC for AVNU gas. AVNU will include its actual fee
-  // (≤ MAX_GAS_USDC) as the first call in the signed bundle. Any unspent
-  // gas reserve remains in the ghost address (acceptable for a one-time vault).
-  const spendable    = balance - MAX_GAS_USDC
-  const platformFee  = spendable * FEE_BPS / 10_000n
-  const payout       = spendable - platformFee
+  // We attempt AVNU free gas sponsorship first; if accepted, the full balance
+  // is spendable (no gas reserve needed). If AVNU charges gas from the token,
+  // it inserts its own transfer call before ours, so our amounts stay the same.
+  const platformFee  = balance * FEE_BPS / 10_000n
+  const payout       = balance - platformFee
 
   // ── Build AVNU paymaster transaction ────────────────────────────────────
   const [payoutLow,  payoutHigh ] = toU256Calldata(payout)
@@ -202,7 +201,6 @@ export default async function handler(req: Request, res: Response) {
   let buildData: AvnuBuildResponse
   try {
     // Check if the ghost account is already deployed — omit deploymentData if so.
-    // An undeployed counterfactual account has no bytecode (returns '0x' or null).
     let isDeployed = false
     try {
       const code = await provider.getClassAt(ghostAddr, 'latest').catch(() => null)
@@ -210,30 +208,43 @@ export default async function handler(req: Request, res: Response) {
     } catch { /* assume not deployed */ }
     console.log(`[relay-starknet] ghost account deployed=${isDeployed}`)
 
-    const buildBody: Record<string, unknown> = {
-      userAddress:       ghostAddr,
-      calls,
-      gasTokenAddress:   usdcToken,
-      maxGasTokenAmount: MAX_GAS_USDC.toString(),
+    const deploymentData = isDeployed ? undefined : {
+      classHash,
+      salt:     pubKey,   // OZ convention: salt = pubKey
+      unique:   false,    // deployer = 0x0
+      calldata: [pubKey], // OZ Account constructor: [publicKey]
     }
 
-    if (!isDeployed) {
-      // AVNU deploys the ghost OZ account atomically when deploymentData is present.
-      // unique=false means deployer=0x0, matching the OZ Account standard.
-      buildBody.deploymentData = {
-        classHash,
-        salt:     pubKey,    // OZ convention: salt = pubKey
-        unique:   false,
-        calldata: [pubKey],  // OZ Account constructor: [publicKey]
+    // AVNU Paymaster v1 — correct endpoint is /paymaster/v1/build-typed-data.
+    // We first try without a gasTokenAddress (AVNU-sponsored / free gas) so any
+    // USDC variant is accepted. If that returns 404/400 we retry charging the
+    // detected usdcToken from the ghost account's balance.
+    const tryBuild = async (chargeGasToken: boolean) => {
+      const body: Record<string, unknown> = {
+        userAddress: ghostAddr,
+        calls,
+        ...(chargeGasToken && {
+          gasTokenAddress:   usdcToken,
+          maxGasTokenAmount: MAX_GAS_USDC.toString(),
+        }),
+        ...(deploymentData && { deploymentData }),
       }
+      console.log(`[relay-starknet] AVNU build attempt chargeGas=${chargeGasToken}`)
+      return fetch(`${AVNU_BASE}/paymaster/v1/build-typed-data`, {
+        method:  'POST',
+        headers: avnuHeaders(avnuKey),
+        body:    JSON.stringify(body),
+        signal:  AbortSignal.timeout(15_000),
+      })
     }
 
-    const buildRes = await fetch(`${AVNU_BASE}/paymaster/v1/build`, {
-      method:  'POST',
-      headers: avnuHeaders(avnuKey),
-      body:    JSON.stringify(buildBody),
-      signal:  AbortSignal.timeout(15_000),
-    })
+    // Attempt 1: free gas sponsorship
+    let buildRes = await tryBuild(false)
+    // Attempt 2: charge gas from ghost account balance if free mode not available
+    if (!buildRes.ok && (buildRes.status === 404 || buildRes.status === 400)) {
+      console.log(`[relay-starknet] free gas rejected (${buildRes.status}), retrying with gasToken`)
+      buildRes = await tryBuild(true)
+    }
 
     if (!buildRes.ok) {
       const errBody = await buildRes.text().catch(() => '')
