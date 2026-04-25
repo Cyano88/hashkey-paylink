@@ -5,20 +5,24 @@
  *   - /api/relay-v2      POST  — V2 ghost-vault relay (RELAYER_PRIVATE_KEY)
  *   - /api/sweep         POST  — immediate single-router sweep (KEEPER_PRIVATE_KEY)
  *   - /api/sweep-keeper  GET   — batch sweep keeper (hit by external cron)
+ *   - /api/relay-stream  POST  — Streampay gasless claim/cancel on Arc
+ *   - /api/health        GET   — liveness probe (used by RelayerWakeUp component)
  *   - /*                       — Vite production build (dist/)
  */
 
 import express from 'express'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
-import relayV2Handler       from './api/relay-v2.js'
-import relayStarknetHandler  from './api/relay-starknet.js'
-import txStatusHandler       from './api/tx-status.js'
+import relayV2Handler         from './api/relay-v2.js'
+import relayStarknetHandler   from './api/relay-starknet.js'
+import txStatusHandler        from './api/tx-status.js'
 import recoverStarknetHandler from './api/recover-starknet.js'
-import starkBalanceHandler   from './api/starknet-balance.js'
-import setupRelayerHandler   from './api/setup-relayer.js'
-import sweepHandler         from './api/sweep.js'
-import keeperHandler        from './api/sweep-keeper.js'
+import starkBalanceHandler    from './api/starknet-balance.js'
+import setupRelayerHandler    from './api/setup-relayer.js'
+import sweepHandler           from './api/sweep.js'
+import keeperHandler          from './api/sweep-keeper.js'
+// ── Streampay module ──────────────────────────────────────────────────────────
+import relayStreamHandler     from './modules/streampay/api/relay-stream.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -27,14 +31,17 @@ const app = express()
 app.use(express.json())
 
 // ── API routes ────────────────────────────────────────────────────────────────
-app.post('/api/relay-v2',          relayV2Handler)
-app.post('/api/relay-starknet',    relayStarknetHandler)
-app.post('/api/tx-status',         txStatusHandler)
-app.post('/api/starknet-balance',  starkBalanceHandler)
+app.post('/api/relay-v2',              relayV2Handler)
+app.post('/api/relay-starknet',        relayStarknetHandler)
+app.post('/api/tx-status',             txStatusHandler)
+app.post('/api/starknet-balance',      starkBalanceHandler)
 app.get('/api/setup-starknet-relayer', setupRelayerHandler)
-app.post('/api/recover-starknet',     recoverStarknetHandler)
-app.all('/api/sweep',              sweepHandler)       // frontend uses POST; cron can use GET
-app.get('/api/sweep-keeper',       keeperHandler)
+app.post('/api/recover-starknet',      recoverStarknetHandler)
+app.all('/api/sweep',                  sweepHandler)       // frontend uses POST; cron can use GET
+app.get('/api/sweep-keeper',           keeperHandler)
+// ── Streampay routes ──────────────────────────────────────────────────────────
+app.post('/api/relay-stream',          relayStreamHandler)
+app.get('/api/health',                 (_req, res) => res.json({ ok: true, ts: Date.now() }))
 
 // ── Static frontend (Vite build output) ──────────────────────────────────────
 app.use(express.static(join(__dirname, 'dist')))
