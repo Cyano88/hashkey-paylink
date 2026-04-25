@@ -141,6 +141,15 @@ export default function Layout() {
               >
                 Starknet
               </a>
+              {' · '}
+              <a
+                href="https://testnet.arcscan.app"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-gray-500 underline-offset-2 hover:underline transition-colors"
+              >
+                Arc
+              </a>
             </p>
           </div>
         </footer>

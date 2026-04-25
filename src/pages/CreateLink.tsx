@@ -145,46 +145,10 @@ export default function CreateLink() {
   }
 
   // ── Generate handler ───────────────────────────────────────────────────
-  async function handleGenerate() {
+  function handleGenerate() {
     if (!canGenerate) return
-    const link = buildLink()
-
-    // Master Router: if background check already confirmed router is deployed → instant ready
-    if (evmValid && routerDeployed === true) {
-      setGeneratedLink(link)
-      setVaultStep('ready')
-      return
-    }
-
-    // No EVM address → just show link (no vault for Starknet-only links)
-    if (!evmValid) {
-      setGeneratedLink(link)
-      setVaultStep('skipped')
-      return
-    }
-
-    // Background check still running → do a fresh on-chain check
-    setVaultStep('checking')
-    setDeployError(null)
-
-    try {
-      const factory = ROUTER_FACTORY['base']
-      if (!factory) { setGeneratedLink(link); setVaultStep('skipped'); return }
-
-      const router = await EVM_CLIENTS.base.readContract({
-        address: factory, abi: FACTORY_GET_ROUTER_ABI,
-        functionName: 'getRouterAddress', args: [evmAddr as `0x${string}`],
-      })
-      const code     = await EVM_CLIENTS.base.getBytecode({ address: router })
-      const deployed = !!code && code.length > 2
-
-      setRouterDeployed(deployed)
-      setGeneratedLink(link)
-      setVaultStep(deployed ? 'ready' : 'needs_deploy')
-    } catch {
-      setGeneratedLink(link)
-      setVaultStep('skipped')
-    }
+    setGeneratedLink(buildLink())
+    setVaultStep('ready')
   }
 
   // ── Deploy vault handler ───────────────────────────────────────────────
@@ -221,13 +185,7 @@ export default function CreateLink() {
     setVaultStep('idle'); setDeployError(null); setRouterDeployed(null); resetDeploy()
   }
 
-  // ── Vault status helpers ───────────────────────────────────────────────
-  const isChecking     = vaultStep === 'checking'
-  const needsDeploy    = vaultStep === 'needs_deploy'
-  const isDeploying    = vaultStep === 'deploying' || isDeployPending
-  const vaultReady     = vaultStep === 'ready'
-  const vaultSkipped   = vaultStep === 'skipped'
-  const linkReady      = generatedLink !== '' && !isChecking
+  const linkReady = generatedLink !== ''
 
   return (
     <div className="mx-auto max-w-lg animate-fade-in">
@@ -455,13 +413,6 @@ export default function CreateLink() {
             </button>
           )}
 
-          {isChecking && (
-            <div className="flex w-full items-center justify-center gap-2 rounded-xl bg-gray-100 px-6 py-3.5 text-sm font-semibold text-gray-500">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Checking payment vault…
-            </div>
-          )}
-
           {!canGenerate && !(isEvmNet ? evmDirty : starkDirty) && vaultStep === 'idle' && (
             <p className="text-center text-xs text-gray-400">
               Enter a {isEvmNet ? 'wallet' : 'Starknet'} address to continue
@@ -469,215 +420,81 @@ export default function CreateLink() {
           )}
         </div>
 
-        {/* ── Vault activation panel ───────────────────────────────────── */}
-        {(needsDeploy || isDeploying || vaultReady || vaultSkipped) && linkReady && (
+        {/* ── Link ready panel ─────────────────────────────────────────── */}
+        {linkReady && (
           <div className="animate-slide-up border-t border-gray-100 bg-gradient-to-b from-gray-50/80 to-white p-6 sm:px-8 space-y-4">
-
-            {/* Vault status header */}
-            {(needsDeploy || isDeploying) && (
-              <div className="space-y-3">
-                <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3.5">
-                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
-                  <div>
-                    <p className="text-sm font-semibold text-amber-800">Activate your payment vault</p>
-                    <p className="mt-0.5 text-xs text-amber-700 leading-relaxed">
-                      One-time setup on Base (~$0.01 gas). Once active, anyone can pay you — even from
-                      an exchange — and funds route automatically. Only needed once per wallet address.
-                    </p>
-                  </div>
-                </div>
-
-                {/* Switch to Base if needed */}
-                {isConnected && !isOnBase && (
-                  <button
-                    onClick={() => switchChain({ chainId: baseChainId })}
-                    disabled={isSwitching}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-amber-500 px-6 py-3 text-sm font-semibold text-white hover:bg-amber-600 transition-all active:scale-[0.98] disabled:opacity-70"
-                  >
-                    {isSwitching
-                      ? <><Loader2 className="h-4 w-4 animate-spin" /> Switching…</>
-                      : <><ArrowRight className="h-4 w-4" /> Switch to Base to activate</>}
-                  </button>
-                )}
-
-                {/* Connect wallet if not connected */}
-                {!isConnected && (
-                  <div className="space-y-2">
-                    <div className="flex justify-center">
-                      <ConnectButton label="Connect Wallet to Activate" />
-                    </div>
-                    <p className="text-center text-[11px] text-gray-400">
-                      or{' '}
-                      <button
-                        onClick={() => setVaultStep('skipped')}
-                        className="underline underline-offset-2 hover:text-gray-600"
-                      >
-                        skip for now
-                      </button>
-                      {' '}— vault can be activated later
-                    </p>
-                  </div>
-                )}
-
-                {/* Deploy button — only if connected and on Base */}
-                {isConnected && isOnBase && (
-                  <button
-                    onClick={handleDeployVault}
-                    disabled={isDeploying}
-                    className={cn(
-                      'flex w-full items-center justify-center gap-2 rounded-xl px-6 py-3.5 text-sm font-semibold transition-all duration-200',
-                      isDeploying
-                        ? 'cursor-not-allowed bg-gray-100 text-gray-500'
-                        : 'bg-black text-white shadow-button hover:bg-gray-800 hover:shadow-md active:scale-[0.98]',
-                    )}
-                  >
-                    {isDeploying
-                      ? <><Loader2 className="h-4 w-4 animate-spin" /> Activating vault…</>
-                      : <><Zap className="h-4 w-4" /> Activate Payment Vault</>}
-                  </button>
-                )}
-
-                {deployError && (
-                  <p className="text-center text-xs text-red-500">{deployError}</p>
-                )}
-
-                {/* Skip option */}
-                {isConnected && isOnBase && !isDeploying && (
-                  <p className="text-center text-[11px] text-gray-400">
-                    or{' '}
-                    <button
-                      onClick={() => setVaultStep('skipped')}
-                      className="underline underline-offset-2 hover:text-gray-600"
-                    >
-                      skip for now
-                    </button>
-                    {' '}— wallet-connected payers will still work
-                  </p>
-                )}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="flex items-center gap-2 text-sm font-semibold text-gray-800">
+                  <CheckCheck className="h-4 w-4 text-emerald-500" />
+                  Link Ready
+                </p>
+                <button onClick={handleReset} className="text-xs text-gray-400 hover:text-gray-600 transition-colors">
+                  Start over
+                </button>
               </div>
-            )}
 
-            {/* Vault ready */}
-            {vaultReady && (
-              <div className="flex items-center gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-3">
-                <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-600" />
-                <div>
-                  <p className="text-sm font-semibold text-emerald-800">Payment vault active</p>
-                  <p className="text-[11px] text-emerald-700">Anyone can pay — even from an exchange. Funds route automatically.</p>
-                </div>
+              <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3.5 py-2.5">
+                <p className="min-w-0 flex-1 truncate font-mono text-xs text-gray-500">{generatedLink}</p>
               </div>
-            )}
 
-            {/* Vault skipped — if background check found the router is deployed, show as ready */}
-            {vaultSkipped && routerDeployed === true && (
-              <div className="flex items-center gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-3">
-                <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-600" />
-                <div>
-                  <p className="text-sm font-semibold text-emerald-800">Payment vault active</p>
-                  <p className="text-[11px] text-emerald-700">Anyone can pay — even from an exchange. Funds route automatically.</p>
+              {/* Preview */}
+              <div className="rounded-xl border border-gray-100 bg-white p-4 space-y-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Preview</p>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-2xl font-bold text-gray-900">{formatAmount(amt, 18)}</span>
+                  <span className="text-sm font-medium text-gray-500">USDC · HSK</span>
                 </div>
-              </div>
-            )}
-            {vaultSkipped && routerDeployed !== true && (
-              <div className="flex items-start gap-2.5 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3">
-                <Wallet className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
-                <div>
-                  <p className="text-sm font-semibold text-slate-600">Vault not yet activated</p>
-                  <p className="text-[11px] text-slate-500 leading-relaxed">
-                    Wallet-connected payers work fine. Activate once for exchange/manual send support.
-                  </p>
-                  {evmValid && !isConnected && (
-                    <div className="mt-2">
-                      <ConnectButton label="Connect & Activate" />
+                <div className="space-y-1">
+                  {evmValid && (
+                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                      <span className="flex gap-0.5">
+                        <span className="h-1.5 w-1.5 rounded-full bg-[#0052FF]" />
+                        <span className="h-1.5 w-1.5 rounded-full bg-[#C9A227]" />
+                      </span>
+                      <span>{CHAIN_META[selectedNet].label}:</span>
+                      <span className="font-mono text-gray-700">{truncateAddress(evmAddr, 8)}</span>
                     </div>
                   )}
-                  {evmValid && isConnected && (
-                    <button
-                      onClick={() => { setVaultStep('needs_deploy'); setDeployError(null) }}
-                      className="mt-2 text-xs font-semibold text-blue-600 hover:text-blue-800 underline underline-offset-2"
-                    >
-                      Activate now →
-                    </button>
+                  {starkValid && (
+                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                      <span className="h-1.5 w-1.5 rounded-full bg-[#8B5CF6]" />
+                      <span>Starknet:</span>
+                      <span className="font-mono text-gray-700">{truncateAddress(starkAddr, 8)}</span>
+                    </div>
+                  )}
+                  {memo && (
+                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                      <span className="h-1.5 w-1.5 rounded-full bg-gray-300" />
+                      <span>Memo: <span className="font-medium text-gray-700">"{memo}"</span></span>
+                    </div>
                   )}
                 </div>
               </div>
-            )}
 
-            {/* ── Link panel (shown for all non-checking states) ── */}
-            {(vaultReady || vaultSkipped || needsDeploy || isDeploying) && (
-              <div className="space-y-3 pt-1">
-                <div className="flex items-center justify-between">
-                  <p className="flex items-center gap-2 text-sm font-semibold text-gray-800">
-                    <CheckCheck className="h-4 w-4 text-emerald-500" />
-                    Link Ready
-                  </p>
-                  <button onClick={handleReset} className="text-xs text-gray-400 hover:text-gray-600 transition-colors">
-                    Start over
-                  </button>
-                </div>
-
-                <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3.5 py-2.5">
-                  <p className="min-w-0 flex-1 truncate font-mono text-xs text-gray-500">{generatedLink}</p>
-                </div>
-
-                {/* Preview */}
-                <div className="rounded-xl border border-gray-100 bg-white p-4 space-y-2">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Preview</p>
-                  <div className="flex items-baseline gap-1.5">
-                    <span className="text-2xl font-bold text-gray-900">{formatAmount(amt, 18)}</span>
-                    <span className="text-sm font-medium text-gray-500">USDC · HSK</span>
-                  </div>
-                  <div className="space-y-1">
-                    {evmValid && (
-                      <div className="flex items-center gap-2 text-xs text-gray-500">
-                        <span className="flex gap-0.5">
-                          <span className="h-1.5 w-1.5 rounded-full bg-[#0052FF]" />
-                          <span className="h-1.5 w-1.5 rounded-full bg-[#C9A227]" />
-                        </span>
-                        <span>Base / HashKey:</span>
-                        <span className="font-mono text-gray-700">{truncateAddress(evmAddr, 8)}</span>
-                      </div>
-                    )}
-                    {starkValid && (
-                      <div className="flex items-center gap-2 text-xs text-gray-500">
-                        <span className="h-1.5 w-1.5 rounded-full bg-[#8B5CF6]" />
-                        <span>Starknet:</span>
-                        <span className="font-mono text-gray-700">{truncateAddress(starkAddr, 8)}</span>
-                      </div>
-                    )}
-                    {memo && (
-                      <div className="flex items-center gap-2 text-xs text-gray-500">
-                        <span className="h-1.5 w-1.5 rounded-full bg-gray-300" />
-                        <span>Memo: <span className="font-medium text-gray-700">"{memo}"</span></span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex gap-2.5">
-                  <button
-                    onClick={handleCopy}
-                    className={cn(
-                      'flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all active:scale-[0.98]',
-                      copied
-                        ? 'border border-emerald-200 bg-emerald-50 text-emerald-700'
-                        : 'bg-black text-white hover:bg-gray-800',
-                    )}
-                  >
-                    {copied ? <><CheckCheck className="h-4 w-4" /> Copied!</> : <><Copy className="h-4 w-4" /> Copy Link</>}
-                  </button>
-                  <a
-                    href={generatedLink}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:border-gray-300 hover:bg-gray-50 transition-all active:scale-[0.98]"
-                  >
-                    <ExternalLink className="h-4 w-4" />
-                    Test
-                  </a>
-                </div>
+              <div className="flex gap-2.5">
+                <button
+                  onClick={handleCopy}
+                  className={cn(
+                    'flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all active:scale-[0.98]',
+                    copied
+                      ? 'border border-emerald-200 bg-emerald-50 text-emerald-700'
+                      : 'bg-black text-white hover:bg-gray-800',
+                  )}
+                >
+                  {copied ? <><CheckCheck className="h-4 w-4" /> Copied!</> : <><Copy className="h-4 w-4" /> Copy Link</>}
+                </button>
+                <a
+                  href={generatedLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:border-gray-300 hover:bg-gray-50 transition-all active:scale-[0.98]"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  Test
+                </a>
               </div>
-            )}
+            </div>
           </div>
         )}
       </div>
