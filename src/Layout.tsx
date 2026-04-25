@@ -1,9 +1,7 @@
 import { useRef, useState } from 'react'
 import { Outlet, Link, useLocation, useSearchParams } from 'react-router-dom'
 import { ConnectButton } from '@rainbow-me/rainbowkit'
-import { Loader2, LogOut, MessageCircle, X, Send, ExternalLink, Search } from 'lucide-react'
-import { useStarknet } from './lib/StarknetContext'
-import { truncateAddress } from './lib/utils'
+import { ChevronDown, MessageCircle, X, Send, ExternalLink, Search } from 'lucide-react'
 import { CHAIN_META } from './lib/chains'
 import type { ChainKey } from './lib/chains'
 
@@ -45,16 +43,68 @@ function keywordReply(input: string): ChatMsg | null {
   return null
 }
 
+// ─── Network Toolkit ─────────────────────────────────────────────────────────
+const ALL_NETWORKS = [CHAIN_META.base, CHAIN_META.hashkey, CHAIN_META.arc, CHAIN_META.starknet]
+
+function NetworkToolkit({ activeKey }: { activeKey: ChainKey | null }) {
+  const [open, setOpen] = useState(false)
+  const active = activeKey ? CHAIN_META[activeKey] : null
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="inline-flex h-9 items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 text-[13px] font-medium text-gray-700 shadow-sm hover:bg-gray-50 transition-colors"
+      >
+        <span className={`h-2 w-2 shrink-0 rounded-full ${active ? active.dotColor : 'bg-emerald-500 animate-pulse'}`} />
+        <span className="hidden sm:inline">{active ? active.label : 'Mainnet'}</span>
+        <ChevronDown className="h-3.5 w-3.5 text-gray-400" />
+      </button>
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 z-50 mt-2 w-52 overflow-hidden rounded-xl border border-[#E5E7EB] bg-white shadow-md">
+            <div className="border-b border-gray-100 px-3.5 py-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Supported Networks</p>
+            </div>
+            {ALL_NETWORKS.map(net => {
+              const isActive = activeKey === net.key
+              const isTestnet = 'isTestnet' in net && !!(net as { isTestnet?: boolean }).isTestnet
+              return (
+                <div
+                  key={net.key}
+                  className={`flex items-center gap-2.5 px-3.5 py-2.5 transition-colors ${isActive ? 'bg-gray-50' : 'hover:bg-gray-50'}`}
+                >
+                  <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${net.dotColor}`} />
+                  <span className="flex-1 text-[13px] font-medium text-gray-800">{net.label}</span>
+                  {isTestnet && (
+                    <span className="rounded border border-amber-100 bg-amber-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-600">
+                      Testnet
+                    </span>
+                  )}
+                  {isActive && (
+                    <span className="flex h-4 w-4 items-center justify-center rounded-full bg-emerald-100">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                    </span>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function Layout() {
   const { pathname } = useLocation()
   const [searchParams] = useSearchParams()
   const isPayPage = pathname === '/pay'
   const payNetParam = isPayPage ? (searchParams.get('net') as ChainKey | null) : null
-  const payChainMeta = (payNetParam && payNetParam in CHAIN_META) ? CHAIN_META[payNetParam] : null
-  const { address: starkAddress, isConnecting: isStarkConnecting, connect: connectStarknet, disconnect: disconnectStarknet } = useStarknet()
-  const [starkDropdownOpen, setStarkDropdownOpen] = useState(false)
-  const dropdownRef = useRef<HTMLDivElement>(null)
+  const activeNet = (payNetParam && payNetParam in CHAIN_META) ? payNetParam : null
 
   const [chatOpen,     setChatOpen]     = useState(false)
   const [chatInput,    setChatInput]    = useState('')
@@ -166,76 +216,25 @@ export default function Layout() {
             </span>
           </Link>
 
-          {/* Right side */}
-          <div className="flex items-center gap-2">
-            {/* Network badge — chain-specific on pay page, generic Mainnet elsewhere */}
-            {payChainMeta ? (
-              <span className={`hidden sm:inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium ${payChainMeta.badgeBg} ${payChainMeta.badgeText} ${payChainMeta.badgeBorder}`}>
-                <span className={`h-1.5 w-1.5 rounded-full ${payChainMeta.dotColor} animate-pulse`} />
-                {payChainMeta.label}
-              </span>
-            ) : (
-              <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                Mainnet
-              </span>
-            )}
+          {/* Right side — three elements, unified h-9 baseline */}
+          <div className="flex items-center gap-x-2">
+            {/* 1. Network Toolkit */}
+            <NetworkToolkit activeKey={activeNet} />
 
-            {/* Starknet + EVM wallet buttons — hidden on pay page (locked-in checkout) */}
-            {!isPayPage && (starkAddress ? (
-              <div className="relative hidden sm:block" ref={dropdownRef}>
-                <button
-                  onClick={() => setStarkDropdownOpen((v) => !v)}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-purple-200 bg-purple-50 px-2.5 py-1 text-xs font-medium text-purple-700 hover:bg-purple-100 transition-colors"
-                >
-                  <span className="h-1.5 w-1.5 rounded-full bg-purple-500" />
-                  {truncateAddress(starkAddress, 4)}
-                </button>
-                {starkDropdownOpen && (
-                  <>
-                    <div className="fixed inset-0 z-40" onClick={() => setStarkDropdownOpen(false)} />
-                    <div className="absolute right-0 z-50 mt-2 w-44 overflow-hidden rounded-xl border border-white/60 bg-white/80 shadow-lg backdrop-blur-xl">
-                      <div className="border-b border-gray-100 px-3.5 py-2.5">
-                        <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Starknet</p>
-                        <p className="mt-0.5 font-mono text-xs text-gray-700">{truncateAddress(starkAddress, 6)}</p>
-                      </div>
-                      <button
-                        onClick={() => { disconnectStarknet(); setStarkDropdownOpen(false) }}
-                        className="flex w-full items-center gap-2 px-3.5 py-2.5 text-xs font-medium text-red-600 hover:bg-red-50 transition-colors"
-                      >
-                        <LogOut className="h-3.5 w-3.5" />
-                        Disconnect Wallet
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
-            ) : (
-              <button
-                onClick={connectStarknet}
-                disabled={isStarkConnecting}
-                title="Connect Starknet wallet (ArgentX / Braavos)"
-                className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-purple-200 bg-white px-2.5 py-1 text-xs font-medium text-purple-600 hover:bg-purple-50 transition-colors disabled:opacity-60"
-              >
-                {isStarkConnecting ? <Loader2 className="h-3 w-3 animate-spin" /> : <span className="h-1.5 w-1.5 rounded-full bg-purple-300" />}
-                Starknet
-              </button>
-            ))}
-
-            {/* X (Twitter) link — always visible */}
+            {/* 2. X (Twitter) — always visible, h-9 to match */}
             <a
               href="https://x.com/Hash_PayLink"
               target="_blank"
               rel="noopener noreferrer"
               title="Follow Hash PayLink on X"
-              className="flex h-8 w-8 items-center justify-center rounded-full text-gray-500 opacity-60 hover:opacity-100 transition-opacity"
+              className="flex h-9 w-9 items-center justify-center rounded-full text-gray-500 opacity-60 hover:opacity-100 transition-opacity"
             >
               <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                 <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.73-8.835L1.254 2.25H8.08l4.213 5.567L18.244 2.25zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77z" />
               </svg>
             </a>
 
-            {/* EVM ConnectButton — hidden on pay page */}
+            {/* 3. EVM ConnectButton — hidden on pay page (locked-in checkout) */}
             {!isPayPage && (
               <ConnectButton
                 showBalance={false}
