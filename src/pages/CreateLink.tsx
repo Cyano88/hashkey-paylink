@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import { useOutletContext } from 'react-router-dom'
+import type { LayoutOutletContext } from '../Layout'
 import {
   useAccount,
   useChainId,
@@ -45,7 +47,8 @@ export default function CreateLink() {
   const [memo,          setMemo]          = useState('')
   const [generatedLink, setGeneratedLink] = useState('')
   const [copied,        setCopied]        = useState(false)
-  const [selectedNet,  setPreviewChain]  = useState<ChainKey>('base')
+  // selectedNet is owned by Layout and shared via outlet context for bidirectional sync with the header toolkit
+  const { selectedNet, onNetworkSelect } = useOutletContext<LayoutOutletContext>()
   // Derived early so useEffect hooks below can reference it without TDZ error
   const isEvmNet = selectedNet !== 'starknet'
   const [vaultStep,     setVaultStep]     = useState<VaultStep>('idle')
@@ -211,7 +214,7 @@ export default function CreateLink() {
               return (
                 <button
                   key={c}
-                  onClick={() => setPreviewChain(c)}
+                  onClick={() => onNetworkSelect(c)}
                   className={cn(
                     'flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all duration-150',
                     isActive ? m.toggleActive : 'text-gray-500 hover:text-gray-800',

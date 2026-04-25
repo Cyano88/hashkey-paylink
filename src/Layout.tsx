@@ -45,6 +45,12 @@ function keywordReply(input: string): ChatMsg | null {
   return null
 }
 
+// ─── Shared outlet context (Layout → child pages) ────────────────────────────
+export type LayoutOutletContext = {
+  selectedNet: ChainKey        // always a concrete key, never null
+  onNetworkSelect: (key: ChainKey) => void
+}
+
 // ─── Network Toolkit ─────────────────────────────────────────────────────────
 const ALL_NETWORKS = [CHAIN_META.base, CHAIN_META.hashkey, CHAIN_META.arc, CHAIN_META.starknet]
 
@@ -310,10 +316,10 @@ export default function Layout() {
           {/* Right side — single horizontal baseline */}
           <div className="flex items-center gap-x-2">
 
-            {/* 1. Network Toolkit — always visible */}
+            {/* 1. Network Toolkit — always visible; null selectedNet defaults to 'base' */}
             {isPayPage
               ? <NetworkToolkit activeKey={activeNet} locked />
-              : <NetworkToolkit activeKey={selectedNet} onSwitch={handleNetworkSelect} />
+              : <NetworkToolkit activeKey={selectedNet ?? 'base'} onSwitch={handleNetworkSelect} />
             }
 
             {/* 2. X (Twitter) — always visible */}
@@ -364,7 +370,7 @@ export default function Layout() {
 
       {/* ── Page content ─────────────────────────────────────────────────── */}
       <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-10 sm:px-6">
-        <Outlet />
+        <Outlet context={{ selectedNet: selectedNet ?? 'base', onNetworkSelect: handleNetworkSelect } satisfies LayoutOutletContext} />
       </main>
 
       {/* ── Footer ───────────────────────────────────────────────────────── */}
