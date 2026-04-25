@@ -29,10 +29,6 @@ import {ECDSA}  from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
  *       → a Claim signature cannot be submitted as a Cancel (type confusion)
  *  5. `onlyRelayer` execution gate — only the registered relayer address
  *       can call claim() / cancel(); no open-access attack surface
- *
- * ── Arc USDC note ─────────────────────────────────────────────────────────────
- *  Arc native USDC (0x3600...0000) is a precompile. SafeERC20's assembly
- *  wrapper is incompatible with it. All transfers use IERC20.transfer() directly.
  */
 contract StreamVault {
     // ── Immutable stream parameters ───────────────────────────────────────────

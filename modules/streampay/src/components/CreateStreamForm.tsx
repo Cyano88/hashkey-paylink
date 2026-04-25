@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState } from 'react'
 import {
   useAccount, useChainId, useSwitchChain,
   useReadContract, useWriteContract, usePublicClient,
@@ -12,10 +12,10 @@ const ARC_CHAIN_ID = 5042002
 const ARC_USDC     = '0x3600000000000000000000000000000000000000' as const
 const ARC_EXPLORER = 'https://testnet.arcscan.app'
 
+// Arc USDC precompile: use transfer() directly — SafeERC20 is incompatible
 const ERC20_ABI = parseAbi([
   'function balanceOf(address) view returns (uint256)',
-  'function allowance(address owner, address spender) view returns (uint256)',
-  'function approve(address spender, uint256 amount) returns (bool)',
+  'function transfer(address to, uint256 amount) returns (bool)',
 ])
 
 // ── Duration presets ──────────────────────────────────────────────────────────
@@ -28,7 +28,7 @@ const DURATIONS = [
 ]
 
 // ── Step types ────────────────────────────────────────────────────────────────
-type Step = 'form' | 'approving' | 'creating' | 'success'
+type Step = 'form' | 'funding' | 'creating' | 'success'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function parseUsdc(val: string): bigint {
@@ -55,17 +55,17 @@ export function CreateStreamForm() {
   const factoryAddr = (import.meta.env.VITE_STREAM_FACTORY_ADDRESS ?? '') as `0x${string}`
 
   // ── Form state ────────────────────────────────────────────────────────────
-  const [recipient,     setRecipient]     = useState('')
-  const [amount,        setAmount]        = useState('')
+  const [recipient,      setRecipient]      = useState('')
+  const [amount,         setAmount]         = useState('')
   const [durationPreset, setDurationPreset] = useState<bigint | null>(null)
-  const [customDays,    setCustomDays]    = useState('')
-  const [salt]   = useState<`0x${string}`>(genSalt)  // stable per session
+  const [customDays,     setCustomDays]     = useState('')
+  const [salt] = useState<`0x${string}`>(genSalt)
 
   // ── Step / tx state ───────────────────────────────────────────────────────
-  const [step,       setStep]       = useState<Step>('form')
-  const [statusMsg,  setStatusMsg]  = useState('')
-  const [error,      setError]      = useState<string | null>(null)
-  const [streamLink, setStreamLink] = useState<string | null>(null)
+  const [step,         setStep]         = useState<Step>('form')
+  const [statusMsg,    setStatusMsg]    = useState('')
+  const [error,        setError]        = useState<string | null>(null)
+  const [streamLink,   setStreamLink]   = useState<string | null>(null)
   const [deployTxHash, setDeployTxHash] = useState<string | null>(null)
 
   // ── Derived values ────────────────────────────────────────────────────────
@@ -79,7 +79,7 @@ export function CreateStreamForm() {
 
   const isFormValid = recipientValid && amountValid && durationValid && isConnected && isOnArc && !!factoryAddr
 
-  // ── Contract reads ────────────────────────────────────────────────────────
+  // ── USDC balance ──────────────────────────────────────────────────────────
   const { data: usdcBalance } = useReadContract({
     address:      ARC_USDC,
     abi:          ERC20_ABI,
@@ -88,85 +88,66 @@ export function CreateStreamForm() {
     query:        { enabled: !!connectedAddr && isOnArc, refetchInterval: 10_000 },
   })
 
-  const { data: allowance, refetch: refetchAllowance } = useReadContract({
-    address:      ARC_USDC,
-    abi:          ERC20_ABI,
-    functionName: 'allowance',
-    args:         [
-      connectedAddr ?? '0x0000000000000000000000000000000000000000',
-      factoryAddr,
-    ],
-    query: { enabled: !!connectedAddr && !!factoryAddr && isOnArc },
-  })
+  const hasEnoughBalance = (usdcBalance ?? 0n) >= amountBn
 
-  const hasEnoughBalance  = (usdcBalance ?? 0n) >= amountBn
-  const hasEnoughAllowance = (allowance ?? 0n) >= amountBn
-  const needsApproval     = isFormValid && !hasEnoughAllowance
+  // ── Step indicator labels ─────────────────────────────────────────────────
+  const steps = [
+    { label: 'Setup',          done: isFormValid },
+    { label: 'Fund Vault',     done: step === 'creating' || step === 'success' },
+    { label: 'Deploy Stream',  done: step === 'success' },
+  ]
 
-  // ── Step summary for UI ───────────────────────────────────────────────────
-  const steps = useMemo(() => [
-    { label: 'Setup',         done: isFormValid },
-    { label: 'Approve USDC',  done: hasEnoughAllowance && isFormValid },
-    { label: 'Deploy Stream', done: step === 'success' },
-  ], [isFormValid, hasEnoughAllowance, step])
-
-  // ── Actions ───────────────────────────────────────────────────────────────
-  async function handleApprove() {
-    if (!connectedAddr || !factoryAddr) return
-    setError(null)
-    setStep('approving')
-    setStatusMsg('Waiting for approval signature…')
-    try {
-      const txHash = await writeContractAsync({
-        address:      ARC_USDC,
-        abi:          ERC20_ABI,
-        functionName: 'approve',
-        args:         [factoryAddr, amountBn],
-      })
-      setStatusMsg('Confirming approval on Arc…')
-      await publicClient!.waitForTransactionReceipt({ hash: txHash })
-      await refetchAllowance()
-      setStep('form')
-      setStatusMsg('')
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err)
-      if (msg.toLowerCase().includes('rejected') || msg.toLowerCase().includes('denied')) {
-        setStep('form'); setStatusMsg(''); return
-      }
-      setError(msg.slice(0, 140))
-      setStep('form')
-    }
-  }
-
-  async function handleCreate() {
+  // ── Main action: ghost-vault flow ─────────────────────────────────────────
+  // 1. Pre-compute vault address
+  // 2. Transfer USDC directly to that address
+  // 3. Deploy vault via createStream()
+  async function handleDeploy() {
     if (!isFormValid || !connectedAddr || !publicClient) return
     setError(null)
-    setStep('creating')
-    setStatusMsg('Waiting for signature…')
-    try {
-      const startTime = BigInt(Math.floor(Date.now() / 1000) + 120)  // 2 min buffer
-      const endTime   = startTime + durationSecs
 
-      const txHash = await writeContractAsync({
+    const startTime = BigInt(Math.floor(Date.now() / 1000) + 120)  // 2 min buffer
+    const endTime   = startTime + durationSecs
+
+    try {
+      // Step 1 — Predict vault address
+      const predicted = await publicClient.readContract({
+        address:      factoryAddr,
+        abi:          STREAM_VAULT_FACTORY_ABI,
+        functionName: 'getVaultAddress',
+        args:         [connectedAddr, recipient as `0x${string}`, amountBn, startTime, endTime, salt],
+      }) as `0x${string}`
+
+      // Step 2 — Transfer USDC to ghost vault (no approve needed)
+      setStep('funding')
+      setStatusMsg('Sign transfer to fund the vault…')
+
+      const fundTx = await writeContractAsync({
+        address:      ARC_USDC,
+        abi:          ERC20_ABI,
+        functionName: 'transfer',
+        args:         [predicted, amountBn],
+        gas:          100_000n,
+      })
+      setStatusMsg('Confirming USDC transfer on Arc…')
+      await publicClient.waitForTransactionReceipt({ hash: fundTx })
+
+      // Step 3 — Deploy the vault
+      setStep('creating')
+      setStatusMsg('Sign to deploy the stream vault…')
+
+      const deployTx = await writeContractAsync({
         address:      factoryAddr,
         abi:          STREAM_VAULT_FACTORY_ABI,
         functionName: 'createStream',
-        args: [
-          recipient as `0x${string}`,
-          amountBn,
-          startTime,
-          endTime,
-          salt,
-        ],
-        gas: 500_000n,
+        args:         [recipient as `0x${string}`, amountBn, startTime, endTime, salt],
+        gas:          2_000_000n,
       })
-      setDeployTxHash(txHash)
+      setDeployTxHash(deployTx)
       setStatusMsg('Deploying stream vault on Arc…')
 
-      const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash })
+      const receipt = await publicClient.waitForTransactionReceipt({ hash: deployTx })
 
-      // Extract vault address from StreamCreated event
-      const logs = parseEventLogs({ abi: STREAM_VAULT_FACTORY_ABI, logs: receipt.logs })
+      const logs  = parseEventLogs({ abi: STREAM_VAULT_FACTORY_ABI, logs: receipt.logs })
       const event = logs.find(l => l.eventName === 'StreamCreated')
       const vault = (event?.args as { vault?: `0x${string}` })?.vault
 
@@ -180,7 +161,7 @@ export function CreateStreamForm() {
       if (msg.toLowerCase().includes('rejected') || msg.toLowerCase().includes('denied')) {
         setStep('form'); setStatusMsg(''); return
       }
-      setError(msg.slice(0, 140))
+      setError(msg.slice(0, 160))
       setStep('form')
     }
   }
@@ -208,7 +189,6 @@ export function CreateStreamForm() {
               </p>
             </div>
 
-            {/* Shareable link */}
             <div className="rounded-xl border border-gray-100 bg-gray-50 p-3 text-left space-y-2">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
                 Your Stream Link
@@ -258,7 +238,7 @@ export function CreateStreamForm() {
   }
 
   // ── Render: Form ──────────────────────────────────────────────────────────
-  const isWorking = step === 'approving' || step === 'creating'
+  const isWorking = step === 'funding' || step === 'creating'
 
   return (
     <div className="mx-auto w-full max-w-md font-inter">
@@ -312,9 +292,11 @@ export function CreateStreamForm() {
               value={recipient}
               onChange={e => setRecipient(e.target.value.trim())}
               spellCheck={false}
+              disabled={isWorking}
               className={[
                 'w-full rounded-xl border bg-gray-50/60 px-4 py-3 font-mono text-sm',
                 'placeholder:text-gray-300 transition-all focus:bg-white focus:outline-none focus:ring-2',
+                'disabled:opacity-60',
                 recipient && !recipientValid
                   ? 'border-red-200 text-red-600 focus:ring-red-100'
                   : recipientValid
@@ -337,7 +319,8 @@ export function CreateStreamForm() {
                 step="any"
                 value={amount}
                 onChange={e => setAmount(e.target.value)}
-                className="w-full rounded-xl border border-gray-200 bg-gray-50/60 px-4 py-3 pr-16 text-sm placeholder:text-gray-300 transition-all focus:border-gray-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-gray-100"
+                disabled={isWorking}
+                className="w-full rounded-xl border border-gray-200 bg-gray-50/60 px-4 py-3 pr-16 text-sm placeholder:text-gray-300 transition-all focus:border-gray-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-gray-100 disabled:opacity-60"
               />
               <span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-[11px] font-semibold text-gray-400">
                 USDC
@@ -363,9 +346,10 @@ export function CreateStreamForm() {
                 <button
                   key={d.label}
                   type="button"
+                  disabled={isWorking}
                   onClick={() => { setDurationPreset(d.secs); setCustomDays('') }}
                   className={[
-                    'rounded-lg border px-3 py-1.5 text-[12px] font-medium transition-all',
+                    'rounded-lg border px-3 py-1.5 text-[12px] font-medium transition-all disabled:opacity-60',
                     durationPreset === d.secs
                       ? 'border-gray-900 bg-gray-900 text-white'
                       : 'border-gray-200 text-gray-600 hover:border-gray-400',
@@ -381,8 +365,9 @@ export function CreateStreamForm() {
                   min="0.1"
                   step="0.1"
                   value={customDays}
+                  disabled={isWorking}
                   onChange={e => { setCustomDays(e.target.value); setDurationPreset(null) }}
-                  className="w-20 rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-[12px] text-gray-700 focus:border-gray-400 focus:outline-none"
+                  className="w-20 rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-[12px] text-gray-700 focus:border-gray-400 focus:outline-none disabled:opacity-60"
                 />
                 <span className="text-[11px] text-gray-400">days</span>
               </div>
@@ -406,37 +391,33 @@ export function CreateStreamForm() {
             </div>
           )}
 
-          {/* Action: Approve or Create */}
+          {/* Action button */}
           {isConnected && isOnArc && (
             <div className="space-y-2.5">
-              {needsApproval && (
-                <button
-                  onClick={handleApprove}
-                  disabled={!isFormValid || isWorking || !hasEnoughBalance}
-                  className="flex w-full items-center justify-center gap-2.5 rounded-xl border border-gray-200 py-3.5 text-[14px] font-semibold text-gray-700 transition-all hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  {isWorking && step === 'approving'
-                    ? <><Spinner /> {statusMsg}</>
-                    : `Approve ${amount || '0'} USDC`}
-                </button>
-              )}
-
               <button
-                onClick={handleCreate}
-                disabled={!isFormValid || isWorking || needsApproval || !hasEnoughBalance}
+                onClick={handleDeploy}
+                disabled={!isFormValid || isWorking || !hasEnoughBalance}
                 className="flex w-full items-center justify-center gap-2.5 rounded-xl py-3.5 text-[14px] font-semibold transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
                 style={
-                  !isWorking && !needsApproval && isFormValid && hasEnoughBalance
+                  !isWorking && isFormValid && hasEnoughBalance
                     ? { background: '#00FF41', color: '#0a0a0a' }
                     : { background: '#f3f4f6', color: '#9ca3af' }
                 }
               >
-                {isWorking && step === 'creating'
+                {isWorking
                   ? <><Spinner /> {statusMsg}</>
                   : 'Deploy Stream'}
               </button>
 
-              {!hasEnoughBalance && amountValid && isOnArc && (
+              {/* In-progress hint */}
+              {isWorking && (
+                <p className="text-center text-[11px] text-gray-400">
+                  {step === 'funding'  && 'Step 1 of 2 — transferring USDC to vault'}
+                  {step === 'creating' && 'Step 2 of 2 — deploying vault contract'}
+                </p>
+              )}
+
+              {!hasEnoughBalance && amountValid && isOnArc && !isWorking && (
                 <p className="text-center text-[12px] text-red-400">
                   Insufficient USDC. Fund your wallet on Arc first.
                 </p>
@@ -448,9 +429,11 @@ export function CreateStreamForm() {
                 </p>
               )}
 
-              <p className="text-center text-[11px] text-gray-300">
-                You'll need a small amount of Arc USDC for gas fees (~0.01 USDC)
-              </p>
+              {!isWorking && (
+                <p className="text-center text-[11px] text-gray-300">
+                  Requires 2 wallet signatures — USDC transfer then vault deploy
+                </p>
+              )}
             </div>
           )}
         </div>

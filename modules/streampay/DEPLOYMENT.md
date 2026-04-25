@@ -75,12 +75,13 @@ Add these to Render → Service → Environment tab:
 
 | Variable | Value | Notes |
 |---|---|---|
-| `STREAM_FACTORY_ADDRESS` | `0x...` | Deployed `StreamVaultFactory` on Arc Mainnet |
+| `STREAM_FACTORY_ADDRESS` | `0x05e621a4d9860a0066d29b7ed376fb926d5a773e` | Server-side factory address (Arc Testnet) |
+| `VITE_STREAM_FACTORY_ADDRESS` | `0x05e621a4d9860a0066d29b7ed376fb926d5a773e` | Browser-side factory address (must match above) |
 | `RELAYER_PRIVATE_KEY_ARC` | `0x...` | Arc relayer wallet private key |
-| `PRIVATE_RPC_URL_ARC` | `https://...` | Private RPC (Alchemy / QuickNode for Arc) |
+| `PRIVATE_RPC_URL_ARC` | `https://rpc.testnet.arc.network` | Arc RPC |
 | `RENDER_EXTERNAL_URL` | `https://hashkey-paylink.onrender.com` | Used for OG image absolute URLs |
 
-- [ ] All 4 variables are set in Render environment.
+- [ ] All 5 variables are set in Render environment.
 - [ ] `RELAYER_PRIVATE_KEY_ARC` has no VITE_ prefix (must stay server-side only).
 - [ ] Trigger a manual Render redeploy after setting variables.
 

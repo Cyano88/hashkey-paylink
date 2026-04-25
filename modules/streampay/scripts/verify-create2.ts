@@ -4,16 +4,20 @@
  * Proves that StreamVaultFactory.getVaultAddress() (the pre-calculation shown
  * to the user) always matches the address produced by CREATE2 at deployment.
  *
+ * Ghost-vault flow:
+ *   1. Pre-compute vault address via getVaultAddress()
+ *   2. Transfer USDC directly to that address (no approve needed)
+ *   3. Call createStream() — deploys the vault (funds already there)
+ *
  * Run:
  *   npx tsx modules/streampay/scripts/verify-create2.ts
  *
  * Required env vars:
  *   PRIVATE_RPC_URL_ARC         Arc RPC endpoint
- *   RELAYER_PRIVATE_KEY_ARC     Deployer wallet (must hold Arc USDC for gas)
+ *   RELAYER_PRIVATE_KEY_ARC     Deployer wallet (must hold Arc USDC)
  *   STREAM_FACTORY_ADDRESS      Deployed StreamVaultFactory
  */
 
-import 'dotenv/config'
 import {
   createPublicClient,
   createWalletClient,
@@ -22,9 +26,6 @@ import {
   defineChain,
   keccak256,
   toBytes,
-  encodeAbiParameters,
-  parseAbiParameters,
-  getContractAddress,
   isAddressEqual,
 } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
@@ -46,6 +47,11 @@ const FACTORY_ABI = parseAbi([
   'event StreamCreated(bytes32 indexed streamId, address indexed vault, address indexed sender, address recipient, uint256 totalAmount, uint64 startTime, uint64 endTime)',
 ])
 
+const ERC20_ABI = parseAbi([
+  'function transfer(address to, uint256 amount) returns (bool)',
+  'function balanceOf(address) view returns (uint256)',
+])
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const PASS = '\x1b[32m✓\x1b[0m'
 const FAIL = '\x1b[31m✗\x1b[0m'
@@ -64,14 +70,14 @@ async function main() {
   console.log('\n─── StreamVault CREATE2 Verification ──────────────────────────')
 
   // ── Env ───────────────────────────────────────────────────────────────────
-  const rawKey     = process.env.RELAYER_PRIVATE_KEY_ARC ?? process.env.RELAYER_PRIVATE_KEY
-  const rpcUrl     = process.env.PRIVATE_RPC_URL_ARC     ?? 'https://rpc.testnet.arc.network'
+  const rawKey      = process.env.RELAYER_PRIVATE_KEY_ARC ?? process.env.RELAYER_PRIVATE_KEY
+  const rpcUrl      = process.env.PRIVATE_RPC_URL_ARC     ?? 'https://rpc.testnet.arc.network'
   const factoryAddr = process.env.STREAM_FACTORY_ADDRESS  as `0x${string}` | undefined
 
   if (!rawKey)      { console.error('Missing RELAYER_PRIVATE_KEY_ARC'); process.exit(1) }
   if (!factoryAddr) { console.error('Missing STREAM_FACTORY_ADDRESS');  process.exit(1) }
 
-  const account      = privateKeyToAccount(rawKey as `0x${string}`)
+  const account      = privateKeyToAccount(`0x${rawKey.replace(/^0x/, '')}` as `0x${string}`)
   const publicClient = createPublicClient({ chain: arc, transport: http(rpcUrl) })
   const walletClient = createWalletClient({ account, chain: arc, transport: http(rpcUrl) })
 
@@ -87,10 +93,9 @@ async function main() {
   console.log(`${INFO} Relayer:  ${relayer}\n`)
 
   // ── Test parameters ────────────────────────────────────────────────────────
-  // Use a deterministic salt based on the test run so repeated runs don't clash
   const now       = BigInt(Math.floor(Date.now() / 1000))
-  const startTime = now + 60n          // starts in 1 minute
-  const endTime   = now + 3_600n       // ends in 1 hour
+  const startTime = now + 60n               // starts in 1 minute
+  const endTime   = startTime + 3_600n      // exactly 1 hour after start
   const amount    = 1_000_000n         // 1 USDC (6 decimals)
   const recipient = account.address    // self-stream for testing
   const sender    = account.address
@@ -104,7 +109,7 @@ async function main() {
   console.log(`${INFO} Duration:   1 hour`)
   console.log(`${INFO} Salt:       ${salt}\n`)
 
-  // ── Step 1: Pre-calculate address (what we show to the user) ─────────────
+  // ── Step 1: Pre-calculate vault address ───────────────────────────────────
   console.log('─── Step 1: Pre-calculation ─────────────────────────────────────')
   const predicted = await publicClient.readContract({
     address:      factoryAddr,
@@ -114,21 +119,14 @@ async function main() {
   }) as `0x${string}`
   console.log(`${INFO} Predicted vault: ${predicted}`)
 
-  // Verify the predicted address has no code yet (vault doesn't exist yet)
   const codeBefore = await publicClient.getBytecode({ address: predicted })
   assert(
     !codeBefore || codeBefore === '0x',
-    'Predicted address is empty (not yet deployed) ✓',
+    'Predicted address is empty (not yet deployed)',
   )
 
-  // ── Step 2: Check USDC allowance ──────────────────────────────────────────
-  console.log('\n─── Step 2: USDC Approval ───────────────────────────────────────')
-  const ERC20_ABI = parseAbi([
-    'function approve(address spender, uint256 amount) returns (bool)',
-    'function allowance(address owner, address spender) view returns (uint256)',
-    'function balanceOf(address) view returns (uint256)',
-  ])
-
+  // ── Step 2: Fund vault address directly (ghost-vault flow) ────────────────
+  console.log('\n─── Step 2: Fund Ghost Vault ─────────────────────────────────────')
   const balance = await publicClient.readContract({
     address: usdc, abi: ERC20_ABI, functionName: 'balanceOf', args: [account.address],
   })
@@ -139,31 +137,32 @@ async function main() {
     process.exit(1)
   }
 
-  const allowance = await publicClient.readContract({
-    address: usdc, abi: ERC20_ABI, functionName: 'allowance',
-    args: [account.address, factoryAddr],
+  // Transfer USDC directly to the predicted vault address — no approve needed
+  console.log(`${INFO} Transferring 1 USDC to ghost vault ${predicted}...`)
+  const transferTx = await walletClient.writeContract({
+    address: usdc,
+    abi:     ERC20_ABI,
+    functionName: 'transfer',
+    args:    [predicted, amount],
+    gas:     100_000n,
   })
+  await publicClient.waitForTransactionReceipt({ hash: transferTx })
+  console.log(`${PASS} USDC transferred to ghost vault`)
 
-  if (allowance < amount) {
-    console.log(`${INFO} Approving factory to spend 1 USDC...`)
-    const approveTx = await walletClient.writeContract({
-      address: usdc, abi: ERC20_ABI, functionName: 'approve',
-      args: [factoryAddr, amount],
-    })
-    await publicClient.waitForTransactionReceipt({ hash: approveTx })
-    console.log(`${PASS} Approved`)
-  } else {
-    console.log(`${PASS} Allowance sufficient`)
-  }
+  // Verify vault received the funds
+  const vaultBalance = await publicClient.readContract({
+    address: usdc, abi: ERC20_ABI, functionName: 'balanceOf', args: [predicted],
+  })
+  assert(vaultBalance >= amount, `Ghost vault holds ${Number(vaultBalance) / 1e6} USDC`)
 
-  // ── Step 3: Deploy via factory ────────────────────────────────────────────
+  // ── Step 3: Deploy via createStream() ────────────────────────────────────
   console.log('\n─── Step 3: Deploy via createStream() ───────────────────────────')
   const txHash = await walletClient.writeContract({
     address:      factoryAddr,
     abi:          FACTORY_ABI,
     functionName: 'createStream',
     args:         [recipient, amount, startTime, endTime, salt],
-    gas:          400_000n,
+    gas:          2_000_000n,
   })
   console.log(`${INFO} Tx: ${txHash}`)
 
@@ -192,7 +191,6 @@ async function main() {
     `getVaultAddress() === deployed vault (${predicted})`,
   )
 
-  // Double-check: the vault now has code
   const codeAfter = await publicClient.getBytecode({ address: actualVault })
   assert(
     !!codeAfter && codeAfter.length > 2,
