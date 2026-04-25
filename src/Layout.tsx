@@ -56,23 +56,23 @@ function StarknetIcon({ className }: { className?: string }) {
   )
 }
 
-// Parent always passes the currently active key — this component only handles display + switching.
-function NetworkToolkit({ activeKey, locked }: { activeKey: ChainKey | null; locked?: boolean }) {
+// Pure display component — all switching logic lives in Layout.
+function NetworkToolkit({
+  activeKey,
+  locked,
+  onSwitch,
+}: {
+  activeKey: ChainKey | null
+  locked?: boolean
+  onSwitch?: (key: ChainKey) => void
+}) {
   const [open, setOpen] = useState(false)
-  const { switchChain } = useSwitchChain()
-  const { connect: connectStarknet } = useStarknet()
-  const displayNet  = activeKey ? CHAIN_META[activeKey] : null
-  // Dropdown lists every network except the currently active one
-  const otherNets   = ALL_NETWORKS.filter(n => n.key !== activeKey)
+  const displayNet = activeKey ? CHAIN_META[activeKey] : null
+  const otherNets  = ALL_NETWORKS.filter(n => n.key !== activeKey)
 
   function handleSwitch(key: ChainKey) {
     setOpen(false)
-    if (key === 'starknet') {
-      connectStarknet()
-    } else {
-      const id = (CHAIN_META[key] as { chainId?: number }).chainId
-      if (id) switchChain({ chainId: id })
-    }
+    onSwitch?.(key)
   }
 
   return (
@@ -138,38 +138,63 @@ export default function Layout() {
   const payNetParam = isPayPage ? (searchParams.get('net') as ChainKey | null) : null
   const activeNet = (payNetParam && payNetParam in CHAIN_META) ? payNetParam : null
 
-  // ── Wallet state ─────────────────────────────────────────────────────────────
+  // ── Wallet connections ───────────────────────────────────────────────────────
   const { address: evmAddress, isConnected: evmConnected, chainId: evmChainId } = useAccount()
-  const { disconnect: disconnectEvm }  = useDisconnect()
-  const { openConnectModal }           = useConnectModal()
-  const { address: starkAddress, disconnect: disconnectStarknet } = useStarknet()
+  const { disconnect: disconnectEvm } = useDisconnect()
+  const { switchChain }               = useSwitchChain()
+  const { openConnectModal }          = useConnectModal()
+  const { address: starkAddress, connect: connectStarknet, disconnect: disconnectStarknet } = useStarknet()
 
-  // Mutual exclusion: connecting one ecosystem auto-disconnects the other
-  const prevEvmRef   = useRef(evmConnected)
-  const prevStarkRef = useRef(starkAddress)
-  useEffect(() => {
-    const justConnected = evmConnected && !prevEvmRef.current
-    prevEvmRef.current  = evmConnected
-    if (justConnected && starkAddress) disconnectStarknet()
-  }, [evmConnected])  // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    const justConnected  = !!starkAddress && !prevStarkRef.current
-    prevStarkRef.current = starkAddress
-    if (justConnected && evmConnected) disconnectEvm()
-  }, [starkAddress])  // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Derived header state
-  const anyConnected   = evmConnected || !!starkAddress
-  const evmNetKey      = evmConnected
+  const anyConnected = evmConnected || !!starkAddress
+  const evmNetKey    = evmConnected
     ? ([CHAIN_META.base, CHAIN_META.hashkey, CHAIN_META.arc] as const).find(n => n.chainId === evmChainId)?.key ?? null
     : null
   const connectedNetKey: ChainKey | null = starkAddress ? 'starknet' : evmNetKey
   const displayAddress = starkAddress ?? evmAddress ?? null
   const fmtAddr = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`
 
+  // selectedNet = user's intent (which network they want); may lead connectedNetKey during transition
+  const [selectedNet, setSelectedNet] = useState<ChainKey | null>(null)
+
+  // Sync selectedNet when a wallet actually connects / chain changes
+  useEffect(() => {
+    if (evmConnected && evmNetKey) setSelectedNet(evmNetKey)
+  }, [evmConnected, evmNetKey])  // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (starkAddress) setSelectedNet('starknet')
+  }, [starkAddress])  // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Network-select handler (called by NetworkToolkit dropdown) ────────────
+  function handleNetworkSelect(key: ChainKey) {
+    setSelectedNet(key)
+
+    if (evmConnected && key !== 'starknet') {
+      // EVM → EVM: switch chain in-place, wallet stays connected
+      const id = (CHAIN_META[key] as { chainId?: number }).chainId
+      if (id) switchChain({ chainId: id })
+    } else if (evmConnected && key === 'starknet') {
+      // EVM → Starknet: drop EVM, user must click Connect Wallet for Starknet
+      disconnectEvm()
+    } else if (starkAddress && key !== 'starknet') {
+      // Starknet → EVM: drop Starknet, user must click Connect Wallet for EVM
+      disconnectStarknet()
+    }
+    // Fully disconnected: just update intent, Connect Wallet will act on it
+  }
+
+  // ── Connect Wallet handler (action depends on selectedNet intent) ─────────
+  function handleConnectWallet() {
+    if (selectedNet === 'starknet') {
+      connectStarknet()
+    } else {
+      openConnectModal?.()
+    }
+  }
+
   function disconnectAll() {
     if (evmConnected) disconnectEvm()
     if (starkAddress) disconnectStarknet()
+    setSelectedNet(null)
   }
 
   const [chatOpen,     setChatOpen]     = useState(false)
@@ -282,29 +307,16 @@ export default function Layout() {
             </span>
           </Link>
 
-          {/* Right side — single horizontal line, all items h-9 baseline */}
+          {/* Right side — single horizontal baseline */}
           <div className="flex items-center gap-x-2">
 
-            {/* ── Pay page: static locked network badge ── */}
-            {isPayPage && <NetworkToolkit activeKey={activeNet} locked />}
+            {/* 1. Network Toolkit — always visible */}
+            {isPayPage
+              ? <NetworkToolkit activeKey={activeNet} locked />
+              : <NetworkToolkit activeKey={selectedNet} onSwitch={handleNetworkSelect} />
+            }
 
-            {/* ── Landing/Create: disconnected → Connect Wallet badge ── */}
-            {!isPayPage && !anyConnected && (
-              <button
-                onClick={openConnectModal}
-                className="inline-flex h-9 items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 text-[13px] font-medium text-gray-700 shadow-sm hover:bg-gray-50 transition-colors"
-              >
-                <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="hidden sm:inline">Connect Wallet</span>
-              </button>
-            )}
-
-            {/* ── Landing/Create: connected → active network dropdown ── */}
-            {!isPayPage && anyConnected && (
-              <NetworkToolkit activeKey={connectedNetKey} />
-            )}
-
-            {/* ── X (Twitter) — always visible ── */}
+            {/* 2. X (Twitter) — always visible */}
             <a
               href="https://x.com/Hash_PayLink"
               target="_blank"
@@ -317,14 +329,25 @@ export default function Layout() {
               </svg>
             </a>
 
-            {/* ── Identity: plain non-interactive address text ── */}
+            {/* 3a. Identity — plain address text, no interaction (connected) */}
             {!isPayPage && anyConnected && displayAddress && (
               <span className="hidden sm:block select-none font-mono text-[13px] text-gray-500 pointer-events-none">
                 {fmtAddr(displayAddress)}
               </span>
             )}
 
-            {/* ── Power off: disconnects all active sessions ── */}
+            {/* 3b. Connect Wallet — shown when disconnected; routes to selectedNet ecosystem */}
+            {!isPayPage && !anyConnected && (
+              <button
+                onClick={handleConnectWallet}
+                className="inline-flex h-9 items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 text-[13px] font-medium text-gray-700 shadow-sm hover:bg-gray-50 transition-colors"
+              >
+                <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="hidden sm:inline">Connect Wallet</span>
+              </button>
+            )}
+
+            {/* 4. Power — disconnects all, resets intent (connected only) */}
             {!isPayPage && anyConnected && (
               <button
                 onClick={disconnectAll}
