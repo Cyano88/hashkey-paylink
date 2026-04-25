@@ -125,8 +125,12 @@ export default async function handler(req: Request, res: Response) {
   }
 
   // ── Env checks ──────────────────────────────────────────────────────────────
-  const rawKey = process.env.RELAYER_PRIVATE_KEY
-  // Arc uses its own RPC and factory vars if set, otherwise falls back to Base vars
+  // Arc uses a dedicated relayer key (RELAYER_PRIVATE_KEY_ARC) because its
+  // factory was deployed with the Arc deployer wallet as the authorised relayer,
+  // and that wallet holds Arc native USDC for gas. Falls back to RELAYER_PRIVATE_KEY.
+  const rawKey = chainKey === 'arc'
+    ? (process.env.RELAYER_PRIVATE_KEY_ARC ?? process.env.RELAYER_PRIVATE_KEY)
+    : process.env.RELAYER_PRIVATE_KEY
   const rpcUrl     = chainKey === 'arc'
     ? (process.env.PRIVATE_RPC_URL_ARC ?? process.env.PRIVATE_RPC_URL)
     : process.env.PRIVATE_RPC_URL
