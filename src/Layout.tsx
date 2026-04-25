@@ -5,24 +5,15 @@ import { Loader2, LogOut, MessageCircle, X, Send, ExternalLink, Search } from 'l
 import { useStarknet } from './lib/StarknetContext'
 import { truncateAddress } from './lib/utils'
 
-// ─── Chain detection helpers ──────────────────────────────────────────────────
-const EVM_TX_RE    = /^0x[0-9a-fA-F]{64}$/
-const STARK_TX_RE  = /^0x[0-9a-fA-F]{1,64}$/
-const EVM_ADDR_RE  = /^0x[0-9a-fA-F]{40}$/
+// ─── Input detection ─────────────────────────────────────────────────────────
+const TX_HASH_RE = /^0x[0-9a-fA-F]{1,64}$/
+const EVM_ADDR_RE = /^0x[0-9a-fA-F]{40}$/
 
-function detectInput(raw: string): 'evm_tx' | 'stark_tx' | 'evm_addr' | 'unknown' {
+function detectInput(raw: string): 'tx_hash' | 'evm_addr' | 'unknown' {
   const v = raw.trim()
-  if (EVM_ADDR_RE.test(v))  return 'evm_addr'
-  if (EVM_TX_RE.test(v))    return 'evm_tx'
-  if (STARK_TX_RE.test(v))  return 'stark_tx'
+  if (EVM_ADDR_RE.test(v)) return 'evm_addr'
+  if (TX_HASH_RE.test(v))  return 'tx_hash'
   return 'unknown'
-}
-
-const EXPLORER: Record<string, { name: string; txUrl: (h: string) => string; addrUrl: (a: string) => string }> = {
-  base:     { name: 'Basescan',         txUrl: h => `https://basescan.org/tx/${h}`,             addrUrl: a => `https://basescan.org/address/${a}`         },
-  hashkey:  { name: 'HashKey Explorer', txUrl: h => `https://explorer.hsk.xyz/tx/${h}`,         addrUrl: a => `https://explorer.hsk.xyz/address/${a}`     },
-  arc:      { name: 'Arcscan',          txUrl: h => `https://testnet.arcscan.app/tx/${h}`,      addrUrl: a => `https://testnet.arcscan.app/address/${a}`  },
-  starknet: { name: 'Starkscan',        txUrl: h => `https://starkscan.co/tx/${h}`,             addrUrl: a => `https://starkscan.co/contract/${a}`        },
 }
 
 // ─── Chat types ───────────────────────────────────────────────────────────────
@@ -34,74 +25,22 @@ type ChatMsg = {
 
 const WELCOME: ChatMsg = {
   from: 'bot',
-  text: 'Hello. I\'m your Hash PayLink support agent. I can track transactions, check wallet activity, and explain payment status across Base, HashKey, Starknet, and Arc.\n\nShare a transaction hash or wallet address to get started, or tap "Track Payment" below.',
+  text: 'Hello. I am your Hash PayLink support agent. I can track live transaction status across Base, HashKey, Starknet, and Arc.\n\nShare a transaction hash or wallet address to begin, or tap "Track Payment" below.',
 }
 
-function botReply(input: string): ChatMsg[] {
-  const type = detectInput(input.trim())
-
-  if (type === 'evm_tx') {
-    const replies: ChatMsg[] = [
-      { from: 'bot', text: '🔍  Investigating transaction on EVM networks…\n\nI\'ve located this hash format as an EVM transaction (Base, HashKey, or Arc). Verifying finality status.' },
-    ]
-    // Show all three EVM explorers
-    for (const [chain, exp] of Object.entries(EXPLORER).filter(([c]) => c !== 'starknet')) {
-      replies.push({
-        from: 'bot',
-        text: `View on ${exp.name} →`,
-        link: { label: `Open ${exp.name}`, href: exp.txUrl(input.trim()) },
-      })
-    }
-    replies.push({
-      from: 'bot',
-      text: 'EVM transactions typically reach **Finality** within 12 seconds on Base and Arc. HashKey finalises in under 3 seconds. If the transaction shows as Pending for more than 2 minutes, it may be underpriced on gas.',
-    })
-    return replies
-  }
-
-  if (type === 'stark_tx') {
-    return [
-      {
-        from: 'bot',
-        text: '🔍  Investigating Starknet transaction…\n\nThis looks like a Starknet transaction hash. Starknet operates in two stages: first accepted on L2 (usually <30 seconds), then settled on Ethereum L1 (~2–4 hours for full finality).',
-        link: { label: 'Open on Starkscan', href: EXPLORER.starknet.txUrl(input.trim()) },
-      },
-      {
-        from: 'bot',
-        text: 'If your payment shows "ACCEPTED_ON_L2" it is fully spendable by the recipient, even before L1 settlement. No action needed on your side.',
-      },
-    ]
-  }
-
-  if (type === 'evm_addr') {
-    return [
-      {
-        from: 'bot',
-        text: '📋  Address detected. I can pull recent transaction history for this wallet across supported networks.',
-        link: { label: 'View on Basescan', href: EXPLORER.base.addrUrl(input.trim()) },
-      },
-      {
-        from: 'bot',
-        text: 'To verify a specific payment, share the transaction hash from your wallet\'s history — it starts with 0x and is 66 characters long.',
-      },
-    ]
-  }
-
-  // Keyword matching
+function keywordReply(input: string): ChatMsg | null {
   const low = input.toLowerCase()
   if (low.includes('pending') || low.includes('stuck'))
-    return [{ from: 'bot', text: 'A stuck transaction is usually caused by a low gas fee or nonce gap. On Base and Arc, you can speed it up by resubmitting with a higher priority fee. On HashKey, transactions either confirm or fail quickly — a pending state beyond 30 seconds likely indicates congestion. Share your tx hash for a specific check.' }]
+    return { from: 'bot', text: 'A transaction in pending state has been broadcast to the network but not yet included in a block. This is typically caused by insufficient gas pricing. On Base and Arc, you can resubmit with a higher priority fee to accelerate inclusion. On HashKey, pending transactions usually resolve within seconds. Share your transaction hash for a precise status check.' }
   if (low.includes('fee') || low.includes('gas'))
-    return [{ from: 'bot', text: 'Hash PayLink deducts a 0.5% platform fee on settlement. Network gas fees are separate and paid by your wallet on EVM chains. On Starknet, gas is paid in STRK or USDC depending on your wallet settings. Arc uses USDC as the native gas token.' }]
-  if (low.includes('refund') || low.includes('cancel'))
-    return [{ from: 'bot', text: 'On-chain transactions are irreversible once confirmed. If a payment was sent to the wrong address, please contact the recipient directly. Hash PayLink cannot reverse or intercept confirmed transactions.' }]
-  if (low.includes('starknet') || low.includes('stark'))
-    return [{ from: 'bot', text: 'Starknet payments use the WalletConnect flow via ArgentX or Braavos. Connect your Starknet wallet on the payment page and approve the USDC transfer. The recipient receives funds once the transaction is ACCEPTED_ON_L2.' }]
-
-  return [{
-    from: 'bot',
-    text: 'I can help with transaction tracking, payment status, gas questions, and chain-specific finality. Share a transaction hash (0x… 66 chars) or wallet address, or ask me anything about your payment.',
-  }]
+    return { from: 'bot', text: 'Hash PayLink applies a 0.5% platform fee at the point of settlement. Network gas fees are independent and deducted by the respective chain from your wallet. Arc uses USDC as its native gas token. Starknet gas is denominated in STRK.' }
+  if (low.includes('refund') || low.includes('cancel') || low.includes('reverse'))
+    return { from: 'bot', text: 'Confirmed on-chain transactions are irreversible by design. Hash PayLink does not have custody over funds at any point and cannot initiate reversals. If a payment was sent to an incorrect address, you will need to coordinate directly with the receiving party.' }
+  if (low.includes('starknet') || low.includes('argent') || low.includes('braavos'))
+    return { from: 'bot', text: 'Starknet payments require a compatible wallet such as ArgentX or Braavos. Connect your wallet on the payment page and authorise the USDC transfer. The recipient can spend the funds as soon as the transaction status reads ACCEPTED_ON_L2. Full L1 settlement occurs within 2–4 hours and is not required for the payment to be final.' }
+  if (low.includes('track') || low.includes('status') || low.includes('check'))
+    return { from: 'bot', text: 'To track a specific transaction, paste the hash directly into this chat. A transaction hash starts with 0x and is typically 66 characters long on EVM networks.' }
+  return null
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -122,28 +61,84 @@ export default function Layout() {
     setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 60)
   }
 
-  function addBotReplies(replies: ChatMsg[]) {
-    setIsTyping(true)
-    setTimeout(() => {
-      setChatMessages(m => [...m, ...replies])
-      setIsTyping(false)
-      scrollToBottom()
-    }, 700)
+  function pushBot(msgs: ChatMsg[]) {
+    setChatMessages(m => [...m, ...msgs])
+    setIsTyping(false)
+    scrollToBottom()
   }
 
-  function handleSend(text = chatInput) {
+  async function handleSend(text = chatInput) {
     const trimmed = text.trim()
     if (!trimmed) return
     setChatMessages(m => [...m, { from: 'user', text: trimmed }])
     setChatInput('')
     scrollToBottom()
-    addBotReplies(botReply(trimmed))
+
+    const type = detectInput(trimmed)
+
+    if (type === 'tx_hash') {
+      // Show investigating state immediately, then probe live
+      setIsTyping(true)
+      setChatMessages(m => [...m, {
+        from: 'bot',
+        text: 'Investigating transaction across Base, HashKey, Arc, and Starknet. Please wait.',
+      }])
+      scrollToBottom()
+
+      try {
+        const res  = await fetch('/api/tx-status', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ hash: trimmed }),
+        })
+        const data = await res.json() as {
+          found: boolean
+          network?: string
+          status?: 'confirmed' | 'pending'
+          explorerName?: string
+          explorerUrl?: string
+          estimatedSeconds?: number
+        }
+
+        if (data.found && data.network && data.status) {
+          const body = data.status === 'confirmed'
+            ? `Transaction identified on ${data.network}. Current status: Confirmed.\n\nThis transaction has been successfully finalized on-chain.`
+            : `Transaction identified on ${data.network}. Current status: Pending.\n\nThis transaction is currently in the mempool. It is expected to settle in approximately ${data.estimatedSeconds ?? '—'} seconds.`
+          pushBot([{ from: 'bot', text: body, link: { label: `View on ${data.explorerName}`, href: data.explorerUrl! } }])
+        } else {
+          pushBot([{ from: 'bot', text: 'This transaction hash could not be located on our supported networks. Please verify the hash and confirm the originating network.' }])
+        }
+      } catch {
+        pushBot([{ from: 'bot', text: 'Unable to reach network nodes at this time. Please try again shortly, or verify the transaction directly on the relevant block explorer.' }])
+      }
+      return
+    }
+
+    if (type === 'evm_addr') {
+      pushBot([
+        {
+          from: 'bot',
+          text: 'Wallet address received. To verify a specific payment, share the transaction hash from your wallet history. It begins with 0x and is 66 characters long on EVM networks.',
+          link: { label: 'View address on Basescan', href: `https://basescan.org/address/${trimmed}` },
+        },
+      ])
+      return
+    }
+
+    // Keyword matching
+    const kwReply = keywordReply(trimmed)
+    if (kwReply) { pushBot([kwReply]); return }
+
+    pushBot([{
+      from: 'bot',
+      text: 'I can track live transaction status, explain payment finality, and answer questions about fees or network behaviour. Share a transaction hash or describe your issue.',
+    }])
   }
 
   function handleTrackPayment() {
     setChatMessages(m => [...m, {
       from: 'bot',
-      text: 'Please paste your transaction hash below. It should start with 0x and be 66 characters long (EVM) or a shorter Starknet hash.',
+      text: 'Please paste your transaction hash below. It begins with 0x and is typically 66 characters long on EVM networks.',
     }])
     scrollToBottom()
   }
