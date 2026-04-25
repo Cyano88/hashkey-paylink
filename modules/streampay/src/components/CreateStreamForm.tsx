@@ -213,7 +213,7 @@ export function CreateStreamForm() {
       <div className="mx-auto w-full max-w-lg">
         <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-lg">
           <CardHeader />
-          <div className="px-12 py-10 space-y-6 text-center">
+          <div className="px-14 py-10 space-y-6 text-center mx-auto">
 
             <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full"
               style={{ background: 'rgba(0,255,65,0.08)', border: '1.5px solid rgba(0,255,65,0.28)' }}>
@@ -285,7 +285,7 @@ export function CreateStreamForm() {
         <CardHeader />
 
         {/* Step pills */}
-        <div className="flex items-center gap-0 border-b px-12 py-4" style={{ borderColor: '#f0f0f0' }}>
+        <div className="flex items-center gap-0 border-b px-14 py-4" style={{ borderColor: '#f0f0f0' }}>
           {STEPS.map((s, i) => (
             <div key={s.label} className="flex items-center">
               <div className="flex items-center gap-1.5">
@@ -306,7 +306,7 @@ export function CreateStreamForm() {
         </div>
 
         {/* ── Form body — space-y-8 strict vertical rhythm ── */}
-        <div className="space-y-8 px-12 py-10">
+        <div className="space-y-8 px-14 py-10 mx-auto">
 
           {/* Section A: inputs */}
           <div className="space-y-6">
@@ -526,7 +526,7 @@ export function CreateStreamForm() {
 
 function CardHeader() {
   return (
-    <div className="flex items-center justify-between border-b px-12 py-5"
+    <div className="flex items-center justify-between border-b px-14 py-5"
       style={{ borderColor: '#f0f0f0' }}>
       <div className="flex items-center gap-2">
         <Logomark />
