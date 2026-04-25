@@ -1,9 +1,11 @@
 import { useRef, useState } from 'react'
-import { Outlet, Link, useLocation } from 'react-router-dom'
+import { Outlet, Link, useLocation, useSearchParams } from 'react-router-dom'
 import { ConnectButton } from '@rainbow-me/rainbowkit'
 import { Loader2, LogOut, MessageCircle, X, Send, ExternalLink, Search } from 'lucide-react'
 import { useStarknet } from './lib/StarknetContext'
 import { truncateAddress } from './lib/utils'
+import { CHAIN_META } from './lib/chains'
+import type { ChainKey } from './lib/chains'
 
 // ─── Input detection ─────────────────────────────────────────────────────────
 const TX_HASH_RE = /^0x[0-9a-fA-F]{1,64}$/
@@ -46,7 +48,10 @@ function keywordReply(input: string): ChatMsg | null {
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function Layout() {
   const { pathname } = useLocation()
+  const [searchParams] = useSearchParams()
   const isPayPage = pathname === '/pay'
+  const payNetParam = isPayPage ? (searchParams.get('net') as ChainKey | null) : null
+  const payChainMeta = (payNetParam && payNetParam in CHAIN_META) ? CHAIN_META[payNetParam] : null
   const { address: starkAddress, isConnecting: isStarkConnecting, connect: connectStarknet, disconnect: disconnectStarknet } = useStarknet()
   const [starkDropdownOpen, setStarkDropdownOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
@@ -163,12 +168,21 @@ export default function Layout() {
 
           {/* Right side */}
           <div className="flex items-center gap-2">
-            <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              🟢 Mainnet
-            </span>
+            {/* Network badge — chain-specific on pay page, generic Mainnet elsewhere */}
+            {payChainMeta ? (
+              <span className={`hidden sm:inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium ${payChainMeta.badgeBg} ${payChainMeta.badgeText} ${payChainMeta.badgeBorder}`}>
+                <span className={`h-1.5 w-1.5 rounded-full ${payChainMeta.dotColor} animate-pulse`} />
+                {payChainMeta.label}
+              </span>
+            ) : (
+              <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Mainnet
+              </span>
+            )}
 
-            {starkAddress ? (
+            {/* Starknet + EVM wallet buttons — hidden on pay page (locked-in checkout) */}
+            {!isPayPage && (starkAddress ? (
               <div className="relative hidden sm:block" ref={dropdownRef}>
                 <button
                   onClick={() => setStarkDropdownOpen((v) => !v)}
@@ -206,9 +220,9 @@ export default function Layout() {
                 {isStarkConnecting ? <Loader2 className="h-3 w-3 animate-spin" /> : <span className="h-1.5 w-1.5 rounded-full bg-purple-300" />}
                 Starknet
               </button>
-            )}
+            ))}
 
-            {/* X (Twitter) link */}
+            {/* X (Twitter) link — always visible */}
             <a
               href="https://x.com/Hash_PayLink"
               target="_blank"
@@ -221,11 +235,14 @@ export default function Layout() {
               </svg>
             </a>
 
-            <ConnectButton
-              showBalance={false}
-              chainStatus="icon"
-              accountStatus={{ smallScreen: 'avatar', largeScreen: 'full' }}
-            />
+            {/* EVM ConnectButton — hidden on pay page */}
+            {!isPayPage && (
+              <ConnectButton
+                showBalance={false}
+                chainStatus="icon"
+                accountStatus={{ smallScreen: 'avatar', largeScreen: 'full' }}
+              />
+            )}
           </div>
         </div>
       </header>
