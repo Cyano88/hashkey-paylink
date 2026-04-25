@@ -1,7 +1,9 @@
 import { useRef, useState } from 'react'
 import { Outlet, Link, useLocation, useSearchParams } from 'react-router-dom'
 import { ConnectButton } from '@rainbow-me/rainbowkit'
+import { useAccount, useSwitchChain } from 'wagmi'
 import { ChevronDown, MessageCircle, X, Send, ExternalLink, Search } from 'lucide-react'
+import { useStarknet } from './lib/StarknetContext'
 import { CHAIN_META } from './lib/chains'
 import type { ChainKey } from './lib/chains'
 
@@ -46,49 +48,109 @@ function keywordReply(input: string): ChatMsg | null {
 // ─── Network Toolkit ─────────────────────────────────────────────────────────
 const ALL_NETWORKS = [CHAIN_META.base, CHAIN_META.hashkey, CHAIN_META.arc, CHAIN_META.starknet]
 
-function NetworkToolkit({ activeKey }: { activeKey: ChainKey | null }) {
+// Starknet spark icon (4-pointed star / brand spark shape)
+function StarknetIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M12 2L14 10L22 12L14 14L12 22L10 14L2 12L10 10Z" />
+    </svg>
+  )
+}
+
+function NetworkToolkit({ activeKey, locked }: { activeKey: ChainKey | null; locked?: boolean }) {
   const [open, setOpen] = useState(false)
-  const active = activeKey ? CHAIN_META[activeKey] : null
+  const { isConnected, chainId: evmChainId } = useAccount()
+  const { switchChain }                       = useSwitchChain()
+  const { address: starkAddress, connect: connectStarknet } = useStarknet()
+
+  // Map current EVM chainId → a known network entry
+  const currentEvmNet = isConnected
+    ? ([CHAIN_META.base, CHAIN_META.hashkey, CHAIN_META.arc] as const).find(
+        n => n.chainId === evmChainId,
+      ) ?? null
+    : null
+
+  // Button label: locked page shows the link's network; free pages show live connection
+  const displayNet = locked
+    ? (activeKey ? CHAIN_META[activeKey] : null)
+    : (currentEvmNet ?? (starkAddress ? CHAIN_META.starknet : null))
+
+  function handleNetworkClick(key: ChainKey) {
+    setOpen(false)
+    if (key === 'starknet') {
+      connectStarknet()
+    } else {
+      const chainId = (CHAIN_META[key] as { chainId?: number }).chainId
+      if (chainId) switchChain({ chainId })
+    }
+  }
 
   return (
     <div className="relative">
+      {/* ── Trigger button ── */}
       <button
-        onClick={() => setOpen(v => !v)}
-        className="inline-flex h-9 items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 text-[13px] font-medium text-gray-700 shadow-sm hover:bg-gray-50 transition-colors"
+        onClick={locked ? undefined : () => setOpen(v => !v)}
+        className={[
+          'inline-flex h-9 items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3',
+          'text-[13px] font-medium text-gray-700 shadow-sm transition-colors',
+          locked ? 'cursor-default' : 'hover:bg-gray-50 cursor-pointer',
+        ].join(' ')}
       >
-        <span className={`h-2 w-2 shrink-0 rounded-full ${active ? active.dotColor : 'bg-emerald-500 animate-pulse'}`} />
-        <span className="hidden sm:inline">{active ? active.label : 'Mainnet'}</span>
-        <ChevronDown className="h-3.5 w-3.5 text-gray-400" />
+        {displayNet?.key === 'starknet' ? (
+          <StarknetIcon className="h-2.5 w-2.5 shrink-0 text-purple-500" />
+        ) : (
+          <span className={`h-2 w-2 shrink-0 rounded-full ${displayNet ? displayNet.dotColor : 'bg-emerald-500 animate-pulse'}`} />
+        )}
+        <span className="hidden sm:inline">{displayNet ? displayNet.label : 'Mainnet'}</span>
+        {!locked && <ChevronDown className="h-3.5 w-3.5 text-gray-400" />}
       </button>
 
-      {open && (
+      {/* ── Dropdown ── */}
+      {open && !locked && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
           <div className="absolute right-0 z-50 mt-2 w-52 overflow-hidden rounded-xl border border-[#E5E7EB] bg-white shadow-md">
             <div className="border-b border-gray-100 px-3.5 py-2">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Supported Networks</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Switch Network</p>
             </div>
+
             {ALL_NETWORKS.map(net => {
-              const isActive = activeKey === net.key
               const isTestnet = 'isTestnet' in net && !!(net as { isTestnet?: boolean }).isTestnet
+              // Connected indicator — EVM: chain matches; Starknet: wallet address present
+              const isEvmActive  = net.key !== 'starknet' && isConnected &&
+                                   (net as { chainId?: number }).chainId === evmChainId
+              const isStarkActive = net.key === 'starknet' && !!starkAddress
+              const isConnectedNet = isEvmActive || isStarkActive
+
               return (
-                <div
+                <button
                   key={net.key}
-                  className={`flex items-center gap-2.5 px-3.5 py-2.5 transition-colors ${isActive ? 'bg-gray-50' : 'hover:bg-gray-50'}`}
+                  onClick={() => handleNetworkClick(net.key)}
+                  className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left transition-colors hover:bg-gray-50"
                 >
-                  <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${net.dotColor}`} />
+                  {/* Icon */}
+                  {net.key === 'starknet' ? (
+                    <StarknetIcon className="h-3.5 w-3.5 shrink-0 text-purple-500" />
+                  ) : (
+                    <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${net.dotColor}`} />
+                  )}
+
                   <span className="flex-1 text-[13px] font-medium text-gray-800">{net.label}</span>
+
+                  {/* Testnet pill */}
                   {isTestnet && (
                     <span className="rounded border border-amber-100 bg-amber-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-600">
                       Testnet
                     </span>
                   )}
-                  {isActive && (
-                    <span className="flex h-4 w-4 items-center justify-center rounded-full bg-emerald-100">
+
+                  {/* Connected indicator */}
+                  {isConnectedNet && (
+                    <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-emerald-100">
                       <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                     </span>
                   )}
-                </div>
+                </button>
               )
             })}
           </div>
@@ -219,7 +281,7 @@ export default function Layout() {
           {/* Right side — three elements, unified h-9 baseline */}
           <div className="flex items-center gap-x-2">
             {/* 1. Network Toolkit */}
-            <NetworkToolkit activeKey={activeNet} />
+            <NetworkToolkit activeKey={activeNet} locked={isPayPage} />
 
             {/* 2. X (Twitter) — always visible, h-9 to match */}
             <a
