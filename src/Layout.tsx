@@ -1,8 +1,8 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Outlet, Link, useLocation, useSearchParams } from 'react-router-dom'
-import { ConnectButton } from '@rainbow-me/rainbowkit'
-import { useAccount, useSwitchChain } from 'wagmi'
-import { ChevronDown, MessageCircle, X, Send, ExternalLink, Search } from 'lucide-react'
+import { useConnectModal } from '@rainbow-me/rainbowkit'
+import { useAccount, useDisconnect, useSwitchChain } from 'wagmi'
+import { ChevronDown, MessageCircle, Power, X, Send, ExternalLink, Search } from 'lucide-react'
 import { useStarknet } from './lib/StarknetContext'
 import { CHAIN_META } from './lib/chains'
 import type { ChainKey } from './lib/chains'
@@ -48,7 +48,6 @@ function keywordReply(input: string): ChatMsg | null {
 // ─── Network Toolkit ─────────────────────────────────────────────────────────
 const ALL_NETWORKS = [CHAIN_META.base, CHAIN_META.hashkey, CHAIN_META.arc, CHAIN_META.starknet]
 
-// Starknet spark icon (4-pointed star / brand spark shape)
 function StarknetIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -57,97 +56,68 @@ function StarknetIcon({ className }: { className?: string }) {
   )
 }
 
+// Parent always passes the currently active key — this component only handles display + switching.
 function NetworkToolkit({ activeKey, locked }: { activeKey: ChainKey | null; locked?: boolean }) {
   const [open, setOpen] = useState(false)
-  const { isConnected, chainId: evmChainId } = useAccount()
-  const { switchChain }                       = useSwitchChain()
-  const { address: starkAddress, connect: connectStarknet } = useStarknet()
+  const { switchChain } = useSwitchChain()
+  const { connect: connectStarknet } = useStarknet()
+  const displayNet  = activeKey ? CHAIN_META[activeKey] : null
+  // Dropdown lists every network except the currently active one
+  const otherNets   = ALL_NETWORKS.filter(n => n.key !== activeKey)
 
-  // Map current EVM chainId → a known network entry
-  const currentEvmNet = isConnected
-    ? ([CHAIN_META.base, CHAIN_META.hashkey, CHAIN_META.arc] as const).find(
-        n => n.chainId === evmChainId,
-      ) ?? null
-    : null
-
-  // Button label: locked page shows the link's network; free pages show live connection
-  const displayNet = locked
-    ? (activeKey ? CHAIN_META[activeKey] : null)
-    : (currentEvmNet ?? (starkAddress ? CHAIN_META.starknet : null))
-
-  function handleNetworkClick(key: ChainKey) {
+  function handleSwitch(key: ChainKey) {
     setOpen(false)
     if (key === 'starknet') {
       connectStarknet()
     } else {
-      const chainId = (CHAIN_META[key] as { chainId?: number }).chainId
-      if (chainId) switchChain({ chainId })
+      const id = (CHAIN_META[key] as { chainId?: number }).chainId
+      if (id) switchChain({ chainId: id })
     }
   }
 
   return (
     <div className="relative">
-      {/* ── Trigger button ── */}
       <button
         onClick={locked ? undefined : () => setOpen(v => !v)}
         className={[
           'inline-flex h-9 items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3',
           'text-[13px] font-medium text-gray-700 shadow-sm transition-colors',
-          locked ? 'cursor-default' : 'hover:bg-gray-50 cursor-pointer',
+          locked ? 'cursor-default' : 'hover:bg-gray-50',
         ].join(' ')}
       >
         {displayNet?.key === 'starknet' ? (
           <StarknetIcon className="h-2.5 w-2.5 shrink-0 text-purple-500" />
         ) : (
-          <span className={`h-2 w-2 shrink-0 rounded-full ${displayNet ? displayNet.dotColor : 'bg-emerald-500 animate-pulse'}`} />
+          <span className={`h-2 w-2 shrink-0 rounded-full ${displayNet?.dotColor ?? 'bg-gray-400'}`} />
         )}
-        <span className="hidden sm:inline">{displayNet ? displayNet.label : 'Mainnet'}</span>
+        <span className="hidden sm:inline">{displayNet?.label ?? 'Network'}</span>
         {!locked && <ChevronDown className="h-3.5 w-3.5 text-gray-400" />}
       </button>
 
-      {/* ── Dropdown ── */}
       {open && !locked && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
           <div className="absolute right-0 z-50 mt-2 w-52 overflow-hidden rounded-xl border border-[#E5E7EB] bg-white shadow-md">
             <div className="border-b border-gray-100 px-3.5 py-2">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Switch Network</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Switch to</p>
             </div>
-
-            {ALL_NETWORKS.map(net => {
+            {otherNets.map(net => {
               const isTestnet = 'isTestnet' in net && !!(net as { isTestnet?: boolean }).isTestnet
-              // Connected indicator — EVM: chain matches; Starknet: wallet address present
-              const isEvmActive  = net.key !== 'starknet' && isConnected &&
-                                   (net as { chainId?: number }).chainId === evmChainId
-              const isStarkActive = net.key === 'starknet' && !!starkAddress
-              const isConnectedNet = isEvmActive || isStarkActive
-
               return (
                 <button
                   key={net.key}
-                  onClick={() => handleNetworkClick(net.key)}
+                  onClick={() => handleSwitch(net.key)}
                   className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left transition-colors hover:bg-gray-50"
                 >
-                  {/* Icon */}
                   {net.key === 'starknet' ? (
                     <StarknetIcon className="h-3.5 w-3.5 shrink-0 text-purple-500" />
                   ) : (
                     <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${net.dotColor}`} />
                   )}
-
                   <span className="flex-1 text-[13px] font-medium text-gray-800">{net.label}</span>
-
-                  {/* Testnet pill */}
                   {isTestnet && (
                     <span className="rounded border border-amber-100 bg-amber-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-600">
                       Testnet
-                    </span>
-                  )}
-
-                  {/* Connected indicator */}
-                  {isConnectedNet && (
-                    <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-emerald-100">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                     </span>
                   )}
                 </button>
@@ -167,6 +137,40 @@ export default function Layout() {
   const isPayPage = pathname === '/pay'
   const payNetParam = isPayPage ? (searchParams.get('net') as ChainKey | null) : null
   const activeNet = (payNetParam && payNetParam in CHAIN_META) ? payNetParam : null
+
+  // ── Wallet state ─────────────────────────────────────────────────────────────
+  const { address: evmAddress, isConnected: evmConnected, chainId: evmChainId } = useAccount()
+  const { disconnect: disconnectEvm }  = useDisconnect()
+  const { openConnectModal }           = useConnectModal()
+  const { address: starkAddress, disconnect: disconnectStarknet } = useStarknet()
+
+  // Mutual exclusion: connecting one ecosystem auto-disconnects the other
+  const prevEvmRef   = useRef(evmConnected)
+  const prevStarkRef = useRef(starkAddress)
+  useEffect(() => {
+    const justConnected = evmConnected && !prevEvmRef.current
+    prevEvmRef.current  = evmConnected
+    if (justConnected && starkAddress) disconnectStarknet()
+  }, [evmConnected])  // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const justConnected  = !!starkAddress && !prevStarkRef.current
+    prevStarkRef.current = starkAddress
+    if (justConnected && evmConnected) disconnectEvm()
+  }, [starkAddress])  // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Derived header state
+  const anyConnected   = evmConnected || !!starkAddress
+  const evmNetKey      = evmConnected
+    ? ([CHAIN_META.base, CHAIN_META.hashkey, CHAIN_META.arc] as const).find(n => n.chainId === evmChainId)?.key ?? null
+    : null
+  const connectedNetKey: ChainKey | null = starkAddress ? 'starknet' : evmNetKey
+  const displayAddress = starkAddress ?? evmAddress ?? null
+  const fmtAddr = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`
+
+  function disconnectAll() {
+    if (evmConnected) disconnectEvm()
+    if (starkAddress) disconnectStarknet()
+  }
 
   const [chatOpen,     setChatOpen]     = useState(false)
   const [chatInput,    setChatInput]    = useState('')
@@ -278,12 +282,29 @@ export default function Layout() {
             </span>
           </Link>
 
-          {/* Right side — three elements, unified h-9 baseline */}
+          {/* Right side — single horizontal line, all items h-9 baseline */}
           <div className="flex items-center gap-x-2">
-            {/* 1. Network Toolkit */}
-            <NetworkToolkit activeKey={activeNet} locked={isPayPage} />
 
-            {/* 2. X (Twitter) — always visible, h-9 to match */}
+            {/* ── Pay page: static locked network badge ── */}
+            {isPayPage && <NetworkToolkit activeKey={activeNet} locked />}
+
+            {/* ── Landing/Create: disconnected → Connect Wallet badge ── */}
+            {!isPayPage && !anyConnected && (
+              <button
+                onClick={openConnectModal}
+                className="inline-flex h-9 items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 text-[13px] font-medium text-gray-700 shadow-sm hover:bg-gray-50 transition-colors"
+              >
+                <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="hidden sm:inline">Connect Wallet</span>
+              </button>
+            )}
+
+            {/* ── Landing/Create: connected → active network dropdown ── */}
+            {!isPayPage && anyConnected && (
+              <NetworkToolkit activeKey={connectedNetKey} />
+            )}
+
+            {/* ── X (Twitter) — always visible ── */}
             <a
               href="https://x.com/Hash_PayLink"
               target="_blank"
@@ -296,14 +317,24 @@ export default function Layout() {
               </svg>
             </a>
 
-            {/* 3. EVM ConnectButton — hidden on pay page (locked-in checkout) */}
-            {!isPayPage && (
-              <ConnectButton
-                showBalance={false}
-                chainStatus="icon"
-                accountStatus={{ smallScreen: 'avatar', largeScreen: 'full' }}
-              />
+            {/* ── Identity: plain non-interactive address text ── */}
+            {!isPayPage && anyConnected && displayAddress && (
+              <span className="hidden sm:block select-none font-mono text-[13px] text-gray-500 pointer-events-none">
+                {fmtAddr(displayAddress)}
+              </span>
             )}
+
+            {/* ── Power off: disconnects all active sessions ── */}
+            {!isPayPage && anyConnected && (
+              <button
+                onClick={disconnectAll}
+                title="Disconnect all wallets"
+                className="flex h-9 w-9 items-center justify-center rounded-full text-gray-400 transition-colors hover:text-red-500 hover:bg-red-50"
+              >
+                <Power className="h-4 w-4" />
+              </button>
+            )}
+
           </div>
         </div>
       </header>
