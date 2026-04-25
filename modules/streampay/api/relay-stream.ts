@@ -52,8 +52,8 @@ const arcChain = defineChain({
 const ABI = parseAbi([
   'function claim(uint256 amount, uint256 nonce, uint256 deadline, bytes sig)',
   'function cancel(uint256 nonce, uint256 deadline, bytes sig)',
-  'function claimable()  view returns (uint256)',
-  'function cancelled()  view returns (bool)',
+  'function claimable() view returns (uint256)',
+  'function cancelled() view returns (bool)',
   'function nonces(address) view returns (uint256)',
 ])
 

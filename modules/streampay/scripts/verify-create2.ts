@@ -39,8 +39,8 @@ const arc = defineChain({
 
 // ── ABIs ──────────────────────────────────────────────────────────────────────
 const FACTORY_ABI = parseAbi([
-  'function usdc()     view returns (address)',
-  'function relayer()  view returns (address)',
+  'function usdc() view returns (address)',
+  'function relayer() view returns (address)',
   'function getVaultAddress(address sender, address recipient, uint256 totalAmount, uint64 startTime, uint64 endTime, bytes32 salt) view returns (address)',
   'function createStream(address recipient, uint256 totalAmount, uint64 startTime, uint64 endTime, bytes32 salt) returns (address vault)',
   'event StreamCreated(bytes32 indexed streamId, address indexed vault, address indexed sender, address recipient, uint256 totalAmount, uint64 startTime, uint64 endTime)',
@@ -110,7 +110,7 @@ async function main() {
     address:      factoryAddr,
     abi:          FACTORY_ABI,
     functionName: 'getVaultAddress',
-    args:         [sender, recipient, amount, Number(startTime), Number(endTime), salt],
+    args:         [sender, recipient, amount, startTime, endTime, salt],
   }) as `0x${string}`
   console.log(`${INFO} Predicted vault: ${predicted}`)
 
@@ -162,7 +162,7 @@ async function main() {
     address:      factoryAddr,
     abi:          FACTORY_ABI,
     functionName: 'createStream',
-    args:         [recipient, amount, Number(startTime), Number(endTime), salt],
+    args:         [recipient, amount, startTime, endTime, salt],
     gas:          400_000n,
   })
   console.log(`${INFO} Tx: ${txHash}`)
@@ -202,11 +202,11 @@ async function main() {
   // ── Step 6: Read-back sanity ───────────────────────────────────────────────
   console.log('\n─── Step 6: Contract state read-back ────────────────────────────')
   const VAULT_ABI = parseAbi([
-    'function totalAmount()   view returns (uint256)',
-    'function startTime()     view returns (uint64)',
-    'function endTime()       view returns (uint64)',
-    'function recipient()     view returns (address)',
-    'function isFunded()      view returns (bool)',
+    'function totalAmount() view returns (uint256)',
+    'function startTime() view returns (uint64)',
+    'function endTime() view returns (uint64)',
+    'function recipient() view returns (address)',
+    'function isFunded() view returns (bool)',
     'function calculateUnlocked() view returns (uint256)',
   ])
   const [ta, st, et, rec, funded, unlocked] = await Promise.all([

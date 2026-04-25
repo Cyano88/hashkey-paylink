@@ -136,19 +136,19 @@ export default async function streamOgHandler(req: Request, res: Response) {
 
   // Fetch live stream data for dynamic OG content
   try {
-    const info = await publicClient.readContract({
+    const raw = await publicClient.readContract({
       address:      vault,
       abi:          VAULT_ABI,
       functionName: 'streamInfo',
     })
 
-    const {
-      _sender, _recipient, _totalAmount, _endTime, _cancelled,
-    } = info as {
+    // viem returns named-tuple returns as a readonly labeled tuple; cast via unknown
+    const info = raw as unknown as {
       _sender: `0x${string}`; _recipient: `0x${string}`
       _totalAmount: bigint;   _endTime: bigint
       _cancelled: boolean
     }
+    const { _sender, _recipient, _totalAmount, _endTime, _cancelled } = info
 
     const status      = _cancelled ? 'Cancelled'
       : BigInt(Math.floor(Date.now() / 1000)) >= _endTime ? 'Complete'

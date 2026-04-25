@@ -13,6 +13,21 @@ import { SyncingOverlay }    from './SyncingOverlay'
 import { PendingTxToast }    from './PendingTxToast'
 import { STREAM_VAULT_ABI }  from '../lib/streamVaultAbi'
 
+// ── StreamInfo type ───────────────────────────────────────────────────────────
+// viem returns multi-value named returns as a labeled readonly tuple.
+// We cast via unknown to access fields by name throughout this component.
+type StreamInfo = {
+  _sender:           `0x${string}`
+  _recipient:        `0x${string}`
+  _totalAmount:      bigint
+  _startTime:        bigint
+  _endTime:          bigint
+  _alreadyWithdrawn: bigint
+  _cancelled:        boolean
+  _unlocked:         bigint
+  _claimable:        bigint
+}
+
 // ── Arc constants (self-contained — no import from core SDK) ──────────────────
 const ARC_CHAIN_ID = 5042002
 const ARC_EXPLORER = 'https://testnet.arcscan.app'
@@ -66,12 +81,13 @@ export function StreamView({ vaultAddress }: StreamViewProps) {
   const [relayerReady, setRelayerReady] = useState(isDemo) // demo skips health check
 
   // ── Contract reads (skipped in demo mode) ─────────────────────────────────
-  const { data: info, refetch: refetchInfo } = useReadContract({
+  const { data: rawInfo, refetch: refetchInfo } = useReadContract({
     address:      vaultAddress,
     abi:          STREAM_VAULT_ABI,
     functionName: 'streamInfo',
     query:        { enabled: !!vaultAddress && relayerReady },
   })
+  const info = rawInfo as unknown as StreamInfo | undefined
 
   const { data: signerNonce, refetch: refetchNonce } = useReadContract({
     address:      vaultAddress,
