@@ -5,9 +5,9 @@
  * so no manual config is needed when new payment links are created.
  *
  * Triggered by an external cron (cron-job.org, free) hitting:
- *   GET https://hashkey-paylink.vercel.app/api/sweep-keeper?secret=<CRON_SECRET>
+ *   GET https://hashkey-paylink.onrender.com/api/sweep-keeper?secret=<CRON_SECRET>
  *
- * Required env vars (Vercel dashboard → Settings → Environment Variables):
+ * Required env vars (Render dashboard → Environment → Environment Variables):
  *   KEEPER_PRIVATE_KEY  — 0x-prefixed private key; wallet needs Base ETH for gas only
  *   CRON_SECRET         — any random string; authenticates cron requests
  *   FACTORY_FROM_BLOCK  — (optional) block the factory was deployed at; defaults to 29500000
