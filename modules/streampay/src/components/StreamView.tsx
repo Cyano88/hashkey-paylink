@@ -6,10 +6,12 @@ import {
   useReadContract,
   useSignTypedData,
 } from 'wagmi'
-import { useStreamState }  from '../hooks/useStreamState'
+import { useStreamState }    from '../hooks/useStreamState'
+import { usePendingTx }      from '../hooks/usePendingTx'
 import { TriStateBar, formatUsdc, formatUsdcFull } from './TriStateBar'
-import { SyncingOverlay }  from './SyncingOverlay'
-import { STREAM_VAULT_ABI } from '../lib/streamVaultAbi'
+import { SyncingOverlay }    from './SyncingOverlay'
+import { PendingTxToast }    from './PendingTxToast'
+import { STREAM_VAULT_ABI }  from '../lib/streamVaultAbi'
 
 // ── Arc constants (self-contained — no import from core SDK) ──────────────────
 const ARC_CHAIN_ID = 5042002
@@ -111,6 +113,9 @@ export function StreamView({ vaultAddress }: StreamViewProps) {
   const [txHash,      setTxHash]      = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
 
+  // ── Persistent pending tx tracking (survives tab close) ───────────────────
+  const { pendingTxs, addPending, dismiss } = usePendingTx(vaultAddress)
+
   async function handleClaim() {
     if (!vaultAddress || !connectedAddr || !stream || stream.claimable === 0n) return
     setActionState('signing')
@@ -159,7 +164,10 @@ export function StreamView({ vaultAddress }: StreamViewProps) {
       const data = await res.json() as { ok: boolean; txHash?: string; error?: string }
       if (!data.ok) throw new Error(data.error ?? 'Relay failed')
 
-      setTxHash(data.txHash ?? null)
+      const hash = data.txHash as `0x${string}` | undefined
+      setTxHash(hash ?? null)
+      // Persist to localStorage so the toast survives a tab close
+      if (hash && vaultAddress) addPending(hash, vaultAddress, 'claim')
       setActionState('success')
       setTimeout(() => { refetchInfo(); refetchNonce() }, 4_000)
     } catch (err: unknown) {
@@ -214,7 +222,9 @@ export function StreamView({ vaultAddress }: StreamViewProps) {
       const data = await res.json() as { ok: boolean; txHash?: string; error?: string }
       if (!data.ok) throw new Error(data.error ?? 'Relay failed')
 
-      setTxHash(data.txHash ?? null)
+      const hash = data.txHash as `0x${string}` | undefined
+      setTxHash(hash ?? null)
+      if (hash && vaultAddress) addPending(hash, vaultAddress, 'cancel')
       setActionState('success')
       setTimeout(() => refetchInfo(), 4_000)
     } catch (err: unknown) {
@@ -368,17 +378,38 @@ export function StreamView({ vaultAddress }: StreamViewProps) {
               )}
 
               {/* Recipient: Withdraw */}
-              {(isRecipient || isDemo) && (isOnArc || isDemo) && !isComplete && (
-                <ActionButton
-                  state={actionState}
-                  label={`Withdraw ${formatUsdc(stream?.claimable ?? 0n)} to Wallet`}
-                  signingLabel="Sign in wallet — no gas required"
-                  relayingLabel="Submitting via relayer…"
-                  successLabel="Withdrawal submitted"
-                  disabled={!stream || stream.claimable === 0n || isDemo}
-                  onClick={handleClaim}
-                />
-              )}
+              {(isRecipient || isDemo) && (isOnArc || isDemo) && !isComplete && (() => {
+                const isAccruing = !!stream && stream.claimable === 0n && !stream.isBeforeStart
+                const isNotStarted = !!stream && stream.isBeforeStart
+                return (
+                  <div className="space-y-1.5">
+                    <ActionButton
+                      state={actionState}
+                      label={`Withdraw ${formatUsdc(stream?.claimable ?? 0n)} to Wallet`}
+                      signingLabel="Sign in wallet — no gas required"
+                      relayingLabel="Submitting via relayer…"
+                      successLabel="Withdrawal submitted"
+                      disabled={!stream || stream.claimable === 0n || isDemo}
+                      onClick={handleClaim}
+                    />
+                    {/* Zero-balance tooltip states */}
+                    {isNotStarted && (
+                      <p className="text-center text-[12px] text-gray-400">
+                        Stream begins {new Date(Number(liveParams!.startTime) * 1000).toLocaleString()}
+                      </p>
+                    )}
+                    {isAccruing && (
+                      <div className="flex items-center justify-center gap-1.5 text-[12px] text-gray-400">
+                        <span
+                          className="inline-block h-1.5 w-1.5 rounded-full bg-[#00FF41]"
+                          style={{ animation: 'streamPulse 2s ease-in-out infinite' }}
+                        />
+                        Earnings accruing — first withdrawal available soon
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
 
               {/* Recipient: Fully withdrawn */}
               {isRecipient && isComplete && stream?.claimable === 0n && (
@@ -465,6 +496,9 @@ export function StreamView({ vaultAddress }: StreamViewProps) {
           </span>
         </div>
       </div>
+
+      {/* Persistent pending tx toasts (bottom-right, survives tab close) */}
+      <PendingTxToast txs={pendingTxs} onDismiss={dismiss} />
 
       {/* Pulse keyframe (shared across card) */}
       <style>{`
