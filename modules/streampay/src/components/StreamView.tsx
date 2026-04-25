@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import {
   useAccount, useChainId, useSwitchChain,
   useReadContract, useSignTypedData,
@@ -55,14 +56,15 @@ interface StreamViewProps {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 export function StreamView({ vaultAddress }: StreamViewProps) {
-  // ── Empty state: no vault → show create form ──────────────────────────────
-  if (!vaultAddress) return <CreateStreamForm />
+  const [params] = useSearchParams()
+  const reason   = params.get('reason') ?? undefined
 
-  return <StreamDetail vaultAddress={vaultAddress} />
+  if (!vaultAddress) return <CreateStreamForm />
+  return <StreamDetail vaultAddress={vaultAddress} reason={reason} />
 }
 
 // ── Stream Detail (production, live contract data) ────────────────────────────
-function StreamDetail({ vaultAddress }: { vaultAddress: `0x${string}` }) {
+function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; reason?: string }) {
   const { address: connectedAddr, isConnected } = useAccount()
   const chainId = useChainId()
   const { switchChain } = useSwitchChain()
@@ -275,11 +277,18 @@ function StreamDetail({ vaultAddress }: { vaultAddress: `0x${string}` }) {
 
           {/* Role label + Ticker */}
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">
-              {isRecipient ? 'Available for Withdrawal'
-               : isSender   ? 'Active Payroll Stream'
-               : 'Stream Overview'}
-            </p>
+            <div className="flex items-center gap-3">
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">
+                {isRecipient ? 'Available for Withdrawal'
+                 : isSender   ? 'Active Payroll Stream'
+                 : 'Stream Overview'}
+              </p>
+              {reason && (
+                <span className="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-0.5 text-[10px] font-semibold text-gray-500 truncate max-w-[160px]">
+                  {reason}
+                </span>
+              )}
+            </div>
             <div className="mt-2 flex items-baseline gap-1">
               <span className="self-start mt-2 text-[11px] font-medium text-gray-400">$</span>
               <span
