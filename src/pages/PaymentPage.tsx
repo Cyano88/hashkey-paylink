@@ -651,7 +651,7 @@ export default function PaymentPage() {
     const nonce        = permitNonce ?? 0n
     try {
       const sig = await signTypedDataAsync({
-        domain: { name: 'USD Coin', version: '2', chainId: targetChainId, verifyingContract: tokenAddress },
+        domain: { name: chain === 'arc' ? 'USDC' : 'USD Coin', version: '2', chainId: targetChainId, verifyingContract: tokenAddress },
         types: {
           Permit: [
             { name: 'owner',    type: 'address' },

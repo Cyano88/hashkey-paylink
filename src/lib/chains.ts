@@ -147,9 +147,9 @@ export const CHAIN_META = {
     asset: 'USDC',
     decimals: 6,
     chainId: 5042002,
-    // Circle USDC on Arc Testnet — update to mainnet address when Arc launches
+    // Arc native USDC precompile — symbol=USDC, decimals=6
     // Ref: https://docs.arc.network/arc/references/contract-addresses
-    tokenAddress: '0x0000000000000000000000000000000000000001' as `0x${string}`,
+    tokenAddress: '0x3600000000000000000000000000000000000000' as `0x${string}`,
     explorerUrl: 'https://testnet.arcscan.app',
     explorerName: 'Arcscan',
     // Glow: Violet (Arc brand)

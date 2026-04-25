@@ -75,23 +75,27 @@ async function getEthPriceUsd(): Promise<bigint> {
 }
 
 /**
- * Converts an ETH gas cost to a USDC amount (6 decimals).
+ * Converts a gas cost to USDC (6 decimals).
  *
- *   gasReimbUsdc = (gasPrice × estimatedGas × ethUsd) / 1e18
- *
- * Example at gasPrice=0.1 gwei, gas=300k, eth=$3000:
- *   = (100_000_000 × 300_000 × 3000) / 1e18
- *   = 90_000_000_000_000_000 / 1e18
- *   = 0.09 → 90_000 micro-USDC (~$0.09)
+ * Base/EVM:  gasReimbUsdc = (gasPrice_wei × estimatedGas × ethUsd) / 1e18
+ * Arc:       native gas IS USDC (18-decimal Wei), so no ETH→USD conversion needed.
+ *            gasReimbUsdc = (gasPrice_wei × estimatedGas) / 1e12
+ *            (divide by 1e12 to go from 18-decimal USDC-wei → 6-decimal USDC units)
  */
-async function calcGasReimbUsdc(publicClient: ReturnType<typeof createPublicClient>): Promise<bigint> {
-  const [gasPrice, ethUsd] = await Promise.all([
-    publicClient.getGasPrice(),
-    getEthPriceUsd(),
-  ])
-  const ethCostWei  = gasPrice * ESTIMATED_GAS
-  // USDC has 6 decimals; multiply before dividing to preserve precision.
-  const reimbRaw    = (ethCostWei * ethUsd * 1_000_000n) / (10n ** 18n)
+async function calcGasReimbUsdc(
+  publicClient: ReturnType<typeof createPublicClient>,
+  chainKey: 'base' | 'arc' = 'base',
+): Promise<bigint> {
+  const gasPrice = await publicClient.getGasPrice()
+
+  if (chainKey === 'arc') {
+    const reimbRaw = (gasPrice * ESTIMATED_GAS) / 10n ** 12n
+    return reimbRaw > MAX_REIMB_USDC ? MAX_REIMB_USDC : reimbRaw
+  }
+
+  const ethUsd     = await getEthPriceUsd()
+  const ethCostWei = gasPrice * ESTIMATED_GAS
+  const reimbRaw   = (ethCostWei * ethUsd * 1_000_000n) / (10n ** 18n)
   return reimbRaw > MAX_REIMB_USDC ? MAX_REIMB_USDC : reimbRaw
 }
 
@@ -152,7 +156,7 @@ export default async function handler(req: Request, res: Response) {
   // ── Gas reimbursement calculation ────────────────────────────────────────────
   let gasReimbUsdc: bigint
   try {
-    gasReimbUsdc = await calcGasReimbUsdc(publicClient)
+    gasReimbUsdc = await calcGasReimbUsdc(publicClient, chainKey)
   } catch {
     // If price fetch or gas estimate fails, use a safe fixed fallback (0.10 USDC).
     gasReimbUsdc = 100_000n
