@@ -97,6 +97,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
     address:      vaultAddress,
     abi:          STREAM_VAULT_ABI,
     functionName: 'streamInfo',
+    chainId:      ARC_CHAIN_ID,
     query:        { enabled: true, retry: 2 },
   })
   const info = rawInfo as unknown as StreamInfo | undefined
@@ -105,6 +106,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
     address:      vaultAddress,
     abi:          STREAM_VAULT_ABI,
     functionName: 'nonces',
+    chainId:      ARC_CHAIN_ID,
     args:         [connectedAddr ?? '0x0000000000000000000000000000000000000000'],
     query:        { enabled: !!connectedAddr },
   })
