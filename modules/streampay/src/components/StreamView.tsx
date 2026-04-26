@@ -4,7 +4,6 @@ import { useSearchParams } from 'react-router-dom'
 import {
   useAccount, useChainId, useSwitchChain, useSignTypedData,
 } from 'wagmi'
-import { useConnectModal } from '@rainbow-me/rainbowkit'
 import { useQuery } from '@tanstack/react-query'
 import { createPublicClient, http, defineChain } from 'viem'
 import { useStreamState }    from '../hooks/useStreamState'
@@ -126,7 +125,6 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
   const { address: connectedAddr, isConnected } = useAccount()
   const chainId = useChainId()
   const { switchChain } = useSwitchChain()
-  const { openConnectModal } = useConnectModal()
   const isOnArc = chainId === ARC_CHAIN_ID
 
   // Background relayer health check — only affects Withdraw button spinner
@@ -332,7 +330,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
   // ── Loading skeleton ──────────────────────────────────────────────────────
   if (isLoading && !info) {
     return (
-      <div className="w-full max-w-[480px] mx-auto">
+      <div className="w-full max-w-[480px] mx-auto mt-12">
         <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
           <div className="animate-pulse p-7 space-y-5">
             <div className="flex items-center justify-between">
@@ -367,7 +365,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
 
   // ── Stream card ───────────────────────────────────────────────────────────
   return (
-    <div className="w-full max-w-[480px] mx-auto">
+    <div className="w-full max-w-[480px] mx-auto mt-12">
       <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
 
         {/* Header */}
@@ -436,19 +434,11 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
           {!isCancelled && (
             <div className="space-y-2.5">
 
-              {/* Connect wallet */}
+              {/* Wallet not connected — header handles Connect Wallet */}
               {!isConnected && (
-                <button
-                  onClick={() => openConnectModal?.()}
-                  className="flex w-[90%] mx-auto items-center justify-center gap-2 rounded-xl py-3.5 text-[13px] font-semibold transition-colors active:scale-[0.98] min-h-[52px]"
-                  style={{ background: '#111827', color: '#ffffff' }}
-                >
-                  <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round"
-                      d="M21 12a2.25 2.25 0 00-2.25-2.25H15a3 3 0 11-6 0H5.25A2.25 2.25 0 003 12m18 0v6a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 18v-6m18 0V9M3 12V9m18-3a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v3m18-3V6" />
-                  </svg>
-                  Connect Wallet
-                </button>
+                <div className="rounded-xl border border-gray-100 bg-gray-50 py-3.5 text-center text-[12px] text-gray-400">
+                  Connect your wallet above to interact
+                </div>
               )}
 
               {/* Wrong network */}

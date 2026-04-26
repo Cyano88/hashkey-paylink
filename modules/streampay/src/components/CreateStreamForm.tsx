@@ -1,9 +1,8 @@
 import { useState } from 'react'
 import {
   useAccount, useChainId, useSwitchChain,
-  useDisconnect, useReadContract, useWriteContract, usePublicClient,
+  useReadContract, useWriteContract, usePublicClient,
 } from 'wagmi'
-import { useConnectModal } from '@rainbow-me/rainbowkit'
 import { isAddress, parseAbi, parseEventLogs } from 'viem'
 import { STREAM_VAULT_FACTORY_ABI } from '../lib/streamVaultAbi'
 import { formatUsdcFull } from './TriStateBar'
@@ -56,8 +55,6 @@ export function CreateStreamForm() {
   const { address: connectedAddr, isConnected } = useAccount()
   const chainId                = useChainId()
   const { switchChain }        = useSwitchChain()
-  const { disconnect }         = useDisconnect()
-  const { openConnectModal }   = useConnectModal()
   const { writeContractAsync } = useWriteContract()
   const publicClient           = usePublicClient({ chainId: ARC_CHAIN_ID })
 
@@ -155,17 +152,21 @@ export function CreateStreamForm() {
   // ── Success screen ────────────────────────────────────────────────────────
   if (step === 'success' && streamLink) {
     return (
-      <div className="w-full max-w-[480px] mx-auto">
-        <div className="space-y-8 sm:space-y-12">
+      <div className="w-full max-w-[480px] mx-auto mt-12">
+        <div className="space-y-6">
 
-          <div className="text-center space-y-2">
-            <h1 className="text-[24px] sm:text-[32px] font-bold tracking-tight text-gray-900">STREAMPAY</h1>
-            <p className="text-[13px] sm:text-[14px] text-gray-400">Stream payment in USDC to anyone on Arc</p>
+          {/* Page title */}
+          <div className="text-center space-y-1.5">
+            <h1 className="text-[26px] sm:text-[30px] font-bold tracking-tight text-gray-900">
+              Stream<span style={{ color: '#3b82f6' }}>Pay</span>
+            </h1>
+            <p className="text-[13px] text-gray-400">Stream payment in USDC to anyone on Arc</p>
           </div>
 
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-5 py-7 sm:p-8 text-center space-y-6">
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-50 border border-emerald-100">
-              <svg className="h-6 w-6 text-emerald-500" fill="none" viewBox="0 0 24 24"
+          {/* Success card */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-5 py-7 sm:px-7 sm:py-8 text-center space-y-6">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-gray-50 border border-gray-200">
+              <svg className="h-6 w-6 text-gray-700" fill="none" viewBox="0 0 24 24"
                 stroke="currentColor" strokeWidth={2.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
               </svg>
@@ -192,7 +193,7 @@ export function CreateStreamForm() {
                   onClick={handleCopy}
                   className="w-full flex items-center justify-center gap-2 rounded-xl py-3 text-[13px] font-semibold transition-all min-h-[48px]"
                   style={copied
-                    ? { background: '#f0fdf4', color: '#16a34a', border: '2px solid #bbf7d0' }
+                    ? { background: '#f9fafb', color: '#374151', border: '2px solid #e5e7eb' }
                     : { background: '#111827', color: '#ffffff', border: '2px solid #111827' }}
                 >
                   {copied
@@ -227,10 +228,10 @@ export function CreateStreamForm() {
     )
   }
 
-  // ── Hint ──────────────────────────────────────────────────────────────────
+  // ── Status hint ───────────────────────────────────────────────────────────
   const hint = (() => {
     if (isWorking) return step === 'funding' ? 'Step 1 of 2 — funding vault' : 'Step 2 of 2 — deploying stream'
-    if (!isConnected) return null
+    if (!isConnected) return 'Connect your wallet in the header above to continue'
     if (!isOnArc) return null
     if (insufficientFunds) return null
     if (!recipientValid && recipient) return null
@@ -242,23 +243,25 @@ export function CreateStreamForm() {
 
   // ── Form ──────────────────────────────────────────────────────────────────
   return (
-    <div className="w-full max-w-[480px] mx-auto">
-      <div className="space-y-8 sm:space-y-12">
+    <div className="w-full max-w-[480px] mx-auto mt-12">
+      <div className="space-y-8">
 
-        {/* Hero */}
-        <div className="text-center space-y-2">
-          <h1 className="text-[26px] sm:text-[32px] font-bold tracking-tight text-gray-900">STREAMPAY</h1>
-          <p className="text-[13px] sm:text-[14px] text-gray-400">Stream payment in USDC to anyone on Arc</p>
+        {/* ── Page title (Rule 4: aligned to same 480px) ── */}
+        <div className="text-center space-y-1.5">
+          <h1 className="text-[26px] sm:text-[30px] font-bold tracking-tight text-gray-900">
+            Stream<span style={{ color: '#3b82f6' }}>Pay</span>
+          </h1>
+          <p className="text-[13px] text-gray-400">Stream payment in USDC to anyone on Arc</p>
         </div>
 
-        {/* Card + How It Works */}
+        {/* ── Vault Card + How It Works ── */}
         <div className="space-y-4">
 
-          {/* Card */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm">
-            <div className="p-5 sm:p-7 space-y-4 sm:space-y-5">
+          {/* Vault Card */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="p-5 sm:p-7 space-y-6">
 
-              {/* Recipient Address */}
+              {/* ── Recipient Address capsule ── */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
@@ -280,20 +283,20 @@ export function CreateStreamForm() {
                     spellCheck={false}
                     disabled={isWorking}
                     className={[
-                      'w-full rounded-xl border-2 px-4 py-3 text-[13px] font-mono',
+                      'w-full rounded-xl border-2 px-4 py-3 text-[13px] font-mono min-h-[48px]',
                       'placeholder:text-gray-300 placeholder:font-sans focus:outline-none transition-colors',
-                      'disabled:opacity-50 disabled:cursor-not-allowed min-h-[48px]',
+                      'disabled:opacity-50 disabled:cursor-not-allowed',
                       recipient && !recipientValid
                         ? 'border-red-200 bg-red-50/30'
                         : recipientValid
-                        ? 'border-emerald-200 bg-emerald-50/20'
-                        : 'border-gray-200',
+                        ? 'border-blue-200 bg-blue-50/20'
+                        : 'border-gray-200 focus:border-gray-400',
                     ].join(' ')}
                   />
                   {recipientValid && (
                     <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-600">
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                      <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 border border-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-600">
+                        <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
                         Address Valid
                       </span>
                     </div>
@@ -301,9 +304,9 @@ export function CreateStreamForm() {
                 </div>
 
                 {recipientValid && (
-                  <p className="text-[11px] text-emerald-600 flex items-center gap-1">
+                  <p className="text-[11px] text-blue-500 flex items-center gap-1">
                     <CheckIcon small />
-                    Auto-filled · {recipient.slice(0, 10)}…{recipient.slice(-8)}
+                    {recipient.slice(0, 10)}…{recipient.slice(-8)}
                   </p>
                 )}
                 {recipient && !recipientValid && (
@@ -311,7 +314,7 @@ export function CreateStreamForm() {
                 )}
               </div>
 
-              {/* Amount */}
+              {/* ── Amount capsule ── */}
               <div className="space-y-1.5">
                 <div className="flex items-center gap-1.5">
                   <ChainIcon />
@@ -340,11 +343,11 @@ export function CreateStreamForm() {
                     {insufficientFunds && <span className="ml-1.5 font-semibold text-red-500">— insufficient</span>}
                   </p>
                 ) : (
-                  <p className="text-[11px] text-gray-400">USDC on Arc Network — connect wallet to see balance</p>
+                  <p className="text-[11px] text-gray-400">USDC on Arc Network</p>
                 )}
               </div>
 
-              {/* Duration */}
+              {/* ── Duration capsule ── */}
               <div className="space-y-1.5">
                 <div className="flex items-center gap-1.5">
                   <ClockIcon />
@@ -385,7 +388,7 @@ export function CreateStreamForm() {
                 </div>
               </div>
 
-              {/* Memo */}
+              {/* ── Memo capsule ── */}
               <div className="space-y-1.5">
                 <div className="flex items-center gap-1.5">
                   <TagIcon />
@@ -403,20 +406,10 @@ export function CreateStreamForm() {
                 />
               </div>
 
-              {/* CTA */}
+              {/* ── CTA ── */}
               <div className="space-y-2.5 pt-1">
-                {!isConnected && (
-                  /* Rule 3: 90% width with auto margins gives an internal gutter within the card */
-                  <button
-                    onClick={() => openConnectModal?.()}
-                    className="flex w-[90%] mx-auto items-center justify-center gap-2 rounded-xl py-3.5 text-[14px] font-semibold transition-colors active:scale-[0.98] min-h-[52px]"
-                    style={{ background: '#111827', color: '#ffffff' }}
-                  >
-                    <WalletIcon />
-                    Connect Wallet
-                  </button>
-                )}
 
+                {/* Wrong network — replace primary button */}
                 {isConnected && !isOnArc && (
                   <button
                     onClick={() => switchChain({ chainId: ARC_CHAIN_ID })}
@@ -427,28 +420,20 @@ export function CreateStreamForm() {
                   </button>
                 )}
 
-                {isConnected && isOnArc && (
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={handleDeploy}
-                      disabled={!deployReady}
-                      className="flex flex-1 items-center justify-center gap-2 rounded-xl py-3.5 text-[14px] font-semibold transition-all active:scale-[0.98] min-h-[52px]"
-                      style={deployReady
-                        ? { background: '#111827', color: '#ffffff', cursor: 'pointer' }
-                        : { background: '#f3f4f6', color: '#9ca3af', cursor: 'not-allowed' }}
-                    >
-                      {isWorking ? <><Spinner />{statusMsg}</> : <><StreamIcon />Deploy Stream →</>}
-                    </button>
-
-                    <button
-                      onClick={() => disconnect()}
-                      title="Disconnect wallet"
-                      className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-xl border-2 border-gray-200 transition-colors active:scale-[0.96] hover:border-red-200 hover:text-red-500"
-                      style={{ color: '#111827' }}
-                    >
-                      <PowerIcon />
-                    </button>
-                  </div>
+                {/* START STREAMING — always visible, state reflects readiness */}
+                {(!isConnected || isOnArc) && (
+                  <button
+                    onClick={deployReady ? handleDeploy : undefined}
+                    disabled={!deployReady}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-[14px] font-bold tracking-widest transition-all active:scale-[0.98] min-h-[52px]"
+                    style={deployReady
+                      ? { background: '#111827', color: '#ffffff', cursor: 'pointer' }
+                      : { background: '#f3f4f6', color: '#9ca3af', cursor: 'not-allowed' }}
+                  >
+                    {isWorking
+                      ? <><Spinner /><span className="text-[13px] font-medium tracking-normal">{statusMsg}</span></>
+                      : 'START STREAMING'}
+                  </button>
                 )}
 
                 {insufficientFunds && !isWorking && (
@@ -465,11 +450,12 @@ export function CreateStreamForm() {
                   </div>
                 )}
               </div>
+
             </div>
           </div>
 
-          {/* How It Works */}
-          <div className="space-y-3 pt-2">
+          {/* ── How It Works ── */}
+          <div className="space-y-3 pt-1">
             <p className="text-center text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-400">
               How It Works
             </p>
@@ -479,10 +465,7 @@ export function CreateStreamForm() {
                 { n: '2', title: 'Stream begins', desc: 'Funds unlock linearly to the recipient' },
                 { n: '3', title: 'Claim anytime', desc: 'Recipient withdraws gaslessly on Arc' },
               ] as const).map(s => (
-                <div
-                  key={s.n}
-                  className="rounded-2xl border border-gray-100 bg-white p-3 sm:p-4 text-center shadow-sm space-y-1.5 sm:space-y-2"
-                >
+                <div key={s.n} className="rounded-2xl border border-gray-100 bg-white p-3 sm:p-4 text-center shadow-sm space-y-1.5">
                   <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-gray-200 text-[11px] font-semibold text-gray-500">
                     {s.n}
                   </span>
@@ -558,25 +541,6 @@ function StreamIcon() {
   )
 }
 
-function PowerIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M18.36 6.64a9 9 0 1 1-12.73 0" />
-      <line x1="12" y1="2" x2="12" y2="12" />
-    </svg>
-  )
-}
-
-function WalletIcon() {
-  return (
-    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-      <path strokeLinecap="round" strokeLinejoin="round"
-        d="M21 12a2.25 2.25 0 00-2.25-2.25H15a3 3 0 11-6 0H5.25A2.25 2.25 0 003 12m18 0v6a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 18v-6m18 0V9M3 12V9m18-3a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v3m18-3V6" />
-    </svg>
-  )
-}
-
 function ExtLinkIcon() {
   return (
     <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -594,3 +558,6 @@ function Spinner() {
     </svg>
   )
 }
+
+// StreamIcon used in _unused_ legacy; keeping for potential future use
+export { StreamIcon }
