@@ -8,15 +8,12 @@ import { useConnectModal } from '@rainbow-me/rainbowkit'
 import { useQuery } from '@tanstack/react-query'
 import { createPublicClient, http, defineChain } from 'viem'
 import { useStreamState }    from '../hooks/useStreamState'
-import { usePendingTx }      from '../hooks/usePendingTx'
 import { TriStateBar, formatUsdc, formatUsdcFull } from './TriStateBar'
-import { PendingTxToast }    from './PendingTxToast'
 import { CreateStreamForm, HashPayLinkBadge } from './CreateStreamForm'
 import { StreamNotFound }    from './StreamNotFound'
 import { STREAM_VAULT_ABI }  from '../lib/streamVaultAbi'
 
-// ── Standalone Arc public client — bypasses wagmi chain management entirely ───
-// Reads always hit Arc RPC directly, no matter what chain the wallet is on.
+// ── Standalone Arc public client ──────────────────────────────────────────────
 const arcClient = createPublicClient({
   chain: defineChain({
     id:             5042002,
@@ -27,7 +24,7 @@ const arcClient = createPublicClient({
   transport: http('https://rpc.testnet.arc.network'),
 })
 
-// ── StreamInfo type ───────────────────────────────────────────────────────────
+// ── Types ─────────────────────────────────────────────────────────────────────
 type StreamInfo = {
   _sender:           `0x${string}`
   _recipient:        `0x${string}`
@@ -40,6 +37,10 @@ type StreamInfo = {
   _claimable:        bigint
 }
 
+// idle → signing → relaying → pending → confirmed
+//                           ↘ error (at any step after idle)
+type ActionState = 'idle' | 'signing' | 'relaying' | 'pending' | 'confirmed' | 'error'
+
 // ── Constants ─────────────────────────────────────────────────────────────────
 const ARC_CHAIN_ID = 5042002
 const ARC_EXPLORER = 'https://testnet.arcscan.app'
@@ -49,21 +50,26 @@ const nowSec = () => BigInt(Math.floor(Date.now() / 1000))
 function timeRemaining(endTime: bigint): string {
   const diff = Number(endTime - nowSec())
   if (diff <= 0) return 'Stream complete'
-  const days  = Math.floor(diff / 86400)
-  const hours = Math.floor((diff % 86400) / 3600)
-  const mins  = Math.floor((diff % 3600) / 60)
-  if (days  > 0) return `${days}d ${hours}h`
-  if (hours > 0) return `${hours}h ${mins}m`
-  return `${mins}m`
+  const d = Math.floor(diff / 86400)
+  const h = Math.floor((diff % 86400) / 3600)
+  const m = Math.floor((diff % 3600) / 60)
+  if (d > 0) return `${d}d ${h}h`
+  if (h > 0) return `${h}h ${m}m`
+  return `${m}m`
 }
 
-function shortAddr(addr: string): string {
-  return `${addr.slice(0, 6)}…${addr.slice(-4)}`
+function shortAddr(a: string) { return `${a.slice(0, 6)}…${a.slice(-4)}` }
+
+function cleanRelayError(msg: string): string {
+  if (msg.toLowerCase().includes('missing or invalid')) return 'Transaction rejected by Arc — please try again.'
+  if (msg.toLowerCase().includes('nothing available'))   return 'No funds available to withdraw yet.'
+  if (msg.toLowerCase().includes('already cancelled'))   return 'This stream is already cancelled.'
+  if (msg.toLowerCase().includes('relay failed'))        return 'Relay server error — please try again.'
+  // Strip long URLs from raw viem/RPC errors
+  return msg.replace(/https?:\/\/[^\s]+/g, '').trim().slice(0, 120)
 }
 
-type ActionState = 'idle' | 'signing' | 'relaying' | 'success' | 'error'
-
-// ── Error boundary — catches render errors so page never goes blank ───────────
+// ── Error boundary ────────────────────────────────────────────────────────────
 class StreamErrorBoundary extends Component<
   { children: ReactNode },
   { error: Error | null }
@@ -72,12 +78,8 @@ class StreamErrorBoundary extends Component<
     super(props)
     this.state = { error: null }
   }
-  static getDerivedStateFromError(error: Error) {
-    return { error }
-  }
-  componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error('[StreamPay] render error:', error, info)
-  }
+  static getDerivedStateFromError(e: Error) { return { error: e } }
+  componentDidCatch(e: Error, info: ErrorInfo) { console.error('[StreamPay]', e, info) }
   render() {
     if (this.state.error) {
       return (
@@ -85,8 +87,7 @@ class StreamErrorBoundary extends Component<
           <div className="rounded-2xl border border-red-100 bg-white p-8 text-center space-y-4 shadow-sm">
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-red-50 border border-red-100">
               <svg className="h-5 w-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round"
-                  d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
               </svg>
             </div>
             <div>
@@ -109,14 +110,9 @@ class StreamErrorBoundary extends Component<
 }
 
 // ── Route ─────────────────────────────────────────────────────────────────────
-interface StreamViewProps {
-  vaultAddress?: `0x${string}`
-}
-
-export function StreamView({ vaultAddress }: StreamViewProps) {
+export function StreamView({ vaultAddress }: { vaultAddress?: `0x${string}` }) {
   const [params] = useSearchParams()
   const reason   = params.get('reason') ?? undefined
-
   if (!vaultAddress) return <CreateStreamForm />
   return (
     <StreamErrorBoundary>
@@ -133,12 +129,12 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
   const { openConnectModal } = useConnectModal()
   const isOnArc = chainId === ARC_CHAIN_ID
 
-  // Background relayer check — only affects the Withdraw button spinner
+  // Background relayer health check — only affects Withdraw button spinner
   const [relayerReady, setRelayerReady] = useState(false)
-  const relayerChecked = useRef(false)
+  const checkedRef = useRef(false)
   useEffect(() => {
-    if (relayerChecked.current) return
-    relayerChecked.current = true
+    if (checkedRef.current) return
+    checkedRef.current = true
     let dead = false
     async function ping() {
       if (dead) return
@@ -152,62 +148,32 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
     return () => { dead = true }
   }, [])
 
-  // ── Direct Arc RPC reads via standalone client — no wagmi chain dependency ──
-  const {
-    data: info,
-    isLoading,
-    isError,
-    refetch: refetchInfo,
-  } = useQuery<StreamInfo>({
+  // ── Contract reads via standalone Arc client ──────────────────────────────
+  const { data: info, isLoading, isError, refetch: refetchInfo } = useQuery<StreamInfo>({
     queryKey: ['streamInfo', vaultAddress],
     queryFn:  async () => {
-      // viem returns named-tuple outputs as a plain array [0,1,2,...].
-      // Named property access (raw._sender) is undefined at runtime —
-      // destructure by index to get the actual values.
       const r = await arcClient.readContract({
-        address:      vaultAddress,
-        abi:          STREAM_VAULT_ABI,
-        functionName: 'streamInfo',
-      }) as unknown as readonly [
-        `0x${string}`, // 0 _sender
-        `0x${string}`, // 1 _recipient
-        bigint,        // 2 _totalAmount
-        bigint,        // 3 _startTime
-        bigint,        // 4 _endTime
-        bigint,        // 5 _alreadyWithdrawn
-        boolean,       // 6 _cancelled
-        bigint,        // 7 _unlocked
-        bigint,        // 8 _claimable
-      ]
+        address: vaultAddress, abi: STREAM_VAULT_ABI, functionName: 'streamInfo',
+      }) as unknown as readonly [`0x${string}`, `0x${string}`, bigint, bigint, bigint, bigint, boolean, bigint, bigint]
       return {
-        _sender:           r[0],
-        _recipient:        r[1],
-        _totalAmount:      r[2],
-        _startTime:        r[3],
-        _endTime:          r[4],
-        _alreadyWithdrawn: r[5],
-        _cancelled:        r[6],
-        _unlocked:         r[7],
-        _claimable:        r[8],
+        _sender: r[0], _recipient: r[1], _totalAmount: r[2],
+        _startTime: r[3], _endTime: r[4], _alreadyWithdrawn: r[5],
+        _cancelled: r[6], _unlocked: r[7], _claimable: r[8],
       }
     },
-    retry:     2,
-    staleTime: 0,
+    retry: 2, staleTime: 0,
   })
 
-  const { data: signerNonce, refetch: refetchNonce } = useQuery<bigint>({
+  const { refetch: refetchNonce } = useQuery<bigint>({
     queryKey: ['nonce', vaultAddress, connectedAddr],
     queryFn:  async () => {
       const raw = await arcClient.readContract({
-        address:      vaultAddress,
-        abi:          STREAM_VAULT_ABI,
-        functionName: 'nonces',
-        args:         [connectedAddr!],
+        address: vaultAddress, abi: STREAM_VAULT_ABI,
+        functionName: 'nonces', args: [connectedAddr!],
       })
       return raw as bigint
     },
-    enabled:   !!connectedAddr,
-    staleTime: 0,
+    enabled: !!connectedAddr, staleTime: 0,
   })
 
   // ── Role detection ────────────────────────────────────────────────────────
@@ -231,39 +197,63 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
 
   const stream = useStreamState(liveParams, 100)
 
-  // ── EIP-712 gasless actions ───────────────────────────────────────────────
+  // ── EIP-712 action state ──────────────────────────────────────────────────
   const { signTypedDataAsync } = useSignTypedData()
   const [actionState, setActionState] = useState<ActionState>('idle')
-  const [txHash,      setTxHash]      = useState<string | null>(null)
+  const [txHash,      setTxHash]      = useState<`0x${string}` | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
-  const { pendingTxs, addPending, dismiss } = usePendingTx(vaultAddress)
+
+  // Poll for transaction receipt every 3s after broadcast
+  function pollReceipt(hash: `0x${string}`, attempts = 0) {
+    if (attempts > 60) { // 3 min max
+      setActionError('Transaction not confirmed after 3 minutes — check Arcscan')
+      setActionState('error')
+      return
+    }
+    setTimeout(async () => {
+      try {
+        const receipt = await arcClient.getTransactionReceipt({ hash })
+        if (receipt?.status === 'success') {
+          setActionState('confirmed')
+          refetchInfo(); refetchNonce()
+          setTimeout(() => refetchInfo(), 3_000)
+          setTimeout(() => refetchInfo(), 7_000)
+        } else if (receipt?.status === 'reverted') {
+          setActionError('Transaction reverted on Arc — funds not moved')
+          setActionState('error')
+        } else {
+          pollReceipt(hash, attempts + 1)
+        }
+      } catch {
+        pollReceipt(hash, attempts + 1)
+      }
+    }, 3_000)
+  }
 
   async function handleClaim() {
     if (!connectedAddr || !stream || stream.claimable === 0n) return
-    setActionState('signing'); setActionError(null)
+    setActionState('signing'); setActionError(null); setTxHash(null)
     try {
       const deadline = BigInt(Math.floor(Date.now() / 1000) + 600)
-      // Always read fresh nonce from chain — never use a cached value.
-      // A stale nonce causes "Missing or invalid parameters" on the relay RPC.
       const nonce = await arcClient.readContract({
         address: vaultAddress, abi: STREAM_VAULT_ABI,
         functionName: 'nonces', args: [connectedAddr],
       }) as bigint
+
       const sig = await signTypedDataAsync({
         domain: { name: 'StreamVault', version: '1', chainId: ARC_CHAIN_ID, verifyingContract: vaultAddress },
-        types: {
-          Claim: [
-            { name: 'recipient', type: 'address' },
-            { name: 'amount',    type: 'uint256' },
-            { name: 'nonce',     type: 'uint256' },
-            { name: 'deadline',  type: 'uint256' },
-          ],
-        },
+        types: { Claim: [
+          { name: 'recipient', type: 'address' },
+          { name: 'amount',    type: 'uint256' },
+          { name: 'nonce',     type: 'uint256' },
+          { name: 'deadline',  type: 'uint256' },
+        ]},
         primaryType: 'Claim',
         message: { recipient: connectedAddr, amount: stream.claimable, nonce, deadline },
       })
+
       setActionState('relaying')
-      const res = await fetch('/api/relay-stream', {
+      const res  = await fetch('/api/relay-stream', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'claim', vaultAddress, sig,
@@ -273,49 +263,45 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
       })
       const data = await res.json() as { ok: boolean; txHash?: string; error?: string }
       if (!data.ok) throw new Error(data.error ?? 'Relay failed')
-      const hash = data.txHash as `0x${string}` | undefined
-      setTxHash(hash ?? null)
-      if (hash) addPending(hash, vaultAddress, 'claim')
-      setActionState('success')
-      // Poll until on-chain data actually changes — covers slow block times
-      refetchInfo(); refetchNonce()
-      setTimeout(() => { refetchInfo(); refetchNonce() }, 4_000)
-      setTimeout(() => { refetchInfo(); refetchNonce() }, 9_000)
-      setTimeout(() => { refetchInfo(); refetchNonce() }, 15_000)
+
+      const hash = data.txHash as `0x${string}`
+      setTxHash(hash)
+      setActionState('pending')
+      pollReceipt(hash)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
       if (msg.toLowerCase().includes('rejected') || msg.toLowerCase().includes('denied')) {
         setActionState('idle'); return
       }
-      setActionError(msg.slice(0, 120)); setActionState('error')
+      setActionError(cleanRelayError(msg))
+      setActionState('error')
     }
   }
 
   async function handleCancel() {
     if (!connectedAddr) return
-    if (!window.confirm('Cancel this stream?\n\nThe unlocked portion will be sent to the recipient and the locked remainder will be refunded to you.')) return
-    setActionState('signing'); setActionError(null)
+    if (!window.confirm('Cancel this stream?\n\nThe unlocked portion goes to the recipient. The locked remainder is refunded to you.')) return
+    setActionState('signing'); setActionError(null); setTxHash(null)
     try {
       const deadline = BigInt(Math.floor(Date.now() / 1000) + 600)
-      // Fresh nonce from chain — same reason as handleClaim
       const nonce = await arcClient.readContract({
         address: vaultAddress, abi: STREAM_VAULT_ABI,
         functionName: 'nonces', args: [connectedAddr],
       }) as bigint
+
       const sig = await signTypedDataAsync({
         domain: { name: 'StreamVault', version: '1', chainId: ARC_CHAIN_ID, verifyingContract: vaultAddress },
-        types: {
-          Cancel: [
-            { name: 'sender',   type: 'address' },
-            { name: 'nonce',    type: 'uint256' },
-            { name: 'deadline', type: 'uint256' },
-          ],
-        },
+        types: { Cancel: [
+          { name: 'sender',   type: 'address' },
+          { name: 'nonce',    type: 'uint256' },
+          { name: 'deadline', type: 'uint256' },
+        ]},
         primaryType: 'Cancel',
         message: { sender: connectedAddr, nonce, deadline },
       })
+
       setActionState('relaying')
-      const res = await fetch('/api/relay-stream', {
+      const res  = await fetch('/api/relay-stream', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'cancel', vaultAddress, sig,
@@ -324,19 +310,18 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
       })
       const data = await res.json() as { ok: boolean; txHash?: string; error?: string }
       if (!data.ok) throw new Error(data.error ?? 'Relay failed')
-      const hash = data.txHash as `0x${string}` | undefined
-      setTxHash(hash ?? null)
-      if (hash) addPending(hash, vaultAddress, 'cancel')
-      setActionState('success')
-      refetchInfo()
-      setTimeout(() => refetchInfo(), 4_000)
-      setTimeout(() => refetchInfo(), 9_000)
+
+      const hash = data.txHash as `0x${string}`
+      setTxHash(hash)
+      setActionState('pending')
+      pollReceipt(hash)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
       if (msg.toLowerCase().includes('rejected') || msg.toLowerCase().includes('denied')) {
         setActionState('idle'); return
       }
-      setActionError(msg.slice(0, 120)); setActionState('error')
+      setActionError(cleanRelayError(msg))
+      setActionState('error')
     }
   }
 
@@ -369,23 +354,16 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
     )
   }
 
-  // ── Not found ─────────────────────────────────────────────────────────────
-  if (isError || !info) {
-    return <StreamNotFound vaultAddress={vaultAddress} />
-  }
+  if (isError || !info) return <StreamNotFound vaultAddress={vaultAddress} />
 
-  // ── Status badge ──────────────────────────────────────────────────────────
   const statusBadge = isCancelled
     ? <span className="inline-flex items-center rounded-full bg-red-50 border border-red-100 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-red-500">Cancelled</span>
     : isComplete
     ? <span className="inline-flex items-center rounded-full bg-emerald-50 border border-emerald-100 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-600">Complete</span>
-    : (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-gray-50 border border-gray-100 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-500">
-        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400"
-          style={{ animation: 'spPulse 2s ease-in-out infinite' }} />
+    : <span className="inline-flex items-center gap-1.5 rounded-full bg-gray-50 border border-gray-100 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-500">
+        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" style={{ animation: 'spPulse 2s ease-in-out infinite' }} />
         Live
       </span>
-    )
 
   // ── Stream card ───────────────────────────────────────────────────────────
   return (
@@ -399,9 +377,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
               <span className="h-2 w-2 rounded-full bg-blue-500" />
               <span className="h-2 w-2 rounded-full bg-amber-400" />
             </span>
-            <span className="text-[12px] font-semibold uppercase tracking-[0.14em] text-gray-500">
-              StreamPay
-            </span>
+            <span className="text-[12px] font-semibold uppercase tracking-[0.14em] text-gray-500">StreamPay</span>
           </div>
           {statusBadge}
         </div>
@@ -409,13 +385,11 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
         {/* Body */}
         <div className="px-7 pb-6 space-y-5">
 
-          {/* Role label + reason + ticker */}
+          {/* Ticker */}
           <div>
             <div className="flex items-center gap-2 mb-1">
               <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">
-                {isRecipient ? 'Available for Withdrawal'
-                 : isSender   ? 'Active Payroll Stream'
-                 : 'Stream Overview'}
+                {isRecipient ? 'Available for Withdrawal' : isSender ? 'Active Payroll Stream' : 'Stream Overview'}
               </p>
               {reason && (
                 <span className="max-w-[140px] truncate rounded-full border border-gray-200 bg-gray-50 px-2.5 py-0.5 text-[10px] font-semibold text-gray-500">
@@ -431,9 +405,9 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
               <span className="mb-0.5 self-end text-[12px] font-medium text-gray-400">USDC</span>
             </div>
             <p className="mt-0.5 text-[12px] text-gray-400">
-              {stream?.isBeforeStart  ? 'Stream begins soon'
-               : isCancelled         ? 'Final vested amount'
-               : isComplete          ? 'Fully vested'
+              {stream?.isBeforeStart ? 'Stream begins soon'
+               : isCancelled        ? 'Final vested amount'
+               : isComplete         ? 'Fully vested'
                : 'Total unlocked · updates every 100ms'}
             </p>
           </div>
@@ -458,19 +432,11 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
             <MetaCell label="Withdrawn" value={formatUsdc(info._alreadyWithdrawn)} />
           </div>
 
-          {/* Actions */}
+          {/* ── Actions ─────────────────────────────────────────────────── */}
           {!isCancelled && (
-            <div className="space-y-2">
-              {isConnected && !isOnArc && (
-                <button
-                  onClick={() => switchChain({ chainId: ARC_CHAIN_ID })}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl py-3 text-[13px] font-semibold transition-colors active:scale-[0.98]"
-                  style={{ background: '#111827', color: '#ffffff' }}
-                >
-                  Switch to Arc Network
-                </button>
-              )}
+            <div className="space-y-2.5">
 
+              {/* Connect wallet */}
               {!isConnected && (
                 <button
                   onClick={() => openConnectModal?.()}
@@ -485,66 +451,175 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
                 </button>
               )}
 
-              {/* Recipient withdraw — shown whenever there is a claimable balance,
-                  regardless of isComplete (a finished stream can still have unclaimed funds) */}
-              {isRecipient && isOnArc && (stream?.claimable ?? 0n) > 0n && (() => {
-                const isNotStarted = !!stream && stream.isBeforeStart
-                return (
-                  <div className="space-y-1.5">
-                    {!relayerReady ? (
+              {/* Wrong network */}
+              {isConnected && !isOnArc && (
+                <button
+                  onClick={() => switchChain({ chainId: ARC_CHAIN_ID })}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-[13px] font-semibold transition-colors active:scale-[0.98]"
+                  style={{ background: '#111827', color: '#ffffff' }}
+                >
+                  Switch to Arc Network
+                </button>
+              )}
+
+              {/* ── Recipient withdraw flow ── */}
+              {isRecipient && isOnArc && (() => {
+                const claimable = stream?.claimable ?? 0n
+                const hasBalance = claimable > 0n
+
+                // Confirmed — show Arcscan button (even after balance refreshes to 0)
+                if (actionState === 'confirmed' && txHash) {
+                  return (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 py-3">
+                        <svg className="h-4 w-4 text-emerald-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                        </svg>
+                        <span className="text-[13px] font-semibold text-emerald-700">Withdrawal confirmed</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => window.open(`${ARC_EXPLORER}/tx/${txHash}`, '_blank', 'noopener,noreferrer')}
+                        className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-gray-200 py-3 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer"
+                      >
+                        <ExtLinkIcon />
+                        View on Arcscan
+                      </button>
+                    </div>
+                  )
+                }
+
+                // Pending — show inline status
+                if (actionState === 'pending' && txHash) {
+                  return (
+                    <div className="space-y-2">
                       <button disabled
                         className="flex w-full items-center justify-center gap-2.5 rounded-xl py-3.5 text-[13px] font-semibold"
-                        style={{ background: '#111827', color: '#ffffff', opacity: 0.7, cursor: 'wait' }}
+                        style={{ background: '#f3f4f6', color: '#6b7280', cursor: 'default' }}
                       >
-                        <svg className="h-4 w-4 animate-spin shrink-0" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                        </svg>
-                        Relayer connecting…
+                        Withdrawal submitted
                       </button>
-                    ) : (
-                      <ActionButton
-                        state={actionState}
-                        label={`Withdraw ${formatUsdc(stream.claimable)} to Wallet`}
-                        signingLabel="Sign in wallet — no gas required"
-                        relayingLabel="Submitting via relayer…"
-                        successLabel="Withdrawal submitted"
-                        disabled={false}
-                        onClick={handleClaim}
-                      />
-                    )}
-                    {isNotStarted && (
-                      <p className="text-center text-[12px] text-gray-400">
-                        Stream begins {new Date(Number(info._startTime) * 1000).toLocaleString()}
-                      </p>
-                    )}
-                  </div>
+                      {/* Pending indicator */}
+                      <div className="flex items-center justify-between rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <svg className="h-3.5 w-3.5 animate-spin text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                          </svg>
+                          <span className="text-[12px] text-gray-500 font-medium">Pending on Arc…</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => window.open(`${ARC_EXPLORER}/tx/${txHash}`, '_blank', 'noopener,noreferrer')}
+                          className="flex items-center gap-1 text-[11px] font-semibold text-gray-500 hover:text-gray-800 underline underline-offset-2 transition-colors cursor-pointer"
+                        >
+                          <ExtLinkIcon />
+                          Track
+                        </button>
+                      </div>
+                    </div>
+                  )
+                }
+
+                // Signing / relaying — disabled button with live label
+                if (actionState === 'signing' || actionState === 'relaying') {
+                  return (
+                    <button disabled
+                      className="flex w-full items-center justify-center gap-2.5 rounded-xl py-3.5 text-[13px] font-semibold"
+                      style={{ background: '#111827', color: '#ffffff', opacity: 0.75, cursor: 'wait' }}
+                    >
+                      <svg className="h-4 w-4 animate-spin shrink-0" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      {actionState === 'signing' ? 'Sign in wallet — no gas required' : 'Broadcasting to Arc…'}
+                    </button>
+                  )
+                }
+
+                // Error — show message + retry
+                if (actionState === 'error') {
+                  return (
+                    <div className="space-y-2">
+                      <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-center space-y-1">
+                        <p className="text-[12px] font-semibold text-red-600">{actionError}</p>
+                        <button
+                          onClick={() => { setActionState('idle'); setActionError(null) }}
+                          className="text-[11px] font-semibold text-red-500 underline underline-offset-2"
+                        >
+                          Try again
+                        </button>
+                      </div>
+                      {txHash && (
+                        <button
+                          type="button"
+                          onClick={() => window.open(`${ARC_EXPLORER}/tx/${txHash}`, '_blank', 'noopener,noreferrer')}
+                          className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-gray-200 py-2.5 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 transition-colors cursor-pointer"
+                        >
+                          <ExtLinkIcon />
+                          Check transaction on Arcscan
+                        </button>
+                      )}
+                    </div>
+                  )
+                }
+
+                // Idle — main withdraw button (or "All funds withdrawn")
+                if (!hasBalance) {
+                  if (isComplete) {
+                    return (
+                      <div className="rounded-xl border border-gray-100 bg-gray-50 py-3.5 text-center text-[13px] font-medium text-gray-500">
+                        All funds withdrawn
+                      </div>
+                    )
+                  }
+                  return (
+                    <div className="flex items-center justify-center gap-1.5 text-[12px] text-gray-400 py-1">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" style={{ animation: 'spPulse 2s ease-in-out infinite' }} />
+                      Earnings accruing — first withdrawal available soon
+                    </div>
+                  )
+                }
+
+                // Has balance — show withdraw
+                if (!relayerReady) {
+                  return (
+                    <button disabled
+                      className="flex w-full items-center justify-center gap-2.5 rounded-xl py-3.5 text-[13px] font-semibold"
+                      style={{ background: '#111827', color: '#ffffff', opacity: 0.7, cursor: 'wait' }}
+                    >
+                      <svg className="h-4 w-4 animate-spin shrink-0" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      Relayer connecting…
+                    </button>
+                  )
+                }
+
+                return (
+                  <button
+                    onClick={handleClaim}
+                    className="flex w-full items-center justify-center gap-2.5 rounded-xl py-3.5 text-[13px] font-semibold transition-all active:scale-[0.98]"
+                    style={{ background: '#111827', color: '#ffffff', cursor: 'pointer' }}
+                  >
+                    Withdraw {formatUsdc(claimable)} to Wallet
+                  </button>
                 )
               })()}
 
-              {/* Accruing — stream live but nothing claimable yet */}
-              {isRecipient && isOnArc && !isComplete && (stream?.claimable ?? 0n) === 0n && !stream?.isBeforeStart && (
-                <div className="flex items-center justify-center gap-1.5 text-[12px] text-gray-400 py-1">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400"
-                    style={{ animation: 'spPulse 2s ease-in-out infinite' }} />
-                  Earnings accruing — first withdrawal available soon
-                </div>
-              )}
-
-              {/* Truly nothing left — stream complete AND claimable is zero */}
-              {isRecipient && isComplete && (stream?.claimable ?? 0n) === 0n && (
-                <div className="rounded-xl border border-gray-100 bg-gray-50 py-3.5 text-center text-[13px] font-medium text-gray-500">
-                  All funds withdrawn
-                </div>
-              )}
+              {/* Recipient complete — already handled inside the IIFE above */}
 
               {/* Sender cancel */}
-              {isSender && !isComplete && (
-                <button onClick={handleCancel} disabled={actionState !== 'idle'}
+              {isSender && !isComplete && isOnArc && (
+                <button
+                  onClick={handleCancel}
+                  disabled={actionState !== 'idle' && actionState !== 'error'}
                   className="flex w-full items-center justify-center gap-2 rounded-xl border border-red-100 bg-red-50 py-3 text-[13px] font-semibold text-red-600 hover:bg-red-100 transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {actionState === 'signing'  ? 'Sign to confirm…'
                    : actionState === 'relaying' ? 'Processing…'
+                   : actionState === 'pending'  ? 'Cancellation pending…'
                    : 'Cancel Stream & Reclaim Locked Funds'}
                 </button>
               )}
@@ -556,23 +631,6 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
                 >
                   Create Your Own Stream
                 </a>
-              )}
-
-              {actionState === 'success' && txHash && (
-                <a
-                  href={`${ARC_EXPLORER}/tx/${txHash}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-gray-200 py-3 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 transition-colors active:scale-[0.98]"
-                >
-                  <ExtLinkIcon />
-                  View on Arcscan
-                </a>
-              )}
-              {actionState === 'error' && actionError && (
-                <p className="rounded-xl border border-red-100 bg-red-50 px-3 py-2.5 text-center text-[12px] text-red-500">
-                  {actionError}
-                </p>
               )}
             </div>
           )}
@@ -599,8 +657,6 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
         </div>
       </div>
 
-      <PendingTxToast txs={pendingTxs} onDismiss={dismiss} />
-
       <style>{`
         @keyframes spPulse {
           0%, 100% { opacity: 0.5; }
@@ -619,51 +675,6 @@ function MetaCell({ label, value }: { label: string; value: string }) {
       <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{label}</p>
       <p className="mt-0.5 text-[13px] font-semibold text-gray-700 tabular-nums">{value}</p>
     </div>
-  )
-}
-
-interface ActionButtonProps {
-  state:         ActionState
-  label:         string
-  signingLabel:  string
-  relayingLabel: string
-  successLabel:  string
-  disabled?:     boolean
-  onClick:       () => void
-}
-
-function ActionButton({ state, label, signingLabel, relayingLabel, successLabel, disabled, onClick }: ActionButtonProps) {
-  const isWorking = state === 'signing' || state === 'relaying'
-  const isDone    = state === 'success'
-  const displayLabel = state === 'signing' ? signingLabel
-    : state === 'relaying' ? relayingLabel
-    : isDone ? successLabel
-    : label
-
-  return (
-    <button onClick={onClick} disabled={disabled || isWorking || isDone}
-      className="flex w-full items-center justify-center gap-2.5 rounded-xl py-3.5 text-[13px] font-semibold transition-all duration-150 active:scale-[0.98]"
-      style={
-        isDone    ? { background: '#f3f4f6', color: '#6b7280', cursor: 'default' }
-        : isWorking ? { background: '#111827', color: '#ffffff', cursor: 'wait', opacity: 0.75 }
-        : disabled  ? { background: '#f3f4f6', color: '#9ca3af', cursor: 'not-allowed' }
-        : { background: '#111827', color: '#ffffff', cursor: 'pointer' }
-      }
-    >
-      {isWorking && (
-        <svg className="h-4 w-4 animate-spin shrink-0" fill="none" viewBox="0 0 24 24">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-        </svg>
-      )}
-      {isDone && (
-        <svg className="h-4 w-4 text-emerald-500 shrink-0" fill="none" viewBox="0 0 24 24"
-          stroke="currentColor" strokeWidth={2.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-        </svg>
-      )}
-      {displayLabel}
-    </button>
   )
 }
 
