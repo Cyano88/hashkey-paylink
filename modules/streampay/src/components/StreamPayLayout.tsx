@@ -2,13 +2,14 @@ import { Outlet } from 'react-router-dom'
 
 export function StreamPayLayout() {
   return (
-    <div className="min-h-screen bg-[#F5F5F7] font-inter flex flex-col">
-      {/* Safe horizontal padding prevents content touching screen edges on all devices */}
-      <main className="flex flex-1 flex-col items-center justify-start px-4 pt-8 pb-6 sm:justify-center sm:py-12">
+    // Rule 1: Safety Container — mandatory edge gap, consistent background, centered column
+    <div className="min-h-screen w-full bg-gray-50 font-inter flex flex-col items-center p-4 md:p-8">
+
+      <main className="flex-1 w-full flex flex-col items-center justify-center py-4 md:py-6">
         <Outlet />
       </main>
 
-      <footer className="py-5 flex flex-col items-center gap-3 px-4">
+      <footer className="w-full max-w-[480px] mx-auto py-4 flex flex-col items-center gap-3">
         <p className="text-[11px] font-medium tracking-widest uppercase text-gray-300 text-center">
           Streampay &nbsp;·&nbsp; Arc Network &nbsp;·&nbsp;{' '}
           <a
@@ -26,6 +27,7 @@ export function StreamPayLayout() {
           <span className="text-[10px] font-semibold text-gray-400">Powered by Hash PayLink</span>
         </span>
       </footer>
+
     </div>
   )
 }

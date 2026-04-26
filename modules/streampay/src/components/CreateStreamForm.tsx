@@ -155,7 +155,7 @@ export function CreateStreamForm() {
   // ── Success screen ────────────────────────────────────────────────────────
   if (step === 'success' && streamLink) {
     return (
-      <div className="w-full max-w-[460px] mx-auto">
+      <div className="w-full max-w-[480px] mx-auto">
         <div className="space-y-8 sm:space-y-12">
 
           <div className="text-center space-y-2">
@@ -242,7 +242,7 @@ export function CreateStreamForm() {
 
   // ── Form ──────────────────────────────────────────────────────────────────
   return (
-    <div className="w-full max-w-[460px] mx-auto">
+    <div className="w-full max-w-[480px] mx-auto">
       <div className="space-y-8 sm:space-y-12">
 
         {/* Hero */}
@@ -406,9 +406,10 @@ export function CreateStreamForm() {
               {/* CTA */}
               <div className="space-y-2.5 pt-1">
                 {!isConnected && (
+                  /* Rule 3: 90% width with auto margins gives an internal gutter within the card */
                   <button
                     onClick={() => openConnectModal?.()}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-[14px] font-semibold transition-colors active:scale-[0.98] min-h-[52px]"
+                    className="flex w-[90%] mx-auto items-center justify-center gap-2 rounded-xl py-3.5 text-[14px] font-semibold transition-colors active:scale-[0.98] min-h-[52px]"
                     style={{ background: '#111827', color: '#ffffff' }}
                   >
                     <WalletIcon />
