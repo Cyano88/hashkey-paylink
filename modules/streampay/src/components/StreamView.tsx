@@ -544,8 +544,11 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
               )}
 
               {actionState === 'success' && txHash && (
-                <a href={`${ARC_EXPLORER}/tx/${txHash}`} target="_blank" rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-1.5 text-[12px] text-gray-400 hover:text-gray-600 transition-colors"
+                <a
+                  href={`${ARC_EXPLORER}/tx/${txHash}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-gray-200 py-3 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 transition-colors active:scale-[0.98]"
                 >
                   <ExtLinkIcon />
                   View on Arcscan
