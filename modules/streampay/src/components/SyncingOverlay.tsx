@@ -1,8 +1,3 @@
-// ── SyncingOverlay ────────────────────────────────────────────────────────────
-// Compact in-card overlay shown during Render cold-start (up to 3 min).
-// More subtle than the fullscreen RelayerWakeUp — sits inside the stream card
-// as a frosted layer so the card structure is still visible underneath.
-
 import { useEffect, useRef, useState } from 'react'
 
 const TIMEOUT_SEC = 180
@@ -58,17 +53,18 @@ export function SyncingOverlay({ onReady, onTimeout }: SyncingOverlayProps) {
   const secs = remaining % 60
 
   return (
-    <div className="absolute inset-0 z-10 flex flex-col items-center justify-center rounded-2xl bg-white/90 backdrop-blur-sm">
-      <div className="w-64 text-center space-y-5">
-        {/* Spinner or check */}
+    <div className="absolute inset-0 z-10 flex flex-col items-center justify-center rounded-2xl bg-white/92 backdrop-blur-sm">
+      <div className="w-60 text-center space-y-5">
+        {/* Spinner or warning */}
         <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full border border-gray-100 bg-gray-50">
           {timedOut ? (
-            <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24"
+              stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round"
                 d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
             </svg>
           ) : (
-            <div className="h-6 w-6 rounded-full border-2 border-gray-200 border-t-[#00FF41] animate-spin" />
+            <div className="h-6 w-6 rounded-full border-2 border-gray-200 border-t-gray-700 animate-spin" />
           )}
         </div>
 
@@ -79,7 +75,7 @@ export function SyncingOverlay({ onReady, onTimeout }: SyncingOverlayProps) {
           <p className="mt-1 text-[12px] text-gray-400 leading-relaxed">
             {timedOut
               ? 'The relayer did not respond. Please retry.'
-              : 'Infrastructure is starting. Gasless transactions\nwill be ready shortly.'}
+              : 'Infrastructure is starting. Gasless transactions will be ready shortly.'}
           </p>
         </div>
 
@@ -90,7 +86,7 @@ export function SyncingOverlay({ onReady, onTimeout }: SyncingOverlayProps) {
               className="h-full rounded-full transition-all duration-1000"
               style={{
                 width:      `${progress * 100}%`,
-                background: timedOut ? '#d1d5db' : '#00FF41',
+                background: timedOut ? '#d1d5db' : '#1a1a1a',
               }}
             />
           </div>
@@ -101,7 +97,12 @@ export function SyncingOverlay({ onReady, onTimeout }: SyncingOverlayProps) {
 
         {timedOut && (
           <button
-            onClick={() => { startRef.current = Date.now(); setElapsed(0); setTimedOut(false); window.location.reload() }}
+            onClick={() => {
+              startRef.current = Date.now()
+              setElapsed(0)
+              setTimedOut(false)
+              window.location.reload()
+            }}
             className="w-full rounded-xl border border-gray-200 py-2 text-[12px] font-medium text-gray-600 hover:bg-gray-50 transition-colors"
           >
             Retry Connection

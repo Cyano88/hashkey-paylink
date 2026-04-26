@@ -4,23 +4,12 @@ import type { PendingTx } from '../hooks/usePendingTx'
 const ARC_EXPLORER = 'https://testnet.arcscan.app'
 
 interface PendingTxToastProps {
-  txs:      PendingTx[]
+  txs:       PendingTx[]
   onDismiss: (txHash: `0x${string}`) => void
 }
 
-/**
- * PendingTxToast
- *
- * Renders a stacked set of toast notifications (bottom-right) — one per
- * in-flight or recently confirmed transaction. Confirmed toasts auto-dismiss
- * after 6 seconds. Failed toasts persist until manually dismissed.
- *
- * Usage (add once near the root of StreamView or the stream page):
- *   const { pendingTxs, addPending, dismiss } = usePendingTx(vaultAddress)
- *   <PendingTxToast txs={pendingTxs} onDismiss={dismiss} />
- */
 export function PendingTxToast({ txs, onDismiss }: PendingTxToastProps) {
-  const visible = txs.filter(t => t.status !== 'failed' || true) // show all statuses
+  const visible = txs.filter(() => true)
   if (visible.length === 0) return null
 
   return (
@@ -32,19 +21,15 @@ export function PendingTxToast({ txs, onDismiss }: PendingTxToastProps) {
   )
 }
 
-// ── Individual toast ──────────────────────────────────────────────────────────
-
 function Toast({ tx, onDismiss }: { tx: PendingTx; onDismiss: (h: `0x${string}`) => void }) {
-  const [visible, setVisible] = useState(false)   // controls enter animation
+  const [visible, setVisible] = useState(false)
   const [leaving, setLeaving] = useState(false)
 
-  // Slide-in on mount
   useEffect(() => {
     const id = setTimeout(() => setVisible(true), 30)
     return () => clearTimeout(id)
   }, [])
 
-  // Auto-dismiss confirmed toasts after 6 seconds
   useEffect(() => {
     if (tx.status !== 'confirmed') return
     const id = setTimeout(() => handleDismiss(), 6_000)
@@ -59,7 +44,6 @@ function Toast({ tx, onDismiss }: { tx: PendingTx; onDismiss: (h: `0x${string}`)
   const isConfirmed = tx.status === 'confirmed'
   const isFailed    = tx.status === 'failed'
   const isPending   = tx.status === 'pending'
-
   const actionLabel = tx.action === 'claim' ? 'Withdrawal' : 'Cancellation'
 
   return (
@@ -84,15 +68,15 @@ function Toast({ tx, onDismiss }: { tx: PendingTx; onDismiss: (h: `0x${string}`)
             </div>
           )}
           {isConfirmed && (
-            <div className="flex h-5 w-5 items-center justify-center rounded-full bg-[#00FF41]/15">
-              <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"
-                strokeWidth={3} style={{ color: '#00CC33' }}>
+            <div className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-50 border border-emerald-100">
+              <svg className="h-3 w-3 text-emerald-500" fill="none" viewBox="0 0 24 24"
+                stroke="currentColor" strokeWidth={3}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
               </svg>
             </div>
           )}
           {isFailed && (
-            <div className="flex h-5 w-5 items-center justify-center rounded-full bg-red-50">
+            <div className="flex h-5 w-5 items-center justify-center rounded-full bg-red-50 border border-red-100">
               <svg className="h-3 w-3 text-red-400" fill="none" viewBox="0 0 24 24"
                 stroke="currentColor" strokeWidth={3}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />

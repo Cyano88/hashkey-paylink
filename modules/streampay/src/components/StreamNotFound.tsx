@@ -4,8 +4,8 @@ interface StreamNotFoundProps {
 
 export function StreamNotFound({ vaultAddress }: StreamNotFoundProps) {
   return (
-    <div className="mx-auto w-full max-w-md font-inter">
-      <div className="rounded-2xl border border-gray-100 bg-white px-8 py-10 shadow-lg text-center space-y-5">
+    <div className="w-full max-w-[420px] mx-auto space-y-4">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 text-center space-y-5">
 
         <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-gray-100 bg-gray-50">
           <svg className="h-6 w-6 text-gray-300" fill="none" viewBox="0 0 24 24"
@@ -16,10 +16,9 @@ export function StreamNotFound({ vaultAddress }: StreamNotFoundProps) {
         </div>
 
         <div className="space-y-2">
-          <p className="text-[15px] font-semibold text-gray-900">Stream Not Found</p>
+          <p className="text-[15px] font-bold text-gray-900">Stream Not Found</p>
           <p className="text-[13px] leading-relaxed text-gray-400">
-            No stream exists at this address. It may not have been
-            deployed yet, or the link may be incorrect.
+            No stream exists at this address. It may not have been deployed yet, or the link may be incorrect.
           </p>
           <p className="font-mono text-[11px] text-gray-300">
             {vaultAddress.slice(0, 10)}…{vaultAddress.slice(-8)}
@@ -28,7 +27,7 @@ export function StreamNotFound({ vaultAddress }: StreamNotFoundProps) {
 
         <a
           href="/"
-          className="block w-full rounded-xl bg-gray-900 py-3 text-center text-[14px] font-semibold text-white transition-colors hover:bg-gray-700"
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-gray-900 py-3 text-[14px] font-semibold text-white hover:bg-gray-800 transition-colors"
         >
           Create a New Stream
         </a>

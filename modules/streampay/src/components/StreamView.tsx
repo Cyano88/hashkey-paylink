@@ -4,16 +4,16 @@ import {
   useAccount, useChainId, useSwitchChain,
   useReadContract, useSignTypedData,
 } from 'wagmi'
-import { useStreamState }     from '../hooks/useStreamState'
-import { usePendingTx }       from '../hooks/usePendingTx'
+import { useStreamState }   from '../hooks/useStreamState'
+import { usePendingTx }     from '../hooks/usePendingTx'
 import { TriStateBar, formatUsdc, formatUsdcFull } from './TriStateBar'
-import { SyncingOverlay }     from './SyncingOverlay'
-import { PendingTxToast }     from './PendingTxToast'
-import { CreateStreamForm }   from './CreateStreamForm'
-import { StreamNotFound }     from './StreamNotFound'
-import { STREAM_VAULT_ABI }   from '../lib/streamVaultAbi'
+import { SyncingOverlay }   from './SyncingOverlay'
+import { PendingTxToast }   from './PendingTxToast'
+import { CreateStreamForm } from './CreateStreamForm'
+import { StreamNotFound }   from './StreamNotFound'
+import { STREAM_VAULT_ABI } from '../lib/streamVaultAbi'
 
-// ── StreamInfo type (viem returns labeled tuple; cast via unknown) ─────────────
+// ── StreamInfo type ───────────────────────────────────────────────────────────
 type StreamInfo = {
   _sender:           `0x${string}`
   _recipient:        `0x${string}`
@@ -38,23 +38,22 @@ function timeRemaining(endTime: bigint): string {
   const days  = Math.floor(diff / 86400)
   const hours = Math.floor((diff % 86400) / 3600)
   const mins  = Math.floor((diff % 3600) / 60)
-  if (days  > 0) return `${days}d ${hours}h remaining`
-  if (hours > 0) return `${hours}h ${mins}m remaining`
-  return `${mins}m remaining`
+  if (days  > 0) return `${days}d ${hours}h`
+  if (hours > 0) return `${hours}h ${mins}m`
+  return `${mins}m`
 }
 
 function shortAddr(addr: string): string {
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`
 }
 
-// ── Types ─────────────────────────────────────────────────────────────────────
 type ActionState = 'idle' | 'signing' | 'relaying' | 'success' | 'error'
 
 interface StreamViewProps {
   vaultAddress?: `0x${string}`
 }
 
-// ── Component ─────────────────────────────────────────────────────────────────
+// ── Route ─────────────────────────────────────────────────────────────────────
 export function StreamView({ vaultAddress }: StreamViewProps) {
   const [params] = useSearchParams()
   const reason   = params.get('reason') ?? undefined
@@ -63,14 +62,13 @@ export function StreamView({ vaultAddress }: StreamViewProps) {
   return <StreamDetail vaultAddress={vaultAddress} reason={reason} />
 }
 
-// ── Stream Detail (production, live contract data) ────────────────────────────
+// ── Stream Detail ─────────────────────────────────────────────────────────────
 function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; reason?: string }) {
   const { address: connectedAddr, isConnected } = useAccount()
   const chainId = useChainId()
   const { switchChain } = useSwitchChain()
   const isOnArc = chainId === ARC_CHAIN_ID
 
-  // ── Relayer health gate ───────────────────────────────────────────────────
   const [relayerReady, setRelayerReady] = useState(false)
 
   // ── Contract reads ────────────────────────────────────────────────────────
@@ -101,7 +99,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
   const isSender = !!connectedAddr && !!info
     && connectedAddr.toLowerCase() === info._sender.toLowerCase()
 
-  // ── Live ticker params (100ms updates) ───────────────────────────────────
+  // ── Live ticker ───────────────────────────────────────────────────────────
   const liveParams = useMemo(() => {
     if (!info) return null
     return {
@@ -145,7 +143,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
       })
 
       setActionState('relaying')
-      const res  = await fetch('/api/relay-stream', {
+      const res = await fetch('/api/relay-stream', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'claim', vaultAddress, sig,
@@ -192,7 +190,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
       })
 
       setActionState('relaying')
-      const res  = await fetch('/api/relay-stream', {
+      const res = await fetch('/api/relay-stream', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'cancel', vaultAddress, sig,
@@ -216,7 +214,6 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
     }
   }
 
-  // ── Derived ───────────────────────────────────────────────────────────────
   const isCancelled = info?._cancelled ?? false
   const isComplete  = stream?.isComplete ?? false
   const endTime     = liveParams?.endTime ?? 0n
@@ -224,17 +221,23 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
   // ── Loading skeleton ──────────────────────────────────────────────────────
   if (!relayerReady || (isLoading && !info)) {
     return (
-      <div className="mx-auto w-full max-w-md font-inter">
-        <div className="relative overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-lg">
+      <div className="w-full max-w-[420px] mx-auto">
+        <div className="relative overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
           {!relayerReady && <SyncingOverlay onReady={() => setRelayerReady(true)} />}
-          <div className="animate-pulse px-6 py-8 space-y-5">
-            <div className="h-3 w-24 rounded bg-gray-100" />
-            <div className="h-14 w-48 rounded-lg bg-gray-100" />
+          <div className="animate-pulse p-7 space-y-5">
+            <div className="flex items-center justify-between">
+              <div className="h-3 w-20 rounded bg-gray-100" />
+              <div className="h-5 w-14 rounded-full bg-gray-100" />
+            </div>
+            <div className="space-y-1">
+              <div className="h-3 w-32 rounded bg-gray-100" />
+              <div className="h-12 w-48 rounded-lg bg-gray-100" />
+            </div>
             <div className="h-2 w-full rounded-full bg-gray-100" />
             <div className="grid grid-cols-3 gap-3">
-              {[0,1,2].map(i => <div key={i} className="h-12 rounded-xl bg-gray-100" />)}
+              {[0, 1, 2].map(i => <div key={i} className="h-14 rounded-xl bg-gray-100" />)}
             </div>
-            <div className="h-12 rounded-xl bg-gray-100" />
+            <div className="h-11 rounded-xl bg-gray-100" />
           </div>
         </div>
       </div>
@@ -246,58 +249,66 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
     return <StreamNotFound vaultAddress={vaultAddress} />
   }
 
-  // ── Production stream card ────────────────────────────────────────────────
+  // ── Status badge ──────────────────────────────────────────────────────────
+  const statusBadge = isCancelled
+    ? <span className="inline-flex items-center rounded-full bg-red-50 border border-red-100 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-red-500">Cancelled</span>
+    : isComplete
+    ? <span className="inline-flex items-center rounded-full bg-emerald-50 border border-emerald-100 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-600">Complete</span>
+    : (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-gray-50 border border-gray-100 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-500">
+        <span
+          className="h-1.5 w-1.5 rounded-full bg-emerald-400"
+          style={{ animation: 'spPulse 2s ease-in-out infinite' }}
+        />
+        Live
+      </span>
+    )
+
+  // ── Stream card ───────────────────────────────────────────────────────────
   return (
-    <div className="mx-auto w-full max-w-md font-inter">
-      <div className="relative overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-lg">
+    <div className="w-full max-w-[420px] mx-auto">
+      <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
 
         {/* Header */}
-        <div className="flex items-center justify-between px-6 pt-5 pb-2">
-          <div className="flex items-center gap-1.5">
-            <img src="/hash-logo.png" alt="" className="h-4 w-4 opacity-30" />
-            <span className="text-[11px] font-medium tracking-widest text-gray-300 uppercase">
-              Hash PayLink
+        <div className="flex items-center justify-between px-7 pt-6 pb-3">
+          <div className="flex items-center gap-2">
+            <span className="flex gap-0.5">
+              <span className="h-2 w-2 rounded-full bg-blue-500" />
+              <span className="h-2 w-2 rounded-full bg-amber-400" />
+            </span>
+            <span className="text-[12px] font-semibold uppercase tracking-[0.14em] text-gray-500">
+              StreamPay
             </span>
           </div>
-          <div className="flex items-center gap-1.5">
-            {!isComplete && !isCancelled && (
-              <span className="flex items-center gap-1 rounded-full bg-gray-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400">
-                <span className="h-1.5 w-1.5 rounded-full bg-[#00FF41]"
-                  style={{ animation: 'streamPulse 2s ease-in-out infinite' }} />
-                Live
-              </span>
-            )}
-            {isCancelled && <span className="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-red-400">Cancelled</span>}
-            {isComplete && !isCancelled && <span className="rounded-full bg-green-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[#00CC33]">Complete</span>}
-          </div>
+          {statusBadge}
         </div>
 
         {/* Body */}
-        <div className="px-6 pb-6 pt-4 space-y-6">
+        <div className="px-7 pb-6 space-y-5">
 
-          {/* Role label + Ticker */}
+          {/* Role label + reason + ticker */}
           <div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 mb-1">
               <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">
                 {isRecipient ? 'Available for Withdrawal'
                  : isSender   ? 'Active Payroll Stream'
                  : 'Stream Overview'}
               </p>
               {reason && (
-                <span className="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-0.5 text-[10px] font-semibold text-gray-500 truncate max-w-[160px]">
+                <span className="max-w-[140px] truncate rounded-full border border-gray-200 bg-gray-50 px-2.5 py-0.5 text-[10px] font-semibold text-gray-500">
                   {reason}
                 </span>
               )}
             </div>
-            <div className="mt-2 flex items-baseline gap-1">
-              <span className="self-start mt-2 text-[11px] font-medium text-gray-400">$</span>
+            <div className="flex items-baseline gap-1">
+              <span className="self-start mt-1.5 text-[12px] font-medium text-gray-400">$</span>
               <span
-                className="text-[3.25rem] font-bold leading-none tracking-tight tabular-nums"
-                style={{ color: '#00FF41' }}
+                className="text-[3rem] font-bold leading-none tracking-tight tabular-nums text-gray-900"
+                style={{ fontVariantNumeric: 'tabular-nums' }}
               >
                 {stream ? formatUsdcFull(stream.totalUnlocked) : '0.000000'}
               </span>
-              <span className="mb-0.5 self-end text-xs font-medium text-gray-400">USDC</span>
+              <span className="mb-0.5 self-end text-[12px] font-medium text-gray-400">USDC</span>
             </div>
             <p className="mt-0.5 text-[12px] text-gray-400">
               {stream?.isBeforeStart  ? 'Stream begins soon'
@@ -318,7 +329,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
           )}
 
           {/* Meta cells */}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-3 gap-2.5">
             <MetaCell label="Total"     value={formatUsdc(liveParams?.totalAmount ?? 0n)} />
             <MetaCell
               label={isCancelled ? 'Cancelled' : isComplete ? 'Completed' : 'Remaining'}
@@ -329,20 +340,23 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
 
           {/* Actions */}
           {!isCancelled && (
-            <div className="space-y-2.5">
+            <div className="space-y-2">
               {isConnected && !isOnArc && (
-                <button onClick={() => switchChain({ chainId: ARC_CHAIN_ID })}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-gray-900 py-3.5 text-[14px] font-semibold text-white hover:bg-gray-700 transition-colors active:scale-[0.98]">
+                <button
+                  onClick={() => switchChain({ chainId: ARC_CHAIN_ID })}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-gray-900 py-3 text-[13px] font-semibold text-white hover:bg-gray-800 transition-colors active:scale-[0.98]"
+                >
                   Switch to Arc Network
                 </button>
               )}
+
               {!isConnected && (
                 <div className="rounded-xl border border-gray-100 bg-gray-50 py-3.5 text-center text-[13px] text-gray-400">
                   Connect your wallet to interact
                 </div>
               )}
 
-              {/* Recipient withdraw */}
+              {/* Recipient actions */}
               {isRecipient && isOnArc && !isComplete && (() => {
                 const isAccruing   = !!stream && stream.claimable === 0n && !stream.isBeforeStart
                 const isNotStarted = !!stream && stream.isBeforeStart
@@ -364,8 +378,10 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
                     )}
                     {isAccruing && (
                       <div className="flex items-center justify-center gap-1.5 text-[12px] text-gray-400">
-                        <span className="h-1.5 w-1.5 rounded-full bg-[#00FF41]"
-                          style={{ animation: 'streamPulse 2s ease-in-out infinite' }} />
+                        <span
+                          className="h-1.5 w-1.5 rounded-full bg-emerald-400"
+                          style={{ animation: 'spPulse 2s ease-in-out infinite' }}
+                        />
                         Earnings accruing — first withdrawal available soon
                       </div>
                     )}
@@ -381,42 +397,48 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
 
               {/* Sender cancel */}
               {isSender && !isComplete && (
-                <button onClick={handleCancel} disabled={actionState !== 'idle'}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-red-100 bg-red-50 py-3 text-[13px] font-semibold text-red-600 hover:bg-red-100 transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50">
-                  {actionState === 'signing' ? 'Sign to confirm…'
+                <button
+                  onClick={handleCancel}
+                  disabled={actionState !== 'idle'}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-red-100 bg-red-50 py-3 text-[13px] font-semibold text-red-600 hover:bg-red-100 transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {actionState === 'signing'  ? 'Sign to confirm…'
                    : actionState === 'relaying' ? 'Processing…'
                    : 'Cancel Stream & Reclaim Locked Funds'}
                 </button>
               )}
 
-              {/* Create new stream link (observer role) */}
+              {/* Observer */}
               {!isRecipient && !isSender && isConnected && (
-                <a href="/"
-                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 py-2.5 text-[13px] font-medium text-gray-500 hover:bg-gray-50 transition-colors">
+                <a
+                  href="/"
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 py-2.5 text-[13px] font-medium text-gray-500 hover:bg-gray-50 transition-colors"
+                >
                   Create Your Own Stream
                 </a>
               )}
 
               {actionState === 'success' && txHash && (
-                <a href={`${ARC_EXPLORER}/tx/${txHash}`} target="_blank" rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-1.5 text-[12px] font-medium text-gray-400 hover:text-gray-600 transition-colors">
-                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
-                  </svg>
+                <a
+                  href={`${ARC_EXPLORER}/tx/${txHash}`}
+                  target="_blank" rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-1.5 text-[12px] text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <ExtLinkIcon />
                   View on Arcscan
                 </a>
               )}
               {actionState === 'error' && actionError && (
-                <p className="rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-center text-[12px] text-red-500">
+                <p className="rounded-xl border border-red-100 bg-red-50 px-3 py-2.5 text-center text-[12px] text-red-500">
                   {actionError}
                 </p>
               )}
             </div>
           )}
 
-          {/* Sender → Recipient strip */}
+          {/* Address strip */}
           {info && (
-            <div className="flex items-center justify-between rounded-xl border border-gray-50 bg-gray-50/60 px-3.5 py-2.5">
+            <div className="flex items-center justify-between rounded-xl border border-gray-100 bg-gray-50/60 px-4 py-3">
               <div className="space-y-0.5">
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Sender</p>
                 <p className="font-mono text-[12px] text-gray-600">{shortAddr(info._sender)}</p>
@@ -432,9 +454,9 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
           )}
         </div>
 
-        {/* Footer badge */}
+        {/* Footer */}
         <div className="flex items-center justify-center gap-1.5 border-t border-gray-50 bg-gray-50/40 py-3">
-          <img src="/hash-logo.png" alt="Hash PayLink" className="h-3.5 w-3.5 opacity-25" />
+          <img src="/hash-logo.png" alt="" className="h-3.5 w-3.5 opacity-20" />
           <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-gray-300">
             Powered by Hash PayLink
           </span>
@@ -444,7 +466,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
       <PendingTxToast txs={pendingTxs} onDismiss={dismiss} />
 
       <style>{`
-        @keyframes streamPulse {
+        @keyframes spPulse {
           0%, 100% { opacity: 0.5; }
           50%       { opacity: 1;   }
         }
@@ -457,7 +479,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
 
 function MetaCell({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-gray-50 bg-gray-50/60 px-3 py-2.5 text-center">
+    <div className="rounded-xl border border-gray-100 bg-gray-50/60 px-3 py-2.5 text-center">
       <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{label}</p>
       <p className="mt-0.5 text-[13px] font-semibold text-gray-700 tabular-nums">{value}</p>
     </div>
@@ -478,7 +500,7 @@ function ActionButton({ state, label, signingLabel, relayingLabel, successLabel,
   const isWorking = state === 'signing' || state === 'relaying'
   const isDone    = state === 'success'
 
-  const displayLabel = state === 'signing' ? signingLabel
+  const displayLabel = state === 'signing'  ? signingLabel
     : state === 'relaying' ? relayingLabel
     : isDone ? successLabel
     : label
@@ -488,27 +510,39 @@ function ActionButton({ state, label, signingLabel, relayingLabel, successLabel,
       onClick={onClick}
       disabled={disabled || isWorking || isDone}
       className={[
-        'flex w-full items-center justify-center gap-2.5 rounded-xl py-3.5 text-[14px] font-semibold',
+        'flex w-full items-center justify-center gap-2.5 rounded-xl py-3.5 text-[13px] font-semibold',
         'transition-all duration-150 active:scale-[0.98]',
-        isDone    ? 'bg-gray-100 text-gray-500 cursor-default'
-        : isWorking ? 'cursor-wait opacity-75'
-        : disabled  ? 'cursor-not-allowed opacity-40'
-        : 'shadow-sm hover:opacity-90',
+        isDone
+          ? 'bg-gray-100 text-gray-500 cursor-default'
+          : isWorking
+          ? 'cursor-wait opacity-75 bg-gray-900 text-white'
+          : disabled
+          ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+          : 'bg-gray-900 text-white hover:bg-gray-800 shadow-sm',
       ].join(' ')}
-      style={!isDone && !isWorking && !disabled ? { background: '#00FF41', color: '#0a0a0a' } : undefined}
     >
       {isWorking && (
-        <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+        <svg className="h-4 w-4 animate-spin shrink-0" fill="none" viewBox="0 0 24 24">
           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
         </svg>
       )}
       {isDone && (
-        <svg className="h-4 w-4 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+        <svg className="h-4 w-4 text-emerald-500 shrink-0" fill="none" viewBox="0 0 24 24"
+          stroke="currentColor" strokeWidth={2.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
         </svg>
       )}
       {displayLabel}
     </button>
+  )
+}
+
+function ExtLinkIcon() {
+  return (
+    <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round"
+        d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+    </svg>
   )
 }

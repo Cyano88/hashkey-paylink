@@ -40,7 +40,6 @@ function genSalt(): `0x${string}` {
   return `0x${[...arr].map(b => b.toString(16).padStart(2, '0')).join('')}` as `0x${string}`
 }
 
-// Preserve ?app=streampay on shared Render hostname so routing stays in StreamPayApp
 function buildStreamLink(vault: `0x${string}`, reason: string): string {
   const { hostname, origin } = window.location
   const isDedicatedHost =
@@ -54,44 +53,6 @@ function buildStreamLink(vault: `0x${string}`, reason: string): string {
   return `${origin}/stream/${vault}${qs ? `?${qs}` : ''}`
 }
 
-// ── Metallic 'O' logomark ─────────────────────────────────────────────────────
-function Logomark() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 18 18" fill="none">
-      <defs>
-        <linearGradient id="sp-g" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%"   stopColor="#888" />
-          <stop offset="50%"  stopColor="#111" />
-          <stop offset="100%" stopColor="#555" />
-        </linearGradient>
-      </defs>
-      <circle cx="9" cy="9" r="7.5" stroke="url(#sp-g)" strokeWidth="2" />
-      <circle cx="9" cy="9" r="3"   fill="url(#sp-g)" />
-    </svg>
-  )
-}
-
-// ── Design tokens ─────────────────────────────────────────────────────────────
-// Matches the solid, high-contrast weight of the HashPayLink recipient card
-const T = {
-  labelColor:    '#333333',
-  primaryText:   '#0a0a0a',
-  mutedText:     '#6b6b6b',
-  borderIdle:    '#d4d4d4',
-  borderFocus:   '#00FF41',
-  bgSurface:     '#f8f8f8',
-  green:         '#00FF41',
-}
-
-// Shared input shell — border-2, consistent rounded-xl, green on focus
-const inputShell = [
-  'w-full rounded-xl border-2 bg-white px-4 py-3 text-[13px] font-medium',
-  'placeholder:text-gray-300 placeholder:font-normal',
-  'outline-none transition-colors',
-  'disabled:opacity-50 disabled:cursor-not-allowed',
-].join(' ')
-
-// ── Component ─────────────────────────────────────────────────────────────────
 export function CreateStreamForm() {
   const { address: connectedAddr, isConnected } = useAccount()
   const chainId                = useChainId()
@@ -142,14 +103,7 @@ export function CreateStreamForm() {
   const isWorking   = step === 'funding' || step === 'creating'
   const deployReady = isFormValid && !isWorking && !insufficientFunds
 
-  // ── Step indicators ───────────────────────────────────────────────────────
-  const STEPS = [
-    { label: 'Setup',         done: isFormValid },
-    { label: 'Fund Vault',    done: step === 'creating' || step === 'success' },
-    { label: 'Deploy Stream', done: step === 'success' },
-  ]
-
-  // ── Ghost-vault deploy ────────────────────────────────────────────────────
+  // ── Deploy flow ───────────────────────────────────────────────────────────
   async function handleDeploy() {
     if (!deployReady || !connectedAddr || !publicClient) return
     setError(null)
@@ -210,366 +164,373 @@ export function CreateStreamForm() {
   // ── Success screen ────────────────────────────────────────────────────────
   if (step === 'success' && streamLink) {
     return (
-      <div className="mx-auto w-full max-w-lg">
-        <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-lg">
-          <CardHeader />
-          <div className="px-14 py-10 space-y-6 text-center mx-auto">
-
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full"
-              style={{ background: 'rgba(0,255,65,0.08)', border: '1.5px solid rgba(0,255,65,0.28)' }}>
-              <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24"
-                stroke="currentColor" strokeWidth={2.5} style={{ color: '#00CC33' }}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-              </svg>
-            </div>
-
-            <div className="space-y-1">
-              <p className="text-[18px] font-bold" style={{ color: T.primaryText }}>Stream Deployed</p>
-              {reason && (
-                <p className="text-[12px] font-semibold uppercase tracking-wide" style={{ color: T.labelColor }}>
-                  {reason}
-                </p>
-              )}
-              <p className="text-[13px]" style={{ color: T.mutedText }}>
-                {formatUsdcFull(amountBn)} USDC streaming to{' '}
-                <span className="font-mono font-semibold" style={{ color: T.primaryText }}>
-                  {recipient.slice(0, 6)}…{recipient.slice(-4)}
-                </span>
-              </p>
-            </div>
-
-            <div className="rounded-xl border-2 p-4 text-left space-y-3"
-              style={{ borderColor: T.borderIdle, background: T.bgSurface }}>
-              <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: T.labelColor }}>
-                Share Stream Link
-              </p>
-              <p className="break-all font-mono text-[11px] leading-relaxed" style={{ color: T.mutedText }}>
-                {streamLink}
-              </p>
-              <div className="flex gap-2.5 pt-0.5">
-                <button
-                  onClick={() => navigator.clipboard.writeText(streamLink)}
-                  className="flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2.5 text-[12px] font-semibold text-white transition-colors hover:opacity-90"
-                  style={{ background: T.primaryText }}
-                >
-                  Copy Link
-                </button>
-                <a href={streamLink}
-                  className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border-2 py-2.5 text-[12px] font-semibold transition-colors hover:border-[#00FF41]"
-                  style={{ borderColor: T.borderIdle, color: T.primaryText }}>
-                  View Stream
-                </a>
-              </div>
-            </div>
-
-            {deployTxHash && (
-              <a href={`${ARC_EXPLORER}/tx/${deployTxHash}`} target="_blank" rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 text-[12px] transition-colors hover:opacity-70"
-                style={{ color: T.mutedText }}>
-                <ExtLinkIcon />
-                View on Arcscan
-              </a>
-            )}
+      <div className="w-full max-w-[480px] mx-auto space-y-4">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 text-center space-y-6">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-50 border border-emerald-100">
+            <svg className="h-6 w-6 text-emerald-500" fill="none" viewBox="0 0 24 24"
+              stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+            </svg>
           </div>
-          <CardFooter />
+
+          <div className="space-y-1.5">
+            <p className="text-[17px] font-bold text-gray-900">Stream Deployed</p>
+            {reason && (
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">{reason}</p>
+            )}
+            <p className="text-[13px] text-gray-500">
+              {formatUsdcFull(amountBn)} USDC streaming to{' '}
+              <span className="font-mono font-semibold text-gray-700">
+                {recipient.slice(0, 6)}…{recipient.slice(-4)}
+              </span>
+            </p>
+          </div>
+
+          <div className="rounded-xl bg-gray-50 border border-gray-200 p-4 text-left space-y-3">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Share Stream Link</p>
+            <p className="break-all font-mono text-[11px] leading-relaxed text-gray-500">{streamLink}</p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => navigator.clipboard.writeText(streamLink)}
+                className="flex-1 rounded-xl bg-gray-900 py-2.5 text-[13px] font-semibold text-white hover:bg-gray-800 transition-colors"
+              >
+                Copy Link
+              </button>
+              <a
+                href={streamLink}
+                className="flex-1 rounded-xl border border-gray-200 py-2.5 text-center text-[13px] font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                View Stream
+              </a>
+            </div>
+          </div>
+
+          {deployTxHash && (
+            <a
+              href={`${ARC_EXPLORER}/tx/${deployTxHash}`}
+              target="_blank" rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-[12px] text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              <ExtLinkIcon />
+              View on Arcscan
+            </a>
+          )}
         </div>
       </div>
     )
   }
 
-  // ── Form screen ───────────────────────────────────────────────────────────
+  // ── Hint below button ─────────────────────────────────────────────────────
+  const hint = (() => {
+    if (isWorking) return step === 'funding' ? 'Step 1 of 2 — funding vault' : 'Step 2 of 2 — deploying stream'
+    if (!isConnected) return null
+    if (!isOnArc) return null
+    if (insufficientFunds) return null
+    if (!recipientValid && recipient) return null
+    if (!recipientValid) return 'Enter a recipient address to continue'
+    if (!amountValid) return 'Enter an amount to continue'
+    if (!durationValid) return 'Select a stream duration to continue'
+    return '2 wallet signatures required — fund vault, then deploy'
+  })()
+
+  // ── Form ──────────────────────────────────────────────────────────────────
   return (
-    <div className="mx-auto w-full max-w-lg">
-      <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-lg">
+    <div className="w-full max-w-[480px] mx-auto space-y-4">
 
-        <CardHeader />
+      {/* ── Card ── */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm">
+        <div className="p-7 space-y-5">
 
-        {/* Step pills */}
-        <div className="flex items-center gap-0 border-b px-14 py-4" style={{ borderColor: '#f0f0f0' }}>
-          {STEPS.map((s, i) => (
-            <div key={s.label} className="flex items-center">
+          {/* ── Recipient Address ── */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5">
-                <div className="flex h-[18px] w-[18px] items-center justify-center rounded-full text-[9px] font-bold"
-                  style={s.done
-                    ? { background: T.green, color: '#0a0a0a' }
-                    : { background: '#ebebeb', color: '#999' }}>
-                  {s.done ? '✓' : i + 1}
-                </div>
-                <span className="text-[11px] font-semibold"
-                  style={{ color: s.done ? T.primaryText : '#aaa' }}>
-                  {s.label}
+                <span className="flex gap-0.5">
+                  <span className="h-2 w-2 rounded-full bg-blue-500" />
+                  <span className="h-2 w-2 rounded-full bg-amber-400" />
                 </span>
+                <span className="text-[13px] font-semibold text-gray-700">Recipient Address</span>
               </div>
-              {i < STEPS.length - 1 && <div className="mx-3 h-px w-7" style={{ background: '#e8e8e8' }} />}
+              <span className="text-[11px] text-gray-400">Arc Network</span>
             </div>
-          ))}
-        </div>
 
-        {/* ── Form body — space-y-8 strict vertical rhythm ── */}
-        <div className="space-y-8 px-14 py-10 mx-auto">
-
-          {/* Section A: inputs */}
-          <div className="space-y-6">
-
-            {/* Recipient */}
-            <FormField label="Recipient Wallet">
+            <div className="relative">
               <input
                 type="text"
-                placeholder="0x… EVM address on Arc"
+                placeholder="0x... (40 hex chars)"
                 value={recipient}
                 onChange={e => setRecipient(e.target.value.trim())}
                 spellCheck={false}
                 disabled={isWorking}
                 className={[
-                  inputShell, 'font-mono text-[12px]',
+                  'w-full rounded-xl border px-4 py-2.5 text-[13px] font-mono',
+                  'placeholder:text-gray-300 placeholder:font-sans focus:outline-none transition-colors',
+                  'disabled:opacity-50 disabled:cursor-not-allowed',
                   recipient && !recipientValid
-                    ? 'border-red-300 focus:border-red-400'
+                    ? 'border-red-200 bg-red-50/30 focus:border-red-300'
                     : recipientValid
-                    ? 'border-emerald-300 focus:border-emerald-400'
-                    : `border-[${T.borderIdle}] focus:border-[${T.borderFocus}]`,
+                    ? 'border-emerald-200 bg-emerald-50/20'
+                    : 'border-gray-200 focus:border-gray-400',
                 ].join(' ')}
-                style={{ color: T.primaryText, borderColor: recipientValid ? '#86efac' : recipient && !recipientValid ? '#fca5a5' : T.borderIdle }}
               />
-              {recipient && !recipientValid && (
-                <p className="mt-1.5 text-[11px] font-medium text-red-400">
-                  Enter a valid EVM address
-                </p>
-              )}
-            </FormField>
-
-            {/* Amount — flex input-group */}
-            <FormField label="Total Amount">
-              <div className="flex overflow-hidden rounded-xl border-2 bg-white transition-colors focus-within:border-[#00FF41]"
-                style={{ borderColor: T.borderIdle }}>
-                <input
-                  type="number"
-                  placeholder="0.00"
-                  min="0" step="any"
-                  value={amount}
-                  onChange={e => setAmount(e.target.value)}
-                  disabled={isWorking}
-                  className="min-w-0 flex-1 bg-transparent px-4 py-3 text-[14px] font-semibold focus:outline-none disabled:opacity-50"
-                  style={{ color: T.primaryText }}
-                />
-                <div className="flex items-center border-l-2 px-4"
-                  style={{ borderColor: '#ebebeb', background: T.bgSurface }}>
-                  <span className="select-none text-[12px] font-bold" style={{ color: T.labelColor }}>
-                    USDC
+              {recipientValid && (
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-600">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                    Address Valid
                   </span>
                 </div>
-              </div>
-              {isConnected && isOnArc && usdcBalance !== undefined && (
-                <p className="mt-1.5 text-[11px]" style={{ color: T.mutedText }}>
-                  Balance:{' '}
-                  <span className="font-semibold" style={{ color: T.primaryText }}>
-                    {formatUsdcFull(usdcBalance)} USDC
-                  </span>
-                  {insufficientFunds && (
-                    <span className="ml-2 font-semibold text-red-500">— insufficient</span>
-                  )}
-                </p>
               )}
-            </FormField>
+            </div>
 
-            {/* Duration — chip row + custom, same rounded-xl as inputs */}
-            <FormField label="Duration">
-              <div className="space-y-2.5">
-                <div className="flex flex-wrap gap-2">
-                  {DURATIONS.map(d => {
-                    const active = durationPreset === d.secs
-                    return (
-                      <button
-                        key={d.label}
-                        type="button"
-                        disabled={isWorking}
-                        onClick={() => { setDurationPreset(d.secs); setCustomDays('') }}
-                        className="rounded-xl border-2 px-4 py-2.5 text-[12px] font-semibold transition-all disabled:opacity-50"
-                        style={active
-                          ? { background: T.green, borderColor: T.green, color: T.primaryText }
-                          : { background: 'transparent', borderColor: T.borderIdle, color: T.labelColor }}
-                      >
-                        {d.label}
-                      </button>
-                    )
-                  })}
-                </div>
-                {/* Custom days — same rounded-xl border-2 shell */}
-                <div className="flex overflow-hidden rounded-xl border-2 bg-white transition-colors focus-within:border-[#00FF41]"
-                  style={{ borderColor: durationPreset === null && customDays ? T.borderFocus : T.borderIdle }}>
-                  <input
-                    type="number"
-                    placeholder="Custom days"
-                    min="0.1" step="0.1"
-                    value={customDays}
-                    disabled={isWorking}
-                    onChange={e => { setCustomDays(e.target.value); setDurationPreset(null) }}
-                    className="min-w-0 flex-1 bg-transparent px-4 py-3 text-[13px] font-medium focus:outline-none disabled:opacity-50 placeholder:font-normal placeholder:text-gray-300"
-                    style={{ color: T.primaryText }}
-                  />
-                  <div className="flex items-center border-l-2 px-4"
-                    style={{ borderColor: '#ebebeb', background: T.bgSurface }}>
-                    <span className="select-none text-[12px] font-bold" style={{ color: T.labelColor }}>
-                      DAYS
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </FormField>
-
-            {/* Reason — same rounded-xl border-2 shell as Amount */}
-            <FormField label="Reason for Stream">
-              <div className="flex overflow-hidden rounded-xl border-2 bg-white transition-colors focus-within:border-[#00FF41]"
-                style={{ borderColor: T.borderIdle }}>
-                <input
-                  type="text"
-                  placeholder="e.g., April Salary, Freelance Gig…"
-                  value={reason}
-                  onChange={e => setReason(e.target.value)}
-                  disabled={isWorking}
-                  maxLength={80}
-                  className="min-w-0 flex-1 bg-transparent px-4 py-3 text-[13px] font-medium focus:outline-none disabled:opacity-50 placeholder:font-normal placeholder:text-gray-300"
-                  style={{ color: T.primaryText }}
-                />
-              </div>
-            </FormField>
+            {recipientValid && (
+              <p className="text-[11px] text-emerald-600 flex items-center gap-1">
+                <svg className="h-3 w-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                </svg>
+                Auto-filled · {recipient.slice(0, 10)}…{recipient.slice(-8)}
+              </p>
+            )}
+            {recipient && !recipientValid && (
+              <p className="text-[11px] text-red-400">Enter a valid EVM address</p>
+            )}
           </div>
 
-          {/* Section B: CTA group */}
-          <div className="space-y-3">
+          {/* ── Amount ── */}
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-1.5">
+              <ChainIcon />
+              <span className="text-[13px] font-semibold text-gray-700">Amount</span>
+            </div>
+            <div className="flex overflow-hidden rounded-xl border border-gray-200 bg-white focus-within:border-gray-400 transition-colors">
+              <input
+                type="number"
+                placeholder="0.0"
+                min="0" step="any"
+                value={amount}
+                onChange={e => setAmount(e.target.value)}
+                disabled={isWorking}
+                className="min-w-0 flex-1 bg-transparent px-4 py-2.5 text-[14px] font-semibold focus:outline-none disabled:opacity-50 placeholder:text-gray-300 placeholder:font-normal"
+              />
+              <div className="flex items-center px-4 border-l border-gray-100 bg-gray-50 shrink-0">
+                <span className="text-[12px] font-semibold text-gray-500 select-none">USDC</span>
+              </div>
+            </div>
+            {isConnected && isOnArc && usdcBalance !== undefined ? (
+              <p className="text-[11px] text-gray-400">
+                Balance:{' '}
+                <span className={`font-semibold ${insufficientFunds ? 'text-red-500' : 'text-gray-600'}`}>
+                  {formatUsdcFull(usdcBalance)} USDC
+                </span>
+                {insufficientFunds && (
+                  <span className="ml-1.5 font-semibold text-red-500">— insufficient</span>
+                )}
+              </p>
+            ) : (
+              <p className="text-[11px] text-gray-400">USDC on Arc Network — connect wallet to see balance</p>
+            )}
+          </div>
 
-            {/* Not connected */}
+          {/* ── Duration ── */}
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-1.5">
+              <ClockIcon />
+              <span className="text-[13px] font-semibold text-gray-700">Duration</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {DURATIONS.map(d => {
+                const active = durationPreset === d.secs
+                return (
+                  <button
+                    key={d.label}
+                    type="button"
+                    disabled={isWorking}
+                    onClick={() => { setDurationPreset(d.secs); setCustomDays('') }}
+                    className={[
+                      'rounded-xl border px-3.5 py-2 text-[12px] font-semibold transition-all',
+                      'disabled:opacity-50 disabled:cursor-not-allowed',
+                      active
+                        ? 'border-gray-900 bg-gray-900 text-white'
+                        : 'border-gray-200 bg-white text-gray-600 hover:border-gray-400',
+                    ].join(' ')}
+                  >
+                    {d.label}
+                  </button>
+                )
+              })}
+            </div>
+            <div className="flex overflow-hidden rounded-xl border border-gray-200 bg-white focus-within:border-gray-400 transition-colors">
+              <input
+                type="number"
+                placeholder="Custom days"
+                min="0.1" step="0.1"
+                value={customDays}
+                disabled={isWorking}
+                onChange={e => { setCustomDays(e.target.value); setDurationPreset(null) }}
+                className="min-w-0 flex-1 bg-transparent px-4 py-2.5 text-[13px] focus:outline-none disabled:opacity-50 placeholder:text-gray-300"
+              />
+              <div className="flex items-center px-4 border-l border-gray-100 bg-gray-50 shrink-0">
+                <span className="text-[12px] font-semibold text-gray-500 select-none">DAYS</span>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Memo / Reason ── */}
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-1.5">
+              <TagIcon />
+              <span className="text-[13px] font-semibold text-gray-700">Memo</span>
+              <span className="text-[11px] text-gray-400">optional · stored on-chain</span>
+            </div>
+            <input
+              type="text"
+              placeholder="e.g., April Salary, Freelance Gig…"
+              value={reason}
+              onChange={e => setReason(e.target.value)}
+              disabled={isWorking}
+              maxLength={80}
+              className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-[13px] placeholder:text-gray-300 focus:outline-none focus:border-gray-400 transition-colors disabled:opacity-50"
+            />
+          </div>
+
+          {/* ── CTA ── */}
+          <div className="space-y-2.5 pt-1">
             {!isConnected && (
               <button
                 onClick={() => openConnectModal?.()}
-                className="flex w-full items-center justify-center gap-2 rounded-xl py-3 text-[14px] font-bold transition-all active:scale-[0.98]"
-                style={{ background: T.green, color: T.primaryText }}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-gray-900 py-3 text-[14px] font-semibold text-white hover:bg-gray-800 transition-colors active:scale-[0.98]"
               >
                 <WalletIcon />
                 Connect Wallet
               </button>
             )}
 
-            {/* Wrong network */}
             {isConnected && !isOnArc && (
               <button
                 onClick={() => switchChain({ chainId: ARC_CHAIN_ID })}
-                className="flex w-full items-center justify-center gap-2 rounded-xl py-3 text-[14px] font-bold text-white transition-all hover:opacity-90 active:scale-[0.98]"
-                style={{ background: T.primaryText }}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-gray-900 py-3 text-[14px] font-semibold text-white hover:bg-gray-800 transition-colors active:scale-[0.98]"
               >
                 Switch to Arc Network
               </button>
             )}
 
-            {/* Deploy + Power row */}
             {isConnected && isOnArc && (
-              <div className="flex items-center justify-center gap-2.5">
-                {/* Deploy — 70% of card width, centered */}
+              <div className="flex items-center gap-2">
                 <button
                   onClick={handleDeploy}
                   disabled={!deployReady}
-                  className="flex flex-1 items-center justify-center gap-2 rounded-xl py-3 text-[14px] font-bold transition-all active:scale-[0.98]"
-                  style={{
-                    background: T.green,
-                    color:      T.primaryText,
-                    opacity:    deployReady ? 1 : 0.38,
-                    cursor:     deployReady ? 'pointer' : 'not-allowed',
-                    maxWidth:   '70%',
-                  }}
+                  className={[
+                    'flex flex-1 items-center justify-center gap-2 rounded-xl py-3',
+                    'text-[14px] font-semibold transition-all active:scale-[0.98]',
+                    deployReady
+                      ? 'bg-gray-900 text-white hover:bg-gray-800 cursor-pointer shadow-sm'
+                      : 'bg-gray-100 text-gray-400 cursor-not-allowed',
+                  ].join(' ')}
                 >
-                  {isWorking ? <><Spinner />{statusMsg}</> : 'Deploy Stream'}
+                  {isWorking
+                    ? <><Spinner />{statusMsg}</>
+                    : <><StreamIcon />Deploy Stream &nbsp;→</>}
                 </button>
 
-                {/* Power / disconnect — square ash-grey outlined box */}
                 <button
                   onClick={() => disconnect()}
                   title="Disconnect wallet"
-                  className="flex h-[42px] w-[42px] flex-shrink-0 items-center justify-center rounded-xl border-2 transition-all hover:border-red-300 hover:text-red-400 active:scale-[0.96]"
-                  style={{ borderColor: T.borderIdle, color: T.mutedText }}
+                  className="flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-xl border border-gray-200 text-gray-400 hover:border-red-200 hover:text-red-400 transition-colors active:scale-[0.96]"
                 >
                   <PowerIcon />
                 </button>
               </div>
             )}
 
-            {/* Sub-line feedback */}
-            {isWorking && (
-              <p className="text-center text-[11px] font-medium" style={{ color: T.mutedText }}>
-                {step === 'funding' ? 'Step 1 of 2 — funding vault' : 'Step 2 of 2 — deploying contract'}
-              </p>
-            )}
-            {!isWorking && insufficientFunds && (
+            {insufficientFunds && !isWorking && (
               <p className="text-center text-[12px] font-semibold text-red-500">
                 Insufficient USDC — fund your Arc wallet first
               </p>
             )}
-            {!isWorking && isConnected && isOnArc && !insufficientFunds && (
-              <p className="text-center text-[11px]" style={{ color: '#ccc' }}>
-                2 wallet signatures required — fund vault, then deploy
-              </p>
+
+            {hint && !insufficientFunds && (
+              <p className="text-center text-[12px] text-gray-400">{hint}</p>
             )}
 
             {error && (
-              <div className="rounded-xl border-2 border-red-100 bg-red-50 px-4 py-3 text-center text-[12px] font-medium text-red-500">
+              <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-center text-[12px] text-red-500">
                 {error}
               </div>
             )}
           </div>
         </div>
+      </div>
 
-        <CardFooter />
+      {/* ── How It Works ── */}
+      <div className="space-y-3 pt-2">
+        <p className="text-center text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-400">
+          How It Works
+        </p>
+        <div className="grid grid-cols-3 gap-3">
+          {([
+            { n: '1', title: 'Fund vault',    desc: 'USDC is pre-loaded into a ghost vault address' },
+            { n: '2', title: 'Stream begins', desc: 'Funds unlock linearly to the recipient over time' },
+            { n: '3', title: 'Claim anytime', desc: 'Recipient withdraws gaslessly — no gas required' },
+          ] as const).map(s => (
+            <div
+              key={s.n}
+              className="rounded-2xl border border-gray-100 bg-white p-4 text-center shadow-sm space-y-2"
+            >
+              <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-gray-200 text-[11px] font-semibold text-gray-500">
+                {s.n}
+              </span>
+              <p className="text-[12px] font-bold text-gray-800">{s.title}</p>
+              <p className="text-[11px] leading-snug text-gray-400">{s.desc}</p>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   )
 }
 
-// ── Shared sub-components ──────────────────────────────────────────────────────
+// ── Icons ─────────────────────────────────────────────────────────────────────
 
-function CardHeader() {
+function ChainIcon() {
   return (
-    <div className="flex items-center justify-between border-b px-14 py-5"
-      style={{ borderColor: '#f0f0f0' }}>
-      <div className="flex items-center gap-2">
-        <Logomark />
-        <span className="text-[13px] font-bold uppercase tracking-[0.18em]"
-          style={{ color: '#0a0a0a' }}>
-          StreamPay
-        </span>
-      </div>
-      <span className="text-[11px] font-semibold uppercase tracking-wider"
-        style={{ color: '#6b6b6b' }}>
-        New Stream
-      </span>
-    </div>
+    <svg className="h-3.5 w-3.5 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round"
+        d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
+    </svg>
   )
 }
 
-function CardFooter() {
+function ClockIcon() {
   return (
-    <div className="flex items-center justify-center gap-2 border-t py-3.5"
-      style={{ borderColor: '#f4f4f4', background: '#fafafa' }}>
-      <img src="/hash-logo.png" alt="" className="h-3.5 w-3.5 opacity-25" />
-      <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-300">
-        Powered by Hash PayLink
-      </span>
-    </div>
+    <svg className="h-3.5 w-3.5 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
   )
 }
 
-function FormField({ label, children }: { label: string; children: React.ReactNode }) {
+function TagIcon() {
   return (
-    <div>
-      <label className="mb-3 block text-[11px] font-bold uppercase tracking-[0.1em]"
-        style={{ color: '#333333' }}>
-        {label}
-      </label>
-      {children}
-    </div>
+    <svg className="h-3.5 w-3.5 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round"
+        d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M6 6h.008v.008H6V6z" />
+    </svg>
+  )
+}
+
+function StreamIcon() {
+  return (
+    <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round"
+        d="M3 7.5L7.5 3m0 0L12 7.5M7.5 3v13.5m13.5 0L16.5 21m0 0L12 16.5m4.5 4.5V7.5" />
+    </svg>
   )
 }
 
 function PowerIcon() {
   return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M18.36 6.64a9 9 0 1 1-12.73 0" />
       <line x1="12" y1="2" x2="12" y2="12" />
     </svg>
@@ -596,7 +557,7 @@ function ExtLinkIcon() {
 
 function Spinner() {
   return (
-    <svg className="mr-1.5 h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+    <svg className="h-4 w-4 animate-spin shrink-0" fill="none" viewBox="0 0 24 24">
       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
     </svg>
