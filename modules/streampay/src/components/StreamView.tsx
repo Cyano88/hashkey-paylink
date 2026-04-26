@@ -1,17 +1,16 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
   useAccount, useChainId, useSwitchChain,
   useReadContract, useSignTypedData,
 } from 'wagmi'
-import { useStreamState }   from '../hooks/useStreamState'
-import { usePendingTx }     from '../hooks/usePendingTx'
+import { useStreamState }    from '../hooks/useStreamState'
+import { usePendingTx }      from '../hooks/usePendingTx'
 import { TriStateBar, formatUsdc, formatUsdcFull } from './TriStateBar'
-import { SyncingOverlay }   from './SyncingOverlay'
-import { PendingTxToast }   from './PendingTxToast'
-import { CreateStreamForm } from './CreateStreamForm'
-import { StreamNotFound }   from './StreamNotFound'
-import { STREAM_VAULT_ABI } from '../lib/streamVaultAbi'
+import { PendingTxToast }    from './PendingTxToast'
+import { CreateStreamForm, HashPayLinkBadge } from './CreateStreamForm'
+import { StreamNotFound }    from './StreamNotFound'
+import { STREAM_VAULT_ABI }  from '../lib/streamVaultAbi'
 
 // ── StreamInfo type ───────────────────────────────────────────────────────────
 type StreamInfo = {
@@ -69,10 +68,26 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
   const { switchChain } = useSwitchChain()
   const isOnArc = chainId === ARC_CHAIN_ID
 
-  // relayerReady gates claim/cancel actions only — stream data loads immediately
+  // Background relayer check — only affects the Withdraw button spinner, nothing else
   const [relayerReady, setRelayerReady] = useState(false)
+  const relayerChecked = useRef(false)
+  useEffect(() => {
+    if (relayerChecked.current) return
+    relayerChecked.current = true
+    let dead = false
+    async function ping() {
+      if (dead) return
+      try {
+        const r = await fetch('/api/health', { cache: 'no-store' })
+        if (r.ok && !dead) { setRelayerReady(true); return }
+      } catch { /* still waking */ }
+      if (!dead) setTimeout(ping, 5_000)
+    }
+    ping()
+    return () => { dead = true }
+  }, [])
 
-  // ── Contract reads ────────────────────────────────────────────────────────
+  // ── Contract reads — no gates, load immediately ───────────────────────────
   const {
     data: rawInfo,
     refetch: refetchInfo,
@@ -91,7 +106,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
     abi:          STREAM_VAULT_ABI,
     functionName: 'nonces',
     args:         [connectedAddr ?? '0x0000000000000000000000000000000000000000'],
-    query:        { enabled: relayerReady && !!connectedAddr },
+    query:        { enabled: !!connectedAddr },
   })
 
   // ── Role detection ────────────────────────────────────────────────────────
@@ -219,7 +234,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
   const isComplete  = stream?.isComplete ?? false
   const endTime     = liveParams?.endTime ?? 0n
 
-  // ── Loading skeleton (only while RPC data hasn't arrived yet) ───────────────
+  // ── Loading skeleton (RPC only, no relayer gate) ──────────────────────────
   if (isLoading && !info) {
     return (
       <div className="w-full max-w-[420px] mx-auto">
@@ -256,10 +271,8 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
     ? <span className="inline-flex items-center rounded-full bg-emerald-50 border border-emerald-100 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-600">Complete</span>
     : (
       <span className="inline-flex items-center gap-1.5 rounded-full bg-gray-50 border border-gray-100 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-500">
-        <span
-          className="h-1.5 w-1.5 rounded-full bg-emerald-400"
-          style={{ animation: 'spPulse 2s ease-in-out infinite' }}
-        />
+        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400"
+          style={{ animation: 'spPulse 2s ease-in-out infinite' }} />
         Live
       </span>
     )
@@ -338,17 +351,9 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
             <MetaCell label="Withdrawn" value={formatUsdc(stream?.alreadyWithdrawn ?? 0n)} />
           </div>
 
-          {/* Actions */}
+          {/* Actions — no relayerReady gates */}
           {!isCancelled && (
             <div className="space-y-2">
-              {/* Non-blocking relayer health check — only affects action buttons */}
-              {!relayerReady && (
-                <SyncingOverlay
-                  onReady={() => setRelayerReady(true)}
-                  inline
-                />
-              )}
-
               {isConnected && !isOnArc && (
                 <button
                   onClick={() => switchChain({ chainId: ARC_CHAIN_ID })}
@@ -365,21 +370,38 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
                 </div>
               )}
 
-              {/* Recipient actions */}
-              {isRecipient && isOnArc && !isComplete && relayerReady && (() => {
+              {/* Recipient withdraw — spinner on button if relayer still waking */}
+              {isRecipient && isOnArc && !isComplete && (() => {
                 const isAccruing   = !!stream && stream.claimable === 0n && !stream.isBeforeStart
                 const isNotStarted = !!stream && stream.isBeforeStart
+                const canWithdraw  = !!stream && stream.claimable > 0n
+
                 return (
                   <div className="space-y-1.5">
-                    <ActionButton
-                      state={actionState}
-                      label={`Withdraw ${formatUsdc(stream?.claimable ?? 0n)} to Wallet`}
-                      signingLabel="Sign in wallet — no gas required"
-                      relayingLabel="Submitting via relayer…"
-                      successLabel="Withdrawal submitted"
-                      disabled={!stream || stream.claimable === 0n}
-                      onClick={handleClaim}
-                    />
+                    {/* Withdraw button — always rendered; spinner if relayer not yet ready */}
+                    {!relayerReady && canWithdraw ? (
+                      <button
+                        disabled
+                        className="flex w-full items-center justify-center gap-2.5 rounded-xl py-3.5 text-[13px] font-semibold"
+                        style={{ background: '#111827', color: '#ffffff', opacity: 0.7, cursor: 'wait' }}
+                      >
+                        <svg className="h-4 w-4 animate-spin shrink-0" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                        Relayer connecting…
+                      </button>
+                    ) : (
+                      <ActionButton
+                        state={actionState}
+                        label={`Withdraw ${formatUsdc(stream?.claimable ?? 0n)} to Wallet`}
+                        signingLabel="Sign in wallet — no gas required"
+                        relayingLabel="Submitting via relayer…"
+                        successLabel="Withdrawal submitted"
+                        disabled={!stream || stream.claimable === 0n}
+                        onClick={handleClaim}
+                      />
+                    )}
                     {isNotStarted && (
                       <p className="text-center text-[12px] text-gray-400">
                         Stream begins {new Date(Number(liveParams!.startTime) * 1000).toLocaleString()}
@@ -387,10 +409,8 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
                     )}
                     {isAccruing && (
                       <div className="flex items-center justify-center gap-1.5 text-[12px] text-gray-400">
-                        <span
-                          className="h-1.5 w-1.5 rounded-full bg-emerald-400"
-                          style={{ animation: 'spPulse 2s ease-in-out infinite' }}
-                        />
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400"
+                          style={{ animation: 'spPulse 2s ease-in-out infinite' }} />
                         Earnings accruing — first withdrawal available soon
                       </div>
                     )}
@@ -405,7 +425,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
               )}
 
               {/* Sender cancel */}
-              {isSender && !isComplete && relayerReady && (
+              {isSender && !isComplete && (
                 <button
                   onClick={handleCancel}
                   disabled={actionState !== 'idle'}
@@ -463,12 +483,9 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
           )}
         </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-center gap-1.5 border-t border-gray-50 bg-gray-50/40 py-3">
-          <img src="/hash-logo.png" alt="" className="h-3.5 w-3.5 opacity-20" />
-          <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-gray-300">
-            Powered by Hash PayLink
-          </span>
+        {/* Footer — Hash PayLink pill badge */}
+        <div className="border-t border-gray-50 bg-gray-50/40 py-3.5">
+          <HashPayLinkBadge />
         </div>
       </div>
 

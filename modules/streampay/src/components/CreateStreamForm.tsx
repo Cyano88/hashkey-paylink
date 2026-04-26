@@ -79,6 +79,7 @@ export function CreateStreamForm() {
   const [error,        setError]        = useState<string | null>(null)
   const [streamLink,   setStreamLink]   = useState<string | null>(null)
   const [deployTxHash, setDeployTxHash] = useState<string | null>(null)
+  const [copied,       setCopied]       = useState(false)
 
   // ── Derived ───────────────────────────────────────────────────────────────
   const recipientValid = isAddress(recipient)
@@ -161,61 +162,94 @@ export function CreateStreamForm() {
     }
   }
 
+  function handleCopy() {
+    if (!streamLink) return
+    navigator.clipboard.writeText(streamLink)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 3000)
+  }
+
   // ── Success screen ────────────────────────────────────────────────────────
   if (step === 'success' && streamLink) {
     return (
-      <div className="w-full max-w-[480px] mx-auto space-y-4">
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 text-center space-y-6">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-50 border border-emerald-100">
-            <svg className="h-6 w-6 text-emerald-500" fill="none" viewBox="0 0 24 24"
-              stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-            </svg>
+      <div className="w-full max-w-[460px] mx-auto">
+        <div className="space-y-12">
+          {/* Hero */}
+          <div className="text-center space-y-2">
+            <h1 className="text-[32px] font-bold tracking-tight text-gray-900">STREAMPAY</h1>
+            <p className="text-[14px] text-gray-400">Stream payment in USDC to anyone on Arc</p>
           </div>
 
-          <div className="space-y-1.5">
-            <p className="text-[17px] font-bold text-gray-900">Stream Deployed</p>
-            {reason && (
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">{reason}</p>
-            )}
-            <p className="text-[13px] text-gray-500">
-              {formatUsdcFull(amountBn)} USDC streaming to{' '}
-              <span className="font-mono font-semibold text-gray-700">
-                {recipient.slice(0, 6)}…{recipient.slice(-4)}
-              </span>
-            </p>
-          </div>
-
-          <div className="rounded-xl bg-gray-50 border border-gray-200 p-4 text-left space-y-3">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Share Stream Link</p>
-            <p className="break-all font-mono text-[11px] leading-relaxed text-gray-500">{streamLink}</p>
-            <div className="flex gap-2">
-              <button
-                onClick={() => navigator.clipboard.writeText(streamLink)}
-                className="flex-1 rounded-xl py-2.5 text-[13px] font-semibold transition-colors"
-                style={{ background: '#111827', color: '#ffffff' }}
-              >
-                Copy Link
-              </button>
-              <a
-                href={streamLink}
-                className="flex-1 rounded-xl border border-gray-200 py-2.5 text-center text-[13px] font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
-              >
-                View Stream
-              </a>
+          {/* Success card */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 text-center space-y-6">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-50 border border-emerald-100">
+              <svg className="h-6 w-6 text-emerald-500" fill="none" viewBox="0 0 24 24"
+                stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+              </svg>
             </div>
-          </div>
 
-          {deployTxHash && (
-            <a
-              href={`${ARC_EXPLORER}/tx/${deployTxHash}`}
-              target="_blank" rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-[12px] text-gray-400 hover:text-gray-600 transition-colors"
-            >
-              <ExtLinkIcon />
-              View on Arcscan
-            </a>
-          )}
+            <div className="space-y-1.5">
+              <p className="text-[17px] font-bold text-gray-900">Stream Deployed</p>
+              {reason && (
+                <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">{reason}</p>
+              )}
+              <p className="text-[13px] text-gray-500">
+                {formatUsdcFull(amountBn)} USDC streaming to{' '}
+                <span className="font-mono font-semibold text-gray-700">
+                  {recipient.slice(0, 6)}…{recipient.slice(-4)}
+                </span>
+              </p>
+            </div>
+
+            {/* Share link box */}
+            <div className="rounded-xl bg-gray-50 border-2 border-gray-200 p-4 text-left space-y-3">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Share Stream Link</p>
+              <p className="break-all font-mono text-[11px] leading-relaxed text-gray-500">{streamLink}</p>
+
+              {/* Vertical stack — identical width & height */}
+              <div className="space-y-2">
+                <button
+                  onClick={handleCopy}
+                  className="w-full flex items-center justify-center gap-2 rounded-xl py-3 text-[13px] font-semibold transition-all"
+                  style={copied
+                    ? { background: '#f0fdf4', color: '#16a34a', border: '2px solid #bbf7d0' }
+                    : { background: '#111827', color: '#ffffff', border: '2px solid #111827' }}
+                >
+                  {copied
+                    ? <>
+                        <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24"
+                          stroke="currentColor" strokeWidth={2.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                        </svg>
+                        LINK COPIED
+                      </>
+                    : 'Copy Link'}
+                </button>
+                <a
+                  href={streamLink}
+                  className="w-full flex items-center justify-center rounded-xl py-3 text-[13px] font-semibold text-gray-700 transition-colors hover:bg-gray-50"
+                  style={{ border: '2px solid #e5e7eb' }}
+                >
+                  View Stream
+                </a>
+              </div>
+            </div>
+
+            {deployTxHash && (
+              <a
+                href={`${ARC_EXPLORER}/tx/${deployTxHash}`}
+                target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-[12px] text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <ExtLinkIcon />
+                View on Arcscan
+              </a>
+            )}
+
+            {/* Powered by Hash PayLink pill */}
+            <HashPayLinkBadge />
+          </div>
         </div>
       </div>
     )
@@ -236,253 +270,279 @@ export function CreateStreamForm() {
 
   // ── Form ──────────────────────────────────────────────────────────────────
   return (
-    <div className="w-full max-w-[480px] mx-auto space-y-4">
+    <div className="w-full max-w-[460px] mx-auto">
+      <div className="space-y-12">
 
-      {/* ── Card ── */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm">
-        <div className="p-7 space-y-5">
+        {/* ── Hero ── */}
+        <div className="text-center space-y-2">
+          <h1 className="text-[32px] font-bold tracking-tight text-gray-900">STREAMPAY</h1>
+          <p className="text-[14px] text-gray-400">Stream payment in USDC to anyone on Arc</p>
+        </div>
 
-          {/* ── Recipient Address ── */}
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5">
-                <span className="flex gap-0.5">
-                  <span className="h-2 w-2 rounded-full bg-blue-500" />
-                  <span className="h-2 w-2 rounded-full bg-amber-400" />
-                </span>
-                <span className="text-[13px] font-semibold text-gray-700">Recipient Address</span>
-              </div>
-              <span className="text-[11px] text-gray-400">Arc Network</span>
-            </div>
+        {/* ── Card + How It Works ── */}
+        <div className="space-y-4">
 
-            <div className="relative">
-              <input
-                type="text"
-                placeholder="0x... (40 hex chars)"
-                value={recipient}
-                onChange={e => setRecipient(e.target.value.trim())}
-                spellCheck={false}
-                disabled={isWorking}
-                className={[
-                  'w-full rounded-xl border px-4 py-2.5 text-[13px] font-mono',
-                  'placeholder:text-gray-300 placeholder:font-sans focus:outline-none transition-colors',
-                  'disabled:opacity-50 disabled:cursor-not-allowed',
-                  recipient && !recipientValid
-                    ? 'border-red-200 bg-red-50/30 focus:border-red-300'
-                    : recipientValid
-                    ? 'border-emerald-200 bg-emerald-50/20'
-                    : 'border-gray-200 focus:border-gray-400',
-                ].join(' ')}
-              />
-              {recipientValid && (
-                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-600">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                    Address Valid
-                  </span>
+          {/* Card */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm">
+            <div className="p-7 space-y-5">
+
+              {/* ── Recipient Address ── */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <span className="flex gap-0.5">
+                      <span className="h-2 w-2 rounded-full bg-blue-500" />
+                      <span className="h-2 w-2 rounded-full bg-amber-400" />
+                    </span>
+                    <span className="text-[13px] font-semibold text-gray-700">Recipient Address</span>
+                  </div>
+                  <span className="text-[11px] text-gray-400">Arc Network</span>
                 </div>
-              )}
-            </div>
 
-            {recipientValid && (
-              <p className="text-[11px] text-emerald-600 flex items-center gap-1">
-                <svg className="h-3 w-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                </svg>
-                Auto-filled · {recipient.slice(0, 10)}…{recipient.slice(-8)}
-              </p>
-            )}
-            {recipient && !recipientValid && (
-              <p className="text-[11px] text-red-400">Enter a valid EVM address</p>
-            )}
-          </div>
-
-          {/* ── Amount ── */}
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-1.5">
-              <ChainIcon />
-              <span className="text-[13px] font-semibold text-gray-700">Amount</span>
-            </div>
-            <div className="flex overflow-hidden rounded-xl border border-gray-200 bg-white focus-within:border-gray-400 transition-colors">
-              <input
-                type="number"
-                placeholder="0.0"
-                min="0" step="any"
-                value={amount}
-                onChange={e => setAmount(e.target.value)}
-                disabled={isWorking}
-                className="min-w-0 flex-1 bg-transparent px-4 py-2.5 text-[14px] font-semibold focus:outline-none disabled:opacity-50 placeholder:text-gray-300 placeholder:font-normal"
-              />
-              <div className="flex items-center px-4 border-l border-gray-100 bg-gray-50 shrink-0">
-                <span className="text-[12px] font-semibold text-gray-500 select-none">USDC</span>
-              </div>
-            </div>
-            {isConnected && isOnArc && usdcBalance !== undefined ? (
-              <p className="text-[11px] text-gray-400">
-                Balance:{' '}
-                <span className={`font-semibold ${insufficientFunds ? 'text-red-500' : 'text-gray-600'}`}>
-                  {formatUsdcFull(usdcBalance)} USDC
-                </span>
-                {insufficientFunds && (
-                  <span className="ml-1.5 font-semibold text-red-500">— insufficient</span>
-                )}
-              </p>
-            ) : (
-              <p className="text-[11px] text-gray-400">USDC on Arc Network — connect wallet to see balance</p>
-            )}
-          </div>
-
-          {/* ── Duration ── */}
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-1.5">
-              <ClockIcon />
-              <span className="text-[13px] font-semibold text-gray-700">Duration</span>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {DURATIONS.map(d => {
-                const active = durationPreset === d.secs
-                return (
-                  <button
-                    key={d.label}
-                    type="button"
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="0x... (40 hex chars)"
+                    value={recipient}
+                    onChange={e => setRecipient(e.target.value.trim())}
+                    spellCheck={false}
                     disabled={isWorking}
-                    onClick={() => { setDurationPreset(d.secs); setCustomDays('') }}
-                    className="rounded-xl border px-3.5 py-2 text-[12px] font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                    style={active
-                      ? { background: '#111827', borderColor: '#111827', color: '#ffffff' }
-                      : { background: '#ffffff', borderColor: '#e5e7eb', color: '#4b5563' }}
+                    className={[
+                      'w-full rounded-xl border-2 px-4 py-2.5 text-[13px] font-mono',
+                      'placeholder:text-gray-300 placeholder:font-sans focus:outline-none transition-colors',
+                      'disabled:opacity-50 disabled:cursor-not-allowed',
+                      recipient && !recipientValid
+                        ? 'border-red-200 bg-red-50/30'
+                        : recipientValid
+                        ? 'border-emerald-200 bg-emerald-50/20'
+                        : 'border-gray-200',
+                    ].join(' ')}
+                  />
+                  {recipientValid && (
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-600">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                        Address Valid
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {recipientValid && (
+                  <p className="text-[11px] text-emerald-600 flex items-center gap-1">
+                    <svg className="h-3 w-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                    </svg>
+                    Auto-filled · {recipient.slice(0, 10)}…{recipient.slice(-8)}
+                  </p>
+                )}
+                {recipient && !recipientValid && (
+                  <p className="text-[11px] text-red-400">Enter a valid EVM address</p>
+                )}
+              </div>
+
+              {/* ── Amount ── */}
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-1.5">
+                  <ChainIcon />
+                  <span className="text-[13px] font-semibold text-gray-700">Amount</span>
+                </div>
+                <div className="flex overflow-hidden rounded-xl border-2 border-gray-200 bg-white transition-colors focus-within:border-gray-400">
+                  <input
+                    type="number"
+                    placeholder="0.0"
+                    min="0" step="any"
+                    value={amount}
+                    onChange={e => setAmount(e.target.value)}
+                    disabled={isWorking}
+                    className="min-w-0 flex-1 bg-transparent px-4 py-2.5 text-[14px] font-semibold focus:outline-none disabled:opacity-50 placeholder:text-gray-300 placeholder:font-normal"
+                  />
+                  <div className="flex items-center px-4 border-l-2 border-gray-200 bg-gray-50 shrink-0">
+                    <span className="text-[12px] font-bold text-gray-500 select-none">USDC</span>
+                  </div>
+                </div>
+                {isConnected && isOnArc && usdcBalance !== undefined ? (
+                  <p className="text-[11px] text-gray-400">
+                    Balance:{' '}
+                    <span className={`font-semibold ${insufficientFunds ? 'text-red-500' : 'text-gray-600'}`}>
+                      {formatUsdcFull(usdcBalance)} USDC
+                    </span>
+                    {insufficientFunds && (
+                      <span className="ml-1.5 font-semibold text-red-500">— insufficient</span>
+                    )}
+                  </p>
+                ) : (
+                  <p className="text-[11px] text-gray-400">USDC on Arc Network — connect wallet to see balance</p>
+                )}
+              </div>
+
+              {/* ── Duration ── */}
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-1.5">
+                  <ClockIcon />
+                  <span className="text-[13px] font-semibold text-gray-700">Duration</span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {DURATIONS.map(d => {
+                    const active = durationPreset === d.secs
+                    return (
+                      <button
+                        key={d.label}
+                        type="button"
+                        disabled={isWorking}
+                        onClick={() => { setDurationPreset(d.secs); setCustomDays('') }}
+                        className="rounded-xl border-2 px-3.5 py-2 text-[12px] font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                        style={active
+                          ? { background: '#111827', borderColor: '#111827', color: '#ffffff' }
+                          : { background: '#ffffff', borderColor: '#e5e7eb', color: '#4b5563' }}
+                      >
+                        {d.label}
+                      </button>
+                    )
+                  })}
+                </div>
+                <div className="flex overflow-hidden rounded-xl border-2 border-gray-200 bg-white transition-colors focus-within:border-gray-400">
+                  <input
+                    type="number"
+                    placeholder="Custom days"
+                    min="0.1" step="0.1"
+                    value={customDays}
+                    disabled={isWorking}
+                    onChange={e => { setCustomDays(e.target.value); setDurationPreset(null) }}
+                    className="min-w-0 flex-1 bg-transparent px-4 py-2.5 text-[13px] focus:outline-none disabled:opacity-50 placeholder:text-gray-300"
+                  />
+                  <div className="flex items-center px-4 border-l-2 border-gray-200 bg-gray-50 shrink-0">
+                    <span className="text-[12px] font-bold text-gray-500 select-none">DAYS</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* ── Memo / Reason ── */}
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-1.5">
+                  <TagIcon />
+                  <span className="text-[13px] font-semibold text-gray-700">Memo</span>
+                  <span className="text-[11px] text-gray-400">optional · stored on-chain</span>
+                </div>
+                <input
+                  type="text"
+                  placeholder="e.g., April Salary, Freelance Gig…"
+                  value={reason}
+                  onChange={e => setReason(e.target.value)}
+                  disabled={isWorking}
+                  maxLength={80}
+                  className="w-full rounded-xl border-2 border-gray-200 px-4 py-2.5 text-[13px] placeholder:text-gray-300 focus:outline-none focus:border-gray-400 transition-colors disabled:opacity-50"
+                />
+              </div>
+
+              {/* ── CTA ── */}
+              <div className="space-y-2.5 pt-1">
+                {/* Fix 5: Connect Wallet reverted to full-width */}
+                {!isConnected && (
+                  <button
+                    onClick={() => openConnectModal?.()}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl py-3 text-[14px] font-semibold transition-colors active:scale-[0.98]"
+                    style={{ background: '#111827', color: '#ffffff' }}
                   >
-                    {d.label}
+                    <WalletIcon />
+                    Connect Wallet
                   </button>
-                )
-              })}
-            </div>
-            <div className="flex overflow-hidden rounded-xl border border-gray-200 bg-white focus-within:border-gray-400 transition-colors">
-              <input
-                type="number"
-                placeholder="Custom days"
-                min="0.1" step="0.1"
-                value={customDays}
-                disabled={isWorking}
-                onChange={e => { setCustomDays(e.target.value); setDurationPreset(null) }}
-                className="min-w-0 flex-1 bg-transparent px-4 py-2.5 text-[13px] focus:outline-none disabled:opacity-50 placeholder:text-gray-300"
-              />
-              <div className="flex items-center px-4 border-l border-gray-100 bg-gray-50 shrink-0">
-                <span className="text-[12px] font-semibold text-gray-500 select-none">DAYS</span>
+                )}
+
+                {isConnected && !isOnArc && (
+                  <button
+                    onClick={() => switchChain({ chainId: ARC_CHAIN_ID })}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl py-3 text-[14px] font-semibold transition-colors active:scale-[0.98]"
+                    style={{ background: '#111827', color: '#ffffff' }}
+                  >
+                    Switch to Arc Network
+                  </button>
+                )}
+
+                {isConnected && isOnArc && (
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleDeploy}
+                      disabled={!deployReady}
+                      className="flex flex-1 items-center justify-center gap-2 rounded-xl py-3 text-[14px] font-semibold transition-all active:scale-[0.98]"
+                      style={deployReady
+                        ? { background: '#111827', color: '#ffffff', cursor: 'pointer' }
+                        : { background: '#f3f4f6', color: '#9ca3af', cursor: 'not-allowed' }}
+                    >
+                      {isWorking
+                        ? <><Spinner />{statusMsg}</>
+                        : <><StreamIcon />Deploy Stream &nbsp;→</>}
+                    </button>
+
+                    <button
+                      onClick={() => disconnect()}
+                      title="Disconnect wallet"
+                      className="flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-xl border-2 border-gray-200 transition-colors active:scale-[0.96] hover:border-red-200 hover:text-red-500"
+                      style={{ color: '#111827' }}
+                    >
+                      <PowerIcon />
+                    </button>
+                  </div>
+                )}
+
+                {insufficientFunds && !isWorking && (
+                  <p className="text-center text-[12px] font-semibold text-red-500">
+                    Insufficient USDC — fund your Arc wallet first
+                  </p>
+                )}
+
+                {hint && !insufficientFunds && (
+                  <p className="text-center text-[12px] text-gray-400">{hint}</p>
+                )}
+
+                {error && (
+                  <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-center text-[12px] text-red-500">
+                    {error}
+                  </div>
+                )}
               </div>
             </div>
           </div>
 
-          {/* ── Memo / Reason ── */}
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-1.5">
-              <TagIcon />
-              <span className="text-[13px] font-semibold text-gray-700">Memo</span>
-              <span className="text-[11px] text-gray-400">optional · stored on-chain</span>
-            </div>
-            <input
-              type="text"
-              placeholder="e.g., April Salary, Freelance Gig…"
-              value={reason}
-              onChange={e => setReason(e.target.value)}
-              disabled={isWorking}
-              maxLength={80}
-              className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-[13px] placeholder:text-gray-300 focus:outline-none focus:border-gray-400 transition-colors disabled:opacity-50"
-            />
-          </div>
-
-          {/* ── CTA ── */}
-          <div className="space-y-2.5 pt-1">
-            {!isConnected && (
-              <button
-                onClick={() => openConnectModal?.()}
-                className="flex mx-auto items-center justify-center gap-2 rounded-xl px-8 py-3 text-[14px] font-semibold transition-colors active:scale-[0.98]"
-                style={{ background: '#111827', color: '#ffffff' }}
-              >
-                <WalletIcon />
-                Connect Wallet
-              </button>
-            )}
-
-            {isConnected && !isOnArc && (
-              <button
-                onClick={() => switchChain({ chainId: ARC_CHAIN_ID })}
-                className="flex w-full items-center justify-center gap-2 rounded-xl py-3 text-[14px] font-semibold transition-colors active:scale-[0.98]"
-                style={{ background: '#111827', color: '#ffffff' }}
-              >
-                Switch to Arc Network
-              </button>
-            )}
-
-            {isConnected && isOnArc && (
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handleDeploy}
-                  disabled={!deployReady}
-                  className="flex flex-1 items-center justify-center gap-2 rounded-xl py-3 text-[14px] font-semibold transition-all active:scale-[0.98]"
-                  style={deployReady
-                    ? { background: '#111827', color: '#ffffff', cursor: 'pointer' }
-                    : { background: '#f3f4f6', color: '#9ca3af', cursor: 'not-allowed' }}
+          {/* ── How It Works ── */}
+          <div className="space-y-3 pt-2">
+            <p className="text-center text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-400">
+              How It Works
+            </p>
+            <div className="grid grid-cols-3 gap-3">
+              {([
+                { n: '1', title: 'Fund vault',    desc: 'USDC is pre-loaded into a ghost vault address' },
+                { n: '2', title: 'Stream begins', desc: 'Funds unlock linearly to the recipient over time' },
+                { n: '3', title: 'Claim anytime', desc: 'Recipient withdraws gaslessly — no gas required' },
+              ] as const).map(s => (
+                <div
+                  key={s.n}
+                  className="rounded-2xl border border-gray-100 bg-white p-4 text-center shadow-sm space-y-2"
                 >
-                  {isWorking
-                    ? <><Spinner />{statusMsg}</>
-                    : <><StreamIcon />Deploy Stream &nbsp;→</>}
-                </button>
-
-                <button
-                  onClick={() => disconnect()}
-                  title="Disconnect wallet"
-                  className="flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-xl border border-gray-200 transition-colors active:scale-[0.96] hover:border-red-200 hover:text-red-500"
-                  style={{ color: '#111827' }}
-                >
-                  <PowerIcon />
-                </button>
-              </div>
-            )}
-
-            {insufficientFunds && !isWorking && (
-              <p className="text-center text-[12px] font-semibold text-red-500">
-                Insufficient USDC — fund your Arc wallet first
-              </p>
-            )}
-
-            {hint && !insufficientFunds && (
-              <p className="text-center text-[12px] text-gray-400">{hint}</p>
-            )}
-
-            {error && (
-              <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-center text-[12px] text-red-500">
-                {error}
-              </div>
-            )}
+                  <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-gray-200 text-[11px] font-semibold text-gray-500">
+                    {s.n}
+                  </span>
+                  <p className="text-[12px] font-bold text-gray-800">{s.title}</p>
+                  <p className="text-[11px] leading-snug text-gray-400">{s.desc}</p>
+                </div>
+              ))}
+            </div>
           </div>
+
         </div>
       </div>
+    </div>
+  )
+}
 
-      {/* ── How It Works ── */}
-      <div className="space-y-3 pt-2">
-        <p className="text-center text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-400">
-          How It Works
-        </p>
-        <div className="grid grid-cols-3 gap-3">
-          {([
-            { n: '1', title: 'Fund vault',    desc: 'USDC is pre-loaded into a ghost vault address' },
-            { n: '2', title: 'Stream begins', desc: 'Funds unlock linearly to the recipient over time' },
-            { n: '3', title: 'Claim anytime', desc: 'Recipient withdraws gaslessly — no gas required' },
-          ] as const).map(s => (
-            <div
-              key={s.n}
-              className="rounded-2xl border border-gray-100 bg-white p-4 text-center shadow-sm space-y-2"
-            >
-              <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-gray-200 text-[11px] font-semibold text-gray-500">
-                {s.n}
-              </span>
-              <p className="text-[12px] font-bold text-gray-800">{s.title}</p>
-              <p className="text-[11px] leading-snug text-gray-400">{s.desc}</p>
-            </div>
-          ))}
-        </div>
-      </div>
+// ── Shared badge ──────────────────────────────────────────────────────────────
+export function HashPayLinkBadge() {
+  return (
+    <div className="flex justify-center">
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 px-3 py-1">
+        <img src="/hash-logo.png" alt="#" className="h-3 w-3 opacity-50" />
+        <span className="text-[10px] font-semibold text-gray-400">Powered by Hash PayLink</span>
+      </span>
     </div>
   )
 }
