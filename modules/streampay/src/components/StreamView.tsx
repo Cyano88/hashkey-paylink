@@ -243,7 +243,12 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
     setActionState('signing'); setActionError(null)
     try {
       const deadline = BigInt(Math.floor(Date.now() / 1000) + 600)
-      const nonce    = signerNonce ?? 0n
+      // Always read fresh nonce from chain — never use a cached value.
+      // A stale nonce causes "Missing or invalid parameters" on the relay RPC.
+      const nonce = await arcClient.readContract({
+        address: vaultAddress, abi: STREAM_VAULT_ABI,
+        functionName: 'nonces', args: [connectedAddr],
+      }) as bigint
       const sig = await signTypedDataAsync({
         domain: { name: 'StreamVault', version: '1', chainId: ARC_CHAIN_ID, verifyingContract: vaultAddress },
         types: {
@@ -272,7 +277,11 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
       setTxHash(hash ?? null)
       if (hash) addPending(hash, vaultAddress, 'claim')
       setActionState('success')
+      // Poll until on-chain data actually changes — covers slow block times
+      refetchInfo(); refetchNonce()
       setTimeout(() => { refetchInfo(); refetchNonce() }, 4_000)
+      setTimeout(() => { refetchInfo(); refetchNonce() }, 9_000)
+      setTimeout(() => { refetchInfo(); refetchNonce() }, 15_000)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
       if (msg.toLowerCase().includes('rejected') || msg.toLowerCase().includes('denied')) {
@@ -288,7 +297,11 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
     setActionState('signing'); setActionError(null)
     try {
       const deadline = BigInt(Math.floor(Date.now() / 1000) + 600)
-      const nonce    = signerNonce ?? 0n
+      // Fresh nonce from chain — same reason as handleClaim
+      const nonce = await arcClient.readContract({
+        address: vaultAddress, abi: STREAM_VAULT_ABI,
+        functionName: 'nonces', args: [connectedAddr],
+      }) as bigint
       const sig = await signTypedDataAsync({
         domain: { name: 'StreamVault', version: '1', chainId: ARC_CHAIN_ID, verifyingContract: vaultAddress },
         types: {
@@ -315,7 +328,9 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
       setTxHash(hash ?? null)
       if (hash) addPending(hash, vaultAddress, 'cancel')
       setActionState('success')
+      refetchInfo()
       setTimeout(() => refetchInfo(), 4_000)
+      setTimeout(() => refetchInfo(), 9_000)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
       if (msg.toLowerCase().includes('rejected') || msg.toLowerCase().includes('denied')) {
