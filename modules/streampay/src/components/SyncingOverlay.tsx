@@ -6,9 +6,11 @@ const POLL_MS     = 5_000
 interface SyncingOverlayProps {
   onReady:    () => void
   onTimeout?: () => void
+  /** When true renders a compact inline banner instead of a full card overlay */
+  inline?:    boolean
 }
 
-export function SyncingOverlay({ onReady, onTimeout }: SyncingOverlayProps) {
+export function SyncingOverlay({ onReady, onTimeout, inline }: SyncingOverlayProps) {
   const [elapsed, setElapsed]   = useState(0)
   const [timedOut, setTimedOut] = useState(false)
   const startRef = useRef(Date.now())
@@ -47,15 +49,40 @@ export function SyncingOverlay({ onReady, onTimeout }: SyncingOverlayProps) {
     return () => { deadRef.current = true; clearInterval(ticker) }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Inline banner (used inside actions area of StreamView) ────────────────
+  if (inline) {
+    if (timedOut) {
+      return (
+        <div className="flex items-center justify-between rounded-xl border border-red-100 bg-red-50 px-4 py-2.5">
+          <span className="text-[12px] text-red-500">Relayer timeout — actions unavailable</span>
+          <button
+            onClick={() => { startRef.current = Date.now(); setElapsed(0); setTimedOut(false); window.location.reload() }}
+            className="text-[12px] font-semibold text-red-600 underline"
+          >
+            Retry
+          </button>
+        </div>
+      )
+    }
+    return (
+      <div className="flex items-center gap-2.5 rounded-xl border border-gray-100 bg-gray-50 px-4 py-2.5">
+        <div className="h-3.5 w-3.5 shrink-0 rounded-full border-2 border-gray-200 border-t-gray-600 animate-spin" />
+        <span className="text-[12px] text-gray-500">
+          Relayer waking up — actions available shortly
+        </span>
+      </div>
+    )
+  }
+
+  // ── Full card overlay (legacy, kept for other usages) ─────────────────────
   const progress  = Math.min(1, elapsed / TIMEOUT_SEC)
   const remaining = Math.max(0, TIMEOUT_SEC - elapsed)
   const mins = Math.floor(remaining / 60)
   const secs = remaining % 60
 
   return (
-    <div className="absolute inset-0 z-10 flex flex-col items-center justify-center rounded-2xl bg-white/92 backdrop-blur-sm">
+    <div className="absolute inset-0 z-10 flex flex-col items-center justify-center rounded-2xl bg-white/95 backdrop-blur-sm">
       <div className="w-60 text-center space-y-5">
-        {/* Spinner or warning */}
         <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full border border-gray-100 bg-gray-50">
           {timedOut ? (
             <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24"
@@ -79,14 +106,13 @@ export function SyncingOverlay({ onReady, onTimeout }: SyncingOverlayProps) {
           </p>
         </div>
 
-        {/* Progress track */}
         <div className="space-y-1.5">
           <div className="h-1 w-full overflow-hidden rounded-full bg-gray-100">
             <div
               className="h-full rounded-full transition-all duration-1000"
               style={{
                 width:      `${progress * 100}%`,
-                background: timedOut ? '#d1d5db' : '#1a1a1a',
+                background: timedOut ? '#d1d5db' : '#111827',
               }}
             />
           </div>

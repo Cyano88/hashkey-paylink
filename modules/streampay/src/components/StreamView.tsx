@@ -69,6 +69,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
   const { switchChain } = useSwitchChain()
   const isOnArc = chainId === ARC_CHAIN_ID
 
+  // relayerReady gates claim/cancel actions only — stream data loads immediately
   const [relayerReady, setRelayerReady] = useState(false)
 
   // ── Contract reads ────────────────────────────────────────────────────────
@@ -81,7 +82,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
     address:      vaultAddress,
     abi:          STREAM_VAULT_ABI,
     functionName: 'streamInfo',
-    query:        { enabled: relayerReady, retry: 1 },
+    query:        { enabled: true, retry: 2 },
   })
   const info = rawInfo as unknown as StreamInfo | undefined
 
@@ -218,12 +219,11 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
   const isComplete  = stream?.isComplete ?? false
   const endTime     = liveParams?.endTime ?? 0n
 
-  // ── Loading skeleton ──────────────────────────────────────────────────────
-  if (!relayerReady || (isLoading && !info)) {
+  // ── Loading skeleton (only while RPC data hasn't arrived yet) ───────────────
+  if (isLoading && !info) {
     return (
       <div className="w-full max-w-[420px] mx-auto">
-        <div className="relative overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
-          {!relayerReady && <SyncingOverlay onReady={() => setRelayerReady(true)} />}
+        <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
           <div className="animate-pulse p-7 space-y-5">
             <div className="flex items-center justify-between">
               <div className="h-3 w-20 rounded bg-gray-100" />
@@ -341,10 +341,19 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
           {/* Actions */}
           {!isCancelled && (
             <div className="space-y-2">
+              {/* Non-blocking relayer health check — only affects action buttons */}
+              {!relayerReady && (
+                <SyncingOverlay
+                  onReady={() => setRelayerReady(true)}
+                  inline
+                />
+              )}
+
               {isConnected && !isOnArc && (
                 <button
                   onClick={() => switchChain({ chainId: ARC_CHAIN_ID })}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-gray-900 py-3 text-[13px] font-semibold text-white hover:bg-gray-800 transition-colors active:scale-[0.98]"
+                  className="flex w-full items-center justify-center gap-2 rounded-xl py-3 text-[13px] font-semibold transition-colors active:scale-[0.98]"
+                  style={{ background: '#111827', color: '#ffffff' }}
                 >
                   Switch to Arc Network
                 </button>
@@ -357,7 +366,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
               )}
 
               {/* Recipient actions */}
-              {isRecipient && isOnArc && !isComplete && (() => {
+              {isRecipient && isOnArc && !isComplete && relayerReady && (() => {
                 const isAccruing   = !!stream && stream.claimable === 0n && !stream.isBeforeStart
                 const isNotStarted = !!stream && stream.isBeforeStart
                 return (
@@ -396,7 +405,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
               )}
 
               {/* Sender cancel */}
-              {isSender && !isComplete && (
+              {isSender && !isComplete && relayerReady && (
                 <button
                   onClick={handleCancel}
                   disabled={actionState !== 'idle'}
@@ -509,17 +518,13 @@ function ActionButton({ state, label, signingLabel, relayingLabel, successLabel,
     <button
       onClick={onClick}
       disabled={disabled || isWorking || isDone}
-      className={[
-        'flex w-full items-center justify-center gap-2.5 rounded-xl py-3.5 text-[13px] font-semibold',
-        'transition-all duration-150 active:scale-[0.98]',
-        isDone
-          ? 'bg-gray-100 text-gray-500 cursor-default'
-          : isWorking
-          ? 'cursor-wait opacity-75 bg-gray-900 text-white'
-          : disabled
-          ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-          : 'bg-gray-900 text-white hover:bg-gray-800 shadow-sm',
-      ].join(' ')}
+      className="flex w-full items-center justify-center gap-2.5 rounded-xl py-3.5 text-[13px] font-semibold transition-all duration-150 active:scale-[0.98]"
+      style={
+        isDone    ? { background: '#f3f4f6', color: '#6b7280', cursor: 'default' }
+        : isWorking ? { background: '#111827', color: '#ffffff', cursor: 'wait', opacity: 0.75 }
+        : disabled  ? { background: '#f3f4f6', color: '#9ca3af', cursor: 'not-allowed' }
+        : { background: '#111827', color: '#ffffff', cursor: 'pointer' }
+      }
     >
       {isWorking && (
         <svg className="h-4 w-4 animate-spin shrink-0" fill="none" viewBox="0 0 24 24">

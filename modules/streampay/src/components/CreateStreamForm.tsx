@@ -192,7 +192,8 @@ export function CreateStreamForm() {
             <div className="flex gap-2">
               <button
                 onClick={() => navigator.clipboard.writeText(streamLink)}
-                className="flex-1 rounded-xl bg-gray-900 py-2.5 text-[13px] font-semibold text-white hover:bg-gray-800 transition-colors"
+                className="flex-1 rounded-xl py-2.5 text-[13px] font-semibold transition-colors"
+                style={{ background: '#111827', color: '#ffffff' }}
               >
                 Copy Link
               </button>
@@ -346,13 +347,10 @@ export function CreateStreamForm() {
                     type="button"
                     disabled={isWorking}
                     onClick={() => { setDurationPreset(d.secs); setCustomDays('') }}
-                    className={[
-                      'rounded-xl border px-3.5 py-2 text-[12px] font-semibold transition-all',
-                      'disabled:opacity-50 disabled:cursor-not-allowed',
-                      active
-                        ? 'border-gray-900 bg-gray-900 text-white'
-                        : 'border-gray-200 bg-white text-gray-600 hover:border-gray-400',
-                    ].join(' ')}
+                    className="rounded-xl border px-3.5 py-2 text-[12px] font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={active
+                      ? { background: '#111827', borderColor: '#111827', color: '#ffffff' }
+                      : { background: '#ffffff', borderColor: '#e5e7eb', color: '#4b5563' }}
                   >
                     {d.label}
                   </button>
@@ -398,7 +396,8 @@ export function CreateStreamForm() {
             {!isConnected && (
               <button
                 onClick={() => openConnectModal?.()}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-gray-900 py-3 text-[14px] font-semibold text-white hover:bg-gray-800 transition-colors active:scale-[0.98]"
+                className="flex mx-auto items-center justify-center gap-2 rounded-xl px-8 py-3 text-[14px] font-semibold transition-colors active:scale-[0.98]"
+                style={{ background: '#111827', color: '#ffffff' }}
               >
                 <WalletIcon />
                 Connect Wallet
@@ -408,7 +407,8 @@ export function CreateStreamForm() {
             {isConnected && !isOnArc && (
               <button
                 onClick={() => switchChain({ chainId: ARC_CHAIN_ID })}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-gray-900 py-3 text-[14px] font-semibold text-white hover:bg-gray-800 transition-colors active:scale-[0.98]"
+                className="flex w-full items-center justify-center gap-2 rounded-xl py-3 text-[14px] font-semibold transition-colors active:scale-[0.98]"
+                style={{ background: '#111827', color: '#ffffff' }}
               >
                 Switch to Arc Network
               </button>
@@ -419,13 +419,10 @@ export function CreateStreamForm() {
                 <button
                   onClick={handleDeploy}
                   disabled={!deployReady}
-                  className={[
-                    'flex flex-1 items-center justify-center gap-2 rounded-xl py-3',
-                    'text-[14px] font-semibold transition-all active:scale-[0.98]',
-                    deployReady
-                      ? 'bg-gray-900 text-white hover:bg-gray-800 cursor-pointer shadow-sm'
-                      : 'bg-gray-100 text-gray-400 cursor-not-allowed',
-                  ].join(' ')}
+                  className="flex flex-1 items-center justify-center gap-2 rounded-xl py-3 text-[14px] font-semibold transition-all active:scale-[0.98]"
+                  style={deployReady
+                    ? { background: '#111827', color: '#ffffff', cursor: 'pointer' }
+                    : { background: '#f3f4f6', color: '#9ca3af', cursor: 'not-allowed' }}
                 >
                   {isWorking
                     ? <><Spinner />{statusMsg}</>
@@ -435,7 +432,8 @@ export function CreateStreamForm() {
                 <button
                   onClick={() => disconnect()}
                   title="Disconnect wallet"
-                  className="flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-xl border border-gray-200 text-gray-400 hover:border-red-200 hover:text-red-400 transition-colors active:scale-[0.96]"
+                  className="flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-xl border border-gray-200 transition-colors active:scale-[0.96] hover:border-red-200 hover:text-red-500"
+                  style={{ color: '#111827' }}
                 >
                   <PowerIcon />
                 </button>
