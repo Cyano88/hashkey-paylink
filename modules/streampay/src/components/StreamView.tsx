@@ -470,14 +470,13 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
                 </button>
               )}
 
-              {/* Recipient withdraw */}
-              {isRecipient && isOnArc && !isComplete && (() => {
-                const isAccruing   = !!stream && stream.claimable === 0n && !stream.isBeforeStart
+              {/* Recipient withdraw — shown whenever there is a claimable balance,
+                  regardless of isComplete (a finished stream can still have unclaimed funds) */}
+              {isRecipient && isOnArc && (stream?.claimable ?? 0n) > 0n && (() => {
                 const isNotStarted = !!stream && stream.isBeforeStart
-                const canWithdraw  = !!stream && stream.claimable > 0n
                 return (
                   <div className="space-y-1.5">
-                    {!relayerReady && canWithdraw ? (
+                    {!relayerReady ? (
                       <button disabled
                         className="flex w-full items-center justify-center gap-2.5 rounded-xl py-3.5 text-[13px] font-semibold"
                         style={{ background: '#111827', color: '#ffffff', opacity: 0.7, cursor: 'wait' }}
@@ -491,11 +490,11 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
                     ) : (
                       <ActionButton
                         state={actionState}
-                        label={`Withdraw ${formatUsdc(stream?.claimable ?? 0n)} to Wallet`}
+                        label={`Withdraw ${formatUsdc(stream.claimable)} to Wallet`}
                         signingLabel="Sign in wallet — no gas required"
                         relayingLabel="Submitting via relayer…"
                         successLabel="Withdrawal submitted"
-                        disabled={!stream || stream.claimable === 0n}
+                        disabled={false}
                         onClick={handleClaim}
                       />
                     )}
@@ -504,18 +503,21 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
                         Stream begins {new Date(Number(info._startTime) * 1000).toLocaleString()}
                       </p>
                     )}
-                    {isAccruing && (
-                      <div className="flex items-center justify-center gap-1.5 text-[12px] text-gray-400">
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400"
-                          style={{ animation: 'spPulse 2s ease-in-out infinite' }} />
-                        Earnings accruing — first withdrawal available soon
-                      </div>
-                    )}
                   </div>
                 )
               })()}
 
-              {isRecipient && isComplete && (
+              {/* Accruing — stream live but nothing claimable yet */}
+              {isRecipient && isOnArc && !isComplete && (stream?.claimable ?? 0n) === 0n && !stream?.isBeforeStart && (
+                <div className="flex items-center justify-center gap-1.5 text-[12px] text-gray-400 py-1">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400"
+                    style={{ animation: 'spPulse 2s ease-in-out infinite' }} />
+                  Earnings accruing — first withdrawal available soon
+                </div>
+              )}
+
+              {/* Truly nothing left — stream complete AND claimable is zero */}
+              {isRecipient && isComplete && (stream?.claimable ?? 0n) === 0n && (
                 <div className="rounded-xl border border-gray-100 bg-gray-50 py-3.5 text-center text-[13px] font-medium text-gray-500">
                   All funds withdrawn
                 </div>
