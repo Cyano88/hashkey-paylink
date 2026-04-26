@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, Component } from 'react'
+import type { ReactNode, ErrorInfo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
-  useAccount, useChainId, useSwitchChain,
-  useReadContract, useSignTypedData,
+  useAccount, useChainId, useSwitchChain, useSignTypedData,
 } from 'wagmi'
+import { useQuery } from '@tanstack/react-query'
+import { createPublicClient, http, defineChain } from 'viem'
 import { useStreamState }    from '../hooks/useStreamState'
 import { usePendingTx }      from '../hooks/usePendingTx'
 import { TriStateBar, formatUsdc, formatUsdcFull } from './TriStateBar'
@@ -11,6 +13,18 @@ import { PendingTxToast }    from './PendingTxToast'
 import { CreateStreamForm, HashPayLinkBadge } from './CreateStreamForm'
 import { StreamNotFound }    from './StreamNotFound'
 import { STREAM_VAULT_ABI }  from '../lib/streamVaultAbi'
+
+// ── Standalone Arc public client — bypasses wagmi chain management entirely ───
+// Reads always hit Arc RPC directly, no matter what chain the wallet is on.
+const arcClient = createPublicClient({
+  chain: defineChain({
+    id:             5042002,
+    name:           'Arc Testnet',
+    nativeCurrency: { decimals: 18, name: 'USD Coin', symbol: 'USDC' },
+    rpcUrls:        { default: { http: ['https://rpc.testnet.arc.network'] } },
+  }),
+  transport: http('https://rpc.testnet.arc.network'),
+})
 
 // ── StreamInfo type ───────────────────────────────────────────────────────────
 type StreamInfo = {
@@ -48,17 +62,66 @@ function shortAddr(addr: string): string {
 
 type ActionState = 'idle' | 'signing' | 'relaying' | 'success' | 'error'
 
+// ── Error boundary — catches render errors so page never goes blank ───────────
+class StreamErrorBoundary extends Component<
+  { children: ReactNode },
+  { error: Error | null }
+> {
+  constructor(props: { children: ReactNode }) {
+    super(props)
+    this.state = { error: null }
+  }
+  static getDerivedStateFromError(error: Error) {
+    return { error }
+  }
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error('[StreamPay] render error:', error, info)
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="w-full max-w-[420px] mx-auto">
+          <div className="rounded-2xl border border-red-100 bg-white p-8 text-center space-y-4 shadow-sm">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-red-50 border border-red-100">
+              <svg className="h-5 w-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round"
+                  d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-[15px] font-bold text-gray-900">Something went wrong</p>
+              <p className="mt-1 text-[12px] text-gray-400">{this.state.error.message}</p>
+            </div>
+            <button
+              onClick={() => { this.setState({ error: null }); window.location.reload() }}
+              className="w-full rounded-xl py-2.5 text-[13px] font-semibold text-white"
+              style={{ background: '#111827' }}
+            >
+              Reload Page
+            </button>
+          </div>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
+
+// ── Route ─────────────────────────────────────────────────────────────────────
 interface StreamViewProps {
   vaultAddress?: `0x${string}`
 }
 
-// ── Route ─────────────────────────────────────────────────────────────────────
 export function StreamView({ vaultAddress }: StreamViewProps) {
   const [params] = useSearchParams()
   const reason   = params.get('reason') ?? undefined
 
   if (!vaultAddress) return <CreateStreamForm />
-  return <StreamDetail vaultAddress={vaultAddress} reason={reason} />
+  return (
+    <StreamErrorBoundary>
+      <StreamDetail vaultAddress={vaultAddress} reason={reason} />
+    </StreamErrorBoundary>
+  )
 }
 
 // ── Stream Detail ─────────────────────────────────────────────────────────────
@@ -68,7 +131,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
   const { switchChain } = useSwitchChain()
   const isOnArc = chainId === ARC_CHAIN_ID
 
-  // Background relayer check — only affects the Withdraw button spinner, nothing else
+  // Background relayer check — only affects the Withdraw button spinner
   const [relayerReady, setRelayerReady] = useState(false)
   const relayerChecked = useRef(false)
   useEffect(() => {
@@ -87,28 +150,39 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
     return () => { dead = true }
   }, [])
 
-  // ── Contract reads — no gates, load immediately ───────────────────────────
+  // ── Direct Arc RPC reads via standalone client — no wagmi chain dependency ──
   const {
-    data: rawInfo,
-    refetch: refetchInfo,
+    data: info,
     isLoading,
     isError,
-  } = useReadContract({
-    address:      vaultAddress,
-    abi:          STREAM_VAULT_ABI,
-    functionName: 'streamInfo',
-    chainId:      ARC_CHAIN_ID,
-    query:        { enabled: true, retry: 2 },
+    refetch: refetchInfo,
+  } = useQuery<StreamInfo>({
+    queryKey: ['streamInfo', vaultAddress],
+    queryFn:  async () => {
+      const raw = await arcClient.readContract({
+        address:      vaultAddress,
+        abi:          STREAM_VAULT_ABI,
+        functionName: 'streamInfo',
+      })
+      return raw as unknown as StreamInfo
+    },
+    retry:     2,
+    staleTime: 0,
   })
-  const info = rawInfo as unknown as StreamInfo | undefined
 
-  const { data: signerNonce, refetch: refetchNonce } = useReadContract({
-    address:      vaultAddress,
-    abi:          STREAM_VAULT_ABI,
-    functionName: 'nonces',
-    chainId:      ARC_CHAIN_ID,
-    args:         [connectedAddr ?? '0x0000000000000000000000000000000000000000'],
-    query:        { enabled: !!connectedAddr },
+  const { data: signerNonce, refetch: refetchNonce } = useQuery<bigint>({
+    queryKey: ['nonce', vaultAddress, connectedAddr],
+    queryFn:  async () => {
+      const raw = await arcClient.readContract({
+        address:      vaultAddress,
+        abi:          STREAM_VAULT_ABI,
+        functionName: 'nonces',
+        args:         [connectedAddr!],
+      })
+      return raw as bigint
+    },
+    enabled:   !!connectedAddr,
+    staleTime: 0,
   })
 
   // ── Role detection ────────────────────────────────────────────────────────
@@ -145,7 +219,6 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
     try {
       const deadline = BigInt(Math.floor(Date.now() / 1000) + 600)
       const nonce    = signerNonce ?? 0n
-
       const sig = await signTypedDataAsync({
         domain: { name: 'StreamVault', version: '1', chainId: ARC_CHAIN_ID, verifyingContract: vaultAddress },
         types: {
@@ -159,7 +232,6 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
         primaryType: 'Claim',
         message: { recipient: connectedAddr, amount: stream.claimable, nonce, deadline },
       })
-
       setActionState('relaying')
       const res = await fetch('/api/relay-stream', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -171,7 +243,6 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
       })
       const data = await res.json() as { ok: boolean; txHash?: string; error?: string }
       if (!data.ok) throw new Error(data.error ?? 'Relay failed')
-
       const hash = data.txHash as `0x${string}` | undefined
       setTxHash(hash ?? null)
       if (hash) addPending(hash, vaultAddress, 'claim')
@@ -193,7 +264,6 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
     try {
       const deadline = BigInt(Math.floor(Date.now() / 1000) + 600)
       const nonce    = signerNonce ?? 0n
-
       const sig = await signTypedDataAsync({
         domain: { name: 'StreamVault', version: '1', chainId: ARC_CHAIN_ID, verifyingContract: vaultAddress },
         types: {
@@ -206,7 +276,6 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
         primaryType: 'Cancel',
         message: { sender: connectedAddr, nonce, deadline },
       })
-
       setActionState('relaying')
       const res = await fetch('/api/relay-stream', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -217,7 +286,6 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
       })
       const data = await res.json() as { ok: boolean; txHash?: string; error?: string }
       if (!data.ok) throw new Error(data.error ?? 'Relay failed')
-
       const hash = data.txHash as `0x${string}` | undefined
       setTxHash(hash ?? null)
       if (hash) addPending(hash, vaultAddress, 'cancel')
@@ -236,7 +304,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
   const isComplete  = stream?.isComplete ?? false
   const endTime     = liveParams?.endTime ?? 0n
 
-  // ── Loading skeleton (RPC only, no relayer gate) ──────────────────────────
+  // ── Loading skeleton ──────────────────────────────────────────────────────
   if (isLoading && !info) {
     return (
       <div className="w-full max-w-[420px] mx-auto">
@@ -262,7 +330,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
   }
 
   // ── Not found ─────────────────────────────────────────────────────────────
-  if (isError && !info) {
+  if (isError || !info) {
     return <StreamNotFound vaultAddress={vaultAddress} />
   }
 
@@ -317,10 +385,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
             </div>
             <div className="flex items-baseline gap-1">
               <span className="self-start mt-1.5 text-[12px] font-medium text-gray-400">$</span>
-              <span
-                className="text-[3rem] font-bold leading-none tracking-tight tabular-nums text-gray-900"
-                style={{ fontVariantNumeric: 'tabular-nums' }}
-              >
+              <span className="text-[3rem] font-bold leading-none tracking-tight tabular-nums text-gray-900">
                 {stream ? formatUsdcFull(stream.totalUnlocked) : '0.000000'}
               </span>
               <span className="mb-0.5 self-end text-[12px] font-medium text-gray-400">USDC</span>
@@ -339,21 +404,21 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
               claimed={stream.alreadyWithdrawn}
               unlocked={stream.claimable}
               locked={stream.remainingInStream}
-              total={liveParams?.totalAmount ?? 1n}
+              total={info._totalAmount}
             />
           )}
 
           {/* Meta cells */}
           <div className="grid grid-cols-3 gap-2.5">
-            <MetaCell label="Total"     value={formatUsdc(liveParams?.totalAmount ?? 0n)} />
+            <MetaCell label="Total"     value={formatUsdc(info._totalAmount)} />
             <MetaCell
               label={isCancelled ? 'Cancelled' : isComplete ? 'Completed' : 'Remaining'}
               value={isCancelled || isComplete ? '—' : timeRemaining(endTime)}
             />
-            <MetaCell label="Withdrawn" value={formatUsdc(stream?.alreadyWithdrawn ?? 0n)} />
+            <MetaCell label="Withdrawn" value={formatUsdc(info._alreadyWithdrawn)} />
           </div>
 
-          {/* Actions — no relayerReady gates */}
+          {/* Actions */}
           {!isCancelled && (
             <div className="space-y-2">
               {isConnected && !isOnArc && (
@@ -372,18 +437,15 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
                 </div>
               )}
 
-              {/* Recipient withdraw — spinner on button if relayer still waking */}
+              {/* Recipient withdraw */}
               {isRecipient && isOnArc && !isComplete && (() => {
                 const isAccruing   = !!stream && stream.claimable === 0n && !stream.isBeforeStart
                 const isNotStarted = !!stream && stream.isBeforeStart
                 const canWithdraw  = !!stream && stream.claimable > 0n
-
                 return (
                   <div className="space-y-1.5">
-                    {/* Withdraw button — always rendered; spinner if relayer not yet ready */}
                     {!relayerReady && canWithdraw ? (
-                      <button
-                        disabled
+                      <button disabled
                         className="flex w-full items-center justify-center gap-2.5 rounded-xl py-3.5 text-[13px] font-semibold"
                         style={{ background: '#111827', color: '#ffffff', opacity: 0.7, cursor: 'wait' }}
                       >
@@ -406,7 +468,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
                     )}
                     {isNotStarted && (
                       <p className="text-center text-[12px] text-gray-400">
-                        Stream begins {new Date(Number(liveParams!.startTime) * 1000).toLocaleString()}
+                        Stream begins {new Date(Number(info._startTime) * 1000).toLocaleString()}
                       </p>
                     )}
                     {isAccruing && (
@@ -428,9 +490,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
 
               {/* Sender cancel */}
               {isSender && !isComplete && (
-                <button
-                  onClick={handleCancel}
-                  disabled={actionState !== 'idle'}
+                <button onClick={handleCancel} disabled={actionState !== 'idle'}
                   className="flex w-full items-center justify-center gap-2 rounded-xl border border-red-100 bg-red-50 py-3 text-[13px] font-semibold text-red-600 hover:bg-red-100 transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {actionState === 'signing'  ? 'Sign to confirm…'
@@ -441,8 +501,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
 
               {/* Observer */}
               {!isRecipient && !isSender && isConnected && (
-                <a
-                  href="/"
+                <a href="/"
                   className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 py-2.5 text-[13px] font-medium text-gray-500 hover:bg-gray-50 transition-colors"
                 >
                   Create Your Own Stream
@@ -450,9 +509,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
               )}
 
               {actionState === 'success' && txHash && (
-                <a
-                  href={`${ARC_EXPLORER}/tx/${txHash}`}
-                  target="_blank" rel="noopener noreferrer"
+                <a href={`${ARC_EXPLORER}/tx/${txHash}`} target="_blank" rel="noopener noreferrer"
                   className="flex items-center justify-center gap-1.5 text-[12px] text-gray-400 hover:text-gray-600 transition-colors"
                 >
                   <ExtLinkIcon />
@@ -468,24 +525,22 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
           )}
 
           {/* Address strip */}
-          {info && (
-            <div className="flex items-center justify-between rounded-xl border border-gray-100 bg-gray-50/60 px-4 py-3">
-              <div className="space-y-0.5">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Sender</p>
-                <p className="font-mono text-[12px] text-gray-600">{shortAddr(info._sender)}</p>
-              </div>
-              <svg className="h-3.5 w-3.5 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
-              </svg>
-              <div className="space-y-0.5 text-right">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Recipient</p>
-                <p className="font-mono text-[12px] text-gray-600">{shortAddr(info._recipient)}</p>
-              </div>
+          <div className="flex items-center justify-between rounded-xl border border-gray-100 bg-gray-50/60 px-4 py-3">
+            <div className="space-y-0.5">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Sender</p>
+              <p className="font-mono text-[12px] text-gray-600">{shortAddr(info._sender)}</p>
             </div>
-          )}
+            <svg className="h-3.5 w-3.5 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+            </svg>
+            <div className="space-y-0.5 text-right">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Recipient</p>
+              <p className="font-mono text-[12px] text-gray-600">{shortAddr(info._recipient)}</p>
+            </div>
+          </div>
         </div>
 
-        {/* Footer — Hash PayLink pill badge */}
+        {/* Footer */}
         <div className="border-t border-gray-50 bg-gray-50/40 py-3.5">
           <HashPayLinkBadge />
         </div>
@@ -527,16 +582,13 @@ interface ActionButtonProps {
 function ActionButton({ state, label, signingLabel, relayingLabel, successLabel, disabled, onClick }: ActionButtonProps) {
   const isWorking = state === 'signing' || state === 'relaying'
   const isDone    = state === 'success'
-
-  const displayLabel = state === 'signing'  ? signingLabel
+  const displayLabel = state === 'signing' ? signingLabel
     : state === 'relaying' ? relayingLabel
     : isDone ? successLabel
     : label
 
   return (
-    <button
-      onClick={onClick}
-      disabled={disabled || isWorking || isDone}
+    <button onClick={onClick} disabled={disabled || isWorking || isDone}
       className="flex w-full items-center justify-center gap-2.5 rounded-xl py-3.5 text-[13px] font-semibold transition-all duration-150 active:scale-[0.98]"
       style={
         isDone    ? { background: '#f3f4f6', color: '#6b7280', cursor: 'default' }
