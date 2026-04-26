@@ -159,12 +159,35 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
   } = useQuery<StreamInfo>({
     queryKey: ['streamInfo', vaultAddress],
     queryFn:  async () => {
-      const raw = await arcClient.readContract({
+      // viem returns named-tuple outputs as a plain array [0,1,2,...].
+      // Named property access (raw._sender) is undefined at runtime —
+      // destructure by index to get the actual values.
+      const r = await arcClient.readContract({
         address:      vaultAddress,
         abi:          STREAM_VAULT_ABI,
         functionName: 'streamInfo',
-      })
-      return raw as unknown as StreamInfo
+      }) as unknown as readonly [
+        `0x${string}`, // 0 _sender
+        `0x${string}`, // 1 _recipient
+        bigint,        // 2 _totalAmount
+        bigint,        // 3 _startTime
+        bigint,        // 4 _endTime
+        bigint,        // 5 _alreadyWithdrawn
+        boolean,       // 6 _cancelled
+        bigint,        // 7 _unlocked
+        bigint,        // 8 _claimable
+      ]
+      return {
+        _sender:           r[0],
+        _recipient:        r[1],
+        _totalAmount:      r[2],
+        _startTime:        r[3],
+        _endTime:          r[4],
+        _alreadyWithdrawn: r[5],
+        _cancelled:        r[6],
+        _unlocked:         r[7],
+        _claimable:        r[8],
+      }
     },
     retry:     2,
     staleTime: 0,
