@@ -371,7 +371,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
       <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
 
         {/* Header */}
-        <div className="flex items-center justify-between px-7 pt-6 pb-3">
+        <div className="flex items-center justify-between px-5 pt-5 pb-2 sm:px-7 sm:pt-6 sm:pb-3">
           <div className="flex items-center gap-2">
             <span className="flex gap-0.5">
               <span className="h-2 w-2 rounded-full bg-blue-500" />
@@ -383,7 +383,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
         </div>
 
         {/* Body */}
-        <div className="px-7 pb-6 space-y-5">
+        <div className="px-5 pb-5 space-y-4 sm:px-7 sm:pb-6 sm:space-y-5">
 
           {/* Ticker */}
           <div>
@@ -399,7 +399,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
             </div>
             <div className="flex items-baseline gap-1">
               <span className="self-start mt-1.5 text-[12px] font-medium text-gray-400">$</span>
-              <span className="text-[3rem] font-bold leading-none tracking-tight tabular-nums text-gray-900">
+              <span className="text-[2rem] sm:text-[3rem] font-bold leading-none tracking-tight tabular-nums text-gray-900">
                 {stream ? formatUsdcFull(stream.totalUnlocked) : '0.000000'}
               </span>
               <span className="mb-0.5 self-end text-[12px] font-medium text-gray-400">USDC</span>
@@ -423,7 +423,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
           )}
 
           {/* Meta cells */}
-          <div className="grid grid-cols-3 gap-2.5">
+          <div className="grid grid-cols-3 gap-2">
             <MetaCell label="Total"     value={formatUsdc(info._totalAmount)} />
             <MetaCell
               label={isCancelled ? 'Cancelled' : isComplete ? 'Completed' : 'Remaining'}
@@ -440,7 +440,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
               {!isConnected && (
                 <button
                   onClick={() => openConnectModal?.()}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-[13px] font-semibold transition-colors active:scale-[0.98]"
+                  className="flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-[13px] font-semibold transition-colors active:scale-[0.98] min-h-[52px]"
                   style={{ background: '#111827', color: '#ffffff' }}
                 >
                   <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -455,7 +455,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
               {isConnected && !isOnArc && (
                 <button
                   onClick={() => switchChain({ chainId: ARC_CHAIN_ID })}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-[13px] font-semibold transition-colors active:scale-[0.98]"
+                  className="flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-[13px] font-semibold transition-colors active:scale-[0.98] min-h-[52px]"
                   style={{ background: '#111827', color: '#ffffff' }}
                 >
                   Switch to Arc Network
@@ -636,7 +636,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
           )}
 
           {/* Address strip */}
-          <div className="flex items-center justify-between rounded-xl border border-gray-100 bg-gray-50/60 px-4 py-3">
+          <div className="flex items-center justify-between rounded-xl border border-gray-100 bg-gray-50/60 px-3 py-2.5 sm:px-4 sm:py-3">
             <div className="space-y-0.5">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Sender</p>
               <p className="font-mono text-[12px] text-gray-600">{shortAddr(info._sender)}</p>
@@ -671,9 +671,9 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
 
 function MetaCell({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-gray-100 bg-gray-50/60 px-3 py-2.5 text-center">
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{label}</p>
-      <p className="mt-0.5 text-[13px] font-semibold text-gray-700 tabular-nums">{value}</p>
+    <div className="rounded-xl border border-gray-100 bg-gray-50/60 px-2 py-2.5 sm:px-3 text-center">
+      <p className="text-[9px] sm:text-[10px] font-semibold uppercase tracking-wider text-gray-400 truncate">{label}</p>
+      <p className="mt-0.5 text-[12px] sm:text-[13px] font-semibold text-gray-700 tabular-nums">{value}</p>
     </div>
   )
 }

@@ -8,7 +8,6 @@ import { isAddress, parseAbi, parseEventLogs } from 'viem'
 import { STREAM_VAULT_FACTORY_ABI } from '../lib/streamVaultAbi'
 import { formatUsdcFull } from './TriStateBar'
 
-// ── Arc constants ─────────────────────────────────────────────────────────────
 const ARC_CHAIN_ID = 5042002
 const ARC_USDC     = '0x3600000000000000000000000000000000000000' as const
 const ARC_EXPLORER = 'https://testnet.arcscan.app'
@@ -65,7 +64,6 @@ export function CreateStreamForm() {
   const isOnArc     = chainId === ARC_CHAIN_ID
   const factoryAddr = (import.meta.env.VITE_STREAM_FACTORY_ADDRESS ?? '') as `0x${string}`
 
-  // ── Form state ────────────────────────────────────────────────────────────
   const [recipient,      setRecipient]      = useState('')
   const [amount,         setAmount]         = useState('')
   const [durationPreset, setDurationPreset] = useState<bigint | null>(null)
@@ -73,7 +71,6 @@ export function CreateStreamForm() {
   const [reason,         setReason]         = useState('')
   const [salt] = useState<`0x${string}`>(genSalt)
 
-  // ── Tx state ──────────────────────────────────────────────────────────────
   const [step,         setStep]         = useState<Step>('form')
   const [statusMsg,    setStatusMsg]    = useState('')
   const [error,        setError]        = useState<string | null>(null)
@@ -81,7 +78,6 @@ export function CreateStreamForm() {
   const [deployTxHash, setDeployTxHash] = useState<string | null>(null)
   const [copied,       setCopied]       = useState(false)
 
-  // ── Derived ───────────────────────────────────────────────────────────────
   const recipientValid = isAddress(recipient)
   const amountBn       = parseUsdc(amount)
   const amountValid    = amountBn > 0n
@@ -91,7 +87,6 @@ export function CreateStreamForm() {
   const isFormValid    = recipientValid && amountValid && durationValid
                          && isConnected && isOnArc && !!factoryAddr
 
-  // ── USDC balance ──────────────────────────────────────────────────────────
   const { data: usdcBalance } = useReadContract({
     address:      ARC_USDC,
     abi:          ERC20_ABI,
@@ -104,44 +99,34 @@ export function CreateStreamForm() {
   const isWorking   = step === 'funding' || step === 'creating'
   const deployReady = isFormValid && !isWorking && !insufficientFunds
 
-  // ── Deploy flow ───────────────────────────────────────────────────────────
   async function handleDeploy() {
     if (!deployReady || !connectedAddr || !publicClient) return
     setError(null)
-
     const startTime = BigInt(Math.floor(Date.now() / 1000) + 120)
     const endTime   = startTime + durationSecs
-
     try {
       const predicted = await publicClient.readContract({
-        address:      factoryAddr,
-        abi:          STREAM_VAULT_FACTORY_ABI,
+        address: factoryAddr, abi: STREAM_VAULT_FACTORY_ABI,
         functionName: 'getVaultAddress',
-        args:         [connectedAddr, recipient as `0x${string}`, amountBn, startTime, endTime, salt],
+        args: [connectedAddr, recipient as `0x${string}`, amountBn, startTime, endTime, salt],
       }) as `0x${string}`
 
-      setStep('funding')
-      setStatusMsg('Sign to fund vault…')
+      setStep('funding'); setStatusMsg('Sign to fund vault…')
       const fundTx = await writeContractAsync({
         address: ARC_USDC, abi: ERC20_ABI,
-        functionName: 'transfer',
-        args: [predicted, amountBn],
-        gas: 100_000n,
+        functionName: 'transfer', args: [predicted, amountBn], gas: 100_000n,
       })
       setStatusMsg('Confirming on Arc…')
       await publicClient.waitForTransactionReceipt({ hash: fundTx })
 
-      setStep('creating')
-      setStatusMsg('Sign to deploy vault…')
+      setStep('creating'); setStatusMsg('Sign to deploy vault…')
       const deployTx = await writeContractAsync({
-        address:      factoryAddr,
-        abi:          STREAM_VAULT_FACTORY_ABI,
+        address: factoryAddr, abi: STREAM_VAULT_FACTORY_ABI,
         functionName: 'createStream',
-        args:         [recipient as `0x${string}`, amountBn, startTime, endTime, salt],
-        gas:          2_000_000n,
+        args: [recipient as `0x${string}`, amountBn, startTime, endTime, salt],
+        gas: 2_000_000n,
       })
-      setDeployTxHash(deployTx)
-      setStatusMsg('Deploying on Arc…')
+      setDeployTxHash(deployTx); setStatusMsg('Deploying on Arc…')
       const receipt = await publicClient.waitForTransactionReceipt({ hash: deployTx })
 
       const logs  = parseEventLogs({ abi: STREAM_VAULT_FACTORY_ABI, logs: receipt.logs })
@@ -150,15 +135,13 @@ export function CreateStreamForm() {
       if (!vault) throw new Error('Could not extract vault address from receipt.')
 
       setStreamLink(buildStreamLink(vault, reason))
-      setStep('success')
-      setStatusMsg('')
+      setStep('success'); setStatusMsg('')
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
       if (msg.toLowerCase().includes('rejected') || msg.toLowerCase().includes('denied')) {
         setStep('form'); setStatusMsg(''); return
       }
-      setError(msg.slice(0, 180))
-      setStep('form')
+      setError(msg.slice(0, 180)); setStep('form')
     }
   }
 
@@ -173,15 +156,14 @@ export function CreateStreamForm() {
   if (step === 'success' && streamLink) {
     return (
       <div className="w-full max-w-[460px] mx-auto">
-        <div className="space-y-12">
-          {/* Hero */}
+        <div className="space-y-8 sm:space-y-12">
+
           <div className="text-center space-y-2">
-            <h1 className="text-[32px] font-bold tracking-tight text-gray-900">STREAMPAY</h1>
-            <p className="text-[14px] text-gray-400">Stream payment in USDC to anyone on Arc</p>
+            <h1 className="text-[24px] sm:text-[32px] font-bold tracking-tight text-gray-900">STREAMPAY</h1>
+            <p className="text-[13px] sm:text-[14px] text-gray-400">Stream payment in USDC to anyone on Arc</p>
           </div>
 
-          {/* Success card */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 text-center space-y-6">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-5 py-7 sm:p-8 text-center space-y-6">
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-50 border border-emerald-100">
               <svg className="h-6 w-6 text-emerald-500" fill="none" viewBox="0 0 24 24"
                 stroke="currentColor" strokeWidth={2.5}>
@@ -202,33 +184,24 @@ export function CreateStreamForm() {
               </p>
             </div>
 
-            {/* Share link box */}
             <div className="rounded-xl bg-gray-50 border-2 border-gray-200 p-4 text-left space-y-3">
               <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Share Stream Link</p>
               <p className="break-all font-mono text-[11px] leading-relaxed text-gray-500">{streamLink}</p>
-
-              {/* Vertical stack — identical width & height */}
               <div className="space-y-2">
                 <button
                   onClick={handleCopy}
-                  className="w-full flex items-center justify-center gap-2 rounded-xl py-3 text-[13px] font-semibold transition-all"
+                  className="w-full flex items-center justify-center gap-2 rounded-xl py-3 text-[13px] font-semibold transition-all min-h-[48px]"
                   style={copied
                     ? { background: '#f0fdf4', color: '#16a34a', border: '2px solid #bbf7d0' }
                     : { background: '#111827', color: '#ffffff', border: '2px solid #111827' }}
                 >
                   {copied
-                    ? <>
-                        <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24"
-                          stroke="currentColor" strokeWidth={2.5}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                        </svg>
-                        LINK COPIED
-                      </>
+                    ? <><CheckIcon />LINK COPIED</>
                     : 'Copy Link'}
                 </button>
                 <a
                   href={streamLink}
-                  className="w-full flex items-center justify-center rounded-xl py-3 text-[13px] font-semibold text-gray-700 transition-colors hover:bg-gray-50"
+                  className="w-full flex items-center justify-center rounded-xl py-3 text-[13px] font-semibold text-gray-700 transition-colors hover:bg-gray-50 min-h-[48px]"
                   style={{ border: '2px solid #e5e7eb' }}
                 >
                   View Stream
@@ -247,7 +220,6 @@ export function CreateStreamForm() {
               </a>
             )}
 
-            {/* Powered by Hash PayLink pill */}
             <HashPayLinkBadge />
           </div>
         </div>
@@ -255,7 +227,7 @@ export function CreateStreamForm() {
     )
   }
 
-  // ── Hint below button ─────────────────────────────────────────────────────
+  // ── Hint ──────────────────────────────────────────────────────────────────
   const hint = (() => {
     if (isWorking) return step === 'funding' ? 'Step 1 of 2 — funding vault' : 'Step 2 of 2 — deploying stream'
     if (!isConnected) return null
@@ -271,22 +243,22 @@ export function CreateStreamForm() {
   // ── Form ──────────────────────────────────────────────────────────────────
   return (
     <div className="w-full max-w-[460px] mx-auto">
-      <div className="space-y-12">
+      <div className="space-y-8 sm:space-y-12">
 
-        {/* ── Hero ── */}
+        {/* Hero */}
         <div className="text-center space-y-2">
-          <h1 className="text-[32px] font-bold tracking-tight text-gray-900">STREAMPAY</h1>
-          <p className="text-[14px] text-gray-400">Stream payment in USDC to anyone on Arc</p>
+          <h1 className="text-[26px] sm:text-[32px] font-bold tracking-tight text-gray-900">STREAMPAY</h1>
+          <p className="text-[13px] sm:text-[14px] text-gray-400">Stream payment in USDC to anyone on Arc</p>
         </div>
 
-        {/* ── Card + How It Works ── */}
+        {/* Card + How It Works */}
         <div className="space-y-4">
 
           {/* Card */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm">
-            <div className="p-7 space-y-5">
+            <div className="p-5 sm:p-7 space-y-4 sm:space-y-5">
 
-              {/* ── Recipient Address ── */}
+              {/* Recipient Address */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
@@ -308,9 +280,9 @@ export function CreateStreamForm() {
                     spellCheck={false}
                     disabled={isWorking}
                     className={[
-                      'w-full rounded-xl border-2 px-4 py-2.5 text-[13px] font-mono',
+                      'w-full rounded-xl border-2 px-4 py-3 text-[13px] font-mono',
                       'placeholder:text-gray-300 placeholder:font-sans focus:outline-none transition-colors',
-                      'disabled:opacity-50 disabled:cursor-not-allowed',
+                      'disabled:opacity-50 disabled:cursor-not-allowed min-h-[48px]',
                       recipient && !recipientValid
                         ? 'border-red-200 bg-red-50/30'
                         : recipientValid
@@ -330,9 +302,7 @@ export function CreateStreamForm() {
 
                 {recipientValid && (
                   <p className="text-[11px] text-emerald-600 flex items-center gap-1">
-                    <svg className="h-3 w-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                    </svg>
+                    <CheckIcon small />
                     Auto-filled · {recipient.slice(0, 10)}…{recipient.slice(-8)}
                   </p>
                 )}
@@ -341,7 +311,7 @@ export function CreateStreamForm() {
                 )}
               </div>
 
-              {/* ── Amount ── */}
+              {/* Amount */}
               <div className="space-y-1.5">
                 <div className="flex items-center gap-1.5">
                   <ChainIcon />
@@ -355,7 +325,7 @@ export function CreateStreamForm() {
                     value={amount}
                     onChange={e => setAmount(e.target.value)}
                     disabled={isWorking}
-                    className="min-w-0 flex-1 bg-transparent px-4 py-2.5 text-[14px] font-semibold focus:outline-none disabled:opacity-50 placeholder:text-gray-300 placeholder:font-normal"
+                    className="min-w-0 flex-1 bg-transparent px-4 py-3 text-[14px] font-semibold focus:outline-none disabled:opacity-50 placeholder:text-gray-300 placeholder:font-normal min-h-[48px]"
                   />
                   <div className="flex items-center px-4 border-l-2 border-gray-200 bg-gray-50 shrink-0">
                     <span className="text-[12px] font-bold text-gray-500 select-none">USDC</span>
@@ -367,16 +337,14 @@ export function CreateStreamForm() {
                     <span className={`font-semibold ${insufficientFunds ? 'text-red-500' : 'text-gray-600'}`}>
                       {formatUsdcFull(usdcBalance)} USDC
                     </span>
-                    {insufficientFunds && (
-                      <span className="ml-1.5 font-semibold text-red-500">— insufficient</span>
-                    )}
+                    {insufficientFunds && <span className="ml-1.5 font-semibold text-red-500">— insufficient</span>}
                   </p>
                 ) : (
                   <p className="text-[11px] text-gray-400">USDC on Arc Network — connect wallet to see balance</p>
                 )}
               </div>
 
-              {/* ── Duration ── */}
+              {/* Duration */}
               <div className="space-y-1.5">
                 <div className="flex items-center gap-1.5">
                   <ClockIcon />
@@ -391,7 +359,7 @@ export function CreateStreamForm() {
                         type="button"
                         disabled={isWorking}
                         onClick={() => { setDurationPreset(d.secs); setCustomDays('') }}
-                        className="rounded-xl border-2 px-3.5 py-2 text-[12px] font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="rounded-xl border-2 px-3.5 py-2.5 text-[12px] font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
                         style={active
                           ? { background: '#111827', borderColor: '#111827', color: '#ffffff' }
                           : { background: '#ffffff', borderColor: '#e5e7eb', color: '#4b5563' }}
@@ -409,7 +377,7 @@ export function CreateStreamForm() {
                     value={customDays}
                     disabled={isWorking}
                     onChange={e => { setCustomDays(e.target.value); setDurationPreset(null) }}
-                    className="min-w-0 flex-1 bg-transparent px-4 py-2.5 text-[13px] focus:outline-none disabled:opacity-50 placeholder:text-gray-300"
+                    className="min-w-0 flex-1 bg-transparent px-4 py-3 text-[13px] focus:outline-none disabled:opacity-50 placeholder:text-gray-300 min-h-[48px]"
                   />
                   <div className="flex items-center px-4 border-l-2 border-gray-200 bg-gray-50 shrink-0">
                     <span className="text-[12px] font-bold text-gray-500 select-none">DAYS</span>
@@ -417,7 +385,7 @@ export function CreateStreamForm() {
                 </div>
               </div>
 
-              {/* ── Memo / Reason ── */}
+              {/* Memo */}
               <div className="space-y-1.5">
                 <div className="flex items-center gap-1.5">
                   <TagIcon />
@@ -431,17 +399,16 @@ export function CreateStreamForm() {
                   onChange={e => setReason(e.target.value)}
                   disabled={isWorking}
                   maxLength={80}
-                  className="w-full rounded-xl border-2 border-gray-200 px-4 py-2.5 text-[13px] placeholder:text-gray-300 focus:outline-none focus:border-gray-400 transition-colors disabled:opacity-50"
+                  className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-[13px] placeholder:text-gray-300 focus:outline-none focus:border-gray-400 transition-colors disabled:opacity-50 min-h-[48px]"
                 />
               </div>
 
-              {/* ── CTA ── */}
+              {/* CTA */}
               <div className="space-y-2.5 pt-1">
-                {/* Fix 5: Connect Wallet reverted to full-width */}
                 {!isConnected && (
                   <button
                     onClick={() => openConnectModal?.()}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl py-3 text-[14px] font-semibold transition-colors active:scale-[0.98]"
+                    className="flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-[14px] font-semibold transition-colors active:scale-[0.98] min-h-[52px]"
                     style={{ background: '#111827', color: '#ffffff' }}
                   >
                     <WalletIcon />
@@ -452,7 +419,7 @@ export function CreateStreamForm() {
                 {isConnected && !isOnArc && (
                   <button
                     onClick={() => switchChain({ chainId: ARC_CHAIN_ID })}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl py-3 text-[14px] font-semibold transition-colors active:scale-[0.98]"
+                    className="flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-[14px] font-semibold transition-colors active:scale-[0.98] min-h-[52px]"
                     style={{ background: '#111827', color: '#ffffff' }}
                   >
                     Switch to Arc Network
@@ -464,20 +431,18 @@ export function CreateStreamForm() {
                     <button
                       onClick={handleDeploy}
                       disabled={!deployReady}
-                      className="flex flex-1 items-center justify-center gap-2 rounded-xl py-3 text-[14px] font-semibold transition-all active:scale-[0.98]"
+                      className="flex flex-1 items-center justify-center gap-2 rounded-xl py-3.5 text-[14px] font-semibold transition-all active:scale-[0.98] min-h-[52px]"
                       style={deployReady
                         ? { background: '#111827', color: '#ffffff', cursor: 'pointer' }
                         : { background: '#f3f4f6', color: '#9ca3af', cursor: 'not-allowed' }}
                     >
-                      {isWorking
-                        ? <><Spinner />{statusMsg}</>
-                        : <><StreamIcon />Deploy Stream &nbsp;→</>}
+                      {isWorking ? <><Spinner />{statusMsg}</> : <><StreamIcon />Deploy Stream →</>}
                     </button>
 
                     <button
                       onClick={() => disconnect()}
                       title="Disconnect wallet"
-                      className="flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-xl border-2 border-gray-200 transition-colors active:scale-[0.96] hover:border-red-200 hover:text-red-500"
+                      className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-xl border-2 border-gray-200 transition-colors active:scale-[0.96] hover:border-red-200 hover:text-red-500"
                       style={{ color: '#111827' }}
                     >
                       <PowerIcon />
@@ -490,11 +455,9 @@ export function CreateStreamForm() {
                     Insufficient USDC — fund your Arc wallet first
                   </p>
                 )}
-
                 {hint && !insufficientFunds && (
                   <p className="text-center text-[12px] text-gray-400">{hint}</p>
                 )}
-
                 {error && (
                   <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-center text-[12px] text-red-500">
                     {error}
@@ -504,26 +467,26 @@ export function CreateStreamForm() {
             </div>
           </div>
 
-          {/* ── How It Works ── */}
+          {/* How It Works */}
           <div className="space-y-3 pt-2">
             <p className="text-center text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-400">
               How It Works
             </p>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-3 gap-2 sm:gap-3">
               {([
-                { n: '1', title: 'Fund vault',    desc: 'USDC is pre-loaded into a ghost vault address' },
-                { n: '2', title: 'Stream begins', desc: 'Funds unlock linearly to the recipient over time' },
-                { n: '3', title: 'Claim anytime', desc: 'Recipient withdraws gaslessly — no gas required' },
+                { n: '1', title: 'Fund vault',    desc: 'USDC is pre-loaded into a ghost vault' },
+                { n: '2', title: 'Stream begins', desc: 'Funds unlock linearly to the recipient' },
+                { n: '3', title: 'Claim anytime', desc: 'Recipient withdraws gaslessly on Arc' },
               ] as const).map(s => (
                 <div
                   key={s.n}
-                  className="rounded-2xl border border-gray-100 bg-white p-4 text-center shadow-sm space-y-2"
+                  className="rounded-2xl border border-gray-100 bg-white p-3 sm:p-4 text-center shadow-sm space-y-1.5 sm:space-y-2"
                 >
                   <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-gray-200 text-[11px] font-semibold text-gray-500">
                     {s.n}
                   </span>
-                  <p className="text-[12px] font-bold text-gray-800">{s.title}</p>
-                  <p className="text-[11px] leading-snug text-gray-400">{s.desc}</p>
+                  <p className="text-[11px] sm:text-[12px] font-bold text-gray-800">{s.title}</p>
+                  <p className="text-[10px] sm:text-[11px] leading-snug text-gray-400">{s.desc}</p>
                 </div>
               ))}
             </div>
@@ -548,6 +511,15 @@ export function HashPayLinkBadge() {
 }
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
+
+function CheckIcon({ small }: { small?: boolean }) {
+  return (
+    <svg className={`${small ? 'h-3 w-3' : 'h-4 w-4'} shrink-0`} fill="none" viewBox="0 0 24 24"
+      stroke="currentColor" strokeWidth={2.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+    </svg>
+  )
+}
 
 function ChainIcon() {
   return (
@@ -587,7 +559,7 @@ function StreamIcon() {
 
 function PowerIcon() {
   return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
       strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M18.36 6.64a9 9 0 1 1-12.73 0" />
       <line x1="12" y1="2" x2="12" y2="12" />
