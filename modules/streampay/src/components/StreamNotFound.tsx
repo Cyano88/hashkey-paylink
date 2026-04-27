@@ -4,7 +4,7 @@ interface StreamNotFoundProps {
 
 export function StreamNotFound({ vaultAddress }: StreamNotFoundProps) {
   return (
-    <div className="w-full max-w-[480px] mx-auto">
+    <div className="w-full max-w-[480px] mx-auto mt-12">
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-5 py-8 sm:px-8 sm:py-10 text-center space-y-5">
 
         <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-gray-100 bg-gray-50">

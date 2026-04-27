@@ -82,7 +82,7 @@ class StreamErrorBoundary extends Component<
   render() {
     if (this.state.error) {
       return (
-        <div className="w-full max-w-[480px] mx-auto">
+        <div className="w-full max-w-[480px] mx-auto mt-12">
           <div className="rounded-2xl border border-red-100 bg-white p-8 text-center space-y-4 shadow-sm">
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-red-50 border border-red-100">
               <svg className="h-5 w-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
