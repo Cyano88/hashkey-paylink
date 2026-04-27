@@ -49,7 +49,7 @@ export function StreamPayHeader() {
           {!isConnected && (
             <button
               onClick={() => openConnectModal?.()}
-              className="inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-[13px] font-medium text-white transition-colors"
+              className="inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-[13px] font-medium text-white transition-colors"
               style={{ background: '#111827' }}
             >
               <span className="h-2 w-2 shrink-0 rounded-full bg-blue-400 animate-pulse" />
@@ -78,12 +78,11 @@ export function StreamPayHeader() {
 // ── Icons ─────────────────────────────────────────────────────────────────────
 
 function GeometricO() {
-  // w-8 h-8 equivalent (32px) — matches hash-logo.png sizing on reference
   return (
-    <svg width="32" height="32" viewBox="0 0 32 32" fill="none"
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
       className="transition-transform group-hover:scale-105">
-      <circle cx="16" cy="16" r="13" stroke="#111827" strokeWidth="3" />
-      <circle cx="16" cy="16" r="5"  fill="#111827" />
+      <circle cx="12" cy="12" r="9.5" stroke="#111827" strokeWidth="2.5" />
+      <circle cx="12" cy="12" r="3.5" fill="#111827" />
     </svg>
   )
 }
