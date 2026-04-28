@@ -157,114 +157,8 @@ export function StreamGate() {
     )
   }
 
-  const progressPct = Math.min((poa.accrued / sessionCap) * 100, 100)
-
-  // ── Gate step indicator ───────────────────────────────────────────────────
-  function GateOverlay() {
-    // Step 1: wallet not connected
-    if (!isConnected) {
-      return (
-        <OverlayShell dripRate={dripRate} sessionCap={sessionCap}>
-          <div className="rounded-xl border border-gray-100 bg-gray-50 px-5 py-3 text-center text-[12px] text-gray-500">
-            Connect your wallet in the header above
-          </div>
-          <StepDots current={0} />
-        </OverlayShell>
-      )
-    }
-
-    // Step 2: wrong network
-    if (!isOnArc) {
-      return (
-        <OverlayShell dripRate={dripRate} sessionCap={sessionCap}>
-          <button
-            onClick={() => switchChain({ chainId: ARC_CHAIN_ID })}
-            className="flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-[13px] font-semibold text-white min-h-[48px] transition-all active:scale-[0.98]"
-            style={{ background: '#111827' }}
-          >
-            Switch to Arc Network
-          </button>
-          <StepDots current={1} />
-        </OverlayShell>
-      )
-    }
-
-    // Step 3: passkey not registered
-    if (!passkey.registered) {
-      return (
-        <OverlayShell dripRate={dripRate} sessionCap={sessionCap}>
-          <button
-            onClick={() => void passkey.register()}
-            disabled={passkey.registering}
-            className="flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-[13px] font-semibold text-white min-h-[48px] transition-all active:scale-[0.98]"
-            style={{ background: '#111827' }}
-          >
-            {passkey.registering
-              ? <><Spinner />Authorizing…</>
-              : <><FingerprintIcon />Authorize via Passkey</>}
-          </button>
-          {passkey.error && (
-            <p className="text-[11px] text-red-500 text-center max-w-[260px]">{passkey.error}</p>
-          )}
-          <StepDots current={2} />
-        </OverlayShell>
-      )
-    }
-
-    // Step 4: USDC not approved
-    if (!isApproved) {
-      return (
-        <OverlayShell dripRate={dripRate} sessionCap={sessionCap}>
-          {!POA_CONTRACT ? (
-            <div className="rounded-xl border border-amber-100 bg-amber-50 px-4 py-3 text-center text-[12px] text-amber-700">
-              Contract pending deployment — set VITE_POA_CONTRACT
-            </div>
-          ) : approvePending ? (
-            <div className="space-y-2 w-full max-w-[260px]">
-              <div className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-gray-50 py-3 text-[13px] text-gray-500">
-                <Spinner />
-                Approval pending on Arc…
-              </div>
-              {approveTx && (
-                <button
-                  type="button"
-                  onClick={() => window.open(`https://testnet.arcscan.app/tx/${approveTx}`, '_blank', 'noopener,noreferrer')}
-                  className="flex w-full items-center justify-center gap-1.5 text-[11px] font-semibold text-gray-500 hover:text-gray-800 underline underline-offset-2 transition-colors"
-                >
-                  <ExtLinkIcon />Track on Arcscan
-                </button>
-              )}
-            </div>
-          ) : (
-            <>
-              <div className="text-center space-y-1 max-w-[260px]">
-                <p className="text-[13px] font-semibold text-gray-800">Set Spending Limit</p>
-                <p className="text-[12px] text-gray-500">
-                  Approve up to{' '}
-                  <span className="font-semibold">${sessionCap.toFixed(2)} USDC</span>
-                  {' '}for this session.
-                </p>
-              </div>
-              <button
-                onClick={handleApprove}
-                disabled={approving}
-                className="flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-[13px] font-semibold text-white min-h-[48px] transition-all active:scale-[0.98]"
-                style={{ background: '#111827' }}
-              >
-                {approving ? <><Spinner />Confirm in wallet…</> : 'Approve USDC Spending'}
-              </button>
-              {approveError && (
-                <p className="text-[11px] text-red-500 text-center max-w-[260px]">{approveError}</p>
-              )}
-            </>
-          )}
-          <StepDots current={3} />
-        </OverlayShell>
-      )
-    }
-
-    return null // fully authorised — no overlay
-  }
+  const progressPct  = Math.min((poa.accrued / sessionCap) * 100, 100)
+  const currentStep  = !isConnected ? 0 : !isOnArc ? 1 : !passkey.registered ? 2 : 3
 
   return (
     <div className="w-full max-w-[480px] mx-auto mt-8 space-y-4">
@@ -301,7 +195,97 @@ export function StreamGate() {
         </div>
 
         {/* Gate overlay — dismissed once fully authorised */}
-        {!fullyAuthorised && <GateOverlay />}
+        {!fullyAuthorised && (
+          <OverlayShell dripRate={dripRate} sessionCap={sessionCap}>
+
+            {/* Step 1 — wallet not connected */}
+            {!isConnected && (
+              <div className="rounded-xl border border-gray-100 bg-gray-50 px-5 py-3 text-center text-[12px] text-gray-500">
+                Connect your wallet in the header above
+              </div>
+            )}
+
+            {/* Step 2 — wrong network */}
+            {isConnected && !isOnArc && (
+              <button
+                onClick={() => switchChain({ chainId: ARC_CHAIN_ID })}
+                className="flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-[13px] font-semibold text-white min-h-[48px] transition-all active:scale-[0.98]"
+                style={{ background: '#111827' }}
+              >
+                Switch to Arc Network
+              </button>
+            )}
+
+            {/* Step 3 — passkey registration */}
+            {isConnected && isOnArc && !passkey.registered && (
+              <>
+                <button
+                  onClick={() => void passkey.register()}
+                  disabled={passkey.registering}
+                  className="flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-[13px] font-semibold text-white min-h-[48px] transition-all active:scale-[0.98]"
+                  style={{ background: '#111827' }}
+                >
+                  {passkey.registering
+                    ? <><Spinner />Authorizing…</>
+                    : <><FingerprintIcon />Authorize via Passkey</>}
+                </button>
+                {passkey.error && (
+                  <p className="text-[11px] text-red-500 text-center max-w-[260px]">{passkey.error}</p>
+                )}
+              </>
+            )}
+
+            {/* Step 4 — USDC approval */}
+            {isConnected && isOnArc && passkey.registered && !isApproved && (
+              <>
+                {!POA_CONTRACT ? (
+                  <div className="rounded-xl border border-amber-100 bg-amber-50 px-4 py-3 text-center text-[12px] text-amber-700">
+                    Contract not configured — set VITE_POA_CONTRACT on Render
+                  </div>
+                ) : approvePending ? (
+                  <div className="space-y-2 w-full max-w-[260px]">
+                    <div className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-gray-50 py-3 text-[13px] text-gray-500">
+                      <Spinner />Approval pending on Arc…
+                    </div>
+                    {approveTx && (
+                      <button
+                        type="button"
+                        onClick={() => window.open(`https://testnet.arcscan.app/tx/${approveTx}`, '_blank', 'noopener,noreferrer')}
+                        className="flex w-full items-center justify-center gap-1.5 text-[11px] font-semibold text-gray-500 hover:text-gray-800 underline underline-offset-2 transition-colors"
+                      >
+                        <ExtLinkIcon />Track on Arcscan
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <>
+                    <div className="text-center space-y-1 max-w-[260px]">
+                      <p className="text-[13px] font-semibold text-gray-800">Set Spending Limit</p>
+                      <p className="text-[12px] text-gray-500">
+                        Approve up to{' '}
+                        <span className="font-semibold">${sessionCap.toFixed(2)} USDC</span>
+                        {' '}for this session.
+                      </p>
+                    </div>
+                    <button
+                      onClick={handleApprove}
+                      disabled={approving}
+                      className="flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-[13px] font-semibold text-white min-h-[48px] transition-all active:scale-[0.98]"
+                      style={{ background: '#111827' }}
+                    >
+                      {approving ? <><Spinner />Confirm in wallet…</> : 'Approve USDC Spending'}
+                    </button>
+                    {approveError && (
+                      <p className="text-[11px] text-red-500 text-center max-w-[260px]">{approveError}</p>
+                    )}
+                  </>
+                )}
+              </>
+            )}
+
+            <StepDots current={currentStep} />
+          </OverlayShell>
+        )}
 
         {/* ViewerHUD — live spending meter, only when authorised */}
         {fullyAuthorised && (
