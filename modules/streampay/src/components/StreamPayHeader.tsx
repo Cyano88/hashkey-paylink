@@ -1,8 +1,16 @@
 import { useAccount, useDisconnect } from 'wagmi'
 import { useConnectModal }           from '@rainbow-me/rainbowkit'
-import { useLocation }               from 'react-router-dom'
+import { Link, useLocation }         from 'react-router-dom'
 
 function fmtAddr(a: string) { return `${a.slice(0, 6)}…${a.slice(-4)}` }
+
+// Preserve ?app=streampay (and any other query params) across internal navigation
+function useAppPath(path: string): string {
+  const { search } = useLocation()
+  const params = new URLSearchParams(search)
+  const app = params.get('app')
+  return app ? `${path}?app=${app}` : path
+}
 
 export function StreamPayHeader() {
   const { address, isConnected } = useAccount()
@@ -12,41 +20,44 @@ export function StreamPayHeader() {
 
   const isCreatorMode = pathname.startsWith('/creator') || pathname.startsWith('/gate')
 
+  const payrollTo = useAppPath('/')
+  const creatorTo = useAppPath('/creator')
+
   return (
     <header className="sticky top-0 z-50 border-b border-white/60 bg-white/80 backdrop-blur-xl">
       <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3 sm:px-6">
 
         {/* ── Left: Geometric O + StreamPay ── */}
-        <a href="/" className="group flex items-center gap-2.5 focus:outline-none">
+        <Link to={payrollTo} className="group flex items-center gap-2.5 focus:outline-none">
           <GeometricO />
           <span className="text-[15px] font-semibold tracking-tight text-gray-900">
             Stream<span style={{ color: '#3b82f6' }}>Pay</span>
           </span>
-        </a>
+        </Link>
 
         {/* ── Right: Mode toggle · X · Address · Connect / Power ── */}
         <div className="flex items-center gap-x-2">
 
-          {/* Mode toggle: Payroll ↔ Creator */}
+          {/* Mode toggle: Payroll ↔ Creator — uses Link for SPA navigation (no reload) */}
           <div className="hidden sm:flex items-center rounded-full border border-gray-200 bg-gray-50/80 p-0.5">
-            <a
-              href="/"
+            <Link
+              to={payrollTo}
               className="rounded-full px-3 py-1 text-[11px] font-semibold transition-all"
               style={!isCreatorMode
                 ? { background: '#ffffff', color: '#111827', boxShadow: '0 1px 2px rgba(0,0,0,0.06)' }
                 : { color: '#9ca3af' }}
             >
               Payroll
-            </a>
-            <a
-              href="/creator"
+            </Link>
+            <Link
+              to={creatorTo}
               className="rounded-full px-3 py-1 text-[11px] font-semibold transition-all"
               style={isCreatorMode
                 ? { background: '#ffffff', color: '#111827', boxShadow: '0 1px 2px rgba(0,0,0,0.06)' }
                 : { color: '#9ca3af' }}
             >
               Creator
-            </a>
+            </Link>
           </div>
 
           {/* X (Twitter) — h-9 w-9 rounded-full, matches reference */}
