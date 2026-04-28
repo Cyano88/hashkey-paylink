@@ -178,6 +178,8 @@ export function usePoAStream(config: PoAConfig): PoAState {
     tickRef.current = setInterval(() => {
       const cfg = cfgRef.current
       if (accruedRef.current >= cfg.sessionCap) {
+        accruedRef.current = cfg.sessionCap
+        setAccrued(cfg.sessionCap)   // ensure reactive state reaches cap so capHit is true
         clearTickers()
         activeRef.current = false
         setIsActive(false)

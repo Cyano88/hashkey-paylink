@@ -175,7 +175,7 @@ export function StreamGate() {
                   Checkpoint: {new Date(poa.ghostVault.ts).toLocaleTimeString()}
                 </p>
                 <button
-                  onClick={() => passkey.reset()}
+                  onClick={() => { sessionStop(); passkey.reset() }}
                   className="text-[10px] text-gray-400 hover:text-gray-600 transition-colors"
                 >
                   End session
