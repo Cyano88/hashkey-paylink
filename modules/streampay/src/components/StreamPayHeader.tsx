@@ -1,5 +1,6 @@
 import { useAccount, useDisconnect } from 'wagmi'
-import { useConnectModal } from '@rainbow-me/rainbowkit'
+import { useConnectModal }           from '@rainbow-me/rainbowkit'
+import { useLocation }               from 'react-router-dom'
 
 function fmtAddr(a: string) { return `${a.slice(0, 6)}…${a.slice(-4)}` }
 
@@ -7,25 +8,46 @@ export function StreamPayHeader() {
   const { address, isConnected } = useAccount()
   const { openConnectModal }     = useConnectModal()
   const { disconnect }           = useDisconnect()
+  const { pathname }             = useLocation()
+
+  const isCreatorMode = pathname.startsWith('/creator') || pathname.startsWith('/gate')
 
   return (
-    // Matches hashkey-paylink.onrender.com exactly:
-    // frosted-glass bg, max-w-5xl container, px-4 sm:px-6 py-3 sizing
     <header className="sticky top-0 z-50 border-b border-white/60 bg-white/80 backdrop-blur-xl">
       <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3 sm:px-6">
 
         {/* ── Left: Geometric O + StreamPay ── */}
         <a href="/" className="group flex items-center gap-2.5 focus:outline-none">
           <GeometricO />
-          {/* text-[15px] font-semibold matches Hash PayLink weight exactly */}
           <span className="text-[15px] font-semibold tracking-tight text-gray-900">
             Stream<span style={{ color: '#3b82f6' }}>Pay</span>
           </span>
         </a>
 
-        {/* ── Right: X · Connect Wallet / Address + Power ── */}
-        {/* gap-x-2 matches hashkey-paylink right-side item spacing */}
+        {/* ── Right: Mode toggle · X · Address · Connect / Power ── */}
         <div className="flex items-center gap-x-2">
+
+          {/* Mode toggle: Payroll ↔ Creator */}
+          <div className="hidden sm:flex items-center rounded-full border border-gray-200 bg-gray-50/80 p-0.5">
+            <a
+              href="/"
+              className="rounded-full px-3 py-1 text-[11px] font-semibold transition-all"
+              style={!isCreatorMode
+                ? { background: '#ffffff', color: '#111827', boxShadow: '0 1px 2px rgba(0,0,0,0.06)' }
+                : { color: '#9ca3af' }}
+            >
+              Payroll
+            </a>
+            <a
+              href="/creator"
+              className="rounded-full px-3 py-1 text-[11px] font-semibold transition-all"
+              style={isCreatorMode
+                ? { background: '#ffffff', color: '#111827', boxShadow: '0 1px 2px rgba(0,0,0,0.06)' }
+                : { color: '#9ca3af' }}
+            >
+              Creator
+            </a>
+          </div>
 
           {/* X (Twitter) — h-9 w-9 rounded-full, matches reference */}
           <a

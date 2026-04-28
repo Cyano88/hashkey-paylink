@@ -1,15 +1,10 @@
 import { BrowserRouter, Navigate, Route, Routes, useParams, useSearchParams } from 'react-router-dom'
 import { StreamPayLayout } from './components/StreamPayLayout'
 import { StreamView }      from './components/StreamView'
+import { CreatorPage }     from './components/creator/CreatorPage'
+import { StreamGate }      from './components/creator/StreamGate'
 
-// ── Page wrapper — resolves vault from path param OR query string ─────────────
-//
-// Supported URL patterns:
-//   /                          → demo mode (no real vault)
-//   /stream                    → demo mode
-//   /stream/0x1234...          → specific vault from path
-//   /stream?vault=0x1234...    → specific vault from query (for deep links)
-//
+// ── Payroll page — resolves vault from path param OR query string ─────────────
 function StreamPage() {
   const { vaultAddress } = useParams<{ vaultAddress?: string }>()
   const [params]         = useSearchParams()
@@ -23,13 +18,15 @@ export default function StreamPayApp() {
     <BrowserRouter>
       <Routes>
         <Route element={<StreamPayLayout />}>
-          {/* Root → demo stream */}
-          <Route index element={<StreamPage />} />
-          {/* Stream routes */}
-          <Route path="stream"                  element={<StreamPage />} />
-          <Route path="stream/:vaultAddress"    element={<StreamPage />} />
+          {/* Payroll / Time-Sovereign flows */}
+          <Route index                           element={<StreamPage />} />
+          <Route path="stream"                   element={<StreamPage />} />
+          <Route path="stream/:vaultAddress"     element={<StreamPage />} />
+          {/* Creator / Event-Sovereign flows */}
+          <Route path="creator"                  element={<CreatorPage />} />
+          <Route path="gate"                     element={<StreamGate />} />
           {/* Fallback */}
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="*"                        element={<Navigate to="/" replace />} />
         </Route>
       </Routes>
     </BrowserRouter>
