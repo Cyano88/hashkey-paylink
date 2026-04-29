@@ -1,4 +1,4 @@
-import { useState }              from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useAccount }             from 'wagmi'
 import { Mail, X as XIcon }       from 'lucide-react'
 import { LinkFactory }            from './LinkFactory'
@@ -6,24 +6,45 @@ import { readGhostVault }         from '../../hooks/usePoAStream'
 import type { GhostVaultEntry }   from '../../hooks/usePoAStream'
 
 // ── Settlement Dashboard ──────────────────────────────────────────────────────
-// Creators input a contentId + viewer address to look up any pending ghost-vault
-// signature and settle it on-chain via the PoA relay.
 
 function SettlementDashboard() {
   const { isConnected } = useAccount()
 
-  const [contentId,   setContentId]   = useState('')
-  const [viewer,      setViewer]      = useState('')
-  const [settling,    setSettling]    = useState(false)
-  const [settleTx,    setSettleTx]    = useState<string | null>(null)
-  const [settleError, setSettleError] = useState<string | null>(null)
+  const [contentId,    setContentId]    = useState('')
+  const [viewer,       setViewer]       = useState('')
+  const [ghostEntry,   setGhostEntry]   = useState<GhostVaultEntry | null>(null)
+  const [vaultLoading, setVaultLoading] = useState(false)
+  const [settling,     setSettling]     = useState(false)
+  const [settleTx,     setSettleTx]     = useState<string | null>(null)
+  const [settleError,  setSettleError]  = useState<string | null>(null)
 
-  // Read ghost vault from localStorage (same device) — in production viewers
-  // would POST their signed entry to a creator-registry endpoint.
-  const ghostEntry: GhostVaultEntry | null =
-    contentId.trim() && viewer.trim()
-      ? readGhostVault(contentId.trim(), viewer.trim())
-      : null
+  // Fetch vault: try server first (cross-device), fall back to localStorage
+  const fetchVault = useCallback(async (id: string, addr: string) => {
+    if (!id.trim() || !addr.trim()) { setGhostEntry(null); return }
+    setVaultLoading(true)
+    setGhostEntry(null)
+    try {
+      const res  = await fetch(`/api/get-vault?id=${encodeURIComponent(id.trim())}&viewer=${addr.trim()}`)
+      const data = await res.json() as { ok: boolean; vault?: GhostVaultEntry }
+      if (data.ok && data.vault) {
+        setGhostEntry(data.vault as GhostVaultEntry)
+      } else {
+        // Fall back to localStorage (same-device testing)
+        const local = readGhostVault(id.trim(), addr.trim())
+        setGhostEntry(local)
+      }
+    } catch {
+      setGhostEntry(readGhostVault(id.trim(), addr.trim()))
+    } finally {
+      setVaultLoading(false)
+    }
+  }, [])
+
+  // Re-fetch whenever contentId or viewer changes (with short debounce)
+  useEffect(() => {
+    const t = setTimeout(() => fetchVault(contentId, viewer), 500)
+    return () => clearTimeout(t)
+  }, [contentId, viewer, fetchVault])
 
   async function handleClaim() {
     if (!ghostEntry) return
@@ -75,7 +96,7 @@ function SettlementDashboard() {
                 type="text"
                 placeholder="from your generated link"
                 value={contentId}
-                onChange={e => { setContentId(e.target.value); setSettleTx(null) }}
+                onChange={e => { setContentId(e.target.value); setSettleTx(null); setSettleError(null) }}
                 className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-[13px] font-mono placeholder:text-gray-300 placeholder:font-sans focus:outline-none focus:border-gray-400 transition-colors min-h-[48px]"
               />
             </div>
@@ -85,7 +106,7 @@ function SettlementDashboard() {
                 type="text"
                 placeholder="0x… viewer's Arc wallet"
                 value={viewer}
-                onChange={e => { setViewer(e.target.value); setSettleTx(null) }}
+                onChange={e => { setViewer(e.target.value); setSettleTx(null); setSettleError(null) }}
                 className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-[13px] font-mono placeholder:text-gray-300 placeholder:font-sans focus:outline-none focus:border-gray-400 transition-colors min-h-[48px]"
               />
             </div>
@@ -94,7 +115,15 @@ function SettlementDashboard() {
           {/* Ghost vault preview */}
           {ghostEntry && (
             <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 space-y-1.5">
-              <p className="text-[11px] font-bold text-blue-700">Ghost Vault Found</p>
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] font-bold text-blue-700">Ghost Vault Found</p>
+                <button
+                  onClick={() => fetchVault(contentId, viewer)}
+                  className="text-[10px] text-blue-500 hover:text-blue-700 underline underline-offset-2 transition-colors"
+                >
+                  Refresh
+                </button>
+              </div>
               <div className="flex items-center justify-between">
                 <p className="text-[12px] text-blue-600">
                   Accrued:{' '}
@@ -110,9 +139,15 @@ function SettlementDashboard() {
             </div>
           )}
 
-          {!ghostEntry && contentId && viewer && (
+          {vaultLoading && (
+            <div className="flex items-center justify-center gap-2 rounded-xl border border-gray-100 bg-gray-50 px-4 py-3 text-[12px] text-gray-400">
+              <VaultSpinner />Looking up vault…
+            </div>
+          )}
+
+          {!vaultLoading && !ghostEntry && contentId && viewer && (
             <div className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3 text-center text-[12px] text-gray-400">
-              No ghost vault found for this viewer + content pair
+              No vault found — viewer may not have signed yet
             </div>
           )}
 
@@ -215,6 +250,15 @@ function ExtLinkIcon() {
 function Spinner() {
   return (
     <svg className="h-4 w-4 animate-spin shrink-0" fill="none" viewBox="0 0 24 24">
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+    </svg>
+  )
+}
+
+function VaultSpinner() {
+  return (
+    <svg className="h-3.5 w-3.5 animate-spin shrink-0 mr-1" fill="none" viewBox="0 0 24 24">
       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
     </svg>

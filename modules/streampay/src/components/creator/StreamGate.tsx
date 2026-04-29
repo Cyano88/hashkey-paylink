@@ -332,13 +332,16 @@ export function StreamGate() {
           <div className="border-t border-gray-100 bg-gray-50/60 px-4 py-3 space-y-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5">
-                {poa.isActive
+                {poa.isActive && !poa.isPaused
                   ? <span className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse" />
+                  : poa.isPaused
+                  ? <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
                   : <span className="h-1.5 w-1.5 rounded-full bg-gray-300" />}
                 <span className="text-[11px] font-semibold text-gray-500">
-                  {poa.isActive  ? 'Session Active'
-                   : poa.capHit ? 'Session Complete'
-                   :              'Session Paused'}
+                  {poa.isPaused  ? 'Idle — move to resume'
+                   : poa.isActive ? 'Session Active'
+                   : poa.capHit  ? 'Session Complete'
+                   :               'Session Paused'}
                 </span>
               </div>
               <span className="font-mono text-[12px] font-semibold text-gray-700">
