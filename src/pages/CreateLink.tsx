@@ -25,6 +25,8 @@ import {
   Zap,
   AlertTriangle,
   Wallet,
+  Mail,
+  X,
 } from 'lucide-react'
 import { isAddress } from 'viem'
 import { ConnectButton } from '@rainbow-me/rainbowkit'
@@ -522,6 +524,26 @@ export default function CreateLink() {
                 <p className="mt-0.5 text-xs text-gray-400 leading-relaxed">{body}</p>
               </div>
             ))}
+          </div>
+
+          {/* ── Footer links ─────────────────────────────────────────── */}
+          <div className="mt-6 border-t border-gray-100 pt-5 flex items-center justify-center gap-8">
+            <a
+              href="mailto:support@hashpaylink.com"
+              className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-900 transition-colors"
+            >
+              <Mail className="h-3.5 w-3.5" />
+              support@hashpaylink.com
+            </a>
+            <a
+              href="https://x.com/Hash_PayLink"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-900 transition-colors"
+            >
+              <X className="h-3.5 w-3.5" />
+              @Hash_PayLink
+            </a>
           </div>
         </div>
       )}
