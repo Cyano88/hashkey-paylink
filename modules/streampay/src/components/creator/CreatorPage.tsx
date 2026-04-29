@@ -1,5 +1,6 @@
 import { useState }              from 'react'
 import { useAccount }             from 'wagmi'
+import { Mail, X as XIcon }       from 'lucide-react'
 import { LinkFactory }            from './LinkFactory'
 import { readGhostVault }         from '../../hooks/usePoAStream'
 import type { GhostVaultEntry }   from '../../hooks/usePoAStream'
@@ -156,6 +157,26 @@ function SettlementDashboard() {
             </p>
           )}
         </div>
+      </div>
+
+      {/* ── Footer links ── */}
+      <div className="border-t border-gray-100 pt-4 pb-2 flex items-center justify-center gap-8">
+        <a
+          href="mailto:support@hashpaylink.com"
+          className="flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-gray-900 transition-colors"
+        >
+          <Mail className="h-3.5 w-3.5" />
+          support@hashpaylink.com
+        </a>
+        <a
+          href="https://x.com/Streampay_"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-gray-900 transition-colors"
+        >
+          <XIcon className="h-3.5 w-3.5" />
+          @Streampay_
+        </a>
       </div>
     </div>
   )
