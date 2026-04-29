@@ -60,17 +60,6 @@ export function StreamPayHeader() {
             </Link>
           </div>
 
-          {/* X (Twitter) — h-9 w-9 rounded-full, matches reference */}
-          <a
-            href="https://x.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            title="Follow StreamPay on X"
-            className="flex h-9 w-9 items-center justify-center rounded-full text-gray-500 opacity-60 hover:opacity-100 transition-opacity"
-          >
-            <XLogo />
-          </a>
-
           {/* Address pill — plain mono text, hidden on mobile (matches reference) */}
           {isConnected && address && (
             <span className="hidden sm:block select-none font-mono text-[13px] text-gray-500 pointer-events-none">
@@ -116,14 +105,6 @@ function GeometricO() {
       className="transition-transform group-hover:scale-105">
       <circle cx="12" cy="12" r="9.5" stroke="#111827" strokeWidth="2.5" />
       <circle cx="12" cy="12" r="3.5" fill="#111827" />
-    </svg>
-  )
-}
-
-function XLogo() {
-  return (
-    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.73-8.835L1.254 2.25H8.08l4.213 5.567L18.244 2.25zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77z" />
     </svg>
   )
 }

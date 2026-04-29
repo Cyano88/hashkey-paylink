@@ -4,6 +4,7 @@ import {
   useReadContract, useWriteContract, usePublicClient,
 } from 'wagmi'
 import { isAddress, parseAbi, parseEventLogs } from 'viem'
+import { Mail, X as XIcon } from 'lucide-react'
 import { STREAM_VAULT_FACTORY_ABI } from '../lib/streamVaultAbi'
 import { formatUsdcFull } from './TriStateBar'
 
@@ -473,6 +474,26 @@ export function CreateStreamForm() {
                   <p className="text-[10px] sm:text-[11px] leading-snug text-gray-400">{s.desc}</p>
                 </div>
               ))}
+            </div>
+
+            {/* ── Footer links ── */}
+            <div className="border-t border-gray-100 pt-4 flex items-center justify-center gap-8">
+              <a
+                href="mailto:support@hashpaylink.com"
+                className="flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-gray-900 transition-colors"
+              >
+                <Mail className="h-3.5 w-3.5" />
+                support@hashpaylink.com
+              </a>
+              <a
+                href="https://x.com/Streampay_"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-gray-900 transition-colors"
+              >
+                <XIcon className="h-3.5 w-3.5" />
+                @Streampay_
+              </a>
             </div>
           </div>
 
