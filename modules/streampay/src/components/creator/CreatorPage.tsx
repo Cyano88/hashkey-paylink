@@ -5,68 +5,91 @@ import { LinkFactory }            from './LinkFactory'
 import { readGhostVault }         from '../../hooks/usePoAStream'
 import type { GhostVaultEntry }   from '../../hooks/usePoAStream'
 
+type ViewerRow = { viewer: string; amountRaw: string; ts: number }
+
+function parseContentId(input: string): string {
+  try {
+    const url = new URL(input.includes('://') ? input : `https://x.com${input}`)
+    return url.searchParams.get('id') ?? input.trim()
+  } catch { return input.trim() }
+}
+
 // ── Settlement Dashboard ──────────────────────────────────────────────────────
 
 function SettlementDashboard() {
   const { isConnected } = useAccount()
 
-  const [contentId,    setContentId]    = useState('')
-  const [viewer,       setViewer]       = useState('')
-  const [ghostEntry,   setGhostEntry]   = useState<GhostVaultEntry | null>(null)
-  const [vaultLoading, setVaultLoading] = useState(false)
-  const [settling,     setSettling]     = useState(false)
-  const [settleTx,     setSettleTx]     = useState<string | null>(null)
-  const [settleError,  setSettleError]  = useState<string | null>(null)
+  const [gateInput,   setGateInput]   = useState('')
+  const [contentId,   setContentId]   = useState('')
+  const [viewers,     setViewers]     = useState<ViewerRow[]>([])
+  const [loading,     setLoading]     = useState(false)
+  const [settlingFor, setSettlingFor] = useState<string | null>(null)
+  const [settledTxs,  setSettledTxs]  = useState<Record<string, string>>({})
+  const [errors,      setErrors]      = useState<Record<string, string>>({})
 
-  // Fetch vault: try server first (cross-device), fall back to localStorage
-  const fetchVault = useCallback(async (id: string, addr: string) => {
-    if (!id.trim() || !addr.trim()) { setGhostEntry(null); return }
-    setVaultLoading(true)
-    setGhostEntry(null)
-    try {
-      const res  = await fetch(`/api/get-vault?id=${encodeURIComponent(id.trim())}&viewer=${addr.trim()}`)
-      const data = await res.json() as { ok: boolean; vault?: GhostVaultEntry }
-      if (data.ok && data.vault) {
-        setGhostEntry(data.vault as GhostVaultEntry)
-      } else {
-        // Fall back to localStorage (same-device testing)
-        const local = readGhostVault(id.trim(), addr.trim())
-        setGhostEntry(local)
-      }
-    } catch {
-      setGhostEntry(readGhostVault(id.trim(), addr.trim()))
-    } finally {
-      setVaultLoading(false)
-    }
-  }, [])
-
-  // Re-fetch whenever contentId or viewer changes (with short debounce)
-  useEffect(() => {
-    const t = setTimeout(() => fetchVault(contentId, viewer), 500)
-    return () => clearTimeout(t)
-  }, [contentId, viewer, fetchVault])
-
-  async function handleClaim() {
-    if (!ghostEntry) return
-    setSettling(true)
-    setSettleError(null)
-    try {
-      const res  = await fetch('/api/settle-poa', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify(ghostEntry),
-      })
-      const data = await res.json() as { ok: boolean; txHash?: string; error?: string }
-      if (!data.ok) throw new Error(data.error ?? 'Settlement failed')
-      setSettleTx(data.txHash ?? null)
-    } catch (e: unknown) {
-      setSettleError(e instanceof Error ? e.message : String(e))
-    } finally {
-      setSettling(false)
+  // Parse gate link or raw contentId as the user types
+  function handleGateInput(val: string) {
+    setGateInput(val)
+    const id = parseContentId(val)
+    if (id !== contentId) {
+      setContentId(id)
+      setViewers([])
+      setSettledTxs({})
+      setErrors({})
     }
   }
 
-  const accrued = ghostEntry ? Number(ghostEntry.amountRaw) / 1_000_000 : 0
+  // Fetch all viewers who have signed for this contentId
+  const fetchViewers = useCallback(async (id: string) => {
+    if (!id.trim()) { setViewers([]); return }
+    setLoading(true)
+    try {
+      const res  = await fetch(`/api/list-viewers?id=${encodeURIComponent(id.trim())}`)
+      const data = await res.json() as { ok: boolean; viewers?: ViewerRow[] }
+      if (data.ok && data.viewers) {
+        setViewers(data.viewers)
+      } else {
+        setViewers([])
+      }
+    } catch {
+      setViewers([])
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    const t = setTimeout(() => fetchViewers(contentId), 500)
+    return () => clearTimeout(t)
+  }, [contentId, fetchViewers])
+
+  async function handleSettle(viewerAddr: string) {
+    setSettlingFor(viewerAddr)
+    setErrors(e => ({ ...e, [viewerAddr]: '' }))
+    try {
+      // Fetch vault from server first, fall back to localStorage
+      let vault: GhostVaultEntry | null = null
+      const res  = await fetch(`/api/get-vault?id=${encodeURIComponent(contentId)}&viewer=${viewerAddr}`)
+      const data = await res.json() as { ok: boolean; vault?: GhostVaultEntry }
+      vault = data.ok && data.vault ? data.vault as GhostVaultEntry : readGhostVault(contentId, viewerAddr)
+
+      if (!vault) throw new Error('Vault not found — viewer may need to re-sign')
+
+      const settle = await fetch('/api/settle-poa', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(vault),
+      })
+      const result = await settle.json() as { ok: boolean; txHash?: string; error?: string }
+      if (!result.ok) throw new Error(result.error ?? 'Settlement failed')
+      setSettledTxs(t => ({ ...t, [viewerAddr]: result.txHash ?? '' }))
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setErrors(err => ({ ...err, [viewerAddr]: msg.slice(0, 140) }))
+    } finally {
+      setSettlingFor(null)
+    }
+  }
 
   return (
     <div className="w-full max-w-[480px] mx-auto mt-6 mb-12">
@@ -83,106 +106,100 @@ function SettlementDashboard() {
             </span>
           </div>
 
-          <p className="text-[12px] text-gray-400 leading-relaxed">
-            Enter a Content ID (from your generated link) and a viewer's wallet address
-            to pull their latest ghost-vault signature and settle on Arc.
-          </p>
-
-          {/* Inputs */}
-          <div className="space-y-3">
-            <div className="space-y-1.5">
-              <span className="text-[13px] font-semibold text-gray-700">Content ID</span>
-              <input
-                type="text"
-                placeholder="from your generated link"
-                value={contentId}
-                onChange={e => { setContentId(e.target.value); setSettleTx(null); setSettleError(null) }}
-                className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-[13px] font-mono placeholder:text-gray-300 placeholder:font-sans focus:outline-none focus:border-gray-400 transition-colors min-h-[48px]"
-              />
+          {/* Gate link input */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[13px] font-semibold text-gray-700">Paste Gate Link</span>
+              <span className="text-[11px] text-gray-400">Content ID auto-filled</span>
             </div>
-            <div className="space-y-1.5">
-              <span className="text-[13px] font-semibold text-gray-700">Viewer Address</span>
-              <input
-                type="text"
-                placeholder="0x… viewer's Arc wallet"
-                value={viewer}
-                onChange={e => { setViewer(e.target.value); setSettleTx(null); setSettleError(null) }}
-                className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-[13px] font-mono placeholder:text-gray-300 placeholder:font-sans focus:outline-none focus:border-gray-400 transition-colors min-h-[48px]"
-              />
-            </div>
-          </div>
-
-          {/* Ghost vault preview */}
-          {ghostEntry && (
-            <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 space-y-1.5">
-              <div className="flex items-center justify-between">
-                <p className="text-[11px] font-bold text-blue-700">Ghost Vault Found</p>
+            <input
+              type="text"
+              placeholder="https://…/gate?id=abc123…  or just the Content ID"
+              value={gateInput}
+              onChange={e => handleGateInput(e.target.value)}
+              className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-[13px] placeholder:text-gray-300 focus:outline-none focus:border-gray-400 transition-colors min-h-[48px]"
+            />
+            {contentId && (
+              <p className="text-[11px] text-gray-400">
+                Content ID: <span className="font-mono font-semibold text-gray-600">{contentId}</span>
+                {' '}
                 <button
-                  onClick={() => fetchVault(contentId, viewer)}
-                  className="text-[10px] text-blue-500 hover:text-blue-700 underline underline-offset-2 transition-colors"
+                  onClick={() => fetchViewers(contentId)}
+                  className="text-blue-500 hover:text-blue-700 underline underline-offset-2 transition-colors"
                 >
                   Refresh
                 </button>
-              </div>
-              <div className="flex items-center justify-between">
-                <p className="text-[12px] text-blue-600">
-                  Accrued:{' '}
-                  <span className="font-bold">${accrued.toFixed(6)} USDC</span>
-                </p>
-                <p className="text-[10px] text-blue-500">
-                  {new Date(ghostEntry.ts).toLocaleString()}
-                </p>
-              </div>
-              <p className="font-mono text-[10px] text-blue-400 break-all">
-                sig: {ghostEntry.sig.slice(0, 22)}…
               </p>
+            )}
+          </div>
+
+          {/* Viewers list */}
+          {loading && (
+            <div className="flex items-center justify-center gap-2 rounded-xl border border-gray-100 bg-gray-50 px-4 py-4 text-[12px] text-gray-400">
+              <VaultSpinner />Looking up viewers…
             </div>
           )}
 
-          {vaultLoading && (
-            <div className="flex items-center justify-center gap-2 rounded-xl border border-gray-100 bg-gray-50 px-4 py-3 text-[12px] text-gray-400">
-              <VaultSpinner />Looking up vault…
+          {!loading && contentId && viewers.length === 0 && (
+            <div className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-4 text-center text-[12px] text-gray-400">
+              No viewers have signed yet — share your gate link
             </div>
           )}
 
-          {!vaultLoading && !ghostEntry && contentId && viewer && (
-            <div className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3 text-center text-[12px] text-gray-400">
-              No vault found — viewer may not have signed yet
-            </div>
-          )}
-
-          {/* Settle */}
-          {settleTx ? (
+          {!loading && viewers.length > 0 && (
             <div className="space-y-2">
-              <div className="flex items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 py-3">
-                <CheckIcon />
-                <span className="text-[13px] font-semibold text-emerald-700">Settlement submitted</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => window.open(`https://testnet.arcscan.app/tx/${settleTx}`, '_blank', 'noopener,noreferrer')}
-                className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-gray-200 py-3 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
-              >
-                <ExtLinkIcon />
-                View on Arcscan
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={handleClaim}
-              disabled={!ghostEntry || settling || !isConnected}
-              className="flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-[14px] font-bold tracking-widest min-h-[52px] transition-all active:scale-[0.98]"
-              style={ghostEntry && !settling && isConnected
-                ? { background: '#111827', color: '#ffffff', cursor: 'pointer' }
-                : { background: '#f3f4f6', color: '#9ca3af', cursor: 'not-allowed' }}
-            >
-              {settling ? <><Spinner />Settling…</> : 'CLAIM REVENUE'}
-            </button>
-          )}
+              <p className="text-[11px] font-semibold text-gray-500">
+                {viewers.length} viewer{viewers.length > 1 ? 's' : ''} signed
+              </p>
+              {viewers.map(v => {
+                const amt    = (Number(v.amountRaw) / 1_000_000).toFixed(6)
+                const txHash = settledTxs[v.viewer]
+                const err    = errors[v.viewer]
+                const busy   = settlingFor === v.viewer
 
-          {settleError && (
-            <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-[12px] text-red-500 text-center">
-              {settleError}
+                return (
+                  <div key={v.viewer} className="rounded-xl border border-gray-100 bg-gray-50/60 px-4 py-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <p className="font-mono text-[12px] text-gray-700">
+                          {v.viewer.slice(0, 8)}…{v.viewer.slice(-6)}
+                        </p>
+                        <p className="text-[10px] text-gray-400">
+                          {new Date(v.ts).toLocaleString()}
+                        </p>
+                      </div>
+                      <p className="font-mono text-[13px] font-semibold text-gray-800">
+                        ${amt} <span className="text-[10px] font-normal text-gray-400">USDC</span>
+                      </p>
+                    </div>
+
+                    {txHash ? (
+                      <button
+                        type="button"
+                        onClick={() => window.open(`https://testnet.arcscan.app/tx/${txHash}`, '_blank', 'noopener,noreferrer')}
+                        className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 py-2 text-[12px] font-semibold text-emerald-700 hover:bg-emerald-100 transition-colors"
+                      >
+                        <CheckIcon />Settled · View on Arcscan
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleSettle(v.viewer)}
+                        disabled={busy || !isConnected}
+                        className="flex w-full items-center justify-center gap-1.5 rounded-lg py-2 text-[12px] font-semibold transition-all active:scale-[0.98]"
+                        style={!busy && isConnected
+                          ? { background: '#111827', color: '#ffffff' }
+                          : { background: '#f3f4f6', color: '#9ca3af', cursor: 'not-allowed' }}
+                      >
+                        {busy ? <><Spinner />Settling…</> : 'Claim Revenue'}
+                      </button>
+                    )}
+
+                    {err && (
+                      <p className="text-[11px] text-red-500 text-center">{err}</p>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           )}
 
@@ -258,7 +275,7 @@ function Spinner() {
 
 function VaultSpinner() {
   return (
-    <svg className="h-3.5 w-3.5 animate-spin shrink-0 mr-1" fill="none" viewBox="0 0 24 24">
+    <svg className="h-3.5 w-3.5 animate-spin shrink-0" fill="none" viewBox="0 0 24 24">
       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
     </svg>

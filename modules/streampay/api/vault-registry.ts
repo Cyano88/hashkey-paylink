@@ -73,3 +73,24 @@ export async function getVault(req: Request, res: Response) {
 
   return res.status(200).json({ ok: true, vault: entry })
 }
+
+// ── GET /api/list-viewers ─────────────────────────────────────────────────────
+// Returns all viewer vaults registered for a given contentId.
+// Creator uses this to discover who has signed without needing viewer addresses.
+export async function listViewers(req: Request, res: Response) {
+  const { id } = req.query as { id?: string }
+
+  if (!id) return res.status(400).json({ ok: false, error: 'id is required' })
+
+  const prefix = `${id}_`
+  const viewers = Array.from(registry.entries())
+    .filter(([k]) => k.startsWith(prefix))
+    .map(([, entry]) => ({
+      viewer:    entry.viewer,
+      amountRaw: entry.amountRaw,
+      ts:        entry.ts,
+    }))
+    .sort((a, b) => b.ts - a.ts) // newest first
+
+  return res.status(200).json({ ok: true, viewers })
+}
