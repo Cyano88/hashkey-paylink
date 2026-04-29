@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAccount, useSignTypedData } from 'wagmi'
 
-const POA_DOMAIN = { name: 'ArcPoA', version: '1', chainId: 5042002 } as const
+// verifyingContract must match the deployed PoASettlement address exactly —
+// the contract bakes address(this) into its DOMAIN_SEPARATOR at construction.
+const POA_DOMAIN = {
+  name:              'ArcPoA',
+  version:           '1',
+  chainId:           5042002,
+  verifyingContract: (import.meta.env.VITE_POA_CONTRACT ?? '0x91DbDb49c8C68e5775554D42A1B5ce15C89C814B') as `0x${string}`,
+} as const
 
 const POA_TYPES = {
   SessionIntent: [
