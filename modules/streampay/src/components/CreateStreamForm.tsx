@@ -159,7 +159,7 @@ export function CreateStreamForm() {
           {/* Page title */}
           <div className="text-center space-y-1.5">
             <h1 className="text-[26px] sm:text-[30px] font-bold tracking-tight text-gray-900">
-              Stream<span style={{ color: '#3b82f6' }}>Pay</span>
+              Pay<span style={{ color: '#3b82f6' }}>roll</span>
             </h1>
             <p className="text-[13px] text-gray-400">Stream payment in USDC to anyone on Arc</p>
           </div>
@@ -250,7 +250,7 @@ export function CreateStreamForm() {
         {/* ── Page title (Rule 4: aligned to same 480px) ── */}
         <div className="text-center space-y-1.5">
           <h1 className="text-[26px] sm:text-[30px] font-bold tracking-tight text-gray-900">
-            Stream<span style={{ color: '#3b82f6' }}>Pay</span>
+            Pay<span style={{ color: '#3b82f6' }}>roll</span>
           </h1>
           <p className="text-[13px] text-gray-400">Stream payment in USDC to anyone on Arc</p>
         </div>
