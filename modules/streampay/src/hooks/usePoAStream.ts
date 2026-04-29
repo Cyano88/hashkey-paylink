@@ -75,7 +75,7 @@ export type PoAState = {
   isPaused:     boolean   // true when session is active but viewer is idle
   capHit:       boolean
   ghostVault:   GhostVaultEntry | null
-  sessionStart: () => Promise<void>
+  sessionStart: () => void
   sessionStop:  () => void
   forceSign:    () => Promise<void>
   setVisible:   (v: boolean) => void
@@ -100,7 +100,6 @@ export function usePoAStream(config: PoAConfig): PoAState {
   const addrRef         = useRef(address)
   const cfgRef          = useRef(config)
   const tickRef         = useRef<ReturnType<typeof setInterval> | null>(null)
-  const sigTickRef      = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => { addrRef.current = address }, [address])
   useEffect(() => { cfgRef.current  = config  }, [config])
@@ -177,8 +176,7 @@ export function usePoAStream(config: PoAConfig): PoAState {
   }, [signTypedDataAsync])
 
   function clearTickers() {
-    if (tickRef.current)    { clearInterval(tickRef.current);    tickRef.current    = null }
-    if (sigTickRef.current) { clearInterval(sigTickRef.current); sigTickRef.current = null }
+    if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null }
   }
 
   const sessionStop = useCallback(() => {
@@ -190,39 +188,27 @@ export function usePoAStream(config: PoAConfig): PoAState {
     // No doSign here — scroll in/out of view must never open the wallet
   }, [])
 
-  const sessionStart = useCallback(async () => {
+  const sessionStart = useCallback(() => {
     if (activeRef.current || !addrRef.current) return
     if (accruedRef.current >= cfgRef.current.sessionCap) return
 
-    lastActivityRef.current = Date.now() // reset idle clock on session open
+    lastActivityRef.current = Date.now()
     isPausedRef.current = false
     setIsPaused(false)
-
-    await doSign()
-
     activeRef.current = true
     setIsActive(true)
 
-    // 1-second drip ticker — checks idle timeout before incrementing
+    // 1-second drip ticker — no signing here, only idle detection + cap check
     tickRef.current = setInterval(() => {
-      const cfg      = cfgRef.current
-      const idleMs   = cfg.idleTimeout ?? 30_000
-      const isIdle   = Date.now() - lastActivityRef.current > idleMs
+      const cfg    = cfgRef.current
+      const idleMs = cfg.idleTimeout ?? 30_000
+      const isIdle = Date.now() - lastActivityRef.current > idleMs
 
       if (isIdle) {
-        if (!isPausedRef.current) {
-          isPausedRef.current = true
-          setIsPaused(true)
-          void doSign() // checkpoint when going idle
-        }
-        return // don't drip while idle
+        if (!isPausedRef.current) { isPausedRef.current = true; setIsPaused(true) }
+        return
       }
-
-      // Viewer returned from idle — clear pause flag
-      if (isPausedRef.current) {
-        isPausedRef.current = false
-        setIsPaused(false)
-      }
+      if (isPausedRef.current) { isPausedRef.current = false; setIsPaused(false) }
 
       if (accruedRef.current >= cfg.sessionCap) {
         accruedRef.current = cfg.sessionCap
@@ -230,16 +216,27 @@ export function usePoAStream(config: PoAConfig): PoAState {
         clearTickers()
         activeRef.current = false
         setIsActive(false)
-        void doSign()
+        void doSign() // only auto-sign when cap is fully hit
         return
       }
       accruedRef.current += cfg.dripRate
       setAccrued(accruedRef.current)
     }, 1_000)
-
-    const ms = (cfgRef.current.signInterval ?? 120) * 1_000
-    sigTickRef.current = setInterval(() => void doSign(), ms)
   }, [doSign])
+
+  // Send existing vault via beacon if viewer closes the tab without ending session
+  useEffect(() => {
+    function onUnload() {
+      const addr = addrRef.current
+      if (!addr) return
+      const vault = readGhostVault(cfgRef.current.contentId, addr)
+      if (!vault) return
+      const blob = new Blob([JSON.stringify(vault)], { type: 'application/json' })
+      navigator.sendBeacon('/api/register-vault', blob)
+    }
+    window.addEventListener('beforeunload', onUnload)
+    return () => window.removeEventListener('beforeunload', onUnload)
+  }, [])
 
   useEffect(() => () => clearTickers(), [])
 

@@ -51,7 +51,20 @@ export function StreamGate() {
 
   const passkey = usePasskey()
   const poa     = usePoAStream({ contentId, creator, dripRate, sessionCap })
-  const { sessionStart, sessionStop, setVisible } = poa
+  const { sessionStart, sessionStop, setVisible, forceSign } = poa
+  const [ending,  setEnding]  = useState(false)
+  const [ended,   setEnded]   = useState(false)
+
+  async function handleEndSession() {
+    setEnding(true)
+    try {
+      await forceSign() // one wallet popup — signs the total accrued amount
+      sessionStop()
+      setEnded(true)
+    } finally {
+      setEnding(false)
+    }
+  }
 
   // ── USDC allowance ────────────────────────────────────────────────────────
   const { data: allowance, refetch: refetchAllowance } = useQuery<bigint>({
@@ -148,7 +161,7 @@ export function StreamGate() {
       ([entry]) => {
         const visible = entry.isIntersecting && entry.intersectionRatio >= 0.5
         setVisible(visible)
-        if (visible) void sessionStart()
+        if (visible) sessionStart()
         else sessionStop()
       },
       { threshold: [0, 0.5, 1.0] },
@@ -328,7 +341,7 @@ export function StreamGate() {
         )}
 
         {/* ── ViewerHUD — drip meter ── */}
-        {fullyAuthorised && contentState === 'ready' && (
+        {fullyAuthorised && contentState === 'ready' && !ended && (
           <div className="border-t border-gray-100 bg-gray-50/60 px-4 py-3 space-y-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5">
@@ -360,19 +373,36 @@ export function StreamGate() {
               />
             </div>
 
-            {poa.ghostVault && (
-              <div className="flex items-center justify-between">
-                <p className="text-[10px] text-gray-400">
-                  Checkpoint: {new Date(poa.ghostVault.ts).toLocaleTimeString()}
-                </p>
-                <button
-                  onClick={() => { sessionStop(); passkey.reset() }}
-                  className="text-[10px] text-gray-400 hover:text-gray-600 transition-colors"
-                >
-                  End session
-                </button>
-              </div>
-            )}
+            <div className="flex items-center justify-between">
+              <p className="text-[10px] text-gray-400">
+                Sign once when done reading to confirm payment
+              </p>
+              <button
+                onClick={handleEndSession}
+                disabled={ending || poa.accrued === 0}
+                className="text-[10px] font-semibold transition-colors disabled:opacity-40"
+                style={{ color: ending ? '#9ca3af' : '#111827' }}
+              >
+                {ending ? 'Signing…' : 'End Session'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Session ended confirmation ── */}
+        {fullyAuthorised && ended && (
+          <div className="border-t border-gray-100 bg-emerald-50/60 px-4 py-3 space-y-1.5">
+            <div className="flex items-center gap-1.5">
+              <svg className="h-3.5 w-3.5 text-emerald-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+              </svg>
+              <span className="text-[11px] font-semibold text-emerald-700">
+                Payment signed — ${poa.accrued.toFixed(6)} USDC
+              </span>
+            </div>
+            <p className="text-[10px] text-emerald-600">
+              The creator can now settle your payment on Arc.
+            </p>
           </div>
         )}
       </div>
