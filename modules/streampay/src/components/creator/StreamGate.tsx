@@ -391,7 +391,7 @@ export function StreamGate() {
 
         {/* ── Session ended confirmation ── */}
         {fullyAuthorised && ended && (
-          <div className="border-t border-gray-100 bg-emerald-50/60 px-4 py-3 space-y-1.5">
+          <div className="border-t border-gray-100 bg-emerald-50/60 px-4 py-3 space-y-2">
             <div className="flex items-center gap-1.5">
               <svg className="h-3.5 w-3.5 text-emerald-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
@@ -400,9 +400,17 @@ export function StreamGate() {
                 Payment signed — ${poa.accrued.toFixed(6)} USDC
               </span>
             </div>
-            <p className="text-[10px] text-emerald-600">
-              The creator can now settle your payment on Arc.
-            </p>
+            <div className="flex items-center justify-between">
+              <p className="text-[10px] text-emerald-600">
+                The creator can now settle your payment on Arc.
+              </p>
+              <button
+                onClick={() => setEnded(false)}
+                className="text-[10px] font-semibold text-gray-500 hover:text-gray-800 underline underline-offset-2 transition-colors"
+              >
+                Read again
+              </button>
+            </div>
           </div>
         )}
       </div>

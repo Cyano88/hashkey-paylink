@@ -14,6 +14,26 @@ function parseContentId(input: string): string {
   } catch { return input.trim() }
 }
 
+// Scan localStorage for any ghost vaults matching this contentId.
+// Fallback for when the server restarted and lost its in-memory registry.
+function getLocalVaults(contentId: string): ViewerRow[] {
+  const prefix = `sp_poa_${contentId}_`
+  const rows: ViewerRow[] = []
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i)
+      if (!k?.startsWith(prefix)) continue
+      const entry = JSON.parse(localStorage.getItem(k) ?? '{}') as {
+        viewer?: string; amountRaw?: string; ts?: number
+      }
+      if (entry.viewer && entry.amountRaw) {
+        rows.push({ viewer: entry.viewer, amountRaw: entry.amountRaw, ts: entry.ts ?? 0 })
+      }
+    }
+  } catch { /* localStorage unavailable */ }
+  return rows
+}
+
 // ── Settlement Dashboard ──────────────────────────────────────────────────────
 
 function SettlementDashboard() {
@@ -46,13 +66,19 @@ function SettlementDashboard() {
     try {
       const res  = await fetch(`/api/list-viewers?id=${encodeURIComponent(id.trim())}`)
       const data = await res.json() as { ok: boolean; viewers?: ViewerRow[] }
-      if (data.ok && data.viewers) {
-        setViewers(data.viewers)
-      } else {
-        setViewers([])
-      }
+
+      const serverRows: ViewerRow[] = (data.ok && data.viewers) ? data.viewers : []
+      const localRows  = getLocalVaults(id.trim())
+
+      // Merge: prefer server entry if both exist for same viewer (server may be fresher)
+      const merged = new Map<string, ViewerRow>()
+      localRows.forEach(r  => merged.set(r.viewer.toLowerCase(),  r))
+      serverRows.forEach(r => merged.set(r.viewer.toLowerCase(), r))  // server overwrites local
+
+      setViewers(Array.from(merged.values()).sort((a, b) => b.ts - a.ts))
     } catch {
-      setViewers([])
+      // Network error — fall back to localStorage only
+      setViewers(getLocalVaults(id.trim()))
     } finally {
       setLoading(false)
     }
