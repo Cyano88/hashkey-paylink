@@ -64,7 +64,7 @@ export type PoAConfig = {
   creator:       `0x${string}`
   dripRate:      number   // USDC / second (e.g. 0.001)
   sessionCap:    number   // max USDC this session (e.g. 0.10)
-  signInterval?: number   // seconds between re-signs (default 30)
+  signInterval?: number   // seconds between re-signs (default 120)
   idleTimeout?:  number   // ms of inactivity before drip pauses (default 30_000)
 }
 
@@ -187,8 +187,8 @@ export function usePoAStream(config: PoAConfig): PoAState {
     isPausedRef.current = false
     setIsActive(false)
     setIsPaused(false)
-    void doSign()
-  }, [doSign])
+    // No doSign here — scroll in/out of view must never open the wallet
+  }, [])
 
   const sessionStart = useCallback(async () => {
     if (activeRef.current || !addrRef.current) return
@@ -237,7 +237,7 @@ export function usePoAStream(config: PoAConfig): PoAState {
       setAccrued(accruedRef.current)
     }, 1_000)
 
-    const ms = (cfgRef.current.signInterval ?? 30) * 1_000
+    const ms = (cfgRef.current.signInterval ?? 120) * 1_000
     sigTickRef.current = setInterval(() => void doSign(), ms)
   }, [doSign])
 
