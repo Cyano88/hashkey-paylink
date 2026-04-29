@@ -6,7 +6,7 @@ import { createPublicClient, http, defineChain, parseAbi } from 'viem'
 import { usePoAStream }       from '../../hooks/usePoAStream'
 import { usePasskey }         from '../../hooks/usePasskey'
 
-// ── Arc standalone client (same pattern as StreamView) ────────────────────────
+// ── Arc standalone client ─────────────────────────────────────────────────────
 const arcClient = createPublicClient({
   chain: defineChain({
     id:             5042002,
@@ -17,26 +17,28 @@ const arcClient = createPublicClient({
   transport: http('https://rpc.testnet.arc.network'),
 })
 
-const ARC_CHAIN_ID  = 5042002
-const ARC_USDC      = '0x3600000000000000000000000000000000000000' as const
-const POA_CONTRACT  = (import.meta.env.VITE_POA_CONTRACT ?? '') as `0x${string}`
+const ARC_CHAIN_ID = 5042002
+const ARC_USDC     = '0x3600000000000000000000000000000000000000' as const
+const POA_CONTRACT = (import.meta.env.VITE_POA_CONTRACT ?? '') as `0x${string}`
 
 const ERC20_ABI = parseAbi([
   'function allowance(address owner, address spender) view returns (uint256)',
   'function approve(address spender, uint256 amount) returns (bool)',
 ])
 
+type FetchedContent = { type: 'text' | 'url'; content: string }
+type ContentState   = 'idle' | 'loading' | 'ready' | 'error'
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function StreamGate() {
   const [params] = useSearchParams()
 
-  const contentId  = params.get('id')   ?? ''
-  const creator    = (params.get('cr')  ?? '') as `0x${string}`
-  const rateRaw    = parseInt(params.get('r')   ?? '1000',   10)
-  const capRaw     = parseInt(params.get('cap') ?? '100000', 10)
-  const url        = params.get('u')    ?? ''
-  const title      = params.get('t')    ?? url
+  const contentId = params.get('id')   ?? ''
+  const creator   = (params.get('cr')  ?? '') as `0x${string}`
+  const rateRaw   = parseInt(params.get('r')   ?? '1000',   10)
+  const capRaw    = parseInt(params.get('cap') ?? '100000', 10)
+  const title     = params.get('t')    ?? ''
 
   const dripRate   = rateRaw  / 1_000_000
   const sessionCap = capRaw   / 1_000_000
@@ -51,34 +53,32 @@ export function StreamGate() {
   const poa     = usePoAStream({ contentId, creator, dripRate, sessionCap })
   const { sessionStart, sessionStop, setVisible } = poa
 
-  // ── USDC allowance check ──────────────────────────────────────────────────
+  // ── USDC allowance ────────────────────────────────────────────────────────
   const { data: allowance, refetch: refetchAllowance } = useQuery<bigint>({
     queryKey: ['poa_allowance', address, POA_CONTRACT],
     queryFn:  async () => {
       if (!address || !POA_CONTRACT) return 0n
-      const raw = await arcClient.readContract({
+      return await arcClient.readContract({
         address: ARC_USDC, abi: ERC20_ABI,
         functionName: 'allowance', args: [address, POA_CONTRACT],
-      })
-      return raw as bigint
+      }) as bigint
     },
-    enabled:        !!address && !!POA_CONTRACT && isOnArc,
-    staleTime:      10_000,
+    enabled:         !!address && !!POA_CONTRACT && isOnArc,
+    staleTime:       10_000,
     refetchInterval: 15_000,
   })
 
   const isApproved = !!allowance && allowance >= BigInt(capRaw)
 
-  // ── USDC approve() flow ───────────────────────────────────────────────────
-  const [approving,    setApproving]    = useState(false)
-  const [approveTx,    setApproveTx]    = useState<`0x${string}` | null>(null)
-  const [approveError, setApproveError] = useState<string | null>(null)
+  // ── USDC approve() ────────────────────────────────────────────────────────
+  const [approving,      setApproving]      = useState(false)
+  const [approveTx,      setApproveTx]      = useState<`0x${string}` | null>(null)
+  const [approveError,   setApproveError]   = useState<string | null>(null)
   const [approvePending, setApprovePending] = useState(false)
 
   async function handleApprove() {
     if (!POA_CONTRACT || !isConnected || !isOnArc) return
-    setApproving(true)
-    setApproveError(null)
+    setApproving(true); setApproveError(null)
     try {
       const tx = await writeContractAsync({
         address: ARC_USDC, abi: ERC20_ABI,
@@ -86,18 +86,14 @@ export function StreamGate() {
         args: [POA_CONTRACT, BigInt(capRaw)],
         gas: 100_000n,
       })
-      setApproveTx(tx)
-      setApprovePending(true)
+      setApproveTx(tx); setApprovePending(true)
       pollApproval(tx)
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
       if (!/rejected|denied/i.test(msg)) setApproveError(msg.slice(0, 140))
-    } finally {
-      setApproving(false)
-    }
+    } finally { setApproving(false) }
   }
 
-  // Poll for approval receipt using standalone Arc client (same as StreamView)
   const pollApproval = useCallback((hash: `0x${string}`, attempts = 0) => {
     if (attempts > 40) {
       setApprovePending(false)
@@ -108,29 +104,45 @@ export function StreamGate() {
       try {
         const receipt = await arcClient.getTransactionReceipt({ hash })
         if (receipt?.status === 'success') {
-          setApprovePending(false)
-          setApproveTx(null)
-          refetchAllowance()
+          setApprovePending(false); setApproveTx(null); refetchAllowance()
         } else if (receipt?.status === 'reverted') {
-          setApprovePending(false)
-          setApproveError('Approval transaction reverted')
-        } else {
-          pollApproval(hash, attempts + 1)
-        }
+          setApprovePending(false); setApproveError('Approval transaction reverted')
+        } else { pollApproval(hash, attempts + 1) }
       } catch { pollApproval(hash, attempts + 1) }
     }, 3_000)
   }, [refetchAllowance])
 
-  // ── Auth gate state ───────────────────────────────────────────────────────
-  // Content unlocks only when all 4 conditions are met
+  // ── Content fetch (after full auth) ──────────────────────────────────────
   const fullyAuthorised = isConnected && isOnArc && passkey.registered && isApproved
 
-  // IntersectionObserver: start/stop drip when ≥50% of content is visible
+  const [contentState,  setContentState]  = useState<ContentState>('idle')
+  const [fetchedContent, setFetchedContent] = useState<FetchedContent | null>(null)
+  const [contentError,  setContentError]  = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!fullyAuthorised || !address || !contentId || contentState !== 'idle') return
+    setContentState('loading')
+    fetch(`/api/get-content?id=${encodeURIComponent(contentId)}&viewer=${address}`)
+      .then(r => r.json())
+      .then((data: { ok: boolean; type?: string; content?: string; error?: string }) => {
+        if (data.ok && data.type && data.content) {
+          setFetchedContent({ type: data.type as 'text' | 'url', content: data.content })
+          setContentState('ready')
+        } else {
+          setContentError(data.error ?? 'Could not retrieve content')
+          setContentState('error')
+        }
+      })
+      .catch(() => { setContentError('Server error — please try again'); setContentState('error') })
+  }, [fullyAuthorised, address, contentId, contentState])
+
+  // ── IntersectionObserver: drip only when content is visible + ready ───────
+  // Drip starts AFTER content is fetched and visible — not on auth alone.
   const contentRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     const el = contentRef.current
-    if (!el || !fullyAuthorised) return
+    if (!el || !fullyAuthorised || contentState !== 'ready') return
 
     const observer = new IntersectionObserver(
       ([entry]) => {
@@ -143,12 +155,16 @@ export function StreamGate() {
     )
     observer.observe(el)
     return () => observer.disconnect()
-  }, [fullyAuthorised, sessionStart, sessionStop, setVisible])
+  }, [fullyAuthorised, contentState, sessionStart, sessionStop, setVisible])
 
-  // Final checkpoint sign on page leave
+  // Final checkpoint on unmount
   useEffect(() => () => sessionStop(), [sessionStop])
 
-  // ── Invalid link ──────────────────────────────────────────────────────────
+  // ── Auth step tracking ────────────────────────────────────────────────────
+  const currentStep = !isConnected ? 0 : !isOnArc ? 1 : !passkey.registered ? 2 : 3
+
+  const progressPct = Math.min((poa.accrued / sessionCap) * 100, 100)
+
   if (!contentId || !creator) {
     return (
       <div className="w-full max-w-[480px] mx-auto mt-12 text-center text-[13px] text-gray-400 py-12">
@@ -157,55 +173,25 @@ export function StreamGate() {
     )
   }
 
-  const progressPct  = Math.min((poa.accrued / sessionCap) * 100, 100)
-  const currentStep  = !isConnected ? 0 : !isOnArc ? 1 : !passkey.registered ? 2 : 3
-
   return (
     <div className="w-full max-w-[480px] mx-auto mt-8 space-y-4">
 
-      {/* Gated content card */}
+      {/* ── Content card ── */}
       <div ref={contentRef} className="relative overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
 
-        {/* Article preview — blurred until fully authorised */}
-        <div
-          className="p-6 space-y-3 select-none"
-          style={fullyAuthorised ? {} : { filter: 'blur(5px) brightness(0.9)', pointerEvents: 'none' }}
-        >
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-blue-500">Gated Content</p>
-          <h2 className="text-[18px] font-bold text-gray-900 leading-snug line-clamp-2">
-            {title || 'Premium Content'}
-          </h2>
-          <p className="text-[13px] text-gray-500 leading-relaxed">
-            This content is protected by a StreamPay Proof-of-Attention gate.
-            USDC streams to the creator only while you are actively reading.
-          </p>
-          <div className="space-y-2 pt-1">
-            {[90, 75, 55].map(w => (
-              <div key={w} className="h-2.5 rounded-full bg-gray-100" style={{ width: `${w}%` }} />
-            ))}
-          </div>
-          {url && (
-            <a
-              href={url} target="_blank" rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-[12px] font-semibold text-blue-600 hover:text-blue-800 transition-colors"
-            >
-              Open original →
-            </a>
-          )}
-        </div>
+        {/* Blurred placeholder shown behind the auth overlay */}
+        {!fullyAuthorised && <ContentPlaceholder title={title} />}
 
-        {/* Gate overlay — dismissed once fully authorised */}
+        {/* ── Auth steps overlay ── */}
         {!fullyAuthorised && (
           <OverlayShell dripRate={dripRate} sessionCap={sessionCap}>
 
-            {/* Step 1 — wallet not connected */}
             {!isConnected && (
               <div className="rounded-xl border border-gray-100 bg-gray-50 px-5 py-3 text-center text-[12px] text-gray-500">
                 Connect your wallet in the header above
               </div>
             )}
 
-            {/* Step 2 — wrong network */}
             {isConnected && !isOnArc && (
               <button
                 onClick={() => switchChain({ chainId: ARC_CHAIN_ID })}
@@ -216,7 +202,6 @@ export function StreamGate() {
               </button>
             )}
 
-            {/* Step 3 — passkey registration */}
             {isConnected && isOnArc && !passkey.registered && (
               <>
                 <button
@@ -235,7 +220,6 @@ export function StreamGate() {
               </>
             )}
 
-            {/* Step 4 — USDC approval */}
             {isConnected && isOnArc && passkey.registered && !isApproved && (
               <>
                 {!POA_CONTRACT ? (
@@ -287,8 +271,64 @@ export function StreamGate() {
           </OverlayShell>
         )}
 
-        {/* ViewerHUD — live spending meter, only when authorised */}
-        {fullyAuthorised && (
+        {/* ── Content loading ── */}
+        {fullyAuthorised && contentState === 'loading' && (
+          <div className="flex items-center justify-center gap-3 py-16 text-gray-400">
+            <Spinner />
+            <span className="text-[13px]">Unlocking content…</span>
+          </div>
+        )}
+
+        {/* ── Native text content — reader view ── */}
+        {fullyAuthorised && contentState === 'ready' && fetchedContent?.type === 'text' && (
+          <div className="p-6 space-y-4">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-blue-500">Unlocked Content</p>
+            {title && (
+              <h2 className="text-[18px] font-bold text-gray-900 leading-snug">{title}</h2>
+            )}
+            <div className="max-h-[480px] overflow-y-auto pr-1">
+              <p className="text-[13px] text-gray-700 leading-relaxed whitespace-pre-wrap">
+                {fetchedContent.content}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* ── Private URL — reveal button ── */}
+        {fullyAuthorised && contentState === 'ready' && fetchedContent?.type === 'url' && (
+          <div className="p-6 space-y-4 text-center">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50 border border-emerald-100">
+              <svg className="h-5 w-5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+              </svg>
+            </div>
+            {title && <p className="text-[15px] font-bold text-gray-900">{title}</p>}
+            <p className="text-[12px] text-gray-500">Your private link is ready</p>
+            <button
+              onClick={() => window.open(fetchedContent.content, '_blank', 'noopener,noreferrer')}
+              className="flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-[14px] font-semibold text-white transition-all active:scale-[0.98]"
+              style={{ background: '#111827' }}
+            >
+              Access Content →
+            </button>
+          </div>
+        )}
+
+        {/* ── Content error ── */}
+        {fullyAuthorised && contentState === 'error' && (
+          <div className="p-6 text-center space-y-3">
+            <p className="text-[13px] text-red-500">{contentError}</p>
+            <button
+              onClick={() => setContentState('idle')}
+              className="text-[12px] font-semibold text-gray-500 underline underline-offset-2 hover:text-gray-800 transition-colors"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
+        {/* ── ViewerHUD — drip meter ── */}
+        {fullyAuthorised && contentState === 'ready' && (
           <div className="border-t border-gray-100 bg-gray-50/60 px-4 py-3 space-y-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5">
@@ -334,7 +374,7 @@ export function StreamGate() {
         )}
       </div>
 
-      {/* Creator / rate strip */}
+      {/* ── Creator / rate strip ── */}
       <div className="flex items-center justify-between rounded-xl border border-gray-100 bg-white px-4 py-3 shadow-sm">
         <div className="space-y-0.5">
           <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Creator</p>
@@ -380,25 +420,31 @@ function OverlayShell({
   )
 }
 
-// 4-dot step indicator (0-indexed current step)
-function StepDots({ current }: { current: number }) {
+// Placeholder so the overlay has something to blur over while loading
+function ContentPlaceholder({ title }: { title: string }) {
   return (
-    <div className="flex items-center gap-1.5">
-      {[0, 1, 2, 3].map(i => (
-        <span
-          key={i}
-          className="h-1.5 rounded-full transition-all"
-          style={{
-            width:      i === current ? 16 : 6,
-            background: i <= current  ? '#111827' : '#e5e7eb',
-          }}
-        />
-      ))}
+    <div className="p-6 space-y-3 select-none" style={{ filter: 'blur(5px) brightness(0.9)', pointerEvents: 'none' }}>
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-blue-500">Gated Content</p>
+      <h2 className="text-[18px] font-bold text-gray-900 leading-snug">{title || 'Premium Content'}</h2>
+      <div className="space-y-2 pt-1">
+        {[90, 75, 55, 80, 65].map(w => (
+          <div key={w} className="h-2.5 rounded-full bg-gray-100" style={{ width: `${w}%` }} />
+        ))}
+      </div>
     </div>
   )
 }
 
-// ── Icons ─────────────────────────────────────────────────────────────────────
+function StepDots({ current }: { current: number }) {
+  return (
+    <div className="flex items-center gap-1.5">
+      {[0, 1, 2, 3].map(i => (
+        <span key={i} className="h-1.5 rounded-full transition-all"
+          style={{ width: i === current ? 16 : 6, background: i <= current ? '#111827' : '#e5e7eb' }} />
+      ))}
+    </div>
+  )
+}
 
 function FingerprintIcon() {
   return (
@@ -426,3 +472,4 @@ function Spinner() {
     </svg>
   )
 }
+

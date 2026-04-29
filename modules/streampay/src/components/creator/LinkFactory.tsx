@@ -1,23 +1,18 @@
 import { useState } from 'react'
 import { useAccount } from 'wagmi'
 
-// Derives a deterministic content ID from the creator address + URL slug
-function makeContentId(url: string, creator: string): string {
-  try {
-    const u    = new URL(url)
-    const slug = u.pathname.replace(/[^a-z0-9]/gi, '').slice(0, 16).toLowerCase()
-    return `${creator.slice(2, 8).toLowerCase()}${slug || Date.now().toString(36)}`
-  } catch {
-    return `${creator.slice(2, 8).toLowerCase()}${Date.now().toString(36)}`
-  }
+// Derives a deterministic content ID from creator address + title slug
+function makeContentId(title: string, creator: string): string {
+  const slug = title.trim().replace(/[^a-z0-9]/gi, '').slice(0, 14).toLowerCase()
+    || Date.now().toString(36)
+  return `${creator.slice(2, 8).toLowerCase()}${slug}`
 }
 
 function buildGateLink(params: {
   contentId: string
   creator:   string
-  rateRaw:   number  // USDC/sec × 1e6
-  capRaw:    number  // cap USDC × 1e6
-  url:       string
+  rateRaw:   number
+  capRaw:    number
   title:     string
 }): string {
   const { origin, hostname } = window.location
@@ -27,7 +22,6 @@ function buildGateLink(params: {
   p.set('cr',  params.creator)
   p.set('r',   params.rateRaw.toString())
   p.set('cap', params.capRaw.toString())
-  p.set('u',   params.url)
   if (params.title.trim()) p.set('t', params.title.trim())
   return `${origin}/gate?${p.toString()}`
 }
@@ -35,37 +29,73 @@ function buildGateLink(params: {
 export function LinkFactory() {
   const { address, isConnected } = useAccount()
 
-  const [contentUrl, setContentUrl] = useState('')
-  const [title,      setTitle]      = useState('')
-  const [rateStr,    setRateStr]    = useState('0.001')
-  const [capStr,     setCapStr]     = useState('0.10')
-  const [gateLink,   setGateLink]   = useState<string | null>(null)
-  const [copied,     setCopied]     = useState(false)
+  const [contentType, setContentType] = useState<'text' | 'url'>('text')
+  const [contentBody, setContentBody] = useState('')
+  const [privateUrl,  setPrivateUrl]  = useState('')
+  const [title,       setTitle]       = useState('')
+  const [rateStr,     setRateStr]     = useState('0.001')
+  const [capStr,      setCapStr]      = useState('0.10')
+  const [gateLink,    setGateLink]    = useState<string | null>(null)
+  const [copied,      setCopied]      = useState(false)
+  const [storing,     setStoring]     = useState(false)
+  const [storeError,  setStoreError]  = useState<string | null>(null)
 
-  const rateNum  = parseFloat(rateStr) || 0
-  const capNum   = parseFloat(capStr)  || 0
-  const urlValid = (() => { try { new URL(contentUrl); return true } catch { return false } })()
-  const canBuild = isConnected && !!address && urlValid && rateNum > 0 && capNum > rateNum
+  const rateNum = parseFloat(rateStr) || 0
+  const capNum  = parseFloat(capStr)  || 0
 
-  const sessionDurationSec = rateNum > 0 ? Math.round(capNum / rateNum) : 0
+  const privateUrlValid = (() => {
+    try { new URL(privateUrl); return true } catch { return false }
+  })()
+
+  const hasContent = contentType === 'text'
+    ? contentBody.trim().length > 10
+    : privateUrlValid
+
+  const canBuild = isConnected && !!address && rateNum > 0 && capNum > rateNum && hasContent
+
+  const sessionDurationSec   = rateNum > 0 ? Math.round(capNum / rateNum) : 0
   const sessionDurationLabel = sessionDurationSec >= 3600
     ? `${(sessionDurationSec / 3600).toFixed(1)}h`
     : sessionDurationSec >= 60
     ? `${Math.round(sessionDurationSec / 60)}m`
     : `${sessionDurationSec}s`
 
-  function handleBuild() {
+  async function handleBuild() {
     if (!canBuild || !address) return
-    const contentId = makeContentId(contentUrl, address)
-    setGateLink(buildGateLink({
-      contentId,
-      creator: address,
-      rateRaw: Math.round(rateNum * 1_000_000),
-      capRaw:  Math.round(capNum  * 1_000_000),
-      url:     contentUrl,
-      title,
-    }))
-    setCopied(false)
+    setStoreError(null)
+    setStoring(true)
+
+    const contentId = makeContentId(title || contentBody.slice(0, 20), address)
+    const content   = contentType === 'text' ? contentBody.trim() : privateUrl.trim()
+
+    try {
+      const res  = await fetch('/api/store-content', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          contentId,
+          creator: address,
+          type:    contentType,
+          content,
+          capRaw:  Math.round(capNum * 1_000_000),
+        }),
+      })
+      const data = await res.json() as { ok: boolean; error?: string }
+      if (!data.ok) throw new Error(data.error ?? 'Failed to store content')
+
+      setGateLink(buildGateLink({
+        contentId,
+        creator: address,
+        rateRaw: Math.round(rateNum * 1_000_000),
+        capRaw:  Math.round(capNum  * 1_000_000),
+        title,
+      }))
+      setCopied(false)
+    } catch (e: unknown) {
+      setStoreError(e instanceof Error ? e.message : 'Server error — try again')
+    } finally {
+      setStoring(false)
+    }
   }
 
   function handleCopy() {
@@ -84,7 +114,7 @@ export function LinkFactory() {
           <h1 className="text-[26px] sm:text-[30px] font-bold tracking-tight text-gray-900">
             Creator<span style={{ color: '#3b82f6' }}>Studio</span>
           </h1>
-          <p className="text-[13px] text-gray-400">Gate any URL · earn USDC per second of attention</p>
+          <p className="text-[13px] text-gray-400">Gate your content · earn USDC per second of attention</p>
         </div>
 
         {/* Factory card */}
@@ -99,29 +129,83 @@ export function LinkFactory() {
               <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-500">Link Factory</span>
             </div>
 
-            {/* Content URL */}
+            {/* Content type toggle */}
             <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <span className="text-[13px] font-semibold text-gray-700">Content URL</span>
-                <span className="text-[11px] text-gray-400">article, video, doc…</span>
+              <span className="text-[13px] font-semibold text-gray-700">Content Type</span>
+              <div className="flex overflow-hidden rounded-xl border-2 border-gray-200">
+                <button
+                  type="button"
+                  onClick={() => { setContentType('text'); setGateLink(null) }}
+                  className="flex-1 py-2.5 text-[12px] font-semibold transition-all"
+                  style={contentType === 'text'
+                    ? { background: '#111827', color: '#ffffff' }
+                    : { background: '#ffffff', color: '#9ca3af' }}
+                >
+                  Native Content
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setContentType('url'); setGateLink(null) }}
+                  className="flex-1 py-2.5 text-[12px] font-semibold transition-all border-l-2 border-gray-200"
+                  style={contentType === 'url'
+                    ? { background: '#111827', color: '#ffffff' }
+                    : { background: '#ffffff', color: '#9ca3af' }}
+                >
+                  Private Link
+                </button>
               </div>
-              <input
-                type="url"
-                placeholder="https://your-article.com/post-slug"
-                value={contentUrl}
-                onChange={e => { setContentUrl(e.target.value); setGateLink(null) }}
-                className={[
-                  'w-full rounded-xl border-2 px-4 py-3 text-[13px] focus:outline-none transition-colors min-h-[48px]',
-                  'placeholder:text-gray-300',
-                  contentUrl && !urlValid ? 'border-red-200 bg-red-50/30'
-                    : urlValid            ? 'border-blue-200 bg-blue-50/20'
-                    :                       'border-gray-200 focus:border-gray-400',
-                ].join(' ')}
-              />
-              {contentUrl && !urlValid && (
-                <p className="text-[11px] text-red-400">Enter a valid URL including https://</p>
-              )}
+              <p className="text-[11px] text-gray-400">
+                {contentType === 'text'
+                  ? 'Paste article text — displayed directly in the gate, never leaves StreamPay'
+                  : 'Secret URL revealed only after payment — never exposed in the gate link'}
+              </p>
             </div>
+
+            {/* Native content — textarea */}
+            {contentType === 'text' && (
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[13px] font-semibold text-gray-700">Article Content</span>
+                  <span className="text-[11px] text-gray-400">{contentBody.length} chars</span>
+                </div>
+                <textarea
+                  placeholder="Paste your article, report, essay, or any text content here…"
+                  value={contentBody}
+                  onChange={e => { setContentBody(e.target.value); setGateLink(null) }}
+                  rows={6}
+                  className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-[13px] placeholder:text-gray-300 focus:outline-none focus:border-gray-400 transition-colors resize-none"
+                />
+                {contentBody.length > 0 && contentBody.trim().length <= 10 && (
+                  <p className="text-[11px] text-red-400">Content must be at least 10 characters</p>
+                )}
+              </div>
+            )}
+
+            {/* Private link — URL input */}
+            {contentType === 'url' && (
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[13px] font-semibold text-gray-700">Private Link</span>
+                  <span className="text-[11px] text-gray-400">stored server-side only</span>
+                </div>
+                <input
+                  type="url"
+                  placeholder="https://your-private-content.com/..."
+                  value={privateUrl}
+                  onChange={e => { setPrivateUrl(e.target.value); setGateLink(null) }}
+                  className={[
+                    'w-full rounded-xl border-2 px-4 py-3 text-[13px] focus:outline-none transition-colors min-h-[48px]',
+                    'placeholder:text-gray-300',
+                    privateUrl && !privateUrlValid ? 'border-red-200 bg-red-50/30'
+                      : privateUrlValid            ? 'border-blue-200 bg-blue-50/20'
+                      :                              'border-gray-200 focus:border-gray-400',
+                  ].join(' ')}
+                />
+                {privateUrl && !privateUrlValid && (
+                  <p className="text-[11px] text-red-400">Enter a valid URL including https://</p>
+                )}
+              </div>
+            )}
 
             {/* Title */}
             <div className="space-y-1.5">
@@ -170,7 +254,6 @@ export function LinkFactory() {
               </div>
             </div>
 
-            {/* Session math hint */}
             {rateNum > 0 && capNum > rateNum && (
               <p className="text-[11px] text-gray-400 text-center">
                 Viewer pays up to{' '}
@@ -185,20 +268,40 @@ export function LinkFactory() {
 
             {/* CTA */}
             {!gateLink ? (
-              <button
-                onClick={handleBuild}
-                disabled={!canBuild}
-                className="flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-[14px] font-bold tracking-widest min-h-[52px] transition-all active:scale-[0.98]"
-                style={canBuild
-                  ? { background: '#111827', color: '#ffffff', cursor: 'pointer' }
-                  : { background: '#f3f4f6', color: '#9ca3af', cursor: 'not-allowed' }}
-              >
-                {!isConnected ? 'CONNECT WALLET FIRST' : 'GENERATE STREAM LINK'}
-              </button>
+              <>
+                <button
+                  onClick={handleBuild}
+                  disabled={!canBuild || storing}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-[14px] font-bold tracking-widest min-h-[52px] transition-all active:scale-[0.98]"
+                  style={canBuild && !storing
+                    ? { background: '#111827', color: '#ffffff', cursor: 'pointer' }
+                    : { background: '#f3f4f6', color: '#9ca3af', cursor: 'not-allowed' }}
+                >
+                  {storing
+                    ? <><Spinner />Storing content…</>
+                    : !isConnected
+                    ? 'CONNECT WALLET FIRST'
+                    : 'GENERATE STREAM LINK'}
+                </button>
+                {storeError && (
+                  <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-[12px] text-red-500 text-center">
+                    {storeError}
+                  </div>
+                )}
+              </>
             ) : (
               <div className="space-y-2">
                 <div className="rounded-xl bg-gray-50 border border-gray-200 p-3.5 space-y-2">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Your Gate Link</p>
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-emerald-100">
+                      <svg className="h-2.5 w-2.5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                      </svg>
+                    </span>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500">
+                      Content stored · Gate Link Ready
+                    </p>
+                  </div>
                   <p className="break-all font-mono text-[10px] leading-relaxed text-gray-500">{gateLink}</p>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
@@ -222,7 +325,7 @@ export function LinkFactory() {
                   </a>
                 </div>
                 <button
-                  onClick={() => setGateLink(null)}
+                  onClick={() => { setGateLink(null); setStoreError(null) }}
                   className="w-full text-[11px] text-gray-400 hover:text-gray-600 transition-colors py-1"
                 >
                   Edit parameters
@@ -245,9 +348,9 @@ export function LinkFactory() {
           </p>
           <div className="grid grid-cols-3 gap-2 sm:gap-3">
             {([
-              { n: '1', title: 'Gate content', desc: 'Wrap any URL behind a PoA paywall' },
-              { n: '2', title: 'Viewer pays',  desc: 'USDC drips while they actively read' },
-              { n: '3', title: 'You claim',    desc: 'Settle all viewer sigs in one tx'   },
+              { n: '1', title: 'Gate content', desc: 'Paste text or a private URL — stored server-side' },
+              { n: '2', title: 'Viewer pays',  desc: 'USDC drips while they actively read'              },
+              { n: '3', title: 'You claim',    desc: 'Settle all viewer sigs in one tx'                  },
             ] as const).map(s => (
               <div key={s.n} className="rounded-2xl border border-gray-100 bg-white p-3 sm:p-4 text-center shadow-sm space-y-1.5">
                 <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-gray-200 text-[11px] font-semibold text-gray-500">
@@ -258,10 +361,19 @@ export function LinkFactory() {
               </div>
             ))}
           </div>
-
         </div>
 
       </div>
     </div>
   )
 }
+
+function Spinner() {
+  return (
+    <svg className="h-4 w-4 animate-spin shrink-0" fill="none" viewBox="0 0 24 24">
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+    </svg>
+  )
+}
+

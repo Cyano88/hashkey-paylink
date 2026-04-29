@@ -22,9 +22,10 @@ import setupRelayerHandler    from './api/setup-relayer.js'
 import sweepHandler           from './api/sweep.js'
 import keeperHandler          from './api/sweep-keeper.js'
 // ── Streampay module ──────────────────────────────────────────────────────────
-import relayStreamHandler     from './modules/streampay/api/relay-stream.js'
-import streamOgHandler        from './modules/streampay/api/stream-og.js'
-import settlePoaHandler       from './modules/streampay/api/settle-poa.js'
+import relayStreamHandler               from './modules/streampay/api/relay-stream.js'
+import streamOgHandler                 from './modules/streampay/api/stream-og.js'
+import settlePoaHandler                from './modules/streampay/api/settle-poa.js'
+import { storeContent, getContent }    from './modules/streampay/api/content.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -44,6 +45,8 @@ app.get('/api/sweep-keeper',           keeperHandler)
 // ── Streampay routes ──────────────────────────────────────────────────────────
 app.post('/api/relay-stream',          relayStreamHandler)
 app.post('/api/settle-poa',            settlePoaHandler)
+app.post('/api/store-content',         storeContent)
+app.get('/api/get-content',            getContent)
 app.get('/api/health',                 (_req, res) => res.json({ ok: true, ts: Date.now() }))
 // OG tag injection — must be before the SPA catch-all
 app.get('/stream/:vaultAddress',       streamOgHandler)

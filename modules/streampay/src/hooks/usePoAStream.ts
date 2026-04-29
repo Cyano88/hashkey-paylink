@@ -195,13 +195,6 @@ export function usePoAStream(config: PoAConfig): PoAState {
     sigTickRef.current = setInterval(() => void doSign(), ms)
   }, [doSign])
 
-  // Auto-pause when the viewer switches browser tabs
-  useEffect(() => {
-    const onHide = () => { if (document.hidden && activeRef.current) sessionStop() }
-    document.addEventListener('visibilitychange', onHide)
-    return () => document.removeEventListener('visibilitychange', onHide)
-  }, [sessionStop])
-
   useEffect(() => () => clearTickers(), [])
 
   return {
