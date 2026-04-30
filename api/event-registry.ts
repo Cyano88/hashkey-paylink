@@ -14,7 +14,7 @@ const registry = new Map<string, PaymentEntry[]>()
 
 export function registerEventPayment(req: Request, res: Response): void {
   const { eventId, txHash, chain, payer, memo, amount } = req.body as Partial<PaymentEntry>
-  if (!eventId || !txHash || !payer || !memo) {
+  if (!eventId || !txHash || !memo) {
     res.status(400).json({ ok: false, error: 'Missing required fields' })
     return
   }

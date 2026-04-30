@@ -765,7 +765,11 @@ export default function PaymentPage() {
 
   // ── Event mode: register payment after confirmation ───────────────────────
   async function doRegister(name: string) {
-    const payer  = chain === 'starknet' ? (starkAccount ?? '') : (address ?? '')
+    // In Send-via-Address mode the payer never connects a wallet so address is
+    // undefined. Fall back to the ghost vault address as the payer identifier.
+    const payer  = chain === 'starknet'
+      ? (starkAccount ?? '')
+      : (address ?? directVault ?? '')
     const txH    = manualPayDetected ? manualTxHash
                  : chain === 'starknet' ? starkTxHash
                  : (evmTxHash ?? null)
