@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import type { LayoutOutletContext } from '../Layout'
 import {
@@ -27,7 +27,11 @@ import {
   Wallet,
   Mail,
   X,
+  Download,
+  ScanLine,
+  LayoutDashboard,
 } from 'lucide-react'
+import { QRCodeCanvas } from 'qrcode.react'
 import { isAddress } from 'viem'
 import { ConnectButton } from '@rainbow-me/rainbowkit'
 import { cn, truncateAddress, formatAmount, copyToClipboard } from '../lib/utils'
@@ -49,6 +53,9 @@ export default function CreateLink() {
   const [memo,          setMemo]          = useState('')
   const [generatedLink, setGeneratedLink] = useState('')
   const [copied,        setCopied]        = useState(false)
+  const [eventMode,     setEventMode]     = useState(false)
+  const [eventId,       setEventId]       = useState('')
+  const qrRef = useRef<HTMLDivElement>(null)
   // selectedNet is owned by Layout and shared via outlet context for bidirectional sync with the header toolkit
   const { selectedNet, onNetworkSelect } = useOutletContext<LayoutOutletContext>()
   // Derived early so useEffect hooks below can reference it without TDZ error
@@ -140,13 +147,44 @@ export default function CreateLink() {
 
   const canGenerate = isValidAmt && (isEvmNet ? evmValid : starkValid)
 
+  // ── Event mode toggle ──────────────────────────────────────────────────────
+  function toggleEventMode(on: boolean) {
+    setEventMode(on)
+    if (on && !eventId) {
+      const bytes = crypto.getRandomValues(new Uint8Array(16))
+      setEventId(Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join(''))
+    }
+    setGeneratedLink('')
+  }
+
+  // ── QR download ────────────────────────────────────────────────────────────
+  function downloadQR() {
+    const canvas = qrRef.current?.querySelector('canvas')
+    if (!canvas) return
+    const url = canvas.toDataURL('image/png')
+    const a   = document.createElement('a')
+    a.href     = url
+    a.download = `${(memo.trim() || 'payment-link').replace(/\s+/g, '-')}-qr.png`
+    a.click()
+  }
+
   // ── Build link URL ─────────────────────────────────────────────────────
   function buildLink() {
     const params = new URLSearchParams({ amt, net: selectedNet })
     if (isEvmNet) params.set('evm', evmAddr)
     else          params.set('stark', starkAddr)
     if (memo.trim()) params.set('memo', memo.trim())
+    if (eventMode && eventId) {
+      params.set('event', '1')
+      params.set('id', eventId)
+    }
     return `${window.location.origin}/pay?${params.toString()}`
+  }
+
+  function buildDashboardLink() {
+    const params = new URLSearchParams({ id: eventId, evm: evmAddr, amt })
+    if (memo.trim()) params.set('name', memo.trim())
+    return `${window.location.origin}/event?${params.toString()}`
   }
 
   // ── Generate handler ───────────────────────────────────────────────────
@@ -400,6 +438,36 @@ export default function CreateLink() {
             />
           </fieldset>
 
+          {/* ── Event / Multi-payer Mode toggle ─────────────────────── */}
+          <button
+            type="button"
+            onClick={() => toggleEventMode(!eventMode)}
+            className={cn(
+              'w-full rounded-xl border-2 p-4 text-left transition-all',
+              eventMode
+                ? 'border-blue-400 bg-blue-50/60'
+                : 'border-gray-200 bg-white hover:border-gray-300',
+            )}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <ScanLine className={cn('h-4 w-4', eventMode ? 'text-blue-500' : 'text-gray-400')} />
+                <span className="text-sm font-semibold text-gray-800">Event / Multi-payer Mode</span>
+                <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-700">Beta</span>
+              </div>
+              {/* Toggle pill */}
+              <div className={cn('relative h-5 w-9 rounded-full transition-colors', eventMode ? 'bg-blue-500' : 'bg-gray-300')}>
+                <div className={cn(
+                  'absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform',
+                  eventMode ? 'translate-x-4' : 'translate-x-0.5',
+                )} />
+              </div>
+            </div>
+            <p className="mt-1.5 text-xs text-gray-500 leading-relaxed">
+              Attendees enter their name before paying. Generates a QR code + organizer dashboard with Export CSV.
+            </p>
+          </button>
+
           {/* ── Generate / checking button ───────────────────────────── */}
           {vaultStep === 'idle' && (
             <button
@@ -498,6 +566,41 @@ export default function CreateLink() {
                   <ExternalLink className="h-4 w-4" />
                   Test
                 </a>
+              </div>
+
+              {/* ── QR Code (all links) ──────────────────────────────── */}
+              <div className="rounded-xl border border-gray-100 bg-gray-50/60 p-4 space-y-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">QR Code</p>
+                <div className="flex items-center gap-4">
+                  <div ref={qrRef} className="rounded-lg overflow-hidden bg-white p-1.5 shadow-sm border border-gray-100 shrink-0">
+                    <QRCodeCanvas value={generatedLink} size={96} level="H" />
+                  </div>
+                  <div className="flex-1 space-y-2">
+                    <button
+                      onClick={downloadQR}
+                      className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-100 transition-all active:scale-[0.98]"
+                    >
+                      <Download className="h-3.5 w-3.5" /> Download QR (PNG)
+                    </button>
+
+                    {/* Dashboard link — event mode only */}
+                    {eventMode && (
+                      <a
+                        href={buildDashboardLink()}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700 transition-all active:scale-[0.98]"
+                      >
+                        <LayoutDashboard className="h-3.5 w-3.5" /> Open Organizer Dashboard
+                      </a>
+                    )}
+                  </div>
+                </div>
+                {eventMode && (
+                  <p className="text-[11px] text-blue-600">
+                    Attendees must enter their name before paying — their entry will appear live in the dashboard.
+                  </p>
+                )}
               </div>
             </div>
           </div>

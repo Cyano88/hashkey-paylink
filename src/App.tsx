@@ -3,6 +3,7 @@ import Layout from './Layout'
 import CreateLink from './pages/CreateLink'
 import PaymentPage from './pages/PaymentPage'
 import Dashboard from './pages/Dashboard'
+import EventDashboard from './pages/EventDashboard'
 import StreamPayApp from '../modules/streampay/src/StreamPayApp'
 
 // ── Hostname-based app routing ────────────────────────────────────────────────
@@ -28,6 +29,7 @@ export default function App() {
           <Route index element={<CreateLink />} />
           <Route path="pay" element={<PaymentPage />} />
           <Route path="dashboard" element={<Dashboard />} />
+          <Route path="event" element={<EventDashboard />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

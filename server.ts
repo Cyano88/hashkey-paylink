@@ -27,6 +27,7 @@ import streamOgHandler                 from './modules/streampay/api/stream-og.j
 import settlePoaHandler                from './modules/streampay/api/settle-poa.js'
 import { storeContent, getContent }      from './modules/streampay/api/content.js'
 import { registerVault, getVault, listViewers } from './modules/streampay/api/vault-registry.js'
+import { registerEventPayment, listEventPayments } from './api/event-registry.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -51,6 +52,8 @@ app.get('/api/get-content',            getContent)
 app.post('/api/register-vault',        registerVault)
 app.get('/api/get-vault',              getVault)
 app.get('/api/list-viewers',           listViewers)
+app.post('/api/event-register',        registerEventPayment)
+app.get('/api/list-event-payments',    listEventPayments)
 app.get('/api/health',                 (_req, res) => res.json({ ok: true, ts: Date.now() }))
 // OG tag injection — must be before the SPA catch-all
 app.get('/stream/:vaultAddress',       streamOgHandler)

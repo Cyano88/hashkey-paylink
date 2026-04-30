@@ -181,6 +181,14 @@ export default function PaymentPage() {
   const [sweepTxHash,       setSweepTxHash]       = useState<string | null>(null)
   const [sweepBalanceUsdc,  setSweepBalanceUsdc]  = useState<number | null>(null)
 
+  // ── Event mode ─────────────────────────────────────────────────────────────
+  const isEventMode      = searchParams.get('event') === '1'
+  const eventId          = searchParams.get('id') ?? ''
+  const [attendeeName,   setAttendeeName]   = useState('')
+  const attendeeNameRef  = useRef('')
+  const eventRegistered  = useRef(false)
+  useEffect(() => { attendeeNameRef.current = attendeeName }, [attendeeName])
+
   // ── Direct Send state (shared across Base, Arc, Starknet) ────────────────
   const [payMode,          setPayMode]          = useState<'wallet' | 'direct'>('wallet')
   const [directLinkId,     setDirectLinkId]     = useState<string | null>(null)
@@ -256,7 +264,8 @@ export default function PaymentPage() {
   const displayAddress  = (chain !== 'starknet' && routerAddr) ? routerAddr : activeRecipient
   const isRouterAddress = chain !== 'starknet' && !!routerAddr
 
-  const missingStark = chain === 'starknet' && !resolvedStark
+  const missingStark   = chain === 'starknet' && !resolvedStark
+  const effectiveMemo  = isEventMode ? attendeeName : memo
 
   const isValidParams =
     !isNaN(parseFloat(amt)) && parseFloat(amt) > 0 &&
@@ -699,7 +708,7 @@ export default function PaymentPage() {
         abi: MULTICALL3_AGGREGATE3VALUE_ABI, functionName: 'aggregate3Value',
         args: [[
           { target: activeRecipient as `0x${string}`, allowFailure: false, value: recipientNative,
-            callData: (memo.trim() ? memoToHex(memo.trim()) : '0x') as `0x${string}` },
+            callData: (effectiveMemo.trim() ? memoToHex(effectiveMemo.trim()) : '0x') as `0x${string}` },
           { target: EVM_TREASURY, allowFailure: false, value: feeNative, callData: '0x' },
         ]],
       }),
@@ -751,6 +760,24 @@ export default function PaymentPage() {
 
   // ── Direct Send display address ───────────────────────────────────────────
   const directDisplayAddr = chain === 'starknet' ? starkDirectAddr : directVault
+
+  // ── Event mode: register payment after confirmation ───────────────────────
+  useEffect(() => {
+    if (!isConfirmed || !isEventMode || !eventId || eventRegistered.current) return
+    const name = attendeeNameRef.current.trim()
+    if (!name) return
+    eventRegistered.current = true
+    const payer = chain === 'starknet' ? (starkAccount ?? '') : (address ?? '')
+    const txH   = manualPayDetected ? manualTxHash
+                : chain === 'starknet' ? starkTxHash
+                : (evmTxHash ?? null)
+    fetch('/api/event-register', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ eventId, txHash: txH ?? 'manual', chain, payer, memo: name, amount: amt }),
+    }).catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isConfirmed])
 
   // ── openConnectModal unused lint suppression ──────────────────────────────
   void openConnectModal
@@ -827,7 +854,9 @@ export default function PaymentPage() {
               <CheckCircle2 className="h-8 w-8 text-emerald-500" />
             </div>
             <h2 className="text-xl font-bold text-gray-900">
-              {manualPayDetected ? 'Payment Detected!' : 'Payment Sent!'}
+              {isEventMode
+                ? "You're on the list!"
+                : manualPayDetected ? 'Payment Detected!' : 'Payment Sent!'}
             </h2>
             <p className="mt-1 text-sm text-gray-600">
               {recipientAmt != null ? (
@@ -1088,6 +1117,28 @@ export default function PaymentPage() {
             {memo && <Row label="Memo (on-chain)" value={memo.length > 28 ? memo.slice(0, 28) + '…' : memo} />}
           </div>
 
+          {/* ── Attendee name (event mode) ───────────────────────────────── */}
+          {isEventMode && (
+            <div className="space-y-1.5">
+              <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+                <span className="h-2 w-2 rounded-full bg-blue-500" />
+                Your Name or Handle
+                <span className="ml-auto text-[10px] font-semibold text-red-500">Required</span>
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. @Clinton or Jane Doe"
+                value={attendeeName}
+                onChange={e => setAttendeeName(e.target.value)}
+                maxLength={60}
+                className="w-full rounded-xl border border-gray-200 bg-gray-50/60 px-4 py-3 text-sm placeholder:text-gray-400 focus:border-blue-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100 transition-all"
+              />
+              <p className="text-[11px] text-gray-400">
+                This name will be logged with your payment in the organizer's dashboard.
+              </p>
+            </div>
+          )}
+
           {/* ── Direct Send panel (Base / Arc) ───────────────────────────── */}
           {payMode === 'direct' && (chain === 'base' || chain === 'arc') && (
             <div className="space-y-3">
@@ -1246,7 +1297,7 @@ export default function PaymentPage() {
                 <p className="text-center text-xs text-gray-400">ArgentX, Braavos & other Starknet wallets</p>
               </div>
             ) : (
-              <button onClick={handlePay} disabled={isStarkPending || isStarkConfirming}
+              <button onClick={handlePay} disabled={isStarkPending || isStarkConfirming || (isEventMode && !attendeeName.trim())}
                 className={cn(
                   'flex w-full items-center justify-center gap-2 rounded-xl px-6 py-4 text-sm font-semibold transition-all',
                   isStarkPending || isStarkConfirming ? 'cursor-not-allowed bg-gray-100 text-gray-500'
@@ -1267,7 +1318,7 @@ export default function PaymentPage() {
               {isSwitching ? <><Loader2 className="h-4 w-4 animate-spin" /> Switching…</> : <><RefreshCw className="h-4 w-4" /> Switch to {meta.label}</>}
             </button>
           ) : payMode === 'wallet' ? (
-            <button onClick={handlePay} disabled={isWalletPending || isConfirming}
+            <button onClick={handlePay} disabled={isWalletPending || isConfirming || (isEventMode && !attendeeName.trim())}
               className={cn(
                 'flex w-full items-center justify-center gap-2 rounded-xl px-6 py-4 text-sm font-semibold transition-all',
                 isWalletPending || isConfirming ? 'cursor-not-allowed bg-gray-100 text-gray-500'
