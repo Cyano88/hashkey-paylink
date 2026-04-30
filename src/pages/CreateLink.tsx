@@ -466,6 +466,9 @@ export default function CreateLink() {
             <p className="mt-1.5 text-xs text-gray-500 leading-relaxed">
               Each payer enters their name before paying. Tracked in a live dashboard with Export CSV.
             </p>
+            <p className="mt-1 text-[11px] text-gray-400">
+              Suitable for: <span className="font-medium text-gray-500">online donations · group splits · classroom fees · dues · registrations · and more</span>
+            </p>
           </button>
 
           {/* ── Generate / checking button ───────────────────────────── */}
