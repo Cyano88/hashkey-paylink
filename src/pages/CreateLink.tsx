@@ -438,7 +438,7 @@ export default function CreateLink() {
             />
           </fieldset>
 
-          {/* ── Event / Multi-payer Mode toggle ─────────────────────── */}
+          {/* ── Multi-payer Collection toggle ────────────────────────── */}
           <button
             type="button"
             onClick={() => toggleEventMode(!eventMode)}
@@ -452,7 +452,7 @@ export default function CreateLink() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <ScanLine className={cn('h-4 w-4', eventMode ? 'text-blue-500' : 'text-gray-400')} />
-                <span className="text-sm font-semibold text-gray-800">Event / Multi-payer Mode</span>
+                <span className="text-sm font-semibold text-gray-800">Multi-payer Collection</span>
                 <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-700">Beta</span>
               </div>
               {/* Toggle pill */}
