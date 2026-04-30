@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
 import { QRCodeCanvas } from 'qrcode.react'
+import { formatUnits } from 'viem'
 import {
   ArrowLeft, CheckCheck, Copy, Download, DollarSign,
   ExternalLink, RefreshCw, Users, Zap,
@@ -9,36 +10,58 @@ import { CHAIN_META } from '../lib/chains'
 import { EVM_CLIENTS } from '../lib/router'
 import { cn, truncateAddress } from '../lib/utils'
 
-// ── Minimal ERC-20 Transfer event ABI ────────────────────────────────────────
-const TRANSFER_EVENT_ABI = [{
-  name:    'Transfer',
-  type:    'event' as const,
-  inputs:  [
-    { name: 'from',  type: 'address' as const, indexed: true  },
-    { name: 'to',    type: 'address' as const, indexed: true  },
-    { name: 'value', type: 'uint256' as const, indexed: false },
+// ── ERC-20 Transfer event ABI (matches viem parseAbi output exactly) ─────────
+const TRANSFER_ABI = [{
+  name:   'Transfer',
+  type:   'event'   as const,
+  inputs: [
+    { name: 'from',  type: 'address' as const, indexed: true  as const },
+    { name: 'to',    type: 'address' as const, indexed: true  as const },
+    { name: 'value', type: 'uint256' as const, indexed: false as const },
   ],
 }] as const
 
-type PaymentEntry = {
-  txHash:  string
-  chain:   string
-  payer:   string
-  memo:    string
-  amount:  string
-  ts:      number
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+/** Payment detected directly from the blockchain — always has txHash + amount */
+type ChainPayment = {
+  txHash: string
+  payer:  string
+  amount: string   // human-readable, e.g. "1.00"
+  chain:  string
+  ts:     number
 }
+
+/** Payment registered server-side via POST /api/event-register — has name */
+type ServerPayment = {
+  txHash: string
+  payer:  string
+  memo:   string
+  amount: string
+  chain:  string
+  ts:     number
+}
+
+/** Merged display row */
+type DisplayPayment = ChainPayment & { memo: string }
 
 type Toast = { id: number; addr: string; amount: string; chain: string }
 
-export default function EventDashboard() {
-  const [searchParams]  = useSearchParams()
-  const eventId         = searchParams.get('id')   ?? ''
-  const evm             = searchParams.get('evm')  ?? ''
-  const amt             = searchParams.get('amt')  ?? ''
-  const eventName       = searchParams.get('name') ?? 'Event'
+// ─────────────────────────────────────────────────────────────────────────────
 
-  const [payments,      setPayments]      = useState<PaymentEntry[]>([])
+export default function EventDashboard() {
+  const [searchParams] = useSearchParams()
+  const eventId  = searchParams.get('id')   ?? ''
+  const evm      = searchParams.get('evm')  ?? ''
+  const amt      = searchParams.get('amt')  ?? ''
+  const eventName = searchParams.get('name') ?? 'Event'
+
+  // ── Separate sources of truth ─────────────────────────────────────────────
+  // chainPayments: populated by blockchain watcher (real-time, always accurate)
+  // serverPayments: populated by 5s poll (used only to enrich with payer names)
+  const [chainPayments,  setChainPayments]  = useState<ChainPayment[]>([])
+  const [serverPayments, setServerPayments] = useState<ServerPayment[]>([])
+
   const [loading,       setLoading]       = useState(false)
   const [lastRefresh,   setLastRefresh]   = useState<Date | null>(null)
   const [dashCopied,    setDashCopied]    = useState(false)
@@ -52,93 +75,151 @@ export default function EventDashboard() {
 
   const paymentLink = `${window.location.origin}/pay?evm=${encodeURIComponent(evm)}&amt=${encodeURIComponent(amt)}&memo=${encodeURIComponent(eventName)}&event=1&id=${encodeURIComponent(eventId)}`
 
-  // ── Server registry poll ──────────────────────────────────────────────────
-  const fetchPayments = useCallback(async () => {
+  // ── Merge: chain is source of truth; server enriches with names ───────────
+  const displayPayments = useMemo<DisplayPayment[]>(() => {
+    const map = new Map<string, DisplayPayment>()
+
+    // 1. Seed from blockchain (always accurate amounts + addresses)
+    for (const cp of chainPayments) {
+      map.set(cp.txHash, { ...cp, memo: '' })
+    }
+
+    // 2. Enrich existing entries with names from server; add server-only entries
+    //    (covers payments made before the dashboard was opened)
+    for (const sp of serverPayments) {
+      const key = sp.txHash
+      if (map.has(key)) {
+        map.set(key, { ...map.get(key)!, memo: sp.memo })
+      } else {
+        // Server has it but chain watcher missed it (page opened late)
+        map.set(key, { txHash: sp.txHash, payer: sp.payer, amount: sp.amount, chain: sp.chain, ts: sp.ts, memo: sp.memo })
+      }
+    }
+
+    return Array.from(map.values()).sort((a, b) => b.ts - a.ts)
+  }, [chainPayments, serverPayments])
+
+  const total = useMemo(
+    () => displayPayments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0),
+    [displayPayments],
+  )
+
+  // ── Server poll — ONLY updates serverPayments, never touches chainPayments ─
+  const fetchServerPayments = useCallback(async () => {
     if (!eventId) return
     setLoading(true)
     try {
       const res  = await fetch(`/api/list-event-payments?id=${encodeURIComponent(eventId)}`)
-      const data = await res.json() as { ok: boolean; payments?: PaymentEntry[] }
-      if (data.ok && data.payments) setPayments(data.payments)
+      const data = await res.json() as { ok: boolean; payments?: ServerPayment[] }
+      if (data.ok && data.payments) setServerPayments(data.payments)
     } catch { /* retry next tick */ }
     finally { setLoading(false); setLastRefresh(new Date()) }
   }, [eventId])
 
   useEffect(() => {
-    fetchPayments()
-    const t = setInterval(fetchPayments, 5_000)
+    fetchServerPayments()
+    const t = setInterval(fetchServerPayments, 5_000)
     return () => clearInterval(t)
-  }, [fetchPayments])
+  }, [fetchServerPayments])
 
-  // ── Live blockchain Transfer listener (Base + Arc) ────────────────────────
+  // ── Blockchain Transfer watcher ───────────────────────────────────────────
   useEffect(() => {
     if (!evm) return
 
-    function onTransfer(chainLabel: string, decimals: number) {
+    function makeHandler(chainLabel: string, decimals: number) {
       return (logs: unknown[]) => {
-        const log = (logs as { args?: { from?: string; value?: bigint } }[])[0]
-        if (!log?.args) return
+        for (const rawLog of logs) {
+          // viem returns typed log objects — cast carefully
+          const log = rawLog as {
+            args:            { from?: `0x${string}`; to?: `0x${string}`; value?: bigint }
+            transactionHash: `0x${string}` | null
+          }
 
-        const from   = log.args.from ?? ''
-        const value  = log.args.value ?? 0n
-        const usdcAmt = (Number(value) / Math.pow(10, decimals)).toFixed(2)
+          const { from, value } = log.args
+          const txHash = log.transactionHash ?? (`chain_${Date.now()}` as `0x${string}`)
 
-        // Flash counter
-        setCounterFlash(true)
-        setTimeout(() => setCounterFlash(false), 1800)
+          // Debug: log raw event to console so we can inspect the structure
+          console.table({ chainLabel, from, value: value?.toString(), txHash })
 
-        // Show toast
-        const id = ++toastId.current
-        setToasts(prev => [...prev, { id, addr: from, amount: usdcAmt, chain: chainLabel }])
-        setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 5_000)
+          if (!from || value === undefined) continue
 
-        // Pull latest from server immediately
-        fetchPayments()
+          // Explicit BigInt → human-readable using viem formatUnits (6 decimals for USDC)
+          const amount = parseFloat(formatUnits(value, decimals)).toFixed(2)
+
+          // Build the payment object with explicit field mapping
+          const newPayment: ChainPayment = {
+            txHash,
+            payer:  from,
+            amount,
+            chain:  chainLabel.toLowerCase(),
+            ts:     Date.now(),
+          }
+
+          console.log('[Dashboard] new payment detected:', newPayment)
+
+          // Functional update — never captures stale closure state
+          setChainPayments(prev =>
+            prev.some(p => p.txHash === txHash) ? prev : [newPayment, ...prev],
+          )
+
+          // Flash counter green
+          setCounterFlash(true)
+          setTimeout(() => setCounterFlash(false), 1800)
+
+          // Toast notification
+          const id = ++toastId.current
+          setToasts(prev => [...prev, { id, addr: from, amount, chain: chainLabel }])
+          setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 5_000)
+
+          // Also immediately pull server for the latest names
+          fetchServerPayments()
+        }
       }
     }
+
+    const evmAddr = evm as `0x${string}`
 
     const unwatchers = [
       EVM_CLIENTS.base.watchContractEvent({
         address:         CHAIN_META.base.tokenAddress,
-        abi:             TRANSFER_EVENT_ABI,
+        abi:             TRANSFER_ABI,
         eventName:       'Transfer',
-        args:            { to: evm as `0x${string}` },
+        args:            { to: evmAddr },
         pollingInterval: 3_000,
-        onLogs:          onTransfer('Base', CHAIN_META.base.decimals),
+        onLogs:          makeHandler('Base', CHAIN_META.base.decimals),
       }),
       EVM_CLIENTS.arc.watchContractEvent({
         address:         CHAIN_META.arc.tokenAddress,
-        abi:             TRANSFER_EVENT_ABI,
+        abi:             TRANSFER_ABI,
         eventName:       'Transfer',
-        args:            { to: evm as `0x${string}` },
+        args:            { to: evmAddr },
         pollingInterval: 3_000,
-        onLogs:          onTransfer('Arc', CHAIN_META.arc.decimals),
+        onLogs:          makeHandler('Arc', CHAIN_META.arc.decimals),
       }),
     ]
 
     return () => unwatchers.forEach(u => u())
-  }, [evm, fetchPayments])
+  }, [evm, fetchServerPayments])
 
   // ── QR download ───────────────────────────────────────────────────────────
   function downloadQR() {
     const canvas = qrHiResRef.current?.querySelector('canvas')
     if (!canvas) return
-    const out  = document.createElement('canvas')
-    out.width  = canvas.width
-    out.height = canvas.height
-    const ctx  = out.getContext('2d')!
+    const out = document.createElement('canvas')
+    out.width = canvas.width; out.height = canvas.height
+    const ctx = out.getContext('2d')!
     ctx.drawImage(canvas, 0, 0)
-    const logo  = new Image()
+    const logo = new Image()
     logo.onload = () => {
-      const size    = Math.round(canvas.width * 0.15)
-      const x       = Math.round((canvas.width  - size) / 2)
-      const y       = Math.round((canvas.height - size) / 2)
-      const pad     = 10
+      const size = Math.round(canvas.width * 0.15)
+      const x = Math.round((canvas.width  - size) / 2)
+      const y = Math.round((canvas.height - size) / 2)
+      const pad = 10
       ctx.fillStyle = '#ffffff'
       ctx.fillRect(x - pad, y - pad, size + pad * 2, size + pad * 2)
       ctx.drawImage(logo, x, y, size, size)
-      const a    = document.createElement('a')
-      a.href     = out.toDataURL('image/png')
+      const a = document.createElement('a')
+      a.href = out.toDataURL('image/png')
       a.download = `${eventName.replace(/\s+/g, '-')}-qr.png`
       a.click()
     }
@@ -147,34 +228,29 @@ export default function EventDashboard() {
 
   // ── CSV export ────────────────────────────────────────────────────────────
   function exportCSV() {
-    const header = ['Name / Handle', 'Wallet Address', 'Chain', 'Amount (USDC/HSK)', 'Time', 'Tx Hash']
-    const rows   = payments.map(p => [
-      p.memo, p.payer, p.chain.toUpperCase(), p.amount,
+    const header = ['Name / Handle', 'Wallet Address', 'Chain', 'Amount (USDC)', 'Time', 'Tx Hash']
+    const rows   = displayPayments.map(p => [
+      p.memo || '—', p.payer, p.chain.toUpperCase(), p.amount,
       new Date(p.ts).toISOString(), p.txHash,
     ])
     const csv  = [header, ...rows].map(r => r.map(v => `"${v}"`).join(',')).join('\n')
     const blob = new Blob([csv], { type: 'text/csv' })
     const url  = URL.createObjectURL(blob)
     const a    = document.createElement('a')
-    a.href = url
-    a.download = `${eventName.replace(/\s+/g, '-')}-payments.csv`
+    a.href = url; a.download = `${eventName.replace(/\s+/g, '-')}-payments.csv`
     a.click()
     URL.revokeObjectURL(url)
   }
 
   async function copyDashLink() {
     await navigator.clipboard.writeText(window.location.href)
-    setDashCopied(true)
-    setTimeout(() => setDashCopied(false), 2000)
+    setDashCopied(true); setTimeout(() => setDashCopied(false), 2000)
   }
 
   async function copyPayLink() {
     await navigator.clipboard.writeText(paymentLink)
-    setLinkCopied(true)
-    setTimeout(() => setLinkCopied(false), 2000)
+    setLinkCopied(true); setTimeout(() => setLinkCopied(false), 2000)
   }
-
-  const total = payments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0)
 
   if (!eventId || !evm) {
     return (
@@ -190,22 +266,18 @@ export default function EventDashboard() {
   return (
     <div className="mx-auto max-w-3xl animate-fade-in space-y-5">
 
-      {/* ── Toast notifications ── */}
+      {/* ── Toasts ── */}
       <div className="fixed bottom-6 right-4 sm:right-6 z-50 flex flex-col gap-2 items-end pointer-events-none">
         {toasts.map(t => (
           <div key={t.id}
-            className="flex items-center gap-2.5 rounded-xl border border-emerald-200 bg-emerald-900 px-4 py-3 text-sm text-white shadow-xl animate-slide-up"
+            className="flex items-center gap-2.5 rounded-xl border border-emerald-700 bg-emerald-900 px-4 py-3 text-sm text-white shadow-xl animate-slide-up"
           >
             <span className="relative flex h-2.5 w-2.5 shrink-0">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
               <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-400" />
             </span>
-            <span className="font-medium">
-              ${t.amount} received
-            </span>
-            <span className="font-mono text-emerald-300 text-xs">
-              {t.addr ? `…${t.addr.slice(-4)}` : t.chain}
-            </span>
+            <span className="font-semibold">${t.amount} received</span>
+            <span className="font-mono text-emerald-300 text-xs">…{t.addr.slice(-4)}</span>
           </div>
         ))}
       </div>
@@ -222,16 +294,16 @@ export default function EventDashboard() {
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
               <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
             </span>
-            <p className="text-sm text-gray-500">Live · watching Base & Arc</p>
+            <p className="text-sm text-gray-500">Live · watching Base &amp; Arc</p>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button onClick={copyDashLink}
             className="inline-flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-all active:scale-[0.97]"
           >
-            {dashCopied ? <><CheckCheck className="h-3.5 w-3.5 text-emerald-500" /> Copied</> : <><Copy className="h-3.5 w-3.5" /> Copy Dashboard Link</>}
+            {dashCopied ? <><CheckCheck className="h-3.5 w-3.5 text-emerald-500" />Copied</> : <><Copy className="h-3.5 w-3.5" />Copy Dashboard Link</>}
           </button>
-          <button onClick={fetchPayments} disabled={loading}
+          <button onClick={fetchServerPayments} disabled={loading}
             className="inline-flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-all disabled:opacity-50"
           >
             <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} /> Refresh
@@ -243,17 +315,19 @@ export default function EventDashboard() {
       <div className="grid gap-4 sm:grid-cols-3">
         <div className="col-span-2 grid grid-cols-2 gap-4">
 
-          {/* Payers paid — flashes green on new payment */}
+          {/* Payers counter */}
           <div className={cn(
             'rounded-2xl border p-5 shadow-sm transition-all duration-500',
             counterFlash ? 'border-emerald-300 bg-emerald-50' : 'border-gray-100 bg-white',
           )}>
-            <div className={cn('mb-2 flex items-center gap-1.5 text-xs font-medium transition-colors duration-500', counterFlash ? 'text-emerald-600' : 'text-gray-500')}>
+            <div className={cn('mb-2 flex items-center gap-1.5 text-xs font-medium transition-colors duration-500',
+              counterFlash ? 'text-emerald-600' : 'text-gray-500')}>
               {counterFlash ? <Zap className="h-3.5 w-3.5" /> : <Users className="h-3.5 w-3.5" />}
               Payers
             </div>
-            <p className={cn('text-4xl font-bold transition-colors duration-500', counterFlash ? 'text-emerald-600' : 'text-gray-900')}>
-              {payments.length}
+            <p className={cn('text-4xl font-bold transition-colors duration-500',
+              counterFlash ? 'text-emerald-600' : 'text-gray-900')}>
+              {displayPayments.length}
             </p>
           </div>
 
@@ -262,23 +336,25 @@ export default function EventDashboard() {
             'rounded-2xl border p-5 shadow-sm transition-all duration-500',
             counterFlash ? 'border-emerald-300 bg-emerald-50' : 'border-gray-100 bg-white',
           )}>
-            <div className={cn('mb-2 flex items-center gap-1.5 text-xs font-medium transition-colors duration-500', counterFlash ? 'text-emerald-600' : 'text-gray-500')}>
+            <div className={cn('mb-2 flex items-center gap-1.5 text-xs font-medium transition-colors duration-500',
+              counterFlash ? 'text-emerald-600' : 'text-gray-500')}>
               <DollarSign className="h-3.5 w-3.5" /> Total Collected
             </div>
-            <p className={cn('text-4xl font-bold transition-colors duration-500', counterFlash ? 'text-emerald-600' : 'text-gray-900')}>
+            <p className={cn('text-4xl font-bold transition-colors duration-500',
+              counterFlash ? 'text-emerald-600' : 'text-gray-900')}>
               ${total.toFixed(2)}
             </p>
             <p className="text-[10px] text-gray-400 mt-0.5">USDC · HSK</p>
           </div>
         </div>
 
-        {/* Hidden hi-res QR for download */}
+        {/* Hidden hi-res canvas for download */}
         <div ref={qrHiResRef} aria-hidden="true"
           style={{ position: 'absolute', left: '-9999px', visibility: 'hidden' }}>
           <QRCodeCanvas value={paymentLink} size={1024} level="H" marginSize={4} />
         </div>
 
-        {/* QR Code */}
+        {/* QR Code card */}
         <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm flex flex-col items-center justify-between gap-3">
           <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 self-start">Payment QR</p>
           <div ref={qrRef} className="relative rounded-xl bg-white p-2 shadow-sm border border-gray-100">
@@ -307,7 +383,7 @@ export default function EventDashboard() {
                 Updated {lastRefresh.toLocaleTimeString()}
               </p>
             )}
-            <button onClick={exportCSV} disabled={payments.length === 0}
+            <button onClick={exportCSV} disabled={displayPayments.length === 0}
               className="inline-flex items-center gap-1.5 rounded-lg bg-black px-3 py-1.5 text-xs font-semibold text-white hover:bg-gray-800 transition-all disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.97]"
             >
               <Download className="h-3.5 w-3.5" /> Export CSV
@@ -315,7 +391,7 @@ export default function EventDashboard() {
           </div>
         </div>
 
-        {payments.length === 0 ? (
+        {displayPayments.length === 0 ? (
           <div className="py-16 text-center">
             <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-gray-100">
               <Users className="h-6 w-6 text-gray-400" />
@@ -325,20 +401,22 @@ export default function EventDashboard() {
           </div>
         ) : (
           <div className="divide-y divide-gray-50">
-            {payments.map((p, i) => {
+            {displayPayments.map((p, i) => {
               const chainMeta   = p.chain && p.chain in CHAIN_META ? CHAIN_META[p.chain as keyof typeof CHAIN_META] : null
-              const explorerUrl = chainMeta && !p.txHash.startsWith('manual') ? `${chainMeta.explorerUrl}/tx/${p.txHash}` : null
+              const explorerUrl = chainMeta && !p.txHash.startsWith('chain_') && !p.txHash.startsWith('manual')
+                ? `${chainMeta.explorerUrl}/tx/${p.txHash}`
+                : null
               return (
                 <div key={p.txHash + i} className="flex items-center gap-3 px-5 py-3.5 hover:bg-gray-50/50 transition-colors">
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-xs font-bold text-emerald-700">
-                    {payments.length - i}
+                    {displayPayments.length - i}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-gray-900">{p.memo || '—'}</p>
+                    <p className="truncate text-sm font-semibold text-gray-900">{p.memo || <span className="text-gray-400 font-normal italic">name pending…</span>}</p>
                     <p className="truncate font-mono text-[11px] text-gray-400">{truncateAddress(p.payer, 6)}</p>
                   </div>
                   <div className="text-right shrink-0">
-                    <p className="text-sm font-semibold text-gray-900">${parseFloat(p.amount || '0').toFixed(2)}</p>
+                    <p className="text-sm font-semibold text-gray-900">${parseFloat(p.amount).toFixed(2)}</p>
                     <p className="text-[10px] capitalize text-gray-400">{p.chain || '—'}</p>
                   </div>
                   <div className="hidden sm:block text-right shrink-0">
