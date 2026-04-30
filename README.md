@@ -92,9 +92,9 @@ A Hash PayLink is just a URL. This makes it uniquely powerful in contexts where 
 | ⬡ **Arc** | USDC | **Sub-second** | Native USDC Gas | Wallet Connect · Send via Address | 5042002 |
 | 🔵 **Base** | USDC | ~2 s | EIP-7702 Sponsored | Wallet Connect · Send via Address | 8453 |
 | 🟡 **HashKey** | HSK | ~3 s | Native HSK | Wallet Connect | 177 |
-| 🟣 **Starknet** | USDC | ~2 s | Self-funded STRK | Wallet Connect | — |
+| 🟣 **Starknet** | USDC | ~2 s | AVNU Paymaster · Gas Sponsored | Wallet Connect | — |
 
-> **Starknet note:** AVNU Paymaster API requires a dedicated grants/partnership tier — the free API tier supports swaps only. Starknet payments currently require the payer to hold STRK for gas. Gasless Starknet is on the roadmap once the Paymaster grant is live.
+> **Starknet note:** Gas is sponsored by AVNU Paymaster via the ArgentX/Braavos wallet connection — payers pay in USDC with no STRK required. Starknet currently supports Wallet Connect only; Send via Address is not available on Starknet.
 
 > **Send via Address** (Base & Arc only): the payer sends USDC directly to a CREATE2 ghost vault address — no wallet connection required. The relayer sweeps funds to the recipient automatically.
 

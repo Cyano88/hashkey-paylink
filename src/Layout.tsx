@@ -35,7 +35,7 @@ function keywordReply(input: string): ChatMsg | null {
   if (low.includes('pending') || low.includes('stuck'))
     return { from: 'bot', text: 'A transaction in pending state has been broadcast to the network but not yet included in a block. This is typically caused by insufficient gas pricing. On Base and Arc, you can resubmit with a higher priority fee to accelerate inclusion. On HashKey, pending transactions usually resolve within seconds. Share your transaction hash for a precise status check.' }
   if (low.includes('fee') || low.includes('gas'))
-    return { from: 'bot', text: 'Hash PayLink applies a 0.2% platform fee at the point of settlement. Network gas fees are independent and deducted by the respective chain from your wallet. Arc uses USDC as its native gas token. Starknet gas is denominated in STRK.' }
+    return { from: 'bot', text: 'Hash PayLink applies a 0.2% platform fee at the point of settlement. Arc uses USDC as its native gas token. On Starknet, gas is sponsored by AVNU Paymaster — payers pay in USDC with no STRK required.' }
   if (low.includes('refund') || low.includes('cancel') || low.includes('reverse'))
     return { from: 'bot', text: 'Confirmed on-chain transactions are irreversible by design. Hash PayLink does not have custody over funds at any point and cannot initiate reversals. If a payment was sent to an incorrect address, you will need to coordinate directly with the receiving party.' }
   if (low.includes('starknet') || low.includes('argent') || low.includes('braavos'))
