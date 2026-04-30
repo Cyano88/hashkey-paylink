@@ -1,10 +1,39 @@
+# HashPayLink — Monorepo
+
+This repository contains **two independent products** deployed together on a single Render service.
+
+| Product | What it does | Live |
+|---|---|---|
+| **Hash PayLink** | Multi-chain USDC payment request links across Base, HashKey, Starknet, Arc | [hashkey-paylink.onrender.com](https://hashkey-paylink.onrender.com) |
+| **StreamPay** | USDC streaming payroll + Creator Proof-of-Attention paywall on Arc | [hashkey-paylink.onrender.com/?app=streampay](https://hashkey-paylink.onrender.com/?app=streampay) |
+
+The active product is selected by hostname — StreamPay loads automatically on `streampay.xyz` once DNS is configured. See [`modules/streampay/README.md`](modules/streampay/README.md) for StreamPay-specific documentation.
+
+### Repository Structure
+
+```
+hashkey-paylink/
+├── src/                      # Hash PayLink — React frontend
+├── api/                      # Hash PayLink — Express API handlers
+├── contracts/                # Hardhat project (shared + HashPayLink contracts)
+├── modules/
+│   └── streampay/            # StreamPay — fully self-contained module
+│       ├── src/              #   React frontend
+│       ├── api/              #   Express API handlers
+│       └── contracts/        #   StreamVault + PoASettlement Solidity
+├── server.ts                 # Shared Express server (routes for both products)
+└── tailwind.config.js        # Shared Tailwind config
+```
+
+---
+
 # Hash PayLink SDK &nbsp;`v1.0.0-Mainnet`
 
 > **The Stripe of the Modular Future.**  
 > One line of code to accept stablecoins across the world's most efficient networks.
 
 [![npm](https://img.shields.io/badge/npm-%40hashpaylink%2Fsdk-black?logo=npm)](https://www.npmjs.com/package/@hashpaylink/sdk)
-[![Live App](https://img.shields.io/badge/Live-hash--paylink.vercel.app-0071E3?logo=vercel)](https://hash-paylink.vercel.app)
+[![Live App](https://img.shields.io/badge/Live-hashkey--paylink.onrender.com-0071E3)](https://hashkey-paylink.onrender.com)
 [![Arc Economic OS](https://img.shields.io/badge/Arc-Economic_OS-7C3AED?logo=ethereum)](https://arc.fun)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Built with Claude](https://img.shields.io/badge/Built_with-Claude_4.7-orange?logo=anthropic)](https://anthropic.com)
