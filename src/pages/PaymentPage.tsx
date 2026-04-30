@@ -185,13 +185,11 @@ export default function PaymentPage() {
   // Capture event params from the INITIAL URL at mount — before the direct-send
   // V2 flow can overwrite ?id= via window.history.replaceState.
   const [initParams] = useState(() => new URLSearchParams(window.location.search))
-  const isEventMode  = initParams.get('event') === '1'
-  const eventId      = initParams.get('id') ?? ''
+  const isEventMode      = initParams.get('event') === '1'
+  const eventId          = initParams.get('id') ?? ''
   const [attendeeName,   setAttendeeName]   = useState('')
   const [eventRegStatus, setEventRegStatus] = useState<'idle' | 'pending' | 'ok' | 'error'>('idle')
-  const attendeeNameRef  = useRef('')
   const eventRegistered  = useRef(false)
-  useEffect(() => { attendeeNameRef.current = attendeeName }, [attendeeName])
 
   // ── Direct Send state (shared across Base, Arc, Starknet) ────────────────
   const [payMode,          setPayMode]          = useState<'wallet' | 'direct'>('wallet')
@@ -766,19 +764,14 @@ export default function PaymentPage() {
   const directDisplayAddr = chain === 'starknet' ? starkDirectAddr : directVault
 
   // ── Event mode: register payment after confirmation ───────────────────────
-  async function registerEventPayment() {
-    const name  = attendeeNameRef.current.trim()
-    console.log('[EventReg] called — name:', name, 'eventId:', eventId, 'isEventMode:', isEventMode)
-    if (!name || !eventId) {
-      console.warn('[EventReg] aborted — missing name or eventId')
-      return
-    }
-    const payer = chain === 'starknet' ? (starkAccount ?? '') : (address ?? '')
-    const txH   = manualPayDetected ? manualTxHash
-                : chain === 'starknet' ? starkTxHash
-                : (evmTxHash ?? null)
-    const payload = { eventId, txHash: txH ?? 'manual', chain, payer, memo: name, amount: amt }
-    console.log('[EventReg] posting payload:', payload)
+  async function doRegister(name: string) {
+    const payer  = chain === 'starknet' ? (starkAccount ?? '') : (address ?? '')
+    const txH    = manualPayDetected ? manualTxHash
+                 : chain === 'starknet' ? starkTxHash
+                 : (evmTxHash ?? null)
+    const txHash = txH ?? `manual_${Date.now()}`
+    const payload = { eventId, txHash, chain, payer, memo: name, amount: amt }
+    console.log('[EventReg] posting:', payload)
     setEventRegStatus('pending')
     try {
       const res  = await fetch('/api/event-register', {
@@ -787,24 +780,23 @@ export default function PaymentPage() {
         body:    JSON.stringify(payload),
       })
       const data = await res.json() as { ok: boolean; error?: string }
-      console.log('[EventReg] server response:', data)
+      console.log('[EventReg] response:', data)
       setEventRegStatus(data.ok ? 'ok' : 'error')
     } catch (err) {
-      console.error('[EventReg] fetch error:', err)
+      console.error('[EventReg] fetch failed:', err)
       setEventRegStatus('error')
     }
   }
 
   useEffect(() => {
-    console.log('[EventReg] effect — isConfirmed:', isConfirmed, 'isEventMode:', isEventMode, 'eventId:', eventId, 'alreadyRegistered:', eventRegistered.current)
     if (!isConfirmed || !isEventMode || !eventId || eventRegistered.current) return
-    const name = attendeeNameRef.current.trim()
-    console.log('[EventReg] effect — attendeeName from ref:', name)
+    const name = attendeeName.trim()
+    console.log('[EventReg] triggered — name:', name, 'eventId:', eventId)
     if (!name) return
     eventRegistered.current = true
-    void registerEventPayment()
+    void doRegister(name)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isConfirmed])
+  }, [isConfirmed, attendeeName])
 
   // ── openConnectModal unused lint suppression ──────────────────────────────
   void openConnectModal
@@ -1014,7 +1006,7 @@ export default function PaymentPage() {
                 </span>
                 {eventRegStatus === 'error' && (
                   <button
-                    onClick={() => { eventRegistered.current = false; void registerEventPayment() }}
+                    onClick={() => { eventRegistered.current = false; void doRegister(attendeeName.trim()) }}
                     className="shrink-0 rounded-lg bg-red-100 px-2.5 py-1 text-[11px] font-semibold text-red-700 hover:bg-red-200 transition-colors"
                   >
                     Retry

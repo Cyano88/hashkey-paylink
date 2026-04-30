@@ -19,7 +19,11 @@ export function registerEventPayment(req: Request, res: Response): void {
     return
   }
   const entries = registry.get(eventId) ?? []
-  if (entries.some(e => e.txHash.toLowerCase() === txHash.toLowerCase())) {
+  // Deduplicate by txHash (for real on-chain txs) OR by payer+eventId for manual detections
+  const isDupe = txHash.startsWith('manual_')
+    ? entries.some(e => e.payer.toLowerCase() === payer.toLowerCase())
+    : entries.some(e => e.txHash.toLowerCase() === txHash.toLowerCase())
+  if (isDupe) {
     res.json({ ok: true, duplicate: true })
     return
   }
