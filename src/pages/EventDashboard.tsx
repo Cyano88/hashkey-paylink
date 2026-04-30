@@ -55,11 +55,26 @@ export default function EventDashboard() {
   function downloadQR() {
     const canvas = qrRef.current?.querySelector('canvas')
     if (!canvas) return
-    const url = canvas.toDataURL('image/png')
-    const a   = document.createElement('a')
-    a.href     = url
-    a.download = `${eventName.replace(/\s+/g, '-')}-qr.png`
-    a.click()
+    const out  = document.createElement('canvas')
+    out.width  = canvas.width
+    out.height = canvas.height
+    const ctx  = out.getContext('2d')!
+    ctx.drawImage(canvas, 0, 0)
+    const logo  = new Image()
+    logo.onload = () => {
+      const size    = Math.round(canvas.width * 0.22)
+      const x       = Math.round((canvas.width  - size) / 2)
+      const y       = Math.round((canvas.height - size) / 2)
+      const pad     = 3
+      ctx.fillStyle = '#ffffff'
+      ctx.fillRect(x - pad, y - pad, size + pad * 2, size + pad * 2)
+      ctx.drawImage(logo, x, y, size, size)
+      const a    = document.createElement('a')
+      a.href     = out.toDataURL('image/png')
+      a.download = `${eventName.replace(/\s+/g, '-')}-qr.png`
+      a.click()
+    }
+    logo.src = '/hash-logo.png'
   }
 
   function exportCSV() {
@@ -161,8 +176,13 @@ export default function EventDashboard() {
         {/* QR Code */}
         <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm flex flex-col items-center justify-between gap-3">
           <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 self-start">Payment QR</p>
-          <div ref={qrRef} className="rounded-xl overflow-hidden bg-white p-1 shadow-sm border border-gray-100">
+          <div ref={qrRef} className="relative rounded-xl bg-white p-1 shadow-sm border border-gray-100">
             <QRCodeCanvas value={paymentLink} size={110} level="H" />
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+              <div className="rounded-sm bg-white p-0.5 shadow-sm">
+                <img src="/hash-logo.png" alt="" className="h-6 w-6 object-contain" />
+              </div>
+            </div>
           </div>
           <button
             onClick={downloadQR}

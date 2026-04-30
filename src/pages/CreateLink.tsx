@@ -157,15 +157,30 @@ export default function CreateLink() {
     setGeneratedLink('')
   }
 
-  // ── QR download ────────────────────────────────────────────────────────────
+  // ── QR download (with logo composited onto canvas) ─────────────────────────
   function downloadQR() {
     const canvas = qrRef.current?.querySelector('canvas')
     if (!canvas) return
-    const url = canvas.toDataURL('image/png')
-    const a   = document.createElement('a')
-    a.href     = url
-    a.download = `${(memo.trim() || 'payment-link').replace(/\s+/g, '-')}-qr.png`
-    a.click()
+    const out  = document.createElement('canvas')
+    out.width  = canvas.width
+    out.height = canvas.height
+    const ctx  = out.getContext('2d')!
+    ctx.drawImage(canvas, 0, 0)
+    const logo    = new Image()
+    logo.onload   = () => {
+      const size    = Math.round(canvas.width * 0.22)
+      const x       = Math.round((canvas.width  - size) / 2)
+      const y       = Math.round((canvas.height - size) / 2)
+      const pad     = 3
+      ctx.fillStyle = '#ffffff'
+      ctx.fillRect(x - pad, y - pad, size + pad * 2, size + pad * 2)
+      ctx.drawImage(logo, x, y, size, size)
+      const a    = document.createElement('a')
+      a.href     = out.toDataURL('image/png')
+      a.download = `${(memo.trim() || 'payment-link').replace(/\s+/g, '-')}-qr.png`
+      a.click()
+    }
+    logo.src = '/hash-logo.png'
   }
 
   // ── Build link URL ─────────────────────────────────────────────────────
@@ -575,8 +590,13 @@ export default function CreateLink() {
               <div className="rounded-xl border border-gray-100 bg-gray-50/60 p-4 space-y-3">
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">QR Code</p>
                 <div className="flex items-center gap-4">
-                  <div ref={qrRef} className="rounded-lg overflow-hidden bg-white p-1.5 shadow-sm border border-gray-100 shrink-0">
+                  <div ref={qrRef} className="relative rounded-lg bg-white p-1.5 shadow-sm border border-gray-100 shrink-0">
                     <QRCodeCanvas value={generatedLink} size={96} level="H" />
+                    <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                      <div className="rounded-sm bg-white p-0.5 shadow-sm">
+                        <img src="/hash-logo.png" alt="" className="h-5 w-5 object-contain" />
+                      </div>
+                    </div>
                   </div>
                   <div className="flex-1 space-y-2">
                     <button
