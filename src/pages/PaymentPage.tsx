@@ -798,6 +798,17 @@ export default function PaymentPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isConfirmed, attendeeName])
 
+  // Fallback: also register when Send-via-Address relay succeeds (directStatus='success')
+  // in case the Transfer event watcher hasn't set manualPayDetected yet.
+  useEffect(() => {
+    if (directStatus !== 'success' || !isEventMode || !eventId || eventRegistered.current) return
+    const name = attendeeName.trim()
+    if (!name) return
+    eventRegistered.current = true
+    void doRegister(name)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [directStatus, attendeeName])
+
   // ── openConnectModal unused lint suppression ──────────────────────────────
   void openConnectModal
 
@@ -1173,8 +1184,9 @@ export default function PaymentPage() {
                 placeholder="e.g. @Clinton or Jane Doe"
                 value={attendeeName}
                 onChange={e => setAttendeeName(e.target.value)}
+                disabled={isConfirmed}
                 maxLength={60}
-                className="w-full rounded-xl border border-gray-200 bg-gray-50/60 px-4 py-3 text-sm placeholder:text-gray-400 focus:border-blue-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100 transition-all"
+                className="w-full rounded-xl border border-gray-200 bg-gray-50/60 px-4 py-3 text-sm placeholder:text-gray-400 focus:border-blue-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
               />
               <p className="text-[11px] text-gray-400">
                 This name will be logged with your payment in the organizer's dashboard.
