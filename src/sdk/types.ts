@@ -23,7 +23,7 @@ export interface PayLinkButtonProps {
   memo?: string
   /**
    * Platform fee in basis points.
-   * Defaults to 50 (0.5%). Set to 0 to disable.
+   * Defaults to 20 (0.2%). Set to 0 to disable.
    * Full collection requires deploying the FeeRouter contract.
    */
   platformFeeBps?: number

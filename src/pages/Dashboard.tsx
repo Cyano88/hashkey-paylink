@@ -442,7 +442,7 @@ export default function Dashboard() {
                               </div>
                               <div className="text-gray-300">—</div>
                               <div className="space-y-0.5">
-                                <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Protocol Fee (0.5%)</p>
+                                <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Protocol Fee (0.2%)</p>
                                 <p className="font-mono text-sm font-semibold text-red-500">−${fmt(fee)} USDC</p>
                               </div>
                               <div className="text-gray-300">—</div>
