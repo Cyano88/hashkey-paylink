@@ -55,7 +55,8 @@ export default function CreateLink() {
   const [copied,        setCopied]        = useState(false)
   const [eventMode,     setEventMode]     = useState(false)
   const [eventId,       setEventId]       = useState('')
-  const qrRef = useRef<HTMLDivElement>(null)
+  const qrRef       = useRef<HTMLDivElement>(null)
+  const qrHiResRef  = useRef<HTMLDivElement>(null)
   // selectedNet is owned by Layout and shared via outlet context for bidirectional sync with the header toolkit
   const { selectedNet, onNetworkSelect } = useOutletContext<LayoutOutletContext>()
   // Derived early so useEffect hooks below can reference it without TDZ error
@@ -157,21 +158,21 @@ export default function CreateLink() {
     setGeneratedLink('')
   }
 
-  // ── QR download (with logo composited onto canvas) ─────────────────────────
+  // ── QR download — uses hidden 1024px canvas for UHD output ────────────────
   function downloadQR() {
-    const canvas = qrRef.current?.querySelector('canvas')
+    const canvas = qrHiResRef.current?.querySelector('canvas')
     if (!canvas) return
     const out  = document.createElement('canvas')
     out.width  = canvas.width
     out.height = canvas.height
     const ctx  = out.getContext('2d')!
     ctx.drawImage(canvas, 0, 0)
-    const logo    = new Image()
-    logo.onload   = () => {
+    const logo  = new Image()
+    logo.onload = () => {
       const size    = Math.round(canvas.width * 0.22)
       const x       = Math.round((canvas.width  - size) / 2)
       const y       = Math.round((canvas.height - size) / 2)
-      const pad     = 3
+      const pad     = 10
       ctx.fillStyle = '#ffffff'
       ctx.fillRect(x - pad, y - pad, size + pad * 2, size + pad * 2)
       ctx.drawImage(logo, x, y, size, size)
@@ -584,6 +585,12 @@ export default function CreateLink() {
                   <ExternalLink className="h-4 w-4" />
                   Test
                 </a>
+              </div>
+
+              {/* Hidden 1024px canvas used only for UHD PNG download */}
+              <div ref={qrHiResRef} aria-hidden="true"
+                style={{ position: 'absolute', left: '-9999px', visibility: 'hidden' }}>
+                <QRCodeCanvas value={generatedLink} size={1024} level="H" />
               </div>
 
               {/* ── QR Code (all links) ──────────────────────────────── */}

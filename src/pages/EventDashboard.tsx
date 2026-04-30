@@ -30,7 +30,8 @@ export default function EventDashboard() {
   const [dashCopied,   setDashCopied]   = useState(false)
   const [linkCopied,   setLinkCopied]   = useState(false)
 
-  const qrRef = useRef<HTMLDivElement>(null)
+  const qrRef       = useRef<HTMLDivElement>(null)
+  const qrHiResRef  = useRef<HTMLDivElement>(null)
 
   const paymentLink = `${window.location.origin}/pay?evm=${encodeURIComponent(evm)}&amt=${encodeURIComponent(amt)}&memo=${encodeURIComponent(eventName)}&event=1&id=${encodeURIComponent(eventId)}`
 
@@ -53,7 +54,7 @@ export default function EventDashboard() {
   }, [fetchPayments])
 
   function downloadQR() {
-    const canvas = qrRef.current?.querySelector('canvas')
+    const canvas = qrHiResRef.current?.querySelector('canvas')
     if (!canvas) return
     const out  = document.createElement('canvas')
     out.width  = canvas.width
@@ -65,7 +66,7 @@ export default function EventDashboard() {
       const size    = Math.round(canvas.width * 0.22)
       const x       = Math.round((canvas.width  - size) / 2)
       const y       = Math.round((canvas.height - size) / 2)
-      const pad     = 3
+      const pad     = 10
       ctx.fillStyle = '#ffffff'
       ctx.fillRect(x - pad, y - pad, size + pad * 2, size + pad * 2)
       ctx.drawImage(logo, x, y, size, size)
@@ -171,6 +172,12 @@ export default function EventDashboard() {
             <p className="text-4xl font-bold text-gray-900">${total.toFixed(2)}</p>
             <p className="text-[10px] text-gray-400 mt-0.5">USDC · HSK</p>
           </div>
+        </div>
+
+        {/* Hidden 1024px canvas for UHD download */}
+        <div ref={qrHiResRef} aria-hidden="true"
+          style={{ position: 'absolute', left: '-9999px', visibility: 'hidden' }}>
+          <QRCodeCanvas value={paymentLink} size={1024} level="H" />
         </div>
 
         {/* QR Code */}
