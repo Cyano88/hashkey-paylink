@@ -185,6 +185,7 @@ export default function PaymentPage() {
   const isEventMode      = searchParams.get('event') === '1'
   const eventId          = searchParams.get('id') ?? ''
   const [attendeeName,   setAttendeeName]   = useState('')
+  const [eventRegStatus, setEventRegStatus] = useState<'idle' | 'pending' | 'ok' | 'error'>('idle')
   const attendeeNameRef  = useRef('')
   const eventRegistered  = useRef(false)
   useEffect(() => { attendeeNameRef.current = attendeeName }, [attendeeName])
@@ -762,20 +763,33 @@ export default function PaymentPage() {
   const directDisplayAddr = chain === 'starknet' ? starkDirectAddr : directVault
 
   // ── Event mode: register payment after confirmation ───────────────────────
+  async function registerEventPayment() {
+    const name  = attendeeNameRef.current.trim()
+    if (!name || !eventId) return
+    const payer = chain === 'starknet' ? (starkAccount ?? '') : (address ?? '')
+    const txH   = manualPayDetected ? manualTxHash
+                : chain === 'starknet' ? starkTxHash
+                : (evmTxHash ?? null)
+    setEventRegStatus('pending')
+    try {
+      const res  = await fetch('/api/event-register', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ eventId, txHash: txH ?? 'manual', chain, payer, memo: name, amount: amt }),
+      })
+      const data = await res.json() as { ok: boolean; error?: string }
+      setEventRegStatus(data.ok ? 'ok' : 'error')
+    } catch {
+      setEventRegStatus('error')
+    }
+  }
+
   useEffect(() => {
     if (!isConfirmed || !isEventMode || !eventId || eventRegistered.current) return
     const name = attendeeNameRef.current.trim()
     if (!name) return
     eventRegistered.current = true
-    const payer = chain === 'starknet' ? (starkAccount ?? '') : (address ?? '')
-    const txH   = manualPayDetected ? manualTxHash
-                : chain === 'starknet' ? starkTxHash
-                : (evmTxHash ?? null)
-    fetch('/api/event-register', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ eventId, txHash: txH ?? 'manual', chain, payer, memo: name, amount: amt }),
-    }).catch(() => {})
+    void registerEventPayment()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isConfirmed])
 
@@ -970,6 +984,30 @@ export default function PaymentPage() {
                 <ExternalLink className="h-4 w-4" />
                 View on {meta.explorerName}
               </a>
+            )}
+
+            {isEventMode && (
+              <div className={cn(
+                'flex items-center justify-between gap-3 rounded-xl border px-4 py-3 text-xs font-medium',
+                eventRegStatus === 'ok'      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                : eventRegStatus === 'error' ? 'border-red-200 bg-red-50 text-red-600'
+                : 'border-blue-100 bg-blue-50 text-blue-600',
+              )}>
+                <span>
+                  {eventRegStatus === 'pending'  && 'Logging to dashboard…'}
+                  {eventRegStatus === 'ok'        && '✓ Logged to organizer dashboard'}
+                  {eventRegStatus === 'error'     && 'Failed to log — tap Retry'}
+                  {eventRegStatus === 'idle'      && 'Registering payment…'}
+                </span>
+                {eventRegStatus === 'error' && (
+                  <button
+                    onClick={() => { eventRegistered.current = false; void registerEventPayment() }}
+                    className="shrink-0 rounded-lg bg-red-100 px-2.5 py-1 text-[11px] font-semibold text-red-700 hover:bg-red-200 transition-colors"
+                  >
+                    Retry
+                  </button>
+                )}
+              </div>
             )}
 
             <Link to="/" className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-2.5 text-sm font-medium text-white hover:bg-gray-800 transition-all active:scale-[0.98]">
