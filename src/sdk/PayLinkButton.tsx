@@ -29,7 +29,7 @@ import { ExternalLink, Zap } from 'lucide-react'
 import { CHAIN_META, PLATFORM_FEE_BPS } from '../lib/chains'
 import type { PayLinkButtonProps } from './types'
 
-const HOSTED_BASE_URL = 'https://hashkey-paylink.onrender.com'
+const HOSTED_BASE_URL = 'https://hashpaylink.com'
 
 export function PayLinkButton({
   recipientEVM,

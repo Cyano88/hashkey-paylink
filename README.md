@@ -4,8 +4,8 @@ This repository contains **two independent products** deployed together on a sin
 
 | Product | What it does | Live |
 |---|---|---|
-| **Hash PayLink** | Multi-chain USDC payment request links across Base, HashKey, Starknet, and Arc | [hashkey-paylink.onrender.com](https://hashkey-paylink.onrender.com) |
-| **StreamPay** | USDC streaming payroll + Creator Proof-of-Attention paywall on Arc | [hashkey-paylink.onrender.com/?app=streampay](https://hashkey-paylink.onrender.com/?app=streampay) |
+| **Hash PayLink** | Multi-chain USDC payment request links across Base, HashKey, Starknet, and Arc | [hashpaylink.com](https://hashpaylink.com) |
+| **StreamPay** | USDC streaming payroll + Creator Proof-of-Attention paywall on Arc | [hashpaylink.com/?app=streampay](https://hashpaylink.com/?app=streampay) |
 
 The active product is selected by hostname — StreamPay loads automatically on `streampay.xyz` once DNS is configured. See [`modules/streampay/README.md`](modules/streampay/README.md) for StreamPay-specific documentation.
 
@@ -33,7 +33,7 @@ hashkey-paylink/
 > One line of code to accept stablecoins across the world's most efficient networks.
 
 [![npm](https://img.shields.io/badge/npm-%40hashpaylink%2Fsdk-black?logo=npm)](https://www.npmjs.com/package/@hashpaylink/sdk)
-[![Live App](https://img.shields.io/badge/Live-hashkey--paylink.onrender.com-0071E3)](https://hashkey-paylink.onrender.com)
+[![Live App](https://img.shields.io/badge/Live-hashpaylink.com-0071E3)](https://hashpaylink.com)
 [![Arc Economic OS](https://img.shields.io/badge/Arc-Economic_OS-7C3AED?logo=ethereum)](https://arc.fun)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
@@ -63,8 +63,8 @@ Hash PayLink is built for builders, merchants, and platforms that need to **acce
 
 - **Freelancers & Contractors** — generate a payment link, share it in an email or Telegram. Get paid in USDC across Base, Arc, or HSK.
 - **SaaS & API products** — drop in `<PayLinkButton>` for subscription billing or one-time checkouts. No backend required.
-- **Creator platforms** — gate content, accept tips, or sell access tokens. Already powering [StreamPay](https://hashkey-paylink.onrender.com/?app=streampay).
-- **E-commerce & marketplaces** — stateless checkout links work in any email, QR code, or invoice. No SDK installation required on the buyer's side.
+- **Creator platforms** — gate content, accept tips, or sell access tokens. Already powering [StreamPay](https://hashpaylink.com/?app=streampay).
+- **E-commerce & marketplaces** — stateless checkout links work in any email, QR code *(coming soon)*, or invoice. No SDK installation required on the buyer's side.
 - **DAOs & grant platforms** — request multi-chain contributions via a single link. Recipients can pay from their preferred chain.
 - **Payroll teams** — combine with StreamPay's streaming payroll for time-sovereign salary disbursement.
 - **Web2 platforms adding crypto** — hosted checkout mode requires zero wallet setup in the host app.
@@ -76,7 +76,8 @@ Hash PayLink is built for builders, merchants, and platforms that need to **acce
 A Hash PayLink is just a URL. This makes it uniquely powerful in contexts where traditional payment flows don't work:
 
 - **Email invoicing** — paste the link in any email client. Recipient clicks, pays.
-- **QR codes** — encode as a QR on a physical receipt, product, or event badge.
+- **QR codes** *(coming soon)* — encode as a QR on a physical receipt, product, or event badge.
+- **TestFlight mobile app** *(coming soon)* — native iOS/Android experience for generating and paying links on the go.
 - **Telegram / Discord / X DMs** — send a payment request as a message. Works on any device.
 - **No-code tools** — embed in Notion, Webflow, Linktree, or any platform that accepts links.
 - **Request payment without a website** — no hosting, no backend, no code required.
@@ -218,10 +219,10 @@ export default function CheckoutPage({ invoice }) {
 
 ### 2 · Generate a Payment Link (No SDK Required)
 
-Use the hosted checkout URL directly — embed in emails, QR codes, or any message.
+Use the hosted checkout URL directly — embed in emails, QR codes *(coming soon)*, or any message.
 
 ```
-https://hashkey-paylink.onrender.com/pay?evm=0xYourAddress&stark=0xYourStark&amt=10&memo=Coffee
+https://hashpaylink.com/pay?evm=0xYourAddress&stark=0xYourStark&amt=10&memo=Coffee
 ```
 
 **URL parameters:**
@@ -398,7 +399,7 @@ After detection, a relayer automatically sweeps USDC from the payment router to 
 
 ## Powering StreamPay
 
-The Hash PayLink SDK is the payment backbone of **[StreamPay](https://hashkey-paylink.onrender.com/?app=streampay)** — a USDC streaming platform built on top of this codebase.
+The Hash PayLink SDK is the payment backbone of **[StreamPay](https://hashpaylink.com/?app=streampay)** — a USDC streaming platform built on top of this codebase.
 
 StreamPay uses:
 - **Arc chain config** from `CHAIN_META.arc` for the StreamVault and PoASettlement contracts
