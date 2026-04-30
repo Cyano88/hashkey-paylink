@@ -765,28 +765,38 @@ export default function PaymentPage() {
   // ── Event mode: register payment after confirmation ───────────────────────
   async function registerEventPayment() {
     const name  = attendeeNameRef.current.trim()
-    if (!name || !eventId) return
+    console.log('[EventReg] called — name:', name, 'eventId:', eventId, 'isEventMode:', isEventMode)
+    if (!name || !eventId) {
+      console.warn('[EventReg] aborted — missing name or eventId')
+      return
+    }
     const payer = chain === 'starknet' ? (starkAccount ?? '') : (address ?? '')
     const txH   = manualPayDetected ? manualTxHash
                 : chain === 'starknet' ? starkTxHash
                 : (evmTxHash ?? null)
+    const payload = { eventId, txHash: txH ?? 'manual', chain, payer, memo: name, amount: amt }
+    console.log('[EventReg] posting payload:', payload)
     setEventRegStatus('pending')
     try {
       const res  = await fetch('/api/event-register', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ eventId, txHash: txH ?? 'manual', chain, payer, memo: name, amount: amt }),
+        body:    JSON.stringify(payload),
       })
       const data = await res.json() as { ok: boolean; error?: string }
+      console.log('[EventReg] server response:', data)
       setEventRegStatus(data.ok ? 'ok' : 'error')
-    } catch {
+    } catch (err) {
+      console.error('[EventReg] fetch error:', err)
       setEventRegStatus('error')
     }
   }
 
   useEffect(() => {
+    console.log('[EventReg] effect — isConfirmed:', isConfirmed, 'isEventMode:', isEventMode, 'eventId:', eventId, 'alreadyRegistered:', eventRegistered.current)
     if (!isConfirmed || !isEventMode || !eventId || eventRegistered.current) return
     const name = attendeeNameRef.current.trim()
+    console.log('[EventReg] effect — attendeeName from ref:', name)
     if (!name) return
     eventRegistered.current = true
     void registerEventPayment()
