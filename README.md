@@ -137,7 +137,7 @@ export default function Checkout() {
 }
 ```
 
-This opens Hash PayLink's **hosted checkout** in a new tab. The payer selects their chain, connects their wallet, and pays. You receive the `onPaymentSuccess` callback with the transaction hash and chain.
+This opens Hash PayLink's **hosted checkout** in a new tab. The payer selects their chain and pays — on **Base and Arc** they can either connect a wallet or choose **Send via Address** (send from any EVM wallet or CEX directly to a generated address, no wallet connection required). On HashKey and Starknet, wallet connect is used. You receive the `onPaymentSuccess` callback with the transaction hash and chain.
 
 ---
 
