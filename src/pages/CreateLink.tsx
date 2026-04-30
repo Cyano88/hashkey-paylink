@@ -169,7 +169,7 @@ export default function CreateLink() {
     ctx.drawImage(canvas, 0, 0)
     const logo  = new Image()
     logo.onload = () => {
-      const size    = Math.round(canvas.width * 0.22)
+      const size    = Math.round(canvas.width * 0.15)
       const x       = Math.round((canvas.width  - size) / 2)
       const y       = Math.round((canvas.height - size) / 2)
       const pad     = 10
@@ -590,18 +590,18 @@ export default function CreateLink() {
               {/* Hidden 1024px canvas used only for UHD PNG download */}
               <div ref={qrHiResRef} aria-hidden="true"
                 style={{ position: 'absolute', left: '-9999px', visibility: 'hidden' }}>
-                <QRCodeCanvas value={generatedLink} size={1024} level="H" />
+                <QRCodeCanvas value={generatedLink} size={1024} level="H" includeMargin />
               </div>
 
               {/* ── QR Code (all links) ──────────────────────────────── */}
               <div className="rounded-xl border border-gray-100 bg-gray-50/60 p-4 space-y-3">
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">QR Code</p>
                 <div className="flex items-center gap-4">
-                  <div ref={qrRef} className="relative rounded-lg bg-white p-1.5 shadow-sm border border-gray-100 shrink-0">
-                    <QRCodeCanvas value={generatedLink} size={96} level="H" />
+                  <div ref={qrRef} className="relative rounded-xl bg-white p-2 shadow-sm border border-gray-100 shrink-0">
+                    <QRCodeCanvas value={generatedLink} size={180} level="H" includeMargin />
                     <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                      <div className="rounded-sm bg-white p-0.5 shadow-sm">
-                        <img src="/hash-logo.png" alt="" className="h-5 w-5 object-contain" />
+                      <div className="rounded-sm bg-white p-1 shadow-sm">
+                        <img src="/hash-logo.png" alt="" className="h-6 w-6 object-contain" />
                       </div>
                     </div>
                   </div>

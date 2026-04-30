@@ -63,7 +63,7 @@ export default function EventDashboard() {
     ctx.drawImage(canvas, 0, 0)
     const logo  = new Image()
     logo.onload = () => {
-      const size    = Math.round(canvas.width * 0.22)
+      const size    = Math.round(canvas.width * 0.15)
       const x       = Math.round((canvas.width  - size) / 2)
       const y       = Math.round((canvas.height - size) / 2)
       const pad     = 10
@@ -177,16 +177,16 @@ export default function EventDashboard() {
         {/* Hidden 1024px canvas for UHD download */}
         <div ref={qrHiResRef} aria-hidden="true"
           style={{ position: 'absolute', left: '-9999px', visibility: 'hidden' }}>
-          <QRCodeCanvas value={paymentLink} size={1024} level="H" />
+          <QRCodeCanvas value={paymentLink} size={1024} level="H" includeMargin />
         </div>
 
         {/* QR Code */}
         <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm flex flex-col items-center justify-between gap-3">
           <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 self-start">Payment QR</p>
-          <div ref={qrRef} className="relative rounded-xl bg-white p-1 shadow-sm border border-gray-100">
-            <QRCodeCanvas value={paymentLink} size={110} level="H" />
+          <div ref={qrRef} className="relative rounded-xl bg-white p-2 shadow-sm border border-gray-100">
+            <QRCodeCanvas value={paymentLink} size={160} level="H" includeMargin />
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-              <div className="rounded-sm bg-white p-0.5 shadow-sm">
+              <div className="rounded-sm bg-white p-1 shadow-sm">
                 <img src="/hash-logo.png" alt="" className="h-6 w-6 object-contain" />
               </div>
             </div>
