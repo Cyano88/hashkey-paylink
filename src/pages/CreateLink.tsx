@@ -600,7 +600,7 @@ export default function CreateLink() {
                   <div ref={qrRef} className="relative rounded-xl bg-white p-2 shadow-sm border border-gray-100 shrink-0">
                     <QRCodeCanvas value={generatedLink} size={180} level="H" includeMargin />
                     <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                      <div className="rounded-sm bg-white p-1 shadow-sm">
+                      <div className="rounded-sm bg-white p-0.5">
                         <img src="/hash-logo.png" alt="" className="h-6 w-6 object-contain" />
                       </div>
                     </div>
