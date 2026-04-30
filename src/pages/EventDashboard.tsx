@@ -77,38 +77,35 @@ export default function EventDashboard() {
 
   // ── Merge: chain is source of truth; server enriches with names ───────────
   const displayPayments = useMemo<DisplayPayment[]>(() => {
-    const map = new Map<string, DisplayPayment>()
-
-    // 1. Seed from blockchain (always accurate amounts + addresses)
-    for (const cp of chainPayments) {
-      map.set(cp.txHash, { ...cp, memo: '' })
-    }
-
-    // 2. Enrich existing entries with names from server; add server-only entries
-    //    (covers payments made before the dashboard was opened)
+    // Build flat lookup tables from server data — no Map mutation during iteration
+    const memoByTxHash = new Map<string, string>()
+    const memoByPayer  = new Map<string, string>()
     for (const sp of serverPayments) {
-      // Try exact txHash match first
-      if (map.has(sp.txHash)) {
-        map.set(sp.txHash, { ...map.get(sp.txHash)!, memo: sp.memo })
-        continue
-      }
-      // Fallback: match by payer address — handles manual_ txHash mismatch
-      // that occurs when Send-via-Address relay fires before the Transfer watcher
-      let matched = false
-      for (const [key, entry] of map.entries()) {
-        if (entry.payer.toLowerCase() === sp.payer.toLowerCase()) {
-          map.set(key, { ...entry, memo: sp.memo })
-          matched = true
-          break
-        }
-      }
-      if (!matched) {
-        // Server has it but chain watcher missed it entirely (page opened late)
-        map.set(sp.txHash, { txHash: sp.txHash, payer: sp.payer, amount: sp.amount, chain: sp.chain, ts: sp.ts, memo: sp.memo })
-      }
+      if (sp.txHash) memoByTxHash.set(sp.txHash.toLowerCase(), sp.memo)
+      if (sp.payer)  memoByPayer.set(sp.payer.toLowerCase(),   sp.memo)
     }
 
-    return Array.from(map.values()).sort((a, b) => b.ts - a.ts)
+    // Chain payments are source of truth — enrich with name from either lookup
+    const chainDisplay: DisplayPayment[] = chainPayments.map(cp => ({
+      ...cp,
+      memo: memoByTxHash.get(cp.txHash.toLowerCase())
+         ?? memoByPayer.get(cp.payer.toLowerCase())
+         ?? '',
+    }))
+
+    // Add server-only entries (page was opened after the payment was made)
+    const seenPayers = new Set(chainPayments.map(c => c.payer.toLowerCase()))
+    const seenTxs    = new Set(chainPayments.map(c => c.txHash.toLowerCase()))
+    const serverOnly: DisplayPayment[] = serverPayments
+      .filter(sp =>
+        !seenTxs.has(sp.txHash.toLowerCase()) &&
+        !seenPayers.has(sp.payer.toLowerCase()),
+      )
+      .map(sp => ({ ...sp }))
+
+    console.log('[Dashboard] chain:', chainDisplay.length, 'server-only:', serverOnly.length)
+
+    return [...chainDisplay, ...serverOnly].sort((a, b) => b.ts - a.ts)
   }, [chainPayments, serverPayments])
 
   const total = useMemo(
