@@ -182,8 +182,11 @@ export default function PaymentPage() {
   const [sweepBalanceUsdc,  setSweepBalanceUsdc]  = useState<number | null>(null)
 
   // ── Event mode ─────────────────────────────────────────────────────────────
-  const isEventMode      = searchParams.get('event') === '1'
-  const eventId          = searchParams.get('id') ?? ''
+  // Capture event params from the INITIAL URL at mount — before the direct-send
+  // V2 flow can overwrite ?id= via window.history.replaceState.
+  const [initParams] = useState(() => new URLSearchParams(window.location.search))
+  const isEventMode  = initParams.get('event') === '1'
+  const eventId      = initParams.get('id') ?? ''
   const [attendeeName,   setAttendeeName]   = useState('')
   const [eventRegStatus, setEventRegStatus] = useState<'idle' | 'pending' | 'ok' | 'error'>('idle')
   const attendeeNameRef  = useRef('')
