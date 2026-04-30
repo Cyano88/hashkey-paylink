@@ -464,7 +464,7 @@ export default function CreateLink() {
               </div>
             </div>
             <p className="mt-1.5 text-xs text-gray-500 leading-relaxed">
-              Attendees enter their name before paying. Generates a QR code + organizer dashboard with Export CSV.
+              Each payer enters their name before paying. Tracked in a live dashboard with Export CSV.
             </p>
           </button>
 
