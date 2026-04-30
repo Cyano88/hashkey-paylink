@@ -1172,27 +1172,41 @@ export default function PaymentPage() {
           </div>
 
           {/* ── Attendee name (event mode) ───────────────────────────────── */}
-          {isEventMode && (
-            <div className="space-y-1.5">
-              <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
-                <span className="h-2 w-2 rounded-full bg-blue-500" />
-                Your Name or Handle
-                <span className="ml-auto text-[10px] font-semibold text-red-500">Required</span>
-              </label>
-              <input
-                type="text"
-                placeholder="e.g. @Clinton or Jane Doe"
-                value={attendeeName}
-                onChange={e => setAttendeeName(e.target.value)}
-                disabled={isConfirmed}
-                maxLength={60}
-                className="w-full rounded-xl border border-gray-200 bg-gray-50/60 px-4 py-3 text-sm placeholder:text-gray-400 focus:border-blue-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
-              />
-              <p className="text-[11px] text-gray-400">
-                This name will be logged with your payment in the organizer's dashboard.
-              </p>
-            </div>
-          )}
+          {isEventMode && (() => {
+            const paid = isConfirmed || directStatus === 'success'
+            return (
+              <div className="space-y-1.5">
+                <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+                  <span className={`h-2 w-2 rounded-full ${paid ? 'bg-emerald-500' : 'bg-blue-500'}`} />
+                  Your Name or Handle
+                  {!paid && (
+                    <span className="ml-auto text-[10px] font-semibold text-red-500">Required</span>
+                  )}
+                  {paid && (
+                    <span className="ml-auto text-[10px] font-semibold text-emerald-600">✓ Saved</span>
+                  )}
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. @Clinton or Jane Doe"
+                  value={attendeeName}
+                  onChange={e => setAttendeeName(e.target.value)}
+                  disabled={paid}
+                  maxLength={60}
+                  className={`w-full rounded-xl border px-4 py-3 text-sm placeholder:text-gray-400 transition-all ${
+                    paid
+                      ? 'border-emerald-200 bg-emerald-50/60 text-emerald-800 cursor-not-allowed'
+                      : 'border-gray-200 bg-gray-50/60 focus:border-blue-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100'
+                  }`}
+                />
+                {!paid && (
+                  <p className="text-[11px] text-gray-400">
+                    This name will be logged with your payment in the organizer's dashboard.
+                  </p>
+                )}
+              </div>
+            )
+          })()}
 
           {/* ── Direct Send panel (Base / Arc) ───────────────────────────── */}
           {payMode === 'direct' && (chain === 'base' || chain === 'arc') && (

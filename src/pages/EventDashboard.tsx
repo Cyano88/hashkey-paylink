@@ -87,12 +87,24 @@ export default function EventDashboard() {
     // 2. Enrich existing entries with names from server; add server-only entries
     //    (covers payments made before the dashboard was opened)
     for (const sp of serverPayments) {
-      const key = sp.txHash
-      if (map.has(key)) {
-        map.set(key, { ...map.get(key)!, memo: sp.memo })
-      } else {
-        // Server has it but chain watcher missed it (page opened late)
-        map.set(key, { txHash: sp.txHash, payer: sp.payer, amount: sp.amount, chain: sp.chain, ts: sp.ts, memo: sp.memo })
+      // Try exact txHash match first
+      if (map.has(sp.txHash)) {
+        map.set(sp.txHash, { ...map.get(sp.txHash)!, memo: sp.memo })
+        continue
+      }
+      // Fallback: match by payer address — handles manual_ txHash mismatch
+      // that occurs when Send-via-Address relay fires before the Transfer watcher
+      let matched = false
+      for (const [key, entry] of map.entries()) {
+        if (entry.payer.toLowerCase() === sp.payer.toLowerCase()) {
+          map.set(key, { ...entry, memo: sp.memo })
+          matched = true
+          break
+        }
+      }
+      if (!matched) {
+        // Server has it but chain watcher missed it entirely (page opened late)
+        map.set(sp.txHash, { txHash: sp.txHash, payer: sp.payer, amount: sp.amount, chain: sp.chain, ts: sp.ts, memo: sp.memo })
       }
     }
 
