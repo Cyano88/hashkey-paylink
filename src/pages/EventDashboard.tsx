@@ -179,64 +179,67 @@ export default function EventDashboard() {
     fetchHistorical('arc',  CHAIN_META.arc.decimals,  'Arc')
   }, [evm])
 
-  // ── Live Blockchain Transfer watcher (new payments while page is open) ────
+  // ── Live poll for new payments (getLogs every 5s — works on all public RPCs) ─
+  // watchContractEvent uses eth_newFilter which many public nodes don't support.
+  // Direct getLogs polling is universally compatible.
   useEffect(() => {
     if (!evm) return
+    console.log('[Dashboard] starting live poll for:', evm)
 
-    console.log('[Dashboard] starting watcher for address:', evm)
+    const fromBlock: Record<string, bigint> = {}
 
-    function processLog(
-      rawLog: { args: { from?: `0x${string}`; value?: bigint }; transactionHash: `0x${string}` | null },
-      chainLabel: string,
-      decimals: number,
-    ) {
-      const { from, value } = rawLog.args
-      const txHash = rawLog.transactionHash ?? (`chain_${Date.now()}` as `0x${string}`)
+    async function pollChain(chainKey: 'base' | 'arc', chainLabel: string, decimals: number) {
+      const client = EVM_CLIENTS[chainKey]
+      try {
+        const latest = await client.getBlockNumber()
 
-      console.table({ chainLabel, from, value: value?.toString(), txHash })
+        // On first tick: just record the current block, don't scan (history already fetched)
+        if (!fromBlock[chainKey]) {
+          fromBlock[chainKey] = latest
+          return
+        }
+        if (latest <= fromBlock[chainKey]) return
 
-      if (!from || value === undefined) return
+        const logs = await client.getContractEvents({
+          address:   CHAIN_META[chainKey].tokenAddress,
+          abi:       TRANSFER_ABI,
+          eventName: 'Transfer',
+          args:      { to: evm as `0x${string}` },
+          fromBlock: fromBlock[chainKey],
+          toBlock:   latest,
+        })
 
-      const amount     = parseFloat(formatUnits(value, decimals)).toFixed(2)
-      const newPayment: ChainPayment = { txHash, payer: from, amount, chain: chainLabel.toLowerCase(), ts: Date.now() }
+        fromBlock[chainKey] = latest + 1n
 
-      console.log('[Dashboard] live payment:', newPayment)
+        for (const log of logs) {
+          const { from, value } = log.args
+          const txHash = log.transactionHash ?? (`chain_${Date.now()}` as `0x${string}`)
+          if (!from || value === undefined) continue
 
-      setChainPayments(prev =>
-        prev.some(p => p.txHash === txHash) ? prev : [newPayment, ...prev],
-      )
-      setCounterFlash(true)
-      setTimeout(() => setCounterFlash(false), 1800)
-      const id = ++toastId.current
-      setToasts(prev => [...prev, { id, addr: from, amount, chain: chainLabel }])
-      setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 5_000)
-      fetchServerPayments()
+          const amount     = parseFloat(formatUnits(value, decimals)).toFixed(2)
+          const newPayment: ChainPayment = { txHash, payer: from, amount, chain: chainLabel.toLowerCase(), ts: Date.now() }
+
+          console.log('[Dashboard] new live payment:', newPayment)
+
+          setChainPayments(prev => prev.some(p => p.txHash === txHash) ? prev : [newPayment, ...prev])
+          setCounterFlash(true)
+          setTimeout(() => setCounterFlash(false), 1800)
+          const id = ++toastId.current
+          setToasts(prev => [...prev, { id, addr: from, amount, chain: chainLabel }])
+          setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 5_000)
+          fetchServerPayments()
+        }
+      } catch (err) {
+        console.error(`[Dashboard] ${chainLabel} poll error:`, err)
+      }
     }
 
-    const evmAddr = evm as `0x${string}`
+    const t = setInterval(() => {
+      void pollChain('base', 'Base', CHAIN_META.base.decimals)
+      void pollChain('arc',  'Arc',  CHAIN_META.arc.decimals)
+    }, 5_000)
 
-    const unwatchers = [
-      EVM_CLIENTS.base.watchContractEvent({
-        address:         CHAIN_META.base.tokenAddress,
-        abi:             TRANSFER_ABI,
-        eventName:       'Transfer',
-        args:            { to: evmAddr },
-        pollingInterval: 3_000,
-        onLogs: (logs) => logs.forEach(l => processLog(l as Parameters<typeof processLog>[0], 'Base', CHAIN_META.base.decimals)),
-        onError: (err) => console.error('[Dashboard] Base watcher error:', err),
-      }),
-      EVM_CLIENTS.arc.watchContractEvent({
-        address:         CHAIN_META.arc.tokenAddress,
-        abi:             TRANSFER_ABI,
-        eventName:       'Transfer',
-        args:            { to: evmAddr },
-        pollingInterval: 3_000,
-        onLogs: (logs) => logs.forEach(l => processLog(l as Parameters<typeof processLog>[0], 'Arc', CHAIN_META.arc.decimals)),
-        onError: (err) => console.error('[Dashboard] Arc watcher error:', err),
-      }),
-    ]
-
-    return () => unwatchers.forEach(u => u())
+    return () => clearInterval(t)
   }, [evm, fetchServerPayments])
 
   // ── QR download ───────────────────────────────────────────────────────────
