@@ -131,59 +131,86 @@ export default function EventDashboard() {
     return () => clearInterval(t)
   }, [fetchServerPayments])
 
-  // ── Blockchain Transfer watcher ───────────────────────────────────────────
+  // ── Historical fetch on mount — catches payments made before page opened ────
   useEffect(() => {
     if (!evm) return
 
-    function makeHandler(chainLabel: string, decimals: number) {
-      return (logs: unknown[]) => {
-        for (const rawLog of logs) {
-          // viem returns typed log objects — cast carefully
-          const log = rawLog as {
-            args:            { from?: `0x${string}`; to?: `0x${string}`; value?: bigint }
-            transactionHash: `0x${string}` | null
-          }
+    async function fetchHistorical(chainKey: 'base' | 'arc', decimals: number, chainLabel: string) {
+      try {
+        const client = EVM_CLIENTS[chainKey]
+        const latest = await client.getBlockNumber()
+        const fromBlock = latest > 5000n ? latest - 5000n : 0n
+        console.log(`[Dashboard] fetching ${chainLabel} history from block ${fromBlock}`)
 
-          const { from, value } = log.args
-          const txHash = log.transactionHash ?? (`chain_${Date.now()}` as `0x${string}`)
+        const logs = await client.getContractEvents({
+          address:   CHAIN_META[chainKey].tokenAddress,
+          abi:       TRANSFER_ABI,
+          eventName: 'Transfer',
+          args:      { to: evm as `0x${string}` },
+          fromBlock,
+          toBlock:   latest,
+        })
 
-          // Debug: log raw event to console so we can inspect the structure
-          console.table({ chainLabel, from, value: value?.toString(), txHash })
+        console.log(`[Dashboard] ${chainLabel} history: ${logs.length} transfers found`)
+        if (logs.length === 0) return
 
-          if (!from || value === undefined) continue
-
-          // Explicit BigInt → human-readable using viem formatUnits (6 decimals for USDC)
-          const amount = parseFloat(formatUnits(value, decimals)).toFixed(2)
-
-          // Build the payment object with explicit field mapping
-          const newPayment: ChainPayment = {
-            txHash,
-            payer:  from,
-            amount,
+        const newPayments: ChainPayment[] = logs
+          .filter(l => l.args.from && l.args.value !== undefined)
+          .map((l, i, arr) => ({
+            txHash: l.transactionHash ?? (`chain_${Date.now()}_${i}` as `0x${string}`),
+            payer:  l.args.from as `0x${string}`,
+            amount: parseFloat(formatUnits(l.args.value as bigint, decimals)).toFixed(2),
             chain:  chainLabel.toLowerCase(),
-            ts:     Date.now(),
-          }
+            ts:     Date.now() - (arr.length - 1 - i) * 60_000, // oldest → furthest in past
+          }))
 
-          console.log('[Dashboard] new payment detected:', newPayment)
-
-          // Functional update — never captures stale closure state
-          setChainPayments(prev =>
-            prev.some(p => p.txHash === txHash) ? prev : [newPayment, ...prev],
-          )
-
-          // Flash counter green
-          setCounterFlash(true)
-          setTimeout(() => setCounterFlash(false), 1800)
-
-          // Toast notification
-          const id = ++toastId.current
-          setToasts(prev => [...prev, { id, addr: from, amount, chain: chainLabel }])
-          setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 5_000)
-
-          // Also immediately pull server for the latest names
-          fetchServerPayments()
-        }
+        setChainPayments(prev => {
+          const seen = new Set(prev.map(p => p.txHash.toLowerCase()))
+          const fresh = newPayments.filter(p => !seen.has(p.txHash.toLowerCase()))
+          if (fresh.length === 0) return prev
+          return [...prev, ...fresh].sort((a, b) => b.ts - a.ts)
+        })
+      } catch (err) {
+        console.error(`[Dashboard] ${chainLabel} historical fetch error:`, err)
       }
+    }
+
+    fetchHistorical('base', CHAIN_META.base.decimals, 'Base')
+    fetchHistorical('arc',  CHAIN_META.arc.decimals,  'Arc')
+  }, [evm])
+
+  // ── Live Blockchain Transfer watcher (new payments while page is open) ────
+  useEffect(() => {
+    if (!evm) return
+
+    console.log('[Dashboard] starting watcher for address:', evm)
+
+    function processLog(
+      rawLog: { args: { from?: `0x${string}`; value?: bigint }; transactionHash: `0x${string}` | null },
+      chainLabel: string,
+      decimals: number,
+    ) {
+      const { from, value } = rawLog.args
+      const txHash = rawLog.transactionHash ?? (`chain_${Date.now()}` as `0x${string}`)
+
+      console.table({ chainLabel, from, value: value?.toString(), txHash })
+
+      if (!from || value === undefined) return
+
+      const amount     = parseFloat(formatUnits(value, decimals)).toFixed(2)
+      const newPayment: ChainPayment = { txHash, payer: from, amount, chain: chainLabel.toLowerCase(), ts: Date.now() }
+
+      console.log('[Dashboard] live payment:', newPayment)
+
+      setChainPayments(prev =>
+        prev.some(p => p.txHash === txHash) ? prev : [newPayment, ...prev],
+      )
+      setCounterFlash(true)
+      setTimeout(() => setCounterFlash(false), 1800)
+      const id = ++toastId.current
+      setToasts(prev => [...prev, { id, addr: from, amount, chain: chainLabel }])
+      setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 5_000)
+      fetchServerPayments()
     }
 
     const evmAddr = evm as `0x${string}`
@@ -195,7 +222,8 @@ export default function EventDashboard() {
         eventName:       'Transfer',
         args:            { to: evmAddr },
         pollingInterval: 3_000,
-        onLogs:          makeHandler('Base', CHAIN_META.base.decimals),
+        onLogs: (logs) => logs.forEach(l => processLog(l as Parameters<typeof processLog>[0], 'Base', CHAIN_META.base.decimals)),
+        onError: (err) => console.error('[Dashboard] Base watcher error:', err),
       }),
       EVM_CLIENTS.arc.watchContractEvent({
         address:         CHAIN_META.arc.tokenAddress,
@@ -203,7 +231,8 @@ export default function EventDashboard() {
         eventName:       'Transfer',
         args:            { to: evmAddr },
         pollingInterval: 3_000,
-        onLogs:          makeHandler('Arc', CHAIN_META.arc.decimals),
+        onLogs: (logs) => logs.forEach(l => processLog(l as Parameters<typeof processLog>[0], 'Arc', CHAIN_META.arc.decimals)),
+        onError: (err) => console.error('[Dashboard] Arc watcher error:', err),
       }),
     ]
 
