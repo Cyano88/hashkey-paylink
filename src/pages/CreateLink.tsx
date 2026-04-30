@@ -621,7 +621,7 @@ export default function CreateLink() {
                 </div>
                 {eventMode && (
                   <p className="text-[11px] text-blue-600">
-                    Attendees must enter their name before paying — their entry will appear live in the dashboard.
+                    Each payer must enter their name before paying — their entry will appear live in the dashboard.
                   </p>
                 )}
               </div>
