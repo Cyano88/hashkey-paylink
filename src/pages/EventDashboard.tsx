@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
 import { QRCodeCanvas } from 'qrcode.react'
 import { formatUnits } from 'viem'
@@ -10,10 +10,10 @@ import { CHAIN_META } from '../lib/chains'
 import { EVM_CLIENTS } from '../lib/router'
 import { cn, truncateAddress } from '../lib/utils'
 
-// ── ERC-20 Transfer event ABI (matches viem parseAbi output exactly) ─────────
+// Minimal ERC-20 Transfer ABI for getLogs
 const TRANSFER_ABI = [{
   name:   'Transfer',
-  type:   'event'   as const,
+  type:   'event'  as const,
   inputs: [
     { name: 'from',  type: 'address' as const, indexed: true  as const },
     { name: 'to',    type: 'address' as const, indexed: true  as const },
@@ -21,53 +21,34 @@ const TRANSFER_ABI = [{
   ],
 }] as const
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-
-/** Payment detected directly from the blockchain — always has txHash + amount */
-type ChainPayment = {
-  txHash: string
-  payer:  string
-  amount: string   // human-readable, e.g. "1.00"
-  chain:  string
-  ts:     number
-}
-
-/** Payment registered server-side via POST /api/event-register — has name */
+// Server registry entry — source of truth for the payment log
 type ServerPayment = {
-  txHash: string
-  payer:  string
-  memo:   string
-  amount: string
-  chain:  string
-  ts:     number
+  txHash:  string
+  payer:   string
+  memo:    string   // payer's name / handle
+  amount:  string
+  chain:   string
+  ts:      number
 }
-
-/** Merged display row */
-type DisplayPayment = ChainPayment & { memo: string }
 
 type Toast = { id: number; addr: string; amount: string; chain: string }
 
-// ─────────────────────────────────────────────────────────────────────────────
-
 export default function EventDashboard() {
   const [searchParams] = useSearchParams()
-  const eventId  = searchParams.get('id')   ?? ''
-  const evm      = searchParams.get('evm')  ?? ''
-  const amt      = searchParams.get('amt')  ?? ''
+  const eventId   = searchParams.get('id')   ?? ''
+  const evm       = searchParams.get('evm')  ?? ''
+  const amt       = searchParams.get('amt')  ?? ''
   const eventName = searchParams.get('name') ?? 'Event'
 
-  // ── Separate sources of truth ─────────────────────────────────────────────
-  // chainPayments: populated by blockchain watcher (real-time, always accurate)
-  // serverPayments: populated by 5s poll (used only to enrich with payer names)
-  const [chainPayments,  setChainPayments]  = useState<ChainPayment[]>([])
-  const [serverPayments, setServerPayments] = useState<ServerPayment[]>([])
-
-  const [loading,       setLoading]       = useState(false)
-  const [lastRefresh,   setLastRefresh]   = useState<Date | null>(null)
-  const [dashCopied,    setDashCopied]    = useState(false)
-  const [linkCopied,    setLinkCopied]    = useState(false)
-  const [counterFlash,  setCounterFlash]  = useState(false)
-  const [toasts,        setToasts]        = useState<Toast[]>([])
+  // Server registry is the single source of truth for the payment log.
+  // It is keyed by eventId — only shows payments for THIS event.
+  const [payments,     setPayments]     = useState<ServerPayment[]>([])
+  const [loading,      setLoading]      = useState(false)
+  const [lastRefresh,  setLastRefresh]  = useState<Date | null>(null)
+  const [dashCopied,   setDashCopied]   = useState(false)
+  const [linkCopied,   setLinkCopied]   = useState(false)
+  const [counterFlash, setCounterFlash] = useState(false)
+  const [toasts,       setToasts]       = useState<Toast[]>([])
 
   const qrRef      = useRef<HTMLDivElement>(null)
   const qrHiResRef = useRef<HTMLDivElement>(null)
@@ -75,116 +56,34 @@ export default function EventDashboard() {
 
   const paymentLink = `${window.location.origin}/pay?evm=${encodeURIComponent(evm)}&amt=${encodeURIComponent(amt)}&memo=${encodeURIComponent(eventName)}&event=1&id=${encodeURIComponent(eventId)}`
 
-  // ── Merge: chain is source of truth; server enriches with names ───────────
-  const displayPayments = useMemo<DisplayPayment[]>(() => {
-    // Build flat lookup tables from server data — no Map mutation during iteration
-    const memoByTxHash = new Map<string, string>()
-    const memoByPayer  = new Map<string, string>()
-    for (const sp of serverPayments) {
-      if (sp.txHash) memoByTxHash.set(sp.txHash.toLowerCase(), sp.memo)
-      if (sp.payer)  memoByPayer.set(sp.payer.toLowerCase(),   sp.memo)
-    }
+  const total = payments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0)
 
-    // Chain payments are source of truth — enrich with name from either lookup
-    const chainDisplay: DisplayPayment[] = chainPayments.map(cp => ({
-      ...cp,
-      memo: memoByTxHash.get(cp.txHash.toLowerCase())
-         ?? memoByPayer.get(cp.payer.toLowerCase())
-         ?? '',
-    }))
-
-    // Add server-only entries (page was opened after the payment was made)
-    const seenPayers = new Set(chainPayments.map(c => c.payer.toLowerCase()))
-    const seenTxs    = new Set(chainPayments.map(c => c.txHash.toLowerCase()))
-    const serverOnly: DisplayPayment[] = serverPayments
-      .filter(sp =>
-        !seenTxs.has(sp.txHash.toLowerCase()) &&
-        !seenPayers.has(sp.payer.toLowerCase()),
-      )
-      .map(sp => ({ ...sp }))
-
-    console.log('[Dashboard] chain:', chainDisplay.length, 'server-only:', serverOnly.length)
-
-    return [...chainDisplay, ...serverOnly].sort((a, b) => b.ts - a.ts)
-  }, [chainPayments, serverPayments])
-
-  const total = useMemo(
-    () => displayPayments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0),
-    [displayPayments],
-  )
-
-  // ── Server poll — ONLY updates serverPayments, never touches chainPayments ─
-  const fetchServerPayments = useCallback(async () => {
+  // ── Server registry poll (every 5s) — only source for the payment log ──────
+  const fetchPayments = useCallback(async () => {
     if (!eventId) return
     setLoading(true)
     try {
       const res  = await fetch(`/api/list-event-payments?id=${encodeURIComponent(eventId)}`)
       const data = await res.json() as { ok: boolean; payments?: ServerPayment[] }
-      if (data.ok && data.payments) setServerPayments(data.payments)
+      if (data.ok && data.payments) {
+        setPayments(data.payments.slice().sort((a, b) => b.ts - a.ts))
+      }
     } catch { /* retry next tick */ }
     finally { setLoading(false); setLastRefresh(new Date()) }
   }, [eventId])
 
   useEffect(() => {
-    fetchServerPayments()
-    const t = setInterval(fetchServerPayments, 5_000)
+    fetchPayments()
+    const t = setInterval(fetchPayments, 5_000)
     return () => clearInterval(t)
-  }, [fetchServerPayments])
+  }, [fetchPayments])
 
-  // ── Historical fetch on mount — catches payments made before page opened ────
+  // ── Blockchain poll (every 5s) — flash + toast ONLY, does not touch log ────
+  // Detects any USDC transfer to the recipient address in real time.
+  // This gives the organiser an instant visual ping when a payment arrives,
+  // regardless of whether the payer's name has been registered yet.
   useEffect(() => {
     if (!evm) return
-
-    async function fetchHistorical(chainKey: 'base' | 'arc', decimals: number, chainLabel: string) {
-      try {
-        const client = EVM_CLIENTS[chainKey]
-        const latest = await client.getBlockNumber()
-        const fromBlock = latest > 5000n ? latest - 5000n : 0n
-        console.log(`[Dashboard] fetching ${chainLabel} history from block ${fromBlock}`)
-
-        const logs = await client.getContractEvents({
-          address:   CHAIN_META[chainKey].tokenAddress,
-          abi:       TRANSFER_ABI,
-          eventName: 'Transfer',
-          args:      { to: evm as `0x${string}` },
-          fromBlock,
-          toBlock:   latest,
-        })
-
-        console.log(`[Dashboard] ${chainLabel} history: ${logs.length} transfers found`)
-        if (logs.length === 0) return
-
-        const newPayments: ChainPayment[] = logs
-          .filter(l => l.args.from && l.args.value !== undefined)
-          .map((l, i, arr) => ({
-            txHash: l.transactionHash ?? (`chain_${Date.now()}_${i}` as `0x${string}`),
-            payer:  l.args.from as `0x${string}`,
-            amount: parseFloat(formatUnits(l.args.value as bigint, decimals)).toFixed(2),
-            chain:  chainLabel.toLowerCase(),
-            ts:     Date.now() - (arr.length - 1 - i) * 60_000, // oldest → furthest in past
-          }))
-
-        setChainPayments(prev => {
-          const seen = new Set(prev.map(p => p.txHash.toLowerCase()))
-          const fresh = newPayments.filter(p => !seen.has(p.txHash.toLowerCase()))
-          if (fresh.length === 0) return prev
-          return [...prev, ...fresh].sort((a, b) => b.ts - a.ts)
-        })
-      } catch (err) {
-        console.error(`[Dashboard] ${chainLabel} historical fetch error:`, err)
-      }
-    }
-
-    fetchHistorical('base', CHAIN_META.base.decimals, 'Base')
-    fetchHistorical('arc',  CHAIN_META.arc.decimals,  'Arc')
-  }, [evm])
-
-  // ── Live poll for new payments (getLogs every 5s — works on all public RPCs) ─
-  // watchContractEvent uses eth_newFilter which many public nodes don't support.
-  // Direct getLogs polling is universally compatible.
-  useEffect(() => {
-    if (!evm) return
-    console.log('[Dashboard] starting live poll for:', evm)
 
     const fromBlock: Record<string, bigint> = {}
 
@@ -192,12 +91,7 @@ export default function EventDashboard() {
       const client = EVM_CLIENTS[chainKey]
       try {
         const latest = await client.getBlockNumber()
-
-        // On first tick: just record the current block, don't scan (history already fetched)
-        if (!fromBlock[chainKey]) {
-          fromBlock[chainKey] = latest
-          return
-        }
+        if (!fromBlock[chainKey]) { fromBlock[chainKey] = latest; return }
         if (latest <= fromBlock[chainKey]) return
 
         const logs = await client.getContractEvents({
@@ -213,25 +107,22 @@ export default function EventDashboard() {
 
         for (const log of logs) {
           const { from, value } = log.args
-          const txHash = log.transactionHash ?? (`chain_${Date.now()}` as `0x${string}`)
           if (!from || value === undefined) continue
+          const amount = parseFloat(formatUnits(value, decimals)).toFixed(2)
 
-          const amount     = parseFloat(formatUnits(value, decimals)).toFixed(2)
-          const newPayment: ChainPayment = { txHash, payer: from, amount, chain: chainLabel.toLowerCase(), ts: Date.now() }
-
-          console.log('[Dashboard] new live payment:', newPayment)
-
-          setChainPayments(prev => prev.some(p => p.txHash === txHash) ? prev : [newPayment, ...prev])
+          // Flash the counter cards green
           setCounterFlash(true)
           setTimeout(() => setCounterFlash(false), 1800)
+
+          // Toast: "Payment received · …XXXX"
           const id = ++toastId.current
           setToasts(prev => [...prev, { id, addr: from, amount, chain: chainLabel }])
           setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 5_000)
-          fetchServerPayments()
+
+          // Pull server registry immediately so the name shows ASAP
+          fetchPayments()
         }
-      } catch (err) {
-        console.error(`[Dashboard] ${chainLabel} poll error:`, err)
-      }
+      } catch { /* silent — watcher is best-effort */ }
     }
 
     const t = setInterval(() => {
@@ -240,7 +131,7 @@ export default function EventDashboard() {
     }, 5_000)
 
     return () => clearInterval(t)
-  }, [evm, fetchServerPayments])
+  }, [evm, fetchPayments])
 
   // ── QR download ───────────────────────────────────────────────────────────
   function downloadQR() {
@@ -270,7 +161,7 @@ export default function EventDashboard() {
   // ── CSV export ────────────────────────────────────────────────────────────
   function exportCSV() {
     const header = ['Name / Handle', 'Wallet Address', 'Chain', 'Amount (USDC)', 'Time', 'Tx Hash']
-    const rows   = displayPayments.map(p => [
+    const rows   = payments.map(p => [
       p.memo || '—', p.payer, p.chain.toUpperCase(), p.amount,
       new Date(p.ts).toISOString(), p.txHash,
     ])
@@ -307,7 +198,7 @@ export default function EventDashboard() {
   return (
     <div className="mx-auto max-w-3xl animate-fade-in space-y-5">
 
-      {/* ── Toasts ── */}
+      {/* ── Toast notifications ── */}
       <div className="fixed bottom-6 right-4 sm:right-6 z-50 flex flex-col gap-2 items-end pointer-events-none">
         {toasts.map(t => (
           <div key={t.id}
@@ -344,7 +235,7 @@ export default function EventDashboard() {
           >
             {dashCopied ? <><CheckCheck className="h-3.5 w-3.5 text-emerald-500" />Copied</> : <><Copy className="h-3.5 w-3.5" />Copy Dashboard Link</>}
           </button>
-          <button onClick={fetchServerPayments} disabled={loading}
+          <button onClick={fetchPayments} disabled={loading}
             className="inline-flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-all disabled:opacity-50"
           >
             <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} /> Refresh
@@ -356,11 +247,8 @@ export default function EventDashboard() {
       <div className="grid gap-4 sm:grid-cols-3">
         <div className="col-span-2 grid grid-cols-2 gap-4">
 
-          {/* Payers counter */}
-          <div className={cn(
-            'rounded-2xl border p-5 shadow-sm transition-all duration-500',
-            counterFlash ? 'border-emerald-300 bg-emerald-50' : 'border-gray-100 bg-white',
-          )}>
+          <div className={cn('rounded-2xl border p-5 shadow-sm transition-all duration-500',
+            counterFlash ? 'border-emerald-300 bg-emerald-50' : 'border-gray-100 bg-white')}>
             <div className={cn('mb-2 flex items-center gap-1.5 text-xs font-medium transition-colors duration-500',
               counterFlash ? 'text-emerald-600' : 'text-gray-500')}>
               {counterFlash ? <Zap className="h-3.5 w-3.5" /> : <Users className="h-3.5 w-3.5" />}
@@ -368,15 +256,12 @@ export default function EventDashboard() {
             </div>
             <p className={cn('text-4xl font-bold transition-colors duration-500',
               counterFlash ? 'text-emerald-600' : 'text-gray-900')}>
-              {displayPayments.length}
+              {payments.length}
             </p>
           </div>
 
-          {/* Total collected */}
-          <div className={cn(
-            'rounded-2xl border p-5 shadow-sm transition-all duration-500',
-            counterFlash ? 'border-emerald-300 bg-emerald-50' : 'border-gray-100 bg-white',
-          )}>
+          <div className={cn('rounded-2xl border p-5 shadow-sm transition-all duration-500',
+            counterFlash ? 'border-emerald-300 bg-emerald-50' : 'border-gray-100 bg-white')}>
             <div className={cn('mb-2 flex items-center gap-1.5 text-xs font-medium transition-colors duration-500',
               counterFlash ? 'text-emerald-600' : 'text-gray-500')}>
               <DollarSign className="h-3.5 w-3.5" /> Total Collected
@@ -389,13 +274,13 @@ export default function EventDashboard() {
           </div>
         </div>
 
-        {/* Hidden hi-res canvas for download */}
+        {/* Hidden hi-res QR for download */}
         <div ref={qrHiResRef} aria-hidden="true"
           style={{ position: 'absolute', left: '-9999px', visibility: 'hidden' }}>
           <QRCodeCanvas value={paymentLink} size={1024} level="H" marginSize={4} />
         </div>
 
-        {/* QR Code card */}
+        {/* QR Code */}
         <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm flex flex-col items-center justify-between gap-3">
           <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 self-start">Payment QR</p>
           <div ref={qrRef} className="relative rounded-xl bg-white p-2 shadow-sm border border-gray-100">
@@ -424,7 +309,7 @@ export default function EventDashboard() {
                 Updated {lastRefresh.toLocaleTimeString()}
               </p>
             )}
-            <button onClick={exportCSV} disabled={displayPayments.length === 0}
+            <button onClick={exportCSV} disabled={payments.length === 0}
               className="inline-flex items-center gap-1.5 rounded-lg bg-black px-3 py-1.5 text-xs font-semibold text-white hover:bg-gray-800 transition-all disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.97]"
             >
               <Download className="h-3.5 w-3.5" /> Export CSV
@@ -432,7 +317,7 @@ export default function EventDashboard() {
           </div>
         </div>
 
-        {displayPayments.length === 0 ? (
+        {payments.length === 0 ? (
           <div className="py-16 text-center">
             <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-gray-100">
               <Users className="h-6 w-6 text-gray-400" />
@@ -442,22 +327,22 @@ export default function EventDashboard() {
           </div>
         ) : (
           <div className="divide-y divide-gray-50">
-            {displayPayments.map((p, i) => {
+            {payments.map((p, i) => {
               const chainMeta   = p.chain && p.chain in CHAIN_META ? CHAIN_META[p.chain as keyof typeof CHAIN_META] : null
-              const explorerUrl = chainMeta && !p.txHash.startsWith('chain_') && !p.txHash.startsWith('manual')
+              const explorerUrl = chainMeta && !p.txHash.startsWith('manual')
                 ? `${chainMeta.explorerUrl}/tx/${p.txHash}`
                 : null
               return (
                 <div key={p.txHash + i} className="flex items-center gap-3 px-5 py-3.5 hover:bg-gray-50/50 transition-colors">
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-xs font-bold text-emerald-700">
-                    {displayPayments.length - i}
+                    {payments.length - i}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-gray-900">{p.memo || <span className="text-gray-400 font-normal italic">name pending…</span>}</p>
+                    <p className="truncate text-sm font-semibold text-gray-900">{p.memo || '—'}</p>
                     <p className="truncate font-mono text-[11px] text-gray-400">{truncateAddress(p.payer, 6)}</p>
                   </div>
                   <div className="text-right shrink-0">
-                    <p className="text-sm font-semibold text-gray-900">${parseFloat(p.amount).toFixed(2)}</p>
+                    <p className="text-sm font-semibold text-gray-900">${parseFloat(p.amount || '0').toFixed(2)}</p>
                     <p className="text-[10px] capitalize text-gray-400">{p.chain || '—'}</p>
                   </div>
                   <div className="hidden sm:block text-right shrink-0">
@@ -466,7 +351,7 @@ export default function EventDashboard() {
                   </div>
                   {explorerUrl ? (
                     <a href={explorerUrl} target="_blank" rel="noopener noreferrer"
-                      className="shrink-0 text-gray-300 hover:text-gray-600 transition-colors" title="View on explorer">
+                      className="shrink-0 text-gray-300 hover:text-gray-600 transition-colors">
                       <ExternalLink className="h-3.5 w-3.5" />
                     </a>
                   ) : <div className="h-3.5 w-3.5 shrink-0" />}
@@ -482,7 +367,7 @@ export default function EventDashboard() {
         <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">Payment Link for Payers</p>
         <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50/60 px-3.5 py-2.5">
           <p className="min-w-0 flex-1 truncate font-mono text-xs text-gray-500">{paymentLink}</p>
-          <button onClick={copyPayLink} className="shrink-0 text-gray-400 hover:text-gray-700 transition-colors" title="Copy link">
+          <button onClick={copyPayLink} className="shrink-0 text-gray-400 hover:text-gray-700 transition-colors">
             {linkCopied ? <CheckCheck className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
           </button>
         </div>
