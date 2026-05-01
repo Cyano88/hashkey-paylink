@@ -30,6 +30,7 @@ import {
   Download,
   ScanLine,
   LayoutDashboard,
+  Globe,
 } from 'lucide-react'
 import { QRCodeCanvas } from 'qrcode.react'
 import { isAddress } from 'viem'
@@ -58,8 +59,10 @@ export default function CreateLink() {
   const [memo,          setMemo]          = useState('')
   const [generatedLink, setGeneratedLink] = useState('')
   const [copied,        setCopied]        = useState(false)
-  const [eventMode,     setEventMode]     = useState(false)
-  const [eventId,       setEventId]       = useState('')
+  const [eventMode,      setEventMode]      = useState(false)
+  const [eventId,        setEventId]        = useState('')
+  const [multiChainMode, setMultiChainMode] = useState(false)
+  const chainSwitchMounted = useRef(false)
 
   // Recover last multi-payer dashboard from localStorage
   type SavedEvent = { dashboardUrl: string; paymentUrl: string; eventName: string; ts: number }
@@ -110,16 +113,25 @@ export default function CreateLink() {
 
   // ── Connected wallet auto-fill ─────────────────────────────────────────
   useEffect(() => {
-    if (connectedEvm && evmAddr === '' && isEvmNet) setEvmAddr(connectedEvm)
-  }, [connectedEvm, isEvmNet])  // eslint-disable-line react-hooks/exhaustive-deps
+    if (connectedEvm && evmAddr === '' && (isEvmNet || multiChainMode)) setEvmAddr(connectedEvm)
+  }, [connectedEvm, isEvmNet, multiChainMode])  // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (connectedStark && starkAddr === '' && !isEvmNet) setStarkAddr(connectedStark)
-  }, [connectedStark, isEvmNet])  // eslint-disable-line react-hooks/exhaustive-deps
+    if (connectedStark && starkAddr === '' && (selectedNet === 'starknet' || multiChainMode)) setStarkAddr(connectedStark)
+  }, [connectedStark, selectedNet, multiChainMode])  // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (connectedSolana && solanaAddr === '' && selectedNet === 'solana') setSolanaAddr(connectedSolana)
-  }, [connectedSolana, selectedNet])  // eslint-disable-line react-hooks/exhaustive-deps
+    if (connectedSolana && solanaAddr === '' && (selectedNet === 'solana' || multiChainMode)) setSolanaAddr(connectedSolana)
+  }, [connectedSolana, selectedNet, multiChainMode])  // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Wipe addresses on chain switch (single-chain mode only) ───────────────
+  // Prevents address bleed-over when the organizer switches chains.
+  useEffect(() => {
+    if (!chainSwitchMounted.current) { chainSwitchMounted.current = true; return }
+    if (multiChainMode) return
+    setEvmAddr(''); setStarkAddr(''); setSolanaAddr('')
+    setGeneratedLink(''); setVaultStep('idle')
+  }, [selectedNet])  // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Reset vault step when address changes ─────────────────────────────
   useEffect(() => {
@@ -165,10 +177,19 @@ export default function CreateLink() {
   const solanaValid = isValidSolanaAddr(solanaAddr)
   const isValidAmt  = amtDirty && parseFloat(amt) > 0 && !isNaN(parseFloat(amt))
 
-  const canGenerate = isValidAmt && (
-    selectedNet === 'solana' ? solanaValid :
-    isEvmNet ? evmValid : starkValid
-  )
+  const canGenerate = multiChainMode
+    ? isValidAmt && (evmValid || starkValid || solanaValid)
+    : isValidAmt && (
+        selectedNet === 'solana' ? solanaValid :
+        isEvmNet ? evmValid : starkValid
+      )
+
+  // ── Multi-chain mode toggle ────────────────────────────────────────────────
+  function toggleMultiChainMode(on: boolean) {
+    setMultiChainMode(on)
+    setGeneratedLink('')
+    setVaultStep('idle')
+  }
 
   // ── Event mode toggle ──────────────────────────────────────────────────────
   function toggleEventMode(on: boolean) {
@@ -209,22 +230,36 @@ export default function CreateLink() {
 
   // ── Build link URL ─────────────────────────────────────────────────────
   function buildLink() {
+    if (multiChainMode) {
+      const params = new URLSearchParams({ amt, multi: '1' })
+      if (evmValid)    params.set('evm', evmAddr)
+      if (starkValid)  params.set('stark', starkAddr)
+      if (solanaValid) params.set('sol', solanaAddr)
+      if (memo.trim()) params.set('memo', memo.trim())
+      if (eventMode && eventId) { params.set('event', '1'); params.set('id', eventId) }
+      return `${window.location.origin}/pay?${params.toString()}`
+    }
     const params = new URLSearchParams({ amt, net: selectedNet })
     if (selectedNet === 'solana')  params.set('sol', solanaAddr)
     else if (isEvmNet)             params.set('evm', evmAddr)
     else                           params.set('stark', starkAddr)
     if (memo.trim()) params.set('memo', memo.trim())
-    if (eventMode && eventId) {
-      params.set('event', '1')
-      params.set('id', eventId)
-    }
+    if (eventMode && eventId) { params.set('event', '1'); params.set('id', eventId) }
     return `${window.location.origin}/pay?${params.toString()}`
   }
 
   function buildDashboardLink() {
-    const params = new URLSearchParams({ id: eventId, amt, net: selectedNet })
-    if (selectedNet === 'solana') params.set('sol', solanaAddr)
-    else                          params.set('evm', evmAddr)
+    const params = new URLSearchParams({ id: eventId, amt })
+    if (multiChainMode) {
+      params.set('multi', '1')
+      if (evmValid)    params.set('evm', evmAddr)
+      if (starkValid)  params.set('stark', starkAddr)
+      if (solanaValid) params.set('sol', solanaAddr)
+    } else {
+      params.set('net', selectedNet)
+      if (selectedNet === 'solana') params.set('sol', solanaAddr)
+      else                          params.set('evm', evmAddr)
+    }
     if (memo.trim()) params.set('name', memo.trim())
     return `${window.location.origin}/event?${params.toString()}`
   }
@@ -277,7 +312,7 @@ export default function CreateLink() {
 
   function handleReset() {
     setEvmAddr(''); setStarkAddr(''); setSolanaAddr(''); setAmt(''); setMemo('')
-    setGeneratedLink(''); setCopied(false)
+    setGeneratedLink(''); setCopied(false); setMultiChainMode(false)
     setVaultStep('idle'); setDeployError(null); setRouterDeployed(null); resetDeploy()
   }
 
@@ -298,8 +333,8 @@ export default function CreateLink() {
           Request USDC or HSK from anyone — no app, no signup, just a link.
         </p>
 
-        {/* ── Chain preview toggle ──────────────────────────────────── */}
-        <div className="mt-5 flex flex-col items-center gap-2.5">
+        {/* ── Chain preview toggle — hidden in multi-chain mode (all chains active) */}
+        {!multiChainMode && <div className="mt-5 flex flex-col items-center gap-2.5">
           <div className="flex items-center justify-center gap-0.5 sm:gap-1 rounded-xl border border-gray-200 bg-gray-100/80 p-1 overflow-x-auto w-full sm:w-auto sm:inline-flex">
             {CHAINS.map((c) => {
               const m = CHAIN_META[c]
@@ -334,7 +369,17 @@ export default function CreateLink() {
               </span>
             )
           })()}
-        </div>
+        </div>}
+
+        {/* Multi-chain mode active badge */}
+        {multiChainMode && (
+          <div className="mt-5 flex justify-center">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-[11px] font-semibold text-violet-700">
+              <Globe className="h-3 w-3" />
+              Multi-Chain · All networks active
+            </span>
+          </div>
+        )}
       </div>
 
       {/* ── Form card ─────────────────────────────────────────────────── */}
@@ -342,7 +387,7 @@ export default function CreateLink() {
         <div className="space-y-5 p-6 sm:p-8">
 
           {/* ── EVM Address — Base / HashKey / Arc ───────────────────── */}
-          {isEvmNet && <fieldset className="space-y-1.5">
+          {(isEvmNet || multiChainMode) && <fieldset className="space-y-1.5">
             <label className="flex items-center justify-between">
               <span className="flex items-center gap-2 text-sm font-medium text-gray-700">
                 <span className="flex items-center gap-0.5">
@@ -391,7 +436,7 @@ export default function CreateLink() {
           </fieldset>}
 
           {/* ── Starknet Address — Starknet only ─────────────────────── */}
-          {selectedNet === 'starknet' && <fieldset className="space-y-1.5">
+          {(selectedNet === 'starknet' || multiChainMode) && <fieldset className="space-y-1.5">
             <label className="flex items-center justify-between">
               <span className="flex items-center gap-2 text-sm font-medium text-gray-700">
                 <span className="h-2 w-2 rounded-full bg-[#8B5CF6]" />
@@ -437,7 +482,7 @@ export default function CreateLink() {
           </fieldset>}
 
           {/* ── Solana Address — Solana only ──────────────────────────── */}
-          {selectedNet === 'solana' && <fieldset className="space-y-1.5">
+          {(selectedNet === 'solana' || multiChainMode) && <fieldset className="space-y-1.5">
             <label className="flex items-center justify-between">
               <span className="flex items-center gap-2 text-sm font-medium text-gray-700">
                 <span className="h-2 w-2 rounded-full bg-[#14F195]" />
@@ -570,6 +615,35 @@ export default function CreateLink() {
             </p>
           </button>
 
+          {/* ── Multi-Chain Payment toggle ───────────────────────────── */}
+          <button
+            type="button"
+            onClick={() => toggleMultiChainMode(!multiChainMode)}
+            className={cn(
+              'w-full rounded-xl border-2 p-4 text-left transition-all',
+              multiChainMode
+                ? 'border-violet-400 bg-violet-50/60'
+                : 'border-gray-200 bg-white hover:border-gray-300',
+            )}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Globe className={cn('h-4 w-4', multiChainMode ? 'text-violet-500' : 'text-gray-400')} />
+                <span className="text-sm font-semibold text-gray-800">Multi-Chain Payment</span>
+                <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold text-violet-700">New</span>
+              </div>
+              <div className={cn('relative h-5 w-9 rounded-full transition-colors', multiChainMode ? 'bg-violet-500' : 'bg-gray-300')}>
+                <div className={cn(
+                  'absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform',
+                  multiChainMode ? 'translate-x-4' : 'translate-x-0.5',
+                )} />
+              </div>
+            </div>
+            <p className="mt-1.5 text-xs text-gray-500 leading-relaxed">
+              Fill addresses for multiple chains. Payer chooses which chain to pay from — one payment, any chain.
+            </p>
+          </button>
+
           {/* ── Generate / checking button ───────────────────────────── */}
           {vaultStep === 'idle' && (
             <button
@@ -589,11 +663,14 @@ export default function CreateLink() {
           )}
 
           {!canGenerate && vaultStep === 'idle' && (
-            selectedNet === 'solana' ? !solanaDirty :
-            isEvmNet ? !evmDirty : !starkDirty
+            multiChainMode
+              ? (!evmDirty && !starkDirty && !solanaDirty)
+              : (selectedNet === 'solana' ? !solanaDirty : isEvmNet ? !evmDirty : !starkDirty)
           ) && (
             <p className="text-center text-xs text-gray-400">
-              Enter a {selectedNet === 'solana' ? 'Solana' : isEvmNet ? 'wallet' : 'Starknet'} address to continue
+              {multiChainMode
+                ? 'Enter at least one wallet address to continue'
+                : `Enter a ${selectedNet === 'solana' ? 'Solana' : isEvmNet ? 'wallet' : 'Starknet'} address to continue`}
             </p>
           )}
         </div>
@@ -630,7 +707,7 @@ export default function CreateLink() {
                         <span className="h-1.5 w-1.5 rounded-full bg-[#0052FF]" />
                         <span className="h-1.5 w-1.5 rounded-full bg-[#C9A227]" />
                       </span>
-                      <span>{CHAIN_META[selectedNet].label}:</span>
+                      <span>{multiChainMode ? 'Base · HashKey · Arc' : CHAIN_META[selectedNet].label}:</span>
                       <span className="font-mono text-gray-700">{truncateAddress(evmAddr, 8)}</span>
                     </div>
                   )}

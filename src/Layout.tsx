@@ -48,8 +48,9 @@ function keywordReply(input: string): ChatMsg | null {
 
 // ─── Shared outlet context (Layout → child pages) ────────────────────────────
 export type LayoutOutletContext = {
-  selectedNet: ChainKey        // always a concrete key, never null
-  onNetworkSelect: (key: ChainKey) => void
+  selectedNet:      ChainKey
+  onNetworkSelect:  (key: ChainKey) => void
+  onPayChainChange: (key: ChainKey) => void  // payer page → mirror current chain in header pill
 }
 
 // ─── Network Toolkit ─────────────────────────────────────────────────────────
@@ -169,6 +170,8 @@ export default function Layout() {
 
   // selectedNet = user's intent (which network they want); may lead connectedNetKey during transition
   const [selectedNet, setSelectedNet] = useState<ChainKey | null>(null)
+  // Tracks the active chain on the payer page so the header pill mirrors it
+  const [payChain,    setPayChain]    = useState<ChainKey | null>(null)
 
   // Sync selectedNet when a wallet actually connects / chain changes
   useEffect(() => {
@@ -337,7 +340,7 @@ export default function Layout() {
 
             {/* 1. Network Toolkit — locked pill on pay/dashboard pages; interactive elsewhere */}
             {(isPayPage || isDashPage)
-              ? <NetworkToolkit activeKey={activeNet} locked />
+              ? <NetworkToolkit activeKey={isPayPage ? (payChain ?? activeNet) : activeNet} locked />
               : <NetworkToolkit activeKey={selectedNet ?? 'base'} onSwitch={handleNetworkSelect} />
             }
 
@@ -388,7 +391,7 @@ export default function Layout() {
 
       {/* ── Page content ─────────────────────────────────────────────────── */}
       <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-10 sm:px-6">
-        <Outlet context={{ selectedNet: selectedNet ?? 'base', onNetworkSelect: handleNetworkSelect } satisfies LayoutOutletContext} />
+        <Outlet context={{ selectedNet: selectedNet ?? 'base', onNetworkSelect: handleNetworkSelect, onPayChainChange: setPayChain } satisfies LayoutOutletContext} />
       </main>
 
       {/* ── Footer ───────────────────────────────────────────────────────── */}

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { useSearchParams, Link } from 'react-router-dom'
+import { useSearchParams, Link, useOutletContext } from 'react-router-dom'
+import type { LayoutOutletContext } from '../Layout'
 import {
   useAccount,
   useChainId,
@@ -149,6 +150,7 @@ async function starkUsdcBalance(tokenAddress: string, accountAddress: string): P
 // ─── Component ───────────────────────────────────────────────────────────────
 export default function PaymentPage() {
   const [searchParams] = useSearchParams()
+  const { onPayChainChange } = useOutletContext<LayoutOutletContext>()
 
   const evmParam    = searchParams.get('evm')    ?? searchParams.get('to') ?? ''
   const starkParam  = searchParams.get('stark')  ?? ''
@@ -160,6 +162,7 @@ export default function PaymentPage() {
   const resolvedStark  = starkParam || (legacyChain === 'starknet' ? evmParam : '')
   const resolvedEvm    = legacyChain === 'starknet' ? '' : evmParam
   const resolvedSolana = searchParams.get('sol') ?? ''
+  const isMultiChain   = searchParams.get('multi') === '1'
 
   // netParam (from new link format) takes priority; legacy chain param as fallback
   const [chain, setChain] = useState<ChainKey>(() => {
@@ -170,8 +173,12 @@ export default function PaymentPage() {
     return 'base'
   })
 
-  // Network is locked when link was generated with an explicit ?net= param
-  const netLocked = !!netParam
+  // Multi-chain links: chain toggle free before payment, locked only by success card after.
+  // Single-chain links: locked to the net= param chain.
+  const netLocked = !!netParam && !isMultiChain
+
+  // Sync header pill with initial chain on mount
+  useEffect(() => { onPayChainChange(chain) }, [])  // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── UI state ──────────────────────────────────────────────────────────────
   const [hashCopied,        setHashCopied]       = useState(false)
@@ -704,6 +711,7 @@ export default function PaymentPage() {
     // Auto-disconnect: switching TO Solana drops EVM; switching AWAY from Solana drops Solana
     if (c === 'solana' && isConnected) disconnectEvm()
     if (c !== 'solana' && solanaWalletAddr) disconnectSolana()
+    onPayChainChange(c)   // mirror in header pill (non-interactive, display only)
     setChain(c)
     resetEvmSend()
     resetPermitSign()
@@ -1226,13 +1234,18 @@ export default function PaymentPage() {
               const m          = CHAIN_META[c]
               const isActive   = chain === c
               const hskLocked  = isHskOnly && c !== 'hashkey'
-              const unavailable =
-                hskLocked ||
-                (c === 'starknet' && !resolvedStark) ||
-                (c === 'solana'   && !resolvedSolana) ||
-                (c !== 'starknet' && c !== 'solana' && !resolvedEvm)
+              const unavailable = isMultiChain
+                ? (c === 'starknet' && !resolvedStark) ||
+                  (c === 'solana'   && !resolvedSolana) ||
+                  (c !== 'starknet' && c !== 'solana' && !resolvedEvm)
+                : hskLocked ||
+                  (c === 'starknet' && !resolvedStark) ||
+                  (c === 'solana'   && !resolvedSolana) ||
+                  (c !== 'starknet' && c !== 'solana' && !resolvedEvm)
               const tooltipText = hskLocked
                 ? 'HSK-only payment link'
+                : isMultiChain
+                ? 'No address set for this chain'
                 : 'Recipient address not provided for this chain'
               return (
                 <div key={c} className="relative group">

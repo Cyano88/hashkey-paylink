@@ -35,12 +35,14 @@ type Toast = { id: number; addr: string; amount: string; chain: string }
 
 export default function EventDashboard() {
   const [searchParams] = useSearchParams()
-  const eventId   = searchParams.get('id')   ?? ''
-  const evm       = searchParams.get('evm')  ?? ''
-  const sol       = searchParams.get('sol')  ?? ''
-  const amt       = searchParams.get('amt')  ?? ''
-  const eventName = searchParams.get('name') ?? 'Event'
-  const netParam  = searchParams.get('net')  ?? ''
+  const eventId   = searchParams.get('id')    ?? ''
+  const evm       = searchParams.get('evm')   ?? ''
+  const sol       = searchParams.get('sol')   ?? ''
+  const stark     = searchParams.get('stark') ?? ''
+  const amt       = searchParams.get('amt')   ?? ''
+  const eventName = searchParams.get('name')  ?? 'Event'
+  const netParam  = searchParams.get('net')   ?? ''
+  const multiParam = searchParams.get('multi') ?? ''
 
   // Which EVM chains to watch for flash/toast notifications.
   // New links carry ?net= so we scope to exactly that chain.
@@ -76,9 +78,16 @@ export default function EventDashboard() {
 
   const paymentLink = (() => {
     const p = new URLSearchParams({ amt, memo: eventName, event: '1', id: eventId })
-    if (netParam) p.set('net', netParam)
-    if (sol)      p.set('sol', sol)
-    else if (evm) p.set('evm', evm)
+    if (multiParam === '1') {
+      p.set('multi', '1')
+      if (evm)   p.set('evm',   evm)
+      if (stark) p.set('stark', stark)
+      if (sol)   p.set('sol',   sol)
+    } else {
+      if (netParam) p.set('net', netParam)
+      if (sol)      p.set('sol', sol)
+      else if (evm) p.set('evm', evm)
+    }
     return `${window.location.origin}/pay?${p.toString()}`
   })()
 
@@ -211,7 +220,7 @@ export default function EventDashboard() {
     setLinkCopied(true); setTimeout(() => setLinkCopied(false), 2000)
   }
 
-  if (!eventId || (!evm && !sol)) {
+  if (!eventId || (!evm && !sol && !stark)) {
     return (
       <div className="mx-auto max-w-md py-20 text-center animate-fade-in">
         <p className="text-gray-500 text-sm">Invalid event link — missing event ID or recipient address.</p>
