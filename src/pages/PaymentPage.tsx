@@ -902,10 +902,13 @@ export default function PaymentPage() {
   }
 
   // ── Unified aliases ───────────────────────────────────────────────────────
-  const isConfirmed     = (chain === 'starknet' ? isStarkConfirmed : chain === 'solana' ? isSolanaConfirmed : isEvmConfirmed) || manualPayDetected
+  // directStatus === 'success' is included so EVM Send-via-Address relay
+  // immediately transitions to the full-screen success card (same as Solana).
+  const isConfirmed     = (chain === 'starknet' ? isStarkConfirmed : chain === 'solana' ? isSolanaConfirmed : isEvmConfirmed) || manualPayDetected || directStatus === 'success'
   const txHash          = manualPayDetected ? manualTxHash
-                        : chain === 'starknet' ? starkTxHash
-                        : chain === 'solana'   ? solanaTxHash
+                        : directStatus === 'success'  ? (directTxHash as `0x${string}` | null)
+                        : chain === 'starknet'         ? starkTxHash
+                        : chain === 'solana'           ? solanaTxHash
                         : evmTxHash
   const isWalletPending = chain === 'starknet' ? isStarkPending   : chain === 'solana' ? isSolanaPending   : isEvmWalletPending || isSignPending
   const isConfirming    = chain === 'starknet' ? isStarkConfirming : chain === 'solana' ? isSolanaConfirming : isEvmConfirming
@@ -1054,11 +1057,7 @@ export default function PaymentPage() {
             <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-white shadow-sm animate-bounce-in">
               <CheckCircle2 className="h-8 w-8 text-emerald-500" />
             </div>
-            <h2 className="text-xl font-bold text-gray-900">
-              {isEventMode
-                ? "You're on the list!"
-                : manualPayDetected ? 'Payment Detected!' : 'Payment Sent!'}
-            </h2>
+            <h2 className="text-xl font-bold text-gray-900">Payment Sent!</h2>
             <p className="mt-1 text-sm text-gray-600">
               {recipientAmt != null ? (
                 <>
@@ -1077,7 +1076,7 @@ export default function PaymentPage() {
                   <span className="font-semibold text-gray-900">
                     {formatAmount(amt, meta.decimals)} {meta.asset}
                   </span>{' '}
-                  {manualPayDetected ? 'received at router' : 'delivered successfully'}
+                  {manualPayDetected && directStatus !== 'success' ? 'received at router' : 'delivered successfully'}
                 </>
               )}
             </p>
@@ -1348,7 +1347,7 @@ export default function PaymentPage() {
 
           {/* ── Attendee name (event mode) ───────────────────────────────── */}
           {isEventMode && (() => {
-            const paid = isConfirmed || directStatus === 'success'
+            const paid = isConfirmed
             return (
               <div className="space-y-1.5">
                 <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
@@ -1389,30 +1388,6 @@ export default function PaymentPage() {
               {/* Loading ghost address */}
               {!directDisplayAddr && directStatus !== 'error' ? (
                 <div className="animate-pulse h-14 rounded-xl bg-gray-100" />
-              ) : directStatus === 'success' ? (
-                /* EVM Direct Send success is surfaced via manualPayDetected → full screen */
-                /* For Starknet this branch is unreachable since we set manualPayDetected */
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
-                    <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
-                    <p className="text-sm font-semibold text-emerald-800">Payment Successful</p>
-                  </div>
-                  {directTxHash && (
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2 rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
-                        <p className="min-w-0 flex-1 truncate font-mono text-xs text-gray-600">{directTxHash}</p>
-                        <button onClick={() => { navigator.clipboard.writeText(directTxHash!); setDirectHashCopied(true); setTimeout(() => setDirectHashCopied(false), 2000) }}>
-                          {directHashCopied ? <CheckCheck className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5 text-gray-400" />}
-                        </button>
-                      </div>
-                      <a href={`${meta.explorerUrl}/tx/${directTxHash}`} target="_blank" rel="noopener noreferrer"
-                        className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-all active:scale-[0.98]">
-                        <ExternalLink className="h-4 w-4" />
-                        View on {meta.explorerName}
-                      </a>
-                    </div>
-                  )}
-                </div>
               ) : directStatus === 'relaying' ? (
                 <div className="flex items-center gap-3 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3.5">
                   <Loader2 className="h-4 w-4 shrink-0 animate-spin text-blue-500" />
