@@ -300,7 +300,7 @@ export default function CreateLink() {
 
         {/* ── Chain preview toggle ──────────────────────────────────── */}
         <div className="mt-5 flex flex-col items-center gap-2.5">
-          <div className="flex flex-wrap items-center justify-center gap-1 rounded-xl border border-gray-200 bg-gray-100/80 p-1 max-w-xs sm:max-w-none sm:inline-flex">
+          <div className="flex items-center justify-center gap-0.5 sm:gap-1 rounded-xl border border-gray-200 bg-gray-100/80 p-1 overflow-x-auto w-full sm:w-auto sm:inline-flex">
             {CHAINS.map((c) => {
               const m = CHAIN_META[c]
               const isActive = selectedNet === c
@@ -309,7 +309,7 @@ export default function CreateLink() {
                   key={c}
                   onClick={() => onNetworkSelect(c)}
                   className={cn(
-                    'flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all duration-150',
+                    'flex shrink-0 items-center gap-1 sm:gap-1.5 rounded-lg px-1.5 py-1 sm:px-3 sm:py-1.5 text-[10px] sm:text-xs font-semibold transition-all duration-150',
                     isActive ? m.toggleActive : 'text-gray-500 hover:text-gray-800',
                   )}
                 >
