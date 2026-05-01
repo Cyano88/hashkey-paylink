@@ -1289,9 +1289,9 @@ export default function PaymentPage() {
         <div className={cn('border-b border-gray-100 bg-gradient-to-br p-6 text-center mt-4', meta.headerBg)}>
           {chain === 'arc' ? (
             <div className="mb-2 flex flex-wrap items-center justify-center gap-2">
-              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#7C3AED] text-white text-xs font-bold shadow-sm">⬡</span>
-              <span className="text-xs font-bold tracking-wide text-violet-700">Arc Economic OS</span>
-              <span className="rounded-full border border-violet-200 bg-violet-100 px-2 py-0.5 text-[10px] font-semibold text-violet-600">Sub-second finality</span>
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#008080] text-white text-xs font-bold shadow-sm">⬡</span>
+              <span className="text-xs font-bold tracking-wide text-teal-700">Arc Economic OS</span>
+              <span className="rounded-full border border-teal-200 bg-teal-50 px-2 py-0.5 text-[10px] font-semibold text-teal-700">Sub-second finality</span>
               <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-600">Testnet</span>
             </div>
           ) : (
@@ -1645,7 +1645,7 @@ export default function PaymentPage() {
             !starkAccount ? (
               <div className="space-y-2">
                 <button onClick={connectStarknet} disabled={isStarkConnecting || !window.starknet}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#8B5CF6] px-6 py-4 text-sm font-semibold text-white transition-all hover:bg-[#7C3AED] active:scale-[0.98] disabled:opacity-60">
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#6236FF] px-6 py-4 text-sm font-semibold text-white transition-all hover:bg-[#5025EE] active:scale-[0.98] disabled:opacity-60">
                   {isStarkConnecting ? <><Loader2 className="h-4 w-4 animate-spin" /> Connecting…</> : <><Wallet className="h-4 w-4" /> Connect Starknet Wallet</>}
                 </button>
                 <p className="text-center text-xs text-gray-400">ArgentX, Braavos & other Starknet wallets</p>
@@ -1655,7 +1655,7 @@ export default function PaymentPage() {
                 className={cn(
                   'flex w-full items-center justify-center gap-2 rounded-xl px-6 py-4 text-sm font-semibold transition-all',
                   isStarkPending || isStarkConfirming ? 'cursor-not-allowed bg-gray-100 text-gray-500'
-                    : 'bg-[#8B5CF6] text-white hover:bg-[#7C3AED] shadow-button active:scale-[0.98]',
+                    : 'bg-[#6236FF] text-white hover:bg-[#5025EE] shadow-button active:scale-[0.98]',
                 )}>
                 {isStarkPending     ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirm in Wallet…</>
                 : isStarkConfirming ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirming on Chain…</>
