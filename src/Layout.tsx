@@ -146,6 +146,10 @@ export default function Layout() {
   // Both the pay page and the dashboard show a locked chain pill from the URL param
   const pageNetParam = (isPayPage || isDashPage) ? (searchParams.get('net') as ChainKey | null) : null
   const activeNet = (pageNetParam && pageNetParam in CHAIN_META) ? pageNetParam : null
+  // Recipient address shown on dashboard header (evm or solana)
+  const dashRecipient = isDashPage
+    ? (searchParams.get('evm') || searchParams.get('sol') || '')
+    : ''
 
   // ── Wallet connections ───────────────────────────────────────────────────────
   const { address: evmAddress, isConnected: evmConnected, chainId: evmChainId } = useAccount()
@@ -336,6 +340,13 @@ export default function Layout() {
               ? <NetworkToolkit activeKey={activeNet} locked />
               : <NetworkToolkit activeKey={selectedNet ?? 'base'} onSwitch={handleNetworkSelect} />
             }
+
+            {/* Recipient address — dashboard only, truncated, muted */}
+            {isDashPage && dashRecipient && (
+              <span className="hidden sm:block select-none font-mono text-[13px] text-gray-400 pointer-events-none">
+                {fmtAddr(dashRecipient)}
+              </span>
+            )}
 
             {/* Wallet controls — hidden on pay page and organizer dashboard (read-only pages) */}
             {!isPayPage && !isDashPage && (
