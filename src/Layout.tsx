@@ -4,6 +4,7 @@ import { useConnectModal } from '@rainbow-me/rainbowkit'
 import { useAccount, useDisconnect, useSwitchChain } from 'wagmi'
 import { ChevronDown, MessageCircle, Power, X, Send, ExternalLink, Search } from 'lucide-react'
 import { useStarknet } from './lib/StarknetContext'
+import { useSolana }   from './lib/SolanaContext'
 import { CHAIN_META } from './lib/chains'
 import type { ChainKey } from './lib/chains'
 
@@ -149,14 +150,15 @@ export default function Layout() {
   const { disconnect: disconnectEvm } = useDisconnect()
   const { switchChain }               = useSwitchChain()
   const { openConnectModal }          = useConnectModal()
-  const { address: starkAddress, connect: connectStarknet, disconnect: disconnectStarknet } = useStarknet()
+  const { address: starkAddress,  connect: connectStarknet,  disconnect: disconnectStarknet  } = useStarknet()
+  const { address: solanaAddress, connect: connectSolana,   disconnect: disconnectSolana    } = useSolana()
 
-  const anyConnected = evmConnected || !!starkAddress
+  const anyConnected = evmConnected || !!starkAddress || !!solanaAddress
   const evmNetKey    = evmConnected
     ? ([CHAIN_META.base, CHAIN_META.hashkey, CHAIN_META.arc] as const).find(n => n.chainId === evmChainId)?.key ?? null
     : null
-  const connectedNetKey: ChainKey | null = starkAddress ? 'starknet' : evmNetKey
-  const displayAddress = starkAddress ?? evmAddress ?? null
+  const connectedNetKey: ChainKey | null = starkAddress ? 'starknet' : solanaAddress ? 'solana' : evmNetKey
+  const displayAddress = starkAddress ?? solanaAddress ?? evmAddress ?? null
   const fmtAddr = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`
 
   // selectedNet = user's intent (which network they want); may lead connectedNetKey during transition
@@ -174,6 +176,12 @@ export default function Layout() {
   function handleNetworkSelect(key: ChainKey) {
     setSelectedNet(key)
 
+    if (key === 'solana') {
+      // Switching to Solana: drop EVM/Starknet connections
+      if (evmConnected) disconnectEvm()
+      if (starkAddress) disconnectStarknet()
+      return
+    }
     if (evmConnected && key !== 'starknet') {
       // EVM → EVM: switch chain in-place, wallet stays connected
       const id = (CHAIN_META[key] as { chainId?: number }).chainId
@@ -192,14 +200,17 @@ export default function Layout() {
   function handleConnectWallet() {
     if (selectedNet === 'starknet') {
       connectStarknet()
+    } else if (selectedNet === 'solana') {
+      connectSolana()
     } else {
       openConnectModal?.()
     }
   }
 
   function disconnectAll() {
-    if (evmConnected) disconnectEvm()
-    if (starkAddress) disconnectStarknet()
+    if (evmConnected)  disconnectEvm()
+    if (starkAddress)  disconnectStarknet()
+    if (solanaAddress) disconnectSolana()
     setSelectedNet(null)
   }
 
