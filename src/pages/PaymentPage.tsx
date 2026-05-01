@@ -163,6 +163,7 @@ export default function PaymentPage() {
   const resolvedEvm    = legacyChain === 'starknet' ? '' : evmParam
   const resolvedSolana = searchParams.get('sol') ?? ''
   const isMultiChain   = searchParams.get('multi') === '1'
+  const isFlex         = searchParams.get('flex')  === '1'
 
   // netParam (from new link format) takes priority; legacy chain param as fallback
   const [chain, setChain] = useState<ChainKey>(() => {
@@ -179,6 +180,12 @@ export default function PaymentPage() {
 
   // Sync header pill with initial chain on mount
   useEffect(() => { onPayChainChange(chain) }, [])  // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Flexible amount (payer-entered) ──────────────────────────────────────
+  const [flexAmt,  setFlexAmt]  = useState('')
+  const [flexMemo, setFlexMemo] = useState('')
+  // effectiveAmt: URL amount for fixed links, payer-entered for flex links
+  const effectiveAmt = isFlex ? flexAmt : amt
 
   // ── UI state ──────────────────────────────────────────────────────────────
   const [hashCopied,        setHashCopied]       = useState(false)
@@ -288,7 +295,7 @@ export default function PaymentPage() {
     chain === 'arc'     ? CHAIN_META.arc.chainId     :
     CHAIN_META.hashkey.chainId
   const isCorrectNetwork = isEvmChain ? chainId === targetChainId : true
-  const feeAmount        = (parseFloat(amt) || 0) * (PLATFORM_FEE_BPS / 10_000)
+  const feeAmount        = (parseFloat(effectiveAmt) || 0) * (PLATFORM_FEE_BPS / 10_000)
 
   const activeRecipient = chain === 'starknet' ? resolvedStark
     : chain === 'solana' ? resolvedSolana
@@ -298,10 +305,10 @@ export default function PaymentPage() {
 
   const missingStark   = chain === 'starknet' && !resolvedStark
   const missingSolana  = chain === 'solana'   && !resolvedSolana
-  const effectiveMemo  = isEventMode ? attendeeName : memo
+  const effectiveMemo  = isEventMode ? attendeeName : (isFlex ? (flexMemo || memo) : memo)
 
   const isValidParams =
-    !isNaN(parseFloat(amt)) && parseFloat(amt) > 0 &&
+    (isFlex || (!isNaN(parseFloat(amt)) && parseFloat(amt) > 0)) &&
     (isAddress(resolvedEvm) || !!resolvedStark || !!resolvedSolana)
 
   // Whether Direct Send is available for the current chain
@@ -360,7 +367,7 @@ export default function PaymentPage() {
 
     if (chain === 'hashkey') {
       let initialBalance: bigint | null = null
-      const requestedWei = parseEther(amt || '0')
+      const requestedWei = parseEther(effectiveAmt || '0')
 
       hskTimer = setInterval(async () => {
         if (detectedRef.current) { clearInterval(hskTimer); return }
@@ -382,7 +389,7 @@ export default function PaymentPage() {
         : CHAIN_META.arc.tokenAddress
 
       const watchTarget = (routerAddr ?? resolvedEvm) as `0x${string}`
-      const requestedUnits = parseUnits(amt || '0', meta.decimals)
+      const requestedUnits = parseUnits(effectiveAmt || '0', meta.decimals)
 
       unwatchTransfer = client.watchContractEvent({
         address:         tokenAddress,
@@ -677,14 +684,14 @@ export default function PaymentPage() {
       const client   = EVM_CLIENTS[evmChain]
       if (chain === 'hashkey') {
         const bal          = await client.getBalance({ address: resolvedEvm as `0x${string}` })
-        const requestedWei = parseEther(amt || '0')
+        const requestedWei = parseEther(effectiveAmt || '0')
         if (bal >= requestedWei * 99n / 100n) {
           setReceivedAmount(bal); setManualTxHash(null); setManualPayDetected(true)
         }
       } else {
         const tokenAddress   = chain === 'base' ? CHAIN_META.base.tokenAddress : CHAIN_META.arc.tokenAddress
         const target         = (routerAddr ?? resolvedEvm) as `0x${string}`
-        const requestedUnits = parseUnits(amt || '0', meta.decimals)
+        const requestedUnits = parseUnits(effectiveAmt || '0', meta.decimals)
         const balance = await client.readContract({
           address: tokenAddress, abi: ERC20_BALANCE_OF_ABI,
           functionName: 'balanceOf', args: [target],
@@ -776,7 +783,7 @@ export default function PaymentPage() {
       const buildRes = await fetch('/api/solana-build-tx', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ from: solanaWalletAddr, to: resolvedSolana, amount: amt }),
+        body:    JSON.stringify({ from: solanaWalletAddr, to: resolvedSolana, amount: effectiveAmt }),
       })
       const buildData = await buildRes.json() as { ok: boolean; tx?: string; error?: string }
       if (!buildData.ok || !buildData.tx) throw new Error(buildData.error ?? 'Failed to build transaction')
@@ -816,7 +823,7 @@ export default function PaymentPage() {
     const meta_       = chain === 'arc' ? CHAIN_META.arc : CHAIN_META.base
     const tokenAddress = meta_.tokenAddress
     const deadline     = BigInt(Math.floor(Date.now() / 1000) + 3600)
-    const totalUnits   = parseUnits(amt, meta_.decimals)
+    const totalUnits   = parseUnits(effectiveAmt || '0', meta_.decimals)
     const feeBps       = BigInt(PLATFORM_FEE_BPS)
     const feeUnits     = totalUnits * feeBps / 10_000n
     const recipientUnits = totalUnits - feeUnits
@@ -861,7 +868,7 @@ export default function PaymentPage() {
   }
 
   function handleHashKeyPay() {
-    const totalNative     = parseEther(amt)
+    const totalNative     = parseEther(effectiveAmt || '0')
     const feeBps          = BigInt(PLATFORM_FEE_BPS)
     const feeNative       = totalNative * feeBps / 10_000n
     const recipientNative = totalNative - feeNative
@@ -883,7 +890,7 @@ export default function PaymentPage() {
     if (!provider?.account) { setStarkError('Wallet not connected.'); return }
     setIsStarkPending(true); setStarkError(null)
     try {
-      const totalUnits = BigInt(Math.round(parseFloat(amt) * 1e6))
+      const totalUnits = BigInt(Math.round(parseFloat(effectiveAmt || '0') * 1e6))
       const feeUnits   = totalUnits * BigInt(PLATFORM_FEE_BPS) / 10_000n
       const recipUnits = totalUnits - feeUnits
       const toU256 = (n: bigint) => ({
@@ -942,7 +949,7 @@ export default function PaymentPage() {
                  : chain === 'solana'   ? (solanaTxHash ?? solanaDirectTxHash)
                  : (evmTxHash ?? null)
     const txHash = txH ?? `manual_${Date.now()}`
-    const payload = { eventId, txHash, chain, payer, memo: name, amount: amt }
+    const payload = { eventId, txHash, chain, payer, memo: name, amount: effectiveAmt }
     console.log('[EventReg] posting:', payload)
     setEventRegStatus('pending')
     try {
@@ -1037,7 +1044,7 @@ export default function PaymentPage() {
     const recipientAmt   = receivedAmount != null
       ? Number(receivedAmount) / Math.pow(10, meta.decimals)
       : null
-    const requested = parseFloat(amt)
+    const requested = parseFloat(effectiveAmt)
     const isOver    = recipientAmt != null && recipientAmt > requested * 1.001
 
     // isRouterAddress already implies chain !== 'starknet'; only exclude hashkey separately
@@ -1048,7 +1055,7 @@ export default function PaymentPage() {
       sweepState === 'pending_profitability' ? 'Payment Secured — Optimizing network route for delivery…' :
       sweepState === 'failed'                ? 'Auto-distribution failed' : null
 
-    const requestedUsdc = parseFloat(amt) || 0
+    const requestedUsdc = parseFloat(effectiveAmt) || 0
     const isBatch = sweepBalanceUsdc != null && sweepBalanceUsdc > requestedUsdc * 1.01
 
     const primaryExplorerUrl = chain === 'hashkey'
@@ -1082,7 +1089,7 @@ export default function PaymentPage() {
               ) : (
                 <>
                   <span className="font-semibold text-gray-900">
-                    {formatAmount(amt, meta.decimals)} {meta.asset}
+                    {formatAmount(effectiveAmt, meta.decimals)} {meta.asset}
                   </span>{' '}
                   {manualPayDetected && directStatus !== 'success' ? 'received at router' : 'delivered successfully'}
                 </>
@@ -1154,7 +1161,7 @@ export default function PaymentPage() {
             )}
 
             <div className="divide-y divide-gray-100 rounded-xl border border-gray-100 bg-gray-50/60 overflow-hidden">
-              <Row label="Amount"    value={`${formatAmount(amt, meta.decimals)} ${meta.asset}`} mono={false} />
+              <Row label="Amount"    value={`${formatAmount(effectiveAmt, meta.decimals)} ${meta.asset}`} mono={false} />
               <Row label="Recipient" value={truncateAddress(activeRecipient, 8)} mono />
               <Row label="Network"   value={meta.label} mono={false} />
               {memo && <Row label="Memo" value={`"${memo}"`} mono={false} />}
@@ -1310,7 +1317,31 @@ export default function PaymentPage() {
 
         {/* ── Amount header ─────────────────────────────────────────────── */}
         <div className={cn('border-b border-gray-100 bg-gradient-to-br p-6 text-center mt-4', meta.headerBg)}>
-          {chain === 'arc' ? (
+          {isFlex ? (
+            <>
+              <p className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-gray-400">Enter Amount</p>
+              <div className="flex items-center justify-center gap-2 mb-3">
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  placeholder="0.00"
+                  value={flexAmt}
+                  onChange={e => setFlexAmt(e.target.value)}
+                  className="w-36 text-center text-[2.75rem] font-bold leading-none tracking-tight text-gray-900 bg-transparent border-b-2 border-gray-300 focus:border-gray-500 outline-none"
+                />
+                <span className="text-xl font-semibold text-gray-400">{meta.asset}</span>
+              </div>
+              <input
+                type="text"
+                placeholder={memo ? `e.g. "${memo}"` : "What's this for? (optional)"}
+                value={flexMemo}
+                onChange={e => setFlexMemo(e.target.value)}
+                maxLength={80}
+                className="mx-auto block w-full max-w-xs text-center text-sm text-gray-600 bg-transparent border-b border-gray-200 focus:border-gray-400 outline-none placeholder:text-gray-400 pb-1"
+              />
+            </>
+          ) : chain === 'arc' ? (
             <div className="mb-2 flex flex-wrap items-center justify-center gap-2">
               <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#008080] text-white text-xs font-bold shadow-sm">⬡</span>
               <span className="text-xs font-bold tracking-wide text-teal-700">Arc Economic OS</span>
@@ -1320,14 +1351,18 @@ export default function PaymentPage() {
           ) : (
             <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-widest text-gray-400">Payment Request</p>
           )}
-          <div className="flex items-baseline justify-center gap-2">
-            <span className="text-[2.75rem] font-bold leading-none tracking-tight text-gray-900">{formatAmount(amt, meta.decimals)}</span>
-            <span className="text-xl font-semibold text-gray-400">{meta.asset}</span>
-          </div>
-          {memo && (
-            <p className="mt-2.5 text-sm text-gray-500">
-              <span className="rounded-full border border-gray-200 bg-white px-3 py-0.5 text-xs font-medium">"{memo}"</span>
-            </p>
+          {!isFlex && (
+            <>
+              <div className="flex items-baseline justify-center gap-2">
+                <span className="text-[2.75rem] font-bold leading-none tracking-tight text-gray-900">{formatAmount(effectiveAmt, meta.decimals)}</span>
+                <span className="text-xl font-semibold text-gray-400">{meta.asset}</span>
+              </div>
+              {memo && (
+                <p className="mt-2.5 text-sm text-gray-500">
+                  <span className="rounded-full border border-gray-200 bg-white px-3 py-0.5 text-xs font-medium">"{memo}"</span>
+                </p>
+              )}
+            </>
           )}
         </div>
 
@@ -1352,7 +1387,7 @@ export default function PaymentPage() {
             <div className="flex items-center justify-between bg-gray-50/60 px-4 py-2 border-t border-dashed border-gray-100">
               <span className="text-[11px] font-normal text-slate-400 tracking-wide">Platform fee (0.2%)</span>
               <span className="font-mono text-[11px] text-slate-400">
-                {feeAmount > 0 ? `${feeAmount.toFixed(meta.decimals <= 6 ? 4 : 6)} ${meta.asset}` : '—'}
+                {feeAmount > 0 && effectiveAmt ? `${feeAmount.toFixed(meta.decimals <= 6 ? 4 : 6)} ${meta.asset}` : '—'}
               </span>
             </div>
             {memo && <Row label="Memo (on-chain)" value={memo.length > 28 ? memo.slice(0, 28) + '…' : memo} />}
@@ -1630,7 +1665,7 @@ export default function PaymentPage() {
             ) : (
               <button
                 onClick={handlePay}
-                disabled={isSolanaPending || isSolanaConfirming || (isEventMode && !attendeeName.trim())}
+                disabled={isSolanaPending || isSolanaConfirming || (isEventMode && !attendeeName.trim()) || (isFlex && (!flexAmt || parseFloat(flexAmt) <= 0))}
                 className={cn(
                   'flex w-full items-center justify-center gap-2 rounded-xl px-6 py-4 text-sm font-semibold transition-all',
                   isSolanaPending || isSolanaConfirming
@@ -1640,7 +1675,7 @@ export default function PaymentPage() {
               >
                 {isSolanaPending     ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirm in Wallet…</>
                 : isSolanaConfirming ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirming on Chain…</>
-                : <><Zap className="h-4 w-4" /> Pay {formatAmount(amt, 6)} USDC on Solana</>}
+                : <><Zap className="h-4 w-4" /> Pay {formatAmount(effectiveAmt, 6)} USDC on Solana</>}
               </button>
             )
           ) : payMode === 'wallet' && chain === 'starknet' ? (
@@ -1653,7 +1688,7 @@ export default function PaymentPage() {
                 <p className="text-center text-xs text-gray-400">ArgentX, Braavos & other Starknet wallets</p>
               </div>
             ) : (
-              <button onClick={handlePay} disabled={isStarkPending || isStarkConfirming || (isEventMode && !attendeeName.trim())}
+              <button onClick={handlePay} disabled={isStarkPending || isStarkConfirming || (isEventMode && !attendeeName.trim()) || (isFlex && (!flexAmt || parseFloat(flexAmt) <= 0))}
                 className={cn(
                   'flex w-full items-center justify-center gap-2 rounded-xl px-6 py-4 text-sm font-semibold transition-all',
                   isStarkPending || isStarkConfirming ? 'cursor-not-allowed bg-gray-100 text-gray-500'
@@ -1661,7 +1696,7 @@ export default function PaymentPage() {
                 )}>
                 {isStarkPending     ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirm in Wallet…</>
                 : isStarkConfirming ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirming on Chain…</>
-                : <><Zap className="h-4 w-4" /> Pay {formatAmount(amt, 6)} USDC on Starknet</>}
+                : <><Zap className="h-4 w-4" /> Pay {formatAmount(effectiveAmt, 6)} USDC on Starknet</>}
               </button>
             )
           ) : payMode === 'wallet' && !isConnected ? (
@@ -1674,7 +1709,7 @@ export default function PaymentPage() {
               {isSwitching ? <><Loader2 className="h-4 w-4 animate-spin" /> Switching…</> : <><RefreshCw className="h-4 w-4" /> Switch to {meta.label}</>}
             </button>
           ) : payMode === 'wallet' ? (
-            <button onClick={handlePay} disabled={isWalletPending || isConfirming || (isEventMode && !attendeeName.trim())}
+            <button onClick={handlePay} disabled={isWalletPending || isConfirming || (isEventMode && !attendeeName.trim()) || (isFlex && (!flexAmt || parseFloat(flexAmt) <= 0))}
               className={cn(
                 'flex w-full items-center justify-center gap-2 rounded-xl px-6 py-4 text-sm font-semibold transition-all',
                 isWalletPending || isConfirming ? 'cursor-not-allowed bg-gray-100 text-gray-500'
@@ -1684,7 +1719,7 @@ export default function PaymentPage() {
               : isEvmWalletPending  ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirm in Wallet…</>
               : isConfirming        ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirming on Chain…</>
               : isSweeping          ? <><Loader2 className="h-4 w-4 animate-spin" /> Routing payment…</>
-              : <><Zap className="h-4 w-4" /> Pay {formatAmount(amt, meta.decimals)} {meta.asset} on {meta.label}</>}
+              : <><Zap className="h-4 w-4" /> Pay {formatAmount(effectiveAmt, meta.decimals)} {meta.asset} on {meta.label}</>}
             </button>
           ) : null /* direct mode — no CTA button, address panel above handles it */ }
 

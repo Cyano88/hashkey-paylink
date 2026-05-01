@@ -31,6 +31,7 @@ import {
   ScanLine,
   LayoutDashboard,
   Globe,
+  Sliders,
 } from 'lucide-react'
 import { QRCodeCanvas } from 'qrcode.react'
 import { isAddress } from 'viem'
@@ -62,6 +63,7 @@ export default function CreateLink() {
   const [eventMode,      setEventMode]      = useState(false)
   const [eventId,        setEventId]        = useState('')
   const [multiChainMode, setMultiChainMode] = useState(false)
+  const [flexAmount,     setFlexAmount]     = useState(false)
   const chainSwitchMounted = useRef(false)
 
   // Recover last multi-payer dashboard from localStorage
@@ -177,12 +179,19 @@ export default function CreateLink() {
   const solanaValid = isValidSolanaAddr(solanaAddr)
   const isValidAmt  = amtDirty && parseFloat(amt) > 0 && !isNaN(parseFloat(amt))
 
-  const canGenerate = multiChainMode
-    ? isValidAmt && (evmValid || starkValid || solanaValid)
-    : isValidAmt && (
-        selectedNet === 'solana' ? solanaValid :
-        isEvmNet ? evmValid : starkValid
-      )
+  const hasAddress = multiChainMode
+    ? (evmValid || starkValid || solanaValid)
+    : (selectedNet === 'solana' ? solanaValid : isEvmNet ? evmValid : starkValid)
+
+  const canGenerate = (flexAmount || isValidAmt) && hasAddress
+
+  // ── Flexible amount toggle ─────────────────────────────────────────────────
+  function toggleFlexAmount(on: boolean) {
+    setFlexAmount(on)
+    if (on) setAmt('')   // clear any typed amount — payer will enter it
+    setGeneratedLink('')
+    setVaultStep('idle')
+  }
 
   // ── Multi-chain mode toggle ────────────────────────────────────────────────
   function toggleMultiChainMode(on: boolean) {
@@ -231,7 +240,8 @@ export default function CreateLink() {
   // ── Build link URL ─────────────────────────────────────────────────────
   function buildLink() {
     if (multiChainMode) {
-      const params = new URLSearchParams({ amt, multi: '1' })
+      const params = new URLSearchParams({ multi: '1' })
+      if (!flexAmount) params.set('amt', amt); else params.set('flex', '1')
       if (evmValid)    params.set('evm', evmAddr)
       if (starkValid)  params.set('stark', starkAddr)
       if (solanaValid) params.set('sol', solanaAddr)
@@ -239,7 +249,8 @@ export default function CreateLink() {
       if (eventMode && eventId) { params.set('event', '1'); params.set('id', eventId) }
       return `${window.location.origin}/pay?${params.toString()}`
     }
-    const params = new URLSearchParams({ amt, net: selectedNet })
+    const params = new URLSearchParams({ net: selectedNet })
+    if (!flexAmount) params.set('amt', amt); else params.set('flex', '1')
     if (selectedNet === 'solana')  params.set('sol', solanaAddr)
     else if (isEvmNet)             params.set('evm', evmAddr)
     else                           params.set('stark', starkAddr)
@@ -312,7 +323,7 @@ export default function CreateLink() {
 
   function handleReset() {
     setEvmAddr(''); setStarkAddr(''); setSolanaAddr(''); setAmt(''); setMemo('')
-    setGeneratedLink(''); setCopied(false); setMultiChainMode(false)
+    setGeneratedLink(''); setCopied(false); setMultiChainMode(false); setFlexAmount(false)
     setVaultStep('idle'); setDeployError(null); setRouterDeployed(null); resetDeploy()
   }
 
@@ -528,7 +539,16 @@ export default function CreateLink() {
           </fieldset>}
 
           {/* ── Amount ───────────────────────────────────────────────── */}
-          <fieldset className="space-y-1.5">
+          {flexAmount && (
+            <div className="flex items-center gap-3 rounded-xl border border-dashed border-violet-200 bg-violet-50/40 px-4 py-3">
+              <Sliders className="h-4 w-4 shrink-0 text-violet-400" />
+              <div>
+                <p className="text-xs font-semibold text-violet-600">Flexible Amount enabled</p>
+                <p className="text-[11px] text-violet-400 mt-0.5">Payer enters the amount at checkout</p>
+              </div>
+            </div>
+          )}
+          {!flexAmount && <fieldset className="space-y-1.5">
             <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
               <Coins className="h-3.5 w-3.5 text-gray-400" />
               Amount
@@ -563,7 +583,7 @@ export default function CreateLink() {
                 USDC on Base/Starknet · HSK on HashKey — payer chooses the chain
               </p>
             )}
-          </fieldset>
+          </fieldset>}
 
           {/* ── Memo ─────────────────────────────────────────────────── */}
           <fieldset className="space-y-1.5">
@@ -644,6 +664,37 @@ export default function CreateLink() {
             </p>
           </button>
 
+          {/* ── Flexible Amount toggle ───────────────────────────────── */}
+          <button
+            type="button"
+            onClick={() => toggleFlexAmount(!flexAmount)}
+            className={cn(
+              'w-full rounded-xl border-2 p-4 text-left transition-all',
+              flexAmount
+                ? 'border-violet-400 bg-violet-50/60'
+                : 'border-gray-200 bg-white hover:border-gray-300',
+            )}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Sliders className={cn('h-4 w-4', flexAmount ? 'text-violet-500' : 'text-gray-400')} />
+                <span className="text-sm font-semibold text-gray-800">Flexible Amount</span>
+              </div>
+              <div className={cn('relative h-5 w-9 rounded-full transition-colors', flexAmount ? 'bg-violet-500' : 'bg-gray-300')}>
+                <div className={cn(
+                  'absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform',
+                  flexAmount ? 'translate-x-4' : 'translate-x-0.5',
+                )} />
+              </div>
+            </div>
+            <p className="mt-1.5 text-xs text-gray-500 leading-relaxed">
+              No fixed price — payer enters the amount and what they're paying for at checkout.
+            </p>
+            <p className="mt-1 text-[11px] text-gray-400">
+              Suitable for: <span className="font-medium text-gray-500">restaurants · shops · invoices · tips · donations</span>
+            </p>
+          </button>
+
           {/* ── Generate / checking button ───────────────────────────── */}
           {vaultStep === 'idle' && (
             <button
@@ -697,8 +748,10 @@ export default function CreateLink() {
               <div className="rounded-xl border border-gray-100 bg-white p-4 space-y-2">
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Preview</p>
                 <div className="flex items-baseline gap-1.5">
-                  <span className="text-2xl font-bold text-gray-900">{formatAmount(amt, 18)}</span>
-                  <span className="text-sm font-medium text-gray-500">USDC · HSK</span>
+                  {flexAmount
+                    ? <span className="inline-flex items-center gap-1.5 rounded-full bg-violet-100 px-3 py-1 text-sm font-semibold text-violet-700"><Sliders className="h-3.5 w-3.5" />Flexible</span>
+                    : <><span className="text-2xl font-bold text-gray-900">{formatAmount(amt, 18)}</span><span className="text-sm font-medium text-gray-500">USDC · HSK</span></>
+                  }
                 </div>
                 <div className="space-y-1">
                   {evmValid && (
