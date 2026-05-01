@@ -180,9 +180,11 @@ export async function getSolanaVaultAddress(req: Request, res: Response): Promis
   const { linkId } = req.query as { linkId?: string }
   if (!linkId) { res.status(400).json({ ok: false, error: 'Missing linkId' }); return }
 
+  // Return the vault WALLET address (public key), not the ATA.
+  // Standard Solana UX: sender sends USDC to a wallet address and their
+  // wallet auto-creates the ATA. The sweep reads the ATA derived from this key.
   const vaultKeypair = deriveVaultKeypair(linkId)
-  const vaultATA     = await getAssociatedTokenAddress(USDC_MINT, vaultKeypair.publicKey)
-  res.json({ ok: true, vaultAddress: vaultATA.toString() })
+  res.json({ ok: true, vaultAddress: vaultKeypair.publicKey.toString() })
 }
 
 // ── POST /api/solana-sweep ────────────────────────────────────────────────────

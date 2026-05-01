@@ -567,13 +567,19 @@ export default function PaymentPage() {
     setSolanaDirectStatus('idle')
     fetch(`/api/solana-vault?linkId=${encodeURIComponent(linkId)}`)
       .then(r => r.json())
-      .then((data: { ok: boolean; vaultAddress?: string }) => {
+      .then((data: { ok: boolean; vaultAddress?: string; error?: string }) => {
         if (data.ok && data.vaultAddress) {
           setSolanaVaultAddr(data.vaultAddress)
           setSolanaDirectStatus('waiting')
+        } else {
+          setSolanaDirectError(data.error ?? 'Could not derive vault address')
+          setSolanaDirectStatus('error')
         }
       })
-      .catch(() => {})
+      .catch(() => {
+        setSolanaDirectError('Network error — could not reach relay server')
+        setSolanaDirectStatus('error')
+      })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chain, payMode, resolvedSolana])
 
@@ -590,13 +596,18 @@ export default function PaymentPage() {
           headers: { 'Content-Type': 'application/json' },
           body:    JSON.stringify({ linkId: solanaLinkId, recipient: resolvedSolana }),
         })
-        const data = await res.json() as { ok: boolean; status?: string; txHash?: string }
+        const data = await res.json() as { ok: boolean; status?: string; txHash?: string; error?: string }
         if (data.ok && data.status === 'swept' && data.txHash) {
           setSolanaDirectTxHash(data.txHash)
           setSolanaDirectStatus('success')
           setSolanaLinkId(null)
+        } else if (res.status === 503 || (data.error && data.status !== 'waiting')) {
+          // Hard error (relay not configured, tx failure) — stop polling, show error
+          setSolanaDirectError(data.error ?? 'Relay unavailable')
+          setSolanaDirectStatus('error')
         }
-      } catch { /* ignore */ }
+        // status==='waiting' → no USDC yet, keep polling silently
+      } catch { /* network hiccup — retry next tick */ }
     }
 
     const timer = setInterval(check, 3000)
@@ -1316,12 +1327,15 @@ export default function PaymentPage() {
               value={
                 <span className="flex items-center gap-1.5 text-sm font-medium text-gray-800">
                   <span className={cn('h-2 w-2 rounded-full', meta.dotColor)} />
-                  {chain === 'base' ? 'Base Mainnet' : chain === 'starknet' ? 'Starknet Mainnet'
-                    : chain === 'arc' ? 'Arc Economic OS' : 'HashKey Chain'}
+                  {chain === 'base'     ? 'Base Mainnet'     :
+                   chain === 'starknet' ? 'Starknet Mainnet'  :
+                   chain === 'arc'      ? 'Arc Economic OS'   :
+                   chain === 'solana'   ? 'Solana Mainnet'    :
+                                         'HashKey Chain'}
                 </span>
               }
             />
-            {chain !== 'starknet' && <Row label="Chain ID" value={String(targetChainId)} mono />}
+            {chain !== 'starknet' && chain !== 'solana' && <Row label="Chain ID" value={String(targetChainId)} mono />}
             <Row label="Engine" value={<span className={cn('text-xs font-medium', meta.badgeText)}>{meta.engineLabel}</span>} />
             <div className="flex items-center justify-between bg-gray-50/60 px-4 py-2 border-t border-dashed border-gray-100">
               <span className="text-[11px] font-normal text-slate-400 tracking-wide">Platform fee (0.2%)</span>
