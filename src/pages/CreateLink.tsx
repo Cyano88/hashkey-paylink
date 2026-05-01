@@ -55,6 +55,13 @@ export default function CreateLink() {
   const [copied,        setCopied]        = useState(false)
   const [eventMode,     setEventMode]     = useState(false)
   const [eventId,       setEventId]       = useState('')
+
+  // Recover last multi-payer dashboard from localStorage
+  type SavedEvent = { dashboardUrl: string; paymentUrl: string; eventName: string; ts: number }
+  const [savedEvent, setSavedEvent] = useState<SavedEvent | null>(() => {
+    try { return JSON.parse(localStorage.getItem('hp_last_event') ?? 'null') }
+    catch { return null }
+  })
   const qrRef       = useRef<HTMLDivElement>(null)
   const qrHiResRef  = useRef<HTMLDivElement>(null)
   // selectedNet is owned by Layout and shared via outlet context for bidirectional sync with the header toolkit
@@ -156,6 +163,7 @@ export default function CreateLink() {
       setEventId(Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join(''))
     }
     setGeneratedLink('')
+    setVaultStep('idle')  // restore Generate button when toggling after a previous generate
   }
 
   // ── QR download — uses hidden 1024px canvas for UHD output ────────────────
@@ -206,8 +214,19 @@ export default function CreateLink() {
   // ── Generate handler ───────────────────────────────────────────────────
   function handleGenerate() {
     if (!canGenerate) return
-    setGeneratedLink(buildLink())
+    const link = buildLink()
+    setGeneratedLink(link)
     setVaultStep('ready')
+    if (eventMode && eventId) {
+      const entry: SavedEvent = {
+        dashboardUrl: buildDashboardLink(),
+        paymentUrl:   link,
+        eventName:    memo.trim() || 'My Event',
+        ts:           Date.now(),
+      }
+      localStorage.setItem('hp_last_event', JSON.stringify(entry))
+      setSavedEvent(entry)
+    }
   }
 
   // ── Deploy vault handler ───────────────────────────────────────────────
@@ -636,6 +655,42 @@ export default function CreateLink() {
           </div>
         )}
       </div>
+
+      {/* ── Last event dashboard recovery ────────────────────────────── */}
+      {!generatedLink && savedEvent && (
+        <div className="mt-6 rounded-2xl border border-blue-100 bg-blue-50/60 p-4 space-y-3 animate-fade-in">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold text-blue-700">Last Multi-payer Collection</p>
+              <p className="text-[11px] text-blue-500 mt-0.5">
+                {savedEvent.eventName} · {new Date(savedEvent.ts).toLocaleDateString()}
+              </p>
+            </div>
+            <button
+              onClick={() => { localStorage.removeItem('hp_last_event'); setSavedEvent(null) }}
+              className="text-[11px] text-blue-400 hover:text-blue-600 transition-colors"
+            >
+              Clear
+            </button>
+          </div>
+          <div className="flex gap-2">
+            <a
+              href={savedEvent.dashboardUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700 transition-all active:scale-[0.98]"
+            >
+              Open Dashboard
+            </a>
+            <button
+              onClick={() => copyToClipboard(savedEvent.paymentUrl)}
+              className="flex items-center justify-center gap-1.5 rounded-xl border border-blue-200 bg-white px-3 py-2 text-xs font-medium text-blue-700 hover:bg-blue-50 transition-all active:scale-[0.98]"
+            >
+              Copy Payment Link
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── How it works ─────────────────────────────────────────────── */}
       {!generatedLink && (
