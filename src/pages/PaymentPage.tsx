@@ -38,10 +38,11 @@ import {
   FACTORY_V2_ADDRESSES,
 } from '../lib/router'
 import { useStarknet } from '../lib/StarknetContext'
+import { useSolana }   from '../lib/SolanaContext'
 import { computeStarkGhostAddress } from '../lib/starknet-ghost'
 import { cn, truncateAddress, formatAmount, memoToHex, copyToClipboard } from '../lib/utils'
 
-const CHAINS: ChainKey[] = ['base', 'starknet', 'hashkey', 'arc']
+const CHAINS: ChainKey[] = ['base', 'starknet', 'hashkey', 'arc', 'solana']
 
 // ─── Starknet RPC ─────────────────────────────────────────────────────────────
 const STARKNET_RPC = 'https://rpc.starknet.lava.build'
@@ -155,14 +156,16 @@ export default function PaymentPage() {
   const legacyChain = searchParams.get('chain')  as ChainKey | null
   const netParam    = searchParams.get('net')    as ChainKey | null
 
-  const resolvedStark = starkParam || (legacyChain === 'starknet' ? evmParam : '')
-  const resolvedEvm   = legacyChain === 'starknet' ? '' : evmParam
+  const resolvedStark  = starkParam || (legacyChain === 'starknet' ? evmParam : '')
+  const resolvedEvm    = legacyChain === 'starknet' ? '' : evmParam
+  const resolvedSolana = searchParams.get('sol') ?? ''
 
   // netParam (from new link format) takes priority; legacy chain param as fallback
   const [chain, setChain] = useState<ChainKey>(() => {
-    if (netParam === 'base' || netParam === 'starknet' || netParam === 'hashkey' || netParam === 'arc') return netParam
+    if (netParam === 'base' || netParam === 'starknet' || netParam === 'hashkey' || netParam === 'arc' || netParam === 'solana') return netParam
     if (legacyChain === 'base' || legacyChain === 'starknet' || legacyChain === 'hashkey' || legacyChain === 'arc') return legacyChain
     if (resolvedStark && !resolvedEvm) return 'starknet'
+    if (resolvedSolana && !resolvedEvm && !resolvedStark) return 'solana'
     return 'base'
   })
 
@@ -251,8 +254,24 @@ export default function PaymentPage() {
   const [starkError,        setStarkError]        = useState<string | null>(null)
   const starkPollAbort = useRef<AbortController | null>(null)
 
+  // ── Solana ────────────────────────────────────────────────────────────────
+  const { address: solanaWalletAddr, isConnecting: isSolanaConnecting, connect: connectSolana } = useSolana()
+  const [solanaTxHash,         setSolanaTxHash]         = useState<string | null>(null)
+  const [isSolanaPending,      setIsSolanaPending]      = useState(false)
+  const [isSolanaConfirming,   setIsSolanaConfirming]   = useState(false)
+  const [isSolanaConfirmed,    setIsSolanaConfirmed]    = useState(false)
+  const [solanaError,          setSolanaError]          = useState<string | null>(null)
+  // Solana Send-via-Address
+  const [solanaLinkId,         setSolanaLinkId]         = useState<string | null>(null)
+  const [solanaVaultAddr,      setSolanaVaultAddr]      = useState<string | null>(null)
+  const [solanaDirectStatus,   setSolanaDirectStatus]   = useState<'idle' | 'waiting' | 'relaying' | 'success' | 'error'>('idle')
+  const [solanaDirectTxHash,   setSolanaDirectTxHash]   = useState<string | null>(null)
+  const [solanaDirectError,    setSolanaDirectError]    = useState<string | null>(null)
+  const [solanaAddrCopied,     setSolanaAddrCopied]     = useState(false)
+  const [solanaDirHashCopied,  setSolanaDirHashCopied]  = useState(false)
+
   // ── Derived ───────────────────────────────────────────────────────────────
-  const isEvmChain    = chain !== 'starknet'
+  const isEvmChain    = chain !== 'starknet' && chain !== 'solana'
   const isHskOnly     = legacyChain === 'hashkey'
   const meta          = CHAIN_META[chain]
   const targetChainId =
@@ -262,20 +281,24 @@ export default function PaymentPage() {
   const isCorrectNetwork = isEvmChain ? chainId === targetChainId : true
   const feeAmount        = (parseFloat(amt) || 0) * (PLATFORM_FEE_BPS / 10_000)
 
-  const activeRecipient = chain === 'starknet' ? resolvedStark : resolvedEvm
-  const displayAddress  = (chain !== 'starknet' && routerAddr) ? routerAddr : activeRecipient
-  const isRouterAddress = chain !== 'starknet' && !!routerAddr
+  const activeRecipient = chain === 'starknet' ? resolvedStark
+    : chain === 'solana' ? resolvedSolana
+    : resolvedEvm
+  const displayAddress  = (isEvmChain && routerAddr) ? routerAddr : activeRecipient
+  const isRouterAddress = isEvmChain && !!routerAddr
 
   const missingStark   = chain === 'starknet' && !resolvedStark
+  const missingSolana  = chain === 'solana'   && !resolvedSolana
   const effectiveMemo  = isEventMode ? attendeeName : memo
 
   const isValidParams =
     !isNaN(parseFloat(amt)) && parseFloat(amt) > 0 &&
-    (isAddress(resolvedEvm) || !!resolvedStark)
+    (isAddress(resolvedEvm) || !!resolvedStark || !!resolvedSolana)
 
   // Whether Direct Send is available for the current chain
   const canDirectSend =
-    (chain === 'base' || chain === 'arc') && isAddress(resolvedEvm) && !!FACTORY_V2_ADDRESSES[chain as 'base' | 'arc']
+    ((chain === 'base' || chain === 'arc') && isAddress(resolvedEvm) && !!FACTORY_V2_ADDRESSES[chain as 'base' | 'arc']) ||
+    (chain === 'solana' && !!resolvedSolana)
 
   // ── Step 1: Predict router address + check deployment ────────────────────
   useEffect(() => {
@@ -317,7 +340,7 @@ export default function PaymentPage() {
 
   // ── Step 2: Real-time payment listener ───────────────────────────────────
   useEffect(() => {
-    if (manualPayDetected || chain === 'starknet' || !resolvedEvm) return
+    if (manualPayDetected || chain === 'starknet' || chain === 'solana' || !resolvedEvm) return
 
     const evmChain = chain as 'base' | 'hashkey' | 'arc'
     const client   = EVM_CLIENTS[evmChain]
@@ -523,6 +546,68 @@ export default function PaymentPage() {
   }, [directStatus, directVault, directLinkId, chain])
 
 
+  // ── Solana Send-via-Address: generate linkId + fetch vault ATA ───────────
+  useEffect(() => {
+    if (chain !== 'solana' || payMode !== 'direct' || !resolvedSolana) return
+    const params    = new URLSearchParams(window.location.search)
+    const idParam   = params.get('sid')
+    let linkId: string
+    if (idParam) {
+      linkId = idParam
+    } else {
+      const bytes = crypto.getRandomValues(new Uint8Array(16))
+      linkId = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')
+      params.set('sid', linkId)
+      window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`)
+    }
+    setSolanaLinkId(linkId)
+    setSolanaVaultAddr(null)
+    setSolanaDirectStatus('idle')
+    fetch(`/api/solana-vault?linkId=${encodeURIComponent(linkId)}`)
+      .then(r => r.json())
+      .then((data: { ok: boolean; vaultAddress?: string }) => {
+        if (data.ok && data.vaultAddress) {
+          setSolanaVaultAddr(data.vaultAddress)
+          setSolanaDirectStatus('waiting')
+        }
+      })
+      .catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chain, payMode, resolvedSolana])
+
+  // ── Solana Send-via-Address: poll server for sweep ────────────────────────
+  useEffect(() => {
+    if (solanaDirectStatus !== 'waiting' || !solanaLinkId || !resolvedSolana || chain !== 'solana') return
+    let cancelled = false
+
+    const check = async () => {
+      if (cancelled) return
+      try {
+        const res = await fetch('/api/solana-sweep', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ linkId: solanaLinkId, recipient: resolvedSolana }),
+        })
+        const data = await res.json() as { ok: boolean; status?: string; txHash?: string }
+        if (data.ok && data.status === 'swept' && data.txHash) {
+          setSolanaDirectTxHash(data.txHash)
+          setSolanaDirectStatus('success')
+          setSolanaLinkId(null)
+        }
+      } catch { /* ignore */ }
+    }
+
+    const timer = setInterval(check, 3000)
+    check()
+    return () => { cancelled = true; clearInterval(timer) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [solanaDirectStatus, solanaLinkId, resolvedSolana, chain])
+
+  // ── Solana: mark confirmed when direct send succeeds ─────────────────────
+  useEffect(() => {
+    if (solanaDirectStatus === 'success') setIsSolanaConfirmed(true)
+  }, [solanaDirectStatus])
+
   // ── Manual claim fallback ─────────────────────────────────────────────────
   async function handleManualClaim() {
     if (!routerAddr || !isRouterAddress) return
@@ -557,7 +642,7 @@ export default function PaymentPage() {
 
   // ── "Check Status" button ─────────────────────────────────────────────────
   useEffect(() => {
-    if (manualPayDetected || chain === 'starknet' || !resolvedEvm) return
+    if (manualPayDetected || chain === 'starknet' || chain === 'solana' || !resolvedEvm) return
     setShowCheckButton(false)
     const timer = setTimeout(() => setShowCheckButton(true), 15_000)
     return () => clearTimeout(timer)
@@ -609,6 +694,10 @@ export default function PaymentPage() {
     setStarkTxHash(null); setIsStarkPending(false); setIsStarkConfirming(false)
     setIsStarkConfirmed(false); setStarkError(null)
     starkPollAbort.current?.abort()
+    setIsSolanaPending(false); setIsSolanaConfirming(false); setIsSolanaConfirmed(false)
+    setSolanaError(null); setSolanaTxHash(null)
+    setSolanaLinkId(null); setSolanaVaultAddr(null)
+    setSolanaDirectStatus('idle'); setSolanaDirectTxHash(null); setSolanaDirectError(null)
     setManualPayDetected(false); setManualTxHash(null); setReceivedAmount(null)
     setRouterAddr(null); setRouterDeployed(null); setShowCheckButton(false)
     setSweepState('idle'); setSweepTxHash(null); setSweepBalanceUsdc(null)
@@ -617,7 +706,7 @@ export default function PaymentPage() {
     setDirectStatus('idle'); setDirectTxHash(null); setDirectError(null)
     directRelayedRef.current = false
     if (directPollRef.current) { clearInterval(directPollRef.current); directPollRef.current = null }
-    if (isConnected && c !== 'starknet') {
+    if (isConnected && c !== 'starknet' && c !== 'solana') {
       const cid =
         c === 'base'    ? CHAIN_META.base.chainId    :
         c === 'arc'     ? CHAIN_META.arc.chainId     :
@@ -628,7 +717,7 @@ export default function PaymentPage() {
 
   // ── Copy handlers ─────────────────────────────────────────────────────────
   async function handleCopyHash() {
-    const hash = chain === 'starknet' ? starkTxHash : evmTxHash
+    const hash = chain === 'starknet' ? starkTxHash : chain === 'solana' ? solanaTxHash : evmTxHash
     if (!hash) return
     await copyToClipboard(hash)
     setHashCopied(true)
@@ -647,7 +736,55 @@ export default function PaymentPage() {
     if (!activeRecipient) return
     if (chain === 'base' || chain === 'arc') await handleEvmPermitPay()
     else if (chain === 'starknet') handleStarknetPay()
+    else if (chain === 'solana') await handleSolanaPay()
     else handleHashKeyPay()
+  }
+
+  async function handleSolanaPay() {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const provider = (window as any).phantom?.solana ?? (window as any).solana ?? (window as any).solflare
+    if (!provider || !solanaWalletAddr) {
+      setSolanaError('No Solana wallet found. Install Phantom or Solflare.')
+      return
+    }
+    setIsSolanaPending(true); setSolanaError(null)
+    try {
+      const buildRes = await fetch('/api/solana-build-tx', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ from: solanaWalletAddr, to: resolvedSolana, amount: amt }),
+      })
+      const buildData = await buildRes.json() as { ok: boolean; tx?: string; error?: string }
+      if (!buildData.ok || !buildData.tx) throw new Error(buildData.error ?? 'Failed to build transaction')
+
+      const { Transaction } = await import('@solana/web3.js')
+      const txBytes = Uint8Array.from(atob(buildData.tx), c => c.charCodeAt(0))
+      const tx = Transaction.from(txBytes)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const signedTx = await (provider as any).signTransaction(tx)
+
+      const bytes = (signedTx as { serialize: () => Uint8Array }).serialize()
+      let binary = ''
+      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i])
+      const signedB64 = btoa(binary)
+
+      setIsSolanaPending(false); setIsSolanaConfirming(true)
+
+      const relayRes = await fetch('/api/solana-relay', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ tx: signedB64 }),
+      })
+      const relayData = await relayRes.json() as { ok: boolean; txHash?: string; error?: string }
+      if (!relayData.ok || !relayData.txHash) throw new Error(relayData.error ?? 'Relay failed')
+
+      setSolanaTxHash(relayData.txHash)
+      setIsSolanaConfirming(false); setIsSolanaConfirmed(true)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Transaction rejected'
+      setSolanaError(msg.slice(0, 160))
+      setIsSolanaPending(false); setIsSolanaConfirming(false)
+    }
   }
 
   async function handleEvmPermitPay() {
@@ -749,13 +886,16 @@ export default function PaymentPage() {
   }
 
   // ── Unified aliases ───────────────────────────────────────────────────────
-  const isConfirmed     = (chain === 'starknet' ? isStarkConfirmed  : isEvmConfirmed) || manualPayDetected
+  const isConfirmed     = (chain === 'starknet' ? isStarkConfirmed : chain === 'solana' ? isSolanaConfirmed : isEvmConfirmed) || manualPayDetected
   const txHash          = manualPayDetected ? manualTxHash
-                        : chain === 'starknet' ? starkTxHash : evmTxHash
-  const isWalletPending = chain === 'starknet' ? isStarkPending    : isEvmWalletPending || isSignPending
-  const isConfirming    = chain === 'starknet' ? isStarkConfirming : isEvmConfirming
-  const isSendError     = chain !== 'starknet' ? (isEvmSendError || isEvmReverted) : !!starkError
+                        : chain === 'starknet' ? starkTxHash
+                        : chain === 'solana'   ? solanaTxHash
+                        : evmTxHash
+  const isWalletPending = chain === 'starknet' ? isStarkPending   : chain === 'solana' ? isSolanaPending   : isEvmWalletPending || isSignPending
+  const isConfirming    = chain === 'starknet' ? isStarkConfirming : chain === 'solana' ? isSolanaConfirming : isEvmConfirming
+  const isSendError     = chain === 'starknet' ? !!starkError : chain === 'solana' ? !!solanaError : (isEvmSendError || isEvmReverted)
   const sendErrorMsg    = chain === 'starknet' ? starkError
+                        : chain === 'solana'   ? solanaError
                         : isEvmReverted
                           ? 'Transaction reverted. The permit may have expired or your USDC balance was insufficient.'
                           : (evmSendError?.message ?? 'An unknown error occurred').slice(0, 140)
@@ -766,12 +906,13 @@ export default function PaymentPage() {
   // ── Event mode: register payment after confirmation ───────────────────────
   async function doRegister(name: string) {
     // In Send-via-Address mode the payer never connects a wallet so address is
-    // undefined. Fall back to the ghost vault address as the payer identifier.
-    const payer  = chain === 'starknet'
-      ? (starkAccount ?? '')
+    // undefined. Fall back to the vault address as the payer identifier.
+    const payer  = chain === 'starknet' ? (starkAccount ?? '')
+      : chain === 'solana' ? (solanaWalletAddr ?? solanaVaultAddr ?? '')
       : (address ?? directVault ?? '')
     const txH    = manualPayDetected ? manualTxHash
                  : chain === 'starknet' ? starkTxHash
+                 : chain === 'solana'   ? (solanaTxHash ?? solanaDirectTxHash)
                  : (evmTxHash ?? null)
     const txHash = txH ?? `manual_${Date.now()}`
     const payload = { eventId, txHash, chain, payer, memo: name, amount: amt }
@@ -812,6 +953,16 @@ export default function PaymentPage() {
     void doRegister(name)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [directStatus, attendeeName])
+
+  // Fallback: register when Solana direct-send sweep succeeds.
+  useEffect(() => {
+    if (solanaDirectStatus !== 'success' || !isEventMode || !eventId || eventRegistered.current) return
+    const name = attendeeName.trim()
+    if (!name) return
+    eventRegistered.current = true
+    void doRegister(name)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [solanaDirectStatus, attendeeName])
 
   // ── openConnectModal unused lint suppression ──────────────────────────────
   void openConnectModal
@@ -1063,7 +1214,8 @@ export default function PaymentPage() {
               const unavailable =
                 hskLocked ||
                 (c === 'starknet' && !resolvedStark) ||
-                (c !== 'starknet' && !resolvedEvm)
+                (c === 'solana'   && !resolvedSolana) ||
+                (c !== 'starknet' && c !== 'solana' && !resolvedEvm)
               const tooltipText = hskLocked
                 ? 'HSK-only payment link'
                 : 'Recipient address not provided for this chain'
@@ -1296,6 +1448,80 @@ export default function PaymentPage() {
             </div>
           )}
 
+          {/* ── Direct Send panel (Solana) ───────────────────────────── */}
+          {payMode === 'direct' && chain === 'solana' && (
+            <div className="space-y-3">
+              {!solanaVaultAddr && solanaDirectStatus !== 'error' ? (
+                <div className="animate-pulse h-14 rounded-xl bg-gray-100" />
+              ) : solanaDirectStatus === 'success' ? (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+                    <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+                    <p className="text-sm font-semibold text-emerald-800">Payment Successful</p>
+                  </div>
+                  {solanaDirectTxHash && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
+                        <p className="min-w-0 flex-1 truncate font-mono text-xs text-gray-600">{solanaDirectTxHash}</p>
+                        <button onClick={() => { navigator.clipboard.writeText(solanaDirectTxHash!); setSolanaDirHashCopied(true); setTimeout(() => setSolanaDirHashCopied(false), 2000) }}>
+                          {solanaDirHashCopied ? <CheckCheck className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5 text-gray-400" />}
+                        </button>
+                      </div>
+                      <a href={`${meta.explorerUrl}/tx/${solanaDirectTxHash}`} target="_blank" rel="noopener noreferrer"
+                        className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-all active:scale-[0.98]">
+                        <ExternalLink className="h-4 w-4" />
+                        View on {meta.explorerName}
+                      </a>
+                    </div>
+                  )}
+                </div>
+              ) : solanaDirectStatus === 'relaying' ? (
+                <div className="flex items-center gap-3 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3.5">
+                  <Loader2 className="h-4 w-4 shrink-0 animate-spin text-blue-500" />
+                  <p className="text-sm font-medium text-blue-700">Sweeping payment to recipient…</p>
+                </div>
+              ) : solanaDirectStatus === 'error' ? (
+                <div className="space-y-3">
+                  <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
+                    <div>
+                      <p className="text-sm font-semibold text-red-800">Sweep Failed</p>
+                      <p className="mt-0.5 text-xs text-red-600">{solanaDirectError}</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => { setSolanaDirectStatus('waiting'); setSolanaDirectError(null) }}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white hover:bg-gray-800 transition-all active:scale-[0.98]"
+                  >
+                    Retry
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2.5 rounded-xl border border-emerald-100 bg-emerald-50/60 px-3 py-2.5">
+                    <div className="relative flex h-2.5 w-2.5 shrink-0">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                      <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                    </div>
+                    <p className="text-[11px] font-medium text-emerald-700">Monitoring for USDC — detects in under 3 seconds</p>
+                  </div>
+                  <p className="text-center text-xs text-gray-500">Send USDC on Solana to this address</p>
+                  <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3.5">
+                    <p className="min-w-0 flex-1 break-all font-mono text-xs text-gray-800">{solanaVaultAddr}</p>
+                    <button
+                      onClick={() => { navigator.clipboard.writeText(solanaVaultAddr!); setSolanaAddrCopied(true); setTimeout(() => setSolanaAddrCopied(false), 2500) }}
+                      className="ml-2 shrink-0 flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 transition-all active:scale-90"
+                    >
+                      {solanaAddrCopied
+                        ? <><CheckCheck className="h-3.5 w-3.5 text-emerald-500" /> Copied!</>
+                        : <><Copy className="h-3.5 w-3.5" /> Copy</>}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Tx finalizing indicator — wallet mode only, after tx submitted */}
           {payMode === 'wallet' && evmTxHash && !isEvmConfirmed && chain !== 'starknet' && (
             <div className="flex items-center gap-2.5 rounded-xl border border-emerald-100 bg-emerald-50/60 px-3 py-2.5">
@@ -1319,6 +1545,21 @@ export default function PaymentPage() {
                   <button onClick={() => handleChainSwitch('base')} className="font-semibold underline underline-offset-2">Base</button>
                   {' '}or{' '}
                   <button onClick={() => handleChainSwitch('hashkey')} className="font-semibold underline underline-offset-2">HashKey</button>.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Missing Solana address */}
+          {missingSolana && (
+            <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
+              <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-500" />
+              <div>
+                <p className="text-sm font-semibold text-amber-800">Receiver has not set a Solana address</p>
+                <p className="mt-0.5 text-xs text-amber-700">
+                  Pay via{' '}
+                  <button onClick={() => handleChainSwitch('base')} className="font-semibold underline underline-offset-2">Base</button>
+                  {' '}or another supported chain.
                 </p>
               </div>
             </div>
@@ -1360,6 +1601,41 @@ export default function PaymentPage() {
               <AlertTriangle className="h-4 w-4" />
               No Starknet Address Available
             </button>
+          ) : payMode === 'wallet' && missingSolana ? (
+            <button disabled className="flex w-full cursor-not-allowed items-center justify-center gap-2 rounded-xl bg-gray-100 px-6 py-4 text-sm font-semibold text-gray-400">
+              <AlertTriangle className="h-4 w-4" />
+              No Solana Address Available
+            </button>
+          ) : payMode === 'wallet' && chain === 'solana' ? (
+            !solanaWalletAddr ? (
+              <div className="space-y-2">
+                <button
+                  onClick={connectSolana}
+                  disabled={isSolanaConnecting}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#9945FF] px-6 py-4 text-sm font-semibold text-white transition-all hover:bg-[#8833EE] active:scale-[0.98] disabled:opacity-60"
+                >
+                  {isSolanaConnecting
+                    ? <><Loader2 className="h-4 w-4 animate-spin" /> Connecting…</>
+                    : <><Wallet className="h-4 w-4" /> Connect Solana Wallet</>}
+                </button>
+                <p className="text-center text-xs text-gray-400">Phantom, Solflare & other Solana wallets</p>
+              </div>
+            ) : (
+              <button
+                onClick={handlePay}
+                disabled={isSolanaPending || isSolanaConfirming || (isEventMode && !attendeeName.trim())}
+                className={cn(
+                  'flex w-full items-center justify-center gap-2 rounded-xl px-6 py-4 text-sm font-semibold transition-all',
+                  isSolanaPending || isSolanaConfirming
+                    ? 'cursor-not-allowed bg-gray-100 text-gray-500'
+                    : 'bg-[#9945FF] text-white hover:bg-[#8833EE] shadow-button active:scale-[0.98]',
+                )}
+              >
+                {isSolanaPending     ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirm in Wallet…</>
+                : isSolanaConfirming ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirming on Chain…</>
+                : <><Zap className="h-4 w-4" /> Pay {formatAmount(amt, 6)} USDC on Solana</>}
+              </button>
+            )
           ) : payMode === 'wallet' && chain === 'starknet' ? (
             !starkAccount ? (
               <div className="space-y-2">
@@ -1427,7 +1703,7 @@ export default function PaymentPage() {
       )}
 
       {/* Manual check button */}
-      {showCheckButton && !manualPayDetected && chain !== 'starknet' && payMode === 'wallet' && (
+      {showCheckButton && !manualPayDetected && chain !== 'starknet' && chain !== 'solana' && payMode === 'wallet' && (
         <div className="mt-4 flex justify-center">
           <button
             onClick={handleManualCheck}

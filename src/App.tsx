@@ -4,6 +4,7 @@ import CreateLink from './pages/CreateLink'
 import PaymentPage from './pages/PaymentPage'
 import Dashboard from './pages/Dashboard'
 import EventDashboard from './pages/EventDashboard'
+import { SolanaProvider } from './lib/SolanaContext'
 import StreamPayApp from '../modules/streampay/src/StreamPayApp'
 
 // ── Hostname-based app routing ────────────────────────────────────────────────
@@ -23,6 +24,7 @@ export default function App() {
 
   // Default → Hash PayLink
   return (
+    <SolanaProvider>
     <BrowserRouter>
       <Routes>
         <Route element={<Layout />}>
@@ -34,5 +36,6 @@ export default function App() {
         </Route>
       </Routes>
     </BrowserRouter>
+    </SolanaProvider>
   )
 }

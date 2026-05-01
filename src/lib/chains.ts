@@ -1,7 +1,7 @@
 import { defineChain } from 'viem'
 import { base } from 'viem/chains'
 
-export type ChainKey = 'base' | 'starknet' | 'hashkey' | 'arc'
+export type ChainKey = 'base' | 'starknet' | 'hashkey' | 'arc' | 'solana'
 
 // ─── Platform fee engine ─────────────────────────────────────────────────────
 /** 0.2 % platform fee in basis points (20 bps). Collected via FeeRouter on settlement. */
@@ -163,5 +163,23 @@ export const CHAIN_META = {
     dotColor: 'bg-violet-500',
     engineLabel: 'Arc Testnet · Native USDC Gas',
     isTestnet: true,
+  },
+  solana: {
+    key:          'solana' as const,
+    label:        'Solana',
+    asset:        'USDC',
+    decimals:     6,
+    tokenAddress: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
+    explorerUrl:  'https://solscan.io',
+    explorerName: 'Solscan',
+    glowStyle:    '0 0 52px -8px rgba(153,69,255,0.28), 0 0 0 1px rgba(153,69,255,0.14)',
+    accentColor:  '#9945FF',
+    badgeBg:      'bg-purple-50',
+    badgeText:    'text-purple-700',
+    badgeBorder:  'border-purple-200',
+    toggleActive: 'bg-[#9945FF] text-white shadow-sm',
+    headerBg:     'from-purple-50 to-violet-50',
+    dotColor:     'bg-purple-500',
+    engineLabel:  'Gasless · Fee Sponsored',
   },
 } as const

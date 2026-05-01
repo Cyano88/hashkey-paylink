@@ -36,19 +36,24 @@ import { isAddress } from 'viem'
 import { ConnectButton } from '@rainbow-me/rainbowkit'
 import { cn, truncateAddress, formatAmount, copyToClipboard } from '../lib/utils'
 import { useStarknet } from '../lib/StarknetContext'
+import { useSolana }   from '../lib/SolanaContext'
 import { CHAIN_META, type ChainKey } from '../lib/chains'
 import { EVM_CLIENTS, ROUTER_FACTORY, FACTORY_GET_ROUTER_ABI, FACTORY_DEPLOY_ROUTER_ABI } from '../lib/router'
 
 // ─── Starknet address: 0x followed by exactly 64 hex chars ──────────────────
 const isValidStarkAddr = (v: string) => /^0x[0-9a-fA-F]{64}$/.test(v)
 
-const CHAINS: ChainKey[] = ['base', 'starknet', 'hashkey', 'arc']
+// ─── Solana address: base58, 32–44 characters ────────────────────────────────
+const isValidSolanaAddr = (v: string) => /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(v)
+
+const CHAINS: ChainKey[] = ['base', 'starknet', 'hashkey', 'arc', 'solana']
 
 type VaultStep = 'idle' | 'checking' | 'needs_deploy' | 'deploying' | 'ready' | 'skipped'
 
 export default function CreateLink() {
   const [evmAddr,       setEvmAddr]       = useState('')
   const [starkAddr,     setStarkAddr]     = useState('')
+  const [solanaAddr,    setSolanaAddr]    = useState('')
   const [amt,           setAmt]           = useState('')
   const [memo,          setMemo]          = useState('')
   const [generatedLink, setGeneratedLink] = useState('')
@@ -67,7 +72,7 @@ export default function CreateLink() {
   // selectedNet is owned by Layout and shared via outlet context for bidirectional sync with the header toolkit
   const { selectedNet, onNetworkSelect } = useOutletContext<LayoutOutletContext>()
   // Derived early so useEffect hooks below can reference it without TDZ error
-  const isEvmNet = selectedNet !== 'starknet'
+  const isEvmNet = selectedNet !== 'starknet' && selectedNet !== 'solana'
   const [vaultStep,     setVaultStep]     = useState<VaultStep>('idle')
   const [deployError,   setDeployError]   = useState<string | null>(null)
   // Background check — null=checking, true=deployed, false=not deployed
@@ -76,6 +81,7 @@ export default function CreateLink() {
   // ── Wallet hooks ──────────────────────────────────────────────────────────
   const { isConnected, address: connectedEvm } = useAccount()
   const { address: connectedStark }            = useStarknet()
+  const { address: connectedSolana }           = useSolana()
   const chainId                                = useChainId()
   const { switchChain, isPending: isSwitching } = useSwitchChain()
 
@@ -111,6 +117,10 @@ export default function CreateLink() {
     if (connectedStark && starkAddr === '' && !isEvmNet) setStarkAddr(connectedStark)
   }, [connectedStark, isEvmNet])  // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    if (connectedSolana && solanaAddr === '' && selectedNet === 'solana') setSolanaAddr(connectedSolana)
+  }, [connectedSolana, selectedNet])  // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Reset vault step when address changes ─────────────────────────────
   useEffect(() => {
     setVaultStep('idle')
@@ -145,15 +155,20 @@ export default function CreateLink() {
   }, [evmAddr])
 
   // ── Validation ─────────────────────────────────────────────────────────
-  const evmDirty   = evmAddr.length > 0
-  const starkDirty = starkAddr.length > 0
-  const amtDirty   = amt.length > 0
+  const evmDirty    = evmAddr.length > 0
+  const starkDirty  = starkAddr.length > 0
+  const solanaDirty = solanaAddr.length > 0
+  const amtDirty    = amt.length > 0
 
-  const evmValid   = isAddress(evmAddr)
-  const starkValid = isValidStarkAddr(starkAddr)
-  const isValidAmt = amtDirty && parseFloat(amt) > 0 && !isNaN(parseFloat(amt))
+  const evmValid    = isAddress(evmAddr)
+  const starkValid  = isValidStarkAddr(starkAddr)
+  const solanaValid = isValidSolanaAddr(solanaAddr)
+  const isValidAmt  = amtDirty && parseFloat(amt) > 0 && !isNaN(parseFloat(amt))
 
-  const canGenerate = isValidAmt && (isEvmNet ? evmValid : starkValid)
+  const canGenerate = isValidAmt && (
+    selectedNet === 'solana' ? solanaValid :
+    isEvmNet ? evmValid : starkValid
+  )
 
   // ── Event mode toggle ──────────────────────────────────────────────────────
   function toggleEventMode(on: boolean) {
@@ -195,8 +210,9 @@ export default function CreateLink() {
   // ── Build link URL ─────────────────────────────────────────────────────
   function buildLink() {
     const params = new URLSearchParams({ amt, net: selectedNet })
-    if (isEvmNet) params.set('evm', evmAddr)
-    else          params.set('stark', starkAddr)
+    if (selectedNet === 'solana')  params.set('sol', solanaAddr)
+    else if (isEvmNet)             params.set('evm', evmAddr)
+    else                           params.set('stark', starkAddr)
     if (memo.trim()) params.set('memo', memo.trim())
     if (eventMode && eventId) {
       params.set('event', '1')
@@ -206,7 +222,9 @@ export default function CreateLink() {
   }
 
   function buildDashboardLink() {
-    const params = new URLSearchParams({ id: eventId, evm: evmAddr, amt })
+    const params = new URLSearchParams({ id: eventId, amt })
+    if (selectedNet === 'solana') params.set('sol', solanaAddr)
+    else                          params.set('evm', evmAddr)
     if (memo.trim()) params.set('name', memo.trim())
     return `${window.location.origin}/event?${params.toString()}`
   }
@@ -258,7 +276,7 @@ export default function CreateLink() {
   }
 
   function handleReset() {
-    setEvmAddr(''); setStarkAddr(''); setAmt(''); setMemo('')
+    setEvmAddr(''); setStarkAddr(''); setSolanaAddr(''); setAmt(''); setMemo('')
     setGeneratedLink(''); setCopied(false)
     setVaultStep('idle'); setDeployError(null); setRouterDeployed(null); resetDeploy()
   }
@@ -373,7 +391,7 @@ export default function CreateLink() {
           </fieldset>}
 
           {/* ── Starknet Address — Starknet only ─────────────────────── */}
-          {!isEvmNet && <fieldset className="space-y-1.5">
+          {selectedNet === 'starknet' && <fieldset className="space-y-1.5">
             <label className="flex items-center justify-between">
               <span className="flex items-center gap-2 text-sm font-medium text-gray-700">
                 <span className="h-2 w-2 rounded-full bg-[#8B5CF6]" />
@@ -414,6 +432,52 @@ export default function CreateLink() {
                 {connectedStark && starkAddr.toLowerCase() === connectedStark.toLowerCase()
                   ? `Auto-filled · ${truncateAddress(starkAddr, 8)}`
                   : truncateAddress(starkAddr, 8)}
+              </p>
+            )}
+          </fieldset>}
+
+          {/* ── Solana Address — Solana only ──────────────────────────── */}
+          {selectedNet === 'solana' && <fieldset className="space-y-1.5">
+            <label className="flex items-center justify-between">
+              <span className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                <span className="h-2 w-2 rounded-full bg-[#9945FF]" />
+                Solana Address
+              </span>
+              <span className="text-[11px] font-medium text-gray-400">Solana Mainnet · USDC</span>
+            </label>
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Base58 Solana address (32–44 chars)"
+                value={solanaAddr}
+                onChange={(e) => { setSolanaAddr(e.target.value.trim()); setGeneratedLink('') }}
+                spellCheck={false}
+                autoComplete="off"
+                className={cn(
+                  'w-full rounded-xl border bg-gray-50/60 px-4 py-3 font-mono text-sm',
+                  'placeholder:text-gray-400 transition-all focus:bg-white focus:outline-none focus:ring-2',
+                  solanaDirty && !solanaValid
+                    ? 'border-red-300 pr-10 text-red-600 focus:ring-red-100'
+                    : solanaValid
+                    ? 'border-purple-300 text-gray-900 focus:ring-purple-100'
+                    : 'border-gray-200 text-gray-900 focus:border-[#9945FF]/40 focus:ring-[#9945FF]/15',
+                )}
+              />
+              {solanaDirty && !solanaValid && (
+                <XCircle className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-red-400" />
+              )}
+            </div>
+            {solanaDirty && !solanaValid && (
+              <p className="flex items-center gap-1 text-xs text-red-500">
+                <Info className="h-3 w-3" /> Must be a valid Solana base58 address.
+              </p>
+            )}
+            {solanaValid && (
+              <p className="flex items-center gap-1 text-xs text-purple-600">
+                <CheckCheck className="h-3 w-3" />
+                {connectedSolana && solanaAddr === connectedSolana
+                  ? `Auto-filled · ${truncateAddress(solanaAddr, 8)}`
+                  : truncateAddress(solanaAddr, 8)}
               </p>
             )}
           </fieldset>}
@@ -524,9 +588,12 @@ export default function CreateLink() {
             </button>
           )}
 
-          {!canGenerate && !(isEvmNet ? evmDirty : starkDirty) && vaultStep === 'idle' && (
+          {!canGenerate && vaultStep === 'idle' && (
+            selectedNet === 'solana' ? !solanaDirty :
+            isEvmNet ? !evmDirty : !starkDirty
+          ) && (
             <p className="text-center text-xs text-gray-400">
-              Enter a {isEvmNet ? 'wallet' : 'Starknet'} address to continue
+              Enter a {selectedNet === 'solana' ? 'Solana' : isEvmNet ? 'wallet' : 'Starknet'} address to continue
             </p>
           )}
         </div>
@@ -572,6 +639,13 @@ export default function CreateLink() {
                       <span className="h-1.5 w-1.5 rounded-full bg-[#8B5CF6]" />
                       <span>Starknet:</span>
                       <span className="font-mono text-gray-700">{truncateAddress(starkAddr, 8)}</span>
+                    </div>
+                  )}
+                  {solanaValid && (
+                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                      <span className="h-1.5 w-1.5 rounded-full bg-[#9945FF]" />
+                      <span>Solana:</span>
+                      <span className="font-mono text-gray-700">{truncateAddress(solanaAddr, 8)}</span>
                     </div>
                   )}
                   {memo && (
