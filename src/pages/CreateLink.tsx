@@ -459,8 +459,8 @@ export default function CreateLink() {
                   solanaDirty && !solanaValid
                     ? 'border-red-300 pr-10 text-red-600 focus:ring-red-100'
                     : solanaValid
-                    ? 'border-purple-300 text-gray-900 focus:ring-purple-100'
-                    : 'border-gray-200 text-gray-900 focus:border-[#9945FF]/40 focus:ring-[#9945FF]/15',
+                    ? 'border-emerald-300 text-gray-900 focus:ring-emerald-100'
+                    : 'border-gray-200 text-gray-900 focus:border-[#14F195]/40 focus:ring-[#14F195]/15',
                 )}
               />
               {solanaDirty && !solanaValid && (
@@ -473,7 +473,7 @@ export default function CreateLink() {
               </p>
             )}
             {solanaValid && (
-              <p className="flex items-center gap-1 text-xs text-purple-600">
+              <p className="flex items-center gap-1 text-xs text-emerald-600">
                 <CheckCheck className="h-3 w-3" />
                 {connectedSolana && solanaAddr === connectedSolana
                   ? `Auto-filled · ${truncateAddress(solanaAddr, 8)}`

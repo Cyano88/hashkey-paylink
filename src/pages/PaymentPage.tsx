@@ -4,6 +4,7 @@ import {
   useAccount,
   useChainId,
   useSwitchChain,
+  useDisconnect,
   useSendTransaction,
   useWaitForTransactionReceipt,
   useSignTypedData,
@@ -221,6 +222,7 @@ export default function PaymentPage() {
   const { isConnected, address } = useAccount()
   const chainId                  = useChainId()
   const { switchChain, isPending: isSwitching } = useSwitchChain()
+  const { disconnect: disconnectEvm } = useDisconnect()
   const { openConnectModal }     = useConnectModal()
 
   const {
@@ -255,7 +257,7 @@ export default function PaymentPage() {
   const starkPollAbort = useRef<AbortController | null>(null)
 
   // ── Solana ────────────────────────────────────────────────────────────────
-  const { address: solanaWalletAddr, isConnecting: isSolanaConnecting, connect: connectSolana } = useSolana()
+  const { address: solanaWalletAddr, isConnecting: isSolanaConnecting, connect: connectSolana, disconnect: disconnectSolana } = useSolana()
   const [solanaTxHash,         setSolanaTxHash]         = useState<string | null>(null)
   const [isSolanaPending,      setIsSolanaPending]      = useState(false)
   const [isSolanaConfirming,   setIsSolanaConfirming]   = useState(false)
@@ -688,6 +690,9 @@ export default function PaymentPage() {
   function handleChainSwitch(c: ChainKey) {
     if (isHskOnly && c !== 'hashkey') return
     if (c === chain) return
+    // Auto-disconnect: switching TO Solana drops EVM; switching AWAY from Solana drops Solana
+    if (c === 'solana' && isConnected) disconnectEvm()
+    if (c !== 'solana' && solanaWalletAddr) disconnectSolana()
     setChain(c)
     resetEvmSend()
     resetPermitSign()
@@ -1612,7 +1617,7 @@ export default function PaymentPage() {
                 <button
                   onClick={connectSolana}
                   disabled={isSolanaConnecting}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#9945FF] px-6 py-4 text-sm font-semibold text-white transition-all hover:bg-[#8833EE] active:scale-[0.98] disabled:opacity-60"
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#14F195] px-6 py-4 text-sm font-semibold text-gray-900 transition-all hover:bg-[#00E589] active:scale-[0.98] disabled:opacity-60"
                 >
                   {isSolanaConnecting
                     ? <><Loader2 className="h-4 w-4 animate-spin" /> Connecting…</>
@@ -1628,7 +1633,7 @@ export default function PaymentPage() {
                   'flex w-full items-center justify-center gap-2 rounded-xl px-6 py-4 text-sm font-semibold transition-all',
                   isSolanaPending || isSolanaConfirming
                     ? 'cursor-not-allowed bg-gray-100 text-gray-500'
-                    : 'bg-[#9945FF] text-white hover:bg-[#8833EE] shadow-button active:scale-[0.98]',
+                    : 'bg-[#14F195] text-gray-900 hover:bg-[#00E589] shadow-button active:scale-[0.98]',
                 )}
               >
                 {isSolanaPending     ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirm in Wallet…</>

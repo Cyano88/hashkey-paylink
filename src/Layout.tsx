@@ -182,6 +182,8 @@ export default function Layout() {
       if (starkAddress) disconnectStarknet()
       return
     }
+    // Switching away from Solana: drop Solana connection
+    if (solanaAddress) disconnectSolana()
     if (evmConnected && key !== 'starknet') {
       // EVM → EVM: switch chain in-place, wallet stays connected
       const id = (CHAIN_META[key] as { chainId?: number }).chainId
