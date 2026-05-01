@@ -440,7 +440,7 @@ export default function CreateLink() {
           {selectedNet === 'solana' && <fieldset className="space-y-1.5">
             <label className="flex items-center justify-between">
               <span className="flex items-center gap-2 text-sm font-medium text-gray-700">
-                <span className="h-2 w-2 rounded-full bg-[#9945FF]" />
+                <span className="h-2 w-2 rounded-full bg-[#14F195]" />
                 Solana Address
               </span>
               <span className="text-[11px] font-medium text-gray-400">Solana Mainnet · USDC</span>
@@ -643,7 +643,7 @@ export default function CreateLink() {
                   )}
                   {solanaValid && (
                     <div className="flex items-center gap-2 text-xs text-gray-500">
-                      <span className="h-1.5 w-1.5 rounded-full bg-[#9945FF]" />
+                      <span className="h-1.5 w-1.5 rounded-full bg-[#14F195]" />
                       <span>Solana:</span>
                       <span className="font-mono text-gray-700">{truncateAddress(solanaAddr, 8)}</span>
                     </div>
