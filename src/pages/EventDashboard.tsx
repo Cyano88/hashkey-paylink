@@ -37,8 +37,28 @@ export default function EventDashboard() {
   const [searchParams] = useSearchParams()
   const eventId   = searchParams.get('id')   ?? ''
   const evm       = searchParams.get('evm')  ?? ''
+  const sol       = searchParams.get('sol')  ?? ''
   const amt       = searchParams.get('amt')  ?? ''
   const eventName = searchParams.get('name') ?? 'Event'
+  const netParam  = searchParams.get('net')  ?? ''
+
+  // Which EVM chains to watch for flash/toast notifications.
+  // New links carry ?net= so we scope to exactly that chain.
+  // Legacy links (no net param) fall back to watching both Base & Arc.
+  const evmChainsToWatch: ('base' | 'arc')[] =
+    netParam === 'base' ? ['base'] :
+    netParam === 'arc'  ? ['arc']  :
+    netParam            ? []       :   // starknet / solana / hashkey — no EVM poll
+    evm                 ? ['base', 'arc'] : []  // legacy fallback
+
+  // Human-readable label for the live-watching indicator
+  const watchLabel =
+    netParam === 'base'     ? 'Base'     :
+    netParam === 'arc'      ? 'Arc'      :
+    netParam === 'starknet' ? 'Starknet' :
+    netParam === 'solana'   ? 'Solana'   :
+    netParam === 'hashkey'  ? 'HashKey'  :
+    'Base & Arc'
 
   // Server registry is the single source of truth for the payment log.
   // It is keyed by eventId — only shows payments for THIS event.
@@ -54,7 +74,13 @@ export default function EventDashboard() {
   const qrHiResRef = useRef<HTMLDivElement>(null)
   const toastId    = useRef(0)
 
-  const paymentLink = `${window.location.origin}/pay?evm=${encodeURIComponent(evm)}&amt=${encodeURIComponent(amt)}&memo=${encodeURIComponent(eventName)}&event=1&id=${encodeURIComponent(eventId)}`
+  const paymentLink = (() => {
+    const p = new URLSearchParams({ amt, memo: eventName, event: '1', id: eventId })
+    if (netParam) p.set('net', netParam)
+    if (sol)      p.set('sol', sol)
+    else if (evm) p.set('evm', evm)
+    return `${window.location.origin}/pay?${p.toString()}`
+  })()
 
   const total = payments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0)
 
@@ -126,12 +152,13 @@ export default function EventDashboard() {
     }
 
     const t = setInterval(() => {
-      void pollChain('base', 'Base', CHAIN_META.base.decimals)
-      void pollChain('arc',  'Arc',  CHAIN_META.arc.decimals)
+      for (const key of evmChainsToWatch) {
+        void pollChain(key, CHAIN_META[key].label, CHAIN_META[key].decimals)
+      }
     }, 5_000)
 
     return () => clearInterval(t)
-  }, [evm, fetchPayments])
+  }, [evm, fetchPayments, evmChainsToWatch.join(',')])
 
   // ── QR download ───────────────────────────────────────────────────────────
   function downloadQR() {
@@ -184,7 +211,7 @@ export default function EventDashboard() {
     setLinkCopied(true); setTimeout(() => setLinkCopied(false), 2000)
   }
 
-  if (!eventId || !evm) {
+  if (!eventId || (!evm && !sol)) {
     return (
       <div className="mx-auto max-w-md py-20 text-center animate-fade-in">
         <p className="text-gray-500 text-sm">Invalid event link — missing event ID or recipient address.</p>
@@ -226,7 +253,7 @@ export default function EventDashboard() {
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
               <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
             </span>
-            <p className="text-sm text-gray-500">Live · watching Base &amp; Arc</p>
+            <p className="text-sm text-gray-500">Live · watching {watchLabel}</p>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">

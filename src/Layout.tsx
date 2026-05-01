@@ -141,9 +141,11 @@ function NetworkToolkit({
 export default function Layout() {
   const { pathname } = useLocation()
   const [searchParams] = useSearchParams()
-  const isPayPage = pathname === '/pay'
-  const payNetParam = isPayPage ? (searchParams.get('net') as ChainKey | null) : null
-  const activeNet = (payNetParam && payNetParam in CHAIN_META) ? payNetParam : null
+  const isPayPage  = pathname === '/pay'
+  const isDashPage = pathname === '/event'
+  // Both the pay page and the dashboard show a locked chain pill from the URL param
+  const pageNetParam = (isPayPage || isDashPage) ? (searchParams.get('net') as ChainKey | null) : null
+  const activeNet = (pageNetParam && pageNetParam in CHAIN_META) ? pageNetParam : null
 
   // ── Wallet connections ───────────────────────────────────────────────────────
   const { address: evmAddress, isConnected: evmConnected, chainId: evmChainId } = useAccount()
@@ -329,39 +331,44 @@ export default function Layout() {
           {/* Right side — single horizontal baseline */}
           <div className="flex items-center gap-x-2">
 
-            {/* 1. Network Toolkit — always visible; null selectedNet defaults to 'base' */}
-            {isPayPage
+            {/* 1. Network Toolkit — locked pill on pay/dashboard pages; interactive elsewhere */}
+            {(isPayPage || isDashPage)
               ? <NetworkToolkit activeKey={activeNet} locked />
               : <NetworkToolkit activeKey={selectedNet ?? 'base'} onSwitch={handleNetworkSelect} />
             }
 
-            {/* 3a. Identity — plain address text, no interaction (connected) */}
-            {!isPayPage && anyConnected && displayAddress && (
-              <span className="hidden sm:block select-none font-mono text-[13px] text-gray-500 pointer-events-none">
-                {fmtAddr(displayAddress)}
-              </span>
-            )}
+            {/* Wallet controls — hidden on pay page and organizer dashboard (read-only pages) */}
+            {!isPayPage && !isDashPage && (
+              <>
+                {/* Identity — plain address text when connected */}
+                {anyConnected && displayAddress && (
+                  <span className="hidden sm:block select-none font-mono text-[13px] text-gray-500 pointer-events-none">
+                    {fmtAddr(displayAddress)}
+                  </span>
+                )}
 
-            {/* 3b. Connect Wallet — shown when disconnected; routes to selectedNet ecosystem */}
-            {!isPayPage && !anyConnected && (
-              <button
-                onClick={handleConnectWallet}
-                className="inline-flex h-9 items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 text-[13px] font-medium text-gray-700 shadow-sm hover:bg-gray-50 transition-colors"
-              >
-                <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="hidden sm:inline">Connect Wallet</span>
-              </button>
-            )}
+                {/* Connect Wallet — when disconnected */}
+                {!anyConnected && (
+                  <button
+                    onClick={handleConnectWallet}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 text-[13px] font-medium text-gray-700 shadow-sm hover:bg-gray-50 transition-colors"
+                  >
+                    <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="hidden sm:inline">Connect Wallet</span>
+                  </button>
+                )}
 
-            {/* 4. Power — disconnects all, resets intent (connected only) */}
-            {!isPayPage && anyConnected && (
-              <button
-                onClick={disconnectAll}
-                title="Disconnect all wallets"
-                className="flex h-9 w-9 items-center justify-center rounded-full text-gray-400 transition-colors hover:text-red-500 hover:bg-red-50"
-              >
-                <Power className="h-4 w-4" />
-              </button>
+                {/* Power — disconnect all */}
+                {anyConnected && (
+                  <button
+                    onClick={disconnectAll}
+                    title="Disconnect all wallets"
+                    className="flex h-9 w-9 items-center justify-center rounded-full text-gray-400 transition-colors hover:text-red-500 hover:bg-red-50"
+                  >
+                    <Power className="h-4 w-4" />
+                  </button>
+                )}
+              </>
             )}
 
           </div>

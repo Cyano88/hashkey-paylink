@@ -222,7 +222,7 @@ export default function CreateLink() {
   }
 
   function buildDashboardLink() {
-    const params = new URLSearchParams({ id: eventId, amt })
+    const params = new URLSearchParams({ id: eventId, amt, net: selectedNet })
     if (selectedNet === 'solana') params.set('sol', solanaAddr)
     else                          params.set('evm', evmAddr)
     if (memo.trim()) params.set('name', memo.trim())
