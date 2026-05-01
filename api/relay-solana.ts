@@ -33,6 +33,7 @@ import {
   TokenAccountNotFoundError,
 } from '@solana/spl-token'
 import crypto from 'crypto'
+import bs58   from 'bs58'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const USDC_MINT     = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v')
@@ -48,11 +49,13 @@ function getRpc(): string {
 function loadRelayer(): Keypair {
   const raw = process.env.RELAYER_PRIVATE_KEY_SOLANA
   if (!raw) throw new Error('RELAYER_PRIVATE_KEY_SOLANA not configured')
-  try {
-    return Keypair.fromSecretKey(new Uint8Array(JSON.parse(raw) as number[]))
-  } catch {
-    return Keypair.fromSecretKey(Buffer.from(raw, 'base64'))
-  }
+  // Accept three formats:
+  //   JSON array  — [1,2,3,...,64]     (Solana CLI / solana-keygen output)
+  //   Base64      — 88-char string      (manual export)
+  //   Base58      — Phantom "Export Private Key" output
+  try { return Keypair.fromSecretKey(new Uint8Array(JSON.parse(raw) as number[])) } catch { /* not JSON */ }
+  try { return Keypair.fromSecretKey(bs58.decode(raw)) }                           catch { /* not base58 */ }
+  return Keypair.fromSecretKey(Buffer.from(raw, 'base64'))
 }
 
 /** Deterministically derive a vault keypair from a linkId string */
