@@ -19,7 +19,12 @@ import {
   isAddress,
   encodeFunctionData,
   parseSignature,
+  concat,
 } from 'viem'
+
+// ─── Base Builder Code (ERC-8021) ─────────────────────────────────────────────
+// Appended to calldata on Base Mainnet transactions only. Hex of "bc_8qtb7tny".
+const BASE_BUILDER_CODE = '0x62635f3871746237746e79' as `0x${string}`
 import {
   ArrowLeft, CheckCircle2, ExternalLink, AlertCircle, Loader2,
   RefreshCw, ShieldCheck, Zap, Copy, CheckCheck, Wallet,
@@ -844,25 +849,27 @@ export default function PaymentPage() {
         message: { owner: address, spender: MULTICALL3_ADDRESS, value: totalUnits, nonce, deadline },
       })
       const { v, r, s } = parseSignature(sig)
+      const baseCallData = encodeFunctionData({
+        abi: MULTICALL3_AGGREGATE3_ABI, functionName: 'aggregate3',
+        args: [[
+          { target: tokenAddress, allowFailure: false, callData: encodeFunctionData({
+              abi: ERC20_PERMIT_ABI, functionName: 'permit',
+              args: [address, MULTICALL3_ADDRESS, totalUnits, deadline, Number(v), r, s],
+          })},
+          { target: tokenAddress, allowFailure: false, callData: encodeFunctionData({
+              abi: ERC20_TRANSFER_FROM_ABI, functionName: 'transferFrom',
+              args: [address, activeRecipient as `0x${string}`, recipientUnits],
+          })},
+          { target: tokenAddress, allowFailure: false, callData: encodeFunctionData({
+              abi: ERC20_TRANSFER_FROM_ABI, functionName: 'transferFrom',
+              args: [address, EVM_TREASURY, feeUnits],
+          })},
+        ]],
+      })
       sendTransaction({
         to: MULTICALL3_ADDRESS, value: 0n, chainId: targetChainId,
-        data: encodeFunctionData({
-          abi: MULTICALL3_AGGREGATE3_ABI, functionName: 'aggregate3',
-          args: [[
-            { target: tokenAddress, allowFailure: false, callData: encodeFunctionData({
-                abi: ERC20_PERMIT_ABI, functionName: 'permit',
-                args: [address, MULTICALL3_ADDRESS, totalUnits, deadline, Number(v), r, s],
-            })},
-            { target: tokenAddress, allowFailure: false, callData: encodeFunctionData({
-                abi: ERC20_TRANSFER_FROM_ABI, functionName: 'transferFrom',
-                args: [address, activeRecipient as `0x${string}`, recipientUnits],
-            })},
-            { target: tokenAddress, allowFailure: false, callData: encodeFunctionData({
-                abi: ERC20_TRANSFER_FROM_ABI, functionName: 'transferFrom',
-                args: [address, EVM_TREASURY, feeUnits],
-            })},
-          ]],
-        }),
+        // Append Base Builder Code on Base Mainnet only (ERC-8021)
+        data: chain === 'base' ? concat([baseCallData, BASE_BUILDER_CODE]) : baseCallData,
       })
     } catch { /* user rejected */ }
   }

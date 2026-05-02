@@ -40,6 +40,10 @@ import {
 import { base } from 'viem/chains'
 import { privateKeyToAccount } from 'viem/accounts'
 
+// ─── Base Builder Code (ERC-8021) ─────────────────────────────────────────────
+// Hex of "bc_8qtb7tny" — appended to Base Mainnet relay transactions only.
+const BASE_BUILDER_CODE = '0x62635f3871746237746e79' as `0x${string}`
+
 // ─── Arc Testnet chain definition (mirrors src/lib/chains.ts) ────────────────
 const arcChain = defineChain({
   id: 5042002,
@@ -174,6 +178,8 @@ export default async function handler(req: Request, res: Response) {
       functionName: 'relay',
       args:         [linkId as `0x${string}`, recipient as `0x${string}`, gasReimbUsdc],
       gas:          400_000n,  // generous ceiling; unused gas is refunded
+      // Append Base Builder Code on Base Mainnet only (ERC-8021)
+      ...(chainKey === 'base' ? { dataSuffix: BASE_BUILDER_CODE } : {}),
     })
 
     return res.status(200).json({
