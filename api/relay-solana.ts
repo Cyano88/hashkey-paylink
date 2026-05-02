@@ -29,6 +29,7 @@ import {
   getAssociatedTokenAddress,
   createAssociatedTokenAccountInstruction,
   createTransferCheckedInstruction,
+  createCloseAccountInstruction,
   getAccount,
   TokenAccountNotFoundError,
 } from '@solana/spl-token'
@@ -233,6 +234,14 @@ export async function sweepSolanaVault(req: Request, res: Response): Promise<voi
         vaultATA, USDC_MINT, treasuryATA, vaultKeypair.publicKey, feeRaw, USDC_DECIMALS,
       ))
     }
+
+    // Close the vault ATA after sweeping — returns the ~0.002 SOL rent back to
+    // the relayer, keeping the relayer self-funded without manual top-ups.
+    tx.add(createCloseAccountInstruction(
+      vaultATA,                // account to close (now empty)
+      relayer.publicKey,       // rent destination → relayer recoups SOL
+      vaultKeypair.publicKey,  // authority
+    ))
 
     tx.partialSign(relayer)
     tx.partialSign(vaultKeypair)
