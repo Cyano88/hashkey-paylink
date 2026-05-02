@@ -260,7 +260,9 @@ export default function CreateLink() {
   }
 
   function buildDashboardLink() {
-    const params = new URLSearchParams({ id: eventId, amt })
+    const params = new URLSearchParams({ id: eventId })
+    if (!flexAmount) params.set('amt', amt)
+    else             params.set('flex', '1')
     if (multiChainMode) {
       params.set('multi', '1')
       if (evmValid)    params.set('evm', evmAddr)

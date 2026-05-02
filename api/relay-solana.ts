@@ -237,11 +237,17 @@ export async function sweepSolanaVault(req: Request, res: Response): Promise<voi
     tx.partialSign(relayer)
     tx.partialSign(vaultKeypair)
 
-    const txHash = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: false })
+    const txHash = await connection.sendRawTransaction(tx.serialize(), {
+      skipPreflight:        false,
+      preflightCommitment:  'confirmed',
+      maxRetries:           5,
+    })
     await connection.confirmTransaction({ signature: txHash, blockhash, lastValidBlockHeight }, 'confirmed')
 
     res.json({ ok: true, status: 'swept', txHash })
   } catch (err) {
-    res.status(500).json({ ok: false, error: (err as Error).message })
+    const msg = (err as Error).message ?? 'Unknown sweep error'
+    console.error('[solana-sweep] failed:', msg)
+    res.status(500).json({ ok: false, error: msg })
   }
 }

@@ -5,7 +5,7 @@
  * Guards (in order):
  *   1. Router must be a deployed contract (has bytecode).
  *   2. Router must hold a USDC balance > 0.
- *   3. Profitability: platform fee (0.5% of balance) must exceed estimated gas cost.
+ *   3. Profitability: platform fee (0.2% of balance) must exceed estimated gas cost.
  *      If not profitable, returns { status: 'pending_profitability' } — funds are safe
  *      in the router and will be swept by the next keeper run or a larger payment.
  *
@@ -96,7 +96,7 @@ export default async function handler(req: Request, res: Response) {
   }
 
   const balanceUsdc = Number(balance) / 1e6
-  const feeUsdc     = balanceUsdc * 0.005      // 0.5% platform fee
+  const feeUsdc     = balanceUsdc * 0.002      // 0.2% platform fee
 
   // ── Guard 3: profitability check ─────────────────────────────────────────
   // Only sweep if fee covers estimated gas cost. Otherwise, hold in router — safe.

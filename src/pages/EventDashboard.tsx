@@ -41,8 +41,9 @@ export default function EventDashboard() {
   const stark     = searchParams.get('stark') ?? ''
   const amt       = searchParams.get('amt')   ?? ''
   const eventName = searchParams.get('name')  ?? 'Event'
-  const netParam  = searchParams.get('net')   ?? ''
+  const netParam   = searchParams.get('net')   ?? ''
   const multiParam = searchParams.get('multi') ?? ''
+  const flexParam  = searchParams.get('flex')  ?? ''
 
   // Which EVM chains to watch for flash/toast notifications.
   // New links carry ?net= so we scope to exactly that chain.
@@ -55,11 +56,12 @@ export default function EventDashboard() {
 
   // Human-readable label for the live-watching indicator
   const watchLabel =
-    netParam === 'base'     ? 'Base'     :
-    netParam === 'arc'      ? 'Arc'      :
-    netParam === 'starknet' ? 'Starknet' :
-    netParam === 'solana'   ? 'Solana'   :
-    netParam === 'hashkey'  ? 'HashKey'  :
+    multiParam === '1'      ? 'All Chains' :
+    netParam === 'base'     ? 'Base'       :
+    netParam === 'arc'      ? 'Arc'        :
+    netParam === 'starknet' ? 'Starknet'   :
+    netParam === 'solana'   ? 'Solana'     :
+    netParam === 'hashkey'  ? 'HashKey'    :
     'Base & Arc'
 
   // Server registry is the single source of truth for the payment log.
@@ -77,7 +79,9 @@ export default function EventDashboard() {
   const toastId    = useRef(0)
 
   const paymentLink = (() => {
-    const p = new URLSearchParams({ amt, memo: eventName, event: '1', id: eventId })
+    const p = new URLSearchParams({ memo: eventName, event: '1', id: eventId })
+    if (flexParam === '1') p.set('flex', '1')
+    else if (amt)          p.set('amt', amt)
     if (multiParam === '1') {
       p.set('multi', '1')
       if (evm)   p.set('evm',   evm)

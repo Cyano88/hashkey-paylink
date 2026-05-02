@@ -24,7 +24,7 @@
  *  RELAYER_PRIVATE_KEY        0x-prefixed private key of the master relayer wallet.
  *  PRIVATE_RPC_URL            Private RPC endpoint (Alchemy / QuickNode).
  *  PAYLINK_FACTORY_V2         Deployed PayLinkFactoryV2 contract address.
- *  TREASURY_ADDRESS           Cold wallet that receives the 0.5% fee + gas reimb.
+ *  TREASURY_ADDRESS           Cold wallet that receives the 0.2% fee + gas reimb.
  *                             (Informational here — enforced on-chain in the contract.)
  */
 
