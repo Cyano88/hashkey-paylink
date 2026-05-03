@@ -1,13 +1,10 @@
 // Shared FX currency list + helpers used by CreateLink, PaymentPage, EventDashboard
 
 export const FX_CURRENCIES = [
-  { code: 'NGN', symbol: '₦',   name: 'Nigerian Naira',      decimals: 0 },
-  { code: 'GHS', symbol: '₵',   name: 'Ghanaian Cedi',        decimals: 2 },
-  { code: 'RWF', symbol: 'RF',  name: 'Rwandan Franc',         decimals: 0 },
-  { code: 'HKD', symbol: 'HK$', name: 'Hong Kong Dollar',      decimals: 2 },
-  { code: 'SGD', symbol: 'S$',  name: 'Singapore Dollar',      decimals: 2 },
-  { code: 'JPY', symbol: '¥',   name: 'Japanese Yen',          decimals: 0 },
-  { code: 'SCR', symbol: 'SR',  name: 'Seychellois Rupee',     decimals: 2 },
+  { code: 'NGN', symbol: '₦',   name: 'Nigerian Naira',    decimals: 0 },
+  { code: 'GHS', symbol: '₵',   name: 'Ghanaian Cedi',     decimals: 2 },
+  { code: 'KES', symbol: 'KSh', name: 'Kenyan Shilling',   decimals: 2 },
+  { code: 'SGD', symbol: 'S$',  name: 'Singapore Dollar',  decimals: 2 },
 ] as const
 
 export type FxCode = typeof FX_CURRENCIES[number]['code']

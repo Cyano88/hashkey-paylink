@@ -14,13 +14,10 @@ import type { Request, Response } from 'express'
 
 // ── Supported currencies ──────────────────────────────────────────────────────
 export const FX_META: Record<string, { symbol: string; name: string; decimals: number }> = {
-  NGN: { symbol: '₦',   name: 'Nigerian Naira',      decimals: 0 },
-  GHS: { symbol: '₵',   name: 'Ghanaian Cedi',        decimals: 2 },
-  RWF: { symbol: 'RF',  name: 'Rwandan Franc',         decimals: 0 },
-  HKD: { symbol: 'HK$', name: 'Hong Kong Dollar',      decimals: 2 },
-  SGD: { symbol: 'S$',  name: 'Singapore Dollar',      decimals: 2 },
-  JPY: { symbol: '¥',   name: 'Japanese Yen',          decimals: 0 },
-  SCR: { symbol: 'SR',  name: 'Seychellois Rupee',     decimals: 2 },
+  NGN: { symbol: '₦',   name: 'Nigerian Naira',   decimals: 0 },
+  GHS: { symbol: '₵',   name: 'Ghanaian Cedi',    decimals: 2 },
+  KES: { symbol: 'KSh', name: 'Kenyan Shilling',  decimals: 2 },
+  SGD: { symbol: 'S$',  name: 'Singapore Dollar', decimals: 2 },
 }
 
 // ── In-memory cache — keyed by currency code, 10-minute TTL ──────────────────
