@@ -152,6 +152,23 @@ async function starkUsdcBalance(tokenAddress: string, accountAddress: string): P
   return BigInt(data.balance ?? '0x0')
 }
 
+// ─── Error message normaliser ─────────────────────────────────────────────────
+function friendlyErrorMsg(raw: string): string {
+  const s = raw.toLowerCase()
+  if (s.includes('insufficient') || s.includes('exceeds balance') || s.includes('exceeds the balance') ||
+      s.includes('transfer amount exceeds') || s.includes('not enough'))
+    return 'Insufficient funds — check your balance and try again.'
+  if (s.includes('user rejected') || s.includes('user denied') || s.includes('rejected the request') || s.includes('user cancelled'))
+    return 'Transaction cancelled in wallet.'
+  if (s.includes('reverted') || s.includes('execution reverted'))
+    return 'Transaction reverted — permit may have expired. Try again.'
+  if (s.includes('nonce') || s.includes('already known'))
+    return 'Nonce conflict — please wait a moment and try again.'
+  if (s.includes('gas') && s.includes('insufficient'))
+    return 'Insufficient gas — add funds to cover network fees.'
+  return raw.slice(0, 120)
+}
+
 // ─── Component ───────────────────────────────────────────────────────────────
 export default function PaymentPage() {
   const [searchParams] = useSearchParams()
@@ -468,9 +485,9 @@ export default function PaymentPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [manualPayDetected])
 
-  // ── Reset payMode when switching to HashKey (no Direct Send available) ───
+  // ── Reset payMode for chains that don't support Send via Address ─────────
   useEffect(() => {
-    if (chain === 'hashkey') setPayMode('wallet')
+    if (chain === 'hashkey' || chain === 'starknet') setPayMode('wallet')
   }, [chain])
 
   // ── V2 EVM: Generate linkId + compute ghost vault address ─────────────────
@@ -722,6 +739,8 @@ export default function PaymentPage() {
   function handleChainSwitch(c: ChainKey) {
     if (isHskOnly && c !== 'hashkey') return
     if (c === chain) return
+    // Chains that don't support Send via Address — fall back to wallet connect
+    if (c === 'starknet' || c === 'hashkey') setPayMode('wallet')
     // Auto-disconnect: switching TO Solana drops EVM; switching AWAY from Solana drops Solana
     if (c === 'solana' && isConnected) disconnectEvm()
     if (c !== 'solana' && solanaWalletAddr) disconnectSolana()
@@ -1365,9 +1384,9 @@ export default function PaymentPage() {
         {/* ── Amount header ─────────────────────────────────────────────── */}
         <div className={cn('border-b border-gray-100 bg-gradient-to-br p-6 text-center mt-4', meta.headerBg)}>
           {isFlex ? (
-            <>
-              <p className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-gray-400">Enter Amount</p>
-              <div className="flex items-center justify-center gap-2 mb-3">
+            <div className="flex flex-col items-center gap-3">
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Enter Amount</p>
+              <div className="flex items-baseline justify-center gap-2">
                 <input
                   type="number"
                   min="0"
@@ -1375,19 +1394,11 @@ export default function PaymentPage() {
                   placeholder="0.00"
                   value={flexAmt}
                   onChange={e => setFlexAmt(e.target.value)}
-                  className="w-36 text-center text-[2.75rem] font-bold leading-none tracking-tight text-gray-900 bg-transparent border-b-2 border-gray-300 focus:border-gray-500 outline-none"
+                  className="w-40 text-center text-[2.75rem] font-bold leading-none tracking-tight text-gray-900 bg-transparent border-b-2 border-gray-300 focus:border-gray-500 outline-none"
                 />
                 <span className="text-xl font-semibold text-gray-400">{meta.asset}</span>
               </div>
-              <input
-                type="text"
-                placeholder={memo ? `e.g. "${memo}"` : "What's this for? (optional)"}
-                value={flexMemo}
-                onChange={e => setFlexMemo(e.target.value)}
-                maxLength={80}
-                className="mx-auto block w-full max-w-xs text-center text-sm text-gray-600 bg-transparent border-b border-gray-200 focus:border-gray-400 outline-none placeholder:text-gray-400 pb-1"
-              />
-            </>
+            </div>
           ) : chain === 'arc' ? (
             <div className="mb-2 flex flex-wrap items-center justify-center gap-2">
               <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#008080] text-white text-xs font-bold shadow-sm">⬡</span>
@@ -1675,8 +1686,8 @@ export default function PaymentPage() {
               <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-red-500" />
               <div className="flex-1">
                 <p className="text-sm font-semibold text-red-800">Transaction Failed</p>
-                <p className="mt-0.5 break-all text-xs text-red-600">
-                  {(sendErrorMsg ?? 'An unknown error occurred').slice(0, 140)}
+                <p className="mt-0.5 text-xs text-red-600">
+                  {friendlyErrorMsg(sendErrorMsg ?? 'An unknown error occurred')}
                 </p>
                 <button onClick={() => { resetEvmSend(); setStarkError(null) }}
                   className="mt-2 text-xs font-bold text-red-700 hover:text-red-900">Try again</button>
