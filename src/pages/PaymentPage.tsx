@@ -26,7 +26,7 @@ import {
 // Appended to calldata on Base Mainnet transactions only. Hex of "bc_8qtb7tny".
 const BASE_BUILDER_CODE = '0x62635f3871746237746e79' as `0x${string}`
 import {
-  ArrowLeft, CheckCircle2, ExternalLink, AlertCircle, Loader2,
+  ArrowLeft, CheckCircle2, ExternalLink, AlertCircle, Loader2, ArrowLeftRight,
   RefreshCw, ShieldCheck, Zap, Copy, CheckCheck, Wallet,
   AlertTriangle, Radio,
 } from 'lucide-react'
@@ -205,10 +205,10 @@ export default function PaymentPage() {
   useEffect(() => { onPayChainChange(chain) }, [])  // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Flexible amount (payer-entered) ──────────────────────────────────────
-  const [flexAmt,  setFlexAmt]  = useState('')
-  const [flexMemo, setFlexMemo] = useState('')
-  // effectiveAmt: URL amount for fixed links, payer-entered for flex links
-  const effectiveAmt = isFlex ? flexAmt : amt
+  const [flexAmt,     setFlexAmt]     = useState('')
+  const [flexMemo,    setFlexMemo]    = useState('')
+  const [fxInputMode, setFxInputMode] = useState<'usdc' | 'local'>('usdc')
+  const [localAmt,    setLocalAmt]    = useState('')
 
   // ── UI state ──────────────────────────────────────────────────────────────
   const [hashCopied,        setHashCopied]       = useState(false)
@@ -233,8 +233,7 @@ export default function PaymentPage() {
   const eventRegistered  = useRef(false)
 
   // ── FX display (event mode only — reads params baked into the URL at link creation) ──
-  const fxCurrency  = isEventMode ? (initParams.get('fx')     ?? '')  : ''
-  const fxBuf       = isEventMode ? (parseFloat(initParams.get('fxbuf') ?? '0') || 0) : 0
+  const fxCurrency  = isEventMode ? (initParams.get('fx') ?? '') : ''
   const fxShow      = isEventMode && initParams.get('fxshow') === '1' && !!fxCurrency
   const fxSrc       = initParams.get('fxsrc') === 'custom' ? 'custom' : 'live'
   const fxCustomVal = parseFloat(initParams.get('fxrate') ?? '0') || 0
@@ -254,6 +253,21 @@ export default function PaymentPage() {
   }, [fxCurrency, fxSrc])
 
   useEffect(() => { if (fxShow && fxSrc === 'live') refreshFxRate() }, [fxShow, fxSrc, refreshFxRate])
+
+  // Flex USDC amount — when payer types in local currency, convert to USDC here
+  const flexAmtInUsdc = fxInputMode === 'local' && fxRate && parseFloat(localAmt) > 0
+    ? (parseFloat(localAmt) / fxRate).toFixed(6)
+    : flexAmt
+
+  // effectiveAmt: always USDC
+  const effectiveAmt = isFlex ? flexAmtInUsdc : amt
+
+  // flexPayDisabled: accounts for USDC and local-currency input modes
+  const flexPayDisabled = isFlex && (
+    fxInputMode === 'local'
+      ? (!localAmt || parseFloat(localAmt) <= 0 || !fxRate)
+      : (!flexAmt  || parseFloat(flexAmt)  <= 0)
+  )
 
   // ── Direct Send state (shared across Base, Arc, Starknet) ────────────────
   const [payMode,          setPayMode]          = useState<'wallet' | 'direct'>('wallet')
@@ -1408,7 +1422,7 @@ export default function PaymentPage() {
         {/* ── Amount header ─────────────────────────────────────────────── */}
         <div className={cn('border-b border-gray-100 bg-gradient-to-br p-6 text-center mt-4', meta.headerBg)}>
           {isFlex ? (
-            <div className="flex flex-col items-center gap-3">
+            <div className="flex flex-col items-center gap-2">
               <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Enter Amount</p>
               <div className="flex items-baseline justify-center gap-2">
                 <input
@@ -1416,12 +1430,38 @@ export default function PaymentPage() {
                   min="0"
                   step="any"
                   placeholder="0.00"
-                  value={flexAmt}
-                  onChange={e => setFlexAmt(e.target.value)}
+                  value={fxInputMode === 'local' ? localAmt : flexAmt}
+                  onChange={e => fxInputMode === 'local' ? setLocalAmt(e.target.value) : setFlexAmt(e.target.value)}
                   className="w-40 text-center text-[2.75rem] font-bold leading-none tracking-tight text-gray-900 bg-transparent border-b-2 border-gray-300 focus:border-gray-500 outline-none"
                 />
-                <span className="text-xl font-semibold text-gray-400">{meta.asset}</span>
+                <span className="text-xl font-semibold text-gray-400">
+                  {fxInputMode === 'local' ? (getFxMeta(fxCurrency)?.symbol ?? fxCurrency) : meta.asset}
+                </span>
               </div>
+
+              {/* Swap button — only when FX rate is ready */}
+              {fxShow && fxRate ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (fxInputMode === 'usdc') {
+                      if (flexAmt && parseFloat(flexAmt) > 0) {
+                        const m = getFxMeta(fxCurrency)
+                        setLocalAmt(formatLocalAmt(parseFloat(flexAmt), fxRate, m?.decimals ?? 2))
+                      }
+                      setFxInputMode('local')
+                    } else {
+                      if (localAmt && parseFloat(localAmt) > 0)
+                        setFlexAmt((parseFloat(localAmt) / fxRate).toFixed(4).replace(/\.?0+$/, ''))
+                      setFxInputMode('usdc')
+                    }
+                  }}
+                  className="flex items-center gap-1.5 rounded-full border border-gray-200 bg-white/60 px-3 py-1 text-[11px] font-medium text-gray-500 hover:bg-white hover:text-gray-700 transition-all"
+                >
+                  <ArrowLeftRight className="h-3 w-3" />
+                  {fxInputMode === 'local' ? `Switch to USDC` : `Switch to ${fxCurrency}`}
+                </button>
+              ) : null}
             </div>
           ) : chain === 'arc' ? (
             <div className="mb-2 flex flex-wrap items-center justify-center gap-2">
@@ -1447,33 +1487,50 @@ export default function PaymentPage() {
             </>
           )}
 
-          {/* ── FX indicator — event mode only, shown when organiser enabled it ── */}
+          {/* ── FX indicator — event mode only ─────────────────────────── */}
           {fxShow && fxCurrency && (() => {
-            const fxMeta      = getFxMeta(fxCurrency)
-            const adjustedRate = fxRate ? fxRate * (1 + fxBuf / 100) : null
-            const usdcAmt      = parseFloat(isFlex ? (flexAmt || '0') : effectiveAmt) || 0
+            const fxMeta = getFxMeta(fxCurrency)
+            const rate   = fxRate ?? null
+
+            // Local-currency mode: show the USDC the payer will actually pay
+            if (fxInputMode === 'local') {
+              const usdcOut = rate && parseFloat(localAmt) > 0
+                ? (parseFloat(localAmt) / rate).toFixed(4).replace(/\.?0+$/, '')
+                : null
+              return (
+                <div className="mt-2 flex items-center justify-center gap-1">
+                  {usdcOut ? (
+                    <span className="text-[11px] text-gray-400">You will pay ≈ {usdcOut} USDC</span>
+                  ) : rate ? (
+                    <span className="text-[11px] text-gray-400">
+                      1 {fxCurrency} = {(1 / rate).toFixed(6).replace(/\.?0+$/, '')} USDC
+                    </span>
+                  ) : null}
+                </div>
+              )
+            }
+
+            // USDC mode: show local-currency equivalent
+            const usdcAmt = parseFloat(effectiveAmt) || 0
             return (
               <div className="mt-3 flex items-center justify-center gap-1.5">
                 {fxLoading ? (
                   <RefreshCw className="h-2.5 w-2.5 animate-spin text-gray-300" />
-                ) : adjustedRate && usdcAmt > 0 ? (
+                ) : rate && usdcAmt > 0 ? (
                   <>
                     <span className="text-[11px] text-gray-400 leading-none">
-                      ≈ {formatLocalAmt(usdcAmt, adjustedRate, fxMeta?.decimals ?? 2)} {fxCurrency}
-                      {' · '}1 USDC = {adjustedRate.toFixed(2)} {fxCurrency}
-                      {fxBuf > 0 && ` · +${fxBuf}% coverage`}
+                      ≈ {formatLocalAmt(usdcAmt, rate, fxMeta?.decimals ?? 2)} {fxCurrency}
+                      {' · '}1 USDC = {rate.toFixed(2)} {fxCurrency}
                     </span>
-                    <button
-                      onClick={refreshFxRate}
-                      title="Refresh exchange rate"
-                      className="text-gray-300 hover:text-gray-500 transition-colors focus:outline-none"
-                    >
-                      <RefreshCw className="h-2.5 w-2.5" />
-                    </button>
+                    {fxSrc === 'live' && (
+                      <button onClick={refreshFxRate} title="Refresh rate" className="text-gray-300 hover:text-gray-500 transition-colors focus:outline-none">
+                        <RefreshCw className="h-2.5 w-2.5" />
+                      </button>
+                    )}
                   </>
-                ) : adjustedRate ? (
+                ) : rate ? (
                   <span className="text-[11px] text-gray-400">
-                    1 USDC = {adjustedRate.toFixed(2)} {fxCurrency}
+                    1 USDC = {rate.toFixed(2)} {fxCurrency}
                     {fxSrc === 'live' && (
                       <button onClick={refreshFxRate} className="ml-1 text-gray-300 hover:text-gray-500 transition-colors">
                         <RefreshCw className="inline h-2.5 w-2.5" />
@@ -1802,7 +1859,7 @@ export default function PaymentPage() {
             ) : (
               <button
                 onClick={handlePay}
-                disabled={isSolanaPending || isSolanaConfirming || (isEventMode && !attendeeName.trim()) || (isFlex && (!flexAmt || parseFloat(flexAmt) <= 0))}
+                disabled={isSolanaPending || isSolanaConfirming || (isEventMode && !attendeeName.trim()) || flexPayDisabled}
                 className={cn(
                   'flex w-full items-center justify-center gap-2 rounded-xl px-6 py-4 text-sm font-semibold transition-all',
                   isSolanaPending || isSolanaConfirming
@@ -1825,7 +1882,7 @@ export default function PaymentPage() {
                 <p className="text-center text-xs text-gray-400">ArgentX, Braavos & other Starknet wallets</p>
               </div>
             ) : (
-              <button onClick={handlePay} disabled={isStarkPending || isStarkConfirming || (isEventMode && !attendeeName.trim()) || (isFlex && (!flexAmt || parseFloat(flexAmt) <= 0))}
+              <button onClick={handlePay} disabled={isStarkPending || isStarkConfirming || (isEventMode && !attendeeName.trim()) || flexPayDisabled}
                 className={cn(
                   'flex w-full items-center justify-center gap-2 rounded-xl px-6 py-4 text-sm font-semibold transition-all',
                   isStarkPending || isStarkConfirming ? 'cursor-not-allowed bg-gray-100 text-gray-500'
@@ -1846,7 +1903,7 @@ export default function PaymentPage() {
               {isSwitching ? <><Loader2 className="h-4 w-4 animate-spin" /> Switching…</> : <><RefreshCw className="h-4 w-4" /> Switch to {meta.label}</>}
             </button>
           ) : payMode === 'wallet' ? (
-            <button onClick={handlePay} disabled={isWalletPending || isConfirming || (isEventMode && !attendeeName.trim()) || (isFlex && (!flexAmt || parseFloat(flexAmt) <= 0))}
+            <button onClick={handlePay} disabled={isWalletPending || isConfirming || (isEventMode && !attendeeName.trim()) || flexPayDisabled}
               className={cn(
                 'flex w-full items-center justify-center gap-2 rounded-xl px-6 py-4 text-sm font-semibold transition-all',
                 isWalletPending || isConfirming ? 'cursor-not-allowed bg-gray-100 text-gray-500'

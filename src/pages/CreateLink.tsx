@@ -72,7 +72,6 @@ export default function CreateLink() {
   // ── FX Display settings (event mode only) ────────────────────────────────
   const [fxShow,        setFxShow]        = useState(false)
   const [fxCurrency,    setFxCurrency]    = useState('NGN')
-  const [fxBuffer,      setFxBuffer]      = useState('0')
   const [fxSrc,         setFxSrc]         = useState<'live' | 'custom'>('live')
   const [fxCustomRate,  setFxCustomRate]  = useState('')
   const [fxPreviewRate, setFxPreviewRate] = useState<number | null>(null)
@@ -278,7 +277,6 @@ export default function CreateLink() {
         params.set('event', '1'); params.set('id', eventId)
         if (fxShow && fxCurrency) {
           params.set('fx', fxCurrency); params.set('fxshow', '1')
-          if (parseFloat(fxBuffer) > 0) params.set('fxbuf', fxBuffer)
           if (fxSrc === 'custom' && parseFloat(fxCustomRate) > 0) {
             params.set('fxsrc', 'custom'); params.set('fxrate', fxCustomRate)
           }
@@ -296,7 +294,6 @@ export default function CreateLink() {
       params.set('event', '1'); params.set('id', eventId)
       if (fxShow && fxCurrency) {
         params.set('fx', fxCurrency); params.set('fxshow', '1')
-        if (parseFloat(fxBuffer) > 0) params.set('fxbuf', fxBuffer)
         if (fxSrc === 'custom' && parseFloat(fxCustomRate) > 0) {
           params.set('fxsrc', 'custom'); params.set('fxrate', fxCustomRate)
         }
@@ -322,7 +319,6 @@ export default function CreateLink() {
     if (memo.trim()) params.set('name', memo.trim())
     if (fxShow && fxCurrency) {
       params.set('fx', fxCurrency); params.set('fxshow', '1')
-      if (parseFloat(fxBuffer) > 0) params.set('fxbuf', fxBuffer)
       if (fxSrc === 'custom' && parseFloat(fxCustomRate) > 0) {
         params.set('fxsrc', 'custom'); params.set('fxrate', fxCustomRate)
       }
@@ -694,14 +690,16 @@ export default function CreateLink() {
           {eventMode && (
             <div className={cn(
               'rounded-xl border p-4 space-y-3 transition-all',
-              fxShow ? 'border-blue-200 bg-blue-50/30 dark:border-blue-900/40 dark:bg-blue-950/20' : 'border-gray-200 bg-gray-50/50',
+              fxShow
+                ? 'border-blue-200 bg-blue-50/30 dark:border-blue-800/40 dark:bg-blue-950/20'
+                : 'border-gray-200 bg-gray-50/50 dark:border-white/10 dark:bg-white/[0.03]',
             )}>
               {/* Header row with toggle */}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <DollarSign className={cn('h-3.5 w-3.5', fxShow ? 'text-blue-400' : 'text-gray-400')} />
-                  <span className="text-sm font-medium text-gray-700">Local Currency Display</span>
-                  <span className="text-[10px] text-gray-400 font-normal">— optional</span>
+                  <DollarSign className={cn('h-3.5 w-3.5', fxShow ? 'text-blue-400' : 'text-gray-400 dark:text-gray-500')} />
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Local Currency Display</span>
+                  <span className="text-[10px] text-gray-400 dark:text-gray-500 font-normal">— optional</span>
                 </div>
                 <button
                   type="button"
@@ -780,34 +778,17 @@ export default function CreateLink() {
                     </div>
                   )}
 
-                  {/* Buffer picker */}
-                  <div className="flex items-center gap-3">
-                    <label className="w-16 shrink-0 text-[11px] text-gray-500">Buffer</label>
-                    <select
-                      value={fxBuffer}
-                      onChange={e => setFxBuffer(e.target.value)}
-                      className="flex-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-700 focus:border-blue-300 focus:outline-none focus:ring-1 focus:ring-blue-100"
-                    >
-                      {['0', '0.5', '1', '1.5', '2', '3', '5'].map(v => (
-                        <option key={v} value={v}>
-                          {v === '0' ? 'No buffer' : `+${v}% volatility coverage`}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
                   {/* Live preview */}
                   <div className="flex items-center justify-center gap-1.5 pt-0.5">
                     {fxPreviewLoad ? (
                       <RefreshCw className="h-3 w-3 animate-spin text-gray-300" />
                     ) : fxPreviewRate ? (() => {
-                        const adj = fxPreviewRate * (1 + parseFloat(fxBuffer) / 100)
                         const decimals = getFxMeta(fxCurrency)?.decimals ?? 2
                         return (
                           <p className="text-[11px] text-gray-400 text-center">
                             {fxSrc === 'custom' ? '📌 Custom rate:' : 'Live rate:'}{' '}
-                            1 USDC = {adj.toFixed(decimals > 0 ? 2 : 0)} {fxCurrency}
-                            {isValidAmt && ` · ≈ ${formatLocalAmt(parseFloat(amt), adj, decimals)} ${fxCurrency} for ${amt} USDC`}
+                            1 USDC = {fxPreviewRate.toFixed(decimals > 0 ? 2 : 0)} {fxCurrency}
+                            {isValidAmt && ` · ≈ ${formatLocalAmt(parseFloat(amt), fxPreviewRate, decimals)} ${fxCurrency} for ${amt} USDC`}
                           </p>
                         )
                       })() : fxSrc === 'custom' && !fxCustomRate ? (
@@ -816,8 +797,8 @@ export default function CreateLink() {
                   </div>
                   <p className="text-[10px] text-gray-400 text-center leading-relaxed">
                     {fxSrc === 'custom'
-                      ? `Custom rate is baked into the link — update the link if the rate shifts significantly.`
-                      : `Live rate fetched from Fixer.io, cached 10 min. Buffer covers movement between scan and settlement.`}
+                      ? 'Custom rate is baked into the link — update the link if the rate shifts significantly.'
+                      : 'Live rate fetched from Fixer.io, cached 10 min.'}
                   </p>
                 </div>
               )}
