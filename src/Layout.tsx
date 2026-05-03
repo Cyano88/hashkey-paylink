@@ -2,9 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import { Outlet, Link, useLocation, useSearchParams } from 'react-router-dom'
 import { useConnectModal } from '@rainbow-me/rainbowkit'
 import { useAccount, useDisconnect, useSwitchChain } from 'wagmi'
-import { ChevronDown, MessageCircle, Power, X, Send, ExternalLink, Search } from 'lucide-react'
+import { ChevronDown, MessageCircle, Power, X, Send, ExternalLink, Search, Sun, Moon } from 'lucide-react'
 import { useStarknet } from './lib/StarknetContext'
 import { useSolana }   from './lib/SolanaContext'
+import { useTheme }    from './lib/ThemeContext'
 import { CHAIN_META } from './lib/chains'
 import type { ChainKey } from './lib/chains'
 
@@ -88,9 +89,9 @@ function NetworkToolkit({
       <button
         onClick={locked ? undefined : () => setOpen(v => !v)}
         className={[
-          'inline-flex h-9 items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3',
-          'text-[13px] font-medium text-gray-700 shadow-sm transition-colors',
-          locked ? 'cursor-default' : 'hover:bg-gray-50',
+          'inline-flex h-9 items-center gap-1.5 rounded-full border border-gray-200 dark:border-white/10 bg-white dark:bg-[#1c1c20] px-3',
+          'text-[13px] font-medium text-gray-700 dark:text-gray-200 shadow-sm transition-colors',
+          locked ? 'cursor-default' : 'hover:bg-gray-50 dark:hover:bg-white/5',
         ].join(' ')}
       >
         {displayNet?.key === 'starknet' ? (
@@ -99,15 +100,15 @@ function NetworkToolkit({
           <span className={`h-2 w-2 shrink-0 rounded-full ${displayNet?.dotColor ?? 'bg-gray-400'}`} />
         )}
         <span className="hidden sm:inline">{displayNet?.label ?? 'Network'}</span>
-        {!locked && <ChevronDown className="h-3.5 w-3.5 text-gray-400" />}
+        {!locked && <ChevronDown className="h-3.5 w-3.5 text-gray-400 dark:text-gray-500" />}
       </button>
 
       {open && !locked && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 z-50 mt-2 w-52 overflow-hidden rounded-xl border border-[#E5E7EB] bg-white shadow-md">
-            <div className="border-b border-gray-100 px-3.5 py-2">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Switch to</p>
+          <div className="absolute right-0 z-50 mt-2 w-52 overflow-hidden rounded-xl border border-gray-200 dark:border-white/8 bg-white dark:bg-[#1c1c20] shadow-md">
+            <div className="border-b border-gray-100 dark:border-white/6 px-3.5 py-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">Switch to</p>
             </div>
             {otherNets.map(net => {
               const isTestnet = 'isTestnet' in net && !!(net as { isTestnet?: boolean }).isTestnet
@@ -115,14 +116,14 @@ function NetworkToolkit({
                 <button
                   key={net.key}
                   onClick={() => handleSwitch(net.key)}
-                  className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left transition-colors hover:bg-gray-50"
+                  className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left transition-colors hover:bg-gray-50 dark:hover:bg-white/5"
                 >
                   {net.key === 'starknet' ? (
                     <StarknetIcon className="h-3.5 w-3.5 shrink-0 text-purple-500" />
                   ) : (
                     <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${net.dotColor}`} />
                   )}
-                  <span className="flex-1 text-[13px] font-medium text-gray-800">{net.label}</span>
+                  <span className="flex-1 text-[13px] font-medium text-gray-800 dark:text-gray-100">{net.label}</span>
                   {isTestnet && (
                     <span className="rounded border border-amber-100 bg-amber-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-600">
                       Testnet
@@ -225,6 +226,8 @@ export default function Layout() {
     setSelectedNet(null)
   }
 
+  const { theme, toggle: toggleTheme } = useTheme()
+
   const [chatOpen,     setChatOpen]     = useState(false)
   const [chatInput,    setChatInput]    = useState('')
   const [chatMessages, setChatMessages] = useState<ChatMsg[]>([WELCOME])
@@ -318,9 +321,9 @@ export default function Layout() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F5F5F7] font-inter flex flex-col">
+    <div className="min-h-screen bg-[#F5F5F7] dark:bg-[#111113] font-inter flex flex-col">
       {/* ── Sticky frosted-glass header ─────────────────────────────────── */}
-      <header className="sticky top-0 z-50 border-b border-white/60 bg-white/80 backdrop-blur-xl">
+      <header className="sticky top-0 z-50 border-b border-white/60 dark:border-white/5 bg-white/80 dark:bg-[#111113]/90 backdrop-blur-xl">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3 sm:px-6">
           {/* Wordmark */}
           <Link to="/" className="group flex items-center gap-2.5 focus:outline-none">
@@ -329,7 +332,7 @@ export default function Layout() {
               alt="Hash PayLink"
               className="w-8 h-8 object-contain transition-transform group-hover:scale-105"
             />
-            <span className="text-[15px] font-semibold tracking-tight text-gray-900">
+            <span className="text-[15px] font-semibold tracking-tight text-gray-900 dark:text-white">
               Hash{' '}
               <span className="text-[#0071E3]">PayLink</span>
             </span>
@@ -346,7 +349,7 @@ export default function Layout() {
 
             {/* Recipient address — dashboard only, truncated, muted */}
             {isDashPage && dashRecipient && (
-              <span className="hidden sm:block select-none font-mono text-[13px] text-gray-400 pointer-events-none">
+              <span className="hidden sm:block select-none font-mono text-[13px] text-gray-400 dark:text-gray-500 pointer-events-none">
                 {fmtAddr(dashRecipient)}
               </span>
             )}
@@ -356,7 +359,7 @@ export default function Layout() {
               <>
                 {/* Identity — plain address text when connected */}
                 {anyConnected && displayAddress && (
-                  <span className="hidden sm:block select-none font-mono text-[13px] text-gray-500 pointer-events-none">
+                  <span className="hidden sm:block select-none font-mono text-[13px] text-gray-500 dark:text-gray-400 pointer-events-none">
                     {fmtAddr(displayAddress)}
                   </span>
                 )}
@@ -365,7 +368,7 @@ export default function Layout() {
                 {!anyConnected && (
                   <button
                     onClick={handleConnectWallet}
-                    className="inline-flex h-9 items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 text-[13px] font-medium text-gray-700 shadow-sm hover:bg-gray-50 transition-colors"
+                    className="inline-flex h-9 items-center gap-1.5 rounded-full border border-gray-200 dark:border-white/10 bg-white dark:bg-[#1c1c20] px-3 text-[13px] font-medium text-gray-700 dark:text-gray-200 shadow-sm hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
                   >
                     <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500 animate-pulse" />
                     <span className="hidden sm:inline">Connect Wallet</span>
@@ -377,13 +380,22 @@ export default function Layout() {
                   <button
                     onClick={disconnectAll}
                     title="Disconnect all wallets"
-                    className="flex h-9 w-9 items-center justify-center rounded-full text-gray-400 transition-colors hover:text-red-500 hover:bg-red-50"
+                    className="flex h-9 w-9 items-center justify-center rounded-full text-gray-400 dark:text-gray-500 transition-colors hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10"
                   >
                     <Power className="h-4 w-4" />
                   </button>
                 )}
               </>
             )}
+
+            {/* Theme toggle — always visible */}
+            <button
+              onClick={toggleTheme}
+              title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 dark:border-white/10 bg-white dark:bg-[#1c1c20] text-gray-500 dark:text-gray-400 shadow-sm hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
+            >
+              {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </button>
 
           </div>
         </div>
@@ -396,7 +408,7 @@ export default function Layout() {
 
       {/* ── Footer ───────────────────────────────────────────────────────── */}
       {!isPayPage && (
-        <footer className="border-t border-gray-100 bg-white/50 py-5">
+        <footer className="border-t border-gray-100 dark:border-white/5 bg-white/50 dark:bg-[#111113]/50 py-5">
           <div className="mx-auto max-w-5xl px-4 sm:px-6">
             <p className="text-center text-xs text-gray-400">
               Built on{' '}
