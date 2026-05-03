@@ -53,86 +53,117 @@
 /* ── Dark mode overrides ──────────────────────────────────────────────────────
    Applied when ThemeContext adds class="dark" to <html>.
    Uses higher specificity (html.dark .class) so no !important needed.
-   Chain-specific colors and blue/purple/teal accents are intentionally preserved.
+   Light mode is completely untouched — every rule here is scoped to html.dark.
 ──────────────────────────────────────────────────────────────────────────────── */
 
 html.dark body {
-  background-color: #111113;
-  color: #f3f4f6;
+  background-color: #121212;
+  color: #eeeeee;
 }
 
-/* Surfaces */
-html.dark .bg-white           { background-color: #1c1c20; }
-html.dark .bg-gray-50         { background-color: #18181c; }
-html.dark .bg-gray-100        { background-color: #1e1e23; }
-html.dark .bg-white\/80       { background-color: rgba(28, 28, 32, 0.88); }
-html.dark .bg-white\/50       { background-color: rgba(28, 28, 32, 0.5);  }
-html.dark .bg-gray-100\/80    { background-color: rgba(30, 30, 35, 0.8);  }
+/* ── Surfaces — 3-level hierarchy: page / card / input ─────────────────────── */
+html.dark .bg-white           { background-color: #1e1e1e; }  /* cards */
+html.dark .bg-gray-50         { background-color: #252525; }  /* subtle fills */
+html.dark .bg-gray-100        { background-color: #2a2a2a; }
+html.dark .bg-gray-300        { background-color: #555555; }  /* inactive toggle tracks */
 
-/* Borders */
-html.dark .border-gray-100    { border-color: rgba(255, 255, 255, 0.07); }
-html.dark .border-gray-200    { border-color: rgba(255, 255, 255, 0.09); }
-html.dark .border-white\/60   { border-color: rgba(255, 255, 255, 0.05); }
+/* Opacity variants — Tailwind treats bg-gray-50/60 as a separate class from bg-gray-50 */
+html.dark .bg-gray-50\/60     { background-color: #252525; }  /* inputs (was invisible — light bg kept) */
+html.dark .bg-gray-50\/80     { background-color: #252525; }
+html.dark .bg-blue-50\/60     { background-color: rgba(0, 113, 227, 0.10); }
+html.dark .bg-violet-50\/60   { background-color: rgba(124, 58, 237, 0.10); }
 
-/* Text */
-html.dark .text-gray-900      { color: #f3f4f6; }
-html.dark .text-gray-800      { color: #e5e7eb; }
-html.dark .text-gray-700      { color: #d1d5db; }
-html.dark .text-gray-600      { color: #9ca3af; }
-html.dark .text-gray-500      { color: #9ca3af; }
-html.dark .text-gray-400      { color: #6b7280; }
+/* Header / footer translucent backgrounds */
+html.dark .bg-white\/80       { background-color: rgba(18, 18, 18, 0.92); }
+html.dark .bg-white\/50       { background-color: rgba(18, 18, 18, 0.50); }
+html.dark .bg-gray-100\/80    { background-color: rgba(42, 42, 42, 0.80); }
 
-/* Hover surfaces */
-html.dark .hover\:bg-gray-50:hover  { background-color: rgba(255, 255, 255, 0.04); }
-html.dark .hover\:bg-gray-100:hover { background-color: rgba(255, 255, 255, 0.06); }
+/* ── Gradients — "Link Ready" panel uses from-gray-50/80 to-white (was light) ── */
+html.dark .from-gray-50\/80 {
+  --tw-gradient-from: rgba(37, 37, 37, 0.8);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(37, 37, 37, 0));
+}
+html.dark .to-white { --tw-gradient-to: #1e1e1e; }
 
-/* Inputs & textareas */
+/* ── Borders — solid #333 for clear definition ─────────────────────────────── */
+html.dark .border-gray-100    { border-color: #333333; }
+html.dark .border-gray-200    { border-color: #333333; }
+html.dark .border-gray-300    { border-color: #444444; }
+html.dark .border-white\/60   { border-color: rgba(255, 255, 255, 0.06); }
+
+/* ── Text — near-white hierarchy ───────────────────────────────────────────── */
+html.dark .text-gray-900      { color: #eeeeee; }
+html.dark .text-gray-800      { color: #e0e0e0; }
+html.dark .text-gray-700      { color: #cccccc; }
+html.dark .text-gray-600      { color: #aaaaaa; }
+html.dark .text-gray-500      { color: #888888; }
+html.dark .text-gray-400      { color: #666666; }
+
+/* Hover text */
+html.dark .hover\:text-gray-600:hover { color: #cccccc; }
+html.dark .hover\:text-gray-800:hover { color: #e0e0e0; }
+
+/* ── Hover surfaces ─────────────────────────────────────────────────────────── */
+html.dark .hover\:bg-gray-50:hover      { background-color: rgba(255, 255, 255, 0.05); }
+html.dark .hover\:bg-gray-100:hover     { background-color: rgba(255, 255, 255, 0.07); }
+html.dark .hover\:border-gray-300:hover { border-color: #555555; }
+
+/* ── Inputs & textareas — elevated surface, high-contrast text ─────────────── */
 html.dark input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='submit']):not([type='button']),
 html.dark textarea,
 html.dark select {
-  background-color: #18181c;
-  color: #f3f4f6;
-  border-color: rgba(255, 255, 255, 0.1);
+  background-color: #252525;
+  color: #eeeeee;
+  border-color: #333333;
+}
+
+html.dark input:focus:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='submit']):not([type='button']),
+html.dark textarea:focus {
+  background-color: #2a2a2a;
 }
 
 html.dark input::placeholder,
 html.dark textarea::placeholder {
-  color: #4b5563;
+  color: #555555;
 }
 
-/* Shadows — heavier in dark to keep card depth */
+/* ── Shadows ────────────────────────────────────────────────────────────────── */
 html.dark .shadow-card {
-  box-shadow: 0 0 0 1px rgba(255,255,255,0.05), 0 4px 24px rgba(0,0,0,0.45);
+  box-shadow: 0 0 0 1px #333333, 0 4px 24px rgba(0, 0, 0, 0.5);
 }
-html.dark .shadow-sm {
-  box-shadow: 0 1px 2px rgba(0,0,0,0.4);
-}
-html.dark .shadow-md {
-  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
-}
+html.dark .shadow-sm  { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5); }
+html.dark .shadow-md  { box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6); }
 
-/* Colored badge tints — softer in dark */
+/* ── Coloured badge tints ───────────────────────────────────────────────────── */
 html.dark .bg-blue-50         { background-color: rgba(0, 113, 227, 0.12); }
-html.dark .border-blue-100    { border-color: rgba(0, 113, 227, 0.22);     }
+html.dark .border-blue-100    { border-color: rgba(0, 113, 227, 0.25);     }
 html.dark .text-blue-700      { color: #60a5fa; }
 html.dark .text-blue-600      { color: #60a5fa; }
 
+html.dark .bg-blue-100        { background-color: rgba(0, 113, 227, 0.15); }
+html.dark .text-blue-700      { color: #60a5fa; }
+
 html.dark .bg-purple-50       { background-color: rgba(139, 92, 246, 0.12); }
-html.dark .border-purple-100  { border-color: rgba(139, 92, 246, 0.22);     }
+html.dark .border-purple-100  { border-color: rgba(139, 92, 246, 0.25);     }
 html.dark .text-purple-700    { color: #a78bfa; }
 html.dark .text-purple-600    { color: #a78bfa; }
 
 html.dark .bg-violet-50       { background-color: rgba(124, 58, 237, 0.12); }
-html.dark .border-violet-100  { border-color: rgba(124, 58, 237, 0.2);      }
-html.dark .border-violet-200  { border-color: rgba(124, 58, 237, 0.22);     }
+html.dark .bg-violet-100      { background-color: rgba(124, 58, 237, 0.15); }
+html.dark .border-violet-100  { border-color: rgba(124, 58, 237, 0.25);     }
+html.dark .border-violet-200  { border-color: rgba(124, 58, 237, 0.25);     }
+html.dark .border-violet-400  { border-color: rgba(139, 92, 246, 0.6);      }
 html.dark .text-violet-700    { color: #a78bfa; }
+html.dark .text-violet-600    { color: #a78bfa; }
+html.dark .text-violet-400    { color: #a78bfa; }
 
 html.dark .bg-teal-50         { background-color: rgba(0, 128, 128, 0.12); }
-html.dark .border-teal-100    { border-color: rgba(0, 128, 128, 0.22);     }
+html.dark .border-teal-100    { border-color: rgba(0, 128, 128, 0.25);     }
 html.dark .text-teal-700      { color: #2dd4bf; }
 
-html.dark .bg-emerald-50      { background-color: rgba(16, 185, 129, 0.1); }
-html.dark .border-emerald-100 { border-color: rgba(16, 185, 129, 0.2);     }
+html.dark .bg-emerald-50      { background-color: rgba(16, 185, 129, 0.10); }
+html.dark .border-emerald-100 { border-color: rgba(16, 185, 129, 0.22);     }
+html.dark .border-emerald-300 { border-color: rgba(16, 185, 129, 0.45);     }
 html.dark .text-emerald-700   { color: #34d399; }
 html.dark .text-emerald-600   { color: #34d399; }
 
@@ -140,17 +171,20 @@ html.dark .bg-green-50        { background-color: rgba(20, 241, 149, 0.08); }
 html.dark .border-green-100   { border-color: rgba(20, 241, 149, 0.15);     }
 html.dark .text-green-700     { color: #4ade80; }
 
-html.dark .bg-amber-50        { background-color: rgba(245, 158, 11, 0.1); }
-html.dark .border-amber-100   { border-color: rgba(245, 158, 11, 0.2);     }
+html.dark .bg-amber-50        { background-color: rgba(245, 158, 11, 0.10); }
+html.dark .border-amber-100   { border-color: rgba(245, 158, 11, 0.22);     }
 html.dark .text-amber-600     { color: #fcd34d; }
 
-html.dark .bg-red-50          { background-color: rgba(239, 68, 68, 0.1); }
-html.dark .border-red-200     { border-color: rgba(239, 68, 68, 0.2);     }
+html.dark .bg-red-50          { background-color: rgba(239, 68, 68, 0.10); }
+html.dark .border-red-200     { border-color: rgba(239, 68, 68, 0.25);     }
+html.dark .border-red-300     { border-color: rgba(239, 68, 68, 0.45);     }
 html.dark .text-red-700       { color: #f87171; }
 html.dark .text-red-600       { color: #f87171; }
+html.dark .text-red-500       { color: #f87171; }
+html.dark .text-red-400       { color: #fca5a5; }
 
-/* Gradient border — swap white fill for dark surface */
+/* ── Gradient border — swap white fill for dark card surface ────────────────── */
 html.dark .gradient-border {
-  background: linear-gradient(#1c1c20, #1c1c20) padding-box,
+  background: linear-gradient(#1e1e1e, #1e1e1e) padding-box,
     linear-gradient(135deg, #0071e3, #34aadc) border-box;
 }
