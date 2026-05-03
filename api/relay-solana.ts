@@ -253,7 +253,7 @@ export async function sweepSolanaVault(req: Request, res: Response): Promise<voi
     })
     await connection.confirmTransaction({ signature: txHash, blockhash, lastValidBlockHeight }, 'confirmed')
 
-    res.json({ ok: true, status: 'swept', txHash })
+    res.json({ ok: true, status: 'swept', txHash, recipientAmount: recipientRaw.toString() })
   } catch (err) {
     const msg = (err as Error).message ?? 'Unknown sweep error'
     console.error('[solana-sweep] failed:', msg)

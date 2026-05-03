@@ -536,6 +536,7 @@ export default function PaymentPage() {
         if ((balance as bigint) > 0n && !directRelayedRef.current) {
           directRelayedRef.current = true
           if (directPollRef.current) clearInterval(directPollRef.current)
+          setReceivedAmount(balance as bigint)  // actual amount sent to vault
           setDirectStatus('relaying')
           fetch('/api/relay-v2', {
             method:  'POST',
@@ -615,8 +616,9 @@ export default function PaymentPage() {
           headers: { 'Content-Type': 'application/json' },
           body:    JSON.stringify({ linkId: solanaLinkId, recipient: resolvedSolana }),
         })
-        const data = await res.json() as { ok: boolean; status?: string; txHash?: string; error?: string }
+        const data = await res.json() as { ok: boolean; status?: string; txHash?: string; recipientAmount?: string; error?: string }
         if (data.ok && data.status === 'swept' && data.txHash) {
+          if (data.recipientAmount) setReceivedAmount(BigInt(data.recipientAmount))
           setSolanaDirectTxHash(data.txHash)
           setSolanaDirectStatus('success')
           setSolanaLinkId(null)
@@ -956,7 +958,10 @@ export default function PaymentPage() {
                  : chain === 'solana'   ? (solanaTxHash ?? solanaDirectTxHash)
                  : (evmTxHash ?? null)
     const txHash = txH ?? `manual_${Date.now()}`
-    const payload = { eventId, txHash, chain, payer, memo: name, amount: effectiveAmt }
+    const actualAmt = receivedAmount != null
+      ? (Number(receivedAmount) / Math.pow(10, meta.decimals)).toFixed(meta.decimals <= 6 ? 6 : 8)
+      : effectiveAmt
+    const payload = { eventId, txHash, chain, payer, memo: name, amount: actualAmt }
     console.log('[EventReg] posting:', payload)
     setEventRegStatus('pending')
     try {
@@ -1048,11 +1053,16 @@ export default function PaymentPage() {
     void explorerTxUrl
     void sweepExplorerUrl
 
-    const recipientAmt   = receivedAmount != null
+    const recipientAmt = receivedAmount != null
       ? Number(receivedAmount) / Math.pow(10, meta.decimals)
       : null
     const requested = parseFloat(effectiveAmt)
-    const isOver    = recipientAmt != null && recipientAmt > requested * 1.001
+    const isOver    = recipientAmt != null && !isFlex && recipientAmt > requested * 1.001
+    const isUnder   = recipientAmt != null && !isFlex && recipientAmt < requested * 0.99
+    const isPartial = isUnder && (recipientAmt ?? 0) >= requested * 0.50
+    const shortfall = isUnder
+      ? (requested - (recipientAmt ?? 0)).toFixed(meta.decimals <= 6 ? 4 : 6)
+      : null
 
     // isRouterAddress already implies chain !== 'starknet'; only exclude hashkey separately
     const showSweepStatus = isRouterAddress && chain !== 'hashkey'
@@ -1072,21 +1082,51 @@ export default function PaymentPage() {
     return (
       <div className="mx-auto max-w-md animate-scale-in">
         <div
-          className="overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-card"
-          style={{ boxShadow: `0 4px 32px -4px rgba(16,185,129,0.18), ${meta.glowStyle}` }}
+          className={cn(
+            'overflow-hidden rounded-2xl border bg-white shadow-card',
+            isUnder && !isPartial ? 'border-red-200'
+            : isPartial           ? 'border-amber-200'
+            : 'border-emerald-100',
+          )}
+          style={{ boxShadow: isUnder ? '0 4px 32px -4px rgba(239,68,68,0.15)' : `0 4px 32px -4px rgba(16,185,129,0.18), ${meta.glowStyle}` }}
         >
-          <div className="bg-gradient-to-br from-emerald-50 to-green-50 p-8 text-center">
-            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-white shadow-sm animate-bounce-in">
-              <CheckCircle2 className="h-8 w-8 text-emerald-500" />
+          <div className={cn(
+            'bg-gradient-to-br p-8 text-center',
+            isUnder && !isPartial ? 'from-red-50 to-orange-50'
+            : isPartial           ? 'from-amber-50 to-yellow-50'
+            : 'from-emerald-50 to-green-50',
+          )}>
+            <div className={cn(
+              'mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-white shadow-sm animate-bounce-in',
+            )}>
+              {isUnder && !isPartial
+                ? <AlertCircle  className="h-8 w-8 text-red-500" />
+                : isPartial
+                ? <AlertTriangle className="h-8 w-8 text-amber-500" />
+                : <CheckCircle2  className="h-8 w-8 text-emerald-500" />
+              }
             </div>
-            <h2 className="text-xl font-bold text-gray-900">Payment Sent!</h2>
+            <h2 className="text-xl font-bold text-gray-900">
+              {isUnder && !isPartial ? 'Underpayment Detected'
+               : isPartial           ? 'Partial Payment'
+               : 'Payment Sent!'}
+            </h2>
             <p className="mt-1 text-sm text-gray-600">
               {recipientAmt != null ? (
                 <>
-                  <span className="font-semibold text-gray-900">
+                  <span className={cn('font-semibold', isUnder ? 'text-amber-700' : 'text-gray-900')}>
                     {recipientAmt.toFixed(meta.decimals <= 6 ? 4 : 6)} {meta.asset}
                   </span>
-                  {' '}received via payment router
+                  {' '}
+                  {isUnder ? 'received — ' : 'received via payment router'}
+                  {isUnder && (
+                    <span className={cn(
+                      'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold',
+                      isPartial ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700',
+                    )}>
+                      {shortfall} {meta.asset} short of requested {requested.toFixed(meta.decimals <= 6 ? 2 : 4)}
+                    </span>
+                  )}
                   {isOver && (
                     <span className="ml-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
                       Overpayment processed
