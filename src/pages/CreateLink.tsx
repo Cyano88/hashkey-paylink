@@ -795,11 +795,11 @@ export default function CreateLink() {
                       <p className="text-[11px] text-gray-400">Enter your street / parallel market rate above</p>
                     ) : null}
                   </div>
-                  <p className="text-[10px] text-gray-400 text-center leading-relaxed">
-                    {fxSrc === 'custom'
-                      ? 'Custom rate is baked into the link — update the link if the rate shifts significantly.'
-                      : 'Live rate fetched from Fixer.io, cached 10 min.'}
-                  </p>
+                  {fxSrc === 'custom' && (
+                    <p className="text-[10px] text-gray-400 dark:text-gray-500 text-center leading-relaxed">
+                      Custom rate is baked into the link — regenerate if the rate shifts significantly.
+                    </p>
+                  )}
                 </div>
               )}
             </div>

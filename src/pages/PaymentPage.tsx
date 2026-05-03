@@ -1424,7 +1424,9 @@ export default function PaymentPage() {
           {isFlex ? (
             <div className="flex flex-col items-center gap-2">
               <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Enter Amount</p>
-              <div className="flex items-baseline justify-center gap-2">
+
+              {/* Input centered exactly under label; asset label floats right via absolute */}
+              <div className="relative flex justify-center">
                 <input
                   type="number"
                   min="0"
@@ -1434,7 +1436,7 @@ export default function PaymentPage() {
                   onChange={e => fxInputMode === 'local' ? setLocalAmt(e.target.value) : setFlexAmt(e.target.value)}
                   className="w-40 text-center text-[2.75rem] font-bold leading-none tracking-tight text-gray-900 bg-transparent border-b-2 border-gray-300 focus:border-gray-500 outline-none"
                 />
-                <span className="text-xl font-semibold text-gray-400">
+                <span className="absolute left-full top-1/2 -translate-y-1/2 pl-2 text-xl font-semibold text-gray-400 whitespace-nowrap">
                   {fxInputMode === 'local' ? (getFxMeta(fxCurrency)?.symbol ?? fxCurrency) : meta.asset}
                 </span>
               </div>
@@ -1456,7 +1458,7 @@ export default function PaymentPage() {
                       setFxInputMode('usdc')
                     }
                   }}
-                  className="flex items-center gap-1.5 rounded-full border border-gray-200 bg-white/60 px-3 py-1 text-[11px] font-medium text-gray-500 hover:bg-white hover:text-gray-700 transition-all"
+                  className="flex items-center gap-1.5 rounded-full border border-gray-200 dark:border-white/20 bg-white/60 dark:bg-white/10 px-3 py-1 text-[11px] font-medium text-gray-500 dark:text-gray-300 hover:bg-white dark:hover:bg-white/20 hover:text-gray-700 dark:hover:text-white transition-all"
                 >
                   <ArrowLeftRight className="h-3 w-3" />
                   {fxInputMode === 'local' ? `Switch to USDC` : `Switch to ${fxCurrency}`}
