@@ -41,9 +41,14 @@ export default function EventDashboard() {
   const stark     = searchParams.get('stark') ?? ''
   const amt       = searchParams.get('amt')   ?? ''
   const eventName = searchParams.get('name')  ?? 'Event'
-  const netParam   = searchParams.get('net')   ?? ''
-  const multiParam = searchParams.get('multi') ?? ''
-  const flexParam  = searchParams.get('flex')  ?? ''
+  const netParam   = searchParams.get('net')    ?? ''
+  const multiParam = searchParams.get('multi')  ?? ''
+  const flexParam  = searchParams.get('flex')   ?? ''
+  const fxParam    = searchParams.get('fx')     ?? ''
+  const fxShowParam= searchParams.get('fxshow') ?? ''
+  const fxBufParam = searchParams.get('fxbuf')  ?? ''
+  const fxSrcParam = searchParams.get('fxsrc')  ?? ''
+  const fxRateParam= searchParams.get('fxrate') ?? ''
 
   // Which EVM chains to watch for flash/toast notifications.
   // New links carry ?net= so we scope to exactly that chain.
@@ -91,6 +96,11 @@ export default function EventDashboard() {
       if (netParam) p.set('net', netParam)
       if (sol)      p.set('sol', sol)
       else if (evm) p.set('evm', evm)
+    }
+    if (fxParam && fxShowParam === '1') {
+      p.set('fx', fxParam); p.set('fxshow', '1')
+      if (fxBufParam) p.set('fxbuf', fxBufParam)
+      if (fxSrcParam === 'custom' && fxRateParam) { p.set('fxsrc', 'custom'); p.set('fxrate', fxRateParam) }
     }
     return `${window.location.origin}/pay?${p.toString()}`
   })()

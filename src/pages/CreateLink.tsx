@@ -32,8 +32,11 @@ import {
   LayoutDashboard,
   Globe,
   Sliders,
+  DollarSign,
+  RefreshCw,
 } from 'lucide-react'
 import { QRCodeCanvas } from 'qrcode.react'
+import { FX_CURRENCIES, getFxMeta, formatLocalAmt, fetchFxRate } from '../lib/fx'
 import { isAddress } from 'viem'
 import { ConnectButton } from '@rainbow-me/rainbowkit'
 import { cn, truncateAddress, formatAmount, copyToClipboard } from '../lib/utils'
@@ -65,6 +68,15 @@ export default function CreateLink() {
   const [multiChainMode, setMultiChainMode] = useState(false)
   const [flexAmount,     setFlexAmount]     = useState(false)
   const chainSwitchMounted = useRef(false)
+
+  // ── FX Display settings (event mode only) ────────────────────────────────
+  const [fxShow,        setFxShow]        = useState(false)
+  const [fxCurrency,    setFxCurrency]    = useState('NGN')
+  const [fxBuffer,      setFxBuffer]      = useState('0')
+  const [fxSrc,         setFxSrc]         = useState<'live' | 'custom'>('live')
+  const [fxCustomRate,  setFxCustomRate]  = useState('')
+  const [fxPreviewRate, setFxPreviewRate] = useState<number | null>(null)
+  const [fxPreviewLoad, setFxPreviewLoad] = useState(false)
 
   // Recover last multi-payer dashboard from localStorage
   type SavedEvent = { dashboardUrl: string; paymentUrl: string; eventName: string; ts: number }
@@ -168,6 +180,22 @@ export default function CreateLink() {
     return () => { cancelled = true }
   }, [evmAddr])
 
+  // ── FX preview rate ───────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!fxShow || !eventMode || !fxCurrency) { setFxPreviewRate(null); return }
+    if (fxSrc === 'custom') {
+      const v = parseFloat(fxCustomRate)
+      setFxPreviewRate(v > 0 ? v : null)
+      return
+    }
+    let cancelled = false
+    setFxPreviewLoad(true)
+    fetchFxRate(fxCurrency).then(d => {
+      if (!cancelled && d.ok && d.rate) setFxPreviewRate(d.rate)
+    }).catch(() => {}).finally(() => { if (!cancelled) setFxPreviewLoad(false) })
+    return () => { cancelled = true }
+  }, [fxShow, fxCurrency, eventMode, fxSrc, fxCustomRate])
+
   // ── Validation ─────────────────────────────────────────────────────────
   const evmDirty    = evmAddr.length > 0
   const starkDirty  = starkAddr.length > 0
@@ -246,7 +274,16 @@ export default function CreateLink() {
       if (starkValid)  params.set('stark', starkAddr)
       if (solanaValid) params.set('sol', solanaAddr)
       if (memo.trim()) params.set('memo', memo.trim())
-      if (eventMode && eventId) { params.set('event', '1'); params.set('id', eventId) }
+      if (eventMode && eventId) {
+        params.set('event', '1'); params.set('id', eventId)
+        if (fxShow && fxCurrency) {
+          params.set('fx', fxCurrency); params.set('fxshow', '1')
+          if (parseFloat(fxBuffer) > 0) params.set('fxbuf', fxBuffer)
+          if (fxSrc === 'custom' && parseFloat(fxCustomRate) > 0) {
+            params.set('fxsrc', 'custom'); params.set('fxrate', fxCustomRate)
+          }
+        }
+      }
       return `${window.location.origin}/pay?${params.toString()}`
     }
     const params = new URLSearchParams({ net: selectedNet })
@@ -255,7 +292,13 @@ export default function CreateLink() {
     else if (isEvmNet)             params.set('evm', evmAddr)
     else                           params.set('stark', starkAddr)
     if (memo.trim()) params.set('memo', memo.trim())
-    if (eventMode && eventId) { params.set('event', '1'); params.set('id', eventId) }
+    if (eventMode && eventId) {
+      params.set('event', '1'); params.set('id', eventId)
+      if (fxShow && fxCurrency) {
+        params.set('fx', fxCurrency); params.set('fxshow', '1')
+        if (parseFloat(fxBuffer) > 0) params.set('fxbuf', fxBuffer)
+      }
+    }
     return `${window.location.origin}/pay?${params.toString()}`
   }
 
@@ -274,6 +317,10 @@ export default function CreateLink() {
       else                          params.set('evm', evmAddr)
     }
     if (memo.trim()) params.set('name', memo.trim())
+    if (fxShow && fxCurrency) {
+      params.set('fx', fxCurrency); params.set('fxshow', '1')
+      if (parseFloat(fxBuffer) > 0) params.set('fxbuf', fxBuffer)
+    }
     return `${window.location.origin}/event?${params.toString()}`
   }
 
@@ -636,6 +683,140 @@ export default function CreateLink() {
               Suitable for: <span className="font-medium text-gray-500">online donations · group splits · classroom fees · dues · registrations · and more</span>
             </p>
           </button>
+
+          {/* ── FX Display Settings (only when event mode is ON) ─────── */}
+          {eventMode && (
+            <div className={cn(
+              'rounded-xl border p-4 space-y-3 transition-all',
+              fxShow ? 'border-blue-200 bg-blue-50/30 dark:border-blue-900/40 dark:bg-blue-950/20' : 'border-gray-200 bg-gray-50/50',
+            )}>
+              {/* Header row with toggle */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <DollarSign className={cn('h-3.5 w-3.5', fxShow ? 'text-blue-400' : 'text-gray-400')} />
+                  <span className="text-sm font-medium text-gray-700">Local Currency Display</span>
+                  <span className="text-[10px] text-gray-400 font-normal">— optional</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setFxShow(v => !v)}
+                  className="shrink-0"
+                >
+                  <div className={cn('relative h-5 w-9 rounded-full transition-colors', fxShow ? 'bg-blue-500' : 'bg-gray-300')}>
+                    <div className={cn(
+                      'absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform',
+                      fxShow ? 'translate-x-4' : 'translate-x-0.5',
+                    )} />
+                  </div>
+                </button>
+              </div>
+
+              {/* Settings — only when toggled on */}
+              {fxShow && (
+                <div className="space-y-2.5 pt-0.5">
+                  {/* Currency picker */}
+                  <div className="flex items-center gap-3">
+                    <label className="w-16 shrink-0 text-[11px] text-gray-500">Currency</label>
+                    <select
+                      value={fxCurrency}
+                      onChange={e => { setFxCurrency(e.target.value); setFxPreviewRate(null) }}
+                      className="flex-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-700 focus:border-blue-300 focus:outline-none focus:ring-1 focus:ring-blue-100"
+                    >
+                      {FX_CURRENCIES.map(c => (
+                        <option key={c.code} value={c.code}>
+                          {c.symbol} {c.name} ({c.code})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Rate source toggle */}
+                  <div className="flex items-center gap-3">
+                    <label className="w-16 shrink-0 text-[11px] text-gray-500">Rate</label>
+                    <div className="flex flex-1 rounded-lg border border-gray-200 bg-gray-50 p-0.5 text-xs font-medium">
+                      <button
+                        type="button"
+                        onClick={() => setFxSrc('live')}
+                        className={cn(
+                          'flex-1 rounded-md px-3 py-1.5 transition-all',
+                          fxSrc === 'live' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700',
+                        )}
+                      >Live (Fixer.io)</button>
+                      <button
+                        type="button"
+                        onClick={() => setFxSrc('custom')}
+                        className={cn(
+                          'flex-1 rounded-md px-3 py-1.5 transition-all',
+                          fxSrc === 'custom' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700',
+                        )}
+                      >Custom / Street</button>
+                    </div>
+                  </div>
+
+                  {/* Custom rate input */}
+                  {fxSrc === 'custom' && (
+                    <div className="flex items-center gap-3">
+                      <label className="w-16 shrink-0 text-[11px] text-gray-500">1 USDC =</label>
+                      <div className="relative flex-1">
+                        <input
+                          type="number"
+                          min="0"
+                          step="any"
+                          placeholder={`e.g. 1780`}
+                          value={fxCustomRate}
+                          onChange={e => setFxCustomRate(e.target.value)}
+                          className="w-full rounded-lg border border-gray-200 bg-white px-3 py-1.5 pr-14 text-sm text-gray-700 placeholder:text-gray-300 focus:border-blue-300 focus:outline-none focus:ring-1 focus:ring-blue-100"
+                        />
+                        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-semibold text-gray-400">
+                          {fxCurrency}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Buffer picker */}
+                  <div className="flex items-center gap-3">
+                    <label className="w-16 shrink-0 text-[11px] text-gray-500">Buffer</label>
+                    <select
+                      value={fxBuffer}
+                      onChange={e => setFxBuffer(e.target.value)}
+                      className="flex-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-700 focus:border-blue-300 focus:outline-none focus:ring-1 focus:ring-blue-100"
+                    >
+                      {['0', '0.5', '1', '1.5', '2', '3', '5'].map(v => (
+                        <option key={v} value={v}>
+                          {v === '0' ? 'No buffer' : `+${v}% volatility coverage`}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Live preview */}
+                  <div className="flex items-center justify-center gap-1.5 pt-0.5">
+                    {fxPreviewLoad ? (
+                      <RefreshCw className="h-3 w-3 animate-spin text-gray-300" />
+                    ) : fxPreviewRate ? (() => {
+                        const adj = fxPreviewRate * (1 + parseFloat(fxBuffer) / 100)
+                        const decimals = getFxMeta(fxCurrency)?.decimals ?? 2
+                        return (
+                          <p className="text-[11px] text-gray-400 text-center">
+                            {fxSrc === 'custom' ? '📌 Custom rate:' : 'Live rate:'}{' '}
+                            1 USDC = {adj.toFixed(decimals > 0 ? 2 : 0)} {fxCurrency}
+                            {isValidAmt && ` · ≈ ${formatLocalAmt(parseFloat(amt), adj, decimals)} ${fxCurrency} for ${amt} USDC`}
+                          </p>
+                        )
+                      })() : fxSrc === 'custom' && !fxCustomRate ? (
+                      <p className="text-[11px] text-gray-400">Enter your street / parallel market rate above</p>
+                    ) : null}
+                  </div>
+                  <p className="text-[10px] text-gray-400 text-center leading-relaxed">
+                    {fxSrc === 'custom'
+                      ? `Custom rate is baked into the link — update the link if the rate shifts significantly.`
+                      : `Live rate fetched from Fixer.io, cached 10 min. Buffer covers movement between scan and settlement.`}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* ── Multi-Chain Payment toggle ───────────────────────────── */}
           <button

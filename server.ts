@@ -32,6 +32,7 @@ import {
   buildSolanaTx, relaySolanaTx,
   getSolanaVaultAddress, sweepSolanaVault,
 } from './api/relay-solana.js'
+import fxRateHandler from './api/fx-rate.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -63,6 +64,7 @@ app.post('/api/solana-build-tx',       buildSolanaTx)
 app.post('/api/solana-relay',          relaySolanaTx)
 app.get('/api/solana-vault',           getSolanaVaultAddress)
 app.post('/api/solana-sweep',          sweepSolanaVault)
+app.get('/api/fx-rate',                fxRateHandler)
 app.get('/api/health',                 (_req, res) => res.json({ ok: true, ts: Date.now() }))
 // OG tag injection — must be before the SPA catch-all
 app.get('/stream/:vaultAddress',       streamOgHandler)

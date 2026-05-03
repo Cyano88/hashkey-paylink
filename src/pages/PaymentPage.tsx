@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams, Link, useOutletContext } from 'react-router-dom'
 import type { LayoutOutletContext } from '../Layout'
 import {
@@ -48,6 +48,7 @@ import { useStarknet } from '../lib/StarknetContext'
 import { useSolana }   from '../lib/SolanaContext'
 import { computeStarkGhostAddress } from '../lib/starknet-ghost'
 import { cn, truncateAddress, formatAmount, memoToHex, copyToClipboard } from '../lib/utils'
+import { getFxMeta, formatLocalAmt, fetchFxRate } from '../lib/fx'
 
 const CHAINS: ChainKey[] = ['base', 'starknet', 'hashkey', 'arc', 'solana']
 
@@ -230,6 +231,29 @@ export default function PaymentPage() {
   const [attendeeName,   setAttendeeName]   = useState('')
   const [eventRegStatus, setEventRegStatus] = useState<'idle' | 'pending' | 'ok' | 'error'>('idle')
   const eventRegistered  = useRef(false)
+
+  // ── FX display (event mode only — reads params baked into the URL at link creation) ──
+  const fxCurrency  = isEventMode ? (initParams.get('fx')     ?? '')  : ''
+  const fxBuf       = isEventMode ? (parseFloat(initParams.get('fxbuf') ?? '0') || 0) : 0
+  const fxShow      = isEventMode && initParams.get('fxshow') === '1' && !!fxCurrency
+  const fxSrc       = initParams.get('fxsrc') === 'custom' ? 'custom' : 'live'
+  const fxCustomVal = parseFloat(initParams.get('fxrate') ?? '0') || 0
+
+  const [fxRate,    setFxRate]    = useState<number | null>(fxSrc === 'custom' && fxCustomVal > 0 ? fxCustomVal : null)
+  const [fxLoading, setFxLoading] = useState(false)
+  const [fxStale,   setFxStale]   = useState(false)
+
+  const refreshFxRate = useCallback(async () => {
+    if (!fxCurrency || fxSrc === 'custom') return
+    setFxLoading(true)
+    try {
+      const d = await fetchFxRate(fxCurrency)
+      if (d.ok && d.rate) { setFxRate(d.rate); setFxStale(d.stale ?? false) }
+    } catch { /* ignore */ }
+    finally { setFxLoading(false) }
+  }, [fxCurrency, fxSrc])
+
+  useEffect(() => { if (fxShow && fxSrc === 'live') refreshFxRate() }, [fxShow, fxSrc, refreshFxRate])
 
   // ── Direct Send state (shared across Base, Arc, Starknet) ────────────────
   const [payMode,          setPayMode]          = useState<'wallet' | 'direct'>('wallet')
@@ -1422,7 +1446,53 @@ export default function PaymentPage() {
               )}
             </>
           )}
+
+          {/* ── FX indicator — event mode only, shown when organiser enabled it ── */}
+          {fxShow && fxCurrency && (() => {
+            const fxMeta      = getFxMeta(fxCurrency)
+            const adjustedRate = fxRate ? fxRate * (1 + fxBuf / 100) : null
+            const usdcAmt      = parseFloat(isFlex ? (flexAmt || '0') : effectiveAmt) || 0
+            return (
+              <div className="mt-3 flex items-center justify-center gap-1.5">
+                {fxLoading ? (
+                  <RefreshCw className="h-2.5 w-2.5 animate-spin text-gray-300" />
+                ) : adjustedRate && usdcAmt > 0 ? (
+                  <>
+                    <span className="text-[11px] text-gray-400 leading-none">
+                      ≈ {formatLocalAmt(usdcAmt, adjustedRate, fxMeta?.decimals ?? 2)} {fxCurrency}
+                      {' · '}1 USDC = {adjustedRate.toFixed(2)} {fxCurrency}
+                      {fxBuf > 0 && ` · +${fxBuf}% coverage`}
+                    </span>
+                    <button
+                      onClick={refreshFxRate}
+                      title="Refresh exchange rate"
+                      className="text-gray-300 hover:text-gray-500 transition-colors focus:outline-none"
+                    >
+                      <RefreshCw className="h-2.5 w-2.5" />
+                    </button>
+                  </>
+                ) : adjustedRate ? (
+                  <span className="text-[11px] text-gray-400">
+                    1 USDC = {adjustedRate.toFixed(2)} {fxCurrency}
+                    <button onClick={refreshFxRate} className="ml-1 text-gray-300 hover:text-gray-500 transition-colors">
+                      <RefreshCw className="inline h-2.5 w-2.5" />
+                    </button>
+                  </span>
+                ) : null}
+              </div>
+            )
+          })()}
         </div>
+
+        {/* ── Live rates banner ─────────────────────────────────────────── */}
+        {fxShow && fxCurrency && (
+          <div className="px-6 pt-4">
+            <p className="text-center text-[10px] text-gray-400 leading-relaxed">
+              Pricing in USDC · Shown in {getFxMeta(fxCurrency)?.name ?? fxCurrency} at live market rates
+              {fxStale && ' · ⚠ Rate may be outdated'}
+            </p>
+          </div>
+        )}
 
         <div className="p-6 space-y-5">
           {/* Transaction details */}
