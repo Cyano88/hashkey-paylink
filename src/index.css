@@ -127,6 +127,13 @@ html.dark .from-emerald-50 {
 }
 html.dark .to-green-50 { --tw-gradient-to: #021a0e; }
 
+/* Underpayment card header (from-red-50 to-orange-50) */
+html.dark .from-red-50 {
+  --tw-gradient-from: #200a0a;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(32,10,10,0));
+}
+html.dark .to-orange-50 { --tw-gradient-to: #201008; }
+
 /* "Link Ready" panel (gray-50/80 → white) */
 html.dark .from-gray-50\/80 {
   --tw-gradient-from: rgba(37, 37, 37, 0.8);
@@ -266,6 +273,7 @@ html.dark .text-amber-500     { color: #fbbf24; }
 
 /* Red */
 html.dark .bg-red-50          { background-color: rgba(239, 68, 68, 0.10); }
+html.dark .bg-red-100         { background-color: rgba(239, 68, 68, 0.16); }
 html.dark .border-red-100     { border-color: rgba(239, 68, 68, 0.22);     }  /* error state banner */
 html.dark .border-red-200     { border-color: rgba(239, 68, 68, 0.28);     }
 html.dark .border-red-300     { border-color: rgba(239, 68, 68, 0.45);     }
