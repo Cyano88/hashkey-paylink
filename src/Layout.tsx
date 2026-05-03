@@ -55,7 +55,7 @@ export type LayoutOutletContext = {
 }
 
 // ─── Network Toolkit ─────────────────────────────────────────────────────────
-const ALL_NETWORKS = [CHAIN_META.base, CHAIN_META.hashkey, CHAIN_META.arc, CHAIN_META.starknet]
+const ALL_NETWORKS = [CHAIN_META.base, CHAIN_META.hashkey, CHAIN_META.arc, CHAIN_META.starknet, CHAIN_META.solana]
 
 function StarknetIcon({ className }: { className?: string }) {
   return (
@@ -174,12 +174,14 @@ export default function Layout() {
   // Tracks the active chain on the payer page so the header pill mirrors it
   const [payChain,    setPayChain]    = useState<ChainKey | null>(null)
 
-  // Sync selectedNet when a wallet actually connects / chain changes
+  // Sync selectedNet when a wallet actually connects / chain changes.
+  // Guard: never override an explicit Solana selection — that would cause a
+  // race where disconnectEvm() is async and the effect fires before it settles.
   useEffect(() => {
-    if (evmConnected && evmNetKey) setSelectedNet(evmNetKey)
+    if (evmConnected && evmNetKey && selectedNet !== 'solana') setSelectedNet(evmNetKey)
   }, [evmConnected, evmNetKey])  // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (starkAddress) setSelectedNet('starknet')
+    if (starkAddress && selectedNet !== 'solana') setSelectedNet('starknet')
   }, [starkAddress])  // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Network-select handler (called by NetworkToolkit dropdown) ────────────
