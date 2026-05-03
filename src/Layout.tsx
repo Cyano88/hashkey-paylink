@@ -330,7 +330,7 @@ export default function Layout() {
             <img
               src="/hash-logo.png"
               alt="Hash PayLink"
-              className="w-8 h-8 object-contain transition-transform group-hover:scale-105 dark:brightness-0 dark:invert"
+              className="w-8 h-8 object-contain transition-transform group-hover:scale-105 dark:invert"
             />
             <span className="text-[15px] font-semibold tracking-tight text-gray-900 dark:text-white">
               Hash{' '}
