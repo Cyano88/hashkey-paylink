@@ -297,6 +297,9 @@ export default function CreateLink() {
       if (fxShow && fxCurrency) {
         params.set('fx', fxCurrency); params.set('fxshow', '1')
         if (parseFloat(fxBuffer) > 0) params.set('fxbuf', fxBuffer)
+        if (fxSrc === 'custom' && parseFloat(fxCustomRate) > 0) {
+          params.set('fxsrc', 'custom'); params.set('fxrate', fxCustomRate)
+        }
       }
     }
     return `${window.location.origin}/pay?${params.toString()}`
@@ -320,6 +323,9 @@ export default function CreateLink() {
     if (fxShow && fxCurrency) {
       params.set('fx', fxCurrency); params.set('fxshow', '1')
       if (parseFloat(fxBuffer) > 0) params.set('fxbuf', fxBuffer)
+      if (fxSrc === 'custom' && parseFloat(fxCustomRate) > 0) {
+        params.set('fxsrc', 'custom'); params.set('fxrate', fxCustomRate)
+      }
     }
     return `${window.location.origin}/event?${params.toString()}`
   }

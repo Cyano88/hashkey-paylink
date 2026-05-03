@@ -1474,8 +1474,17 @@ export default function PaymentPage() {
                 ) : adjustedRate ? (
                   <span className="text-[11px] text-gray-400">
                     1 USDC = {adjustedRate.toFixed(2)} {fxCurrency}
-                    <button onClick={refreshFxRate} className="ml-1 text-gray-300 hover:text-gray-500 transition-colors">
-                      <RefreshCw className="inline h-2.5 w-2.5" />
+                    {fxSrc === 'live' && (
+                      <button onClick={refreshFxRate} className="ml-1 text-gray-300 hover:text-gray-500 transition-colors">
+                        <RefreshCw className="inline h-2.5 w-2.5" />
+                      </button>
+                    )}
+                  </span>
+                ) : fxSrc === 'live' ? (
+                  <span className="text-[11px] text-gray-400 flex items-center gap-1">
+                    Rate unavailable
+                    <button onClick={refreshFxRate} title="Retry" className="text-gray-300 hover:text-gray-500 transition-colors">
+                      <RefreshCw className="h-2.5 w-2.5" />
                     </button>
                   </span>
                 ) : null}
