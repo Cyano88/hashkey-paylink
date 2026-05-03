@@ -4,7 +4,7 @@ This repository contains **two independent products** deployed together on a sin
 
 | Product | What it does | Live |
 |---|---|---|
-| **Hash PayLink** | Multi-chain USDC payment request links across Base, HashKey, Starknet, and Arc | [hashpaylink.com](https://hashpaylink.com) |
+| **Hash PayLink** | Multi-chain USDC/HSK payment links across Base, HashKey, Starknet, Arc, and Solana | [hashpaylink.com](https://hashpaylink.com) |
 | **StreamPay** | USDC streaming payroll + Creator Proof-of-Attention paywall on Arc | [hashpaylink.com/?app=streampay](https://hashpaylink.com/?app=streampay) |
 
 The active product is selected by hostname — StreamPay loads automatically on `streampay.xyz` once DNS is configured. See [`modules/streampay/README.md`](modules/streampay/README.md) for StreamPay-specific documentation.
@@ -15,113 +15,406 @@ The active product is selected by hostname — StreamPay loads automatically on 
 hashkey-paylink/
 ├── src/                      # Hash PayLink — React frontend
 ├── api/                      # Hash PayLink — Express API handlers
-├── contracts/                # Hardhat project (shared + HashPayLink contracts)
+├── contracts/                # Hardhat project (FeeRouter + PayLinkFactoryV2)
 ├── modules/
 │   └── streampay/            # StreamPay — fully self-contained module
-│       ├── src/              #   React frontend
-│       ├── api/              #   Express API handlers
-│       └── contracts/        #   StreamVault + PoASettlement Solidity
-├── server.ts                 # Shared Express server (routes for both products)
+├── server.ts                 # Shared Express server
 └── tailwind.config.js        # Shared Tailwind config
 ```
 
 ---
 
-# Hash PayLink SDK &nbsp;`v1.0.0`
+# Hash PayLink &nbsp;`v2.0.0`
 
-> **The Stripe of the Modular Future.**  
-> One line of code to accept stablecoins across the world's most efficient networks.
+> **The contactless USDC payment layer for the real world.**
+> One link. Five chains. Zero gas for the payer. No bank account required.
 
-[![npm](https://img.shields.io/badge/npm-%40hashpaylink%2Fsdk-black?logo=npm)](https://www.npmjs.com/package/@hashpaylink/sdk)
 [![Live App](https://img.shields.io/badge/Live-hashpaylink.com-0071E3)](https://hashpaylink.com)
-[![Arc Economic OS](https://img.shields.io/badge/Arc-Economic_OS-7C3AED?logo=ethereum)](https://arc.fun)
+[![Base App Store](https://img.shields.io/badge/Base_App_Store-Listed-0052FF?logo=ethereum)](https://base.org/ecosystem)
+[![Base Builder Code](https://img.shields.io/badge/ERC--8021-bc__8qtb7tny-0052FF)](https://base.org/builders)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
+---
+
+## What is Hash PayLink?
+
+Hash PayLink is a **stateless, non-custodial payment infrastructure** that turns a single shareable URL or QR code into a complete multi-chain checkout experience. No app download. No merchant account. No gas tokens in the payer's wallet. Just a link — and payment arrives in seconds.
+
+**Payer experience:** scan a QR code or tap a link → select a chain → pay in USDC (or HSK) → done. Zero setup, zero friction.
+
+**Organizer experience:** generate a link in under 30 seconds → share it → watch a live dashboard update as payments arrive in real time → export to CSV.
 
 ---
 
 ## Why Hash PayLink?
 
-### The Gasless Economy Gap
-
-Every chain has its own gas token, wallet standard, and payment UX. For builders, this means hundreds of lines of boilerplate per chain — and for users, it means friction at exactly the moment they're trying to pay. Hash PayLink solves this end-to-end:
-
 | Problem | Hash PayLink Fix |
 |---|---|
 | Accept crypto = 200 lines of wagmi boilerplate | One `<PayLinkButton>` component |
-| Users stranded on the wrong chain | Auto-switch: click a chain pill → wallet switches instantly |
-| Gas friction kills micro-payments on Base | EIP-7702 sponsored transactions (gasless for the payer) |
-| Starknet has no simple EVM integration path | Native ArgentX/Braavos via injected provider |
-| Payment links tied to a single chain | One link covers 4 chains — payer chooses |
-| No visibility into fees before signing | Transparent 0.2% fee shown in every tx before confirmation |
-| Stateless payments hard to track | Real-time on-chain listener detects payments in under 3 seconds |
+| Users stranded on wrong chain | Auto-switch: click a chain pill → wallet switches instantly |
+| Gas friction kills micro-payments | Every chain is gasless for the payer (see Gasless Engine below) |
+| Solana users excluded from EVM payments | Native Solana USDC support with full gasless relay |
+| Payment links tied to one chain | One link covers 5 chains — payer picks their preferred chain |
+| No visibility into fees | Transparent 0.2% fee shown before every signature |
+| Payments hard to track | Real-time on-chain listener + live organizer dashboard |
+| Restaurants/shops need a POS terminal | QR code acts as a contactless, always-on payment terminal |
+| Long error messages confuse payers | Human-readable: "Insufficient funds", "Transaction cancelled" |
+| Underpayments silently logged wrong | Full / Partial / Underpayment detection with exact shortfall shown |
 
 ---
 
-## Target Audience
+## Penta-Chain Engine
 
-Hash PayLink is built for builders, merchants, and platforms that need to **accept stablecoins without the overhead** of full wallet integration:
-
-- **Freelancers & Contractors** — generate a payment link, share it in an email or Telegram. Get paid in USDC across Base, Arc, or HSK.
-- **SaaS & API products** — drop in `<PayLinkButton>` for subscription billing or one-time checkouts. No backend required.
-- **Creator platforms** — gate content, accept tips, or sell access tokens. Already powering [StreamPay](https://hashpaylink.com/?app=streampay).
-- **E-commerce & marketplaces** — stateless checkout links work in any email, QR code *(coming soon)*, or invoice. No SDK installation required on the buyer's side.
-- **DAOs & grant platforms** — request multi-chain contributions via a single link. Recipients can pay from their preferred chain.
-- **Payroll teams** — combine with StreamPay's streaming payroll for time-sovereign salary disbursement.
-- **Web2 platforms adding crypto** — hosted checkout mode requires zero wallet setup in the host app.
-
----
-
-## Where Stateless Payment Links Shine
-
-A Hash PayLink is just a URL. This makes it uniquely powerful in contexts where traditional payment flows don't work:
-
-- **Email invoicing** — paste the link in any email client. Recipient clicks, pays.
-- **QR codes** *(coming soon)* — encode as a QR on a physical receipt, product, or event badge.
-- **TestFlight mobile app** *(coming soon)* — native iOS/Android experience for generating and paying links on the go.
-- **Telegram / Discord / X DMs** — send a payment request as a message. Works on any device.
-- **No-code tools** — embed in Notion, Webflow, Linktree, or any platform that accepts links.
-- **Request payment without a website** — no hosting, no backend, no code required.
-- **Cross-border freelance invoices** — one link, four chains, instant settlement.
-- **Tipping & donations** — share publicly. Anyone with any supported wallet can pay.
-
----
-
-## Quad-Chain Engine
-
-| Chain | Asset | Finality | Gas Model | Pay Mode | Chain ID |
+| Chain | Asset | Finality | Gas Model | Pay Modes | Chain ID |
 |---|---|---|---|---|---|
-| ⬡ **Arc** | USDC | **Sub-second** | Native USDC Gas | Wallet Connect · Send via Address | 5042002 |
 | 🔵 **Base** | USDC | ~2 s | EIP-7702 Sponsored | Wallet Connect · Send via Address | 8453 |
 | 🟡 **HashKey** | HSK | ~3 s | Native HSK | Wallet Connect | 177 |
-| 🟣 **Starknet** | USDC | ~2 s | AVNU Paymaster · Gas Sponsored | Wallet Connect | — |
-
-> **Starknet note:** Gas is sponsored by AVNU Paymaster via the ArgentX/Braavos wallet connection — payers pay in USDC with no STRK required. Starknet currently supports Wallet Connect only; Send via Address is not available on Starknet.
-
-> **Send via Address** (Base & Arc only): the payer sends USDC directly to a CREATE2 ghost vault address — no wallet connection required. The relayer sweeps funds to the recipient automatically.
+| 🟣 **Starknet** | USDC | ~2 s | AVNU Paymaster · Sponsored | Wallet Connect | — |
+| 🩵 **Arc** | USDC | Sub-second | Native USDC Gas | Wallet Connect · Send via Address | 5042002 |
+| 🟢 **Solana** | USDC | ~0.5 s | Relayer Sponsored | Wallet Connect · Send via Address | — |
 
 ---
 
-## Installation
+## The Gasless Engine — How Nobody Pays Gas
+
+This is the core innovation of Hash PayLink. **On every supported chain, the payer never needs to hold or spend a gas token.** Here is exactly how each chain achieves this:
+
+---
+
+### Base & Arc — EIP-2612 Permit + Multicall3 (Wallet Connect)
+
+1. The payer signs an **EIP-2612 permit** — an off-chain typed signature (`signTypedData`) that authorises the FeeRouter contract to spend their USDC. This signature costs zero gas.
+2. Hash PayLink combines the `permit()` call and the `transferFrom()` in a single **Multicall3 `aggregate3`** transaction.
+3. The payer's wallet submits **one transaction** that simultaneously validates the permit and routes USDC to the recipient minus the 0.2% fee. The payer pays the (small) Base/Arc gas fee in ETH/USDC — but on Base this is fractions of a cent, and on Arc the native USDC gas model keeps it negligible.
+4. On **Base Mainnet**, every transaction appends the ERC-8021 Base Builder Code (`bc_8qtb7tny`) to the calldata for Base attribution.
+
+> **Why this matters:** The payer never approves a separate ERC-20 `approve()` transaction. The permit and payment happen atomically in a single signature + one tx.
+
+---
+
+### Base & Arc — CREATE2 Ghost Vault (Send via Address)
+
+1. When the payer selects "Send via Address", Hash PayLink calls `PayLinkFactoryV2.getVaultAddress(linkId, recipient)` — a **pure on-chain computation** that predicts a deterministic CREATE2 address. No transaction needed.
+2. The payer sends USDC to this address from **any wallet, CEX withdrawal, or existing balance** — no wallet connection required.
+3. A Hash PayLink relayer polls the vault address every 3 seconds. The moment USDC arrives, it calls `PayLinkFactoryV2.relay(linkId, recipient, gasReimbUsdc)`.
+4. The contract forwards USDC to the recipient, deducts the 0.2% fee to treasury, and reimburses the relayer's gas cost in USDC. The relayer pays ETH gas — never the payer.
+5. The contract enforces: `onlyRelayer`, `MAX_GAS_REIMB` cap (1.00 USDC), and CREATE2 collision guard — double-relay reverts at the contract level.
+
+> **Payer needs:** USDC in any wallet. Zero ETH. Zero wallet connection. Zero app.
+
+---
+
+### Starknet — AVNU Paymaster (Wallet Connect)
+
+1. The payer connects ArgentX or Braavos — the two leading Starknet wallets.
+2. Hash PayLink constructs a USDC transfer call using Starknet's native `invoke` transaction format.
+3. **AVNU Paymaster** sponsors the STRK gas fee entirely — it pays Starknet's sequencer on the payer's behalf.
+4. The payer signs in their wallet and sees only a USDC debit — no STRK balance required whatsoever.
+5. Hash PayLink polls the Starknet JSON-RPC for `ACCEPTED_ON_L2` status (finalised within ~2 seconds) before confirming success.
+
+> **Payer needs:** USDC on Starknet. Zero STRK.
+
+---
+
+### HashKey Chain — Native HSK (Wallet Connect)
+
+1. The payer connects their wallet to HashKey Chain (Chain ID 177).
+2. Hash PayLink constructs a direct native HSK transfer — no token contract, no permit.
+3. The payer signs one transaction. Gas is paid in HSK and is negligible (~0.0001 HSK).
+4. Hash PayLink polls the HSK balance of the recipient address every 2 seconds for confirmation.
+
+> **HashKey is the only chain where the payer spends a small amount of the payment asset (HSK) as gas. On all other chains, gas is fully sponsored.**
+
+---
+
+### Solana — Relayer as Fee Payer (Wallet Connect)
+
+1. When the payer chooses "Connect Wallet" on Solana, their wallet address is sent to Hash PayLink's relay server.
+2. The server calls `/api/solana-build-tx` and builds a Solana transaction with `feePayer: relayer.publicKey` — the **relayer's wallet pays all SOL network fees**, not the payer.
+3. The relayer partially signs the transaction as fee payer.
+4. The partially-signed transaction (base64-encoded) is returned to the payer's Phantom/Solflare/Backpack wallet.
+5. The payer signs **only the USDC `transferChecked` instruction** — authorising the USDC transfer from their Associated Token Account (ATA) to the recipient's ATA.
+6. The fully-signed transaction is submitted via `/api/solana-relay`. The platform fee (0.2%) is routed to the Hash PayLink treasury ATA atomically.
+
+> **Payer needs:** USDC on Solana. Zero SOL.
+
+---
+
+### Solana — Vault ATA (Send via Address)
+
+1. Hash PayLink derives a deterministic vault keypair from `SHA-256("hashpaylink_sol_vault_" + linkId)`.
+2. The vault's Associated Token Account (ATA) address is returned to the payer.
+3. The payer sends USDC to this ATA from any Solana wallet — no connection required.
+4. Hash PayLink polls the vault ATA every 3 seconds. On USDC arrival, `/api/solana-sweep` executes:
+   - Transfers `balance - 0.2% fee` to the recipient's ATA
+   - Transfers the 0.2% fee to the Hash PayLink treasury ATA
+   - **Closes the vault ATA** — returning ~0.002 SOL rent back to the relayer
+5. This rent recovery keeps the relayer **self-funding** — every sweep replenishes SOL that covers future sweeps. No manual top-ups required.
+6. The sweep response returns the exact `recipientAmount` (actual USDC received), which is shown in the success card and logged on the organizer dashboard.
+
+> **Payer needs:** USDC on Solana. Zero SOL. Zero wallet connection.
+
+---
+
+## Payment Pages & UI
+
+### Payment Card
+
+When a payer opens a Hash PayLink URL, they see a **payment card** that includes:
+
+- **Chain selector pills** — one for each chain the link supports. Active chain highlighted in its brand color (blue for Base, gold for HashKey, purple for Starknet, teal for Arc, green for Solana). Switching chains auto-updates the network in the connected wallet.
+- **Amount display** — the requested USDC/HSK amount in large bold type with the asset label.
+- **On-chain memo** — if set by the organizer, shown as a pill badge below the amount.
+- **Network details row** — chain name, engine type, Chain ID, and platform fee (0.2%).
+- **Pay mode toggle** — "Connect Wallet" or "Send via Address" (available on Base, Arc, Solana).
+- **Underpayment detection** — if the actual received amount differs from the requested amount, the success card changes state:
+  - ✅ **≥99% received** → Green "Payment Sent!" (standard)
+  - 🟡 **50–99% received** → Amber "Partial Payment" with exact shortfall displayed
+  - 🔴 **<50% received** → Red "Underpayment Detected" with exact shortfall
+
+### Flexible Amount Mode
+
+When the organizer enables **Flexible Amount**, the payer sees:
+
+```
+    ENTER AMOUNT
+    [  0.00  ]  USDC
+```
+
+A large centered input directly under the "Enter Amount" label. The payer types how much they want to pay. No reason/memo field — just the amount. This is ideal for restaurants, donations, tipping, and any context where the payer chooses what they pay.
+
+### Full-Screen Success Card
+
+After payment confirmation, the payer sees a full-screen success card with:
+- Chain-specific glow effect and brand colors
+- Exact amount received (actual on-chain value)
+- Transaction hash with direct explorer link
+- Sweep/distribution status (Base/Arc router flows)
+- Event registration confirmation (multi-payer mode)
+
+---
+
+## Multi-Chain Payment Links
+
+A single Hash PayLink can carry addresses for **multiple chains simultaneously**. The organizer fills in EVM, Starknet, and Solana addresses during link creation — and the payer sees all available chains as selectable pills. One link. Any chain.
+
+**URL format:**
+```
+https://hashpaylink.com/pay?multi=1&amt=10&evm=0xYour...&stark=0xYourStark...&sol=YourSolana...
+```
+
+**How it works:**
+- `multi=1` unlocks all chain selectors
+- The payer chooses their preferred chain — only the relevant address is used for that payment
+- The organizer receives funds on whichever chain the payer chose
+
+---
+
+## Multi-Payer Collection (Event Mode)
+
+Designed for events, classes, group splits, and any scenario where **many people pay one organizer**. Enabled by toggling "Multi-payer Collection" on the link creation page.
+
+**Payer flow:**
+1. Payer opens the payment link
+2. Enters their name (required for event registration)
+3. Selects chain and pays
+4. Their name, amount, chain, and transaction hash are logged in real time
+
+**Organizer dashboard features:**
+- Live payment feed — each attendee's name, chain, amount, and timestamp appear as payments arrive
+- Actual received amount logged (not the requested URL amount — real on-chain value)
+- Multi-chain monitoring — watches Base, Arc, HashKey, Starknet, and Solana simultaneously
+- CSV export — download full payment log with one click
+- QR code display — show the event QR code on a screen for attendees to scan
+- Dashboard URL is shareable separately from the payment link
+
+**Real-world use cases:**
+- School/class fee collection
+- Conference or event registrations
+- Group dinners and bill splits
+- Community dues and subscriptions
+- Online fundraisers and charity drives
+- Sports team registration fees
+
+---
+
+## QR Code Feature
+
+Every Hash PayLink automatically generates a **downloadable QR code** at 1024×1024px — suitable for print, display screens, and physical terminals. The QR code encodes the full payment URL including the recipient's address, amount, and memo.
+
+### Self-Service QR Codes (Anyone Can Generate)
+
+Anyone can generate and use Hash PayLink QR codes for free — no sign-up, no approval required. Hash PayLink processes payments statelessly — we never hold funds and have no involvement in individual payments.
+
+### Branded QR Codes (For Merchants & Organizations)
+
+For businesses that need **credibility, trust, and a professional presentation** — restaurants, retail shops, event organizers, universities — Hash PayLink offers a **branded QR code service**.
+
+**How it works:**
+1. Email us at [support@hashpaylink.com](mailto:support@hashpaylink.com) with:
+   - Your business/organization name
+   - Up to 3 wallet addresses (EVM, Solana, Starknet — your choice)
+   - The chain(s) you want to accept payments on
+   - Your preferred memo (e.g. "Village Chief Restaurant")
+2. Hash PayLink generates a **custom branded QR code** in our glass-card design, with your business name as the memo and "Scan to pay in USDC" as the instruction.
+3. We email you the branded QR code **and** the organizer dashboard URL so you can monitor all payments made to your wallet in real time.
+
+**What you get:**
+- Glass-branded Hash PayLink QR code with your business name
+- Memo pre-filled: e.g. `Memo: Village Chief Restaurant`
+- Dashboard URL for live payment tracking — no login required
+- Multi-chain support (payer chooses Base, Solana, Starknet, etc.)
+
+> **Think of it as distributing contactless POS terminals and ATM cards to merchants — except it's a QR code, it never expires, works globally, accepts USDC, and requires no hardware.**
+
+**Why branded QR codes matter:**
+- Customers scanning a QR code at a restaurant want to see a professional, recognizable label — not a random URL
+- Branded QR codes signal legitimacy and trust, the same way a bank card logo does on a physical terminal
+- Once printed and laminated on a table or counter, payments come in automatically — no staff action needed
+- The organizer dashboard URL gives you a permanent window into all incoming payments, self-served
+
+> **Note:** Anyone can create their own Hash PayLink QR code independently. The branded service is for organizations that want the credibility and recognition of a registered Hash PayLink identity.
+
+---
+
+## Dark Mode
+
+Hash PayLink ships with a full **dark / light mode toggle** accessible from the header on every page.
+
+- **Default:** follows your operating system's color scheme preference (`prefers-color-scheme`)
+- **Toggle:** Sun/Moon button in the top-right header
+- **Persistence:** preference saved to `localStorage` — stays between sessions
+- **Coverage:** all pages, all cards, all chain-specific gradients, inputs, badges, error states, success cards, and the RainbowKit wallet modal
+
+Both modes are fully production-quality — the dark theme uses a three-level surface hierarchy (`#121212` page / `#1e1e1e` cards / `#252525` inputs) with proper contrast across every UI element.
+
+---
+
+## Organizer Dashboard
+
+The organizer dashboard is a **live, shareable payment monitoring page** — no login, no account required. It auto-refreshes in real time as payments arrive.
+
+**URL format:**
+```
+https://hashpaylink.com/event?id=YOUR_EVENT_ID&evm=0xYour...&amt=10
+```
+
+**Dashboard shows:**
+- Event name and payment amount (or "Flexible" for flex links)
+- Chain(s) being monitored
+- Live payment log: name, chain badge, amount (actual received), transaction hash, timestamp
+- Running total of payments collected
+- CSV export button
+- QR code for the payment link
+
+**Multi-chain monitoring:** the dashboard watches all configured chains simultaneously — a Base payment and a Solana payment to the same event both appear in the same live feed.
+
+**Actual amount logging:** the dashboard logs the exact USDC/HSK received on-chain — not the URL-requested amount. If a payer sends 2 USDC on a 5 USDC link, the dashboard shows 2 USDC, not 5.
+
+---
+
+## Security — Where Hash PayLink Wins
+
+### Non-Custodial by Design
+
+Hash PayLink **never holds funds at any point**. Payments go directly from payer to recipient (or via transparent on-chain contracts). Even in the Send via Address flow, the CREATE2 vault exists only for seconds before the relayer sweeps it — and the relayer is an immutable contract, not a human intermediary.
+
+### Trustless Smart Contracts
+
+The `PayLinkFactoryV2` contract enforces:
+- `onlyRelayer` — only the registered Hash PayLink relayer can trigger a relay
+- `MAX_GAS_REIMB` cap (1.00 USDC) — relayer cannot overcharge gas reimbursement
+- CREATE2 collision guard — attempting to relay the same `linkId` twice reverts at the contract level (double-spend impossible)
+- All fee splits are deterministic and transparent — `recipient_amount = total - fee - gas_reimb`
+
+### Private Key Security
+
+- `RELAYER_PRIVATE_KEY` is stored exclusively as a server-side environment variable (Render/Vercel secrets)
+- It is **never prefixed `NEXT_PUBLIC_` or `VITE_`** — it can never reach the browser
+- The relayer key is used only inside API route handlers, isolated per request
+- Starknet and Solana each have their own dedicated relayer keys (`RELAYER_PRIVATE_KEY_STARKNET`, `RELAYER_PRIVATE_KEY_SOLANA`) — chain-isolated
+
+### EIP-712 Typed Signatures
+
+All gasless operations on EVM chains use structured **EIP-712 typed data** — not raw `eth_sign` or `personal_sign`. The payer's wallet displays the exact permit parameters (spender, amount, deadline) before signing. Nothing is hidden.
+
+### No Backend Required for Validation
+
+Payment validity is enforced on-chain. Hash PayLink's backend is a **relay layer only** — it cannot steal funds, cannot forge signatures, and cannot prevent a payer from paying directly to a recipient address.
+
+### Open Source
+
+The complete payment logic is open for audit: [`src/pages/PaymentPage.tsx`](src/pages/PaymentPage.tsx), [`api/relay-v2.ts`](api/relay-v2.ts), [`api/relay-solana.ts`](api/relay-solana.ts).
+
+### Underpayment Protection
+
+The payer-facing success card and organizer dashboard always reflect the **actual on-chain received amount**, not the URL-requested amount. Partial and underpayments are clearly flagged — protecting merchants from silent revenue discrepancies.
+
+---
+
+## Base App Store
+
+Hash PayLink is **live on the Base App Store** with Base Builder Code attribution integrated.
+
+- **App ID:** `69f5ac9d7a671bc641dfdc70`
+- **Builder Code:** `bc_8qtb7tny` (ERC-8021)
+- Every Base Mainnet transaction appends the builder code to calldata — enabling Base to attribute onchain volume and qualifying Hash PayLink for Base builder incentive programs
+
+---
+
+## Real-World Use Cases
+
+Hash PayLink is already powering use cases across five categories:
+
+### Retail & Hospitality
+- **Restaurants** — laminated QR code on tables. Customer scans, pays in USDC. Merchant receives notification on their dashboard in under 3 seconds. No POS hardware, no payment processor contract.
+- **Coffee shops & cafes** — flexible amount QR code at the counter. Customer enters their bill total, pays.
+- **Market stalls & pop-ups** — a QR code on the phone screen is the entire payment terminal.
+- **Hotels & Airbnb** — payment link in the booking confirmation email. Guest pays in advance in USDC.
+
+### Freelance & Professional Services
+- **Developers, designers, writers** — generate a link per invoice. Share in any email, Telegram, or X DM. Client pays from any chain.
+- **Consulting & agencies** — invoice with a payment link embedded. No bank account or Stripe setup required.
+- **Cross-border contractors** — the link works globally. No currency conversion, no wire fee, no SWIFT delay.
+
+### Events & Organizations
+- **Conference registrations** — event mode link tracks every attendee's payment with their name. Organizer exports CSV at the end.
+- **School & university fee collection** — semester fees, exam registration, activity dues.
+- **Sports clubs** — membership fees, tournament registrations, kit payments.
+- **Churches & nonprofits** — tithe, donations, fundraising campaigns with live tracking.
+- **DAOs & Web3 communities** — contributor payments, grant disbursements, on-chain receipts.
+
+### Digital & Creator Economy
+- **Newsletter & content creators** — paid subscription links. Send once, pay forever — no renewal system needed.
+- **Musicians & artists** — tip jars, merch payments, exclusive content access.
+- **Educators** — course registration, tutoring sessions, workshop fees.
+- **Gaming projects** — in-game purchases, tournament entry fees, NFT mint payments.
+
+### Business & Enterprise
+- **E-commerce** — add a "Pay with USDC" button to any product page using `<PayLinkButton>`. No payment processor contract.
+- **SaaS** — subscription billing without a merchant account. One component, five chains.
+- **Payroll** — combine with StreamPay for streaming salary disbursement.
+- **Inter-company settlements** — stateless invoicing between Web3 companies with on-chain proof of payment.
+
+---
+
+## Hash PayLink SDK — Plug and Play
+
+The Hash PayLink SDK gives any developer a **drop-in payment layer for their platform** — the same way Stripe provides a payment button, but for USDC across five blockchains.
+
+### Installation
 
 ```bash
 npm install @hashpaylink/sdk
-```
-
-```bash
+# or
 yarn add @hashpaylink/sdk
-```
-
-```bash
+# or
 pnpm add @hashpaylink/sdk
 ```
 
-> **Zero peer-dep setup for hosted mode.** If you're using the hosted checkout (default), you do not need wagmi, RainbowKit, or any wallet provider in your app. The SDK opens the Hash PayLink hosted page — your app just listens for the `onPaymentSuccess` callback.
+### One-Liner Checkout (Zero Config)
 
----
-
-## Quick Start
-
-**Five lines of code:**
+No wallet providers. No wagmi. No RainbowKit. Hash PayLink hosts the entire checkout experience.
 
 ```tsx
 import { PayLinkButton } from '@hashpaylink/sdk'
@@ -130,36 +423,48 @@ export default function Checkout() {
   return (
     <PayLinkButton
       recipientEVM="0xYourEVMAddress"
+      recipientSolana="YourSolanaAddress"
       amount="10"
       memo="Invoice #001"
-      onPaymentSuccess={({ txHash, chain }) => console.log('Paid!', txHash, 'on', chain)}
+      onPaymentSuccess={({ txHash, chain }) => {
+        console.log('Paid!', txHash, 'on', chain)
+        // Update your database, unlock content, send receipt, etc.
+      }}
     />
   )
 }
 ```
 
-This opens Hash PayLink's **hosted checkout** in a new tab. The payer selects their chain and pays — on **Base and Arc** they can either connect a wallet or choose **Send via Address** (send from any EVM wallet or CEX directly to a generated address, no wallet connection required). On HashKey and Starknet, wallet connect is used. You receive the `onPaymentSuccess` callback with the transaction hash and chain.
+**What the payer sees when they click the button:**
 
----
+A full Hash PayLink checkout page opens in a new tab showing:
+1. A chain selector with pills for Base, HashKey, Starknet, Arc, and Solana
+2. The payment amount in large type with the asset label
+3. The memo as a badge
+4. "Connect Wallet" or "Send via Address" toggle
+5. A pay button branded to the selected chain
+6. Full-screen success card after payment with transaction hash
 
-## API Reference
+The checkout UI is fully branded as Hash PayLink — clean, professional, and mobile-optimized.
 
-### `<PayLinkButton>`
+### Full Props Reference
 
 ```tsx
 <PayLinkButton
-  recipientEVM="0x..."          // EVM address (Base · HashKey · Arc)
-  recipientStark="0x..."        // Starknet address (optional — 0x + 64 hex chars)
-  amount="25"                   // Amount in asset units ("25" = 25 USDC)
-  memo="Invoice #042"           // Stored on-chain in tx calldata
-  platformFeeBps={20}           // Default: 20 (0.2%). Set 0 to disable.
-  hosted={true}                 // true = hosted checkout tab (default)
-                                // false = inline widget
-  label="Pay with Crypto"       // Custom button label
+  recipientEVM="0x..."           // EVM address (Base · HashKey · Arc)
+  recipientStark="0x..."         // Starknet address (0x + 64 hex)
+  recipientSolana="..."          // Solana base58 address
+  amount="25"                    // Fixed payment amount ("25" = 25 USDC)
+  memo="Invoice #042"            // On-chain memo (≤100 chars)
+  flex={false}                   // true = payer enters amount at checkout
+  multiChain={true}              // true = show all chains with addresses
+  platformFeeBps={20}            // Default: 20 (0.2%). Set 0 to disable.
+  hosted={true}                  // true = new tab checkout (default, zero config)
+                                 // false = inline widget (requires wagmi setup)
+  label="Pay with Crypto"        // Custom button label
   onPaymentSuccess={(params) => {
-    console.log(params.txHash)        // "0xabc..."
-    console.log(params.chain)         // 'arc' | 'base' | 'starknet' | 'hashkey'
-    console.log(params.platformFee)   // "0.05" (fee in asset units)
+    const { txHash, chain, amount, asset, platformFee, timestamp } = params
+    // Fires after on-chain confirmation
   }}
   onPaymentError={(error) => {
     console.error(error.message)
@@ -167,94 +472,21 @@ This opens Hash PayLink's **hosted checkout** in a new tab. The payer selects th
 />
 ```
 
-#### Props
+### Inline Widget Mode
 
-| Prop | Type | Required | Default | Description |
-|---|---|---|---|---|
-| `recipientEVM` | `string` | * | — | EVM address (`0x` + 40 hex) — required for Base, HashKey, Arc |
-| `recipientStark` | `string` | * | — | Starknet address (`0x` + 64 hex) |
-| `amount` | `string` | ✓ | — | Payment amount |
-| `memo` | `string` | — | — | On-chain memo (≤100 chars) |
-| `platformFeeBps` | `number` | — | `20` | Fee in basis points (20 = 0.2%) |
-| `hosted` | `boolean` | — | `true` | Hosted checkout tab vs inline widget |
-| `label` | `string` | — | `"Pay {amount} USDC"` | Button label |
-| `onPaymentSuccess` | `function` | — | — | Fires after on-chain confirmation |
-| `onPaymentError` | `function` | — | — | Fires on wallet rejection or tx failure |
-
-*At least one of `recipientEVM` or `recipientStark` is required.
-
----
-
-## Getting Started Guide
-
-### 1 · Hosted Checkout (Zero Config — Recommended)
-
-No wallet providers, no wagmi, no RainbowKit needed. Hash PayLink hosts the entire payment flow.
+Embeds the full payment UI directly inside your page — no new tab. Requires wagmi + provider setup.
 
 ```tsx
-// pages/checkout.tsx
-import { PayLinkButton } from '@hashpaylink/sdk'
-
-export default function CheckoutPage({ invoice }) {
-  return (
-    <div className="flex justify-center py-16">
-      <PayLinkButton
-        recipientEVM={process.env.NEXT_PUBLIC_TREASURY_EVM}
-        recipientStark={process.env.NEXT_PUBLIC_TREASURY_STARK}
-        amount={invoice.total.toString()}
-        memo={`Invoice #${invoice.id}`}
-        onPaymentSuccess={async ({ txHash, chain }) => {
-          await fetch('/api/invoices/confirm', {
-            method: 'POST',
-            body: JSON.stringify({ invoiceId: invoice.id, txHash, chain }),
-          })
-        }}
-      />
-    </div>
-  )
-}
-```
-
----
-
-### 2 · Generate a Payment Link (No SDK Required)
-
-Use the hosted checkout URL directly — embed in emails, QR codes *(coming soon)*, or any message.
-
-```
-https://hashpaylink.com/pay?evm=0xYourAddress&stark=0xYourStark&amt=10&memo=Coffee
-```
-
-**URL parameters:**
-
-| Param | Description | Example |
-|---|---|---|
-| `evm` | EVM recipient address | `0xAbCd…` |
-| `stark` | Starknet recipient address | `0x04a3…` (64 hex) |
-| `amt` | Amount | `10` |
-| `memo` | On-chain memo | `Coffee` |
-| `net` | Lock to a specific chain | `base` · `arc` · `hashkey` · `starknet` |
-
----
-
-### 3 · Inline Widget (Full Control)
-
-Embeds the payment UI directly in your page. Requires wagmi + Starknet providers in the host app.
-
-```tsx
-// app/providers.tsx
+// 1. Set up providers (once, in your app root)
 import { WagmiProvider } from 'wagmi'
 import { RainbowKitProvider } from '@rainbow-me/rainbowkit'
 import { QueryClientProvider, QueryClient } from '@tanstack/react-query'
 import { StarknetProvider } from '@hashpaylink/sdk/starknet'
-import { wagmiConfig } from './wagmi'
-
-const queryClient = new QueryClient()
 
 export function Providers({ children }) {
   return (
     <WagmiProvider config={wagmiConfig}>
-      <QueryClientProvider client={queryClient}>
+      <QueryClientProvider client={new QueryClient()}>
         <RainbowKitProvider>
           <StarknetProvider>{children}</StarknetProvider>
         </RainbowKitProvider>
@@ -262,23 +494,89 @@ export function Providers({ children }) {
     </WagmiProvider>
   )
 }
-```
 
-```tsx
-// app/checkout/page.tsx
+// 2. Drop the inline widget wherever you need it
 import { PayLinkButton } from '@hashpaylink/sdk'
 
-export default function Checkout() {
+export default function ProductPage({ product }) {
   return (
     <PayLinkButton
-      recipientEVM="0xYour..."
-      amount="25"
+      recipientEVM={process.env.NEXT_PUBLIC_TREASURY_EVM}
+      recipientSolana={process.env.NEXT_PUBLIC_TREASURY_SOLANA}
+      amount={product.price.toString()}
+      memo={product.name}
       hosted={false}
-      onPaymentSuccess={({ txHash }) => router.push(`/receipt?tx=${txHash}`)}
+      onPaymentSuccess={({ txHash, chain }) =>
+        router.push(`/receipt?tx=${txHash}&chain=${chain}`)
+      }
     />
   )
 }
 ```
+
+### The Widget UI (Inline Mode)
+
+When `hosted={false}`, a self-contained card is rendered inline with:
+
+```
+┌─────────────────────────────────┐
+│      PAYMENT REQUEST            │
+│   25.00  USDC · HSK             │
+│   "Invoice #042"                │
+├─────────────────────────────────┤
+│  ● Base  ● HashKey  ● Arc       │
+│  ● Starknet  ● Solana           │
+├─────────────────────────────────┤
+│  Includes 0.2% platform fee     │
+│                                 │
+│  ⚡ Pay 25 USDC  ↗              │
+│                                 │
+│  Powered by Hash PayLink SDK    │
+│  Non-custodial                  │
+└─────────────────────────────────┘
+```
+
+Clicking the button in inline mode opens the hosted checkout — the inline widget is the integration surface, the checkout is handled by Hash PayLink's infrastructure.
+
+### How It Syncs with Your Platform (Like Stripe)
+
+```
+Your platform          Hash PayLink
+─────────────          ─────────────────────────────
+User clicks "Pay"  →   Hosted checkout opens in new tab
+                        Payer selects chain
+                        Payer connects wallet or uses address
+                        Payment confirmed on-chain (< 3 seconds)
+                   ←   onPaymentSuccess({ txHash, chain, amount })
+Your backend           ↓
+receives callback  →   Verify txHash on-chain
+                   →   Mark order paid, send receipt, unlock content
+```
+
+The integration is designed to be **modular** — Hash PayLink handles all wallet UX, gas sponsorship, chain switching, and confirmation logic. Your platform only sees the callback.
+
+### URL-Based Integration (No SDK Required)
+
+For platforms that can't install npm packages, embed a direct link:
+
+```
+https://hashpaylink.com/pay?evm=0xYour...&sol=YourSolana...&amt=25&memo=Invoice+042
+```
+
+**Full URL parameter reference:**
+
+| Param | Description | Example |
+|---|---|---|
+| `evm` | EVM recipient (Base · HashKey · Arc) | `0xAbCd…` |
+| `stark` | Starknet recipient | `0x04a3…` (64 hex) |
+| `sol` | Solana recipient | `YourBase58Address` |
+| `amt` | Fixed amount | `10` |
+| `flex` | Flexible amount mode | `1` |
+| `memo` | On-chain memo | `Coffee` |
+| `net` | Lock to one chain | `base` · `arc` · `hashkey` · `starknet` · `solana` |
+| `multi` | Multi-chain mode | `1` |
+| `event` | Event/multi-payer mode | `1` |
+| `id` | Event ID | `abc123…` |
 
 ---
 
@@ -287,127 +585,23 @@ export default function Checkout() {
 Hash PayLink charges a **0.2% platform fee** (20 bps) on every transaction, shown transparently before the user signs.
 
 ```
-User pays:       10.00 USDC
-Platform fee:     0.02 USDC  (0.2%)
-Recipient gets:   9.98 USDC
+User pays:        10.00 USDC
+Platform fee:      0.02 USDC  (0.2%)
+Recipient gets:    9.98 USDC
 ```
 
-### Fee Configuration
-
-```tsx
-// Disable (self-hosted deployments)
-<PayLinkButton platformFeeBps={0} ... />
-
-// Custom (Enterprise)
-<PayLinkButton platformFeeBps={10} ... />  // 0.1%
-```
-
-### FeeRouter Contract (On-chain Collection)
-
-Full on-chain fee splitting uses the FeeRouter contract deployed on Base and Arc.
-
-```solidity
-// FeeRouter.sol (interface)
-interface IFeeRouter {
-    function routePayment(
-        address token,
-        address recipient,
-        uint256 amount,
-        uint16  feeBps
-    ) external;
-}
-```
-
----
-
-## Webhooks / `onPaymentSuccess`
-
-The callback fires after on-chain confirmation.
-
-```tsx
-<PayLinkButton
-  ...
-  onPaymentSuccess={async (params) => {
-    const {
-      txHash,           // "0xabc123..."
-      chain,            // "arc" | "base" | "starknet" | "hashkey"
-      amount,           // "10"
-      asset,            // "USDC" | "HSK"
-      recipientAddress, // "0xYour..."
-      platformFee,      // "0.02"
-      timestamp,        // Unix ms
-    } = params
-
-    await fetch('https://api.yourapp.com/payments/confirm', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(params),
-    })
-  }}
-/>
-```
-
-> For production, verify `txHash` on-chain server-side before fulfilling orders.
-
----
-
-## Validation
-
-Strict address validation enforced at input:
-
-```ts
-// EVM (Base, HashKey, Arc) — viem isAddress
-isAddress("0xAbCd...1234")       // ✓  0x + 40 hex chars
-
-// Starknet — exactly 64 hex chars after 0x
-/^0x[0-9a-fA-F]{64}$/.test(v)   // ✓  0x + 64 hex chars
-```
-
-Attempting to paste an EVM address into the Starknet field shows:
-```
-⚠️ Must be a valid 64-character Starknet address.
-```
-
----
-
-## Auto-Switch Network
-
-When a user clicks a chain pill on the payment page:
-
-| User clicks | Wallet action | Result |
-|---|---|---|
-| **Arc** | `wallet_switchEthereumChain` (5042002) | Arc branding, sub-second badge |
-| **Base** | `wallet_switchEthereumChain` (8453) | Blue glow, EIP-7702 gas |
-| **HashKey** | `wallet_switchEthereumChain` (177) | Gold glow, native HSK |
-| **Starknet** | `window.starknet.enable()` | ArgentX / Braavos popup |
-
-If the chain isn't in the wallet, `wallet_addEthereumChain` fires automatically — users never touch network settings.
+The fee is collected **atomically in the same transaction** — there is no separate fee transfer, no trust required.
 
 ---
 
 ## Real-Time Payment Detection
 
-Hash PayLink monitors for incoming payments in real time — no polling button required:
-
-- **EVM chains (Base, Arc):** `watchContractEvent` on the USDC contract, 2-second polling interval. Payment detected in under 3 seconds.
-- **HashKey:** native balance polling every 2 seconds.
-- **Starknet:** receipt polling via JSON-RPC until `ACCEPTED_ON_L2`.
-
-After detection, a relayer automatically sweeps USDC from the payment router to the recipient (Base & Arc). No action required from the recipient.
-
----
-
-## Powering StreamPay
-
-The Hash PayLink SDK is the payment backbone of **[StreamPay](https://hashpaylink.com/?app=streampay)** — a USDC streaming platform built on top of this codebase.
-
-StreamPay uses:
-- **Arc chain config** from `CHAIN_META.arc` for the StreamVault and PoASettlement contracts
-- **EIP-712 typed signing** (same pattern as the payroll relay) for gasless claim and Proof-of-Attention session intents
-- **The same USDC precompile** (`0x3600000000000000000000000000000000000000`) for all streaming payments
-- **Hash PayLink's relayer infrastructure** for gasless vault claims
-
-StreamPay demonstrates that the SDK's primitives — typed signing, chain abstraction, USDC routing — extend naturally to streaming and event-driven payment flows.
+- **Base & Arc (wallet):** `watchContractEvent` on the USDC ERC-20 contract, 2-second polling, detects in under 3 seconds
+- **Base & Arc (vault):** balance polling on the CREATE2 vault address every 3 seconds
+- **HashKey:** native HSK balance polling every 2 seconds
+- **Starknet:** `starknet_getTransactionReceipt` polling until `ACCEPTED_ON_L2`
+- **Solana (wallet):** transaction confirmed via `confirmTransaction` with blockhash commitment
+- **Solana (vault):** ATA balance polling every 3 seconds via `/api/solana-sweep`
 
 ---
 
@@ -416,53 +610,67 @@ StreamPay demonstrates that the SDK's primitives — typed signing, chain abstra
 ```
 src/
 ├── lib/
-│   ├── chains.ts            ← ChainKey, CHAIN_META, arcChain, PLATFORM_FEE_BPS
-│   ├── wagmi.ts             ← wagmiConfig (Base + HashKey + Arc)
-│   ├── router.ts            ← FeeRouter factory + ABI constants
-│   ├── utils.ts             ← encodeErc20Transfer, isValidRecipient, fee helpers
-│   └── StarknetContext.tsx  ← Global Starknet wallet state
+│   ├── chains.ts              ← ChainKey, CHAIN_META (all 5 chains), PLATFORM_FEE_BPS
+│   ├── wagmi.ts               ← wagmiConfig (Base + HashKey + Arc)
+│   ├── router.ts              ← FeeRouter factory + ABI constants
+│   ├── utils.ts               ← encodeErc20Transfer, fee helpers, formatAmount
+│   ├── StarknetContext.tsx    ← Global Starknet wallet state (ArgentX/Braavos)
+│   └── SolanaContext.tsx      ← Global Solana wallet state (Phantom/Solflare/Backpack)
 │
-├── sdk/                     ← @hashpaylink/sdk public surface
-│   ├── index.ts             ← Exports: PayLinkButton, CHAIN_META, types
-│   ├── PayLinkButton.tsx    ← Drop-in component (hosted + inline modes)
-│   └── types.ts             ← TypeScript interfaces
+├── sdk/                       ← @hashpaylink/sdk public surface
+│   ├── index.ts               ← Exports: PayLinkButton, CHAIN_META, types
+│   ├── PayLinkButton.tsx      ← Drop-in component (hosted + inline modes)
+│   └── types.ts               ← TypeScript interfaces
 │
 ├── pages/
-│   ├── CreateLink.tsx       ← Link generator (sender flow)
-│   ├── PaymentPage.tsx      ← Payment checkout (payer flow)
-│   └── Dashboard.tsx        ← Payment history dashboard
+│   ├── CreateLink.tsx         ← Link generator — all options, QR download
+│   ├── PaymentPage.tsx        ← Full payment checkout (all 5 chains)
+│   ├── EventDashboard.tsx     ← Live multi-payer organizer dashboard
+│   └── Dashboard.tsx          ← Single-wallet payment history
 │
-└── Layout.tsx               ← Sticky header, dual-wallet, Hash Assistant chat
+├── Layout.tsx                 ← Sticky header, 5-chain network switcher,
+│                                 dark/light toggle, Hash Assistant chat
+│
+api/
+├── relay-v2.ts                ← EVM Direct Send relay (Base + Arc)
+├── relay-solana.ts            ← Solana gasless relay + vault sweep
+├── sweep.ts                   ← EVM FeeRouter sweep
+├── event-register.ts          ← Multi-payer event log
+└── tx-status.ts               ← Hash Assistant tx lookup
+
+contracts/
+├── PayLinkFactoryV2.sol       ← CREATE2 vault factory + relay logic
+└── FeeRouter.sol              ← On-chain fee splitting router
 ```
 
 ---
 
-## Who Should Integrate
+## Contributing & Local Development
 
-Hash PayLink is designed as a **drop-in payment layer** for any product that handles money movement. Integration effort is under an hour for hosted mode.
+```bash
+git clone https://github.com/Cyano88/hashkey-paylink
+cd hashkey-paylink
+npm install
+npm run dev       # http://localhost:5173 (Vite frontend)
+npm run server    # http://localhost:3001 (Express API)
+```
 
-| Platform Type | Use Case |
-|---|---|
-| **Freelance / invoice tools** | Generate and send payment links without a merchant account |
-| **SaaS subscriptions** | One-click checkout for monthly/annual plans |
-| **Creator economy** | Tip jars, paid newsletters, gated content |
-| **Marketplaces** | Buyer checkout across chains without wallet setup |
-| **DAOs & treasuries** | Contributor payments, grant disbursements |
-| **Gaming & NFT projects** | In-game purchases, mint payments |
-| **Fintech / neobanks** | Crypto off-ramp or on-chain settlement layer |
-| **Event platforms** | Ticket sales, registrations, on-chain receipts |
-| **Payroll platforms** | Combined with StreamPay for streaming salary flows |
+**Required environment variables for full functionality:**
 
----
+```env
+RELAYER_PRIVATE_KEY=              # Base/Arc EVM relay key
+RELAYER_PRIVATE_KEY_ARC=          # Arc-specific relay key (optional, falls back to above)
+RELAYER_PRIVATE_KEY_SOLANA=       # Solana relay key (base58, JSON array, or base64)
+PRIVATE_RPC_URL=                  # Private Alchemy/QuickNode RPC (Base)
+PRIVATE_RPC_URL_ARC=              # Private Arc RPC
+SOLANA_RPC_URL=                   # Private QuickNode Solana RPC
+PAYLINK_FACTORY_V2=               # PayLinkFactoryV2 contract address (Base)
+PAYLINK_FACTORY_V2_ARC=           # PayLinkFactoryV2 contract address (Arc)
+TREASURY_ADDRESS=                 # EVM treasury cold wallet
+SOLANA_TREASURY=                  # Solana treasury wallet address
+```
 
-## Security
-
-- **Non-custodial:** the SDK never holds funds — all payments are direct wallet-to-wallet or via transparent FeeRouter contracts
-- **No backend required:** payment validation happens on-chain
-- **Open source:** audit the [payment logic](src/pages/PaymentPage.tsx) yourself
-- **Strict validation:** EVM (40-char) and Starknet (64-char) enforced at input and on generate
-- **No private key exposure:** injected wallet providers only (`window.ethereum`, `window.starknet`)
-- **EIP-712 typed data:** all gasless operations use structured typed signatures — no raw transaction signing
+PRs welcome. Open an issue first for large changes.
 
 ---
 
@@ -470,28 +678,25 @@ Hash PayLink is designed as a **drop-in payment layer** for any product that han
 
 | Tier | Fee | Includes |
 |---|---|---|
-| **Standard** | 0.2% per tx | All 4 chains, hosted checkout, real-time detection, open source |
-| **Enterprise** | Custom | Whitelabel UI, custom domains, priority support, FeeRouter deployment |
-
-Contact us to discuss enterprise pricing or custom integrations.
+| **Standard** | 0.2% per tx | All 5 chains, hosted checkout, real-time detection, gasless relay, organizer dashboard |
+| **Branded QR** | Free (email request) | Custom branded QR code + dashboard URL for merchants |
+| **Enterprise** | Contact us | Whitelabel UI, custom domain, priority support, custom fee structure |
 
 ---
 
-## Contributing
+## Support & Contact
 
-```bash
-git clone https://github.com/Cyano88/hashkey-paylink
-cd hashkey-paylink
-npm install
-npm run dev       # http://localhost:5173
-```
+- **Email:** [support@hashpaylink.com](mailto:support@hashpaylink.com)
+- **X / Twitter:** [@Hash_PayLink](https://x.com/Hash_PayLink)
+- **Branded QR Code requests:** email us with your business name, wallet addresses, and preferred chains
 
-PRs welcome. Open an issue first for large changes.
+For branded QR code requests, please include:
+1. Business/organization name
+2. Up to 3 wallet addresses (EVM, Solana, Starknet)
+3. Preferred payment chains
+4. Any specific memo text you want on the QR
 
-**Support & Contact**
-
-- Email: [support@hashpaylink.com](mailto:support@hashpaylink.com)
-- X: [@Hash_PayLink](https://x.com/Hash_PayLink)
+We'll respond within 24 hours with your branded QR code and dashboard URL.
 
 ---
 
@@ -499,4 +704,4 @@ PRs welcome. Open an issue first for large changes.
 
 MIT © 2026 Hash PayLink Contributors
 
-*Built on [HashKey Chain](https://explorer.hsk.xyz) · [Base](https://basescan.org) · [Starknet](https://starkscan.co) · [Arc Economic OS](https://arc.fun)*
+*Live on [Base App Store](https://base.org/ecosystem) · Built on [Base](https://basescan.org) · [HashKey Chain](https://explorer.hsk.xyz) · [Starknet](https://starkscan.co) · [Arc Economic OS](https://arc.fun) · [Solana](https://solscan.io)*
