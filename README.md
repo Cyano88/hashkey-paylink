@@ -277,6 +277,83 @@ For businesses that need **credibility, trust, and a professional presentation**
 
 ---
 
+## Local Currency FX Display
+
+Available exclusively on **Multi-Payer Collection** links. Organisers can enable a live local currency equivalent shown directly on the payer's payment card — building trust and removing mental conversion friction for customers who think in their home currency.
+
+### Supported Currencies
+
+| Code | Symbol | Country / Region |
+|---|---|---|
+| **NGN** | ₦ | Nigeria |
+| **GHS** | ₵ | Ghana |
+| **KES** | KSh | Kenya |
+| **SGD** | S$ | Singapore |
+
+### How It Works
+
+**Organiser (link creation):**
+1. Toggle **Multi-payer Collection** ON
+2. A "Local Currency Display" section appears — toggle it ON
+3. Choose currency (NGN / GHS / KES / SGD)
+4. Choose rate source:
+   - **Live (Fixer.io)** — fetches the current market rate automatically, cached for 10 minutes
+   - **Custom / Street** — organiser enters their own rate (e.g. a parallel market rate) — baked into the link, no API dependency
+5. Generate → all FX settings are embedded in the payment URL
+
+**Payer (payment card):**
+
+Below the USDC amount, a single subtle line appears:
+```
+≈ 17,800 ₦  ·  1 USDC = 1,780 NGN  ↻
+```
+The `↻` icon manually refreshes the rate (live mode). A thin banner reads:
+```
+Pricing in USDC · Shown in Nigerian Naira at live market rates
+```
+
+### Currency Swap (Flexible Amount Mode)
+
+When the organiser has enabled both **Flexible Amount** and **FX Display**, the payer gets a swap toggle on the input:
+
+```
+    ENTER AMOUNT
+    [ 0.00 ]  USDC
+    ⇄ Switch to NGN
+```
+
+Tapping the swap button flips the input to local currency:
+
+```
+    ENTER AMOUNT
+    [ 5,000 ]  ₦
+    ⇄ Switch to USDC
+    You will pay ≈ 2.98 USDC
+```
+
+The payment always settles in USDC — the local currency input is converted at the live rate before the transaction is submitted.
+
+### Custom / Street Rate
+
+For markets where the official exchange rate differs significantly from real purchasing power (e.g. Nigeria's parallel market), organisers can enter their own rate:
+
+- Type `1780` as the custom NGN/USDC rate
+- This rate is baked permanently into the payment link URL
+- No Fixer.io API key required — works fully offline/standalone
+- Regenerate the link if the rate shifts significantly
+
+### Setup (Live Rate Mode)
+
+Add your Fixer.io API key to your server environment:
+
+```env
+FIXER_API_KEY=your_fixer_api_key
+```
+
+Free plan (100 req/month) is sufficient for low-volume events with 10-minute caching. Custom rate mode requires no API key.
+
+---
+
 ## Dark Mode
 
 Hash PayLink ships with a full **dark / light mode toggle** accessible from the header on every page.
