@@ -113,12 +113,13 @@ contract PayLinkFactoryV2 {
     }
 
     // ─── Constructor ──────────────────────────────────────────────────────────
-    constructor(address _treasury, address _relayer) {
+    constructor(address _treasury, address _relayer, address _owner) {
         require(_treasury != address(0), "V2: zero treasury");
         require(_relayer  != address(0), "V2: zero relayer");
+        require(_owner    != address(0), "V2: zero owner");
         TREASURY = _treasury;
         relayer  = _relayer;
-        owner    = msg.sender;
+        owner    = _owner;
     }
 
     /// @dev Accept native token swept from GhostVaultV2 during relayNative().

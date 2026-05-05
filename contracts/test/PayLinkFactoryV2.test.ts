@@ -41,7 +41,7 @@ describe('PayLinkFactoryV2', () => {
     token2 = await ERC20.deploy('USD Coin (Arc)',  'USDC', 6) as MockERC20
 
     const Factory = await ethers.getContractFactory('PayLinkFactoryV2')
-    factory = await Factory.deploy(treasury.address, relayer.address) as PayLinkFactoryV2
+    factory = await Factory.deploy(treasury.address, relayer.address, owner.address) as PayLinkFactoryV2
     await factory.connect(owner).setUSDC(await token1.getAddress())
   })
 
@@ -50,7 +50,7 @@ describe('PayLinkFactoryV2', () => {
   describe('deployment', () => {
     it('stores TREASURY, relayer, owner; USDC zero before setUSDC', async () => {
       const F     = await ethers.getContractFactory('PayLinkFactoryV2')
-      const fresh = await F.deploy(treasury.address, relayer.address)
+      const fresh = await F.deploy(treasury.address, relayer.address, owner.address)
       expect(await fresh.TREASURY()).to.equal(treasury.address)
       expect(await fresh.relayer()).to.equal(relayer.address)
       expect(await fresh.owner()).to.equal(owner.address)
@@ -59,14 +59,20 @@ describe('PayLinkFactoryV2', () => {
 
     it('reverts on zero treasury', async () => {
       const F = await ethers.getContractFactory('PayLinkFactoryV2')
-      await expect(F.deploy(ethers.ZeroAddress, relayer.address))
+      await expect(F.deploy(ethers.ZeroAddress, relayer.address, owner.address))
         .to.be.revertedWith('V2: zero treasury')
     })
 
     it('reverts on zero relayer', async () => {
       const F = await ethers.getContractFactory('PayLinkFactoryV2')
-      await expect(F.deploy(treasury.address, ethers.ZeroAddress))
+      await expect(F.deploy(treasury.address, ethers.ZeroAddress, owner.address))
         .to.be.revertedWith('V2: zero relayer')
+    })
+
+    it('reverts on zero owner', async () => {
+      const F = await ethers.getContractFactory('PayLinkFactoryV2')
+      await expect(F.deploy(treasury.address, relayer.address, ethers.ZeroAddress))
+        .to.be.revertedWith('V2: zero owner')
     })
   })
 
@@ -75,7 +81,7 @@ describe('PayLinkFactoryV2', () => {
   describe('setUSDC', () => {
     it('stores token and emits USDCConfigured', async () => {
       const F     = await ethers.getContractFactory('PayLinkFactoryV2')
-      const fresh = await F.deploy(treasury.address, relayer.address)
+      const fresh = await F.deploy(treasury.address, relayer.address, owner.address)
       await expect(fresh.connect(owner).setUSDC(await token1.getAddress()))
         .to.emit(fresh, 'USDCConfigured')
         .withArgs(await token1.getAddress())
@@ -89,14 +95,14 @@ describe('PayLinkFactoryV2', () => {
 
     it('reverts on zero address', async () => {
       const F     = await ethers.getContractFactory('PayLinkFactoryV2')
-      const fresh = await F.deploy(treasury.address, relayer.address)
+      const fresh = await F.deploy(treasury.address, relayer.address, owner.address)
       await expect(fresh.connect(owner).setUSDC(ethers.ZeroAddress))
         .to.be.revertedWith('V2: zero token')
     })
 
     it('non-owner cannot call setUSDC', async () => {
       const F     = await ethers.getContractFactory('PayLinkFactoryV2')
-      const fresh = await F.deploy(treasury.address, relayer.address)
+      const fresh = await F.deploy(treasury.address, relayer.address, owner.address)
       await expect(fresh.connect(stranger).setUSDC(await token1.getAddress()))
         .to.be.revertedWith('V2: caller is not owner')
     })
@@ -205,7 +211,7 @@ describe('PayLinkFactoryV2', () => {
 
     it('reverts when USDC not configured', async () => {
       const F     = await ethers.getContractFactory('PayLinkFactoryV2')
-      const fresh = await F.deploy(treasury.address, relayer.address)
+      const fresh = await F.deploy(treasury.address, relayer.address, owner.address)
       await expect(fresh.connect(relayer).relay(linkId, recipient.address, 0n))
         .to.be.revertedWith('V2: token not configured')
     })
@@ -345,7 +351,7 @@ describe('PayLinkFactoryV2', () => {
     it('works when USDC is not configured (HashKey scenario)', async () => {
       // Deploy fresh factory without setUSDC — simulates HashKey deployment
       const F     = await ethers.getContractFactory('PayLinkFactoryV2')
-      const fresh = await F.deploy(treasury.address, relayer.address)
+      const fresh = await F.deploy(treasury.address, relayer.address, owner.address)
       // Do NOT call setUSDC
 
       const vault = await fresh.getVaultAddress(linkId, recipient.address)
@@ -423,7 +429,7 @@ describe('PayLinkFactoryV2', () => {
 
       // A HashKey factory (no USDC) would produce the same vault IF at same address
       const F     = await ethers.getContractFactory('PayLinkFactoryV2')
-      const fresh = await F.deploy(treasury.address, relayer.address)
+      const fresh = await F.deploy(treasury.address, relayer.address, owner.address)
       // fresh.USDC() == address(0) — HashKey scenario, no setUSDC called
 
       // fresh is at a different address so vault differs (expected)
@@ -439,7 +445,7 @@ describe('PayLinkFactoryV2', () => {
 
     it('two-step deploy: relay blocked before setUSDC, works after', async () => {
       const F     = await ethers.getContractFactory('PayLinkFactoryV2')
-      const fresh = await F.deploy(treasury.address, relayer.address)
+      const fresh = await F.deploy(treasury.address, relayer.address, owner.address)
 
       const vault = await fresh.getVaultAddress(linkId, recipient.address)
       await token1.mint(vault, usdc(10))
@@ -457,7 +463,7 @@ describe('PayLinkFactoryV2', () => {
 
     it('relayNative works immediately after deploy with no setUSDC (HashKey)', async () => {
       const F     = await ethers.getContractFactory('PayLinkFactoryV2')
-      const fresh = await F.deploy(treasury.address, relayer.address)
+      const fresh = await F.deploy(treasury.address, relayer.address, owner.address)
 
       const vault = await fresh.getVaultAddress(linkId, recipient.address)
       await stranger.sendTransaction({ to: vault, value: hsk(2) })

@@ -96,8 +96,8 @@ async function main() {
   const v2Initcode = ethers.concat([
     V2Factory.bytecode,
     ethers.AbiCoder.defaultAbiCoder().encode(
-      ['address', 'address'],
-      [TREASURY, deployer.address],   // treasury + initial relayer
+      ['address', 'address', 'address'],
+      [TREASURY, deployer.address, deployer.address],  // treasury, relayer, owner
     ),
   ])
   const v2Address = ethers.getCreate2Address(NICK_FACTORY, SALT_V2, ethers.keccak256(v2Initcode))
