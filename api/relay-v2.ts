@@ -3,29 +3,22 @@
  *
  * Master Relayer endpoint for the PayLinkFactoryV2 "Direct Send" flow.
  *
- * Called by the frontend the instant a USDC balance is detected at a ghost
- * vault address. The relayer:
- *   1. Validates the request.
- *   2. Estimates gas and converts to a USDC reimbursement figure.
- *   3. Signs and broadcasts `PayLinkFactoryV2.relay(linkId, recipient, gasReimbUsdc)`.
- *   4. Returns the transaction hash to the UI.
+ * Supports three chains:
+ *  • Base    — ERC-20 USDC relay.  Calls relay(linkId, recipient, gasReimbUsdc)
+ *  • Arc     — ERC-20 USDC relay (Arc native USDC precompile, gas IS USDC)
+ *  • HashKey — Native HSK relay.  Calls relayNative(linkId, recipient, gasReimbNative)
  *
- * Security notes
- * ──────────────
- *  • RELAYER_PRIVATE_KEY is used only inside this function, via `privateKeyToAccount`.
- *    It is never prefixed NEXT_PUBLIC_ / VITE_ and never reaches the browser.
- *  • PRIVATE_RPC_URL is the backend-only, high-rate-limit RPC (Alchemy / QuickNode).
- *    The frontend uses VITE_RPC_URL (public, rate-limited) for read-only polling.
- *  • The contract itself enforces: onlyRelayer, MAX_GAS_REIMB cap, and
- *    CREATE2 collision guard (double-relay reverts).
- *
- * Required env vars (Vercel → Settings → Environment Variables)
- * ──────────────────────────────────────────────────────────────
- *  RELAYER_PRIVATE_KEY        0x-prefixed private key of the master relayer wallet.
- *  PRIVATE_RPC_URL            Private RPC endpoint (Alchemy / QuickNode).
- *  PAYLINK_FACTORY_V2         Deployed PayLinkFactoryV2 contract address.
- *  TREASURY_ADDRESS           Cold wallet that receives the 0.2% fee + gas reimb.
- *                             (Informational here — enforced on-chain in the contract.)
+ * Required env vars (Render → Environment)
+ * ─────────────────────────────────────────
+ *  RELAYER_PRIVATE_KEY          Master relayer private key (Base)
+ *  RELAYER_PRIVATE_KEY_ARC      Arc relayer key  (falls back to master)
+ *  RELAYER_PRIVATE_KEY_HASHKEY  HashKey relayer key (falls back to master)
+ *  PRIVATE_RPC_URL              Base RPC (Alchemy / QuickNode)
+ *  PRIVATE_RPC_URL_ARC          Arc RPC  (falls back to default Arc RPC)
+ *  PRIVATE_RPC_URL_HASHKEY      HashKey RPC (falls back to https://mainnet.hsk.xyz)
+ *  PAYLINK_FACTORY_V2           Deployed factory address (Base)
+ *  PAYLINK_FACTORY_V2_ARC       Factory on Arc  (falls back to PAYLINK_FACTORY_V2)
+ *  PAYLINK_FACTORY_V2_HASHKEY   Factory on HashKey (falls back to PAYLINK_FACTORY_V2)
  */
 
 import type { Request, Response } from 'express'
@@ -40,11 +33,8 @@ import {
 import { base } from 'viem/chains'
 import { privateKeyToAccount } from 'viem/accounts'
 
-// ─── Base Builder Code (ERC-8021) ─────────────────────────────────────────────
-// Hex of "bc_8qtb7tny" — appended to Base Mainnet relay transactions only.
-const BASE_BUILDER_CODE = '0x62635f3871746237746e79' as `0x${string}`
+// ─── Chain definitions ────────────────────────────────────────────────────────
 
-// ─── Arc Testnet chain definition (mirrors src/lib/chains.ts) ────────────────
 const arcChain = defineChain({
   id: 5042002,
   name: 'Arc Testnet',
@@ -52,17 +42,32 @@ const arcChain = defineChain({
   rpcUrls: { default: { http: ['https://rpc.testnet.arc.network'] } },
 })
 
-// ─── ABI (relay function only) ────────────────────────────────────────────────
+const hashkeyChain = defineChain({
+  id: 177,
+  name: 'HashKey Chain',
+  nativeCurrency: { decimals: 18, name: 'HashKey', symbol: 'HSK' },
+  rpcUrls: { default: { http: ['https://mainnet.hsk.xyz'] } },
+})
 
-const FACTORY_V2_ABI = parseAbi([
+// ─── Contract ABIs ────────────────────────────────────────────────────────────
+
+const RELAY_ABI = parseAbi([
   'function relay(bytes32 linkId, address recipient, uint256 gasReimbUsdc) returns (uint256)',
 ])
 
-// ─── Gas reimbursement helpers ────────────────────────────────────────────────
+const RELAY_NATIVE_ABI = parseAbi([
+  'function relayNative(bytes32 linkId, address recipient, uint256 gasReimbNative) returns (uint256)',
+])
 
-const MAX_REIMB_USDC   = 500_000n   // 0.50 USDC hard ceiling (frontend-side cap; contract caps at 1.00)
-const ESTIMATED_GAS    = 300_000n   // conservative gas estimate for relay()
-const FALLBACK_ETH_USD = 3_000n     // USD/ETH fallback when price fetch fails
+// ─── Base Builder Code (ERC-8021) ─────────────────────────────────────────────
+const BASE_BUILDER_CODE = '0x62635f3871746237746e79' as `0x${string}`
+
+// ─── Gas reimbursement ────────────────────────────────────────────────────────
+
+const MAX_REIMB_USDC         = 500_000n                   // 0.50 USDC  (6 dec)
+const MAX_REIMB_NATIVE       = 5_000_000_000_000_000n     // 0.005 HSK/ETH (18 dec)
+const ESTIMATED_GAS          = 300_000n
+const FALLBACK_ETH_USD       = 3_000n
 
 async function getEthPriceUsd(): Promise<bigint> {
   try {
@@ -71,39 +76,43 @@ async function getEthPriceUsd(): Promise<bigint> {
       { signal: AbortSignal.timeout(3_000) },
     )
     const data = await res.json() as { ethereum?: { usd?: number } }
-    const price = data?.ethereum?.usd
-    return price && price > 0 ? BigInt(Math.round(price)) : FALLBACK_ETH_USD
+    const p    = data?.ethereum?.usd
+    return p && p > 0 ? BigInt(Math.round(p)) : FALLBACK_ETH_USD
   } catch {
     return FALLBACK_ETH_USD
   }
 }
 
-/**
- * Converts a gas cost to USDC (6 decimals).
- *
- * Base/EVM:  gasReimbUsdc = (gasPrice_wei × estimatedGas × ethUsd) / 1e18
- * Arc:       native gas IS USDC (18-decimal Wei), so no ETH→USD conversion needed.
- *            gasReimbUsdc = (gasPrice_wei × estimatedGas) / 1e12
- *            (divide by 1e12 to go from 18-decimal USDC-wei → 6-decimal USDC units)
- */
+// Returns USDC (6-dec) reimbursement for ERC-20 chains
 async function calcGasReimbUsdc(
   publicClient: ReturnType<typeof createPublicClient>,
-  chainKey: 'base' | 'arc' = 'base',
+  chainKey: 'base' | 'arc',
 ): Promise<bigint> {
   const gasPrice = await publicClient.getGasPrice()
-
   if (chainKey === 'arc') {
-    const reimbRaw = (gasPrice * ESTIMATED_GAS) / 10n ** 12n
-    return reimbRaw > MAX_REIMB_USDC ? MAX_REIMB_USDC : reimbRaw
+    // Arc native gas IS USDC (18-dec wei) → convert to 6-dec USDC
+    const raw = (gasPrice * ESTIMATED_GAS) / 10n ** 12n
+    return raw > MAX_REIMB_USDC ? MAX_REIMB_USDC : raw
   }
-
-  const ethUsd     = await getEthPriceUsd()
-  const ethCostWei = gasPrice * ESTIMATED_GAS
-  const reimbRaw   = (ethCostWei * ethUsd * 1_000_000n) / (10n ** 18n)
-  return reimbRaw > MAX_REIMB_USDC ? MAX_REIMB_USDC : reimbRaw
+  const ethUsd = await getEthPriceUsd()
+  const raw    = (gasPrice * ESTIMATED_GAS * ethUsd * 1_000_000n) / (10n ** 18n)
+  return raw > MAX_REIMB_USDC ? MAX_REIMB_USDC : raw
 }
 
-// ─── Validation helpers ───────────────────────────────────────────────────────
+// Returns native wei reimbursement for HashKey
+async function calcGasReimbNative(
+  publicClient: ReturnType<typeof createPublicClient>,
+): Promise<bigint> {
+  try {
+    const gasPrice = await publicClient.getGasPrice()
+    const raw = gasPrice * ESTIMATED_GAS
+    return raw > MAX_REIMB_NATIVE ? MAX_REIMB_NATIVE : raw
+  } catch {
+    return 1_000_000_000_000_000n  // 0.001 HSK fallback
+  }
+}
+
+// ─── Validation ───────────────────────────────────────────────────────────────
 
 function isBytes32(v: unknown): v is `0x${string}` {
   return typeof v === 'string' && /^0x[0-9a-fA-F]{64}$/.test(v)
@@ -112,84 +121,100 @@ function isBytes32(v: unknown): v is `0x${string}` {
 // ─── Handler ─────────────────────────────────────────────────────────────────
 
 export default async function handler(req: Request, res: Response) {
-  // Only accept POST.
-  if (req.method !== 'POST') {
+  if (req.method !== 'POST')
     return res.status(405).json({ ok: false, error: 'Method not allowed' })
-  }
 
-  // ── Input validation ────────────────────────────────────────────────────────
-  const { linkId, recipient, chain: chainParam = 'base' } = (req.body ?? {}) as Record<string, string>
-  const chainKey = chainParam === 'arc' ? 'arc' : 'base'
+  const { linkId, recipient, chain: chainParam = 'base' } =
+    (req.body ?? {}) as Record<string, string>
 
-  if (!isBytes32(linkId)) {
+  const chainKey = (['arc', 'hashkey'] as const).includes(chainParam as 'arc' | 'hashkey')
+    ? (chainParam as 'arc' | 'hashkey')
+    : 'base'
+
+  if (!isBytes32(linkId))
     return res.status(400).json({ ok: false, error: 'linkId must be a 0x-prefixed 32-byte hex string' })
-  }
-  if (!isAddress(recipient as string)) {
+  if (!isAddress(recipient as string))
     return res.status(400).json({ ok: false, error: 'recipient must be a valid EVM address' })
-  }
 
-  // ── Env checks ──────────────────────────────────────────────────────────────
-  // Arc uses a dedicated relayer key (RELAYER_PRIVATE_KEY_ARC) because its
-  // factory was deployed with the Arc deployer wallet as the authorised relayer,
-  // and that wallet holds Arc native USDC for gas. Falls back to RELAYER_PRIVATE_KEY.
+  // ── Per-chain env resolution ─────────────────────────────────────────────
   const rawKey = chainKey === 'arc'
-    ? (process.env.RELAYER_PRIVATE_KEY_ARC ?? process.env.RELAYER_PRIVATE_KEY)
+    ? (process.env.RELAYER_PRIVATE_KEY_ARC     ?? process.env.RELAYER_PRIVATE_KEY)
+    : chainKey === 'hashkey'
+    ? (process.env.RELAYER_PRIVATE_KEY_HASHKEY ?? process.env.RELAYER_PRIVATE_KEY)
     : process.env.RELAYER_PRIVATE_KEY
-  const rpcUrl     = chainKey === 'arc'
-    ? (process.env.PRIVATE_RPC_URL_ARC ?? process.env.PRIVATE_RPC_URL)
+
+  const rpcUrl = chainKey === 'arc'
+    ? (process.env.PRIVATE_RPC_URL_ARC     ?? 'https://rpc.testnet.arc.network')
+    : chainKey === 'hashkey'
+    ? (process.env.PRIVATE_RPC_URL_HASHKEY ?? 'https://mainnet.hsk.xyz')
     : process.env.PRIVATE_RPC_URL
+
   const factoryAddr = chainKey === 'arc'
-    ? (process.env.PAYLINK_FACTORY_V2_ARC ?? process.env.PAYLINK_FACTORY_V2)
+    ? (process.env.PAYLINK_FACTORY_V2_ARC     ?? process.env.PAYLINK_FACTORY_V2)
+    : chainKey === 'hashkey'
+    ? (process.env.PAYLINK_FACTORY_V2_HASHKEY ?? process.env.PAYLINK_FACTORY_V2)
     : process.env.PAYLINK_FACTORY_V2
 
   if (!rawKey)      return res.status(500).json({ ok: false, error: 'RELAYER_PRIVATE_KEY not configured' })
   if (!rpcUrl)      return res.status(500).json({ ok: false, error: 'PRIVATE_RPC_URL not configured' })
-  if (!factoryAddr) return res.status(500).json({ ok: false, error: `PAYLINK_FACTORY_V2${chainKey === 'arc' ? '_ARC' : ''} not configured` })
-  if (!isAddress(factoryAddr)) return res.status(500).json({ ok: false, error: 'Factory address is not a valid EVM address' })
+  if (!factoryAddr || !isAddress(factoryAddr))
+    return res.status(500).json({ ok: false, error: `Factory address not configured for ${chainKey}` })
 
-  // ── Clients — key is only held in memory for the duration of this call ───────
-  const account = privateKeyToAccount(rawKey as `0x${string}`)
-  const viemChain = chainKey === 'arc' ? arcChain : base
+  // ── Clients ───────────────────────────────────────────────────────────────
+  const account    = privateKeyToAccount(rawKey as `0x${string}`)
+  const viemChain  = chainKey === 'arc' ? arcChain : chainKey === 'hashkey' ? hashkeyChain : base
 
-  const publicClient = createPublicClient({
-    chain:     viemChain,
-    transport: http(rpcUrl),
-  })
-  const walletClient = createWalletClient({
-    account,
-    chain:     viemChain,
-    transport: http(rpcUrl),
-  })
+  const publicClient = createPublicClient({ chain: viemChain, transport: http(rpcUrl) })
+  const walletClient = createWalletClient({ account, chain: viemChain, transport: http(rpcUrl) })
 
-  // ── Gas reimbursement calculation ────────────────────────────────────────────
-  let gasReimbUsdc: bigint
+  // ── Broadcast ─────────────────────────────────────────────────────────────
   try {
-    gasReimbUsdc = await calcGasReimbUsdc(publicClient, chainKey)
-  } catch {
-    // If price fetch or gas estimate fails, use a safe fixed fallback (0.10 USDC).
-    gasReimbUsdc = 100_000n
-  }
+    let txHash: `0x${string}`
 
-  // ── Broadcast relay transaction ──────────────────────────────────────────────
-  try {
-    const txHash = await walletClient.writeContract({
-      address:      factoryAddr as `0x${string}`,
-      abi:          FACTORY_V2_ABI,
-      functionName: 'relay',
-      args:         [linkId as `0x${string}`, recipient as `0x${string}`, gasReimbUsdc],
-      gas:          400_000n,  // generous ceiling; unused gas is refunded
-      // Append Base Builder Code on Base Mainnet only (ERC-8021)
-      ...(chainKey === 'base' ? { dataSuffix: BASE_BUILDER_CODE } : {}),
-    })
+    if (chainKey === 'hashkey') {
+      // ── Native HSK relay ─────────────────────────────────────────────────
+      const gasReimbNative = await calcGasReimbNative(publicClient)
 
-    return res.status(200).json({
-      ok:           true,
-      txHash,
-      gasReimbUsdc: gasReimbUsdc.toString(),
-    })
+      txHash = await walletClient.writeContract({
+        address:      factoryAddr as `0x${string}`,
+        abi:          RELAY_NATIVE_ABI,
+        functionName: 'relayNative',
+        args:         [linkId as `0x${string}`, recipient as `0x${string}`, gasReimbNative],
+        gas:          400_000n,
+      })
+
+      return res.status(200).json({
+        ok:               true,
+        txHash,
+        gasReimbNative:   gasReimbNative.toString(),
+      })
+    } else {
+      // ── ERC-20 USDC relay (Base / Arc) ────────────────────────────────────
+      let gasReimbUsdc: bigint
+      try {
+        gasReimbUsdc = await calcGasReimbUsdc(publicClient, chainKey)
+      } catch {
+        gasReimbUsdc = 100_000n  // 0.10 USDC fallback
+      }
+
+      txHash = await walletClient.writeContract({
+        address:      factoryAddr as `0x${string}`,
+        abi:          RELAY_ABI,
+        functionName: 'relay',
+        args:         [linkId as `0x${string}`, recipient as `0x${string}`, gasReimbUsdc],
+        gas:          400_000n,
+        ...(chainKey === 'base' ? { dataSuffix: BASE_BUILDER_CODE } : {}),
+      })
+
+      return res.status(200).json({
+        ok:           true,
+        txHash,
+        gasReimbUsdc: gasReimbUsdc.toString(),
+      })
+    }
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err)
-    console.error('[relay-v2] writeContract failed:', message)
-    return res.status(500).json({ ok: false, error: message.slice(0, 200) })
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('[relay-v2]', chainKey, msg)
+    return res.status(500).json({ ok: false, error: msg.slice(0, 200) })
   }
 }

@@ -537,14 +537,14 @@ export default function PaymentPage() {
 
   // ── Reset payMode for chains that don't support Send via Address ─────────
   useEffect(() => {
-    if (chain === 'hashkey' || chain === 'starknet') setPayMode('wallet')
+    if (chain === 'starknet') setPayMode('wallet')
   }, [chain])
 
   // ── V2 EVM: Generate linkId + compute ghost vault address ─────────────────
   useEffect(() => {
     if (payMode !== 'direct') return
-    if (chain === 'starknet' || chain === 'hashkey') return
-    const factoryAddr = FACTORY_V2_ADDRESSES[chain as 'base' | 'arc']
+    if (chain === 'starknet') return
+    const factoryAddr = FACTORY_V2_ADDRESSES[chain as 'base' | 'arc' | 'hashkey']
     if (!factoryAddr || !resolvedEvm) return
 
     const params  = new URLSearchParams(window.location.search)
@@ -560,8 +560,7 @@ export default function PaymentPage() {
     }
     setDirectLinkId(linkId)
 
-    // Use chain-specific client and factory address
-    const client = EVM_CLIENTS[chain as 'base' | 'arc']
+    const client = EVM_CLIENTS[chain as 'base' | 'arc' | 'hashkey']
     let cancelled = false
     client.readContract({
       address:      factoryAddr,
@@ -582,28 +581,37 @@ export default function PaymentPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [payMode, resolvedEvm, chain])
 
-  // ── V2 EVM: Poll USDC balance at ghost vault; trigger relay on arrival ────
+  // ── V2 EVM: Poll balance at ghost vault; trigger relay on arrival ─────────
+  // Base/Arc: polls ERC-20 USDC balance
+  // HashKey:  polls native HSK balance (no ERC-20 token on HashKey)
   useEffect(() => {
     if (directStatus !== 'waiting' || !directVault || !directLinkId) return
-    if (chain === 'starknet' || chain === 'hashkey') return
+    if (chain === 'starknet') return
 
-    const evmChain = chain as 'base' | 'arc'
-    const client   = EVM_CLIENTS[evmChain]
-    const token    = CHAIN_META[evmChain].tokenAddress
+    const evmChain  = chain as 'base' | 'arc' | 'hashkey'
+    const client    = EVM_CLIENTS[evmChain]
+    const isNative  = chain === 'hashkey'
+    const token     = isNative ? null : (CHAIN_META[evmChain as 'base' | 'arc'].tokenAddress as `0x${string}`)
 
     const check = async () => {
       if (directRelayedRef.current) return
       try {
-        const balance = await client.readContract({
-          address:      token,
-          abi:          ERC20_BALANCE_OF_ABI,
-          functionName: 'balanceOf',
-          args:         [directVault],
-        })
-        if ((balance as bigint) > 0n && !directRelayedRef.current) {
+        let balance: bigint
+        if (isNative) {
+          balance = await client.getBalance({ address: directVault! })
+        } else {
+          balance = await client.readContract({
+            address:      token!,
+            abi:          ERC20_BALANCE_OF_ABI,
+            functionName: 'balanceOf',
+            args:         [directVault],
+          }) as bigint
+        }
+
+        if (balance > 0n && !directRelayedRef.current) {
           directRelayedRef.current = true
           if (directPollRef.current) clearInterval(directPollRef.current)
-          setReceivedAmount(balance as bigint)  // actual amount sent to vault
+          setReceivedAmount(balance)
           setDirectStatus('relaying')
           fetch('/api/relay-v2', {
             method:  'POST',

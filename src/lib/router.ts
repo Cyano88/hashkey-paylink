@@ -89,12 +89,13 @@ export const ERC20_BALANCE_OF_ABI = [{
 
 /**
  * Per-chain PayLinkFactoryV2 addresses.
- * Arc falls back to VITE_FACTORY_V2 if VITE_FACTORY_V2_ARC is not set
- * (useful when the contract is deployed at the same address on both chains).
+ * All three chains fall back to VITE_FACTORY_V2 if their dedicated var is not
+ * set — useful once the deterministic factory is deployed (same address everywhere).
  */
-export const FACTORY_V2_ADDRESSES: Partial<Record<'base' | 'arc', `0x${string}`>> = {
-  base: (import.meta.env.VITE_FACTORY_V2     ?? '') as `0x${string}`,
-  arc:  (import.meta.env.VITE_FACTORY_V2_ARC ?? import.meta.env.VITE_FACTORY_V2 ?? '') as `0x${string}`,
+export const FACTORY_V2_ADDRESSES: Partial<Record<'base' | 'arc' | 'hashkey', `0x${string}`>> = {
+  base:    (import.meta.env.VITE_FACTORY_V2         ?? '') as `0x${string}`,
+  arc:     (import.meta.env.VITE_FACTORY_V2_ARC     ?? import.meta.env.VITE_FACTORY_V2 ?? '') as `0x${string}`,
+  hashkey: (import.meta.env.VITE_FACTORY_V2_HASHKEY ?? import.meta.env.VITE_FACTORY_V2 ?? '') as `0x${string}`,
 }
 
 /** Convenience alias — Base factory address (backward compat). */
@@ -103,6 +104,19 @@ export const FACTORY_V2_ADDRESS = FACTORY_V2_ADDRESSES.base ?? ('' as `0x${strin
 /** Emitted by PayLinkFactoryV2.relay() after a successful ghost-vault sweep */
 export const PAYMENT_RELAYED_ABI = [{
   name: 'PaymentRelayed',
+  type: 'event' as const,
+  inputs: [
+    { name: 'linkId',      type: 'bytes32', indexed: true  },
+    { name: 'recipient',   type: 'address', indexed: true  },
+    { name: 'payout',      type: 'uint256', indexed: false },
+    { name: 'platformFee', type: 'uint256', indexed: false },
+    { name: 'gasReimb',    type: 'uint256', indexed: false },
+  ],
+}] as const
+
+/** Emitted by PayLinkFactoryV2.relayNative() after a native token (HSK) split */
+export const NATIVE_PAYMENT_RELAYED_ABI = [{
+  name: 'NativePaymentRelayed',
   type: 'event' as const,
   inputs: [
     { name: 'linkId',      type: 'bytes32', indexed: true  },
