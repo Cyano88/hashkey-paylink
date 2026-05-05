@@ -10,6 +10,13 @@ interface IERC20Min {
 }
 
 /**
+ * @notice Minimal factory interface so GhostVaultV2 can read USDC at runtime.
+ */
+interface IPayLinkFactory {
+    function USDC() external view returns (address);
+}
+
+/**
  * @title  GhostVaultV2
  * @notice Ephemeral contract deployed via CREATE2. Its constructor immediately
  *         sweeps its entire USDC balance to the factory. Because the address is
@@ -17,13 +24,15 @@ interface IERC20Min {
  *         source (CEX, cold wallet, browser wallet) *before* this contract
  *         is ever deployed — funds sit safely until `relay()` is called.
  *
- * @dev    Constructor args (usdc, factory) are ABI-encoded into the init code
- *         so every (linkId, recipient) pair produces a unique salt and therefore
- *         a unique pre-computed address.
+ * @dev    Only the factory address is ABI-encoded into the init code. USDC is
+ *         read from the factory at construction time, so the same init code hash
+ *         is produced on every EVM chain — enabling identical vault addresses
+ *         across Base, Arc, HashKey, Arbitrum, and any future chain.
  */
 contract GhostVaultV2 {
-    constructor(address usdc, address factory) {
-        uint256 bal = IERC20Min(usdc).balanceOf(address(this));
+    constructor(address factory) {
+        address usdc = IPayLinkFactory(factory).USDC();
+        uint256 bal  = IERC20Min(usdc).balanceOf(address(this));
         if (bal > 0) IERC20Min(usdc).transfer(factory, bal);
     }
 }
@@ -54,6 +63,13 @@ contract GhostVaultV2 {
  *  • Salt consumption: once relay() succeeds, a second call for the same
  *    (linkId, recipient) reverts on CREATE2 collision — double-relay is blocked.
  *  • No upgradeable proxy — the contract is fully immutable after deployment.
+ *
+ * ── Cross-chain determinism ───────────────────────────────────────────────────
+ *  GhostVaultV2 init code encodes only `address(this)` (the factory). The USDC
+ *  address is resolved at vault-construction time via IPayLinkFactory(factory).USDC().
+ *  When this factory is deployed via Nick's Method (CREATE2 singleton factory
+ *  0x4e59b44847b379578588920cA78FbF26c0B4956C) with the same salt, it lands at
+ *  the identical address on every EVM chain → vault addresses are identical too.
  */
 contract PayLinkFactoryV2 {
 
@@ -69,7 +85,6 @@ contract PayLinkFactoryV2 {
     /// @notice 0.5 % platform fee in basis points.
     uint16  public constant FEE_BPS       = 50;
     /// @notice Absolute USDC cap on gas reimbursement (1.00 USDC, 6 decimals).
-    ///         The backend sends a calculated value; the contract enforces the cap.
     uint256 public constant MAX_GAS_REIMB = 1_000_000;
 
     // ─── Events ───────────────────────────────────────────────────────────────
@@ -128,9 +143,6 @@ contract PayLinkFactoryV2 {
      * @notice Pre-compute the ghost vault address for a (linkId, recipient) pair.
      *         Call this off-chain; share the result as the payment address.
      *         No gas cost, no on-chain state required.
-     * @param linkId    Random 32-byte identifier for this PayLink.
-     * @param recipient The wallet that will receive the net payment.
-     * @return vault    The deterministic address that will hold the USDC deposit.
      */
     function getVaultAddress(
         bytes32 linkId,
@@ -151,41 +163,28 @@ contract PayLinkFactoryV2 {
     /**
      * @notice Deploy the ghost vault for (linkId, recipient) and atomically
      *         perform the 3-way USDC split.
-     *
-     * @param linkId        The same linkId used when generating the vault address.
-     * @param recipient     The same recipient used when generating the vault address.
-     * @param gasReimbUsdc  Estimated gas cost in USDC (6 decimals).
-     *                      Capped internally at MAX_GAS_REIMB.
-     *                      If the payment is too small to cover fees, the gas
-     *                      reimbursement is waived to protect the recipient.
-     * @return payout       Net USDC (6 decimals) transferred to recipient.
      */
     function relay(
         bytes32 linkId,
         address recipient,
         uint256 gasReimbUsdc
     ) external onlyRelayer returns (uint256 payout) {
-        // Apply hard cap on gas reimbursement.
         uint256 gasReimb = gasReimbUsdc > MAX_GAS_REIMB ? MAX_GAS_REIMB : gasReimbUsdc;
 
-        // Deploy GhostVaultV2 — constructor sweeps its USDC balance to address(this).
         uint256 balBefore = IERC20Min(USDC).balanceOf(address(this));
-        new GhostVaultV2{salt: _salt(linkId, recipient)}(USDC, address(this));
+        new GhostVaultV2{salt: _salt(linkId, recipient)}(address(this));
         uint256 total = IERC20Min(USDC).balanceOf(address(this)) - balBefore;
 
         require(total > 0, "V2: vault was empty");
 
         uint256 platformFee = (total * FEE_BPS) / 10_000;
 
-        // Safety: if fees would exceed the payment, waive gas reimb.
         if (platformFee + gasReimb >= total) gasReimb = 0;
 
         payout = total - platformFee - gasReimb;
         require(payout > 0, "V2: payout is zero");
 
-        // Treasury receives platform fee + gas reimbursement.
         IERC20Min(USDC).transfer(TREASURY, platformFee + gasReimb);
-        // Recipient receives the net payout.
         IERC20Min(USDC).transfer(recipient, payout);
 
         emit PaymentRelayed(linkId, recipient, payout, platformFee, gasReimb);
@@ -197,10 +196,15 @@ contract PayLinkFactoryV2 {
         return keccak256(abi.encodePacked(linkId, recipient));
     }
 
+    /**
+     * @dev Only `address(this)` is encoded — not USDC. This makes the init code
+     *      hash identical on every chain where this factory sits at the same address,
+     *      which in turn makes vault addresses identical cross-chain.
+     */
     function _initCode() internal view returns (bytes memory) {
         return abi.encodePacked(
             type(GhostVaultV2).creationCode,
-            abi.encode(USDC, address(this))
+            abi.encode(address(this))
         );
     }
 }
