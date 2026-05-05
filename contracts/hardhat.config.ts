@@ -40,6 +40,11 @@ const config: HardhatUserConfig = {
       chainId:  5042002,
       accounts: PK,
     },
+    arbitrum: {
+      url:      'https://arb1.arbitrum.io/rpc',
+      chainId:  42161,
+      accounts: PK,
+    },
   },
 
   etherscan: {

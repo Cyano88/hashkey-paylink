@@ -26,7 +26,7 @@ import {
 // Appended to calldata on Base Mainnet transactions only. Hex of "bc_8qtb7tny".
 const BASE_BUILDER_CODE = '0x62635f3871746237746e79' as `0x${string}`
 import {
-  ArrowLeft, CheckCircle2, ExternalLink, AlertCircle, Loader2, ArrowLeftRight,
+  ArrowLeft, ArrowRight, CheckCircle2, ExternalLink, AlertCircle, Loader2, ArrowLeftRight,
   RefreshCw, ShieldCheck, Zap, Copy, CheckCheck, Wallet,
   AlertTriangle, Radio,
 } from 'lucide-react'
@@ -51,6 +51,18 @@ import { cn, truncateAddress, formatAmount, memoToHex, copyToClipboard } from '.
 import { getFxMeta, formatLocalAmt, fetchFxRate } from '../lib/fx'
 
 const CHAINS: ChainKey[] = ['base', 'starknet', 'hashkey', 'arc', 'solana']
+
+const CHAIN_DISPLAY_NAMES: Record<number, string> = {
+  1:       'Ethereum',
+  10:      'Optimism',
+  56:      'BNB Chain',
+  137:     'Polygon',
+  177:     'HashKey',
+  8453:    'Base',
+  42161:   'Arbitrum',
+  43114:   'Avalanche',
+  5042002: 'Arc',
+}
 
 // ─── Starknet RPC ─────────────────────────────────────────────────────────────
 const STARKNET_RPC = 'https://rpc.starknet.lava.build'
@@ -1804,19 +1816,54 @@ export default function PaymentPage() {
           )}
 
           {/* Wrong network */}
-          {isEvmChain && isConnected && !isCorrectNetwork && !missingStark && payMode === 'wallet' && (
-            <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
-              <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-500" />
-              <div className="flex-1 space-y-2">
-                <p className="text-sm font-semibold text-amber-800">Wrong Network</p>
-                <p className="text-xs text-amber-700">Switch to {meta.label} (Chain ID {targetChainId}) to continue.</p>
-                <button onClick={() => switchChain({ chainId: targetChainId })} disabled={isSwitching}
-                  className="flex items-center gap-1.5 text-xs font-bold text-amber-800 hover:text-amber-900">
-                  {isSwitching ? <><Loader2 className="h-3 w-3 animate-spin" /> Switching…</> : <><RefreshCw className="h-3 w-3" /> Switch now</>}
-                </button>
+          {isEvmChain && isConnected && !isCorrectNetwork && !missingStark && payMode === 'wallet' && (() => {
+            const currentName = CHAIN_DISPLAY_NAMES[chainId] ?? `Chain ${chainId}`
+            return (
+              <div className="overflow-hidden rounded-2xl border border-gray-200/80 bg-white dark:border-white/10 dark:bg-white/[0.03]">
+                {/* Accent line */}
+                <div className="h-[2px] w-full" style={{ background: `linear-gradient(90deg, transparent 0%, ${meta.accentColor}80 30%, ${meta.accentColor} 50%, ${meta.accentColor}80 70%, transparent 100%)` }} />
+
+                <div className="px-4 pb-4 pt-3.5">
+                  {/* Chain transition row */}
+                  <div className="mb-3 flex items-center gap-2">
+                    {/* Current (wrong) chain */}
+                    <div className="flex items-center gap-1.5 rounded-full border border-gray-200 bg-gray-100/80 px-2.5 py-1 dark:border-white/10 dark:bg-white/[0.06]">
+                      <span className="h-1.5 w-1.5 rounded-full bg-gray-400 dark:bg-gray-500" />
+                      <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400">{currentName}</span>
+                    </div>
+
+                    {/* Arrow */}
+                    <div className="flex items-center gap-0.5 text-gray-300 dark:text-white/20">
+                      <div className="h-px w-3 bg-current" />
+                      <ArrowRight className="h-3 w-3" />
+                    </div>
+
+                    {/* Target (correct) chain */}
+                    <div className="flex items-center gap-1.5 rounded-full px-2.5 py-1"
+                      style={{ backgroundColor: `${meta.accentColor}18`, border: `1px solid ${meta.accentColor}35` }}>
+                      <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: meta.accentColor }} />
+                      <span className="text-[11px] font-semibold" style={{ color: meta.accentColor }}>{meta.label}</span>
+                    </div>
+                  </div>
+
+                  <p className="mb-3 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                    Your wallet is connected to <span className="font-medium text-gray-700 dark:text-gray-300">{currentName}</span>. This payment requires{' '}
+                    <span className="font-medium text-gray-700 dark:text-gray-300">{meta.label}</span>.
+                  </p>
+
+                  <button
+                    onClick={() => switchChain({ chainId: targetChainId })}
+                    disabled={isSwitching}
+                    className="flex items-center gap-1.5 text-xs font-semibold transition-opacity hover:opacity-70 disabled:opacity-50"
+                    style={{ color: meta.accentColor }}>
+                    {isSwitching
+                      ? <><Loader2 className="h-3 w-3 animate-spin" /> Switching…</>
+                      : <><RefreshCw className="h-3 w-3" /> Switch to {meta.label}</>}
+                  </button>
+                </div>
               </div>
-            </div>
-          )}
+            )
+          })()}
 
           {/* Send error */}
           {payMode === 'wallet' && isSendError && (
@@ -1901,8 +1948,11 @@ export default function PaymentPage() {
             </div>
           ) : payMode === 'wallet' && !isCorrectNetwork ? (
             <button onClick={() => switchChain({ chainId: targetChainId })} disabled={isSwitching}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-amber-500 px-6 py-4 text-sm font-semibold text-white transition-all hover:bg-amber-600 active:scale-[0.98] disabled:opacity-70">
-              {isSwitching ? <><Loader2 className="h-4 w-4 animate-spin" /> Switching…</> : <><RefreshCw className="h-4 w-4" /> Switch to {meta.label}</>}
+              className="flex w-full items-center justify-center gap-2 rounded-xl px-6 py-4 text-sm font-semibold text-white transition-all active:scale-[0.98] disabled:opacity-70"
+              style={{ backgroundColor: meta.accentColor }}>
+              {isSwitching
+                ? <><Loader2 className="h-4 w-4 animate-spin" /> Switching…</>
+                : <><RefreshCw className="h-4 w-4" /> Switch to {meta.label}</>}
             </button>
           ) : payMode === 'wallet' ? (
             <button onClick={handlePay} disabled={isWalletPending || isConfirming || (isEventMode && !attendeeName.trim()) || flexPayDisabled}
