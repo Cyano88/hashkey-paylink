@@ -76,12 +76,26 @@ export default function EventDashboard() {
   const [lastRefresh,  setLastRefresh]  = useState<Date | null>(null)
   const [dashCopied,   setDashCopied]   = useState(false)
   const [linkCopied,   setLinkCopied]   = useState(false)
+  const [hskPrice,     setHskPrice]     = useState<number | null>(null)
   const [counterFlash, setCounterFlash] = useState(false)
   const [toasts,       setToasts]       = useState<Toast[]>([])
 
   const qrRef      = useRef<HTMLDivElement>(null)
   const qrHiResRef = useRef<HTMLDivElement>(null)
   const toastId    = useRef(0)
+
+  // Fetch HSK price once for display — only when dashboard has HSK payments
+  useEffect(() => {
+    const hasHsk = netParam === 'hashkey' || payments.some(p => p.chain === 'hashkey')
+    if (!hasHsk || hskPrice !== null) return
+    fetch('https://api.coingecko.com/api/v3/simple/price?ids=hashkey-token&vs_currencies=usd', { signal: AbortSignal.timeout(5_000) })
+      .then(r => r.json())
+      .then((d: { 'hashkey-token'?: { usd?: number } }) => {
+        const price = d['hashkey-token']?.usd
+        if (price && price > 0) setHskPrice(price)
+      })
+      .catch(() => { /* price display is optional — fail silently */ })
+  }, [netParam, payments, hskPrice])
 
   const paymentLink = (() => {
     const p = new URLSearchParams({ memo: eventName, event: '1', id: eventId })
@@ -392,8 +406,23 @@ export default function EventDashboard() {
                     <p className="truncate font-mono text-[11px] text-gray-400">{truncateAddress(p.payer, 6)}</p>
                   </div>
                   <div className="text-right shrink-0">
-                    <p className="text-sm font-semibold text-gray-900">${parseFloat(p.amount || '0').toFixed(2)}</p>
-                    <p className="text-[10px] capitalize text-gray-400">{p.chain || '—'}</p>
+                    {p.chain === 'hashkey' ? (
+                      <>
+                        <p className="text-sm font-semibold text-gray-900">
+                          {parseFloat(p.amount || '0').toFixed(4)} HSK
+                        </p>
+                        <p className="text-[10px] text-gray-400">
+                          {hskPrice
+                            ? `≈ $${(parseFloat(p.amount || '0') * hskPrice).toFixed(2)}`
+                            : 'HashKey'}
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-sm font-semibold text-gray-900">${parseFloat(p.amount || '0').toFixed(2)}</p>
+                        <p className="text-[10px] capitalize text-gray-400">{p.chain || '—'}</p>
+                      </>
+                    )}
                   </div>
                   <div className="hidden sm:block text-right shrink-0">
                     <p className="text-[11px] text-gray-400">{new Date(p.ts).toLocaleTimeString()}</p>
