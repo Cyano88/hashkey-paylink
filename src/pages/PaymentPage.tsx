@@ -1677,7 +1677,7 @@ export default function PaymentPage() {
         {fxShow && fxCurrency && (
           <div className="px-6 pt-4">
             <p className="text-center text-[10px] text-gray-400 leading-relaxed">
-              Pricing in USDC · Shown in {getFxMeta(fxCurrency)?.name ?? fxCurrency} at live market rates
+              Pricing in {meta.asset} · Shown in {getFxMeta(fxCurrency)?.name ?? fxCurrency} at live market rates
               {fxStale && ' · ⚠ Rate may be outdated'}
             </p>
           </div>

@@ -61,12 +61,13 @@ export default function EventDashboard() {
 
   // Human-readable label for the live-watching indicator
   const watchLabel =
-    multiParam === '1'      ? 'All Chains' :
-    netParam === 'base'     ? 'Base'       :
-    netParam === 'arc'      ? 'Arc'        :
-    netParam === 'starknet' ? 'Starknet'   :
-    netParam === 'solana'   ? 'Solana'     :
-    netParam === 'hashkey'  ? 'HashKey'    :
+    multiParam === '1'       ? 'All Chains' :
+    netParam === 'base'      ? 'Base'       :
+    netParam === 'arc'       ? 'Arc'        :
+    netParam === 'starknet'  ? 'Starknet'   :
+    netParam === 'solana'    ? 'Solana'     :
+    netParam === 'ethereum'  ? 'Ethereum'   :
+    netParam === 'hashkey'   ? 'HashKey'    :
     'Base & Arc'
 
   // Server registry is the single source of truth for the payment log.
@@ -334,7 +335,7 @@ export default function EventDashboard() {
               counterFlash ? 'text-emerald-600' : 'text-gray-900')}>
               ${total.toFixed(2)}
             </p>
-            <p className="text-[10px] text-gray-400 mt-0.5">USDC · HSK</p>
+            <p className="text-[10px] text-gray-400 mt-0.5">USDC · GHO</p>
           </div>
         </div>
 
@@ -415,6 +416,15 @@ export default function EventDashboard() {
                           {hskPrice
                             ? `≈ $${(parseFloat(p.amount || '0') * hskPrice).toFixed(2)}`
                             : 'HashKey'}
+                        </p>
+                      </>
+                    ) : p.chain === 'ethereum' ? (
+                      <>
+                        <p className="text-sm font-semibold text-gray-900">
+                          {parseFloat(p.amount || '0').toFixed(4)} GHO
+                        </p>
+                        <p className="text-[10px] text-gray-400">
+                          ≈ ${parseFloat(p.amount || '0').toFixed(2)}
                         </p>
                       </>
                     ) : (
