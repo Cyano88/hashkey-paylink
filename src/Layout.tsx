@@ -41,113 +41,113 @@ function keywordReply(input: string): ChatMsg | null {
   const low = input.toLowerCase()
   const has = (...words: string[]) => words.some(w => low.includes(w))
 
-  // ── Platform overview ────────────────────────────────────────────────────────
-  if (has('what is', 'how does', 'overview', 'platform', 'hash paylink', 'introduction', 'intro', 'explain', 'tell me') || (has('how') && has('work')))
-    return { from: 'bot', text: 'Hash PayLink is a non-custodial, multi-chain payment platform. Merchants create a shareable payment link in seconds — no account or KYC required. Payers can pay by connecting a wallet OR by sending directly from any exchange, cold wallet, or CEX using the "Send via Address" option. Supported chains: Base, HashKey, Arc, Starknet, and Solana. The platform charges a flat 0.2% fee at settlement, deducted automatically on-chain.' }
-
-  // ── Creating a link ──────────────────────────────────────────────────────────
-  if (has('create', 'generate', 'make', 'build', 'new link', 'payment link', 'share', 'set up', 'setup', 'get started', 'start', 'merchant', 'seller', 'receive payment'))
-    return { from: 'bot', text: 'To create a payment link:\n1. Go to the home page and connect your wallet.\n2. Enter the amount (or enable Flexible Amount so the payer chooses).\n3. Select your preferred chain — Base, HashKey, Arc, Starknet, or Solana.\n4. Optionally enable Multi-Payer Collection or add a memo.\n5. Click Generate Link — share the URL or QR code with your payer.\n\nYour wallet address is embedded in the link. You never need to share it separately.' }
-
-  // ── How to pay ───────────────────────────────────────────────────────────────
-  if (has('how to pay', 'paying', 'make a payment', 'as a payer', 'i want to pay', 'send payment', 'payer', 'buyer') || (has('how') && has('pay')))
-    return { from: 'bot', text: 'To pay via a Hash PayLink:\n1. Open the payment link shared with you.\n2. Choose "Send via Address" (recommended — works from any exchange or cold wallet without connecting anything), or "Connect Wallet" if you prefer browser wallet signing.\n3. For Send via Address: copy the displayed vault address and send the exact amount to it. Payment is detected automatically within seconds.\n4. For Connect Wallet: approve the transaction in your wallet. Gas is sponsored on Base and Arc — you pay nothing extra.\n\nA success screen confirms delivery.' }
-
-  // ── Send via Address / Direct Send ──────────────────────────────────────────
-  if (has('send via', 'send via address', 'direct send', 'direct', 'no wallet', 'without wallet', 'cex', 'exchange', 'cold wallet', 'copy address', 'vault address', 'wallet address', 'binance', 'coinbase send', 'bybit', 'kraken'))
-    return { from: 'bot', text: '"Send via Address" lets you pay from anywhere — Binance, Coinbase, a hardware wallet, or any other source — without connecting a browser extension. You simply copy the unique vault address shown on the payment page and send the exact amount to it. The payment is detected on-chain automatically and settled within seconds. No wallet connection, no approvals needed.' }
-
-  // ── Multi-payer / event / collection mode ────────────────────────────────────
-  if (has('multi', 'multi-payer', 'event', 'collection', 'collect', 'group', 'organis', 'organiz', 'dashboard', 'attendee', 'fundrais', 'donation', 'contributor', 'many people', 'multiple payers', 'multiple people'))
-    return { from: 'bot', text: 'Multi-Payer Collection mode lets you collect payments from many people using a single link — ideal for events, group orders, or community fundraises. Each payer enters their name before paying, which gets logged on the organizer dashboard with their amount, chain, and timestamp. The dashboard auto-refreshes every 5 seconds. You can export all payments as a CSV. Enable it by toggling "Multi-Payer Collection" when creating a link.' }
-
-  // ── Flexible amount ──────────────────────────────────────────────────────────
-  if (has('flex', 'flexible', 'any amount', 'payer choose', 'custom amount', 'tip', 'tips', 'donation', 'pay what'))
-    return { from: 'bot', text: 'Flexible Amount lets the payer enter any amount they choose rather than a fixed figure. On the payment page they type in the amount before paying. Useful for tips, donations, or pay-what-you-want scenarios. Enable it during link creation by toggling "Flexible Amount".' }
-
-  // ── Fees ────────────────────────────────────────────────────────────────────
-  if (has('fee', 'fees', 'cost', 'charge', '0.2', 'platform fee', 'how much', 'percentage', 'deduction', 'cut', 'commission', 'pricing'))
-    return { from: 'bot', text: 'Hash PayLink charges a flat 0.2% platform fee, deducted automatically at settlement from the payment amount before it reaches the recipient. For example, a 100 USDC payment results in 99.8 USDC delivered. There are no subscription fees, hidden charges, or monthly costs. Gas fees are sponsored by the platform on Base and Arc — payers pay nothing extra for gas.' }
-
-  // ── Gas / gasless ────────────────────────────────────────────────────────────
-  if (has('gas', 'gasless', 'free gas', 'sponsored', 'network fee', 'transaction fee', 'strk', 'avnu'))
-    return { from: 'bot', text: 'Gas is fully sponsored on Base (via EIP-2612 permit + Multicall3) and Arc (native USDC gas, covered by the relayer). On Starknet, gas is sponsored by AVNU Paymaster — payers sign in USDC with no STRK required. On HashKey, native HSK gas costs are minimal and paid by the relayer. On Solana, the platform relayer pays the network fee. In all cases, payers only send the payment amount.' }
-
-  // ── Chains — Base ────────────────────────────────────────────────────────────
-  if ((has('base') && !has('database')) || has('basescan', 'coinbase wallet', 'metamask', 'rainbow wallet', 'l2', 'layer 2', 'ethereum l2'))
-    return { from: 'bot', text: 'Base is an Ethereum L2 built by Coinbase. Hash PayLink supports Base Mainnet for USDC payments. Gas is sponsored — payers pay zero gas. Compatible wallets: MetaMask, Coinbase Smart Wallet, Rainbow, and any WalletConnect-supported wallet. Transactions confirm in seconds. Explorer: basescan.org' }
-
-  // ── Chains — HashKey ─────────────────────────────────────────────────────────
-  if (has('hashkey', 'hsk', 'hash key', 'hashkey chain'))
-    return { from: 'bot', text: 'HashKey Chain is an EVM-compatible network using HSK as its native token. Hash PayLink supports HSK payments on HashKey Mainnet. Payers can send HSK directly via "Send via Address" from any source without connecting a wallet. The platform collects a 0.2% fee in HSK at settlement. Explorer: explorer.hsk.xyz' }
-
-  // ── Chains — Arc ─────────────────────────────────────────────────────────────
-  if (has('arc', 'arcscan', 'testnet', 'arc testnet', 'arc chain'))
-    return { from: 'bot', text: 'Arc is an EVM chain that uses USDC as its native gas token — meaning gas is paid in USDC, not ETH. Hash PayLink is live on Arc Testnet (Chain ID 5042002). It is a great way to test the platform without using real funds. Faucet available at the Arc testnet faucet. Explorer: testnet.arcscan.app' }
-
-  // ── Chains — Starknet ────────────────────────────────────────────────────────
-  if (has('starknet', 'stark', 'argent', 'argentx', 'braavos', 'strk', 'starkscan', 'l2 starknet'))
-    return { from: 'bot', text: 'Starknet payments use Circle native USDC on Starknet Mainnet. Compatible wallets: ArgentX and Braavos. Gas is sponsored by AVNU Paymaster — no STRK needed. Transactions are final when status shows ACCEPTED_ON_L2, which happens in seconds. Full L1 settlement takes 2–4 hours but is not required for the payment to be usable. Explorer: starkscan.co' }
-
-  // ── Chains — Solana ──────────────────────────────────────────────────────────
-  if (has('solana', 'phantom', 'solflare', 'solscan', 'sol usdc', 'sol network'))
-    return { from: 'bot', text: 'Solana payments use native USDC on Solana Mainnet. Compatible wallets: Phantom and Solflare. Gas is sponsored by the platform relayer — payers only sign the USDC transfer. "Send via Address" is also supported on Solana. Transactions confirm in under a second. Explorer: solscan.io' }
-
-  // ── QR code ──────────────────────────────────────────────────────────────────
-  if (has('qr', 'qr code', 'scan', 'barcode', 'print', 'download qr'))
-    return { from: 'bot', text: 'Every payment link includes a downloadable QR code on the link generation screen. Payers can scan it with any camera app to open the payment page directly. High-resolution QR codes are available for print materials. The QR code encodes the full payment link including amount, recipient, and chain.' }
-
-  // ── Wrong chain / network ────────────────────────────────────────────────────
-  if (has('wrong chain', 'wrong network', 'different chain', 'different network', 'wrong address', 'sent to wrong', 'sent on wrong', 'incorrect chain', 'incorrect network', 'recovery', 'recover funds'))
-    return { from: 'bot', text: 'If funds were sent to the correct address but on the wrong chain, recovery depends on whether the platform has infrastructure deployed on that chain. Hash PayLink uses a universal deterministic vault system — in most cases the operations team can deploy the vault on the receiving chain and recover funds. Contact the team immediately via support@hashpaylink.com with your transaction hash and we will investigate.' }
-
-  // ── Pending / stuck ──────────────────────────────────────────────────────────
-  if (has('pending', 'stuck', 'not arrived', 'not received', 'not confirmed', 'slow', 'delayed', 'taking long', 'waiting', 'not showing', 'missing payment', 'where is my'))
-    return { from: 'bot', text: 'If a payment shows pending:\n• On Base/Arc: the transaction is in the mempool. Paste the tx hash here for a live status check.\n• On HashKey: transactions typically confirm within 2–5 seconds.\n• On Starknet: wait for ACCEPTED_ON_L2 status — this confirms payment is final.\n• On Solana: confirmations happen in under a second. If pending for more than 30 seconds, the transaction may have been dropped — retry.\n\nPaste your transaction hash and I will check the status now.' }
-
-  // ── Refund / cancel ──────────────────────────────────────────────────────────
-  if (has('refund', 'cancel', 'reverse', 'undo', 'wrong amount', 'sent wrong', 'mistake', 'accidentally', 'chargeback'))
-    return { from: 'bot', text: 'Blockchain transactions are irreversible once confirmed. Hash PayLink is fully non-custodial — we do not hold funds at any point and cannot initiate reversals. If you sent the wrong amount, you will need to coordinate a refund directly with the recipient. If you believe there was a technical error, contact support@hashpaylink.com with your transaction hash.' }
-
-  // ── Track / status ───────────────────────────────────────────────────────────
-  if (has('track', 'status', 'check', 'verify', 'lookup', 'look up', 'transaction', 'tx hash', 'txhash', 'confirmed', 'confirmation'))
-    return { from: 'bot', text: 'Paste your transaction hash directly into this chat and I will query it live across Base, HashKey, Arc, and Starknet. A valid EVM transaction hash starts with 0x and is 66 characters long.' }
-
-  // ── Wallet setup / connect ───────────────────────────────────────────────────
-  if (has('wallet', 'connect wallet', 'which wallet', 'wallet connect', 'walletconnect', 'install wallet', 'set up wallet', 'metamask', 'coinbase wallet', 'rainbow'))
-    return { from: 'bot', text: 'Supported wallets by chain:\n• Base / Arc / HashKey: MetaMask, Coinbase Smart Wallet, Rainbow, or any WalletConnect wallet.\n• Starknet: ArgentX or Braavos.\n• Solana: Phantom or Solflare.\n\nAlternatively, use "Send via Address" on any chain to pay without connecting a wallet at all — just copy the address and send from any source.' }
-
-  // ── Security / non-custodial ─────────────────────────────────────────────────
-  if (has('safe', 'secure', 'trust', 'custody', 'custodial', 'non-custodial', 'open source', 'trustless', 'audit', 'smart contract', 'contract'))
-    return { from: 'bot', text: 'Hash PayLink is fully non-custodial and trustless. Funds flow directly from payer to recipient via auditable smart contracts — the platform never holds or controls any funds. Payment links are stateless; all parameters are encoded in the URL. Smart contracts are open source and verifiable on-chain. The 0.2% platform fee is the only deduction, enforced on-chain at settlement.' }
-
-  // ── Phishing / scam ──────────────────────────────────────────────────────────
+  // ── Phishing / scam (safety — always first) ──────────────────────────────────
   if (has('phish', 'scam', 'fake', 'suspicious', 'seed phrase', 'private key', 'mnemonic', 'fraud', 'hack', 'stolen', 'impostor'))
     return { from: 'bot', text: 'Warning: Hash PayLink will NEVER ask for your private key, seed phrase, or wallet password. We will never DM you first on any platform. Only interact with links from hashpaylink.com. If you receive a suspicious message claiming to be from Hash PayLink, ignore it and report it to support@hashpaylink.com. Stay safe.' }
 
-  // ── Contact / escalate ───────────────────────────────────────────────────────
-  if (has('contact', 'support', 'help', 'human', 'agent', 'email', 'team', 'speak to', 'talk to', 'reach out', 'report', 'issue', 'problem', 'complaint', 'inquiry', 'enquiry', 'twitter', 'x.com', '@hash'))
-    return CONTACT_MSG
+  // ── Multi-payer / event / collection / dashboard ─────────────────────────────
+  if (has('multi', 'multi-payer', 'collection', 'collect', 'event', 'group payment', 'organis', 'organiz', 'dashboard', 'attendee', 'fundrais', 'contributor', 'many payers', 'multiple payers', 'multiple people', 'many people', 'group order', 'split'))
+    return { from: 'bot', text: 'Multi-Payer Collection mode lets you collect payments from many people with a single link — ideal for events, group orders, or fundraises.\n\nHow it works:\n1. Enable "Multi-Payer Collection" when creating your link.\n2. Share the link or QR code with participants.\n3. Each payer enters their name or handle before paying — this is logged automatically.\n4. The organizer dashboard shows every payment in real time: name, amount, chain, and timestamp.\n5. Export the full payment list as CSV anytime.\n\nThe dashboard auto-refreshes every 5 seconds. Payments across Base, HashKey, Arc, Starknet, and Solana all appear in one unified view.' }
+
+  // ── Flexible amount ──────────────────────────────────────────────────────────
+  if (has('flex', 'flexible', 'any amount', 'payer choose', 'custom amount', 'tip', 'tips', 'pay what', 'open amount', 'variable'))
+    return { from: 'bot', text: 'Flexible Amount lets the payer enter any amount they choose rather than a fixed figure. On the payment page they type in the amount before paying. Useful for tips, donations, or pay-what-you-want scenarios. Enable it during link creation by toggling "Flexible Amount".' }
+
+  // ── Send via Address / Direct Send ──────────────────────────────────────────
+  if (has('send via', 'send via address', 'direct send', 'no wallet', 'without wallet', 'without connecting', 'cex', 'cold wallet', 'vault address', 'copy address', 'binance', 'coinbase send', 'bybit', 'kraken', 'from exchange', 'from cex'))
+    return { from: 'bot', text: '"Send via Address" lets you pay from anywhere — Binance, Coinbase, a hardware wallet, or any other source — without connecting a browser extension. You simply copy the unique vault address shown on the payment page and send the exact amount to it. The payment is detected on-chain automatically and settled within seconds. No wallet connection, no approvals needed.' }
+
+  // ── How to pay ───────────────────────────────────────────────────────────────
+  if (has('how to pay', 'paying', 'make a payment', 'i want to pay', 'send payment', 'as a payer', 'payer', 'buyer') || (has('how') && has('pay')))
+    return { from: 'bot', text: 'To pay via a Hash PayLink:\n1. Open the payment link shared with you.\n2. Choose "Send via Address" (recommended — works from any exchange or cold wallet without connecting anything), or "Connect Wallet" for browser wallet signing.\n3. Send via Address: copy the vault address shown and send the exact amount. Detected automatically within seconds.\n4. Connect Wallet: approve the transaction in your wallet. Gas is sponsored on Base and Arc.\n\nA success screen with your transaction hash confirms delivery.' }
+
+  // ── Creating a link ──────────────────────────────────────────────────────────
+  if (has('create', 'generate', 'make', 'build', 'new link', 'payment link', 'share link', 'set up', 'setup', 'get started', 'merchant', 'seller', 'receive payment', 'start accepting'))
+    return { from: 'bot', text: 'To create a payment link:\n1. Go to the home page and connect your wallet.\n2. Enter the amount (or enable Flexible Amount so the payer chooses).\n3. Select your chain — Base, HashKey, Arc, Starknet, or Solana.\n4. Optionally enable Multi-Payer Collection or add a memo.\n5. Click Generate Link — share the URL or QR code.\n\nYour wallet address is embedded in the link. No account or KYC required.' }
 
   // ── FX / local currency ──────────────────────────────────────────────────────
-  if (has('naira', 'ngn', 'ghana', 'ghs', 'kenya', 'kes', 'singapore', 'sgd', 'fx', 'local currency', 'exchange rate', 'fixer', 'black market rate', 'street rate', 'local price', 'currency display'))
+  if (has('naira', 'ngn', 'ghana', 'ghs', 'kenya', 'kes', 'singapore', 'sgd', 'fx', 'local currency', 'exchange rate', 'fixer', 'black market rate', 'street rate', 'local price', 'currency display', 'local equivalent'))
     return { from: 'bot', text: 'Hash PayLink supports local currency display for Multi-Payer Collection links. Organisers can enable FX display for NGN (Nigerian Naira), GHS (Ghanaian Cedi), KES (Kenyan Shilling), or SGD (Singapore Dollar). Payers see the equivalent in their local currency and can type in either local currency or USDC — the platform always settles in USDC. Rates are live from Fixer.io or a custom/street rate set by the organiser.' }
 
+  // ── QR code ──────────────────────────────────────────────────────────────────
+  if (has('qr', 'qr code', 'barcode', 'print', 'download qr', 'scan qr'))
+    return { from: 'bot', text: 'Every payment link includes a downloadable QR code on the link generation screen. Payers scan it with any camera app to open the payment page directly. High-resolution QR codes are available for print materials. The QR code encodes the full payment link including amount, recipient, and chain.' }
+
   // ── SDK / integration ────────────────────────────────────────────────────────
-  if (has('sdk', 'api', 'integrate', 'integration', 'developer', 'embed', 'widget', 'button', 'checkout', 'react', 'javascript', 'js', 'code', 'npm', 'package'))
-    return { from: 'bot', text: 'Hash PayLink offers an SDK for developers. You can embed a payment button, use a hosted checkout, or integrate via URL parameters. The SDK supports React and vanilla JS. For full documentation, visit hashpaylink.com or contact support@hashpaylink.com for integration support.' }
+  if (has('sdk', 'api', 'integrate', 'integration', 'developer', 'embed', 'widget', 'button', 'checkout', 'react', 'javascript', 'npm', 'package', 'build on'))
+    return { from: 'bot', text: 'Hash PayLink offers an SDK for developers. You can embed a payment button, use a hosted checkout, or integrate via URL parameters. The SDK supports React and vanilla JS. Contact support@hashpaylink.com for integration support.' }
 
-  // ── USDC ─────────────────────────────────────────────────────────────────────
-  if (has('usdc', 'usd coin', 'stablecoin', 'stable coin', 'dollar'))
-    return { from: 'bot', text: 'Hash PayLink primarily settles in USDC (USD Coin by Circle) on Base, Arc, and Starknet. On HashKey, payments are made in native HSK. On Solana, native USDC is used. All USDC used on the platform is Circle-issued native USDC — not bridged or wrapped versions. The 0.2% platform fee is deducted from the payment at settlement.' }
+  // ── Fees ─────────────────────────────────────────────────────────────────────
+  if (has('fee', 'fees', 'cost', 'charge', '0.2', 'platform fee', 'how much', 'percentage', 'deduction', 'cut', 'commission', 'pricing', 'free'))
+    return { from: 'bot', text: 'Hash PayLink charges a flat 0.2% platform fee, deducted automatically at settlement. For example, a 100 USDC payment results in 99.8 USDC delivered. No subscription fees, no hidden charges. Gas is sponsored on Base and Arc — payers pay nothing extra.' }
 
-  // ── Memo / label / tag ───────────────────────────────────────────────────────
-  if (has('memo', 'label', 'tag', 'note', 'reference', 'name', 'description'))
-    return { from: 'bot', text: 'When creating a payment link, you can add a memo or label (e.g. "Invoice #42" or "Coffee payment"). In Multi-Payer Collection mode, each payer enters their own name or handle before paying — this name is logged on the organizer dashboard alongside their payment details.' }
+  // ── Gas / gasless ────────────────────────────────────────────────────────────
+  if (has('gas', 'gasless', 'free gas', 'sponsored', 'network fee', 'transaction fee', 'avnu', 'paymaster'))
+    return { from: 'bot', text: 'Gas is fully sponsored on Base (EIP-2612 permit + Multicall3), Arc (native USDC gas covered by relayer), Starknet (AVNU Paymaster — no STRK needed), HashKey (relayer pays HSK gas), and Solana (relayer pays SOL fee). Payers only send the payment amount — nothing extra.' }
 
   // ── Confirmation time ────────────────────────────────────────────────────────
-  if (has('how long', 'how fast', 'speed', 'instant', 'quick', 'confirmation time', 'finality', 'settle', 'settlement'))
-    return { from: 'bot', text: 'Confirmation times by chain:\n• Base: 2–5 seconds\n• HashKey: 2–5 seconds\n• Arc: 2–5 seconds\n• Starknet: seconds for ACCEPTED_ON_L2 (final for payments); L1 settlement 2–4 hours\n• Solana: under 1 second\n\nAll chains provide near-instant payment finality for practical purposes.' }
+  if (has('how long', 'how fast', 'speed', 'instant', 'confirmation time', 'finality', 'settlement time', 'how quick'))
+    return { from: 'bot', text: 'Confirmation times:\n• Base: 2–5 seconds\n• HashKey: 2–5 seconds\n• Arc: 2–5 seconds\n• Starknet: seconds for ACCEPTED_ON_L2 (final); L1 settlement 2–4 hours (not needed for payment)\n• Solana: under 1 second\n\nAll chains provide near-instant finality for practical purposes.' }
+
+  // ── Wrong chain / network ────────────────────────────────────────────────────
+  if (has('wrong chain', 'wrong network', 'different chain', 'incorrect chain', 'sent to wrong', 'sent on wrong', 'recover funds', 'recovery'))
+    return { from: 'bot', text: 'If funds were sent on the wrong chain, contact the team immediately via support@hashpaylink.com with your transaction hash. Hash PayLink uses a universal deterministic vault system — in most cases funds can be recovered by deploying the vault on the receiving chain.' }
+
+  // ── Pending / stuck ──────────────────────────────────────────────────────────
+  if (has('pending', 'stuck', 'not arrived', 'not received', 'not confirmed', 'delayed', 'taking long', 'waiting', 'not showing', 'missing payment', 'where is my'))
+    return { from: 'bot', text: 'If a payment is pending:\n• Base/Arc: paste the tx hash here for a live status check.\n• HashKey: confirms in 2–5 seconds normally.\n• Starknet: wait for ACCEPTED_ON_L2 status.\n• Solana: under 1 second — if stuck 30+ seconds, the tx may have dropped, retry.\n\nPaste your transaction hash and I will check it now.' }
+
+  // ── Refund / cancel ──────────────────────────────────────────────────────────
+  if (has('refund', 'cancel', 'reverse', 'undo', 'wrong amount', 'sent wrong', 'mistake', 'accidentally', 'chargeback'))
+    return { from: 'bot', text: 'Blockchain transactions are irreversible once confirmed. Hash PayLink is fully non-custodial and cannot initiate reversals. Coordinate refunds directly with the recipient. For technical errors, contact support@hashpaylink.com with your transaction hash.' }
+
+  // ── Track / status ───────────────────────────────────────────────────────────
+  if (has('track', 'status', 'check', 'verify', 'look up', 'tx hash', 'txhash', 'transaction hash', 'confirmed'))
+    return { from: 'bot', text: 'Paste your transaction hash directly into this chat and I will query it live across Base, HashKey, Arc, and Starknet. An EVM transaction hash starts with 0x and is 66 characters long.' }
+
+  // ── Chains — Base ────────────────────────────────────────────────────────────
+  if ((has('base') && !has('database')) || has('basescan', 'metamask', 'rainbow wallet', 'layer 2', 'ethereum l2'))
+    return { from: 'bot', text: 'Base is an Ethereum L2 by Coinbase. Hash PayLink supports USDC payments on Base Mainnet. Gas is sponsored — zero extra cost to payers. Wallets: MetaMask, Coinbase Smart Wallet, Rainbow, or any WalletConnect wallet. Explorer: basescan.org' }
+
+  // ── Chains — HashKey ─────────────────────────────────────────────────────────
+  if (has('hashkey', 'hsk', 'hash key', 'hashkey chain'))
+    return { from: 'bot', text: 'HashKey Chain is EVM-compatible and uses HSK as its native token. Payments are made in HSK via "Send via Address" — no wallet connection needed. The platform collects a 0.2% fee at settlement. Explorer: explorer.hsk.xyz' }
+
+  // ── Chains — Arc ─────────────────────────────────────────────────────────────
+  if (has('arc', 'arcscan', 'arc testnet', 'arc chain', 'testnet'))
+    return { from: 'bot', text: 'Arc is an EVM chain using USDC as its native gas token. Hash PayLink is live on Arc Testnet (Chain ID 5042002) — great for testing without real funds. Explorer: testnet.arcscan.app' }
+
+  // ── Chains — Starknet ────────────────────────────────────────────────────────
+  if (has('starknet', 'argent', 'argentx', 'braavos', 'starkscan', 'l2 stark'))
+    return { from: 'bot', text: 'Starknet payments use Circle native USDC. Compatible wallets: ArgentX and Braavos. Gas is sponsored by AVNU Paymaster — no STRK needed. Final when ACCEPTED_ON_L2. Explorer: starkscan.co' }
+
+  // ── Chains — Solana ──────────────────────────────────────────────────────────
+  if (has('solana', 'phantom', 'solflare', 'solscan'))
+    return { from: 'bot', text: 'Solana payments use native USDC. Wallets: Phantom and Solflare. Gas is relayer-sponsored — payers only sign the USDC transfer. "Send via Address" also works on Solana. Confirms in under 1 second. Explorer: solscan.io' }
+
+  // ── Wallet setup / connect ───────────────────────────────────────────────────
+  if (has('wallet', 'connect wallet', 'which wallet', 'walletconnect', 'install wallet', 'coinbase wallet', 'rainbow'))
+    return { from: 'bot', text: 'Supported wallets:\n• Base / Arc / HashKey: MetaMask, Coinbase Smart Wallet, Rainbow, any WalletConnect wallet.\n• Starknet: ArgentX or Braavos.\n• Solana: Phantom or Solflare.\n\nOr skip wallets entirely — use "Send via Address" to pay from any exchange or cold wallet.' }
+
+  // ── Security / non-custodial ─────────────────────────────────────────────────
+  if (has('safe', 'secure', 'trust', 'custody', 'custodial', 'non-custodial', 'open source', 'trustless', 'audit', 'smart contract'))
+    return { from: 'bot', text: 'Hash PayLink is fully non-custodial. Funds flow directly from payer to recipient via on-chain smart contracts — the platform never holds funds. Links are stateless, parameters encoded in the URL. Smart contracts are open source and verifiable on-chain. The only deduction is the 0.2% platform fee, enforced on-chain.' }
+
+  // ── USDC ─────────────────────────────────────────────────────────────────────
+  if (has('usdc', 'usd coin', 'stablecoin', 'stable coin'))
+    return { from: 'bot', text: 'Hash PayLink settles in USDC on Base, Arc, and Starknet; native HSK on HashKey; and native USDC on Solana. All USDC is Circle-issued — not bridged or wrapped. The 0.2% fee is deducted at settlement.' }
+
+  // ── Memo / label / tag ───────────────────────────────────────────────────────
+  if (has('memo', 'label', 'tag', 'note', 'reference', 'description'))
+    return { from: 'bot', text: 'You can add a memo or label when creating a link (e.g. "Invoice #42"). In Multi-Payer Collection mode, each payer enters their own name or handle — logged on the organizer dashboard with their payment details.' }
+
+  // ── Contact / escalate ───────────────────────────────────────────────────────
+  if (has('contact', 'support', 'help', 'human', 'agent', 'email', 'team', 'speak to', 'talk to', 'reach out', 'report', 'issue', 'problem', 'complaint', 'inquiry', 'twitter', 'x.com', '@hash'))
+    return CONTACT_MSG
+
+  // ── Platform overview — true catch-all for generic questions ─────────────────
+  if (has('what is', 'overview', 'hash paylink', 'introduction', 'intro', 'about') || (has('how') && has('work')) || (has('tell') && has('me')) || (has('explain') && !has('multi', 'flex', 'fee', 'gas', 'chain', 'wallet', 'pay', 'send', 'qr', 'sdk')))
+    return { from: 'bot', text: 'Hash PayLink is a non-custodial, multi-chain payment platform. Merchants create a shareable payment link in seconds — no account or KYC required. Payers pay by connecting a wallet OR sending directly from any exchange or CEX using "Send via Address". Supported chains: Base, HashKey, Arc, Starknet, and Solana. A flat 0.2% fee is deducted at settlement.' }
 
   return null
 }
