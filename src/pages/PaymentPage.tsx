@@ -385,7 +385,7 @@ export default function PaymentPage() {
 
   // Whether Direct Send is available for the current chain
   const canDirectSend =
-    ((chain === 'base' || chain === 'arc') && isAddress(resolvedEvm) && !!FACTORY_V2_ADDRESSES[chain as 'base' | 'arc']) ||
+    ((chain === 'base' || chain === 'arc' || chain === 'hashkey') && isAddress(resolvedEvm) && !!FACTORY_V2_ADDRESSES[chain as 'base' | 'arc' | 'hashkey']) ||
     (chain === 'solana' && !!resolvedSolana)
 
   // ── Step 1: Predict router address + check deployment ────────────────────
@@ -798,7 +798,7 @@ export default function PaymentPage() {
     if (isHskOnly && c !== 'hashkey') return
     if (c === chain) return
     // Chains that don't support Send via Address — fall back to wallet connect
-    if (c === 'starknet' || c === 'hashkey') setPayMode('wallet')
+    if (c === 'starknet') setPayMode('wallet')
     // Auto-disconnect: switching TO Solana drops EVM; switching AWAY from Solana drops Solana
     if (c === 'solana' && isConnected) disconnectEvm()
     if (c !== 'solana' && solanaWalletAddr) disconnectSolana()
@@ -1646,8 +1646,8 @@ export default function PaymentPage() {
             )
           })()}
 
-          {/* ── Direct Send panel (Base / Arc) ───────────────────────────── */}
-          {payMode === 'direct' && (chain === 'base' || chain === 'arc') && (
+          {/* ── Direct Send panel (Base / Arc / HashKey) ─────────────────── */}
+          {payMode === 'direct' && (chain === 'base' || chain === 'arc' || chain === 'hashkey') && (
             <div className="space-y-3">
               {/* Loading ghost address */}
               {!directDisplayAddr && directStatus !== 'error' ? (
@@ -1685,7 +1685,7 @@ export default function PaymentPage() {
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                       <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
                     </div>
-                    <p className="text-[11px] font-medium text-emerald-700">Monitoring for USDC — detects in under 3 seconds</p>
+                    <p className="text-[11px] font-medium text-emerald-700">Monitoring for {meta.asset} — detects in under 3 seconds</p>
                   </div>
                   <p className="text-center text-xs text-gray-500">
                     Send {meta.asset} on {meta.label} to this address
@@ -1761,7 +1761,7 @@ export default function PaymentPage() {
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                       <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
                     </div>
-                    <p className="text-[11px] font-medium text-emerald-700">Monitoring for USDC — detects in under 3 seconds</p>
+                    <p className="text-[11px] font-medium text-emerald-700">Monitoring for {meta.asset} — detects in under 3 seconds</p>
                   </div>
                   <p className="text-center text-xs text-gray-500">Send USDC on Solana to this address</p>
                   <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3.5">
