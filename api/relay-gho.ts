@@ -150,8 +150,11 @@ export default async function handler(req: Request, res: Response) {
     const feeUnits       = totalUnits * PLATFORM_FEE_BPS / 10_000n
     const recipientUnits = totalUnits - feeUnits - gasUnits
 
-    if (recipientUnits <= 0n)
-      return res.status(400).json({ ok: false, error: 'Amount too small to cover fees and gas reimbursement' })
+    if (recipientUnits <= 0n) {
+      const gasGho = (Number(gasUnits) / 1e18).toFixed(4)
+      const minGho = (Number(gasUnits + feeUnits) / 1e18 + 0.01).toFixed(2)
+      return res.status(400).json({ ok: false, error: `Amount too small — current gas cost is ~${gasGho} GHO. Send at least ${minGho} GHO.` })
+    }
 
     // Build Multicall3 calldata: permit → pay recipient → pay treasury → reimburse relayer
     const callData = encodeFunctionData({
