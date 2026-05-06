@@ -1006,8 +1006,8 @@ export default function PaymentPage() {
   // directStatus === 'success' is included so EVM Send-via-Address relay
   // immediately transitions to the full-screen success card (same as Solana).
   const isConfirmed     = (chain === 'starknet' ? isStarkConfirmed : chain === 'solana' ? isSolanaConfirmed : isEvmConfirmed) || manualPayDetected || directStatus === 'success'
-  const txHash          = manualPayDetected ? manualTxHash
-                        : directStatus === 'success'  ? (directTxHash as `0x${string}` | null)
+  const txHash          = directStatus === 'success'   ? (directTxHash as `0x${string}` | null)
+                        : manualPayDetected            ? manualTxHash
                         : chain === 'starknet'         ? starkTxHash
                         : chain === 'solana'           ? solanaTxHash
                         : evmTxHash
@@ -1412,7 +1412,10 @@ export default function PaymentPage() {
         {/* ── Pay mode toggle (Base, Arc USDC, Starknet) ───────────────── */}
         {canDirectSend && (
           <div className="flex justify-center px-4 pt-3">
-            <div className="flex rounded-xl border border-gray-200 bg-gray-100/80 p-0.5 text-xs font-semibold">
+            <div className={cn(
+              'flex rounded-xl border border-gray-200 bg-gray-100/80 p-0.5 text-xs font-semibold transition-opacity duration-200',
+              isEventMode && !attendeeName.trim() && 'opacity-40 pointer-events-none select-none',
+            )}>
               <button
                 onClick={() => setPayMode('wallet')}
                 className={cn(
@@ -1615,13 +1618,23 @@ export default function PaymentPage() {
             return (
               <div className="space-y-1.5">
                 <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
-                  <span className={`h-2 w-2 rounded-full ${paid ? 'bg-emerald-500' : 'bg-blue-500'}`} />
+                  <span className={cn(
+                    'h-2 w-2 rounded-full transition-colors duration-300',
+                    paid ? 'bg-emerald-500' : attendeeName.trim() ? 'bg-emerald-400' : 'bg-gray-300',
+                  )} />
                   Your Name or Handle
-                  {!paid && (
-                    <span className="ml-auto text-[10px] font-semibold text-red-500">Required</span>
-                  )}
-                  {paid && (
+                  {paid ? (
                     <span className="ml-auto text-[10px] font-semibold text-emerald-600">✓ Saved</span>
+                  ) : attendeeName.trim() ? (
+                    <span className="ml-auto flex items-center gap-1 text-[10px] font-semibold text-emerald-600">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                      Ready
+                    </span>
+                  ) : (
+                    <span className="ml-auto flex items-center gap-1 text-[10px] font-medium text-gray-400">
+                      <span className="h-1.5 w-1.5 rounded-full bg-gray-300" />
+                      Required
+                    </span>
                   )}
                 </label>
                 <input
@@ -1638,8 +1651,10 @@ export default function PaymentPage() {
                   }`}
                 />
                 {!paid && (
-                  <p className="text-[11px] text-gray-400">
-                    This name will be logged with your payment in the organizer's dashboard.
+                  <p className="text-[11px] text-gray-400 transition-opacity duration-300" style={{ opacity: attendeeName.trim() ? 0.5 : 1 }}>
+                    {attendeeName.trim()
+                      ? 'Logged with your payment on the organizer dashboard.'
+                      : 'Enter your name to unlock payment — it\'s logged with your payment.'}
                   </p>
                 )}
               </div>
@@ -1690,11 +1705,24 @@ export default function PaymentPage() {
                   <p className="text-center text-xs text-gray-500">
                     Send {meta.asset} on {meta.label} to this address
                   </p>
-                  <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3.5">
+                  <div className={cn(
+                    'flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3.5 transition-opacity duration-200',
+                    isEventMode && !attendeeName.trim() && 'opacity-40',
+                  )}>
                     <p className="min-w-0 flex-1 break-all font-mono text-xs text-gray-800">{directDisplayAddr}</p>
                     <button
-                      onClick={() => { navigator.clipboard.writeText(directDisplayAddr!); setDirectAddrCopied(true); setTimeout(() => setDirectAddrCopied(false), 2500) }}
-                      className="ml-2 shrink-0 flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 transition-all active:scale-90"
+                      onClick={() => {
+                        if (isEventMode && !attendeeName.trim()) return
+                        navigator.clipboard.writeText(directDisplayAddr!)
+                        setDirectAddrCopied(true)
+                        setTimeout(() => setDirectAddrCopied(false), 2500)
+                      }}
+                      className={cn(
+                        'ml-2 shrink-0 flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-600 transition-all',
+                        isEventMode && !attendeeName.trim()
+                          ? 'cursor-not-allowed'
+                          : 'hover:bg-gray-100 active:scale-90',
+                      )}
                     >
                       {directAddrCopied
                         ? <><CheckCheck className="h-3.5 w-3.5 text-emerald-500" /> Copied!</>
