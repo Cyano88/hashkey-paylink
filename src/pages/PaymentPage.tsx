@@ -28,7 +28,7 @@ const BASE_BUILDER_CODE = '0x62635f3871746237746e79' as `0x${string}`
 import {
   ArrowLeft, ArrowRight, CheckCircle2, ExternalLink, AlertCircle, Loader2, ArrowLeftRight,
   RefreshCw, ShieldCheck, Zap, Copy, CheckCheck, Wallet,
-  AlertTriangle, Radio,
+  AlertTriangle, Radio, Power,
 } from 'lucide-react'
 import {
   CHAIN_META, PLATFORM_FEE_BPS, EVM_TREASURY, STARK_TREASURY, type ChainKey,
@@ -403,7 +403,7 @@ export default function PaymentPage() {
 
   // Whether Direct Send is available for the current chain
   const canDirectSend =
-    ((chain === 'base' || chain === 'arc') && isAddress(resolvedEvm) && !!FACTORY_V2_ADDRESSES[chain as 'base' | 'arc']) ||
+    ((chain === 'base' || chain === 'arc' || chain === 'arbitrum') && isAddress(resolvedEvm) && !!FACTORY_V2_ADDRESSES[chain as 'base' | 'arc' | 'arbitrum']) ||
     (chain === 'solana' && !!resolvedSolana)
 
   // ── Step 1: Predict router address + check deployment ────────────────────
@@ -562,7 +562,7 @@ export default function PaymentPage() {
   useEffect(() => {
     if (payMode !== 'direct') return
     if (chain === 'starknet') return
-    const factoryAddr = FACTORY_V2_ADDRESSES[chain as 'base' | 'arc' | 'hashkey']
+    const factoryAddr = FACTORY_V2_ADDRESSES[chain as 'base' | 'arc' | 'hashkey' | 'arbitrum']
     if (!factoryAddr || !resolvedEvm) return
 
     const params  = new URLSearchParams(window.location.search)
@@ -578,7 +578,7 @@ export default function PaymentPage() {
     }
     setDirectLinkId(linkId)
 
-    const client = EVM_CLIENTS[chain as 'base' | 'arc' | 'hashkey']
+    const client = EVM_CLIENTS[chain as 'base' | 'arc' | 'hashkey' | 'arbitrum']
     let cancelled = false
     client.readContract({
       address:      factoryAddr,
@@ -606,10 +606,10 @@ export default function PaymentPage() {
     if (directStatus !== 'waiting' || !directVault || !directLinkId) return
     if (chain === 'starknet') return
 
-    const evmChain  = chain as 'base' | 'arc' | 'hashkey'
+    const evmChain  = chain as 'base' | 'arc' | 'hashkey' | 'arbitrum'
     const client    = EVM_CLIENTS[evmChain]
     const isNative  = chain === 'hashkey'
-    const token     = isNative ? null : (CHAIN_META[evmChain as 'base' | 'arc'].tokenAddress as `0x${string}`)
+    const token     = isNative ? null : (CHAIN_META[evmChain as 'base' | 'arc' | 'arbitrum'].tokenAddress as `0x${string}`)
 
     const check = async () => {
       if (directRelayedRef.current) return
@@ -1456,7 +1456,7 @@ export default function PaymentPage() {
         style={{ boxShadow: `0 4px 24px -4px rgba(0,0,0,0.08), ${meta.glowStyle}`, borderColor: meta.accentColor + '26' }}
       >
         {/* ── Chain toggle ─────────────────────────────────────────────── */}
-        <div className="flex justify-center pt-5 pb-0 px-4">
+        <div className="flex items-center justify-center gap-2 pt-5 pb-0 px-4">
           <div className="flex items-center justify-center gap-0.5 sm:gap-1 rounded-xl border border-gray-200 bg-gray-100/80 p-1 overflow-x-auto w-full sm:w-auto">
             {CHAINS.map((c) => {
               const m          = CHAIN_META[c]
@@ -1504,6 +1504,16 @@ export default function PaymentPage() {
               )
             })}
           </div>
+          {/* ── Disconnect button ───────────────────────────────────────── */}
+          {(isConnected || !!solanaWalletAddr) && (
+            <button
+              onClick={() => { if (chain === 'solana') disconnectSolana(); else disconnectEvm() }}
+              title="Disconnect wallet"
+              className="shrink-0 flex items-center justify-center h-7 w-7 rounded-lg border border-gray-200 bg-gray-100/80 text-gray-400 hover:text-red-500 hover:border-red-200 hover:bg-red-50 transition-all duration-150"
+            >
+              <Power className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
 
         {/* ── Pay mode toggle (Base, Arc USDC, Starknet) ───────────────── */}
@@ -1777,8 +1787,8 @@ export default function PaymentPage() {
             )
           })()}
 
-          {/* ── Direct Send panel (Base / Arc / HashKey) ─────────────────── */}
-          {payMode === 'direct' && (chain === 'base' || chain === 'arc' || chain === 'hashkey') && (
+          {/* ── Direct Send panel (Base / Arc / HashKey / Arbitrum) ─────── */}
+          {payMode === 'direct' && (chain === 'base' || chain === 'arc' || chain === 'hashkey' || chain === 'arbitrum') && (
             <div className="space-y-3">
               {/* Loading ghost address */}
               {!directDisplayAddr && directStatus !== 'error' ? (

@@ -520,11 +520,11 @@ export default function Layout() {
             <p className="text-center text-xs text-gray-400">
               Built on{' '}
               {[
-                { label: 'HashKey Chain', href: 'https://explorer.hsk.xyz' },
-                { label: 'Base',          href: 'https://basescan.org' },
-                { label: 'Starknet',      href: 'https://starkscan.co' },
-                { label: 'Arc',           href: 'https://testnet.arcscan.app' },
-                { label: 'Solana',        href: 'https://solscan.io' },
+                { label: 'Base',      href: 'https://basescan.org' },
+                { label: 'Arbitrum', href: 'https://arbiscan.io' },
+                { label: 'Starknet', href: 'https://starkscan.co' },
+                { label: 'Arc',      href: 'https://testnet.arcscan.app' },
+                { label: 'Solana',   href: 'https://solscan.io' },
               ].map((item, i, arr) => (
                 <span key={item.label}>
                   <a href={item.href} target="_blank" rel="noopener noreferrer"
