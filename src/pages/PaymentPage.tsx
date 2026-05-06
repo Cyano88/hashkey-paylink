@@ -1718,6 +1718,14 @@ export default function PaymentPage() {
                 </span>
               </div>
             )}
+            {chain === 'ethereum' && parseFloat(effectiveAmt || '0') < 5 && parseFloat(effectiveAmt || '0') > 0 && (
+              <div className="flex items-center gap-2 border-t border-amber-100 bg-amber-50/60 px-4 py-2.5">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+                <span className="text-[11px] text-amber-700">
+                  Minimum $5 GHO recommended on Ethereum to keep gas overhead reasonable.
+                </span>
+              </div>
+            )}
             {memo && <Row label="Memo (on-chain)" value={memo.length > 28 ? memo.slice(0, 28) + '…' : memo} />}
           </div>
 
