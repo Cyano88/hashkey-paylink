@@ -106,8 +106,8 @@ export default async function handler(req: Request, res: Response) {
       const gasReimbGho = await calcGasReimbGho(publicClient)
       return res.json({ ok: true, gasReimbGho: gasReimbGho.toString() })
     } catch (err) {
-      // Return max cap as safe fallback so UI always has a value
-      return res.json({ ok: true, gasReimbGho: MAX_GAS_REIMB_GHO.toString() })
+      // Return min floor as safe fallback so UI always has a value
+      return res.json({ ok: true, gasReimbGho: MIN_GAS_REIMB_GHO.toString() })
     }
   }
 
@@ -115,7 +115,7 @@ export default async function handler(req: Request, res: Response) {
   if (req.method !== 'POST')
     return res.status(405).json({ ok: false, error: 'Method not allowed' })
 
-  const { owner, recipient, amount, deadline, v, r, s, gasReimbGho } =
+  const { owner, recipient, amount, deadline, v, r, s } =
     (req.body ?? {}) as Record<string, string>
 
   // Validate inputs
@@ -134,12 +134,13 @@ export default async function handler(req: Request, res: Response) {
   if (!r || !s)
     return res.status(400).json({ ok: false, error: 'Invalid signature r/s' })
 
-  let { account, walletClient } = getClients()
+  const { account, publicClient, walletClient } = getClients()
 
   try {
+    // Calculate gas reimbursement fresh server-side — never trust client value
+    const gasUnits       = await calcGasReimbGho(publicClient)
     const totalUnits     = BigInt(amount)
     const feeUnits       = totalUnits * PLATFORM_FEE_BPS / 10_000n
-    const gasUnits       = BigInt(gasReimbGho ?? MIN_GAS_REIMB_GHO.toString())
     const recipientUnits = totalUnits - feeUnits - gasUnits
 
     if (recipientUnits <= 0n)

@@ -915,14 +915,13 @@ export default function PaymentPage() {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          owner:       address,
-          recipient:   activeRecipient,
-          amount:      totalUnits.toString(),
-          deadline:    deadline.toString(),
-          v:           Number(v),
+          owner:     address,
+          recipient: activeRecipient,
+          amount:    totalUnits.toString(),
+          deadline:  deadline.toString(),
+          v:         Number(v),
           r,
           s,
-          gasReimbGho: gasReimbGho.toString(),
         }),
       })
       const data = await relayRes.json() as { ok: boolean; txHash?: `0x${string}`; error?: string }
