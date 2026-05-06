@@ -1540,10 +1540,10 @@ export default function PaymentPage() {
         )}
 
         {/* ── Amount header ─────────────────────────────────────────────── */}
-        <div className={cn('border-b border-gray-100 bg-gradient-to-br p-6 text-center mt-4', meta.headerBg)}>
+        <div className={cn('border-b border-gray-100 dark:border-white/10 bg-gradient-to-br p-6 text-center mt-4', meta.headerBg, 'dark:from-gray-800 dark:to-gray-900')}>
           {isFlex ? (
             <div className="flex flex-col items-center gap-2">
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Enter Amount</p>
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-300">Enter Amount</p>
 
               {/* Input centered exactly under label; asset label floats right via absolute */}
               <div className="relative flex justify-center">
@@ -1556,7 +1556,7 @@ export default function PaymentPage() {
                   onChange={e => fxInputMode === 'local' ? setLocalAmt(e.target.value) : setFlexAmt(e.target.value)}
                   className="w-40 text-center text-[2.75rem] font-bold leading-none tracking-tight text-gray-900 dark:text-white bg-transparent border-b-2 border-gray-300 dark:border-white/30 focus:border-gray-500 dark:focus:border-white/60 outline-none"
                 />
-                <span className="absolute left-full top-1/2 -translate-y-1/2 pl-2 text-xl font-semibold text-gray-400 whitespace-nowrap">
+                <span className="absolute left-full top-1/2 -translate-y-1/2 pl-2 text-xl font-semibold text-gray-400 dark:text-gray-300 whitespace-nowrap">
                   {fxInputMode === 'local' ? (getFxMeta(fxCurrency)?.symbol ?? fxCurrency) : meta.asset}
                 </span>
               </div>

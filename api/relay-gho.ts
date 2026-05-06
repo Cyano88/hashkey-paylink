@@ -74,18 +74,23 @@ async function getEthPriceUsd(): Promise<bigint> {
 }
 
 async function calcGasReimbGho(publicClient: ReturnType<typeof createPublicClient>): Promise<bigint> {
-  const [block, ethUsd] = await Promise.all([
-    publicClient.getBlock({ blockTag: 'latest' }),
-    getEthPriceUsd(),
-  ])
-  // Use actual baseFeePerGas + small tip (0.2 gwei) — avoids inflated eth_gasPrice suggestions
-  const baseFee  = block.baseFeePerGas ?? 500_000_000n  // fallback 0.5 gwei
-  const gasPrice = baseFee + 200_000_000n               // + 0.2 gwei tip
-  // cost_gho_units(18 dec) = gasPrice(wei) * ESTIMATED_GAS * ethUsd
-  const raw = gasPrice * ESTIMATED_GAS * ethUsd
-  if (raw < MIN_GAS_REIMB_GHO) return MIN_GAS_REIMB_GHO
-  if (raw > MAX_GAS_REIMB_GHO) return MAX_GAS_REIMB_GHO
-  return raw
+  try {
+    const [block, ethUsd] = await Promise.all([
+      publicClient.getBlock({ blockTag: 'latest' }),
+      getEthPriceUsd(),
+    ])
+    const baseFee  = block.baseFeePerGas ?? 500_000_000n  // fallback 0.5 gwei
+    const gasPrice = baseFee + 200_000_000n               // + 0.2 gwei tip
+    const raw      = gasPrice * ESTIMATED_GAS * ethUsd
+    console.log('[relay-gho] baseFee gwei:', Number(baseFee)/1e9, 'ethUsd:', ethUsd.toString(), 'gasUnits GHO:', Number(raw)/1e18)
+    if (raw < MIN_GAS_REIMB_GHO) return MIN_GAS_REIMB_GHO
+    if (raw > MAX_GAS_REIMB_GHO) return MAX_GAS_REIMB_GHO
+    return raw
+  } catch (err) {
+    // RPC failed — use a safe fixed fallback of 0.5 GHO (~$0.50 at current gas)
+    console.warn('[relay-gho] calcGasReimbGho failed, using fallback:', err instanceof Error ? err.message : err)
+    return 500_000_000_000_000_000n  // 0.5 GHO
+  }
 }
 
 function getClients(rpcUrl?: string) {
