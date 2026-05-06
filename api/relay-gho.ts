@@ -38,7 +38,7 @@ const MULTICALL3   = '0xcA11bde05977b3631167028862bE2a173976CA11' as `0x${string
 const TREASURY     = '0xcE5dF9e1115F81a2Fc2F65941B20B820d508e753' as `0x${string}`
 
 const PLATFORM_FEE_BPS  = 20n          // 0.2%
-const ESTIMATED_GAS     = 280_000n     // conservative Multicall3 + 4 ERC-20 calls
+const ESTIMATED_GAS     = 200_000n     // Multicall3 + permit + 3x transferFrom (~170k actual + buffer)
 const MAX_GAS_REIMB_GHO = parseUnits('20', 18)  // 20 GHO cap (~$20)
 const MIN_GAS_REIMB_GHO = parseUnits('1', 18)   // 1 GHO floor (prevents dust attacks)
 const FALLBACK_ETH_USD  = 3_000n
@@ -74,12 +74,14 @@ async function getEthPriceUsd(): Promise<bigint> {
 }
 
 async function calcGasReimbGho(publicClient: ReturnType<typeof createPublicClient>): Promise<bigint> {
-  const [gasPrice, ethUsd] = await Promise.all([
-    publicClient.getGasPrice(),
+  const [block, ethUsd] = await Promise.all([
+    publicClient.getBlock({ blockTag: 'latest' }),
     getEthPriceUsd(),
   ])
+  // Use actual baseFeePerGas + small tip (0.2 gwei) — avoids inflated eth_gasPrice suggestions
+  const baseFee  = block.baseFeePerGas ?? 500_000_000n  // fallback 0.5 gwei
+  const gasPrice = baseFee + 200_000_000n               // + 0.2 gwei tip
   // cost_gho_units(18 dec) = gasPrice(wei) * ESTIMATED_GAS * ethUsd
-  // derivation: (wei/gas * gas) / 1e18 * ethUsd * 1e18 = wei * ethUsd
   const raw = gasPrice * ESTIMATED_GAS * ethUsd
   if (raw < MIN_GAS_REIMB_GHO) return MIN_GAS_REIMB_GHO
   if (raw > MAX_GAS_REIMB_GHO) return MAX_GAS_REIMB_GHO
