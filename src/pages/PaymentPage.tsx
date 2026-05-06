@@ -1470,13 +1470,8 @@ export default function PaymentPage() {
                   (c === 'starknet' && !resolvedStark) ||
                   (c === 'solana'   && !resolvedSolana) ||
                   (c !== 'starknet' && c !== 'solana' && !resolvedEvm)
-              const tooltipText = hskLocked
-                ? 'HSK-only payment link'
-                : isMultiChain
-                ? 'No address set for this chain'
-                : 'Recipient address not provided for this chain'
               return (
-                <div key={c} className="relative group">
+                <div key={c} className="relative">
                   <button
                     onClick={() => !unavailable && !netLocked && handleChainSwitch(c)}
                     disabled={(unavailable && !isActive) || (netLocked && !isActive)}
@@ -1492,14 +1487,6 @@ export default function PaymentPage() {
                     )} />
                     {m.label}
                   </button>
-                  {unavailable && !isActive && (
-                    <div className="pointer-events-none absolute bottom-full left-1/2 mb-2 hidden -translate-x-1/2 group-hover:flex flex-col items-center z-20">
-                      <div className="whitespace-nowrap rounded-lg bg-gray-900/90 px-2.5 py-1.5 text-[10px] text-white shadow-lg">
-                        {tooltipText}
-                      </div>
-                      <div className="border-4 border-transparent border-t-gray-900/90" />
-                    </div>
-                  )}
                 </div>
               )
             })}
