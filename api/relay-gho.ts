@@ -1,7 +1,7 @@
 /**
  * /api/relay-gho
  *
- * Gasless GHO relay for Ethereum Mainnet.
+ * Gasless GHO relay for Arbitrum One.
  * Payer signs an EIP-2612 permit off-chain (free). This endpoint submits the
  * Multicall3 transaction paying gas on the payer's behalf, reimbursed from GHO.
  *
@@ -9,13 +9,13 @@
  * POST /api/relay-gho          → submits relay tx, returns txHash
  *
  * Required env vars:
- *   RELAYER_PRIVATE_KEY_ETH    Ethereum relayer private key (needs ETH for gas)
- *   PRIVATE_RPC_URL_ETH        Ethereum RPC (Alchemy/QuickNode recommended)
+ *   RELAYER_PRIVATE_KEY_ARB    Arbitrum relayer private key (needs ETH for gas)
+ *   PRIVATE_RPC_URL_ARB        Arbitrum RPC (Alchemy/QuickNode recommended)
  *
  * Fee split per transaction:
  *   recipient   = amount - platformFee (0.2%) - gasReimb
  *   treasury    = platformFee (0.2%)
- *   relayer     = gasReimb (covers ETH gas cost, capped at 20 GHO)
+ *   relayer     = gasReimb (covers ETH gas cost on Arbitrum, capped at 0.5 GHO)
  */
 
 import type { Request, Response } from 'express'
@@ -28,19 +28,21 @@ import {
   isAddress,
   parseUnits,
 } from 'viem'
-import { mainnet } from 'viem/chains'
+import { arbitrum } from 'viem/chains'
 import { privateKeyToAccount } from 'viem/accounts'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const GHO_ADDRESS  = '0x40D16FC0246aD3160Ccc09B8D0D3A2cD28aE6C2f' as `0x${string}`
+// GHO on Arbitrum One — verify at arbiscan.io before mainnet deployment
+const GHO_ADDRESS  = '0x7dfF72693f6A4149b17e7C6314655f6A9F7c8B33' as `0x${string}`
 const MULTICALL3   = '0xcA11bde05977b3631167028862bE2a173976CA11' as `0x${string}`
 const TREASURY     = '0xcE5dF9e1115F81a2Fc2F65941B20B820d508e753' as `0x${string}`
 
 const PLATFORM_FEE_BPS  = 20n          // 0.2%
 const ESTIMATED_GAS     = 200_000n     // Multicall3 + permit + 3x transferFrom (~170k actual + buffer)
-const MAX_GAS_REIMB_GHO = parseUnits('20', 18)  // 20 GHO cap (~$20)
-const MIN_GAS_REIMB_GHO = parseUnits('0.1', 18)  // 0.1 GHO floor
+// Arbitrum gas is ~10-50x cheaper than Ethereum — cap at 0.5 GHO ($0.50)
+const MAX_GAS_REIMB_GHO = parseUnits('0.5', 18)
+const MIN_GAS_REIMB_GHO = parseUnits('0.01', 18)
 const FALLBACK_ETH_USD  = 3_000n
 
 // ─── ABIs ─────────────────────────────────────────────────────────────────────
@@ -66,7 +68,7 @@ async function getEthPriceUsd(): Promise<bigint> {
       { signal: AbortSignal.timeout(3_000) },
     )
     const data = await res.json() as { ethereum?: { usd?: number } }
-    const p    = data?.ethereum?.usd
+    const p    = data?.ethereum?.usd  // Arbitrum uses ETH for gas
     return p && p > 0 ? BigInt(Math.round(p)) : FALLBACK_ETH_USD
   } catch {
     return FALLBACK_ETH_USD
@@ -94,12 +96,12 @@ async function calcGasReimbGho(publicClient: ReturnType<typeof createPublicClien
 }
 
 function getClients(rpcUrl?: string) {
-  const rawKey = process.env.RELAYER_PRIVATE_KEY_ETH ?? process.env.RELAYER_PRIVATE_KEY
-  if (!rawKey) throw new Error('RELAYER_PRIVATE_KEY_ETH not configured')
+  const rawKey = process.env.RELAYER_PRIVATE_KEY_ARB ?? process.env.RELAYER_PRIVATE_KEY
+  if (!rawKey) throw new Error('RELAYER_PRIVATE_KEY_ARB not configured')
   const account      = privateKeyToAccount(rawKey as `0x${string}`)
-  const transport    = http(rpcUrl ?? process.env.PRIVATE_RPC_URL_ETH)
-  const publicClient = createPublicClient({ chain: mainnet, transport })
-  const walletClient = createWalletClient({ account, chain: mainnet, transport })
+  const transport    = http(rpcUrl ?? process.env.PRIVATE_RPC_URL_ARB)
+  const publicClient = createPublicClient({ chain: arbitrum, transport })
+  const walletClient = createWalletClient({ account, chain: arbitrum, transport })
   return { account, publicClient, walletClient }
 }
 
@@ -153,7 +155,7 @@ export default async function handler(req: Request, res: Response) {
     if (recipientUnits <= 0n) {
       const gasGho = (Number(gasUnits) / 1e18).toFixed(4)
       const minGho = (Number(gasUnits + feeUnits) / 1e18 + 0.01).toFixed(2)
-      return res.status(400).json({ ok: false, error: `Amount too small — current gas cost is ~${gasGho} GHO. Send at least ${minGho} GHO.` })
+      return res.status(400).json({ ok: false, error: `Amount too small — relay gas cost is ~${gasGho} GHO on Arbitrum. Send at least ${minGho} GHO.` })
     }
 
     // Build Multicall3 calldata: permit → pay recipient → pay treasury → reimburse relayer
@@ -199,7 +201,7 @@ export default async function handler(req: Request, res: Response) {
       gas:   400_000n,
     })
 
-    console.log('[relay-gho] submitted', txHash, 'recipient', recipientUnits.toString(), 'gas', gasUnits.toString())
+    console.log('[relay-gho arb] submitted', txHash, 'recipient', recipientUnits.toString(), 'gas', gasUnits.toString())
 
     return res.status(200).json({
       ok:              true,

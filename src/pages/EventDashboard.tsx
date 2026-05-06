@@ -66,7 +66,7 @@ export default function EventDashboard() {
     netParam === 'arc'       ? 'Arc'        :
     netParam === 'starknet'  ? 'Starknet'   :
     netParam === 'solana'    ? 'Solana'     :
-    netParam === 'ethereum'  ? 'Ethereum'   :
+    netParam === 'arbitrum'  ? 'Arbitrum'   :
     netParam === 'hashkey'   ? 'HashKey'    :
     'Base & Arc'
 
@@ -418,7 +418,7 @@ export default function EventDashboard() {
                             : 'HashKey'}
                         </p>
                       </>
-                    ) : p.chain === 'ethereum' ? (
+                    ) : p.chain === 'arbitrum' ? (
                       <>
                         <p className="text-sm font-semibold text-gray-900">
                           {parseFloat(p.amount || '0').toFixed(4)} GHO

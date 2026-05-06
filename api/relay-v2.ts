@@ -1,24 +1,29 @@
 /**
  * /api/relay-v2
  *
- * Master Relayer endpoint for the PayLinkFactoryV2 "Direct Send" flow.
+ * Master Relayer endpoint for the PayLinkFactoryV2 "Direct Send" (ghost vault) flow.
  *
- * Supports three chains:
- *  • Base    — ERC-20 USDC relay.  Calls relay(linkId, recipient, gasReimbUsdc)
- *  • Arc     — ERC-20 USDC relay (Arc native USDC precompile, gas IS USDC)
- *  • HashKey — Native HSK relay.  Calls relayNative(linkId, recipient, gasReimbNative)
+ * Supports four chains:
+ *  • Base     — ERC-20 USDC relay.  Calls relay(linkId, recipient, gasReimbUsdc)
+ *  • Arc      — ERC-20 USDC relay (Arc native USDC precompile, gas IS USDC)
+ *  • HashKey  — Native HSK relay.  Calls relayNative(linkId, recipient, gasReimbNative)
+ *  • Arbitrum — ERC-20 GHO relay (18-dec). gasReimb passed as 0 — Arbitrum gas is
+ *               negligible (~$0.02) and capped to near-zero by contract MAX_GAS_REIMB.
  *
  * Required env vars (Render → Environment)
  * ─────────────────────────────────────────
  *  RELAYER_PRIVATE_KEY          Master relayer private key (Base)
  *  RELAYER_PRIVATE_KEY_ARC      Arc relayer key  (falls back to master)
  *  RELAYER_PRIVATE_KEY_HASHKEY  HashKey relayer key (falls back to master)
+ *  RELAYER_PRIVATE_KEY_ARB      Arbitrum relayer key (falls back to master)
  *  PRIVATE_RPC_URL              Base RPC (Alchemy / QuickNode)
  *  PRIVATE_RPC_URL_ARC          Arc RPC  (falls back to default Arc RPC)
  *  PRIVATE_RPC_URL_HASHKEY      HashKey RPC (falls back to https://mainnet.hsk.xyz)
- *  PAYLINK_FACTORY_V2           Deployed factory address (Base)
+ *  PRIVATE_RPC_URL_ARB          Arbitrum RPC (falls back to public Arbitrum RPC)
+ *  PAYLINK_FACTORY_V2           Deployed factory address (Base / shared universal)
  *  PAYLINK_FACTORY_V2_ARC       Factory on Arc  (falls back to PAYLINK_FACTORY_V2)
  *  PAYLINK_FACTORY_V2_HASHKEY   Factory on HashKey (falls back to PAYLINK_FACTORY_V2)
+ *  PAYLINK_FACTORY_V2_ARB       Factory on Arbitrum (falls back to PAYLINK_FACTORY_V2)
  */
 
 import type { Request, Response } from 'express'
@@ -30,7 +35,7 @@ import {
   parseAbi,
   defineChain,
 } from 'viem'
-import { base } from 'viem/chains'
+import { base, arbitrum as arbitrumChainDef } from 'viem/chains'
 import { privateKeyToAccount } from 'viem/accounts'
 
 // ─── Chain definitions ────────────────────────────────────────────────────────
@@ -127,8 +132,8 @@ export default async function handler(req: Request, res: Response) {
   const { linkId, recipient, chain: chainParam = 'base' } =
     (req.body ?? {}) as Record<string, string>
 
-  const chainKey = (['arc', 'hashkey'] as const).includes(chainParam as 'arc' | 'hashkey')
-    ? (chainParam as 'arc' | 'hashkey')
+  const chainKey = (['arc', 'hashkey', 'arbitrum'] as const).includes(chainParam as 'arc' | 'hashkey' | 'arbitrum')
+    ? (chainParam as 'arc' | 'hashkey' | 'arbitrum')
     : 'base'
 
   if (!isBytes32(linkId))
@@ -141,18 +146,24 @@ export default async function handler(req: Request, res: Response) {
     ? (process.env.RELAYER_PRIVATE_KEY_ARC     ?? process.env.RELAYER_PRIVATE_KEY)
     : chainKey === 'hashkey'
     ? (process.env.RELAYER_PRIVATE_KEY_HASHKEY ?? process.env.RELAYER_PRIVATE_KEY)
+    : chainKey === 'arbitrum'
+    ? (process.env.RELAYER_PRIVATE_KEY_ARB     ?? process.env.RELAYER_PRIVATE_KEY)
     : process.env.RELAYER_PRIVATE_KEY
 
   const rpcUrl = chainKey === 'arc'
     ? (process.env.PRIVATE_RPC_URL_ARC     ?? 'https://rpc.testnet.arc.network')
     : chainKey === 'hashkey'
     ? (process.env.PRIVATE_RPC_URL_HASHKEY ?? 'https://mainnet.hsk.xyz')
+    : chainKey === 'arbitrum'
+    ? (process.env.PRIVATE_RPC_URL_ARB     ?? 'https://arb1.arbitrum.io/rpc')
     : process.env.PRIVATE_RPC_URL
 
   const factoryAddr = chainKey === 'arc'
     ? (process.env.PAYLINK_FACTORY_V2_ARC     ?? process.env.PAYLINK_FACTORY_V2)
     : chainKey === 'hashkey'
     ? (process.env.PAYLINK_FACTORY_V2_HASHKEY ?? process.env.PAYLINK_FACTORY_V2)
+    : chainKey === 'arbitrum'
+    ? (process.env.PAYLINK_FACTORY_V2_ARB     ?? process.env.PAYLINK_FACTORY_V2)
     : process.env.PAYLINK_FACTORY_V2
 
   if (!rawKey)      return res.status(500).json({ ok: false, error: 'RELAYER_PRIVATE_KEY not configured' })
@@ -162,7 +173,7 @@ export default async function handler(req: Request, res: Response) {
 
   // ── Clients ───────────────────────────────────────────────────────────────
   const account    = privateKeyToAccount(rawKey as `0x${string}`)
-  const viemChain  = chainKey === 'arc' ? arcChain : chainKey === 'hashkey' ? hashkeyChain : base
+  const viemChain  = chainKey === 'arc' ? arcChain : chainKey === 'hashkey' ? hashkeyChain : chainKey === 'arbitrum' ? arbitrumChainDef : base
 
   const publicClient = createPublicClient({ chain: viemChain, transport: http(rpcUrl) })
   const walletClient = createWalletClient({ account, chain: viemChain, transport: http(rpcUrl) })
@@ -187,6 +198,23 @@ export default async function handler(req: Request, res: Response) {
         ok:               true,
         txHash,
         gasReimbNative:   gasReimbNative.toString(),
+      })
+    } else if (chainKey === 'arbitrum') {
+      // ── ERC-20 GHO relay (Arbitrum One) ──────────────────────────────────
+      // GHO has 18 decimals. Contract MAX_GAS_REIMB = 1_000_000 (≈ 0 GHO) so
+      // gas reimb is passed as 0 — Arbitrum relay costs ~$0.02 which is negligible.
+      txHash = await walletClient.writeContract({
+        address:      factoryAddr as `0x${string}`,
+        abi:          RELAY_ABI,
+        functionName: 'relay',
+        args:         [linkId as `0x${string}`, recipient as `0x${string}`, 0n],
+        gas:          400_000n,
+      })
+
+      return res.status(200).json({
+        ok:           true,
+        txHash,
+        gasReimbUsdc: '0',
       })
     } else {
       // ── ERC-20 USDC relay (Base / Arc) ────────────────────────────────────

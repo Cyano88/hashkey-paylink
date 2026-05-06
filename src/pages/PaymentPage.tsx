@@ -50,7 +50,7 @@ import { computeStarkGhostAddress } from '../lib/starknet-ghost'
 import { cn, truncateAddress, formatAmount, memoToHex, copyToClipboard } from '../lib/utils'
 import { getFxMeta, formatLocalAmt, fetchFxRate } from '../lib/fx'
 
-const CHAINS: ChainKey[] = ['base', 'starknet', 'arc', 'solana', 'ethereum']
+const CHAINS: ChainKey[] = ['base', 'starknet', 'arc', 'solana', 'arbitrum']
 
 const CHAIN_DISPLAY_NAMES: Record<number, string> = {
   1:       'Ethereum',
@@ -202,7 +202,7 @@ export default function PaymentPage() {
 
   // netParam (from new link format) takes priority; legacy chain param as fallback
   const [chain, setChain] = useState<ChainKey>(() => {
-    if (netParam === 'base' || netParam === 'starknet' || netParam === 'hashkey' || netParam === 'arc' || netParam === 'solana' || netParam === 'ethereum') return netParam
+    if (netParam === 'base' || netParam === 'starknet' || netParam === 'hashkey' || netParam === 'arc' || netParam === 'solana' || netParam === 'arbitrum') return netParam
     if (legacyChain === 'base' || legacyChain === 'starknet' || legacyChain === 'hashkey' || legacyChain === 'arc') return legacyChain
     if (resolvedStark && !resolvedEvm) return 'starknet'
     if (resolvedSolana && !resolvedEvm && !resolvedStark) return 'solana'
@@ -282,7 +282,7 @@ export default function PaymentPage() {
   )
 
   // ── Direct Send state (shared across Base, Arc, Starknet) ────────────────
-  const [payMode,          setPayMode]          = useState<'wallet' | 'direct'>((chain === 'starknet' || chain === 'ethereum') ? 'wallet' : 'direct')
+  const [payMode,          setPayMode]          = useState<'wallet' | 'direct'>((chain === 'starknet' || chain === 'arbitrum') ? 'wallet' : 'direct')
   const [directLinkId,     setDirectLinkId]     = useState<string | null>(null)
   // EVM chains (Base / Arc): the CREATE2 ghost vault address
   const [directVault,      setDirectVault]      = useState<`0x${string}` | null>(null)
@@ -320,14 +320,14 @@ export default function PaymentPage() {
   const { isLoading: isEvmConfirming, isSuccess: isEvmConfirmed, isError: isEvmReverted } =
     useWaitForTransactionReceipt({ hash: evmTxHash })
 
-  // ── GHO relay state (Ethereum — relayer submits tx on payer's behalf) ──────
+  // ── GHO relay state (Arbitrum — relayer submits tx on payer's behalf) ──────
   const [ghoRelayHash,    setGhoRelayHash]    = useState<`0x${string}` | undefined>(undefined)
   const [ghoRelayPending, setGhoRelayPending] = useState(false)
   const [ghoRelayError,   setGhoRelayError]   = useState<string | null>(null)
   const [ghoGasEstimate,  setGhoGasEstimate]  = useState<bigint>(0n)
 
   const { isLoading: isGhoConfirming, isSuccess: isGhoConfirmed } =
-    useWaitForTransactionReceipt({ hash: ghoRelayHash, chainId: 1 })
+    useWaitForTransactionReceipt({ hash: ghoRelayHash, chainId: 42161 })
 
   const { signTypedDataAsync, isPending: isSignPending, reset: resetPermitSign } = useSignTypedData()
 
@@ -336,18 +336,18 @@ export default function PaymentPage() {
   const { data: permitNonce } = useReadContract({
     address: chain === 'base'
       ? CHAIN_META.base.tokenAddress
-      : chain === 'ethereum'
-      ? CHAIN_META.ethereum.tokenAddress
+      : chain === 'arbitrum'
+      ? CHAIN_META.arbitrum.tokenAddress
       : CHAIN_META.arc.tokenAddress,
     abi: NONCES_ABI,
     functionName: 'nonces',
     args: [address ?? '0x0000000000000000000000000000000000000000'],
     chainId: (chain === 'base'
       ? CHAIN_META.base.chainId
-      : chain === 'ethereum'
-      ? CHAIN_META.ethereum.chainId
+      : chain === 'arbitrum'
+      ? CHAIN_META.arbitrum.chainId
       : CHAIN_META.arc.chainId) as number,
-    query: { enabled: (chain === 'base' || chain === 'arc' || chain === 'ethereum') && !!address },
+    query: { enabled: (chain === 'base' || chain === 'arc' || chain === 'arbitrum') && !!address },
   })
 
   // ── Starknet ──────────────────────────────────────────────────────────────
@@ -382,7 +382,7 @@ export default function PaymentPage() {
   const targetChainId =
     chain === 'base'     ? CHAIN_META.base.chainId     :
     chain === 'arc'      ? CHAIN_META.arc.chainId      :
-    chain === 'ethereum' ? CHAIN_META.ethereum.chainId :
+    chain === 'arbitrum' ? CHAIN_META.arbitrum.chainId :
     CHAIN_META.hashkey.chainId
   const isCorrectNetwork = isEvmChain ? chainId === targetChainId : true
   const feeAmount        = (parseFloat(effectiveAmt) || 0) * (PLATFORM_FEE_BPS / 10_000)
@@ -555,7 +555,7 @@ export default function PaymentPage() {
 
   // ── Reset payMode on chain switch: Starknet wallet-only, all others direct ─
   useEffect(() => {
-    setPayMode((chain === 'starknet' || chain === 'ethereum') ? 'wallet' : 'direct')
+    setPayMode((chain === 'starknet' || chain === 'arbitrum') ? 'wallet' : 'direct')
   }, [chain])
 
   // ── V2 EVM: Generate linkId + compute ghost vault address ─────────────────
@@ -864,9 +864,9 @@ export default function PaymentPage() {
     setTimeout(() => setAddrCopied(false), 3000)
   }
 
-  // ── Fetch GHO gas estimate when Ethereum chain is active ─────────────────
+  // ── Fetch GHO gas estimate when Arbitrum chain is active ─────────────────
   useEffect(() => {
-    if (chain !== 'ethereum') return
+    if (chain !== 'arbitrum') return
     fetch('/api/relay-gho')
       .then(r => r.json())
       .then((d: { ok: boolean; gasReimbGho?: string }) => {
@@ -875,13 +875,13 @@ export default function PaymentPage() {
       .catch(() => {})
   }, [chain])
 
-  // ── GHO relay pay (Ethereum — relayer submits tx, payer only signs) ───────
+  // ── GHO relay pay (Arbitrum — relayer submits tx, payer only signs) ───────
   async function handleGhoRelayPay() {
     if (!address || !activeRecipient) return
     setGhoRelayError(null)
     setGhoRelayPending(true)
 
-    const tokenAddress = CHAIN_META.ethereum.tokenAddress
+    const tokenAddress = CHAIN_META.arbitrum.tokenAddress
     const totalUnits   = parseUnits(effectiveAmt || '0', 18)
     const deadline     = BigInt(Math.floor(Date.now() / 1000) + 3600)
     const nonce        = permitNonce ?? 0n
@@ -895,7 +895,7 @@ export default function PaymentPage() {
 
     try {
       const sig = await signTypedDataAsync({
-        domain: { name: 'Gho Token', version: '1', chainId: 1, verifyingContract: tokenAddress },
+        domain: { name: 'Gho Token', version: '1', chainId: 42161, verifyingContract: tokenAddress },
         types: {
           Permit: [
             { name: 'owner',    type: 'address' },
@@ -937,7 +937,7 @@ export default function PaymentPage() {
   // ── Payment handlers ──────────────────────────────────────────────────────
   async function handlePay() {
     if (!activeRecipient) return
-    if (chain === 'ethereum') await handleGhoRelayPay()
+    if (chain === 'arbitrum') await handleGhoRelayPay()
     else if (chain === 'base' || chain === 'arc') await handleEvmPermitPay()
     else if (chain === 'starknet') handleStarknetPay()
     else if (chain === 'solana') await handleSolanaPay()
@@ -993,7 +993,7 @@ export default function PaymentPage() {
 
   async function handleEvmPermitPay() {
     if (!address) return
-    const meta_       = chain === 'arc' ? CHAIN_META.arc : chain === 'ethereum' ? CHAIN_META.ethereum : CHAIN_META.base
+    const meta_       = chain === 'arc' ? CHAIN_META.arc : chain === 'arbitrum' ? CHAIN_META.arbitrum : CHAIN_META.base
     const tokenAddress = meta_.tokenAddress
     const deadline     = BigInt(Math.floor(Date.now() / 1000) + 3600)
     const totalUnits   = parseUnits(effectiveAmt || '0', meta_.decimals)
@@ -1004,7 +1004,7 @@ export default function PaymentPage() {
     // GHO EIP-712 domain: name="Gho Token", version="1"
     const permitDomain = chain === 'arc'
       ? { name: 'USDC',      version: '2', chainId: targetChainId, verifyingContract: tokenAddress }
-      : chain === 'ethereum'
+      : chain === 'arbitrum'
       ? { name: 'Gho Token', version: '1', chainId: targetChainId, verifyingContract: tokenAddress }
       : { name: 'USD Coin',  version: '2', chainId: targetChainId, verifyingContract: tokenAddress }
     try {
@@ -1100,19 +1100,19 @@ export default function PaymentPage() {
   // ── Unified aliases ───────────────────────────────────────────────────────
   // directStatus === 'success' is included so EVM Send-via-Address relay
   // immediately transitions to the full-screen success card (same as Solana).
-  const isConfirmed     = (chain === 'starknet' ? isStarkConfirmed : chain === 'solana' ? isSolanaConfirmed : chain === 'ethereum' ? isGhoConfirmed : isEvmConfirmed) || manualPayDetected || directStatus === 'success'
+  const isConfirmed     = (chain === 'starknet' ? isStarkConfirmed : chain === 'solana' ? isSolanaConfirmed : chain === 'arbitrum' ? isGhoConfirmed : isEvmConfirmed) || manualPayDetected || directStatus === 'success'
   const txHash          = directStatus === 'success'   ? (directTxHash as `0x${string}` | null)
                         : manualPayDetected            ? manualTxHash
                         : chain === 'starknet'         ? starkTxHash
                         : chain === 'solana'           ? solanaTxHash
-                        : chain === 'ethereum'         ? (ghoRelayHash ?? null)
+                        : chain === 'arbitrum'         ? (ghoRelayHash ?? null)
                         : evmTxHash
-  const isWalletPending = chain === 'starknet' ? isStarkPending   : chain === 'solana' ? isSolanaPending   : chain === 'ethereum' ? (ghoRelayPending || isSignPending) : isEvmWalletPending || isSignPending
-  const isConfirming    = chain === 'starknet' ? isStarkConfirming : chain === 'solana' ? isSolanaConfirming : chain === 'ethereum' ? isGhoConfirming : isEvmConfirming
-  const isSendError     = chain === 'starknet' ? !!starkError : chain === 'solana' ? !!solanaError : chain === 'ethereum' ? !!ghoRelayError : (isEvmSendError || isEvmReverted)
+  const isWalletPending = chain === 'starknet' ? isStarkPending   : chain === 'solana' ? isSolanaPending   : chain === 'arbitrum' ? (ghoRelayPending || isSignPending) : isEvmWalletPending || isSignPending
+  const isConfirming    = chain === 'starknet' ? isStarkConfirming : chain === 'solana' ? isSolanaConfirming : chain === 'arbitrum' ? isGhoConfirming : isEvmConfirming
+  const isSendError     = chain === 'starknet' ? !!starkError : chain === 'solana' ? !!solanaError : chain === 'arbitrum' ? !!ghoRelayError : (isEvmSendError || isEvmReverted)
   const sendErrorMsg    = chain === 'starknet' ? starkError
                         : chain === 'solana'   ? solanaError
-                        : chain === 'ethereum' ? ghoRelayError
+                        : chain === 'arbitrum' ? ghoRelayError
                         : isEvmReverted
                           ? 'Transaction reverted. The permit may have expired or your USDC balance was insufficient.'
                           : (evmSendError?.message ?? 'An unknown error occurred').slice(0, 140)
@@ -1694,7 +1694,7 @@ export default function PaymentPage() {
                    chain === 'starknet' ? 'Starknet Mainnet'  :
                    chain === 'arc'      ? 'Arc Economic OS'   :
                    chain === 'solana'   ? 'Solana Mainnet'    :
-                   chain === 'ethereum' ? 'Ethereum Mainnet'  :
+                   chain === 'arbitrum' ? 'Arbitrum One'      :
                                          'HashKey Chain'}
                 </span>
               }
@@ -1707,7 +1707,7 @@ export default function PaymentPage() {
                 {feeAmount > 0 && effectiveAmt ? `${feeAmount.toFixed(meta.decimals <= 6 ? 4 : 6)} ${meta.asset}` : '—'}
               </span>
             </div>
-            {chain === 'ethereum' && (
+            {chain === 'arbitrum' && payMode === 'wallet' && (
               <div className="flex items-center justify-between bg-gray-50/60 px-4 py-2 border-t border-dashed border-gray-100">
                 <span className="text-[11px] font-normal text-slate-400 tracking-wide">Gas reimb (relayer pays ETH)</span>
                 <span className="font-mono text-[11px] text-slate-400">
@@ -1717,11 +1717,11 @@ export default function PaymentPage() {
                 </span>
               </div>
             )}
-            {chain === 'ethereum' && parseFloat(effectiveAmt || '0') < 5 && parseFloat(effectiveAmt || '0') > 0 && (
+            {chain === 'arbitrum' && parseFloat(effectiveAmt || '0') < 1 && parseFloat(effectiveAmt || '0') > 0 && (
               <div className="flex items-center gap-2 border-t border-amber-200 bg-amber-50 dark:border-amber-400/20 dark:bg-amber-400/10 px-4 py-2.5">
                 <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500 dark:text-amber-400" />
                 <span className="text-[11px] text-amber-700 dark:text-amber-300">
-                  Minimum $5 GHO recommended on Ethereum to keep gas overhead reasonable.
+                  Minimum 1 GHO recommended to keep relay costs proportional.
                 </span>
               </div>
             )}

@@ -7,7 +7,7 @@
  */
 
 import { createPublicClient, http } from 'viem'
-import { base, mainnet } from 'viem/chains'
+import { base, arbitrum } from 'viem/chains'
 import { hashkeyMainnet, arcChain } from './chains'
 
 // ─── Stable public clients ────────────────────────────────────────────────────
@@ -15,7 +15,7 @@ export const EVM_CLIENTS = {
   base:     createPublicClient({ chain: base,           transport: http('https://mainnet.base.org') }),
   hashkey:  createPublicClient({ chain: hashkeyMainnet, transport: http('https://mainnet.hsk.xyz')  }),
   arc:      createPublicClient({ chain: arcChain,       transport: http('https://rpc.testnet.arc.network') }),
-  ethereum: createPublicClient({ chain: mainnet,        transport: http() }),
+  arbitrum: createPublicClient({ chain: arbitrum,       transport: http('https://arb1.arbitrum.io/rpc') }),
 } as const
 
 // ─── Factory addresses ────────────────────────────────────────────────────────
@@ -93,10 +93,11 @@ export const ERC20_BALANCE_OF_ABI = [{
  * All three chains fall back to VITE_FACTORY_V2 if their dedicated var is not
  * set — useful once the deterministic factory is deployed (same address everywhere).
  */
-export const FACTORY_V2_ADDRESSES: Partial<Record<'base' | 'arc' | 'hashkey', `0x${string}`>> = {
-  base:    (import.meta.env.VITE_FACTORY_V2         ?? '') as `0x${string}`,
-  arc:     (import.meta.env.VITE_FACTORY_V2_ARC     ?? import.meta.env.VITE_FACTORY_V2 ?? '') as `0x${string}`,
-  hashkey: (import.meta.env.VITE_FACTORY_V2_HASHKEY ?? import.meta.env.VITE_FACTORY_V2 ?? '') as `0x${string}`,
+export const FACTORY_V2_ADDRESSES: Partial<Record<'base' | 'arc' | 'hashkey' | 'arbitrum', `0x${string}`>> = {
+  base:     (import.meta.env.VITE_FACTORY_V2         ?? '') as `0x${string}`,
+  arc:      (import.meta.env.VITE_FACTORY_V2_ARC     ?? import.meta.env.VITE_FACTORY_V2 ?? '') as `0x${string}`,
+  hashkey:  (import.meta.env.VITE_FACTORY_V2_HASHKEY ?? import.meta.env.VITE_FACTORY_V2 ?? '') as `0x${string}`,
+  arbitrum: (import.meta.env.VITE_FACTORY_V2_ARB     ?? import.meta.env.VITE_FACTORY_V2 ?? '') as `0x${string}`,
 }
 
 /** Convenience alias — Base factory address (backward compat). */

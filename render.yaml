@@ -29,6 +29,16 @@ services:
       - key: PRIVATE_RPC_URL
         sync: false                   # Alchemy backend RPC key (high rate limit)
 
+      # ── Arbitrum + GHO relayer (api/relay-gho.ts + api/relay-v2.ts) ─────────
+      - key: RELAYER_PRIVATE_KEY_ARB
+        sync: false                   # Arbitrum relayer key — wallet needs ETH on Arbitrum
+      - key: PRIVATE_RPC_URL_ARB
+        value: "https://arb1.arbitrum.io/rpc"   # swap for Alchemy/QuickNode in prod
+      - key: PAYLINK_FACTORY_V2_ARB
+        sync: false                   # factory address from deploy-factory-deterministic --network arbitrum
+      - key: VITE_FACTORY_V2_ARB
+        sync: false                   # same value — exposed to browser for vault address computation
+
       # ── V1 sweep keeper (api/sweep.ts + api/sweep-keeper.ts) ──────────────
       - key: KEEPER_PRIVATE_KEY
         sync: false                   # 0x-prefixed keeper wallet private key
