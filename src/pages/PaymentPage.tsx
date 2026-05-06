@@ -320,6 +320,15 @@ export default function PaymentPage() {
   const { isLoading: isEvmConfirming, isSuccess: isEvmConfirmed, isError: isEvmReverted } =
     useWaitForTransactionReceipt({ hash: evmTxHash })
 
+  // ── GHO relay state (Ethereum — relayer submits tx on payer's behalf) ──────
+  const [ghoRelayHash,    setGhoRelayHash]    = useState<`0x${string}` | undefined>(undefined)
+  const [ghoRelayPending, setGhoRelayPending] = useState(false)
+  const [ghoRelayError,   setGhoRelayError]   = useState<string | null>(null)
+  const [ghoGasEstimate,  setGhoGasEstimate]  = useState<bigint>(0n)
+
+  const { isLoading: isGhoConfirming, isSuccess: isGhoConfirmed } =
+    useWaitForTransactionReceipt({ hash: ghoRelayHash, chainId: 1 })
+
   const { signTypedDataAsync, isPending: isSignPending, reset: resetPermitSign } = useSignTypedData()
 
   const { writeContract: callSweep, isPending: isSweeping } = useWriteContract()
@@ -855,10 +864,82 @@ export default function PaymentPage() {
     setTimeout(() => setAddrCopied(false), 3000)
   }
 
+  // ── Fetch GHO gas estimate when Ethereum chain is active ─────────────────
+  useEffect(() => {
+    if (chain !== 'ethereum') return
+    fetch('/api/relay-gho')
+      .then(r => r.json())
+      .then((d: { ok: boolean; gasReimbGho?: string }) => {
+        if (d.gasReimbGho) setGhoGasEstimate(BigInt(d.gasReimbGho))
+      })
+      .catch(() => {})
+  }, [chain])
+
+  // ── GHO relay pay (Ethereum — relayer submits tx, payer only signs) ───────
+  async function handleGhoRelayPay() {
+    if (!address || !activeRecipient) return
+    setGhoRelayError(null)
+    setGhoRelayPending(true)
+
+    const tokenAddress = CHAIN_META.ethereum.tokenAddress
+    const totalUnits   = parseUnits(effectiveAmt || '0', 18)
+    const deadline     = BigInt(Math.floor(Date.now() / 1000) + 3600)
+    const nonce        = permitNonce ?? 0n
+
+    // Refresh gas estimate just before signing so it's accurate
+    let gasReimbGho = ghoGasEstimate
+    try {
+      const est = await fetch('/api/relay-gho').then(r => r.json()) as { ok: boolean; gasReimbGho?: string }
+      if (est.gasReimbGho) { gasReimbGho = BigInt(est.gasReimbGho); setGhoGasEstimate(gasReimbGho) }
+    } catch { /* use cached */ }
+
+    try {
+      const sig = await signTypedDataAsync({
+        domain: { name: 'Gho Token', version: '1', chainId: 1, verifyingContract: tokenAddress },
+        types: {
+          Permit: [
+            { name: 'owner',    type: 'address' },
+            { name: 'spender',  type: 'address' },
+            { name: 'value',    type: 'uint256' },
+            { name: 'nonce',    type: 'uint256' },
+            { name: 'deadline', type: 'uint256' },
+          ],
+        },
+        primaryType: 'Permit',
+        message: { owner: address, spender: MULTICALL3_ADDRESS, value: totalUnits, nonce, deadline },
+      })
+
+      const { v, r, s } = parseSignature(sig)
+
+      const relayRes = await fetch('/api/relay-gho', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          owner:       address,
+          recipient:   activeRecipient,
+          amount:      totalUnits.toString(),
+          deadline:    deadline.toString(),
+          v:           Number(v),
+          r,
+          s,
+          gasReimbGho: gasReimbGho.toString(),
+        }),
+      })
+      const data = await relayRes.json() as { ok: boolean; txHash?: `0x${string}`; error?: string }
+      if (!data.ok || !data.txHash) throw new Error(data.error ?? 'Relay failed')
+      setGhoRelayHash(data.txHash)
+    } catch (err) {
+      setGhoRelayError(err instanceof Error ? friendlyErrorMsg(err.message) : 'Relay failed')
+    } finally {
+      setGhoRelayPending(false)
+    }
+  }
+
   // ── Payment handlers ──────────────────────────────────────────────────────
   async function handlePay() {
     if (!activeRecipient) return
-    if (chain === 'base' || chain === 'arc' || chain === 'ethereum') await handleEvmPermitPay()
+    if (chain === 'ethereum') await handleGhoRelayPay()
+    else if (chain === 'base' || chain === 'arc') await handleEvmPermitPay()
     else if (chain === 'starknet') handleStarknetPay()
     else if (chain === 'solana') await handleSolanaPay()
     else handleHashKeyPay()
@@ -1020,17 +1101,19 @@ export default function PaymentPage() {
   // ── Unified aliases ───────────────────────────────────────────────────────
   // directStatus === 'success' is included so EVM Send-via-Address relay
   // immediately transitions to the full-screen success card (same as Solana).
-  const isConfirmed     = (chain === 'starknet' ? isStarkConfirmed : chain === 'solana' ? isSolanaConfirmed : isEvmConfirmed) || manualPayDetected || directStatus === 'success'
+  const isConfirmed     = (chain === 'starknet' ? isStarkConfirmed : chain === 'solana' ? isSolanaConfirmed : chain === 'ethereum' ? isGhoConfirmed : isEvmConfirmed) || manualPayDetected || directStatus === 'success'
   const txHash          = directStatus === 'success'   ? (directTxHash as `0x${string}` | null)
                         : manualPayDetected            ? manualTxHash
                         : chain === 'starknet'         ? starkTxHash
                         : chain === 'solana'           ? solanaTxHash
+                        : chain === 'ethereum'         ? (ghoRelayHash ?? null)
                         : evmTxHash
-  const isWalletPending = chain === 'starknet' ? isStarkPending   : chain === 'solana' ? isSolanaPending   : isEvmWalletPending || isSignPending
-  const isConfirming    = chain === 'starknet' ? isStarkConfirming : chain === 'solana' ? isSolanaConfirming : isEvmConfirming
-  const isSendError     = chain === 'starknet' ? !!starkError : chain === 'solana' ? !!solanaError : (isEvmSendError || isEvmReverted)
+  const isWalletPending = chain === 'starknet' ? isStarkPending   : chain === 'solana' ? isSolanaPending   : chain === 'ethereum' ? (ghoRelayPending || isSignPending) : isEvmWalletPending || isSignPending
+  const isConfirming    = chain === 'starknet' ? isStarkConfirming : chain === 'solana' ? isSolanaConfirming : chain === 'ethereum' ? isGhoConfirming : isEvmConfirming
+  const isSendError     = chain === 'starknet' ? !!starkError : chain === 'solana' ? !!solanaError : chain === 'ethereum' ? !!ghoRelayError : (isEvmSendError || isEvmReverted)
   const sendErrorMsg    = chain === 'starknet' ? starkError
                         : chain === 'solana'   ? solanaError
+                        : chain === 'ethereum' ? ghoRelayError
                         : isEvmReverted
                           ? 'Transaction reverted. The permit may have expired or your USDC balance was insufficient.'
                           : (evmSendError?.message ?? 'An unknown error occurred').slice(0, 140)
@@ -1625,6 +1708,16 @@ export default function PaymentPage() {
                 {feeAmount > 0 && effectiveAmt ? `${feeAmount.toFixed(meta.decimals <= 6 ? 4 : 6)} ${meta.asset}` : '—'}
               </span>
             </div>
+            {chain === 'ethereum' && (
+              <div className="flex items-center justify-between bg-gray-50/60 px-4 py-2 border-t border-dashed border-gray-100">
+                <span className="text-[11px] font-normal text-slate-400 tracking-wide">Gas reimb (relayer pays ETH)</span>
+                <span className="font-mono text-[11px] text-slate-400">
+                  {ghoGasEstimate > 0n
+                    ? `~${(Number(ghoGasEstimate) / 1e18).toFixed(4)} GHO`
+                    : '…'}
+                </span>
+              </div>
+            )}
             {memo && <Row label="Memo (on-chain)" value={memo.length > 28 ? memo.slice(0, 28) + '…' : memo} />}
           </div>
 
@@ -2014,6 +2107,7 @@ export default function PaymentPage() {
                   : 'bg-black text-white shadow-button hover:bg-gray-800 hover:shadow-md active:scale-[0.98]',
               )}>
               {isSignPending        ? <><Loader2 className="h-4 w-4 animate-spin" /> Sign Permit in Wallet…</>
+              : ghoRelayPending     ? <><Loader2 className="h-4 w-4 animate-spin" /> Relaying via HashPayLink…</>
               : isEvmWalletPending  ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirm in Wallet…</>
               : isConfirming        ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirming on Chain…</>
               : isSweeping          ? <><Loader2 className="h-4 w-4 animate-spin" /> Routing payment…</>
