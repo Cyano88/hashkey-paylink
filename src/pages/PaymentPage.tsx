@@ -1892,11 +1892,24 @@ export default function PaymentPage() {
                     <p className="text-[11px] font-medium text-emerald-700">Monitoring for {meta.asset} — detects in under 3 seconds</p>
                   </div>
                   <p className="text-center text-xs text-gray-500">Send USDC on Solana to this address</p>
-                  <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3.5">
+                  <div className={cn(
+                    'flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3.5 transition-opacity duration-200',
+                    isEventMode && !attendeeName.trim() && 'opacity-40',
+                  )}>
                     <p className="min-w-0 flex-1 break-all font-mono text-xs text-gray-800">{solanaVaultAddr}</p>
                     <button
-                      onClick={() => { navigator.clipboard.writeText(solanaVaultAddr!); setSolanaAddrCopied(true); setTimeout(() => setSolanaAddrCopied(false), 2500) }}
-                      className="ml-2 shrink-0 flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 transition-all active:scale-90"
+                      onClick={() => {
+                        if (isEventMode && !attendeeName.trim()) return
+                        navigator.clipboard.writeText(solanaVaultAddr!)
+                        setSolanaAddrCopied(true)
+                        setTimeout(() => setSolanaAddrCopied(false), 2500)
+                      }}
+                      className={cn(
+                        'ml-2 shrink-0 flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-600 transition-all',
+                        isEventMode && !attendeeName.trim()
+                          ? 'cursor-not-allowed'
+                          : 'hover:bg-gray-100 active:scale-90',
+                      )}
                     >
                       {solanaAddrCopied
                         ? <><CheckCheck className="h-3.5 w-3.5 text-emerald-500" /> Copied!</>
@@ -2032,7 +2045,7 @@ export default function PaymentPage() {
               <div className="space-y-2">
                 <button
                   onClick={connectSolana}
-                  disabled={isSolanaConnecting}
+                  disabled={isSolanaConnecting || (isEventMode && !attendeeName.trim())}
                   className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#14F195] px-6 py-4 text-sm font-semibold text-gray-900 transition-all hover:bg-[#00E589] active:scale-[0.98] disabled:opacity-60"
                 >
                   {isSolanaConnecting
@@ -2079,7 +2092,10 @@ export default function PaymentPage() {
               </button>
             )
           ) : payMode === 'wallet' && !isConnected ? (
-            <div className="flex justify-center">
+            <div className={cn(
+              'flex justify-center',
+              isEventMode && !attendeeName.trim() && 'pointer-events-none opacity-50 select-none',
+            )}>
               <ConnectButton label="Connect Wallet to Pay" />
             </div>
           ) : payMode === 'wallet' && !isCorrectNetwork ? (
