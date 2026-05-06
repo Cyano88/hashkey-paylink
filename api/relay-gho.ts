@@ -40,7 +40,7 @@ const TREASURY     = '0xcE5dF9e1115F81a2Fc2F65941B20B820d508e753' as `0x${string
 const PLATFORM_FEE_BPS  = 20n          // 0.2%
 const ESTIMATED_GAS     = 200_000n     // Multicall3 + permit + 3x transferFrom (~170k actual + buffer)
 const MAX_GAS_REIMB_GHO = parseUnits('20', 18)  // 20 GHO cap (~$20)
-const MIN_GAS_REIMB_GHO = parseUnits('1', 18)   // 1 GHO floor (prevents dust attacks)
+const MIN_GAS_REIMB_GHO = parseUnits('0.1', 18)  // 0.1 GHO floor
 const FALLBACK_ETH_USD  = 3_000n
 
 // ─── ABIs ─────────────────────────────────────────────────────────────────────
