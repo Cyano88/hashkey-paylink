@@ -20,7 +20,7 @@ import { privateKeyToAccount } from 'viem/accounts'
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
-const FACTORY = '0x9439D7f770B2AEBAD9d0D05f2C713F0dB6b812ba' as const
+const FACTORY = '0x163c3B1695e439d20D99Bb344554c5B64965c446' as const
 const USDC    = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' as const
 
 // Block the factory was deployed — avoids scanning from genesis.
