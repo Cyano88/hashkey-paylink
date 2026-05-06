@@ -1554,7 +1554,7 @@ export default function PaymentPage() {
                   placeholder="0.00"
                   value={fxInputMode === 'local' ? localAmt : flexAmt}
                   onChange={e => fxInputMode === 'local' ? setLocalAmt(e.target.value) : setFlexAmt(e.target.value)}
-                  className="w-40 text-center text-[2.75rem] font-bold leading-none tracking-tight text-gray-900 bg-transparent border-b-2 border-gray-300 focus:border-gray-500 outline-none"
+                  className="w-40 text-center text-[2.75rem] font-bold leading-none tracking-tight text-gray-900 dark:text-white bg-transparent border-b-2 border-gray-300 dark:border-white/30 focus:border-gray-500 dark:focus:border-white/60 outline-none"
                 />
                 <span className="absolute left-full top-1/2 -translate-y-1/2 pl-2 text-xl font-semibold text-gray-400 whitespace-nowrap">
                   {fxInputMode === 'local' ? (getFxMeta(fxCurrency)?.symbol ?? fxCurrency) : meta.asset}
@@ -1598,7 +1598,7 @@ export default function PaymentPage() {
           {!isFlex && (
             <>
               <div className="flex items-baseline justify-center gap-2">
-                <span className="text-[2.75rem] font-bold leading-none tracking-tight text-gray-900">{formatAmount(effectiveAmt, meta.decimals)}</span>
+                <span className="text-[2.75rem] font-bold leading-none tracking-tight text-gray-900 dark:text-white">{formatAmount(effectiveAmt, meta.decimals)}</span>
                 <span className="text-xl font-semibold text-gray-400">{meta.asset}</span>
               </div>
               {memo && (
@@ -1718,9 +1718,9 @@ export default function PaymentPage() {
               </div>
             )}
             {chain === 'ethereum' && parseFloat(effectiveAmt || '0') < 5 && parseFloat(effectiveAmt || '0') > 0 && (
-              <div className="flex items-center gap-2 border-t border-amber-100 bg-amber-50/60 px-4 py-2.5">
-                <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" />
-                <span className="text-[11px] text-amber-700">
+              <div className="flex items-center gap-2 border-t border-amber-200 bg-amber-50 dark:border-amber-400/20 dark:bg-amber-400/10 px-4 py-2.5">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500 dark:text-amber-400" />
+                <span className="text-[11px] text-amber-700 dark:text-amber-300">
                   Minimum $5 GHO recommended on Ethereum to keep gas overhead reasonable.
                 </span>
               </div>
