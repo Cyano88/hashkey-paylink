@@ -202,7 +202,7 @@ export default function PaymentPage() {
 
   // netParam (from new link format) takes priority; legacy chain param as fallback
   const [chain, setChain] = useState<ChainKey>(() => {
-    if (netParam === 'base' || netParam === 'starknet' || netParam === 'hashkey' || netParam === 'arc' || netParam === 'solana') return netParam
+    if (netParam === 'base' || netParam === 'starknet' || netParam === 'hashkey' || netParam === 'arc' || netParam === 'solana' || netParam === 'ethereum') return netParam
     if (legacyChain === 'base' || legacyChain === 'starknet' || legacyChain === 'hashkey' || legacyChain === 'arc') return legacyChain
     if (resolvedStark && !resolvedEvm) return 'starknet'
     if (resolvedSolana && !resolvedEvm && !resolvedStark) return 'solana'
