@@ -1,12 +1,12 @@
 import { defineChain } from 'viem'
 import { base } from 'viem/chains'
 
-export type ChainKey = 'base' | 'starknet' | 'hashkey' | 'arc' | 'solana'
+export type ChainKey = 'base' | 'starknet' | 'hashkey' | 'arc' | 'solana' | 'ethereum'
 
 // ─── Platform fee engine ─────────────────────────────────────────────────────
 /** 0.2 % platform fee in basis points (20 bps). Collected via FeeRouter on settlement. */
 export const PLATFORM_FEE_BPS = 20
-/** EVM treasury — receives 0.2% fee on Base, HashKey, Arc */
+/** EVM treasury — receives 0.2% fee on Base, Arc, Ethereum */
 export const EVM_TREASURY = '0xcE5dF9e1115F81a2Fc2F65941B20B820d508e753' as `0x${string}`
 /** Multicall3 — canonical address on all EVM chains; used for atomic permit+split */
 export const MULTICALL3_ADDRESS = '0xcA11bde05977b3631167028862bE2a173976CA11' as `0x${string}`
@@ -182,5 +182,26 @@ export const CHAIN_META = {
     headerBg:     'from-green-50 to-emerald-50',
     dotColor:     'bg-[#14F195]',
     engineLabel:  'Gasless · Fee Sponsored',
+  },
+  ethereum: {
+    key:          'ethereum' as const,
+    label:        'Ethereum',
+    asset:        'GHO',
+    decimals:     18,
+    chainId:      1,
+    // GHO token — Ethereum Mainnet (Aave)
+    tokenAddress: '0x40D16FC0246aD3160Ccc09B8D0D3A2cD28aE6C2f' as `0x${string}`,
+    explorerUrl:  'https://etherscan.io',
+    explorerName: 'Etherscan',
+    // Glow: GHO brand purple #B6509E
+    glowStyle:    '0 0 52px -8px rgba(182,80,158,0.28), 0 0 0 1px rgba(182,80,158,0.14)',
+    accentColor:  '#B6509E',
+    badgeBg:      'bg-pink-50',
+    badgeText:    'text-pink-700',
+    badgeBorder:  'border-pink-200',
+    toggleActive: 'bg-[#B6509E] text-white shadow-sm',
+    headerBg:     'from-pink-50 to-purple-50',
+    dotColor:     'bg-[#B6509E]',
+    engineLabel:  'GHO · Permit Signature',
   },
 } as const

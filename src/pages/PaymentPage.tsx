@@ -50,7 +50,7 @@ import { computeStarkGhostAddress } from '../lib/starknet-ghost'
 import { cn, truncateAddress, formatAmount, memoToHex, copyToClipboard } from '../lib/utils'
 import { getFxMeta, formatLocalAmt, fetchFxRate } from '../lib/fx'
 
-const CHAINS: ChainKey[] = ['base', 'starknet', 'hashkey', 'arc', 'solana']
+const CHAINS: ChainKey[] = ['base', 'starknet', 'arc', 'solana', 'ethereum']
 
 const CHAIN_DISPLAY_NAMES: Record<number, string> = {
   1:       'Ethereum',
@@ -325,12 +325,20 @@ export default function PaymentPage() {
   const { writeContract: callSweep, isPending: isSweeping } = useWriteContract()
 
   const { data: permitNonce } = useReadContract({
-    address: chain === 'base' ? CHAIN_META.base.tokenAddress : CHAIN_META.arc.tokenAddress,
+    address: chain === 'base'
+      ? CHAIN_META.base.tokenAddress
+      : chain === 'ethereum'
+      ? CHAIN_META.ethereum.tokenAddress
+      : CHAIN_META.arc.tokenAddress,
     abi: NONCES_ABI,
     functionName: 'nonces',
     args: [address ?? '0x0000000000000000000000000000000000000000'],
-    chainId: (chain === 'base' ? CHAIN_META.base.chainId : CHAIN_META.arc.chainId) as number,
-    query: { enabled: (chain === 'base' || chain === 'arc') && !!address },
+    chainId: (chain === 'base'
+      ? CHAIN_META.base.chainId
+      : chain === 'ethereum'
+      ? CHAIN_META.ethereum.chainId
+      : CHAIN_META.arc.chainId) as number,
+    query: { enabled: (chain === 'base' || chain === 'arc' || chain === 'ethereum') && !!address },
   })
 
   // ── Starknet ──────────────────────────────────────────────────────────────
@@ -363,8 +371,9 @@ export default function PaymentPage() {
   const isHskOnly     = legacyChain === 'hashkey'
   const meta          = CHAIN_META[chain]
   const targetChainId =
-    chain === 'base'    ? CHAIN_META.base.chainId    :
-    chain === 'arc'     ? CHAIN_META.arc.chainId     :
+    chain === 'base'     ? CHAIN_META.base.chainId     :
+    chain === 'arc'      ? CHAIN_META.arc.chainId      :
+    chain === 'ethereum' ? CHAIN_META.ethereum.chainId :
     CHAIN_META.hashkey.chainId
   const isCorrectNetwork = isEvmChain ? chainId === targetChainId : true
   const feeAmount        = (parseFloat(effectiveAmt) || 0) * (PLATFORM_FEE_BPS / 10_000)
@@ -385,7 +394,7 @@ export default function PaymentPage() {
 
   // Whether Direct Send is available for the current chain
   const canDirectSend =
-    ((chain === 'base' || chain === 'arc' || chain === 'hashkey') && isAddress(resolvedEvm) && !!FACTORY_V2_ADDRESSES[chain as 'base' | 'arc' | 'hashkey']) ||
+    ((chain === 'base' || chain === 'arc') && isAddress(resolvedEvm) && !!FACTORY_V2_ADDRESSES[chain as 'base' | 'arc']) ||
     (chain === 'solana' && !!resolvedSolana)
 
   // ── Step 1: Predict router address + check deployment ────────────────────
@@ -849,7 +858,7 @@ export default function PaymentPage() {
   // ── Payment handlers ──────────────────────────────────────────────────────
   async function handlePay() {
     if (!activeRecipient) return
-    if (chain === 'base' || chain === 'arc') await handleEvmPermitPay()
+    if (chain === 'base' || chain === 'arc' || chain === 'ethereum') await handleEvmPermitPay()
     else if (chain === 'starknet') handleStarknetPay()
     else if (chain === 'solana') await handleSolanaPay()
     else handleHashKeyPay()
@@ -904,7 +913,7 @@ export default function PaymentPage() {
 
   async function handleEvmPermitPay() {
     if (!address) return
-    const meta_       = chain === 'arc' ? CHAIN_META.arc : CHAIN_META.base
+    const meta_       = chain === 'arc' ? CHAIN_META.arc : chain === 'ethereum' ? CHAIN_META.ethereum : CHAIN_META.base
     const tokenAddress = meta_.tokenAddress
     const deadline     = BigInt(Math.floor(Date.now() / 1000) + 3600)
     const totalUnits   = parseUnits(effectiveAmt || '0', meta_.decimals)
@@ -912,9 +921,15 @@ export default function PaymentPage() {
     const feeUnits     = totalUnits * feeBps / 10_000n
     const recipientUnits = totalUnits - feeUnits
     const nonce        = permitNonce ?? 0n
+    // GHO EIP-712 domain: name="Gho Token", version="1"
+    const permitDomain = chain === 'arc'
+      ? { name: 'USDC',      version: '2', chainId: targetChainId, verifyingContract: tokenAddress }
+      : chain === 'ethereum'
+      ? { name: 'Gho Token', version: '1', chainId: targetChainId, verifyingContract: tokenAddress }
+      : { name: 'USD Coin',  version: '2', chainId: targetChainId, verifyingContract: tokenAddress }
     try {
       const sig = await signTypedDataAsync({
-        domain: { name: chain === 'arc' ? 'USDC' : 'USD Coin', version: '2', chainId: targetChainId, verifyingContract: tokenAddress },
+        domain: permitDomain,
         types: {
           Permit: [
             { name: 'owner',    type: 'address' },
@@ -1593,10 +1608,11 @@ export default function PaymentPage() {
               value={
                 <span className="flex items-center gap-1.5 text-sm font-medium text-gray-800">
                   <span className={cn('h-2 w-2 rounded-full', meta.dotColor)} />
-                  {chain === 'base'     ? 'Base Mainnet'     :
+                  {chain === 'base'     ? 'Base Mainnet'      :
                    chain === 'starknet' ? 'Starknet Mainnet'  :
                    chain === 'arc'      ? 'Arc Economic OS'   :
                    chain === 'solana'   ? 'Solana Mainnet'    :
+                   chain === 'ethereum' ? 'Ethereum Mainnet'  :
                                          'HashKey Chain'}
                 </span>
               }

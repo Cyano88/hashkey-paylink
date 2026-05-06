@@ -51,7 +51,7 @@ const isValidStarkAddr = (v: string) => /^0x[0-9a-fA-F]{64}$/.test(v)
 // ─── Solana address: base58, 32–44 characters ────────────────────────────────
 const isValidSolanaAddr = (v: string) => /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(v)
 
-const CHAINS: ChainKey[] = ['base', 'starknet', 'hashkey', 'arc', 'solana']
+const CHAINS: ChainKey[] = ['base', 'starknet', 'arc', 'solana', 'ethereum']
 
 type VaultStep = 'idle' | 'checking' | 'needs_deploy' | 'deploying' | 'ready' | 'skipped'
 
@@ -392,7 +392,7 @@ export default function CreateLink() {
           Create a Hash PayLink
         </h1>
         <p className="mt-2 text-[15px] text-gray-500 text-balance">
-          Request USDC or HSK from anyone — no app, no signup, just a link.
+          Request USDC or GHO from anyone — no app, no signup, just a link.
         </p>
 
         {/* ── Chain preview toggle — hidden in multi-chain mode (all chains active) */}
@@ -458,7 +458,7 @@ export default function CreateLink() {
                 </span>
                 EVM Address
               </span>
-              <span className="text-[11px] font-medium text-gray-400">Base · HashKey</span>
+              <span className="text-[11px] font-medium text-gray-400">Base · Arc · Ethereum</span>
             </label>
             <div className="relative">
               <input
@@ -621,7 +621,7 @@ export default function CreateLink() {
                 )}
               />
               <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-semibold text-gray-400 whitespace-nowrap">
-                USDC · HSK
+                USDC · GHO
               </span>
             </div>
             {amtDirty && !isValidAmt && (
@@ -631,7 +631,7 @@ export default function CreateLink() {
             )}
             {!amtDirty && (
               <p className="text-[11px] text-gray-400">
-                USDC on Base/Starknet · HSK on HashKey — payer chooses the chain
+                USDC on Base/Starknet/Arc/Solana · GHO on Ethereum — payer chooses the chain
               </p>
             )}
           </fieldset>}
@@ -916,7 +916,7 @@ export default function CreateLink() {
                 <div className="flex items-baseline gap-1.5">
                   {flexAmount
                     ? <span className="inline-flex items-center gap-1.5 rounded-full bg-violet-100 px-3 py-1 text-sm font-semibold text-violet-700"><Sliders className="h-3.5 w-3.5" />Flexible</span>
-                    : <><span className="text-2xl font-bold text-gray-900">{formatAmount(amt, 18)}</span><span className="text-sm font-medium text-gray-500">USDC · HSK</span></>
+                    : <><span className="text-2xl font-bold text-gray-900">{formatAmount(amt, 18)}</span><span className="text-sm font-medium text-gray-500">USDC · GHO</span></>
                   }
                 </div>
                 <div className="space-y-1">
@@ -926,7 +926,7 @@ export default function CreateLink() {
                         <span className="h-1.5 w-1.5 rounded-full bg-[#0052FF]" />
                         <span className="h-1.5 w-1.5 rounded-full bg-[#C9A227]" />
                       </span>
-                      <span>{multiChainMode ? 'Base · HashKey · Arc' : CHAIN_META[selectedNet].label}:</span>
+                      <span>{multiChainMode ? 'Base · Arc · Ethereum' : CHAIN_META[selectedNet].label}:</span>
                       <span className="font-mono text-gray-700">{truncateAddress(evmAddr, 8)}</span>
                     </div>
                   )}
@@ -1071,7 +1071,7 @@ export default function CreateLink() {
           <div className="grid grid-cols-3 gap-3">
             {[
               { n: '1', title: 'Enter details',   body: 'Your EVM or Starknet wallet address' },
-              { n: '2', title: 'Enter amount',    body: 'USDC or HSK' },
+              { n: '2', title: 'Enter amount',    body: 'USDC or GHO' },
               { n: '3', title: 'Get paid',        body: 'Anyone pays from any wallet or exchange' },
             ].map(({ n, title, body }) => (
               <div key={n} className="rounded-xl border border-gray-100 bg-white p-4 text-center shadow-sm">

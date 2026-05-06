@@ -7,14 +7,15 @@
  */
 
 import { createPublicClient, http } from 'viem'
-import { base } from 'viem/chains'
+import { base, mainnet } from 'viem/chains'
 import { hashkeyMainnet, arcChain } from './chains'
 
 // ─── Stable public clients ────────────────────────────────────────────────────
 export const EVM_CLIENTS = {
-  base:    createPublicClient({ chain: base,           transport: http('https://mainnet.base.org') }),
-  hashkey: createPublicClient({ chain: hashkeyMainnet, transport: http('https://mainnet.hsk.xyz')  }),
-  arc:     createPublicClient({ chain: arcChain,       transport: http('https://rpc.testnet.arc.network') }),
+  base:     createPublicClient({ chain: base,           transport: http('https://mainnet.base.org') }),
+  hashkey:  createPublicClient({ chain: hashkeyMainnet, transport: http('https://mainnet.hsk.xyz')  }),
+  arc:      createPublicClient({ chain: arcChain,       transport: http('https://rpc.testnet.arc.network') }),
+  ethereum: createPublicClient({ chain: mainnet,        transport: http() }),
 } as const
 
 // ─── Factory addresses ────────────────────────────────────────────────────────

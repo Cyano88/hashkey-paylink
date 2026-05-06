@@ -8,10 +8,10 @@ import {
   braveWallet,
 } from '@rainbow-me/rainbowkit/wallets'
 import { createConfig, http } from 'wagmi'
-import { base } from 'viem/chains'
+import { base, mainnet } from 'viem/chains'
 import { hashkeyMainnet, arcChain } from './chains'
 
-export { hashkeyMainnet, arcChain, base as baseMainnet }
+export { hashkeyMainnet, arcChain, base as baseMainnet, mainnet as ethereumMainnet }
 
 // ─── Wallet connectors ─────────────────────────────────────────────────────
 const projectId = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID ?? ''
@@ -35,13 +35,14 @@ const connectors = connectorsForWallets(walletGroups, {
   projectId: projectId || 'not_configured',
 })
 
-// ─── Wagmi Config — Base + HashKey + Arc ────────────────────────────────────
+// ─── Wagmi Config — Base + Arc + Ethereum + HashKey (hidden, kept for re-enable) ──
 export const wagmiConfig = createConfig({
-  chains: [base, hashkeyMainnet, arcChain],
+  chains: [base, arcChain, mainnet, hashkeyMainnet],
   connectors,
   transports: {
-    [base.id]:          http(),
-    [hashkeyMainnet.id]: http('https://mainnet.hsk.xyz'),
+    [base.id]:           http(),
     [arcChain.id]:       http('https://rpc.testnet.arc.network'),
+    [mainnet.id]:        http(),
+    [hashkeyMainnet.id]: http('https://mainnet.hsk.xyz'),
   },
 })
