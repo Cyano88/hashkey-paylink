@@ -282,7 +282,7 @@ export default function PaymentPage() {
   )
 
   // ── Direct Send state (shared across Base, Arc, Starknet) ────────────────
-  const [payMode,          setPayMode]          = useState<'wallet' | 'direct'>('wallet')
+  const [payMode,          setPayMode]          = useState<'wallet' | 'direct'>(chain === 'starknet' ? 'wallet' : 'direct')
   const [directLinkId,     setDirectLinkId]     = useState<string | null>(null)
   // EVM chains (Base / Arc): the CREATE2 ghost vault address
   const [directVault,      setDirectVault]      = useState<`0x${string}` | null>(null)
@@ -535,9 +535,9 @@ export default function PaymentPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [manualPayDetected])
 
-  // ── Reset payMode for chains that don't support Send via Address ─────────
+  // ── Reset payMode on chain switch: Starknet wallet-only, all others direct ─
   useEffect(() => {
-    if (chain === 'starknet') setPayMode('wallet')
+    setPayMode(chain === 'starknet' ? 'wallet' : 'direct')
   }, [chain])
 
   // ── V2 EVM: Generate linkId + compute ghost vault address ─────────────────
