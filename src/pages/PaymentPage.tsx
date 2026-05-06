@@ -282,7 +282,7 @@ export default function PaymentPage() {
   )
 
   // ── Direct Send state (shared across Base, Arc, Starknet) ────────────────
-  const [payMode,          setPayMode]          = useState<'wallet' | 'direct'>(chain === 'starknet' ? 'wallet' : 'direct')
+  const [payMode,          setPayMode]          = useState<'wallet' | 'direct'>((chain === 'starknet' || chain === 'ethereum') ? 'wallet' : 'direct')
   const [directLinkId,     setDirectLinkId]     = useState<string | null>(null)
   // EVM chains (Base / Arc): the CREATE2 ghost vault address
   const [directVault,      setDirectVault]      = useState<`0x${string}` | null>(null)
@@ -555,7 +555,7 @@ export default function PaymentPage() {
 
   // ── Reset payMode on chain switch: Starknet wallet-only, all others direct ─
   useEffect(() => {
-    setPayMode(chain === 'starknet' ? 'wallet' : 'direct')
+    setPayMode((chain === 'starknet' || chain === 'ethereum') ? 'wallet' : 'direct')
   }, [chain])
 
   // ── V2 EVM: Generate linkId + compute ghost vault address ─────────────────
@@ -1582,7 +1582,7 @@ export default function PaymentPage() {
                   className="flex items-center gap-1.5 rounded-full border border-gray-200 dark:border-white/20 bg-white/60 dark:bg-white/10 px-3 py-1 text-[11px] font-medium text-gray-500 dark:text-gray-300 hover:bg-white dark:hover:bg-white/20 hover:text-gray-700 dark:hover:text-white transition-all"
                 >
                   <ArrowLeftRight className="h-3 w-3" />
-                  {fxInputMode === 'local' ? `Switch to USDC` : `Switch to ${fxCurrency}`}
+                  {fxInputMode === 'local' ? `Switch to ${meta.asset}` : `Switch to ${fxCurrency}`}
                 </button>
               ) : null}
             </div>
