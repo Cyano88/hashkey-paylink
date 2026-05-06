@@ -1496,10 +1496,7 @@ export default function PaymentPage() {
         {/* ── Pay mode toggle (Base, Arc USDC, Starknet) ───────────────── */}
         {canDirectSend && (
           <div className="flex justify-center px-4 pt-3">
-            <div className={cn(
-              'flex rounded-xl border border-gray-200 bg-gray-100/80 p-0.5 text-xs font-semibold transition-opacity duration-200',
-              isEventMode && !attendeeName.trim() && 'opacity-40 pointer-events-none select-none',
-            )}>
+            <div className="flex rounded-xl border border-gray-200 bg-gray-100/80 p-0.5 text-xs font-semibold">
               <button
                 onClick={() => setPayMode('direct')}
                 className={cn(
@@ -2063,7 +2060,7 @@ export default function PaymentPage() {
           ) : payMode === 'wallet' && chain === 'starknet' ? (
             !starkAccount ? (
               <div className="space-y-2">
-                <button onClick={connectStarknet} disabled={isStarkConnecting || !window.starknet}
+                <button onClick={connectStarknet} disabled={isStarkConnecting || !window.starknet || (isEventMode && !attendeeName.trim())}
                   className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#6236FF] px-6 py-4 text-sm font-semibold text-white transition-all hover:bg-[#5025EE] active:scale-[0.98] disabled:opacity-60">
                   {isStarkConnecting ? <><Loader2 className="h-4 w-4 animate-spin" /> Connecting…</> : <><Wallet className="h-4 w-4" /> Connect Starknet Wallet</>}
                 </button>
