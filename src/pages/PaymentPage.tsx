@@ -28,7 +28,7 @@ const BASE_BUILDER_CODE = '0x62635f3871746237746e79' as `0x${string}`
 import {
   ArrowLeft, ArrowRight, CheckCircle2, ExternalLink, AlertCircle, Loader2, ArrowLeftRight,
   RefreshCw, ShieldCheck, Zap, Copy, CheckCheck, Wallet,
-  AlertTriangle, Radio, Power,
+  AlertTriangle, Radio,
 } from 'lucide-react'
 import {
   CHAIN_META, PLATFORM_FEE_BPS, EVM_TREASURY, STARK_TREASURY, type ChainKey,
@@ -282,7 +282,7 @@ export default function PaymentPage() {
   )
 
   // ── Direct Send state (shared across Base, Arc, Starknet) ────────────────
-  const [payMode,          setPayMode]          = useState<'wallet' | 'direct'>((chain === 'starknet' || chain === 'arbitrum') ? 'wallet' : 'direct')
+  const [payMode,          setPayMode]          = useState<'wallet' | 'direct'>(chain === 'starknet' ? 'wallet' : 'direct')
   const [directLinkId,     setDirectLinkId]     = useState<string | null>(null)
   // EVM chains (Base / Arc): the CREATE2 ghost vault address
   const [directVault,      setDirectVault]      = useState<`0x${string}` | null>(null)
@@ -555,7 +555,7 @@ export default function PaymentPage() {
 
   // ── Reset payMode on chain switch: Starknet wallet-only, all others direct ─
   useEffect(() => {
-    setPayMode((chain === 'starknet' || chain === 'arbitrum') ? 'wallet' : 'direct')
+    setPayMode(chain === 'starknet' ? 'wallet' : 'direct')
   }, [chain])
 
   // ── V2 EVM: Generate linkId + compute ghost vault address ─────────────────
@@ -1456,8 +1456,8 @@ export default function PaymentPage() {
         style={{ boxShadow: `0 4px 24px -4px rgba(0,0,0,0.08), ${meta.glowStyle}`, borderColor: meta.accentColor + '26' }}
       >
         {/* ── Chain toggle ─────────────────────────────────────────────── */}
-        <div className="flex items-center justify-center gap-2 pt-5 pb-0 px-4">
-          <div className="flex items-center justify-center gap-0.5 sm:gap-1 rounded-xl border border-gray-200 bg-gray-100/80 p-1 overflow-x-auto w-full sm:w-auto">
+        <div className="flex justify-center pt-5 pb-0 px-4">
+          <div className="flex w-full items-center gap-0.5 rounded-xl border border-gray-200 bg-gray-100/80 p-1">
             {CHAINS.map((c) => {
               const m          = CHAIN_META[c]
               const isActive   = chain === c
@@ -1481,7 +1481,7 @@ export default function PaymentPage() {
                     onClick={() => !unavailable && !netLocked && handleChainSwitch(c)}
                     disabled={(unavailable && !isActive) || (netLocked && !isActive)}
                     className={cn(
-                      'flex shrink-0 items-center gap-1 sm:gap-1.5 rounded-lg px-1.5 py-1 sm:px-3 sm:py-1.5 text-[10px] sm:text-xs font-semibold transition-all duration-150',
+                      'flex flex-1 justify-center items-center gap-1 rounded-lg px-1 py-1.5 text-[10px] font-semibold transition-all duration-150',
                       isActive                  ? m.toggleActive
                       : unavailable || netLocked ? 'cursor-not-allowed text-gray-300'
                       : 'cursor-pointer text-gray-500 hover:text-gray-800',
@@ -1504,16 +1504,6 @@ export default function PaymentPage() {
               )
             })}
           </div>
-          {/* ── Disconnect button ───────────────────────────────────────── */}
-          {(isConnected || !!solanaWalletAddr) && (
-            <button
-              onClick={() => { if (chain === 'solana') disconnectSolana(); else disconnectEvm() }}
-              title="Disconnect wallet"
-              className="shrink-0 flex items-center justify-center h-7 w-7 rounded-lg border border-gray-200 bg-gray-100/80 text-gray-400 hover:text-red-500 hover:border-red-200 hover:bg-red-50 transition-all duration-150"
-            >
-              <Power className="h-3.5 w-3.5" />
-            </button>
-          )}
         </div>
 
         {/* ── Pay mode toggle (Base, Arc USDC, Starknet) ───────────────── */}

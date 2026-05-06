@@ -461,6 +461,17 @@ export default function Layout() {
               </span>
             )}
 
+            {/* Power — pay page only, between network indicator and theme toggle */}
+            {isPayPage && anyConnected && (
+              <button
+                onClick={disconnectAll}
+                title="Disconnect wallet"
+                className="flex h-9 w-9 items-center justify-center rounded-full text-gray-400 dark:text-gray-500 transition-colors hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10"
+              >
+                <Power className="h-4 w-4" />
+              </button>
+            )}
+
             {/* Wallet controls — hidden on pay page and organizer dashboard (read-only pages) */}
             {!isPayPage && !isDashPage && (
               <>
