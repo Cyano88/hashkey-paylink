@@ -45,6 +45,11 @@ const config: HardhatUserConfig = {
       chainId:  42161,
       accounts: PK,
     },
+    og: {
+      url:      'https://evmrpc.0g.ai',
+      chainId:  16661,
+      accounts: PK,
+    },
   },
 
   etherscan: {

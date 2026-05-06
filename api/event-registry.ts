@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express'
+import { archivePayment }          from './og-storage.js'
 
 type PaymentEntry = {
   eventId: string
@@ -27,9 +28,14 @@ export function registerEventPayment(req: Request, res: Response): void {
     res.json({ ok: true, duplicate: true })
     return
   }
-  entries.push({ eventId, txHash, chain: chain ?? '', payer, memo, amount: amount ?? '', ts: Date.now() })
+  const entry: PaymentEntry = { eventId, txHash, chain: chain ?? '', payer, memo, amount: amount ?? '', ts: Date.now() }
+  entries.push(entry)
   registry.set(eventId, entries)
   res.json({ ok: true })
+
+  // Fire-and-forget archive to 0G decentralized storage — non-blocking
+  archivePayment({ eventId, txHash, chain: entry.chain, payer, amount: entry.amount, ts: entry.ts })
+    .catch(() => {}) // already caught inside archivePayment, belt-and-suspenders
 }
 
 export function listEventPayments(req: Request, res: Response): void {

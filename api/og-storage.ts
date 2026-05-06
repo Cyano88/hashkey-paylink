@@ -1,0 +1,120 @@
+/**
+ * 0G Storage — fire-and-forget archive layer for Hash PayLink payment records.
+ *
+ * Every confirmed payment in multi-payer collection mode is uploaded as a JSON
+ * blob to 0G decentralized storage. The root hash (content address) is then
+ * anchored on-chain via PayLinkArchive.sol deployed on 0G mainnet (chain 16661).
+ *
+ * This is intentionally non-blocking — if 0G upload fails the payment record
+ * is still captured in the server registry. 0G is the permanent archive layer,
+ * not the primary store.
+ *
+ * Required env vars:
+ *   OG_STORAGE_KEY      Private key of wallet holding OG tokens for gas
+ *   OG_ARCHIVE_ADDRESS  Deployed PayLinkArchive contract on 0G mainnet
+ */
+
+import { ZgFile, Indexer }  from '@0gfoundation/0g-ts-sdk'
+import { ethers }            from 'ethers'
+import { writeFile, unlink } from 'fs/promises'
+import { join }              from 'path'
+import { tmpdir }            from 'os'
+import { randomBytes }       from 'crypto'
+
+// ─── 0G Mainnet config ────────────────────────────────────────────────────────
+const EVM_RPC     = 'https://evmrpc.0g.ai'
+const INDEXER_RPC = 'https://indexer-storage-turbo.0g.ai'
+
+// ─── PayLinkArchive ABI (anchor rootHash on-chain) ────────────────────────────
+const ARCHIVE_ABI = [
+  'function archive(string calldata eventId, bytes32 rootHash, string calldata chain, string calldata payer, string calldata amount, uint256 ts) external',
+]
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function getSigner(): ethers.Wallet | null {
+  const raw = process.env.OG_STORAGE_KEY ?? process.env.RELAYER_PRIVATE_KEY
+  if (!raw) return null
+  const key      = raw.startsWith('0x') ? raw : `0x${raw}`
+  const provider = new ethers.JsonRpcProvider(EVM_RPC)
+  return new ethers.Wallet(key, provider)
+}
+
+// ─── Main export ──────────────────────────────────────────────────────────────
+
+export type ArchiveRecord = {
+  eventId: string
+  txHash:  string
+  chain:   string
+  payer:   string
+  amount:  string
+  ts:      number
+}
+
+/**
+ * Upload a payment record to 0G Storage and anchor the root hash on-chain.
+ * Returns the root hash string on success, null on any failure.
+ * Never throws — all errors are caught and logged.
+ */
+export async function archivePayment(entry: ArchiveRecord): Promise<string | null> {
+  const signer = getSigner()
+  if (!signer) {
+    console.warn('[0g] OG_STORAGE_KEY not set — skipping archive')
+    return null
+  }
+
+  const tmpPath = join(tmpdir(), `paylink-${randomBytes(8).toString('hex')}.json`)
+
+  try {
+    // 1. Write JSON to a temp file (ZgFile requires a file path in Node.js)
+    const payload = { ...entry, archivedBy: 'Hash PayLink', version: '1' }
+    await writeFile(tmpPath, JSON.stringify(payload, null, 2), 'utf8')
+
+    // 2. Build merkle tree + upload to 0G Storage
+    const file = await ZgFile.fromFilePath(tmpPath)
+    const [tree, treeErr] = await file.merkleTree()
+    if (treeErr || !tree) {
+      console.error('[0g] merkle tree error:', treeErr)
+      await file.close()
+      return null
+    }
+    const rootHash = tree.rootHash() as string
+
+    const indexer = new Indexer(INDEXER_RPC)
+    const [, uploadErr] = await indexer.upload(file, EVM_RPC, signer)
+    await file.close()
+
+    if (uploadErr) {
+      console.error('[0g] upload error:', uploadErr)
+      return null
+    }
+    console.log(`[0g] uploaded payment record — rootHash: ${rootHash}`)
+
+    // 3. Anchor root hash on-chain via PayLinkArchive contract
+    const archiveAddr = process.env.OG_ARCHIVE_ADDRESS
+    if (archiveAddr && ethers.isAddress(archiveAddr)) {
+      try {
+        const contract = new ethers.Contract(archiveAddr, ARCHIVE_ABI, signer)
+        const tx = await contract.archive(
+          entry.eventId,
+          ethers.hexlify(ethers.toUtf8Bytes(rootHash).slice(0, 32)).padEnd(66, '0') as `0x${string}`,
+          entry.chain,
+          entry.payer,
+          entry.amount,
+          BigInt(entry.ts),
+        )
+        console.log(`[0g] anchored on-chain — tx: ${tx.hash}`)
+      } catch (anchorErr) {
+        // Non-fatal: storage upload succeeded even if on-chain anchor fails
+        console.warn('[0g] on-chain anchor failed (non-fatal):', anchorErr instanceof Error ? anchorErr.message : anchorErr)
+      }
+    }
+
+    return rootHash
+  } catch (err) {
+    console.error('[0g] unexpected error:', err instanceof Error ? err.message : err)
+    return null
+  } finally {
+    await unlink(tmpPath).catch(() => {})
+  }
+}
