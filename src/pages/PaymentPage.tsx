@@ -1417,17 +1417,6 @@ export default function PaymentPage() {
               isEventMode && !attendeeName.trim() && 'opacity-40 pointer-events-none select-none',
             )}>
               <button
-                onClick={() => setPayMode('wallet')}
-                className={cn(
-                  'rounded-lg px-4 py-1.5 transition-all duration-150',
-                  payMode === 'wallet'
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-500 hover:text-gray-700',
-                )}
-              >
-                Connect Wallet
-              </button>
-              <button
                 onClick={() => setPayMode('direct')}
                 className={cn(
                   'rounded-lg px-4 py-1.5 transition-all duration-150',
@@ -1437,6 +1426,17 @@ export default function PaymentPage() {
                 )}
               >
                 Send via Address
+              </button>
+              <button
+                onClick={() => setPayMode('wallet')}
+                className={cn(
+                  'rounded-lg px-4 py-1.5 transition-all duration-150',
+                  payMode === 'wallet'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700',
+                )}
+              >
+                Connect Wallet
               </button>
             </div>
           </div>
