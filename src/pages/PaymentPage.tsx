@@ -1457,7 +1457,7 @@ export default function PaymentPage() {
       >
         {/* ── Chain toggle ─────────────────────────────────────────────── */}
         <div className="flex justify-center pt-5 pb-0 px-4">
-          <div className="flex w-full items-center gap-0.5 rounded-xl border border-gray-200 bg-gray-100/80 p-1">
+          <div className="flex items-center justify-center gap-0.5 sm:gap-1 rounded-xl border border-gray-200 bg-gray-100/80 p-1 overflow-x-auto w-full sm:w-auto">
             {CHAINS.map((c) => {
               const m          = CHAIN_META[c]
               const isActive   = chain === c
@@ -1481,7 +1481,7 @@ export default function PaymentPage() {
                     onClick={() => !unavailable && !netLocked && handleChainSwitch(c)}
                     disabled={(unavailable && !isActive) || (netLocked && !isActive)}
                     className={cn(
-                      'flex flex-1 justify-center items-center gap-1 rounded-lg px-1 py-1.5 text-[10px] font-semibold transition-all duration-150',
+                      'flex shrink-0 items-center gap-1 sm:gap-1.5 rounded-lg px-1.5 py-1 sm:px-3 sm:py-1.5 text-[10px] sm:text-xs font-semibold transition-all duration-150',
                       isActive                  ? m.toggleActive
                       : unavailable || netLocked ? 'cursor-not-allowed text-gray-300'
                       : 'cursor-pointer text-gray-500 hover:text-gray-800',
