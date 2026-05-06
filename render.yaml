@@ -17,13 +17,13 @@ services:
       - key: VITE_WALLETCONNECT_PROJECT_ID
         sync: false                   # set manually in Render dashboard
       - key: VITE_FACTORY_V2
-        value: "0x706C84aB768DBf60a84b717e4c49498BEf78b0cD"
+        value: "0xe06b00Be7AFc23db6aA9e809F478E9A1AE3074D1"
       - key: VITE_RPC_URL
         sync: false                   # your Alchemy frontend RPC key
 
       # ── V2 relayer (api/relay-v2.ts) ──────────────────────────────────────
       - key: PAYLINK_FACTORY_V2
-        value: "0x706C84aB768DBf60a84b717e4c49498BEf78b0cD"
+        value: "0xe06b00Be7AFc23db6aA9e809F478E9A1AE3074D1"
       - key: RELAYER_PRIVATE_KEY
         sync: false                   # 0x-prefixed — ROTATE before adding here
       - key: PRIVATE_RPC_URL
@@ -35,9 +35,9 @@ services:
       - key: PRIVATE_RPC_URL_ARB
         value: "https://arb1.arbitrum.io/rpc"   # swap for Alchemy/QuickNode in prod
       - key: PAYLINK_FACTORY_V2_ARB
-        sync: false                   # factory address from deploy-factory-deterministic --network arbitrum
+        value: "0xe06b00Be7AFc23db6aA9e809F478E9A1AE3074D1"
       - key: VITE_FACTORY_V2_ARB
-        sync: false                   # same value — exposed to browser for vault address computation
+        value: "0xe06b00Be7AFc23db6aA9e809F478E9A1AE3074D1"
 
       # ── V1 sweep keeper (api/sweep.ts + api/sweep-keeper.ts) ──────────────
       - key: KEEPER_PRIVATE_KEY
