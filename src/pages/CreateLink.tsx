@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useOutletContext } from 'react-router-dom'
+import { useOutletContext, Link } from 'react-router-dom'
 import type { LayoutOutletContext } from '../Layout'
 import {
   useAccount,
