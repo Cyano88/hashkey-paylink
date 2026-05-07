@@ -7,6 +7,19 @@ import EventDashboard from './pages/EventDashboard'
 import AgentDemo     from './pages/AgentDemo'
 import { SolanaProvider } from './lib/SolanaContext'
 import StreamPayApp from '../modules/streampay/src/StreamPayApp'
+import DocsLayout       from './pages/docs/DocsLayout'
+import DocsHome         from './pages/docs/DocsHome'
+import GettingStarted   from './pages/docs/GettingStarted'
+import PaymentLinks     from './pages/docs/PaymentLinks'
+import Chains           from './pages/docs/Chains'
+import ZeroGStorage     from './pages/docs/ZeroGStorage'
+import AccessMode       from './pages/docs/AccessMode'
+import ApiReference     from './pages/docs/ApiReference'
+import SDKDocs          from './pages/docs/SDKDocs'
+import StreamPayDocs    from './pages/docs/StreamPayDocs'
+import SecurityDocs     from './pages/docs/SecurityDocs'
+import WalletsDocs      from './pages/docs/WalletsDocs'
+import EnvironmentDocs  from './pages/docs/EnvironmentDocs'
 
 // ── Hostname-based app routing ────────────────────────────────────────────────
 // The same Render service hosts both apps. The active hostname determines
@@ -28,6 +41,28 @@ export default function App() {
     <SolanaProvider>
     <BrowserRouter>
       <Routes>
+        <Route path="docs" element={<DocsLayout />}>
+          <Route index element={<DocsHome />} />
+          <Route path="getting-started"    element={<GettingStarted />} />
+          <Route path="payment-links"      element={<PaymentLinks />} />
+          <Route path="multi-payer"        element={<PaymentLinks />} />
+          <Route path="flexible-amount"    element={<PaymentLinks />} />
+          <Route path="qr-codes"           element={<PaymentLinks />} />
+          <Route path="fx-display"         element={<PaymentLinks />} />
+          <Route path="chains/*"           element={<Chains />} />
+          <Route path="0g-storage"         element={<ZeroGStorage />} />
+          <Route path="0g-storage/*"       element={<ZeroGStorage />} />
+          <Route path="access-mode"        element={<AccessMode />} />
+          <Route path="access-mode/*"      element={<AccessMode />} />
+          <Route path="api"                element={<ApiReference />} />
+          <Route path="sdk"                element={<SDKDocs />} />
+          <Route path="sdk/*"              element={<SDKDocs />} />
+          <Route path="streampay"          element={<StreamPayDocs />} />
+          <Route path="streampay/*"        element={<StreamPayDocs />} />
+          <Route path="security"           element={<SecurityDocs />} />
+          <Route path="wallets"            element={<WalletsDocs />} />
+          <Route path="environment"        element={<EnvironmentDocs />} />
+        </Route>
         <Route element={<Layout />}>
           <Route index element={<CreateLink />} />
           <Route path="pay" element={<PaymentPage />} />
