@@ -51,12 +51,17 @@ export type ArchiveRecord = {
   ts:      number
 }
 
+export type ArchiveResult = {
+  rootHash: string  // 0G Storage content address
+  ogTxHash: string  // PayLinkArchive on-chain tx (chainscan.0g.ai/tx/...)
+}
+
 /**
  * Upload a payment record to 0G Storage and anchor the root hash on-chain.
- * Returns the root hash string on success, null on any failure.
+ * Returns { rootHash, ogTxHash } on success, null on any failure.
  * Never throws — all errors are caught and logged.
  */
-export async function archivePayment(entry: ArchiveRecord): Promise<string | null> {
+export async function archivePayment(entry: ArchiveRecord): Promise<ArchiveResult | null> {
   const signer = getSigner()
   if (!signer) {
     console.warn('[0g] OG_STORAGE_KEY not set — skipping archive')
@@ -92,25 +97,28 @@ export async function archivePayment(entry: ArchiveRecord): Promise<string | nul
 
     // 3. Anchor root hash on-chain via PayLinkArchive contract
     const archiveAddr = process.env.OG_ARCHIVE_ADDRESS
-    if (archiveAddr && ethers.isAddress(archiveAddr)) {
-      try {
-        const contract = new ethers.Contract(archiveAddr, ARCHIVE_ABI, signer)
-        const tx = await contract.archive(
-          entry.eventId,
-          ethers.hexlify(ethers.toUtf8Bytes(rootHash).slice(0, 32)).padEnd(66, '0') as `0x${string}`,
-          entry.chain,
-          entry.payer,
-          entry.amount,
-          BigInt(entry.ts),
-        )
-        console.log(`[0g] anchored on-chain — tx: ${tx.hash}`)
-      } catch (anchorErr) {
-        // Non-fatal: storage upload succeeded even if on-chain anchor fails
-        console.warn('[0g] on-chain anchor failed (non-fatal):', anchorErr instanceof Error ? anchorErr.message : anchorErr)
-      }
+    if (!archiveAddr || !ethers.isAddress(archiveAddr)) {
+      console.warn('[0g] OG_ARCHIVE_ADDRESS not set — skipping on-chain anchor')
+      return null
     }
 
-    return rootHash
+    try {
+      const contract = new ethers.Contract(archiveAddr, ARCHIVE_ABI, signer)
+      const tx = await contract.archive(
+        entry.eventId,
+        ethers.hexlify(ethers.toUtf8Bytes(rootHash).slice(0, 32)).padEnd(66, '0') as `0x${string}`,
+        entry.chain,
+        entry.payer,
+        entry.amount,
+        BigInt(entry.ts),
+      )
+      await tx.wait()
+      console.log(`[0g] anchored on-chain — tx: ${tx.hash}`)
+      return { rootHash, ogTxHash: tx.hash as string }
+    } catch (anchorErr) {
+      console.warn('[0g] on-chain anchor failed:', anchorErr instanceof Error ? anchorErr.message : anchorErr)
+      return null
+    }
   } catch (err) {
     console.error('[0g] unexpected error:', err instanceof Error ? err.message : err)
     return null

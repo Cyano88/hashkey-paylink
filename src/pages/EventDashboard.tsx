@@ -23,12 +23,14 @@ const TRANSFER_ABI = [{
 
 // Server registry entry — source of truth for the payment log
 type ServerPayment = {
-  txHash:  string
-  payer:   string
-  memo:    string   // payer's name / handle
-  amount:  string
-  chain:   string
-  ts:      number
+  txHash:      string
+  payer:       string
+  memo:        string   // payer's name / handle
+  amount:      string
+  chain:       string
+  ts:          number
+  ogRootHash?: string   // 0G Storage content address
+  ogTxHash?:   string   // on-chain anchor tx on 0G mainnet
 }
 
 type Toast = { id: number; addr: string; amount: string; chain: string }
@@ -438,15 +440,47 @@ export default function EventDashboard() {
                     <p className="text-[11px] text-gray-400">{new Date(p.ts).toLocaleTimeString()}</p>
                     <p className="text-[10px] text-gray-300">{new Date(p.ts).toLocaleDateString()}</p>
                   </div>
-                  {explorerUrl ? (
-                    <a href={explorerUrl} target="_blank" rel="noopener noreferrer"
-                      className="shrink-0 text-gray-300 hover:text-gray-600 transition-colors">
-                      <ExternalLink className="h-3.5 w-3.5" />
-                    </a>
-                  ) : <div className="h-3.5 w-3.5 shrink-0" />}
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {explorerUrl ? (
+                      <a href={explorerUrl} target="_blank" rel="noopener noreferrer"
+                        className="text-gray-300 hover:text-gray-600 transition-colors">
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </a>
+                    ) : <div className="h-3.5 w-3.5" />}
+                    {p.ogTxHash ? (
+                      <a href={`https://chainscan.0g.ai/tx/${p.ogTxHash}`} target="_blank" rel="noopener noreferrer"
+                        title="Permanently archived on 0G Storage">
+                        <span className="text-[8px] font-bold px-1 py-0.5 rounded border bg-purple-50 text-purple-500 border-purple-100 leading-none">
+                          0G
+                        </span>
+                      </a>
+                    ) : (
+                      <span className="text-[8px] px-1 py-0.5 rounded border bg-gray-50 text-gray-300 border-gray-100 leading-none">
+                        0G
+                      </span>
+                    )}
+                  </div>
                 </div>
               )
             })}
+
+            {/* ── 0G Storage archive notice ────────────────────────────── */}
+            {payments.length > 0 && (
+              <div className="flex items-center gap-2 border-t border-gray-100 px-5 py-2.5">
+                <span className="text-[8px] font-bold px-1 py-0.5 rounded border bg-purple-50 text-purple-500 border-purple-100 leading-none shrink-0">
+                  0G
+                </span>
+                <p className="text-[10px] text-gray-400">
+                  Payment records permanently archived on{' '}
+                  <a href="https://chainscan.0g.ai/address/0x79a804C49e1E5EBC279A228Ab73a7570A0D0819a#events"
+                    target="_blank" rel="noopener noreferrer"
+                    className="underline-offset-2 hover:underline text-gray-500 transition-colors">
+                    0G decentralized storage
+                  </a>
+                  {' '}— {payments.filter(p => p.ogTxHash).length}/{payments.length} archived
+                </p>
+              </div>
+            )}
           </div>
         )}
       </div>

@@ -2,13 +2,15 @@ import type { Request, Response } from 'express'
 import { archivePayment }          from './og-storage.js'
 
 type PaymentEntry = {
-  eventId: string
-  txHash:  string
-  chain:   string
-  payer:   string
-  memo:    string
-  amount:  string
-  ts:      number
+  eventId:     string
+  txHash:      string
+  chain:       string
+  payer:       string
+  memo:        string
+  amount:      string
+  ts:          number
+  ogRootHash?: string  // 0G Storage content address (populated after archive)
+  ogTxHash?:   string  // PayLinkArchive on-chain tx hash on 0G mainnet
 }
 
 const registry = new Map<string, PaymentEntry[]>()
@@ -33,9 +35,20 @@ export function registerEventPayment(req: Request, res: Response): void {
   registry.set(eventId, entries)
   res.json({ ok: true })
 
-  // Fire-and-forget archive to 0G decentralized storage — non-blocking
+  // Fire-and-forget archive to 0G decentralized storage — non-blocking.
+  // When complete, patch the entry in-place so the dashboard can show the badge.
   archivePayment({ eventId, txHash, chain: entry.chain, payer, amount: entry.amount, ts: entry.ts })
-    .catch(() => {}) // already caught inside archivePayment, belt-and-suspenders
+    .then(result => {
+      if (!result) return
+      const list = registry.get(eventId)
+      if (!list) return
+      const idx = list.findIndex(e => e.txHash === txHash)
+      if (idx !== -1) {
+        list[idx].ogRootHash = result.rootHash
+        list[idx].ogTxHash   = result.ogTxHash
+      }
+    })
+    .catch(() => {})
 }
 
 export function listEventPayments(req: Request, res: Response): void {
