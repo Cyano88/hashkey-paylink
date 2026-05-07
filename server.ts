@@ -79,6 +79,14 @@ app.get('/api/health',                 (_req, res) => res.json({ ok: true, ts: D
 app.get('/stream/:vaultAddress',       streamOgHandler)
 app.get('/stream',                     streamOgHandler)
 
+// /agent — dual-purpose: browser gets SPA, API clients get JSON verification
+app.get('/agent', (req, res, next) => {
+  const { eventId, payer } = req.query as Record<string, string>
+  const acceptsJson = (req.headers.accept ?? '').includes('application/json')
+  if (eventId && payer && acceptsJson) return agentVerifyHandler(req, res)
+  next()
+})
+
 // ── Static frontend (Vite build output) ──────────────────────────────────────
 app.use(express.static(join(__dirname, 'dist')))
 

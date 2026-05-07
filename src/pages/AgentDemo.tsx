@@ -39,19 +39,38 @@ const DEMO_PAYER    = 'HashPayLink 0G Test'
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function AgentDemo() {
-  const [eventId,    setEventId]    = useState('')
-  const [payer,      setPayer]      = useState('')
+  const params = new URLSearchParams(window.location.search)
+  const [eventId,    setEventId]    = useState(() => params.get('eventId') ?? '')
+  const [payer,      setPayer]      = useState(() => params.get('payer')   ?? '')
   const [verifying,  setVerifying]  = useState(false)
   const [verified,   setVerified]   = useState<VerifyResult | null>(null)
   const [question,   setQuestion]   = useState('')
   const [messages,   setMessages]   = useState<Message[]>([])
   const [isAsking,   setIsAsking]   = useState(false)
   const [askError,   setAskError]   = useState<string | null>(null)
-  const bottomRef = useRef<HTMLDivElement>(null)
+  const bottomRef    = useRef<HTMLDivElement>(null)
+  const autoRan      = useRef(false)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, isAsking])
+
+  // Auto-verify when eventId + payer arrive via access link URL params
+  useEffect(() => {
+    if (autoRan.current) return
+    const id   = params.get('eventId')
+    const name = params.get('payer')
+    if (id && name) {
+      autoRan.current = true
+      setVerifying(true)
+      setVerified(null)
+      fetch(`/api/agent-verify?eventId=${encodeURIComponent(id)}&payer=${encodeURIComponent(name)}`)
+        .then(r => r.json() as Promise<VerifyResult>)
+        .then(data => { setVerified(data); if (data.verified) setMessages([]) })
+        .catch(() => setVerified({ verified: false, error: 'Verification service unreachable' }))
+        .finally(() => setVerifying(false))
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleVerify() {
     if (!eventId.trim() || !payer.trim()) return
