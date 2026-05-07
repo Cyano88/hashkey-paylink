@@ -1411,39 +1411,23 @@ export default function PaymentPage() {
               </a>
             )}
 
-            {isEventMode && (
-              <div className={cn(
-                'flex items-center justify-between gap-3 rounded-xl border px-4 py-3 text-xs font-medium',
-                eventRegStatus === 'ok'      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                : eventRegStatus === 'error' ? 'border-red-200 bg-red-50 text-red-600'
-                : 'border-blue-100 bg-blue-50 text-blue-600',
-              )}>
-                <span>
-                  {eventRegStatus === 'pending'  && 'Logging to dashboard…'}
-                  {eventRegStatus === 'ok'        && '✓ Logged to organizer dashboard'}
-                  {eventRegStatus === 'error'     && 'Failed to log — tap Retry'}
-                  {eventRegStatus === 'idle'      && 'Registering payment…'}
-                </span>
-                {eventRegStatus === 'error' && (
-                  <button
-                    onClick={() => { eventRegistered.current = false; void doRegister(attendeeName.trim()) }}
-                    className="shrink-0 rounded-lg bg-red-100 px-2.5 py-1 text-[11px] font-semibold text-red-700 hover:bg-red-200 transition-colors"
-                  >
-                    Retry
-                  </button>
-                )}
+            {/* Only surface registration errors — success/pending/idle are silent */}
+            {isEventMode && !agentUrl && eventRegStatus === 'error' && (
+              <div className="flex items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs font-medium text-red-600">
+                <span>Failed to log payment — tap Retry</span>
+                <button
+                  onClick={() => { eventRegistered.current = false; void doRegister(attendeeName.trim()) }}
+                  className="shrink-0 rounded-lg bg-red-100 px-2.5 py-1 text-[11px] font-semibold text-red-700 hover:bg-red-200 transition-colors"
+                >
+                  Retry
+                </button>
               </div>
             )}
 
             {/* ── Access link (Access mode only) ───────────────────────── */}
             {isEventMode && agentUrl && attendeeName.trim() && eventRegStatus === 'ok' && (
-              <div className="flex items-center justify-between gap-3 rounded-xl border border-purple-100 bg-purple-50/60 px-4 py-3">
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold text-purple-700">Your access link is ready</p>
-                  <p className="mt-0.5 truncate font-mono text-[10px] text-purple-400">
-                    {agentUrl.replace(/^https?:\/\//, '')}
-                  </p>
-                </div>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-medium text-gray-600">Your access link is ready</p>
                 <button
                   onClick={async () => {
                     const link = `${agentUrl}?eventId=${encodeURIComponent(eventId)}&payer=${encodeURIComponent(attendeeName.trim())}`
@@ -1451,11 +1435,11 @@ export default function PaymentPage() {
                     setAgentLinkCopied(true)
                     setTimeout(() => setAgentLinkCopied(false), 2500)
                   }}
-                  className="shrink-0 flex items-center gap-1.5 rounded-lg bg-purple-600 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-purple-700 transition-colors active:scale-[0.98]"
+                  className="shrink-0 flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-semibold transition-colors active:scale-[0.98] text-purple-600 hover:bg-purple-50 border border-purple-200"
                 >
                   {agentLinkCopied
                     ? <><CheckCheck className="h-3 w-3" /> Copied!</>
-                    : <><Copy className="h-3 w-3" /> Copy Access Link</>}
+                    : <><Copy className="h-3 w-3" /> Copy</>}
                 </button>
               </div>
             )}

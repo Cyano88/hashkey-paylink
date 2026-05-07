@@ -102,7 +102,7 @@ export default function CreateLink() {
   // ── Wallet hooks ──────────────────────────────────────────────────────────
   const { isConnected, address: connectedEvm } = useAccount()
   const { address: connectedStark }            = useStarknet()
-  const { address: connectedSolana }           = useSolana()
+  const { address: connectedSolana, disconnect: disconnectSolana } = useSolana()
   const chainId                                = useChainId()
   const { switchChain, isPending: isSwitching } = useSwitchChain()
 
@@ -141,6 +141,14 @@ export default function CreateLink() {
   useEffect(() => {
     if (connectedSolana && solanaAddr === '' && (selectedNet === 'solana' || multiChainMode)) setSolanaAddr(connectedSolana)
   }, [connectedSolana, selectedNet, multiChainMode])  // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Disconnect Solana wallet when switching away from Solana network
+  useEffect(() => {
+    if (selectedNet !== 'solana' && !multiChainMode && connectedSolana) {
+      disconnectSolana()
+      setSolanaAddr('')
+    }
+  }, [selectedNet, multiChainMode])  // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Wipe addresses on chain switch (single-chain mode only) ───────────────
   // Prevents address bleed-over when the organizer switches chains.
@@ -544,7 +552,7 @@ export default function CreateLink() {
                 </span>
                 EVM Address
               </span>
-              <span className="text-[11px] font-medium text-gray-400">Base · Arc · Ethereum</span>
+              <span className="text-[11px] font-medium text-gray-400">Base · Arc · Arbitrum</span>
             </label>
             <div className="relative">
               <input
@@ -825,9 +833,9 @@ export default function CreateLink() {
 
           {/* ── Access mode: multi-payer always on notice ─────────────── */}
           {accessMode && (
-            <div className="flex items-center gap-2.5 rounded-xl border border-blue-100 bg-blue-50/50 px-4 py-3">
-              <ScanLine className="h-3.5 w-3.5 text-blue-400 shrink-0" />
-              <p className="text-xs text-blue-600">
+            <div className="flex items-center gap-2.5 rounded-xl border border-blue-100 dark:border-blue-900/40 bg-blue-50/50 dark:bg-blue-950/30 px-4 py-3">
+              <ScanLine className="h-3.5 w-3.5 text-blue-400 dark:text-blue-500 shrink-0" />
+              <p className="text-xs text-blue-600 dark:text-blue-300">
                 <span className="font-semibold">Multi-payer collection is always on</span> in Access mode — each payer's name is logged and archived to 0G for verification.
               </p>
             </div>
@@ -1057,49 +1065,73 @@ export default function CreateLink() {
                 </button>
               </div>
 
-              {/* Preview */}
-              <div className="rounded-xl border border-gray-100 bg-white p-4 space-y-2">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Preview</p>
-                <div className="flex items-baseline gap-1.5">
-                  {flexAmount
-                    ? <span className="inline-flex items-center gap-1.5 rounded-full bg-violet-100 px-3 py-1 text-sm font-semibold text-violet-700"><Sliders className="h-3.5 w-3.5" />Flexible</span>
-                    : <><span className="text-2xl font-bold text-gray-900">{formatAmount(amt, 18)}</span><span className="text-sm font-medium text-gray-500">USDC · GHO</span></>
-                  }
+              {/* Preview + QR side by side */}
+              <div className="rounded-xl border border-gray-100 bg-white p-4 flex items-start gap-3">
+                {/* Left — link details */}
+                <div className="flex-1 min-w-0 space-y-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Preview</p>
+                  <div className="flex items-baseline gap-1.5">
+                    {flexAmount
+                      ? <span className="inline-flex items-center gap-1.5 rounded-full bg-violet-100 px-3 py-1 text-sm font-semibold text-violet-700"><Sliders className="h-3.5 w-3.5" />Flexible</span>
+                      : <><span className="text-2xl font-bold text-gray-900">{formatAmount(amt, 18)}</span><span className="text-sm font-medium text-gray-500">USDC · GHO</span></>
+                    }
+                  </div>
+                  <div className="space-y-1">
+                    {evmValid && (
+                      <div className="flex items-center gap-2 text-xs text-gray-500">
+                        <span className="flex gap-0.5">
+                          <span className="h-1.5 w-1.5 rounded-full bg-[#0052FF]" />
+                          <span className="h-1.5 w-1.5 rounded-full bg-[#C9A227]" />
+                        </span>
+                        <span>{multiChainMode ? 'Base · Arc · Ethereum' : CHAIN_META[selectedNet].label}:</span>
+                        <span className="font-mono text-gray-700">{truncateAddress(evmAddr, 8)}</span>
+                      </div>
+                    )}
+                    {starkValid && (
+                      <div className="flex items-center gap-2 text-xs text-gray-500">
+                        <span className="h-1.5 w-1.5 rounded-full bg-[#8B5CF6]" />
+                        <span>Starknet:</span>
+                        <span className="font-mono text-gray-700">{truncateAddress(starkAddr, 8)}</span>
+                      </div>
+                    )}
+                    {solanaValid && (
+                      <div className="flex items-center gap-2 text-xs text-gray-500">
+                        <span className="h-1.5 w-1.5 rounded-full bg-[#14F195]" />
+                        <span>Solana:</span>
+                        <span className="font-mono text-gray-700">{truncateAddress(solanaAddr, 8)}</span>
+                      </div>
+                    )}
+                    {memo && (
+                      <div className="flex items-center gap-2 text-xs text-gray-500">
+                        <span className="h-1.5 w-1.5 rounded-full bg-gray-300" />
+                        <span>Memo: <span className="font-medium text-gray-700">"{memo}"</span></span>
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  {evmValid && (
-                    <div className="flex items-center gap-2 text-xs text-gray-500">
-                      <span className="flex gap-0.5">
-                        <span className="h-1.5 w-1.5 rounded-full bg-[#0052FF]" />
-                        <span className="h-1.5 w-1.5 rounded-full bg-[#C9A227]" />
-                      </span>
-                      <span>{multiChainMode ? 'Base · Arc · Ethereum' : CHAIN_META[selectedNet].label}:</span>
-                      <span className="font-mono text-gray-700">{truncateAddress(evmAddr, 8)}</span>
+
+                {/* Right — QR code (single payment mode only) */}
+                {!effectiveEventMode && (
+                  <div className="shrink-0 flex flex-col items-center gap-1.5">
+                    <div ref={qrRef} className="relative rounded-xl bg-white p-1.5 shadow-sm border border-gray-100">
+                      <QRCodeCanvas value={generatedLink} size={112} level="H" includeMargin />
+                      <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                        <div className="rounded-sm bg-white p-0.5">
+                          <img src="/hash-logo.png" alt="" className="h-4 w-4 object-contain" />
+                        </div>
+                      </div>
                     </div>
-                  )}
-                  {starkValid && (
-                    <div className="flex items-center gap-2 text-xs text-gray-500">
-                      <span className="h-1.5 w-1.5 rounded-full bg-[#8B5CF6]" />
-                      <span>Starknet:</span>
-                      <span className="font-mono text-gray-700">{truncateAddress(starkAddr, 8)}</span>
-                    </div>
-                  )}
-                  {solanaValid && (
-                    <div className="flex items-center gap-2 text-xs text-gray-500">
-                      <span className="h-1.5 w-1.5 rounded-full bg-[#14F195]" />
-                      <span>Solana:</span>
-                      <span className="font-mono text-gray-700">{truncateAddress(solanaAddr, 8)}</span>
-                    </div>
-                  )}
-                  {memo && (
-                    <div className="flex items-center gap-2 text-xs text-gray-500">
-                      <span className="h-1.5 w-1.5 rounded-full bg-gray-300" />
-                      <span>Memo: <span className="font-medium text-gray-700">"{memo}"</span></span>
-                    </div>
-                  )}
-                </div>
+                    <button
+                      onClick={downloadQR}
+                      className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-[10px] font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-all active:scale-[0.98]"
+                    >
+                      <Download className="h-3 w-3" /> Save
+                    </button>
+                  </div>
+                )}
               </div>
 
+              {/* Copy + Test buttons */}
               <div className="flex gap-2.5">
                 <button
                   onClick={handleCopy}
@@ -1123,52 +1155,31 @@ export default function CreateLink() {
                 </a>
               </div>
 
-              {/* Hidden 1024px canvas used only for UHD PNG download */}
+              {/* Organizer dashboard — multi-payer / access mode only */}
+              {effectiveEventMode && (
+                <a
+                  href={buildDashboardLink()}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-blue-200 bg-white px-4 py-2.5 text-sm font-semibold text-blue-600 hover:bg-blue-50 transition-all active:scale-[0.98]"
+                >
+                  <LayoutDashboard className="h-4 w-4" />
+                  Open Organizer Dashboard
+                </a>
+              )}
+
+              {effectiveEventMode && (
+                <p className="text-[11px] text-gray-400">
+                  {accessMode
+                    ? 'Each payer enters their name — used to generate their personal access link after payment.'
+                    : 'Each payer must enter their name before paying — their entry will appear live in the dashboard.'}
+                </p>
+              )}
+
+              {/* Hidden 1024px canvas for UHD download */}
               <div ref={qrHiResRef} aria-hidden="true"
                 style={{ position: 'absolute', left: '-9999px', visibility: 'hidden' }}>
                 <QRCodeCanvas value={generatedLink} size={1024} level="H" includeMargin />
-              </div>
-
-              {/* ── QR Code (all links) ──────────────────────────────── */}
-              <div className="rounded-xl border border-gray-100 bg-gray-50/60 p-4 space-y-3">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">QR Code</p>
-                <div className="flex items-center gap-4">
-                  <div ref={qrRef} className="relative rounded-xl bg-white p-2 shadow-sm border border-gray-100 shrink-0">
-                    <QRCodeCanvas value={generatedLink} size={180} level="H" includeMargin />
-                    <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                      <div className="rounded-sm bg-white p-0.5">
-                        <img src="/hash-logo.png" alt="" className="h-6 w-6 object-contain" />
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex-1 space-y-2">
-                    <button
-                      onClick={downloadQR}
-                      className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-100 transition-all active:scale-[0.98]"
-                    >
-                      <Download className="h-3.5 w-3.5" /> Download QR (PNG)
-                    </button>
-
-                    {/* Dashboard link — event / access mode */}
-                    {effectiveEventMode && (
-                      <a
-                        href={buildDashboardLink()}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700 transition-all active:scale-[0.98]"
-                      >
-                        <LayoutDashboard className="h-3.5 w-3.5" /> Open Organizer Dashboard
-                      </a>
-                    )}
-                  </div>
-                </div>
-                {effectiveEventMode && (
-                  <p className="text-[11px] text-blue-600">
-                    {accessMode
-                      ? 'Each payer enters their name — used to generate their personal access link after payment.'
-                      : 'Each payer must enter their name before paying — their entry will appear live in the dashboard.'}
-                  </p>
-                )}
               </div>
             </div>
           </div>
@@ -1267,6 +1278,13 @@ export default function CreateLink() {
               <X className="h-3.5 w-3.5" />
               @Hash_PayLink
             </a>
+            <Link
+              to="/docs"
+              className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-900 transition-colors"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              Docs
+            </Link>
           </div>
         </div>
       )}

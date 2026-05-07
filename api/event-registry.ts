@@ -1,5 +1,7 @@
 import type { Request, Response } from 'express'
 import { archivePayment }          from './og-storage.js'
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs'
+import { dirname }                 from 'path'
 
 type PaymentEntry = {
   eventId:     string
@@ -9,11 +11,41 @@ type PaymentEntry = {
   memo:        string
   amount:      string
   ts:          number
-  ogRootHash?: string  // 0G Storage content address (populated after archive)
-  ogTxHash?:   string  // PayLinkArchive on-chain tx hash on 0G mainnet
+  ogRootHash?: string
+  ogTxHash?:   string
 }
 
-const registry = new Map<string, PaymentEntry[]>()
+// ── Persistent storage ────────────────────────────────────────────────────────
+// Set DATA_PATH env var to a Render Persistent Disk mount point (e.g. /data).
+// Without it the registry is in-memory only and resets on each deploy.
+const DATA_FILE = process.env.DATA_PATH
+  ? `${process.env.DATA_PATH}/event-registry.json`
+  : null
+
+function loadRegistry(): Map<string, PaymentEntry[]> {
+  if (!DATA_FILE || !existsSync(DATA_FILE)) return new Map()
+  try {
+    const raw = JSON.parse(readFileSync(DATA_FILE, 'utf8')) as Record<string, PaymentEntry[]>
+    console.log(`[registry] loaded ${Object.keys(raw).length} event(s) from disk`)
+    return new Map(Object.entries(raw))
+  } catch (e) {
+    console.warn('[registry] failed to load from disk — starting fresh:', e)
+    return new Map()
+  }
+}
+
+function persistRegistry(): void {
+  if (!DATA_FILE) return
+  try {
+    const dir = dirname(DATA_FILE)
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+    writeFileSync(DATA_FILE, JSON.stringify(Object.fromEntries(registry)), 'utf8')
+  } catch (e) {
+    console.warn('[registry] failed to persist to disk:', e)
+  }
+}
+
+const registry = loadRegistry()
 
 export function registerEventPayment(req: Request, res: Response): void {
   const { eventId, txHash, chain, payer, memo, amount } = req.body as Partial<PaymentEntry>
@@ -33,6 +65,7 @@ export function registerEventPayment(req: Request, res: Response): void {
   const entry: PaymentEntry = { eventId, txHash, chain: chain ?? '', payer, memo, amount: amount ?? '', ts: Date.now() }
   entries.push(entry)
   registry.set(eventId, entries)
+  persistRegistry()
   res.json({ ok: true })
 
   // Fire-and-forget archive to 0G decentralized storage — non-blocking.
@@ -48,6 +81,7 @@ export function registerEventPayment(req: Request, res: Response): void {
       if (idx !== -1) {
         list[idx].ogRootHash = result.rootHash
         list[idx].ogTxHash   = result.ogTxHash
+        persistRegistry()
       }
     })
     .catch(() => {})

@@ -160,7 +160,7 @@ export type LayoutOutletContext = {
 }
 
 // ─── Network Toolkit ─────────────────────────────────────────────────────────
-const ALL_NETWORKS = [CHAIN_META.base, CHAIN_META.hashkey, CHAIN_META.arc, CHAIN_META.starknet, CHAIN_META.solana]
+const ALL_NETWORKS = [CHAIN_META.base, CHAIN_META.arbitrum, CHAIN_META.arc, CHAIN_META.starknet, CHAIN_META.solana]
 
 function StarknetIcon({ className }: { className?: string }) {
   return (
