@@ -68,31 +68,23 @@ async function verifyPayment(eventId: string, payer: string) {
 // ─── AI response ──────────────────────────────────────────────────────────────
 
 async function getAiResponse(question: string, payerName: string, chain: string, amount: string): Promise<string> {
-  // Use Anthropic Claude if API key is configured
   if (process.env.ANTHROPIC_API_KEY) {
     try {
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
-        method:  'POST',
-        headers: {
-          'x-api-key':         process.env.ANTHROPIC_API_KEY,
-          'anthropic-version': '2023-06-01',
-          'content-type':      'application/json',
-        },
-        body: JSON.stringify({
-          model:      'claude-haiku-4-5-20251001',
-          max_tokens: 512,
-          system:     `You are a helpful AI assistant. Access has been granted to ${payerName} who made a verified payment of ${amount} on ${chain}, confirmed on 0G decentralized storage. Be concise and helpful.`,
-          messages:   [{ role: 'user', content: question }],
-        }),
+      const { default: Anthropic } = await import('@anthropic-ai/sdk')
+      const client  = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+      const message = await client.messages.create({
+        model:      'claude-haiku-4-5-20251001',
+        max_tokens: 512,
+        system:     `You are a helpful AI assistant. Access has been granted to ${payerName} who made a verified payment of ${amount} on ${chain}, confirmed on 0G decentralized storage. Be concise and helpful.`,
+        messages:   [{ role: 'user', content: question }],
       })
-      const data = await res.json() as { content?: { text: string }[] }
-      if (data.content?.[0]?.text) return data.content[0].text
+      const block = message.content[0]
+      if (block.type === 'text') return block.text
     } catch (err) {
-      console.warn('[agent-ask] Claude API error:', err instanceof Error ? err.message : err)
+      console.error('[agent-ask] Claude error:', err instanceof Error ? err.message : err)
     }
   }
 
-  // Demo response — shows the concept clearly without an API key
   return `Access granted. Your payment of ${amount} on ${chain} has been verified on 0G decentralized storage — no trusted intermediary required.\n\nYou asked: "${question}"\n\nThis response is issued only to verified payers. Integrate any AI model here — the payment verification layer is chain-agnostic and trustless.`
 }
 
