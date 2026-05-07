@@ -954,6 +954,94 @@ curl -X POST https://hashpaylink.com/api/agent-ask \
 
 ### Integrating Into Your Own AI Agent
 
+Imagine you run an online graphic design course. Normally, you'd need a payment processor, a user database, a login system, and backend logic to check who has paid before showing them content. With Hash PayLink + 0G, you need **none of that**.
+
+Here is what you actually need:
+
+---
+
+#### What you need (the full list)
+
+| What | Where you get it | Time |
+|---|---|---|
+| A payment event | Create one on [hashpaylink.com](https://hashpaylink.com) — takes 30 seconds | 30 seconds |
+| A payment link | Generated automatically when you create the event | Instant |
+| One API call | `GET /api/agent-verify` — check if a person has paid | 5 minutes to add |
+| A system prompt | Tell the AI what it's teaching / selling | 10 minutes to write |
+
+That's it. No database. No login system. No payment processor contract.
+
+---
+
+#### How it works in plain English
+
+1. **You create a payment event** on hashpaylink.com. You get an `eventId` and a payment link like `https://hashpaylink.com/pay?event=1&id=your-event-id&amt=50&evm=0xYourWallet`. This is your paywall.
+
+2. **Your customer pays.** They open the link, type their name, pick a chain (Base, Solana, Starknet, Arc, or Arbitrum), and pay in USDC. Zero gas. No app needed.
+
+3. **Hash PayLink archives the payment to 0G decentralized storage** automatically. A permanent, tamper-proof proof of the payment is anchored on 0G Mainnet. Nobody can fake or delete this.
+
+4. **Your AI checks before answering.** Every time your AI receives a question, it calls `/api/agent-verify` with the event ID and the customer's name. If verified → answer. If not → send them to the payment link.
+
+5. **Revenue accrues to your wallet.** Payments go directly to the wallet address you set when creating the event. No intermediary holds your funds.
+
+---
+
+#### Two ways to integrate
+
+**Path A — Use Hash PayLink's hosted API (fastest, no infrastructure needed)**
+
+You call one HTTPS endpoint that Hash PayLink runs. No code to deploy, no 0G setup, no contract interaction. Just an HTTP call from your existing backend.
+
+```
+GET https://hashpaylink.com/api/agent-verify?eventId=YOUR_EVENT_ID&payer=CUSTOMER_NAME
+```
+
+Returns `{ "verified": true }` or `{ "verified": false }`. Add this check anywhere in your AI service — one line in any language.
+
+**This is the right path if:** you already have an AI service and want to add a payment gate in under an hour.
+
+---
+
+**Path B — Query 0G Mainnet directly (maximum independence)**
+
+You copy the verification logic and run it yourself. Your server talks directly to the `PayLinkArchive` contract on 0G Mainnet — completely bypassing Hash PayLink's server. Even if hashpaylink.com goes offline, your payment gate still works forever.
+
+See **Pattern 3** below for the exact code. You need no API key, no account — just an RPC connection to 0G Mainnet (`https://evmrpc.0g.ai`), which is free and public.
+
+**This is the right path if:** you need zero dependency on any third-party server, or you want to self-host the entire verification stack.
+
+---
+
+#### Step-by-step: Build a payment-gated AI for your graphic design course
+
+```
+Step 1 — Create a payment event
+  Go to hashpaylink.com → toggle "Multi-payer Collection" → set amount (e.g. $50)
+  → enter your wallet address → Generate → copy your eventId
+
+Step 2 — Share the payment link with your students
+  https://hashpaylink.com/pay?event=1&id=YOUR_EVENT_ID&amt=50&evm=0xYourWallet
+  Put this link on your website, in your emails, or as a QR code
+
+Step 3 — Add the payment check to your AI backend
+  Before your AI responds, call:
+  GET https://hashpaylink.com/api/agent-verify?eventId=YOUR_EVENT_ID&payer=STUDENT_NAME
+  → verified: true  →  serve the lesson
+  → verified: false →  "Please pay first: [link]"
+
+Step 4 — Write your system prompt
+  system: "You are a graphic design tutor. You teach logo design, color theory,
+           and Adobe Illustrator. Access granted to ${payerName} who paid ${amount}.
+           Only answer questions about the course material."
+
+Done. Your AI now earns revenue 24/7 without you doing anything.
+```
+
+The student's name they type on the payment page is the same name they give your AI. That name-to-payment lookup is what `/api/agent-verify` does — checked against an immutable on-chain record.
+
+---
+
 Any developer can add Hash PayLink payment verification to their AI service in minutes. The verification queries 0G Mainnet directly — no API key, no account, no trust required.
 
 #### Pattern 1 — HTTP check before serving (any language)
