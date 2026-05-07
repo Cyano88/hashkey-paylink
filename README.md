@@ -781,8 +781,6 @@ We'll respond within 24 hours with your branded QR code and dashboard URL.
 
 ## 0G Storage Integration — Decentralized Payment Archive
 
-> **Built for the 0G Labs APAC Hackathon 2026 — Track 3: Agentic Economy & Autonomous Applications**
-
 Hash PayLink integrates [0G decentralized storage](https://0g.ai) to permanently archive every payment record made through multi-payer collection links. Payment proofs are stored on 0G Storage and anchored on-chain via the `PayLinkArchive` smart contract deployed on 0G Mainnet (Chain ID 16661).
 
 ### Why 0G Storage
