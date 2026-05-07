@@ -883,13 +883,228 @@ A footer counter shows how many payments in the event have been successfully arc
 
 ---
 
+## Agentic Economy Primitives
+
+The 0G Storage integration unlocks a new capability: **trustless payment verification for AI agents**.
+
+Any AI service can call the Hash PayLink verification API and confirm a payment was made — without trusting any centralized server. The proof comes directly from the `PayLinkArchive` contract on 0G Mainnet. No database. No session. No intermediary.
+
+---
+
+### `GET /api/agent-verify` — Trustless Payment Proof
+
+```bash
+curl "https://hashpaylink.com/api/agent-verify?eventId=evt_abc123&payer=Alice"
+```
+
+**Verified (200):**
+```json
+{
+  "verified": true,
+  "payment": { "payer": "Alice", "chain": "base", "amount": "10.00", "ts": 1746614523394 },
+  "proof": {
+    "ogTxHash":   "0xbd97e81f...",
+    "ogExplorer": "https://chainscan.0g.ai/tx/0xbd97e81f...",
+    "rootHash":   "0x3078...",
+    "contract":   "0x79a804C49e1E5EBC279A228Ab73a7570A0D0819a",
+    "network":    "0G Mainnet (Chain ID 16661)"
+  }
+}
+```
+
+**Not verified (402):**
+```json
+{
+  "verified": false,
+  "error": "No verified payment found for this payer on 0G Storage",
+  "hint":  "Payment may still be archiving (~30–60s after confirmation)"
+}
+```
+
+---
+
+### `POST /api/agent-ask` — Payment-Gated AI Service Demo
+
+```bash
+curl -X POST https://hashpaylink.com/api/agent-ask \
+  -H "Content-Type: application/json" \
+  -d '{ "eventId": "evt_abc123", "payer": "Alice", "question": "Your question here" }'
+```
+
+**Paid payer:**
+```json
+{
+  "answer": "...",
+  "paymentVerified": true,
+  "payment": { "payer": "Alice", "chain": "base", "amount": "10.00" },
+  "proof":   { "ogTxHash": "0xbd97...", "ogExplorer": "https://chainscan.0g.ai/tx/..." }
+}
+```
+
+**Unpaid payer (402):**
+```json
+{
+  "error": "Payment required",
+  "paymentRequired": true,
+  "paymentLink": "https://hashpaylink.com/pay?event=1&id=evt_abc123"
+}
+```
+
+---
+
+### Integrating Into Your Own AI Agent
+
+Any developer can add Hash PayLink payment verification to their AI service in minutes. The verification queries 0G Mainnet directly — no API key, no account, no trust required.
+
+#### Pattern 1 — HTTP check before serving (any language)
+
+```typescript
+// Node.js / TypeScript
+async function serveWithPaymentGate(eventId: string, payer: string, question: string) {
+  const verification = await fetch(
+    `https://hashpaylink.com/api/agent-verify?eventId=${eventId}&payer=${encodeURIComponent(payer)}`
+  ).then(r => r.json())
+
+  if (!verification.verified) {
+    return {
+      error: 'Payment required',
+      paymentLink: `https://hashpaylink.com/pay?event=1&id=${eventId}`,
+    }
+  }
+
+  // Payment confirmed on 0G — serve your AI response
+  const answer = await yourAiModel.ask(question)
+  return { answer, proof: verification.proof }
+}
+```
+
+```python
+# Python
+import requests
+
+def serve_with_payment_gate(event_id: str, payer: str, question: str):
+    res = requests.get(
+        "https://hashpaylink.com/api/agent-verify",
+        params={"eventId": event_id, "payer": payer}
+    ).json()
+
+    if not res.get("verified"):
+        return {
+            "error": "Payment required",
+            "payment_link": f"https://hashpaylink.com/pay?event=1&id={event_id}"
+        }
+
+    # Verified — serve your response
+    answer = your_ai_model.ask(question)
+    return {"answer": answer, "proof": res["proof"]}
+```
+
+#### Pattern 2 — Express middleware
+
+```typescript
+import express from 'express'
+
+function requireHashPayLinkPayment(eventId: string) {
+  return async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const payer = req.body?.payer ?? req.query?.payer as string
+    if (!payer) return res.status(400).json({ error: 'payer required' })
+
+    const result = await fetch(
+      `https://hashpaylink.com/api/agent-verify?eventId=${eventId}&payer=${encodeURIComponent(payer)}`
+    ).then(r => r.json()) as { verified: boolean; proof?: object }
+
+    if (!result.verified) {
+      return res.status(402).json({
+        error: 'Payment required',
+        paymentLink: `https://hashpaylink.com/pay?event=1&id=${eventId}`,
+      })
+    }
+
+    // Attach proof to request for downstream handlers
+    (req as any).paymentProof = result.proof
+    next()
+  }
+}
+
+// Usage — any route protected with one line
+app.post('/api/premium-endpoint',
+  requireHashPayLinkPayment('your-event-id'),
+  async (req, res) => {
+    const answer = await yourAiModel.ask(req.body.question)
+    res.json({ answer, proof: (req as any).paymentProof })
+  }
+)
+```
+
+#### Pattern 3 — Query 0G Mainnet directly (no Hash PayLink server)
+
+For maximum trustlessness, query `PayLinkArchive` yourself:
+
+```typescript
+import { ethers } from 'ethers'
+
+const provider = new ethers.JsonRpcProvider('https://evmrpc.0g.ai')
+const contract  = new ethers.Contract(
+  '0x79a804C49e1E5EBC279A228Ab73a7570A0D0819a',
+  ['event PaymentArchived(string indexed eventId, bytes32 indexed rootHash, string chain, string payer, string amount, uint256 ts)'],
+  provider,
+)
+
+async function verifyOnChain(eventId: string, payer: string): Promise<boolean> {
+  const latest = await provider.getBlockNumber()
+  const events = await contract.queryFilter(
+    contract.filters.PaymentArchived(eventId),
+    latest - 500_000,
+    latest,
+  )
+  return events.some(e => 'args' in e && (e.args[3] as string).toLowerCase() === payer.toLowerCase())
+}
+```
+
+This pattern requires **zero trust** in Hash PayLink — the verification is purely on-chain, readable by any node connected to 0G Mainnet.
+
+---
+
+### The Full Agentic Economy Flow
+
+```
+User wants access to an AI service
+          │
+          ▼
+Developer creates a Hash PayLink multi-payer collection link
+  https://hashpaylink.com/pay?event=1&id=your-event-id&amt=10&evm=0xYour...
+          │
+          ▼
+User pays in USDC (Base, Arc, Starknet, Solana) or GHO (Arbitrum)
+  — zero gas for payer — any chain — no wallet required for Send via Address
+          │
+          ▼
+Payment archived to 0G Storage + anchored on PayLinkArchive (0G Mainnet)
+          │
+          ▼
+AI service calls /api/agent-verify (or queries 0G directly)
+          │
+     ┌────┴────┐
+     │         │
+  verified   not verified
+     │         │
+     ▼         ▼
+Service       402 + payment link
+responds      (user pays, then retries)
++ proof
+```
+
+---
+
 ### Architecture
 
 ```
 hashkey-paylink/
 ├── api/
 │   ├── og-storage.ts          ← 0G upload + PayLinkArchive anchor
-│   └── event-registry.ts      ← patches ogRootHash/ogTxHash after archive
+│   ├── event-registry.ts      ← patches ogRootHash/ogTxHash after archive
+│   ├── agent-verify.ts        ← trustless payment proof from 0G Mainnet
+│   └── agent-ask.ts           ← payment-gated AI service demo
 ├── contracts/
 │   └── contracts/
 │       └── PayLinkArchive.sol ← on-chain root hash registry (0G Mainnet)
@@ -903,6 +1118,8 @@ hashkey-paylink/
 |---|---|
 | [`api/og-storage.ts`](api/og-storage.ts) | Uploads payment JSON to 0G Storage, anchors root hash on-chain |
 | [`api/event-registry.ts`](api/event-registry.ts) | Event payment registry — fires 0G archive after each registration |
+| [`api/agent-verify.ts`](api/agent-verify.ts) | Trustless payment verification via 0G Mainnet contract query |
+| [`api/agent-ask.ts`](api/agent-ask.ts) | Payment-gated AI service demo — 402 if unpaid, response + proof if verified |
 | [`contracts/contracts/PayLinkArchive.sol`](contracts/contracts/PayLinkArchive.sol) | On-chain root hash registry deployed on 0G Mainnet |
 | [`contracts/scripts/deploy-og-archive.ts`](contracts/scripts/deploy-og-archive.ts) | Hardhat deploy script for 0G Mainnet |
 
