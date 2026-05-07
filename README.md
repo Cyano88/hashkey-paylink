@@ -1,12 +1,5 @@
 # HashPayLink — Monorepo
 
-> **Agentic Economy — Trustless Payment-Gated AI**
-> Hash PayLink uses [0G decentralized storage](https://0g.ai) to create permanent, verifiable payment proofs — enabling any AI agent to confirm payment before responding, with no database, no login system, and no intermediary.
-> **Live demo:** [hashpaylink.com/agent](https://hashpaylink.com/agent) · **Verification API:** `GET https://hashpaylink.com/api/agent-verify?eventId=test-0g-1778114523394&payer=HashPayLink+0G+Test`
-> [Jump to 0G Integration →](#0g-storage-integration--decentralized-payment-archive)
-
----
-
 This repository contains **two independent products** deployed together on a single Render service.
 
 | Product | What it does | Live |
@@ -15,6 +8,11 @@ This repository contains **two independent products** deployed together on a sin
 | **StreamPay** | USDC streaming payroll + Creator Proof-of-Attention paywall on Arc | [hashpaylink.com/?app=streampay](https://hashpaylink.com/?app=streampay) |
 
 The active product is selected by hostname — StreamPay loads automatically on `streampay.xyz` once DNS is configured. See [`modules/streampay/README.md`](modules/streampay/README.md) for StreamPay-specific documentation.
+
+> **Agentic Economy — Trustless Payment-Gated AI**
+> Hash PayLink uses [0G decentralized storage](https://0g.ai) to create permanent, verifiable payment proofs — enabling any AI agent to confirm payment before responding, with no database, no login system, and no intermediary.
+> **Live demo:** [hashpaylink.com/agent](https://hashpaylink.com/agent) · **Verification API:** `GET https://hashpaylink.com/api/agent-verify?eventId=test-0g-1778114523394&payer=HashPayLink+0G+Test`
+> [Jump to 0G Integration →](#0g-storage-integration--decentralized-payment-archive)
 
 ### Repository Structure
 
