@@ -1,5 +1,12 @@
 # HashPayLink — Monorepo
 
+> **0G APAC Hackathon Submission — Track 3: Agentic Economy**
+> Hash PayLink uses [0G decentralized storage](https://0g.ai) to create trustless, permanent payment proofs — enabling any AI agent to verify payment before responding, with no database, no login system, and no intermediary.
+> **Live demo:** [hashpaylink.com/agent](https://hashpaylink.com/agent) · **Verification API:** `GET https://hashpaylink.com/api/agent-verify?eventId=test-0g-1778114523394&payer=HashPayLink+0G+Test`
+> [Jump to 0G Integration →](#0g-storage-integration--decentralized-payment-archive)
+
+---
+
 This repository contains **two independent products** deployed together on a single Render service.
 
 | Product | What it does | Live |
