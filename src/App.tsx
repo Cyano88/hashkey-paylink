@@ -4,6 +4,7 @@ import CreateLink from './pages/CreateLink'
 import PaymentPage from './pages/PaymentPage'
 import Dashboard from './pages/Dashboard'
 import EventDashboard from './pages/EventDashboard'
+import AgentDemo     from './pages/AgentDemo'
 import { SolanaProvider } from './lib/SolanaContext'
 import StreamPayApp from '../modules/streampay/src/StreamPayApp'
 
@@ -32,6 +33,7 @@ export default function App() {
           <Route path="pay" element={<PaymentPage />} />
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="event" element={<EventDashboard />} />
+          <Route path="agent" element={<AgentDemo />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>
