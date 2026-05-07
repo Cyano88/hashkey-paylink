@@ -1130,8 +1130,8 @@ export default function PaymentPage() {
     const txH    = manualPayDetected ? manualTxHash
                  : chain === 'starknet' ? starkTxHash
                  : chain === 'solana'   ? (solanaTxHash ?? solanaDirectTxHash)
-                 : chain === 'arbitrum' ? (ghoRelayHash ?? null)
-                 : (evmTxHash ?? null)
+                 : chain === 'arbitrum' ? (ghoRelayHash ?? directTxHash ?? null)
+                 : (evmTxHash ?? directTxHash ?? null)
     const txHash = txH ?? `manual_${Date.now()}`
     const actualAmt = receivedAmount != null
       ? (Number(receivedAmount) / Math.pow(10, meta.decimals)).toFixed(meta.decimals <= 6 ? 6 : 8)
