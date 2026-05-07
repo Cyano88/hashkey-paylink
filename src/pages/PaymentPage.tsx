@@ -225,6 +225,7 @@ export default function PaymentPage() {
   // ── UI state ──────────────────────────────────────────────────────────────
   const [hashCopied,        setHashCopied]       = useState(false)
   const [addrCopied,        setAddrCopied]        = useState(false)
+  const [agentLinkCopied,   setAgentLinkCopied]   = useState(false)
   const [manualPayDetected, setManualPayDetected] = useState(false)
   const [manualTxHash,      setManualTxHash]      = useState<`0x${string}` | null>(null)
   const [receivedAmount,    setReceivedAmount]    = useState<bigint | null>(null)
@@ -240,6 +241,7 @@ export default function PaymentPage() {
   const [initParams] = useState(() => new URLSearchParams(window.location.search))
   const isEventMode      = initParams.get('event') === '1'
   const eventId          = initParams.get('id') ?? ''
+  const agentUrl         = initParams.get('agent') ?? ''
   const [attendeeName,   setAttendeeName]   = useState('')
   const [eventRegStatus, setEventRegStatus] = useState<'idle' | 'pending' | 'ok' | 'error'>('idle')
   const eventRegistered  = useRef(false)
@@ -1430,6 +1432,31 @@ export default function PaymentPage() {
                     Retry
                   </button>
                 )}
+              </div>
+            )}
+
+            {/* ── Access link (Access mode only) ───────────────────────── */}
+            {isEventMode && agentUrl && attendeeName.trim() && eventRegStatus === 'ok' && (
+              <div className="flex items-center justify-between gap-3 rounded-xl border border-purple-100 bg-purple-50/60 px-4 py-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-purple-700">Your access link is ready</p>
+                  <p className="mt-0.5 truncate font-mono text-[10px] text-purple-400">
+                    {agentUrl.replace(/^https?:\/\//, '')}
+                  </p>
+                </div>
+                <button
+                  onClick={async () => {
+                    const link = `${agentUrl}?eventId=${encodeURIComponent(eventId)}&payer=${encodeURIComponent(attendeeName.trim())}`
+                    await copyToClipboard(link)
+                    setAgentLinkCopied(true)
+                    setTimeout(() => setAgentLinkCopied(false), 2500)
+                  }}
+                  className="shrink-0 flex items-center gap-1.5 rounded-lg bg-purple-600 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-purple-700 transition-colors active:scale-[0.98]"
+                >
+                  {agentLinkCopied
+                    ? <><CheckCheck className="h-3 w-3" /> Copied!</>
+                    : <><Copy className="h-3 w-3" /> Copy Access Link</>}
+                </button>
               </div>
             )}
 

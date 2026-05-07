@@ -34,6 +34,8 @@ import {
   Sliders,
   DollarSign,
   RefreshCw,
+  Bot,
+  Lock,
 } from 'lucide-react'
 import { QRCodeCanvas } from 'qrcode.react'
 import { FX_CURRENCIES, getFxMeta, formatLocalAmt, fetchFxRate } from '../lib/fx'
@@ -67,6 +69,9 @@ export default function CreateLink() {
   const [eventId,        setEventId]        = useState('')
   const [multiChainMode, setMultiChainMode] = useState(false)
   const [flexAmount,     setFlexAmount]     = useState(false)
+  const [accessMode,     setAccessMode]     = useState(false)
+  const [agentUrl,       setAgentUrl]       = useState('')
+  const [agentUrlStatus, setAgentUrlStatus] = useState<'idle' | 'checking' | 'ok' | 'incompatible'>('idle')
   const chainSwitchMounted = useRef(false)
 
   // ── FX Display settings (event mode only) ────────────────────────────────
@@ -206,11 +211,14 @@ export default function CreateLink() {
   const solanaValid = isValidSolanaAddr(solanaAddr)
   const isValidAmt  = amtDirty && parseFloat(amt) > 0 && !isNaN(parseFloat(amt))
 
+  // In access mode event collection is always on
+  const effectiveEventMode = accessMode || eventMode
+
   const hasAddress = multiChainMode
     ? (evmValid || starkValid || solanaValid)
     : (selectedNet === 'solana' ? solanaValid : isEvmNet ? evmValid : starkValid)
 
-  const canGenerate = (flexAmount || isValidAmt) && hasAddress
+  const canGenerate = (flexAmount || isValidAmt) && hasAddress && (!accessMode || agentUrlStatus === 'ok')
 
   // ── Flexible amount toggle ─────────────────────────────────────────────────
   function toggleFlexAmount(on: boolean) {
@@ -235,7 +243,34 @@ export default function CreateLink() {
       setEventId(Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join(''))
     }
     setGeneratedLink('')
-    setVaultStep('idle')  // restore Generate button when toggling after a previous generate
+    setVaultStep('idle')
+  }
+
+  // ── Access mode toggle ─────────────────────────────────────────────────────
+  function toggleAccessMode(on: boolean) {
+    setAccessMode(on)
+    setAgentUrl('')
+    setAgentUrlStatus('idle')
+    if (on && !eventId) {
+      const bytes = crypto.getRandomValues(new Uint8Array(16))
+      setEventId(Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join(''))
+    }
+    setGeneratedLink('')
+    setVaultStep('idle')
+  }
+
+  // ── Agent URL compatibility check ──────────────────────────────────────────
+  async function checkAgentUrl() {
+    if (!agentUrl) return
+    try { new URL(agentUrl) } catch { setAgentUrlStatus('incompatible'); return }
+    setAgentUrlStatus('checking')
+    try {
+      const r = await fetch(`/api/check-agent-url?url=${encodeURIComponent(agentUrl)}`)
+      const data = await r.json()
+      setAgentUrlStatus(data.compatible ? 'ok' : 'incompatible')
+    } catch {
+      setAgentUrlStatus('incompatible')
+    }
   }
 
   // ── QR download — uses hidden 1024px canvas for UHD output ────────────────
@@ -273,7 +308,7 @@ export default function CreateLink() {
       if (starkValid)  params.set('stark', starkAddr)
       if (solanaValid) params.set('sol', solanaAddr)
       if (memo.trim()) params.set('memo', memo.trim())
-      if (eventMode && eventId) {
+      if (effectiveEventMode && eventId) {
         params.set('event', '1'); params.set('id', eventId)
         if (fxShow && fxCurrency) {
           params.set('fx', fxCurrency); params.set('fxshow', '1')
@@ -282,6 +317,7 @@ export default function CreateLink() {
           }
         }
       }
+      if (accessMode && agentUrl) params.set('agent', agentUrl)
       return `${window.location.origin}/pay?${params.toString()}`
     }
     const params = new URLSearchParams({ net: selectedNet })
@@ -290,7 +326,7 @@ export default function CreateLink() {
     else if (isEvmNet)             params.set('evm', evmAddr)
     else                           params.set('stark', starkAddr)
     if (memo.trim()) params.set('memo', memo.trim())
-    if (eventMode && eventId) {
+    if (effectiveEventMode && eventId) {
       params.set('event', '1'); params.set('id', eventId)
       if (fxShow && fxCurrency) {
         params.set('fx', fxCurrency); params.set('fxshow', '1')
@@ -299,6 +335,7 @@ export default function CreateLink() {
         }
       }
     }
+    if (accessMode && agentUrl) params.set('agent', agentUrl)
     return `${window.location.origin}/pay?${params.toString()}`
   }
 
@@ -332,11 +369,11 @@ export default function CreateLink() {
     const link = buildLink()
     setGeneratedLink(link)
     setVaultStep('ready')
-    if (eventMode && eventId) {
+    if (effectiveEventMode && eventId) {
       const entry: SavedEvent = {
         dashboardUrl: buildDashboardLink(),
         paymentUrl:   link,
-        eventName:    memo.trim() || 'My Event',
+        eventName:    memo.trim() || (accessMode ? 'My Access Link' : 'My Event'),
         ts:           Date.now(),
       }
       localStorage.setItem('hp_last_event', JSON.stringify(entry))
@@ -376,6 +413,7 @@ export default function CreateLink() {
     setEvmAddr(''); setStarkAddr(''); setSolanaAddr(''); setAmt(''); setMemo('')
     setGeneratedLink(''); setCopied(false); setMultiChainMode(false); setFlexAmount(false)
     setVaultStep('idle'); setDeployError(null); setRouterDeployed(null); resetDeploy()
+    setAccessMode(false); setAgentUrl(''); setAgentUrlStatus('idle')
   }
 
   const linkReady = generatedLink !== ''
@@ -447,6 +485,54 @@ export default function CreateLink() {
       {/* ── Form card ─────────────────────────────────────────────────── */}
       <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-card">
         <div className="space-y-5 p-6 sm:p-8">
+
+          {/* ── Payment / Access toggle ───────────────────────────────── */}
+          <div className="flex rounded-xl border border-gray-200 bg-gray-50 p-1">
+            <button
+              type="button"
+              onClick={() => toggleAccessMode(false)}
+              className={cn(
+                'flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold transition-all',
+                !accessMode ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400 hover:text-gray-600',
+              )}
+            >
+              <Coins className="h-4 w-4" />
+              Payment
+            </button>
+            <button
+              type="button"
+              onClick={() => toggleAccessMode(true)}
+              className={cn(
+                'flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold transition-all',
+                accessMode ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400 hover:text-gray-600',
+              )}
+            >
+              <Bot className="h-4 w-4" />
+              Access
+            </button>
+          </div>
+
+          {/* ── Access mode developer notice ──────────────────────────── */}
+          {accessMode && (
+            <div className="rounded-xl border border-gray-200 bg-gray-50/60 px-4 py-3.5 space-y-1">
+              <div className="flex items-center gap-2">
+                <Lock className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                <p className="text-xs font-semibold text-gray-700">For Developers</p>
+              </div>
+              <p className="text-[11px] text-gray-500 leading-relaxed pl-5.5">
+                Gate your service behind a verified payment.{' '}
+                <Link to="/docs/access-mode" className="text-[#0071E3] hover:underline font-medium">
+                  Verification API guide →
+                </Link>
+              </p>
+              <p className="text-[11px] text-gray-400 leading-relaxed pl-5.5">
+                Want gasless payments in your own app instead?{' '}
+                <Link to="/docs/sdk" className="text-gray-500 hover:underline">
+                  SDK docs →
+                </Link>
+              </p>
+            </div>
+          )}
 
           {/* ── EVM Address — Base / HashKey / Arc ───────────────────── */}
           {(isEvmNet || multiChainMode) && <fieldset className="space-y-1.5">
@@ -653,8 +739,59 @@ export default function CreateLink() {
             />
           </fieldset>
 
-          {/* ── Multi-payer Collection toggle ────────────────────────── */}
-          <button
+          {/* ── Agent URL (Access mode only) ─────────────────────────── */}
+          {accessMode && (
+            <fieldset className="space-y-1.5">
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                <Bot className="h-3.5 w-3.5 text-gray-400" />
+                Agent URL
+              </label>
+              <div className="relative">
+                <input
+                  type="url"
+                  placeholder="https://youragent.com/chat"
+                  value={agentUrl}
+                  onChange={(e) => { setAgentUrl(e.target.value.trim()); setAgentUrlStatus('idle'); setGeneratedLink('') }}
+                  onBlur={() => { if (agentUrl) checkAgentUrl() }}
+                  spellCheck={false}
+                  autoComplete="off"
+                  className={cn(
+                    'w-full rounded-xl border bg-gray-50/60 px-4 py-3 text-sm',
+                    'placeholder:text-gray-400 transition-all focus:bg-white focus:outline-none focus:ring-2',
+                    agentUrlStatus === 'ok'           ? 'border-emerald-300 focus:ring-emerald-100'
+                    : agentUrlStatus === 'incompatible' ? 'border-red-300 focus:ring-red-100'
+                    : 'border-gray-200 focus:border-[#0071E3]/40 focus:ring-[#0071E3]/15',
+                  )}
+                />
+                {agentUrlStatus === 'checking'     && <Loader2    className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-gray-400" />}
+                {agentUrlStatus === 'ok'           && <CheckCheck className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-500" />}
+                {agentUrlStatus === 'incompatible' && <XCircle    className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-red-400" />}
+              </div>
+              {agentUrlStatus === 'ok' && (
+                <p className="flex items-center gap-1 text-xs text-emerald-600">
+                  <CheckCheck className="h-3 w-3" /> Compatible — your service returns a JSON response
+                </p>
+              )}
+              {agentUrlStatus === 'incompatible' && (
+                <p className="flex items-center gap-1 text-xs text-red-500">
+                  <Info className="h-3 w-3" /> Not compatible — integrate the verification API first.{' '}
+                  <Link to="/docs/access-mode/api" className="underline">See guide →</Link>
+                </p>
+              )}
+              {agentUrlStatus === 'idle' && agentUrl && (
+                <p className="text-[11px] text-gray-400">Click outside to check compatibility</p>
+              )}
+              {!agentUrl && (
+                <p className="text-[11px] text-gray-400">
+                  Your service must handle <span className="font-mono">?eventId=</span> and <span className="font-mono">?payer=</span> params.{' '}
+                  <Link to="/docs/access-mode" className="text-gray-500 hover:underline">How to integrate →</Link>
+                </p>
+              )}
+            </fieldset>
+          )}
+
+          {/* ── Multi-payer Collection toggle (Payment mode only) ─────── */}
+          {!accessMode && <button
             type="button"
             onClick={() => toggleEventMode(!eventMode)}
             className={cn(
@@ -684,10 +821,20 @@ export default function CreateLink() {
             <p className="mt-1 text-[11px] text-gray-400">
               Suitable for: <span className="font-medium text-gray-500">online donations · group splits · classroom fees · dues · registrations · and more</span>
             </p>
-          </button>
+          </button>}
 
-          {/* ── FX Display Settings (only when event mode is ON) ─────── */}
-          {eventMode && (
+          {/* ── Access mode: multi-payer always on notice ─────────────── */}
+          {accessMode && (
+            <div className="flex items-center gap-2.5 rounded-xl border border-blue-100 bg-blue-50/50 px-4 py-3">
+              <ScanLine className="h-3.5 w-3.5 text-blue-400 shrink-0" />
+              <p className="text-xs text-blue-600">
+                <span className="font-semibold">Multi-payer collection is always on</span> in Access mode — each payer's name is logged and archived to 0G for verification.
+              </p>
+            </div>
+          )}
+
+          {/* ── FX Display Settings (event or access mode) ────────────── */}
+          {effectiveEventMode && (
             <div className={cn(
               'rounded-xl border p-4 space-y-3 transition-all',
               fxShow
@@ -1002,8 +1149,8 @@ export default function CreateLink() {
                       <Download className="h-3.5 w-3.5" /> Download QR (PNG)
                     </button>
 
-                    {/* Dashboard link — event mode only */}
-                    {eventMode && (
+                    {/* Dashboard link — event / access mode */}
+                    {effectiveEventMode && (
                       <a
                         href={buildDashboardLink()}
                         target="_blank"
@@ -1015,9 +1162,11 @@ export default function CreateLink() {
                     )}
                   </div>
                 </div>
-                {eventMode && (
+                {effectiveEventMode && (
                   <p className="text-[11px] text-blue-600">
-                    Each payer must enter their name before paying — their entry will appear live in the dashboard.
+                    {accessMode
+                      ? 'Each payer enters their name — used to generate their personal access link after payment.'
+                      : 'Each payer must enter their name before paying — their entry will appear live in the dashboard.'}
                   </p>
                 )}
               </div>
@@ -1069,11 +1218,15 @@ export default function CreateLink() {
             How it works
           </p>
           <div className="grid grid-cols-3 gap-3">
-            {[
+            {(!accessMode ? [
               { n: '1', title: 'Enter details',   body: 'Your EVM or Starknet wallet address' },
               { n: '2', title: 'Enter amount',    body: 'USDC or GHO' },
               { n: '3', title: 'Get paid',        body: 'Anyone pays from any wallet or exchange' },
-            ].map(({ n, title, body }) => (
+            ] : [
+              { n: '1', title: 'Integrate API',   body: 'Add our verification layer to your service' },
+              { n: '2', title: 'Paste your URL',  body: 'We check compatibility automatically' },
+              { n: '3', title: 'Share & gate',    body: 'Users pay once, get a personal access link' },
+            ]).map(({ n, title, body }) => (
               <div key={n} className="rounded-xl border border-gray-100 bg-white p-4 text-center shadow-sm">
                 <div className="mx-auto mb-2.5 flex h-7 w-7 items-center justify-center rounded-full bg-gray-100 text-xs font-bold text-gray-600">
                   {n}
@@ -1083,6 +1236,18 @@ export default function CreateLink() {
               </div>
             ))}
           </div>
+
+          {/* ── Access mode doc links ─────────────────────────────────── */}
+          {accessMode && (
+            <div className="mt-4 flex items-center justify-center gap-6">
+              <Link to="/docs/access-mode" className="text-xs text-gray-400 hover:text-gray-700 transition-colors">
+                Verification API guide →
+              </Link>
+              <Link to="/docs/sdk" className="text-xs text-gray-400 hover:text-gray-700 transition-colors">
+                Add payments to your app (SDK) →
+              </Link>
+            </div>
+          )}
 
           {/* ── Footer links ─────────────────────────────────────────── */}
           <div className="mt-6 border-t border-gray-100 pt-5 flex items-center justify-center gap-8">
