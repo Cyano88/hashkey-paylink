@@ -36,6 +36,7 @@ import {
   RefreshCw,
   Bot,
   Lock,
+  Trash2,
 } from 'lucide-react'
 import { QRCodeCanvas } from 'qrcode.react'
 import { FX_CURRENCIES, getFxMeta, formatLocalAmt, fetchFxRate } from '../lib/fx'
@@ -65,6 +66,7 @@ export default function CreateLink() {
   const [memo,          setMemo]          = useState('')
   const [generatedLink, setGeneratedLink] = useState('')
   const [copied,        setCopied]        = useState(false)
+  const [savedLinkCopied, setSavedLinkCopied] = useState(false)
   const [eventMode,      setEventMode]      = useState(false)
   const [eventId,        setEventId]        = useState('')
   const [multiChainMode, setMultiChainMode] = useState(false)
@@ -1188,39 +1190,58 @@ export default function CreateLink() {
 
       {/* ── Last event dashboard recovery ────────────────────────────── */}
       {!generatedLink && savedEvent && (
-        <div className="mt-6 rounded-2xl border border-blue-100 bg-blue-50/60 p-4 space-y-3 animate-fade-in">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold text-blue-700">Last Multi-payer Collection</p>
-              <p className="text-[11px] text-blue-500 mt-0.5">
+        <div className="mt-6 animate-fade-in">
+          <div className="flex items-center justify-between gap-3">
+            {/* Left — label + event info */}
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold text-gray-500">Last Multi-payer Collection</p>
+              <p className="text-[11px] text-gray-400 truncate">
                 {savedEvent.eventName} · {new Date(savedEvent.ts).toLocaleDateString()}
               </p>
             </div>
-            <button
-              onClick={() => { localStorage.removeItem('hp_last_event'); setSavedEvent(null) }}
-              className="text-[11px] text-blue-400 hover:text-blue-600 transition-colors"
-            >
-              Clear
-            </button>
-          </div>
-          <div className="flex gap-2">
-            <a
-              href={savedEvent.dashboardUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700 transition-all active:scale-[0.98]"
-            >
-              Open Dashboard
-            </a>
-            <button
-              onClick={() => copyToClipboard(savedEvent.paymentUrl)}
-              className="flex items-center justify-center gap-1.5 rounded-xl border border-blue-200 bg-white px-3 py-2 text-xs font-medium text-blue-700 hover:bg-blue-50 transition-all active:scale-[0.98]"
-            >
-              Copy Payment Link
-            </button>
+
+            {/* Right — three minimal actions */}
+            <div className="flex items-center gap-1 shrink-0">
+              {/* Dashboard link — truncated URL style */}
+              <a
+                href={savedEvent.dashboardUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium text-gray-500 hover:text-gray-800 hover:border-gray-300 transition-all"
+                title="Open organizer dashboard"
+              >
+                <ExternalLink className="h-3 w-3" />
+                dashboard
+              </a>
+
+              {/* Copy payment link */}
+              <button
+                onClick={async () => {
+                  await copyToClipboard(savedEvent.paymentUrl)
+                  setSavedLinkCopied(true)
+                  setTimeout(() => setSavedLinkCopied(false), 2000)
+                }}
+                className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium text-gray-500 hover:text-gray-800 hover:border-gray-300 transition-all"
+                title="Copy payment link"
+              >
+                {savedLinkCopied
+                  ? <><CheckCheck className="h-3 w-3 text-emerald-500" /><span className="text-emerald-600">Copied!</span></>
+                  : <><Copy className="h-3 w-3" />copy</>}
+              </button>
+
+              {/* Delete */}
+              <button
+                onClick={() => { localStorage.removeItem('hp_last_event'); setSavedEvent(null) }}
+                className="flex items-center justify-center rounded-lg border border-gray-200 bg-white p-1 text-gray-400 hover:text-red-500 hover:border-red-200 transition-all"
+                title="Remove"
+              >
+                <Trash2 className="h-3 w-3" />
+              </button>
+            </div>
           </div>
         </div>
       )}
+
 
       {/* ── How it works ─────────────────────────────────────────────── */}
       {!generatedLink && (
