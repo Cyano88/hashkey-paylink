@@ -18,6 +18,7 @@
 
 import type { Request, Response } from 'express'
 import { ethers }                  from 'ethers'
+import Anthropic                   from '@anthropic-ai/sdk'
 
 // ─── 0G Mainnet config ────────────────────────────────────────────────────────
 const OG_RPC       = 'https://evmrpc.0g.ai'
@@ -70,7 +71,6 @@ async function verifyPayment(eventId: string, payer: string) {
 async function getAiResponse(question: string, payerName: string, chain: string, amount: string): Promise<string> {
   if (process.env.ANTHROPIC_API_KEY) {
     try {
-      const { default: Anthropic } = await import('@anthropic-ai/sdk')
       const client  = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
       const message = await client.messages.create({
         model:      'claude-haiku-4-5-20251001',
@@ -79,10 +79,15 @@ async function getAiResponse(question: string, payerName: string, chain: string,
         messages:   [{ role: 'user', content: question }],
       })
       const block = message.content[0]
-      if (block.type === 'text') return block.text
+      if (block.type === 'text') {
+        console.log('[agent-ask] Claude responded successfully')
+        return block.text
+      }
     } catch (err) {
-      console.error('[agent-ask] Claude error:', err instanceof Error ? err.message : err)
+      console.error('[agent-ask] Claude error:', err instanceof Error ? err.message : String(err))
     }
+  } else {
+    console.warn('[agent-ask] ANTHROPIC_API_KEY not set')
   }
 
   return `Access granted. Your payment of ${amount} on ${chain} has been verified on 0G decentralized storage — no trusted intermediary required.\n\nYou asked: "${question}"\n\nThis response is issued only to verified payers. Integrate any AI model here — the payment verification layer is chain-agnostic and trustless.`
