@@ -37,7 +37,9 @@ export function registerEventPayment(req: Request, res: Response): void {
 
   // Fire-and-forget archive to 0G decentralized storage — non-blocking.
   // When complete, patch the entry in-place so the dashboard can show the badge.
-  archivePayment({ eventId, txHash, chain: entry.chain, payer, amount: entry.amount, ts: entry.ts })
+  // Use the human-readable name (memo) as payer in the 0G archive so
+  // agent-verify can match by name, not wallet address.
+  archivePayment({ eventId, txHash, chain: entry.chain, payer: entry.memo || payer, amount: entry.amount, ts: entry.ts })
     .then(result => {
       if (!result) return
       const list = registry.get(eventId)
