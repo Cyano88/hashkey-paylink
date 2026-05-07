@@ -34,6 +34,8 @@ import {
 } from './api/relay-solana.js'
 import fxRateHandler from './api/fx-rate.js'
 import relayGhoHandler from './api/relay-gho.js'
+import agentVerifyHandler from './api/agent-verify.js'
+import agentAskHandler from './api/agent-ask.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -67,6 +69,9 @@ app.get('/api/solana-vault',           getSolanaVaultAddress)
 app.post('/api/solana-sweep',          sweepSolanaVault)
 app.get('/api/fx-rate',                fxRateHandler)
 app.all('/api/relay-gho',              relayGhoHandler)
+// ── Agentic Economy — 0G payment verification primitives ─────────────────────
+app.all('/api/agent-verify',           agentVerifyHandler)
+app.post('/api/agent-ask',             agentAskHandler)
 app.get('/api/health',                 (_req, res) => res.json({ ok: true, ts: Date.now() }))
 // OG tag injection — must be before the SPA catch-all
 app.get('/stream/:vaultAddress',       streamOgHandler)

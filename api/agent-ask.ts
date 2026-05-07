@@ -1,0 +1,144 @@
+/**
+ * POST /api/agent-ask
+ *
+ * Payment-gated AI service endpoint — demonstrates the Hash PayLink agentic
+ * economy primitive. Any AI service can use this pattern to require verified
+ * payment before rendering a response.
+ *
+ * Body: { eventId: string, payer: string, question: string }
+ *
+ * Flow:
+ *   1. Verify payment on 0G Mainnet via PayLinkArchive contract (trustless)
+ *   2. If verified → return AI response + on-chain proof
+ *   3. If not verified → 402 Payment Required + payment link
+ *
+ * The AI response uses ANTHROPIC_API_KEY if configured, otherwise returns a
+ * structured demo response that still fully demonstrates the verification flow.
+ */
+
+import type { Request, Response } from 'express'
+import { ethers }                  from 'ethers'
+
+// ─── 0G Mainnet config ────────────────────────────────────────────────────────
+const OG_RPC       = 'https://evmrpc.0g.ai'
+const ARCHIVE_ADDR = '0x79a804C49e1E5EBC279A228Ab73a7570A0D0819a'
+const FROM_BLOCK   = parseInt(process.env.OG_FROM_BLOCK ?? '32498000', 10)
+
+const ARCHIVE_ABI = [
+  'event PaymentArchived(string indexed eventId, bytes32 indexed rootHash, string chain, string payer, string amount, uint256 ts)',
+]
+
+// ─── Payment verification (same logic as agent-verify, kept local) ────────────
+
+async function verifyPayment(eventId: string, payer: string) {
+  const provider = new ethers.JsonRpcProvider(OG_RPC)
+  const contract = new ethers.Contract(ARCHIVE_ADDR, ARCHIVE_ABI, provider)
+  const latest   = await provider.getBlockNumber()
+
+  const events = await contract.queryFilter(
+    contract.filters.PaymentArchived(eventId),
+    FROM_BLOCK,
+    latest,
+  )
+
+  const match = events.find(
+    e => 'args' in e && (e.args[3] as string).toLowerCase() === payer.toLowerCase(),
+  )
+
+  if (!match || !('args' in match)) return null
+
+  return {
+    payment: {
+      eventId,
+      payer:  match.args[3] as string,
+      chain:  match.args[2] as string,
+      amount: match.args[4] as string,
+      ts:     Number(match.args[5]),
+    },
+    proof: {
+      ogTxHash:   match.transactionHash,
+      ogExplorer: `https://chainscan.0g.ai/tx/${match.transactionHash}`,
+      rootHash:   match.args[1] as string,
+      contract:   ARCHIVE_ADDR,
+      network:    '0G Mainnet (Chain ID 16661)',
+    },
+  }
+}
+
+// ─── AI response ──────────────────────────────────────────────────────────────
+
+async function getAiResponse(question: string, payerName: string, chain: string, amount: string): Promise<string> {
+  // Use Anthropic Claude if API key is configured
+  if (process.env.ANTHROPIC_API_KEY) {
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method:  'POST',
+        headers: {
+          'x-api-key':         process.env.ANTHROPIC_API_KEY,
+          'anthropic-version': '2023-06-01',
+          'content-type':      'application/json',
+        },
+        body: JSON.stringify({
+          model:      'claude-haiku-4-5-20251001',
+          max_tokens: 512,
+          system:     `You are a helpful AI assistant. Access has been granted to ${payerName} who made a verified payment of ${amount} on ${chain}, confirmed on 0G decentralized storage. Be concise and helpful.`,
+          messages:   [{ role: 'user', content: question }],
+        }),
+      })
+      const data = await res.json() as { content?: { text: string }[] }
+      if (data.content?.[0]?.text) return data.content[0].text
+    } catch (err) {
+      console.warn('[agent-ask] Claude API error:', err instanceof Error ? err.message : err)
+    }
+  }
+
+  // Demo response — shows the concept clearly without an API key
+  return `Access granted. Your payment of ${amount} on ${chain} has been verified on 0G decentralized storage — no trusted intermediary required.\n\nYou asked: "${question}"\n\nThis response is issued only to verified payers. Integrate any AI model here — the payment verification layer is chain-agnostic and trustless.`
+}
+
+// ─── Handler ──────────────────────────────────────────────────────────────────
+
+export default async function handler(req: Request, res: Response) {
+  if (req.method !== 'POST')
+    return res.status(405).json({ error: 'Method not allowed' })
+
+  const { eventId, payer, question } = (req.body ?? {}) as Record<string, string>
+
+  if (!eventId || !payer || !question) {
+    return res.status(400).json({ error: 'Missing required fields: eventId, payer, question' })
+  }
+
+  try {
+    // 1. Verify payment on 0G Mainnet
+    const result = await verifyPayment(eventId, payer)
+
+    if (!result) {
+      return res.status(402).json({
+        error:           'Payment required',
+        paymentRequired: true,
+        message:         `No verified payment found for "${payer}" on event ${eventId}.`,
+        hint:            'Payment may still be archiving to 0G (~30–60s after confirmation)',
+        paymentLink:     `https://hashpaylink.com/pay?event=1&id=${encodeURIComponent(eventId)}`,
+      })
+    }
+
+    // 2. Payment verified — get AI response
+    const answer = await getAiResponse(
+      question,
+      result.payment.payer,
+      result.payment.chain,
+      result.payment.amount,
+    )
+
+    return res.json({
+      answer,
+      paymentVerified: true,
+      payment:         result.payment,
+      proof:           result.proof,
+    })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('[agent-ask]', msg)
+    return res.status(500).json({ error: 'Service temporarily unavailable' })
+  }
+}
