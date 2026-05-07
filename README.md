@@ -777,8 +777,148 @@ We'll respond within 24 hours with your branded QR code and dashboard URL.
 
 ---
 
+---
+
+## 0G Storage Integration — Decentralized Payment Archive
+
+> **Built for the 0G Labs APAC Hackathon 2026 — Track 3: Agentic Economy & Autonomous Applications**
+
+Hash PayLink integrates [0G decentralized storage](https://0g.ai) to permanently archive every payment record made through multi-payer collection links. Payment proofs are stored on 0G Storage and anchored on-chain via the `PayLinkArchive` smart contract deployed on 0G Mainnet (Chain ID 16661).
+
+### Why 0G Storage
+
+The current Web3 payment landscape has a silent problem: payment records live on centralized servers. If the server goes down, the payment history disappears — even though the on-chain transaction is permanent.
+
+Hash PayLink solves this with 0G Storage. Every payment in a multi-payer collection is:
+
+1. **Uploaded as a JSON record** to 0G decentralized storage (content-addressed, permanent)
+2. **Anchored on-chain** via `PayLinkArchive.sol` on 0G Mainnet — creating an immutable, verifiable proof
+
+The organizer's payment dashboard is the last server that needs to exist. The records live forever on 0G regardless.
+
+---
+
+### PayLinkArchive Contract
+
+| | |
+|---|---|
+| **Contract** | `PayLinkArchive.sol` |
+| **Network** | 0G Mainnet (Chain ID 16661) |
+| **Address** | [`0x79a804C49e1E5EBC279A228Ab73a7570A0D0819a`](https://chainscan.0g.ai/address/0x79a804C49e1E5EBC279A228Ab73a7570A0D0819a) |
+| **All archived payments** | [View on 0G Explorer →](https://chainscan.0g.ai/address/0x79a804C49e1E5EBC279A228Ab73a7570A0D0819a#events) |
+
+---
+
+### How It Works
+
+```
+Payer completes payment on Hash PayLink
+          │
+          ▼
+Server logs payment (primary — instant)
+          │
+          ▼  (background, non-blocking)
+Payment JSON uploaded to 0G Storage
+  {
+    "eventId":    "evt_abc123",
+    "txHash":     "0xabc...",
+    "chain":      "base",
+    "payer":      "Alice",
+    "amount":     "10.00",
+    "ts":         1746614523394,
+    "archivedBy": "Hash PayLink",
+    "version":    "1"
+  }
+          │
+          ▼
+Root hash (content address) anchored on 0G Mainnet
+  PayLinkArchive.archive(eventId, rootHash, chain, payer, amount, ts)
+          │
+          ▼
+PaymentArchived event emitted → permanent, verifiable, censorship-resistant
+```
+
+---
+
+### How to Verify a Payment
+
+Anyone can independently verify a Hash PayLink payment record:
+
+**Step 1 — Find the on-chain anchor**
+
+Go to the [PayLinkArchive events page](https://chainscan.0g.ai/address/0x79a804C49e1E5EBC279A228Ab73a7570A0D0819a#events) and find the `PaymentArchived` event for the payment you want to verify. Each event contains:
+- `eventId` — the Hash PayLink collection identifier
+- `rootHash` — the 0G Storage content address of the payment JSON
+- `chain`, `payer`, `amount`, `ts` — payment metadata
+
+**Step 2 — Fetch the JSON from 0G Storage**
+
+Using the 0G TypeScript SDK:
+
+```typescript
+import { Indexer } from '@0gfoundation/0g-ts-sdk'
+
+const indexer = new Indexer('https://indexer-storage-turbo.0g.ai')
+await indexer.download(rootHash, './payment-record.json', true) // true = verify merkle proof
+```
+
+**Step 3 — Cross-check with the payment chain**
+
+The JSON contains the original `txHash`. Verify it exists on the payment chain's explorer (Basescan, Arbiscan, Solscan, etc.).
+
+---
+
+### Organizer Dashboard — 0G Archive Indicator
+
+The organizer dashboard shows a live archive status for every payment:
+
+| Badge | Meaning |
+|---|---|
+| Grey `0G` | Upload in progress (~30–60 seconds) |
+| Purple `0G` (clickable) | Archived and anchored — links to the on-chain proof |
+
+A footer counter shows how many payments in the event have been successfully archived:
+
+```
+[0G]  Payment records permanently archived on 0G decentralized storage — 5/5 archived
+```
+
+---
+
+### Architecture
+
+```
+hashkey-paylink/
+├── api/
+│   ├── og-storage.ts          ← 0G upload + PayLinkArchive anchor
+│   └── event-registry.ts      ← patches ogRootHash/ogTxHash after archive
+├── contracts/
+│   └── contracts/
+│       └── PayLinkArchive.sol ← on-chain root hash registry (0G Mainnet)
+└── src/pages/
+    └── EventDashboard.tsx     ← 0G badge per payment + archive footer
+```
+
+### Key Files
+
+| File | Purpose |
+|---|---|
+| [`api/og-storage.ts`](api/og-storage.ts) | Uploads payment JSON to 0G Storage, anchors root hash on-chain |
+| [`api/event-registry.ts`](api/event-registry.ts) | Event payment registry — fires 0G archive after each registration |
+| [`contracts/contracts/PayLinkArchive.sol`](contracts/contracts/PayLinkArchive.sol) | On-chain root hash registry deployed on 0G Mainnet |
+| [`contracts/scripts/deploy-og-archive.ts`](contracts/scripts/deploy-og-archive.ts) | Hardhat deploy script for 0G Mainnet |
+
+### Environment Variables
+
+```env
+OG_STORAGE_KEY=       # Private key of wallet holding OG tokens (gas for uploads)
+OG_ARCHIVE_ADDRESS=   # PayLinkArchive contract: 0x79a804C49e1E5EBC279A228Ab73a7570A0D0819a
+```
+
+---
+
 ## License
 
 MIT © 2026 Hash PayLink Contributors
 
-*Live on [Base App Store](https://base.org/ecosystem) · Built on [Base](https://basescan.org) · [HashKey Chain](https://explorer.hsk.xyz) · [Starknet](https://starkscan.co) · [Arc Economic OS](https://arc.fun) · [Solana](https://solscan.io)*
+*Live on [Base App Store](https://base.org/ecosystem) · Built on [Base](https://basescan.org) · [Arbitrum](https://arbiscan.io) · [Starknet](https://starkscan.co) · [Arc Economic OS](https://arc.fun) · [Solana](https://solscan.io) · [0G Storage](https://chainscan.0g.ai/address/0x79a804C49e1E5EBC279A228Ab73a7570A0D0819a)*
