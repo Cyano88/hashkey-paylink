@@ -17,6 +17,8 @@
   "dependencies": {
     "@0gfoundation/0g-ts-sdk": "^1.2.8",
     "@anthropic-ai/sdk": "^0.95.0",
+    "@circle-fin/unified-balance-kit": "^1.1.0",
+    "@coral-xyz/anchor": "^0.32.1",
     "@rainbow-me/rainbowkit": "^2.2.4",
     "@solana/spl-token": "^0.4.14",
     "@solana/web3.js": "^1.98.4",

@@ -19,6 +19,7 @@ import {
 } from '../lib/router'
 import { CHAIN_META } from '../lib/chains'
 import { cn, truncateAddress } from '../lib/utils'
+import { queryBalances, type UnifiedBalanceBreakdown, type UnifiedBalanceChainKey } from '../lib/unifiedBalance'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -44,6 +45,10 @@ const FROM_BLOCK = 29_500_000n
 export default function Dashboard() {
   const [searchParams] = useSearchParams()
   const evmAddr = (searchParams.get('evm') ?? '').trim()
+  const solanaAddr = (searchParams.get('sol') ?? '').trim()
+  const starkAddr = (searchParams.get('stark') ?? '').trim()
+  const netParam = (searchParams.get('net') ?? '').trim() as UnifiedBalanceChainKey | ''
+  const isMultiChain = searchParams.get('multi') === '1'
 
   const [routerAddr,    setRouterAddr]    = useState<`0x${string}` | null>(null)
   const [routerChecked, setRouterChecked] = useState(false)
@@ -52,9 +57,31 @@ export default function Dashboard() {
   const [loadError,     setLoadError]     = useState<string | null>(null)
   const [ethPrice,      setEthPrice]      = useState(2_500)
   const [expandedRow,   setExpandedRow]   = useState<string | null>(null)
+  const [balanceRows,   setBalanceRows]   = useState<UnifiedBalanceBreakdown[]>([])
+  const [globalBalance, setGlobalBalance] = useState(0)
+  const [balanceLoading,setBalanceLoading]= useState(false)
+  const [balanceError,  setBalanceError]  = useState<string | null>(null)
+  const [balanceOpen,   setBalanceOpen]   = useState(false)
 
   const client = EVM_CLIENTS.base
   const meta   = CHAIN_META.base
+  const evmValid = isAddress(evmAddr)
+  const solanaValid = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(solanaAddr)
+  const starkValid = /^0x[0-9a-fA-F]{64}$/.test(starkAddr)
+  const hasDashboardAddress = evmValid || solanaValid || starkValid
+  const balanceChains: UnifiedBalanceChainKey[] = (() => {
+    if (isMultiChain) {
+      const chains: UnifiedBalanceChainKey[] = []
+      if (evmValid) chains.push('base', 'arc', 'arbitrum')
+      if (solanaValid) chains.push('solana')
+      if (starkValid) chains.push('starknet')
+      return chains
+    }
+    if (netParam === 'solana') return solanaValid ? ['solana'] : []
+    if (netParam === 'starknet') return starkValid ? ['starknet'] : []
+    if (netParam === 'arc' || netParam === 'arbitrum' || netParam === 'base') return evmValid ? [netParam] : []
+    return evmValid ? ['base'] : []
+  })()
 
   // ── Fetch ETH price (for gas cost in USD) ──────────────────────────────
   useEffect(() => {
@@ -66,7 +93,7 @@ export default function Dashboard() {
 
   // ── Predict router address ──────────────────────────────────────────────
   useEffect(() => {
-    if (!isAddress(evmAddr)) { setRouterAddr(null); setRouterChecked(true); return }
+    if (!evmValid) { setRouterAddr(null); setRouterChecked(true); return }
     const factory = ROUTER_FACTORY['base']
     if (!factory) return
     setRouterChecked(false)
@@ -76,7 +103,50 @@ export default function Dashboard() {
     })
       .then(addr => { setRouterAddr(addr); setRouterChecked(true) })
       .catch(() => setRouterChecked(true))
-  }, [evmAddr])
+  }, [evmAddr, evmValid])
+
+  useEffect(() => {
+    let cancelled = false
+    if (balanceChains.length === 0) {
+      setBalanceRows([])
+      setGlobalBalance(0)
+      setBalanceError(null)
+      setBalanceLoading(false)
+      return
+    }
+
+    setBalanceLoading(true)
+    setBalanceError(null)
+    queryBalances({
+      evmAddress: evmValid ? evmAddr : undefined,
+      solanaAddress: solanaValid ? solanaAddr : undefined,
+      starknetAddress: starkValid ? starkAddr : undefined,
+      chains: balanceChains,
+    })
+      .then(result => {
+        if (cancelled) return
+        setGlobalBalance(result.total)
+        setBalanceRows(result.rows)
+        setBalanceError(result.rows.some(row => row.status === 'error') ? 'Some selected chains could not be queried' : null)
+      })
+      .catch(error => {
+        if (cancelled) return
+        setBalanceError(error instanceof Error ? error.message.slice(0, 120) : 'Unified balance query failed')
+        setBalanceRows(balanceChains.map(key => ({
+          key,
+          label: key === 'base' ? 'Base' : key === 'arc' ? 'Arc' : key === 'arbitrum' ? 'Arbitrum' : key === 'solana' ? 'Solana' : 'Starknet',
+          balance: 0,
+          status: 'error',
+        })))
+        setGlobalBalance(0)
+      })
+      .finally(() => {
+        if (!cancelled) setBalanceLoading(false)
+      })
+
+    return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [evmAddr, solanaAddr, starkAddr, isMultiChain, netParam])
 
   // ── Build a V1 PaymentRow from a PaymentRouted log ───────────────────
   async function rowFromLog(log: {
@@ -141,7 +211,7 @@ export default function Dashboard() {
 
   // ── Load historical events (V1 PaymentRouted + V2 PaymentRelayed) ─────
   const loadPayments = useCallback(async () => {
-    if (!routerAddr && !isAddress(evmAddr)) return
+    if (!routerAddr && !evmValid) return
     setIsLoading(true); setLoadError(null)
     try {
       // V1: events from the per-recipient router contract
@@ -151,7 +221,7 @@ export default function Dashboard() {
         : Promise.resolve([])
 
       // V2: events from PayLinkFactoryV2, filtered by recipient
-      const v2Promise = FACTORY_V2_ADDRESS && isAddress(evmAddr)
+      const v2Promise = FACTORY_V2_ADDRESS && evmValid
         ? client.getLogs({
             address:   FACTORY_V2_ADDRESS,
             event:     PAYMENT_RELAYED_ABI[0],
@@ -170,11 +240,11 @@ export default function Dashboard() {
       setIsLoading(false)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [routerAddr, evmAddr])
+  }, [routerAddr, evmAddr, evmValid])
 
   useEffect(() => {
-    if (routerAddr || (FACTORY_V2_ADDRESS && isAddress(evmAddr))) loadPayments()
-  }, [routerAddr, evmAddr, loadPayments])
+    if (routerAddr || (FACTORY_V2_ADDRESS && evmValid)) loadPayments()
+  }, [routerAddr, evmAddr, evmValid, loadPayments])
 
   // ── Real-time listener: V1 PaymentRouted + V2 PaymentRelayed ─────────
   useEffect(() => {
@@ -197,7 +267,7 @@ export default function Dashboard() {
       }))
     }
 
-    if (FACTORY_V2_ADDRESS && isAddress(evmAddr)) {
+    if (FACTORY_V2_ADDRESS && evmValid) {
       unwatchers.push(client.watchContractEvent({
         address:         FACTORY_V2_ADDRESS,
         abi:             PAYMENT_RELAYED_ABI,
@@ -217,7 +287,7 @@ export default function Dashboard() {
 
     return () => unwatchers.forEach(u => u())
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [routerAddr, evmAddr])
+  }, [routerAddr, evmAddr, evmValid])
 
   // ── Computed helpers ──────────────────────────────────────────────────
   function gasCostUsdc(wei: bigint) { return Number(wei) / 1e18 * ethPrice }
@@ -243,7 +313,7 @@ export default function Dashboard() {
   }
 
   // ── No address ────────────────────────────────────────────────────────
-  if (!isAddress(evmAddr)) {
+  if (!hasDashboardAddress) {
     return (
       <div className="mx-auto max-w-lg py-20 text-center animate-fade-in">
         <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-gray-100">
@@ -251,7 +321,7 @@ export default function Dashboard() {
         </div>
         <h2 className="text-lg font-semibold text-gray-700">No address provided</h2>
         <p className="mt-1 text-sm text-gray-400">
-          Add <code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs">?evm=0x…</code> to the URL
+          Add <code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs">?evm=0x...</code>, <code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs">?sol=...</code>, or <code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs">?stark=0x...</code> to the URL
         </p>
         <Link to="/" className="mt-6 inline-flex items-center gap-2 rounded-xl bg-black px-5 py-2.5 text-sm font-medium text-white hover:bg-gray-800 transition-all">
           <Link2 className="h-4 w-4" /> Create a PayLink
@@ -267,7 +337,13 @@ export default function Dashboard() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-gray-900">Payments Received</h1>
-          <p className="mt-0.5 font-mono text-xs text-gray-400">{truncateAddress(evmAddr, 12)}</p>
+          <p className="mt-0.5 font-mono text-xs text-gray-400">
+            {evmValid
+              ? truncateAddress(evmAddr, 12)
+              : solanaValid
+                ? truncateAddress(solanaAddr, 12)
+                : truncateAddress(starkAddr, 12)}
+          </p>
           {routerAddr && (
             <p className="mt-1 flex items-center gap-1.5 text-[11px] text-gray-400">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
@@ -298,6 +374,61 @@ export default function Dashboard() {
       </div>
 
       {/* ── Summary cards ────────────────────────────────────────────────── */}
+      <div className={cn(
+        'rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition-all',
+        balanceLoading && 'animate-pulse',
+      )}>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Unified Global Balance</p>
+              {balanceError ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                  <AlertCircle className="h-3 w-3" /> Partial
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                  <Info className="h-3 w-3" /> Read-only
+                </span>
+              )}
+            </div>
+            <p className="mt-2 font-mono text-3xl font-bold tracking-tight text-gray-900">
+              {balanceLoading ? '$--.----' : `$${fmt(globalBalance)}`}
+              <span className="ml-2 text-sm font-semibold text-gray-400">USDC</span>
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setBalanceOpen(open => !open)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-all"
+          >
+            Breakdown
+            {balanceOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+          </button>
+        </div>
+
+        {balanceOpen && (
+          <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+            {balanceRows.map(row => (
+              <div key={row.key} className="rounded-lg border border-gray-100 bg-gray-50/60 px-3 py-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-semibold text-gray-600">{row.label}</span>
+                  <span className={cn(
+                    'h-1.5 w-1.5 rounded-full',
+                    row.status === 'ok' ? 'bg-emerald-500' : row.status === 'error' ? 'bg-amber-500' : 'bg-gray-300',
+                  )} />
+                </div>
+                <p className="mt-1 font-mono text-sm font-bold text-gray-900">${fmt(row.balance)}</p>
+                {row.error && <p className="mt-1 text-[10px] leading-snug text-amber-600">{row.error}</p>}
+              </div>
+            ))}
+            {balanceRows.length === 0 && (
+              <p className="text-xs text-gray-400">No supported USDC balance chains were selected for this dashboard.</p>
+            )}
+          </div>
+        )}
+      </div>
+
       {payments.length > 0 && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {[
