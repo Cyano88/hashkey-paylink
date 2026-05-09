@@ -1698,7 +1698,7 @@ export default function PaymentPage() {
             {chain !== 'starknet' && chain !== 'solana' && <Row label="Chain ID" value={String(targetChainId)} mono />}
             <Row label="Engine" value={<span className={cn('text-xs font-medium', meta.badgeText)}>{meta.engineLabel}</span>} />
             <div className="flex items-center justify-between bg-gray-50/60 px-4 py-2 border-t border-dashed border-gray-100">
-              <span className="text-[11px] font-normal text-slate-400 tracking-wide">Platform fee (0.2%)</span>
+              <span className="text-[11px] font-normal text-slate-400 tracking-wide">Platform fee ({((PLATFORM_FEE_BPS / 10_000) * 100).toFixed(1)}%)</span>
               <span className="font-mono text-[11px] text-slate-400">
                 {feeAmount > 0 && effectiveAmt ? `${feeAmount.toFixed(meta.decimals <= 6 ? 4 : 6)} ${meta.asset}` : '—'}
               </span>

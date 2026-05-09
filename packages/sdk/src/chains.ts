@@ -1,12 +1,12 @@
 import { defineChain } from 'viem'
-import { base } from 'viem/chains'
+import { base as baseMainnet } from 'viem/chains'
 
 export type ChainKey = 'base' | 'starknet' | 'hashkey' | 'arc'
 
-export const PLATFORM_FEE_BPS = 50
-/** EVM treasury — receives 0.5% fee on Base, HashKey, Arc */
+export const PLATFORM_FEE_BPS = 20
+/** EVM treasury — receives 0.2% fee on Base, HashKey, Arc */
 export const EVM_TREASURY = '0xcE5dF9e1115F81a2Fc2F65941B20B820d508e753' as `0x${string}`
-/** Starknet treasury — receives 0.5% fee on Starknet */
+/** Starknet treasury — receives 0.2% fee on Starknet */
 export const STARK_TREASURY = '0x0483AB5539B281c08777F1C8337Beeba05c2610feDcbA191B989E35eDc2767C3'
 /** Multicall3 — canonical address on all EVM chains; used for atomic permit+split */
 export const MULTICALL3_ADDRESS = '0xcA11bde05977b3631167028862bE2a173976CA11' as `0x${string}`
@@ -41,11 +41,9 @@ export const arcChain = defineChain({
   testnet: true,
 })
 
-export { base as baseMainnet }
-
 export const CHAIN_META = {
   base: {
-    key: 'base' as const, label: 'Base', asset: 'USDC', decimals: 6, chainId: base.id,
+    key: 'base' as const, label: 'Base', asset: 'USDC', decimals: 6, chainId: baseMainnet.id,
     tokenAddress: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' as `0x${string}`,
     explorerUrl: 'https://basescan.org', explorerName: 'Basescan',
     glowStyle: '0 0 52px -8px rgba(0,82,255,0.25), 0 0 0 1px rgba(0,82,255,0.12)',
@@ -77,7 +75,7 @@ export const CHAIN_META = {
     key: 'arc' as const, label: 'Arc', asset: 'USDC', decimals: 6, chainId: 5042002,
     // Update tokenAddress to mainnet Circle USDC when Arc mainnet launches
     // Ref: https://docs.arc.network/arc/references/contract-addresses
-    tokenAddress: '0x0000000000000000000000000000000000000001' as `0x${string}`,
+    tokenAddress: '0x3600000000000000000000000000000000000000' as `0x${string}`,
     explorerUrl: 'https://testnet.arcscan.app', explorerName: 'Arcscan',
     glowStyle: '0 0 52px -8px rgba(124,58,237,0.30), 0 0 0 1px rgba(124,58,237,0.14)',
     accentColor: '#7C3AED', badgeBg: 'bg-violet-50', badgeText: 'text-violet-700',

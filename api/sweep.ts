@@ -24,7 +24,7 @@ import { privateKeyToAccount } from 'viem/accounts'
 // ─── Chain / token config ────────────────────────────────────────────────────
 
 const USDC_BASE = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' as const
-const USDC_ARC  = '0x0000000000000000000000000000000000000001' as const
+const USDC_ARC  = '0x3600000000000000000000000000000000000000' as const
 
 const arcChain = defineChain({
   id: 5042002,

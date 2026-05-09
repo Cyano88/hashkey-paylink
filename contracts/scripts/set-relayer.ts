@@ -1,6 +1,6 @@
 import { ethers, network } from 'hardhat'
 
-const FACTORY_V2   = '0xe06b00Be7AFc23db6aA9e809F478E9A1AE3074D1'
+const FACTORY_V2   = '0x2268B8aad138a550FEf46C621756fEb26b587F78'
 const NEW_RELAYER  = '0x51080f31a21bedafe50180944606044c12ea88e4'
 
 const ABI = ['function setRelayer(address _relayer) external']

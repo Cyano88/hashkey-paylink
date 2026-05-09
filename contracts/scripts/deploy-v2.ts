@@ -4,7 +4,7 @@ import { ethers, network } from 'hardhat'
 // USDC on Base Mainnet (Circle canonical)
 const USDC_BASE = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'
 
-// Treasury: cold wallet that receives 0.5% platform fee + gas reimbursement
+// Treasury: cold wallet that receives 0.2% platform fee + gas reimbursement
 const EVM_TREASURY = '0xcE5dF9e1115F81a2Fc2F65941B20B820d508e753'
 
 async function main() {
@@ -32,11 +32,16 @@ async function main() {
   // ── Deploy PayLinkFactoryV2 ───────────────────────────────────────────────
   console.log('Deploying PayLinkFactoryV2…')
   const Factory = await ethers.getContractFactory('PayLinkFactoryV2')
-  const factory = await Factory.deploy(USDC_BASE, TREASURY, RELAYER)
+  const factory = await Factory.deploy(TREASURY, RELAYER, deployer.address)
   await factory.waitForDeployment()
 
   const factoryAddress = await factory.getAddress()
   console.log(`✅  PayLinkFactoryV2: ${factoryAddress}\n`)
+
+  console.log(`Configuring USDC: ${USDC_BASE}`)
+  const tx = await factory.setUSDC(USDC_BASE)
+  await tx.wait()
+  console.log(`✅  USDC set: ${USDC_BASE}\n`)
 
   // ── Sanity check: vault address prediction ────────────────────────────────
   await new Promise(r => setTimeout(r, 4000))

@@ -11,7 +11,7 @@ export default function PaymentLinks() {
       <Section title="Single-payer links">
         <p>A standard payment link is a URL with your recipient address, amount, and optional memo encoded as query params. Share it as a link or QR code. The payer opens it, connects a wallet or uses Send via Address, and pays.</p>
         <CodeBlock lang="url">{`https://hashpaylink.com/pay?evm=0xYourAddress&amt=25&memo=Invoice+042`}</CodeBlock>
-        <p className="mt-2">The platform fee (0.2%) is deducted atomically in the transaction. The payer sees the exact amount they'll send and the exact amount you'll receive before signing.</p>
+        <p className="mt-2">The 0.2% platform fee is deducted atomically in the transaction. The payer sees the exact amount they'll send and the exact amount you'll receive before signing.</p>
       </Section>
 
       <Section title="Multi-payer collection">

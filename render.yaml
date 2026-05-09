@@ -5,10 +5,10 @@ services:
   - type: web
     name: hashkey-paylink
     runtime: node
-    plan: free
-    buildCommand: npm install --include=dev && npm run build
-    startCommand: npx tsx server.ts
-    healthCheckPath: /api/relay-v2   # Render will POST → 405, which is fine (service is up)
+    plan: starter
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
         value: production
@@ -17,13 +17,13 @@ services:
       - key: VITE_WALLETCONNECT_PROJECT_ID
         sync: false                   # set manually in Render dashboard
       - key: VITE_FACTORY_V2
-        value: "0xe06b00Be7AFc23db6aA9e809F478E9A1AE3074D1"
+        value: "0x2268B8aad138a550FEf46C621756fEb26b587F78"
       - key: VITE_RPC_URL
         sync: false                   # your Alchemy frontend RPC key
 
       # ── V2 relayer (api/relay-v2.ts) ──────────────────────────────────────
       - key: PAYLINK_FACTORY_V2
-        value: "0xe06b00Be7AFc23db6aA9e809F478E9A1AE3074D1"
+        value: "0x2268B8aad138a550FEf46C621756fEb26b587F78"
       - key: RELAYER_PRIVATE_KEY
         sync: false                   # 0x-prefixed — ROTATE before adding here
       - key: PRIVATE_RPC_URL
@@ -35,9 +35,9 @@ services:
       - key: PRIVATE_RPC_URL_ARB
         value: "https://arb1.arbitrum.io/rpc"   # swap for Alchemy/QuickNode in prod
       - key: PAYLINK_FACTORY_V2_ARB
-        value: "0xe06b00Be7AFc23db6aA9e809F478E9A1AE3074D1"
+        value: "0x2268B8aad138a550FEf46C621756fEb26b587F78"
       - key: VITE_FACTORY_V2_ARB
-        value: "0xe06b00Be7AFc23db6aA9e809F478E9A1AE3074D1"
+        value: "0x2268B8aad138a550FEf46C621756fEb26b587F78"
 
       # ── V1 sweep keeper (api/sweep.ts + api/sweep-keeper.ts) ──────────────
       - key: KEEPER_PRIVATE_KEY
@@ -45,7 +45,7 @@ services:
       - key: CRON_SECRET
         sync: false                   # random string; authenticate sweep-keeper cron
       - key: FACTORY_FROM_BLOCK
-        value: "29500000"             # Base block the V1 factory was deployed at
+        value: "45786000"             # Base block before the 0.2% router factory deployment
 
 # ── External cron (sweep-keeper) ──────────────────────────────────────────────
 # Render free tier does not include cron jobs.

@@ -20,9 +20,9 @@ export const EVM_CLIENTS = {
 
 // ─── Factory addresses ────────────────────────────────────────────────────────
 export const ROUTER_FACTORY: Partial<Record<'base' | 'hashkey' | 'arc', `0x${string}`>> = {
-  base:    '0x163c3B1695e439d20D99Bb344554c5B64965c446',
-  hashkey: '0x163c3B1695e439d20D99Bb344554c5B64965c446',
-  arc:     '0x163c3B1695e439d20D99Bb344554c5B64965c446',
+  base:    '0x70Dd5226eB973268263A9AcD8BC48b4E59E7beCA',
+  hashkey: '0x70Dd5226eB973268263A9AcD8BC48b4E59E7beCA',
+  arc:     '0x70Dd5226eB973268263A9AcD8BC48b4E59E7beCA',
 }
 
 // ─── Factory ABIs ─────────────────────────────────────────────────────────────

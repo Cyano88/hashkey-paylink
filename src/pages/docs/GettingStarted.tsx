@@ -37,7 +37,7 @@ export default function GettingStarted() {
       <Section title="4. Payment confirms">
         <p>Payment detection happens via chain-specific polling — typically within 2–3 seconds of on-chain confirmation. The payer sees a success card showing:</p>
         <ul className="list-none space-y-1 mt-2">
-          <li>• Exact amount received (after 0.2% platform fee)</li>
+          <li>• Exact amount received after the 0.2% platform fee</li>
           <li>• Transaction hash with explorer link</li>
           <li>• Underpayment or overpayment notice if applicable</li>
         </ul>

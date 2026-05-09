@@ -14,7 +14,7 @@ export default function Chains() {
           rows={[
             ['Base',     'USDC',  'EIP-2612 permit + Multicall3 or CREATE2 ghost vault', '8453'],
             ['HashKey',  'HSK + USDC', 'Direct native HSK transfer (~0.0001 HSK)', '177'],
-            ['Arc',      'USDC',  'EIP-2612 permit + Multicall3 or CREATE2 ghost vault', '48900'],
+            ['Arc',      'USDC',  'EIP-2612 permit + Multicall3 or CREATE2 ghost vault', '5042002'],
             ['Starknet', 'USDC',  'AVNU Paymaster sponsors all STRK fees',              'SN_MAIN'],
             ['Solana',   'USDC',  'Relayer keypair covers all SOL fees',                 'mainnet-beta'],
             ['Arbitrum', 'GHO',   'Relayer covers ETH gas for stablecoin transfer',      '42161'],
@@ -52,12 +52,14 @@ export default function Chains() {
         <Table
           headers={['Property', 'Value']}
           rows={[
-            ['Chain ID',  '48900'],
+            ['Chain ID',  '5042002'],
+            ['RPC',       'https://rpc.testnet.arc.network'],
+            ['Explorer',  'https://testnet.arcscan.app'],
             ['Factory',   'VITE_FACTORY_V2_ARC env var'],
             ['Relayer key', 'RELAYER_PRIVATE_KEY_ARC env var'],
           ]}
         />
-        <InfoBox type="info">Arc Testnet (Chain ID 5042002) is available for development. The production deployment targets Arc Mainnet.</InfoBox>
+        <InfoBox type="info">Arc is currently configured for Arc Testnet (Chain ID 5042002). Swap these values when Arc Mainnet details are published.</InfoBox>
       </Section>
 
       <Section title="Starknet">

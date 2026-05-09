@@ -5,7 +5,7 @@ import type { PayLinkFactoryV2, MockERC20 } from '../typechain-types'
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
-const FEE_BPS              = 50n
+const FEE_BPS              = 20n
 const MAX_GAS_REIMB        = 1_000_000n                  // 1 USDC (6-dec) / contract constant
 const MAX_NATIVE_GAS_REIMB = ethers.parseEther('0.01')   // 0.01 HSK/ETH (18-dec)
 
@@ -167,7 +167,7 @@ describe('PayLinkFactoryV2', () => {
       }
     }
 
-    it('splits 99.5% recipient / 0.5% treasury', async () => {
+    it('splits 99.8% recipient / 0.2% treasury', async () => {
       const total = usdc(100)
       const { fee, payout } = split(total, 0n)
       const r = await fundAndRelay(total, 0n)
@@ -267,7 +267,7 @@ describe('PayLinkFactoryV2', () => {
       }
     }
 
-    it('splits 99.5% to recipient, 0.5% to treasury in native token', async () => {
+    it('splits 99.8% to recipient, 0.2% to treasury in native token', async () => {
       const total = hsk(1)
       const { fee, payout } = split(total, 0n)
       const vault = await factory.getVaultAddress(linkId, recipient.address)
@@ -525,7 +525,7 @@ describe('PayLinkFactoryV2', () => {
       expect(await ghoToken.balanceOf(recipient.address) - rBefore).to.equal(payout)
     })
 
-    it('large GHO amount relay — correct split at 0.5% fee', async () => {
+    it('large GHO amount relay — correct split at 0.2% fee', async () => {
       const total = gho(1000)
       const { fee, payout } = split(total, 0n)
 
@@ -536,7 +536,7 @@ describe('PayLinkFactoryV2', () => {
       await ghoFactory.connect(relayer).relay(ghoLinkId, recipient.address, 0n)
 
       expect(await ghoToken.balanceOf(recipient.address) - rBefore).to.equal(payout)
-      expect(fee).to.equal(gho(5)) // 0.5% of 1000 GHO = 5 GHO
+      expect(fee).to.equal(gho(2)) // 0.2% of 1000 GHO = 2 GHO
     })
 
     it('emits PaymentRelayed with correct 18-dec amounts', async () => {

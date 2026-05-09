@@ -2,7 +2,7 @@ import { ExternalLink, Zap } from 'lucide-react'
 import { CHAIN_META, PLATFORM_FEE_BPS } from './chains'
 import type { PayLinkButtonProps } from './types'
 
-const HOSTED_BASE_URL = 'https://hash-paylink.vercel.app'
+const HOSTED_BASE_URL = 'https://hashpaylink.com'
 
 export function PayLinkButton({
   recipientEVM,

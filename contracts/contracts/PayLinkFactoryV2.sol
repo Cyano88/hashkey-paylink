@@ -66,7 +66,7 @@ contract GhostVaultV2 {
  *  0x4e59b44847b379578588920cA78FbF26c0B4956C → same address everywhere.
  *
  * ── Fee model ─────────────────────────────────────────────────────────────────
- *  Both relay() and relayNative() apply the same 0.5% platform fee.
+ *  Both relay() and relayNative() apply the same 0.2% platform fee.
  *  Gas reimbursement is capped: 1 USDC for ERC-20, 0.01 native for HSK/ETH.
  */
 contract PayLinkFactoryV2 {
@@ -79,7 +79,7 @@ contract PayLinkFactoryV2 {
     address public owner;
 
     // ─── Constants ────────────────────────────────────────────────────────────
-    uint16  public constant FEE_BPS              = 50;            // 0.5 %
+    uint16  public constant FEE_BPS              = 20;            // 0.2 %
     uint256 public constant MAX_GAS_REIMB        = 1_000_000;     // 1.00 USDC  (6 decimals)
     uint256 public constant MAX_NATIVE_GAS_REIMB = 0.01 ether;    // 0.01 HSK / ETH (18 decimals)
 

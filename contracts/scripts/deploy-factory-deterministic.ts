@@ -68,19 +68,36 @@ async function deployViaNick(
   return ethers.getCreate2Address(NICK_FACTORY, salt, ethers.keccak256(initcode))
 }
 
+async function estimateNickDeploy(
+  signer:   ethers.Signer,
+  salt:     string,
+  initcode: string,
+): Promise<bigint | null> {
+  try {
+    const deployData = ethers.concat([salt, initcode])
+    return await signer.estimateGas({ to: NICK_FACTORY, data: deployData })
+  } catch {
+    return null
+  }
+}
+
 async function main() {
   const [deployer] = await ethers.getSigners()
   const provider   = ethers.provider
   const chainName  = network.name
   const chainUsdc  = USDC_PER_CHAIN[chainName] ?? ''
+  const dryRun     = process.env.DRY_RUN === '1'
+  const balance    = await provider.getBalance(deployer.address)
 
   console.log('══════════════════════════════════════════════════════')
   console.log('HashKey PayLink — Deterministic Factory Deployment')
   console.log('══════════════════════════════════════════════════════')
   console.log(`Network:   ${chainName}`)
   console.log(`Deployer:  ${deployer.address}`)
+  console.log(`Balance:   ${ethers.formatEther(balance)} native`)
   console.log(`Treasury:  ${TREASURY}`)
   console.log(`USDC:      ${chainUsdc || '(not configured — call setUSDC manually)'}`)
+  if (dryRun) console.log('Mode:      DRY_RUN (no transactions will be sent)')
   console.log()
 
   // ── Verify Nick's factory exists ───────────────────────────────────────────
@@ -107,6 +124,10 @@ async function main() {
   const v2Code = await provider.getCode(v2Address)
   if (v2Code !== '0x') {
     console.log('Already deployed ✅')
+  } else if (dryRun) {
+    const gas = await estimateNickDeploy(deployer, SALT_V2, v2Initcode)
+    if (gas) console.log(`Estimated deploy gas: ${gas.toString()}`)
+    console.log('Not deployed — dry run, skipping transaction.')
   } else {
     console.log('Deploying…')
     await deployViaNick(deployer, SALT_V2, v2Initcode)
@@ -121,18 +142,24 @@ async function main() {
     'function setRelayer(address) external',
   ], deployer)
 
-  const currentUsdc = await v2.USDC()
-  if (currentUsdc === ethers.ZeroAddress) {
-    if (!chainUsdc) {
-      console.log('⚠️  No USDC address for this chain — call setUSDC() manually.')
-    } else {
-      console.log(`Configuring USDC: ${chainUsdc}`)
-      const tx = await v2.setUSDC(chainUsdc)
-      await tx.wait()
-      console.log(`USDC set ✅`)
-    }
+  if (v2Code === '0x' && dryRun) {
+    console.log('USDC configuration skipped — factory is not deployed in dry run.')
   } else {
-    console.log(`USDC already set: ${currentUsdc} ✅`)
+    const currentUsdc = await v2.USDC()
+    if (currentUsdc === ethers.ZeroAddress) {
+      if (!chainUsdc) {
+        console.log('⚠️  No USDC address for this chain — call setUSDC() manually.')
+      } else if (dryRun) {
+        console.log(`USDC not set — dry run would configure: ${chainUsdc}`)
+      } else {
+        console.log(`Configuring USDC: ${chainUsdc}`)
+        const tx = await v2.setUSDC(chainUsdc)
+        await tx.wait()
+        console.log(`USDC set ✅`)
+      }
+    } else {
+      console.log(`USDC already set: ${currentUsdc} ✅`)
+    }
   }
 
   // ══ 2. PaymentRouterFactory ══════════════════════════════════════════════════
@@ -149,6 +176,10 @@ async function main() {
   const routerCode = await provider.getCode(routerAddress)
   if (routerCode !== '0x') {
     console.log('Already deployed ✅')
+  } else if (dryRun) {
+    const gas = await estimateNickDeploy(deployer, SALT_ROUTER, routerInitcode)
+    if (gas) console.log(`Estimated deploy gas: ${gas.toString()}`)
+    console.log('Not deployed — dry run, skipping transaction.')
   } else {
     console.log('Deploying…')
     await deployViaNick(deployer, SALT_ROUTER, routerInitcode)

@@ -26,7 +26,7 @@ contract PaymentRouter is ReentrancyGuard {
     address public immutable recipient;
     address public immutable treasury;
 
-    uint256 public constant FEE_BPS        = 50;      // 0.5 %
+    uint256 public constant FEE_BPS        = 20;      // 0.2 %
     uint256 public constant BPS_DENOMINATOR = 10_000;
 
     // ─── Events ──────────────────────────────────────────────────────────────

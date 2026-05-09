@@ -1,6 +1,6 @@
 import { ethers, network } from 'hardhat'
 
-// ── Treasury address (receives the 0.5% fee on every payment) ────────────────
+// ── Treasury address (receives the 0.2% fee on every payment) ────────────────
 const EVM_TREASURY = '0xcE5dF9e1115F81a2Fc2F65941B20B820d508e753'
 
 async function main() {

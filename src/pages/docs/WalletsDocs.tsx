@@ -13,7 +13,7 @@ export default function WalletsDocs() {
       <Section title="EVM wallets (Base, HashKey, Arc, Arbitrum)">
         <SubSection title="MetaMask">
           <p>Install the MetaMask browser extension or mobile app. Hash PayLink automatically prompts network switching when you connect on a different chain. No manual network configuration required for Base.</p>
-          <p className="mt-1 text-sm">For Arc Testnet: add manually with Chain ID <Code>5042002</Code>, RPC <Code>https://rpc.arc-testnet.io</Code>.</p>
+          <p className="mt-1 text-sm">For Arc Testnet: add manually with Chain ID <Code>5042002</Code>, RPC <Code>https://rpc.testnet.arc.network</Code>.</p>
         </SubSection>
 
         <SubSection title="Coinbase Wallet">
@@ -65,10 +65,10 @@ export default function WalletsDocs() {
         <p>To test on Arc Testnet, add the network manually to MetaMask:</p>
         <ul className="list-none space-y-1 mt-2 font-mono text-xs text-gray-600 dark:text-gray-400">
           <li>Network name: <Code>Arc Testnet</Code></li>
-          <li>RPC URL: <Code>https://rpc.arc-testnet.io</Code></li>
+          <li>RPC URL: <Code>https://rpc.testnet.arc.network</Code></li>
           <li>Chain ID: <Code>5042002</Code></li>
-          <li>Currency symbol: <Code>ETH</Code></li>
-          <li>Explorer: <Code>https://explorer.arc-testnet.io</Code></li>
+          <li>Currency symbol: <Code>USDC</Code></li>
+          <li>Explorer: <Code>https://testnet.arcscan.app</Code></li>
         </ul>
         <p className="mt-3">Get testnet USDC from the Arc faucet. Contact the Arc team for faucet access details.</p>
       </Section>

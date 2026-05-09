@@ -60,7 +60,7 @@ Hash PayLink is a **stateless, non-custodial payment infrastructure** that turns
 | Gas friction kills micro-payments | Every chain is gasless for the payer (see Gasless Engine below) |
 | Solana users excluded from EVM payments | Native Solana USDC support with full gasless relay |
 | Payment links tied to one chain | One link covers 5 chains — payer picks their preferred chain |
-| No visibility into fees | Transparent 0.2% fee shown before every signature |
+| No visibility into fees | Transparent platform fee shown before every signature |
 | Payments hard to track | Real-time on-chain listener + live organizer dashboard |
 | Restaurants/shops need a POS terminal | QR code acts as a contactless, always-on payment terminal |
 | Long error messages confuse payers | Human-readable: "Insufficient funds", "Transaction cancelled" |
@@ -90,7 +90,7 @@ This is the core innovation of Hash PayLink. **On every supported chain, the pay
 
 1. The payer signs an **EIP-2612 permit** — an off-chain typed signature (`signTypedData`) that authorises the FeeRouter contract to spend their USDC. This signature costs zero gas.
 2. Hash PayLink combines the `permit()` call and the `transferFrom()` in a single **Multicall3 `aggregate3`** transaction.
-3. The payer's wallet submits **one transaction** that simultaneously validates the permit and routes USDC to the recipient minus the 0.2% fee. The payer pays the (small) Base/Arc gas fee in ETH/USDC — but on Base this is fractions of a cent, and on Arc the native USDC gas model keeps it negligible.
+3. The payer's wallet submits **one transaction** that simultaneously validates the permit and routes USDC to the recipient minus the platform fee. The payer pays the (small) Base/Arc gas fee in ETH/USDC — but on Base this is fractions of a cent, and on Arc the native USDC gas model keeps it negligible.
 4. On **Base Mainnet**, every transaction appends the ERC-8021 Base Builder Code (`bc_8qtb7tny`) to the calldata for Base attribution.
 
 > **Why this matters:** The payer never approves a separate ERC-20 `approve()` transaction. The permit and payment happen atomically in a single signature + one tx.
@@ -102,7 +102,7 @@ This is the core innovation of Hash PayLink. **On every supported chain, the pay
 1. When the payer selects "Send via Address", Hash PayLink calls `PayLinkFactoryV2.getVaultAddress(linkId, recipient)` — a **pure on-chain computation** that predicts a deterministic CREATE2 address. No transaction needed.
 2. The payer sends USDC to this address from **any wallet, CEX withdrawal, or existing balance** — no wallet connection required.
 3. A Hash PayLink relayer polls the vault address every 3 seconds. The moment USDC arrives, it calls `PayLinkFactoryV2.relay(linkId, recipient, gasReimbUsdc)`.
-4. The contract forwards USDC to the recipient, deducts the 0.2% fee to treasury, and reimburses the relayer's gas cost in USDC. The relayer pays ETH gas — never the payer.
+4. The contract forwards USDC to the recipient, deducts the platform fee to treasury, and reimburses the relayer's gas cost in USDC. The relayer pays ETH gas — never the payer.
 5. The contract enforces: `onlyRelayer`, `MAX_GAS_REIMB` cap (1.00 USDC), and CREATE2 collision guard — double-relay reverts at the contract level.
 
 > **Payer needs:** USDC in any wallet. Zero ETH. Zero wallet connection. Zero app.
@@ -170,7 +170,7 @@ When a payer opens a Hash PayLink URL, they see a **payment card** that includes
 - **Chain selector pills** — one for each chain the link supports. Active chain highlighted in its brand color (blue for Base, gold for HashKey, purple for Starknet, teal for Arc, green for Solana). Switching chains auto-updates the network in the connected wallet.
 - **Amount display** — the requested USDC/HSK amount in large bold type with the asset label.
 - **On-chain memo** — if set by the organizer, shown as a pill badge below the amount.
-- **Network details row** — chain name, engine type, Chain ID, and platform fee (0.2%).
+- **Network details row** — chain name, engine type, Chain ID, and platform fee.
 - **Pay mode toggle** — "Connect Wallet" or "Send via Address" (available on Base, Arc, Solana).
 - **Underpayment detection** — if the actual received amount differs from the requested amount, the success card changes state:
   - ✅ **≥99% received** → Green "Payment Sent!" (standard)
@@ -760,7 +760,7 @@ PRs welcome. Open an issue first for large changes.
 
 | Tier | Fee | Includes |
 |---|---|---|
-| **Standard** | 0.2% per tx | All 5 chains, hosted checkout, real-time detection, gasless relay, organizer dashboard |
+| **Standard** | Platform fee per tx | All 5 chains, hosted checkout, real-time detection, gasless relay, organizer dashboard |
 | **Branded QR** | Free (email request) | Custom branded QR code + dashboard URL for merchants |
 | **Enterprise** | Contact us | Whitelabel UI, custom domain, priority support, custom fee structure |
 

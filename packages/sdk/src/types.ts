@@ -19,7 +19,7 @@ export interface PayLinkButtonProps {
   amount: string
   /** Optional memo stored on-chain in tx input data */
   memo?: string
-  /** Platform fee in basis points. Default: 50 (0.5%). Set 0 to disable. */
+  /** Platform fee in basis points. Default: 20 (0.2%). Set 0 to disable. */
   platformFeeBps?: number
   /** Called after on-chain confirmation */
   onPaymentSuccess?: (params: PaymentSuccessParams) => void

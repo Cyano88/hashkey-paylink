@@ -79,7 +79,7 @@ function keywordReply(input: string): ChatMsg | null {
 
   // ── Fees ─────────────────────────────────────────────────────────────────────
   if (has('fee', 'fees', 'cost', 'charge', '0.2', 'platform fee', 'how much', 'percentage', 'deduction', 'cut', 'commission', 'pricing', 'free'))
-    return { from: 'bot', text: 'Hash PayLink charges a flat 0.2% platform fee, deducted automatically at settlement. For example, a 100 USDC payment results in 99.8 USDC delivered. No subscription fees, no hidden charges. Gas is sponsored on Base and Arc — payers pay nothing extra.' }
+    return { from: 'bot', text: 'Hash PayLink charges a flat 0.2% platform fee, deducted automatically at settlement. For example, a 100 USDC payment results in 99.8 USDC before any gas reimbursement. No subscription fees, no hidden charges.' }
 
   // ── Gas / gasless ────────────────────────────────────────────────────────────
   if (has('gas', 'gasless', 'free gas', 'sponsored', 'network fee', 'transaction fee', 'avnu', 'paymaster'))
@@ -131,11 +131,11 @@ function keywordReply(input: string): ChatMsg | null {
 
   // ── Security / non-custodial ─────────────────────────────────────────────────
   if (has('safe', 'secure', 'trust', 'custody', 'custodial', 'non-custodial', 'open source', 'trustless', 'audit', 'smart contract'))
-    return { from: 'bot', text: 'Hash PayLink is fully non-custodial. Funds flow directly from payer to recipient via on-chain smart contracts — the platform never holds funds. Links are stateless, parameters encoded in the URL. Smart contracts are open source and verifiable on-chain. The only deduction is the 0.2% platform fee, enforced on-chain.' }
+    return { from: 'bot', text: 'Hash PayLink is fully non-custodial. Funds flow directly from payer to recipient via on-chain smart contracts — the platform never holds funds. Links are stateless, parameters encoded in the URL. Smart contracts are open source and verifiable on-chain. The platform deducts a 0.2% fee at settlement.' }
 
   // ── USDC ─────────────────────────────────────────────────────────────────────
   if (has('usdc', 'usd coin', 'stablecoin', 'stable coin'))
-    return { from: 'bot', text: 'Hash PayLink settles in USDC on Base, Arc, and Starknet; native HSK on HashKey; and native USDC on Solana. All USDC is Circle-issued — not bridged or wrapped. The 0.2% fee is deducted at settlement.' }
+    return { from: 'bot', text: 'Hash PayLink settles in USDC on Base, Arc, and Starknet; native HSK on HashKey; and native USDC on Solana. All USDC is Circle-issued — not bridged or wrapped. The contract-backed flow deducts the platform fee at settlement.' }
 
   // ── Memo / label / tag ───────────────────────────────────────────────────────
   if (has('memo', 'label', 'tag', 'note', 'reference', 'description'))
@@ -147,7 +147,7 @@ function keywordReply(input: string): ChatMsg | null {
 
   // ── Platform overview — true catch-all for generic questions ─────────────────
   if (has('what is', 'overview', 'hash paylink', 'introduction', 'intro', 'about') || (has('how') && has('work')) || (has('tell') && has('me')) || (has('explain') && !has('multi', 'flex', 'fee', 'gas', 'chain', 'wallet', 'pay', 'send', 'qr', 'sdk')))
-    return { from: 'bot', text: 'Hash PayLink is a non-custodial, multi-chain payment platform. Merchants create a shareable payment link in seconds — no account or KYC required. Payers pay by connecting a wallet OR sending directly from any exchange or CEX using "Send via Address". Supported chains: Base, HashKey, Arc, Starknet, and Solana. A flat 0.2% fee is deducted at settlement.' }
+    return { from: 'bot', text: 'Hash PayLink is a non-custodial, multi-chain payment platform. Merchants create a shareable payment link in seconds — no account or KYC required. Payers pay by connecting a wallet OR sending directly from any exchange or CEX using "Send via Address". Supported chains: Base, HashKey, Arc, Starknet, and Solana. A platform fee is deducted at settlement.' }
 
   return null
 }

@@ -250,7 +250,7 @@ When a payer opens a Hash PayLink:
 1. **Select chain** — chain pills show which chains the organiser has set up addresses for
 2. **Choose pay mode** — "Connect Wallet" or "Send via Address" (Base, Arc, Solana)
 3. **Connect wallet** (if wallet mode) — standard RainbowKit popup for EVM; ArgentX/Braavos for Starknet; Phantom/Solflare for Solana
-4. **Review the payment** — amount, asset, network, chain ID, 0.2% platform fee displayed
+4. **Review the payment** — amount, asset, network, chain ID, and platform fee displayed
 5. **Pay** — sign in wallet. The transaction is submitted gaslessly — **the payer pays zero gas**
 6. **Success card** — shows exact amount received, transaction hash, and a direct link to the block explorer
 
@@ -680,7 +680,7 @@ The `PayLinkFactoryV2` contract enforces on-chain:
 - **`onlyRelayer`** — only the registered Hash PayLink relayer can trigger a relay. No third party can intercept vault funds.
 - **`MAX_GAS_REIMB` cap (1.00 USDC)** — the relayer cannot overcharge gas reimbursement, capped in the contract itself.
 - **CREATE2 collision guard** — attempting to relay the same `linkId` twice reverts at the contract level. Double-spend is impossible.
-- **Fee splits are deterministic** — `recipient = total - 0.2% fee - gas_reimb`. All values are transparent and verifiable on-chain.
+- **Fee splits are deterministic** — `recipient = total - platform_fee - gas_reimb`. All values are transparent and verifiable on-chain.
 
 ### Private Key Security
 
@@ -718,7 +718,7 @@ PRIVATE_RPC_URL=                  # Private Alchemy/QuickNode RPC for Base
 PRIVATE_RPC_URL_ARC=              # Private Arc RPC
 PAYLINK_FACTORY_V2=               # PayLinkFactoryV2 contract address on Base
 PAYLINK_FACTORY_V2_ARC=           # PayLinkFactoryV2 contract address on Arc
-TREASURY_ADDRESS=                 # EVM treasury wallet (receives 0.2% fee)
+TREASURY_ADDRESS=                 # EVM treasury wallet (receives platform fees)
 
 # ── Solana Relay ─────────────────────────────────────────────────────────
 RELAYER_PRIVATE_KEY_SOLANA=       # Base58 or JSON-array Solana keypair

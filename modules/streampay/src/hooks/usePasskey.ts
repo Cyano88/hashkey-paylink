@@ -7,11 +7,12 @@ function b64url(buf: ArrayBuffer): string {
     .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
 }
 
-function fromB64url(s: string): Uint8Array {
-  return Uint8Array.from(
+function fromB64url(s: string): ArrayBuffer {
+  const bytes = Uint8Array.from(
     atob(s.replace(/-/g, '+').replace(/_/g, '/')),
     c => c.charCodeAt(0),
   )
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
 }
 
 export type PasskeyState = {

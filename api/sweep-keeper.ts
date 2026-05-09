@@ -20,12 +20,12 @@ import { privateKeyToAccount } from 'viem/accounts'
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
-const FACTORY = '0x163c3B1695e439d20D99Bb344554c5B64965c446' as const
+const FACTORY = '0x70Dd5226eB973268263A9AcD8BC48b4E59E7beCA' as const
 const USDC    = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' as const
 
 // Block the factory was deployed — avoids scanning from genesis.
 // Set FACTORY_FROM_BLOCK env var to the exact deployment block for efficiency.
-const FACTORY_FROM_BLOCK = BigInt(process.env.FACTORY_FROM_BLOCK ?? '29500000')
+const FACTORY_FROM_BLOCK = BigInt(process.env.FACTORY_FROM_BLOCK ?? '45786000')
 
 // ─── ABIs ─────────────────────────────────────────────────────────────────────
 
