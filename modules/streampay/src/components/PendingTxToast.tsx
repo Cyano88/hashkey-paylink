@@ -13,7 +13,7 @@ export function PendingTxToast({ txs, onDismiss }: PendingTxToastProps) {
   if (visible.length === 0) return null
 
   return (
-    <div className="pointer-events-none fixed bottom-24 right-4 z-50 flex flex-col items-end gap-2 sm:right-6">
+    <div className="fixed bottom-24 right-4 z-50 flex flex-col items-end gap-2 sm:right-6">
       {visible.map(tx => (
         <Toast key={tx.txHash} tx={tx} onDismiss={onDismiss} />
       ))}
@@ -97,18 +97,17 @@ function Toast({ tx, onDismiss }: { tx: PendingTx; onDismiss: (h: `0x${string}`)
             {isConfirmed && 'Your transaction has been finalized on-chain.'}
             {isFailed    && 'The transaction was reverted. No funds were moved.'}
           </p>
-          <a
-            href={`${ARC_EXPLORER}/tx/${tx.txHash}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg border border-gray-200 py-2 text-[12px] font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
+          <button
+            type="button"
+            onClick={() => window.open(`${ARC_EXPLORER}/tx/${tx.txHash}`, '_blank', 'noopener,noreferrer')}
+            className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg border border-gray-200 py-2 text-[12px] font-semibold text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer"
           >
             <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round"
                 d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
             </svg>
             View on Arcscan
-          </a>
+          </button>
         </div>
 
         {/* Dismiss */}
