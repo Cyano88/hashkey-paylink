@@ -6,6 +6,10 @@ import type {
   GetBalancesResult,
   UnifiedBalanceChainIdentifier,
 } from '@circle-fin/unified-balance-kit'
+import { getAssociatedTokenAddress } from '@solana/spl-token'
+import { Connection, PublicKey } from '@solana/web3.js'
+import { EVM_CLIENTS, ERC20_BALANCE_OF_ABI } from './router'
+import { CHAIN_META } from './chains'
 
 export type UnifiedBalanceChainKey = 'base' | 'arc' | 'arbitrum' | 'solana' | 'starknet'
 
@@ -91,6 +95,32 @@ async function queryCircleBalance(address: string, chain: UnifiedBalanceChainIde
   return amountForCircleChain(result, chain)
 }
 
+async function queryEvmTokenBalance(key: 'base' | 'arc' | 'arbitrum', address: string): Promise<number> {
+  const meta = CHAIN_META[key]
+  const raw = await EVM_CLIENTS[key].readContract({
+    address: meta.tokenAddress,
+    abi: ERC20_BALANCE_OF_ABI,
+    functionName: 'balanceOf',
+    args: [address as `0x${string}`],
+  })
+  return Number(raw) / 10 ** meta.decimals
+}
+
+async function querySolanaWalletBalance(address: string): Promise<number> {
+  const connection = new Connection('https://api.mainnet-beta.solana.com', 'confirmed')
+  const owner = new PublicKey(address)
+  const mint = new PublicKey(CHAIN_META.solana.tokenAddress)
+  const ata = await getAssociatedTokenAddress(mint, owner)
+  try {
+    const balance = await connection.getTokenAccountBalance(ata)
+    return balance.value.uiAmount ?? 0
+  } catch (error) {
+    const message = error instanceof Error ? error.message.toLowerCase() : ''
+    if (message.includes('could not find account') || message.includes('failed to find account')) return 0
+    throw error
+  }
+}
+
 async function queryStarknetBalance(address: string): Promise<number> {
   const response = await fetch('/api/starknet-balance', {
     method: 'POST',
@@ -107,19 +137,36 @@ export async function queryBalances(query: UnifiedBalanceQuery): Promise<Unified
   let rows = emptyRows(selected)
 
   for (const key of selected) {
-    const circleChain = CIRCLE_CHAIN_BY_KEY[key]
-    if (!circleChain) continue
+    if (key === 'starknet') continue
     const address = key === 'solana' ? query.solanaAddress : query.evmAddress
     if (!address) continue
     try {
-      const balance = await queryCircleBalance(address, circleChain)
+      const balance = key === 'solana'
+        ? await querySolanaWalletBalance(address)
+        : await queryEvmTokenBalance(key, address)
       rows = updateRow(rows, key, { balance, status: 'ok', error: undefined })
     } catch (error) {
-      rows = updateRow(rows, key, {
-        balance: 0,
-        status: 'error',
-        error: error instanceof Error ? error.message : 'Circle balance query failed',
-      })
+      const circleChain = CIRCLE_CHAIN_BY_KEY[key]
+      if (!circleChain) {
+        rows = updateRow(rows, key, {
+          balance: 0,
+          status: 'error',
+          error: error instanceof Error ? error.message : 'Balance query failed',
+        })
+        continue
+      }
+
+      try {
+        const balance = await queryCircleBalance(address, circleChain)
+        if (balance <= 0) throw error
+        rows = updateRow(rows, key, { balance, status: 'ok', error: undefined })
+      } catch {
+        rows = updateRow(rows, key, {
+          balance: 0,
+          status: 'error',
+          error: error instanceof Error ? error.message : 'Balance query failed',
+        })
+      }
     }
   }
 
