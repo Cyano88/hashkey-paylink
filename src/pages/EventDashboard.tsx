@@ -10,6 +10,7 @@ import { CHAIN_META } from '../lib/chains'
 import { EVM_CLIENTS } from '../lib/router'
 import { cn, truncateAddress } from '../lib/utils'
 import { queryBalances, type UnifiedBalanceBreakdown, type UnifiedBalanceChainKey } from '../lib/unifiedBalance'
+import { isValidSolanaAddress } from '../lib/solanaAddress'
 
 // Minimal ERC-20 Transfer ABI for getLogs
 const TRANSFER_ABI = [{
@@ -53,7 +54,7 @@ export default function EventDashboard() {
   const fxSrcParam = searchParams.get('fxsrc')  ?? ''
   const fxRateParam= searchParams.get('fxrate') ?? ''
   const evmValid = isAddress(evm)
-  const solanaValid = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(sol)
+  const solanaValid = isValidSolanaAddress(sol)
   const starkValid = /^0x[0-9a-fA-F]{64}$/.test(stark)
   const balanceChains: UnifiedBalanceChainKey[] = (() => {
     if (multiParam === '1') {
@@ -130,10 +131,10 @@ export default function EventDashboard() {
       p.set('multi', '1')
       if (evm)   p.set('evm',   evm)
       if (stark) p.set('stark', stark)
-      if (sol)   p.set('sol',   sol)
+      if (solanaValid) p.set('sol', sol.trim())
     } else {
       if (netParam) p.set('net', netParam)
-      if (sol)      p.set('sol', sol)
+      if (solanaValid) p.set('sol', sol.trim())
       else if (evm) p.set('evm', evm)
     }
     if (fxParam && fxShowParam === '1') {

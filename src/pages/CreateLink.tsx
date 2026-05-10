@@ -47,12 +47,13 @@ import { useStarknet } from '../lib/StarknetContext'
 import { useSolana }   from '../lib/SolanaContext'
 import { CHAIN_META, type ChainKey } from '../lib/chains'
 import { EVM_CLIENTS, ROUTER_FACTORY, FACTORY_GET_ROUTER_ABI, FACTORY_DEPLOY_ROUTER_ABI } from '../lib/router'
+import { isValidSolanaAddress } from '../lib/solanaAddress'
 
 // ─── Starknet address: 0x followed by exactly 64 hex chars ──────────────────
 const isValidStarkAddr = (v: string) => /^0x[0-9a-fA-F]{64}$/.test(v)
 
 // ─── Solana address: base58, 32–44 characters ────────────────────────────────
-const isValidSolanaAddr = (v: string) => /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(v)
+const isValidSolanaAddr = isValidSolanaAddress
 
 const CHAINS: ChainKey[] = ['base', 'starknet', 'arc', 'solana', 'arbitrum']
 

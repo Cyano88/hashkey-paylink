@@ -58,6 +58,7 @@ import { sendCirclePaymasterPayment } from '../lib/circlePaymasterPayment'
 import { canUseCirclePasskeyPayments, prepareCirclePasskeyWallet, sendCirclePasskeyPayment } from '../lib/circlePasskeyPayment'
 import { canUseCircleSolanaEmailWallet, connectCircleSolanaEmailWallet, signCircleSolanaTransaction } from '../lib/circleSolanaEmailWallet'
 import { getSponsoredGasRecoveryUnits } from '../lib/gasRecovery'
+import { isValidSolanaAddress } from '../lib/solanaAddress'
 
 type CircleSolanaSession = Awaited<ReturnType<typeof connectCircleSolanaEmailWallet>>
 
@@ -1123,6 +1124,10 @@ export default function PaymentPage() {
 
   async function handleCircleSolanaEmailPay() {
     if (!resolvedSolana || !showCircleSolanaEmailPay) return
+    if (!isValidSolanaAddress(resolvedSolana)) {
+      setCircleSolanaError('Recipient Solana address is invalid. Ask the organizer for a new payment link.')
+      return
+    }
     const email = circleSolanaEmail.trim()
     if (!email && !circleSolanaSession) {
       setCircleSolanaError('Enter your email to continue with Smart wallet.')
@@ -1183,6 +1188,10 @@ export default function PaymentPage() {
   }
 
   async function handleSolanaPay() {
+    if (!isValidSolanaAddress(resolvedSolana)) {
+      setSolanaError('Recipient Solana address is invalid. Ask the organizer for a new payment link.')
+      return
+    }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const provider = (window as any).phantom?.solana ?? (window as any).solana ?? (window as any).solflare
     if (!provider || !solanaWalletAddr) {
