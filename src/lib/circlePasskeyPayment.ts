@@ -88,7 +88,7 @@ function getCircleClientConfig(chain: ChainKey) {
 
 async function getCredential(email: string) {
   const clientUrl = normalizeCircleClientUrl()
-  if (!CLIENT_KEY || !clientUrl) throw new Error('Circle wallet is not configured.')
+  if (!CLIENT_KEY || !clientUrl) throw new Error('Smart wallet is not configured.')
 
   const transport = toPasskeyTransport(clientUrl, CLIENT_KEY)
   const storedCredentialId = getStoredCredentialId(email)
@@ -125,7 +125,7 @@ function friendlyCircleError(err: unknown) {
   if (lower.includes('user rejected') || lower.includes('notallowederror') || lower.includes('cancel')) {
     return 'Passkey confirmation was cancelled.'
   }
-  return msg.slice(0, 160) || 'Circle wallet payment failed.'
+  return msg.slice(0, 160) || 'Smart wallet payment failed.'
 }
 
 export function canUseCirclePasskeyPayments(chain: ChainKey) {
@@ -139,7 +139,7 @@ export async function sendCirclePasskeyPayment({
   amount,
 }: SendCirclePasskeyPaymentParams): Promise<CirclePasskeyPaymentResult> {
   const config = getCircleClientConfig(chain)
-  if (!config) return { status: 'failed', reason: 'Circle wallet is not configured for this chain.' }
+  if (!config) return { status: 'failed', reason: 'Smart wallet is not configured for this chain.' }
 
   try {
     const meta = CHAIN_META[config.chain]
@@ -169,7 +169,7 @@ export async function sendCirclePasskeyPayment({
     if (balance < totalUnits) {
       return {
         status: 'failed',
-        reason: `Insufficient USDC in Circle wallet ${smartAccount}.`,
+        reason: `Insufficient USDC in Smart wallet ${smartAccount}.`,
         smartAccount,
       }
     }

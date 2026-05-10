@@ -1182,13 +1182,12 @@ export default function PaymentPage() {
     if (!activeRecipient || !showCirclePasskeyPay || !isAddress(activeRecipient)) return
     const email = circleEmail.trim()
     if (!email) {
-      setCirclePasskeyError('Enter your email to continue with Circle wallet.')
+      setCirclePasskeyError('Enter your email to continue with Smart wallet.')
       return
     }
 
     setCirclePasskeyPending(true)
     setCirclePasskeyError(null)
-    setCircleSmartAccount(null)
     setCirclePaymasterTxHash(null)
     try {
       const result = await sendCirclePasskeyPayment({
@@ -2269,17 +2268,19 @@ export default function PaymentPage() {
 
           {payMode === 'wallet' && showCirclePasskeyPay && chain !== 'starknet' && chain !== 'solana' && !manualPayDetected && (
             <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50/70 p-3">
-              <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2.5">
-                <input
-                  type="email"
-                  value={circleEmail}
-                  onChange={(e) => setCircleEmail(e.target.value)}
-                  placeholder="Email for gasless payment"
-                  disabled={circlePasskeyPending || (isEventMode && !attendeeName.trim())}
-                  className="min-w-0 flex-1 bg-transparent text-sm text-gray-800 placeholder:text-gray-400 outline-none"
-                />
-                <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">Gasless</span>
-              </div>
+              {!circleSmartAccount && (
+                <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2.5">
+                  <input
+                    type="email"
+                    value={circleEmail}
+                    onChange={(e) => setCircleEmail(e.target.value)}
+                    placeholder="Email for gasless payment"
+                    disabled={circlePasskeyPending || (isEventMode && !attendeeName.trim())}
+                    className="min-w-0 flex-1 bg-transparent text-sm text-gray-800 placeholder:text-gray-400 outline-none"
+                  />
+                  <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">Gasless</span>
+                </div>
+              )}
               <button
                 onClick={handleCirclePasskeyPay}
                 disabled={circlePasskeyPending || (isEventMode && !attendeeName.trim()) || flexPayDisabled}
@@ -2291,7 +2292,7 @@ export default function PaymentPage() {
                 )}
               >
                 {circlePasskeyPending
-                  ? <><Loader2 className="h-4 w-4 animate-spin" /> {circleSmartAccount ? 'Paying with Circle wallet' : 'Opening Circle wallet'}</>
+                  ? <><Loader2 className="h-4 w-4 animate-spin" /> {circleSmartAccount ? 'Paying with Smart wallet' : 'Opening Smart wallet'}</>
                   : circleSmartAccount
                     ? <><Zap className="h-4 w-4" /> Pay {formatAmount(effectiveAmt, meta.decimals)} {meta.asset}</>
                     : <><Zap className="h-4 w-4" /> Continue with email</>}
@@ -2301,7 +2302,7 @@ export default function PaymentPage() {
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
                       <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
-                        Circle wallet
+                        Smart wallet
                       </p>
                       <p className="truncate font-mono text-[11px] text-gray-600">
                         {truncateAddress(circleSmartAccount, 6)}
@@ -2312,7 +2313,7 @@ export default function PaymentPage() {
                       onClick={handleCopyCircleWallet}
                       className="shrink-0 rounded-md border border-gray-200 bg-white px-2 py-1 text-[10px] font-semibold text-gray-600 transition-all hover:bg-gray-50 active:scale-95"
                     >
-                      {circleWalletCopied ? 'Copied' : 'Copy'}
+                      {circleWalletCopied ? 'Copied' : 'Copy to fund'}
                     </button>
                   </div>
                   <div className="mt-2 flex items-center justify-between border-t border-gray-100 pt-2 text-[11px]">

@@ -58,6 +58,12 @@ const CHAINS: ChainKey[] = ['base', 'starknet', 'arc', 'solana', 'arbitrum']
 
 type VaultStep = 'idle' | 'checking' | 'needs_deploy' | 'deploying' | 'ready' | 'skipped'
 
+function normalizeAmountInput(value: string) {
+  const normalized = value.replace(',', '.').replace(/[^\d.]/g, '')
+  const [whole, ...fraction] = normalized.split('.')
+  return fraction.length ? `${whole}.${fraction.join('')}` : whole
+}
+
 export default function CreateLink() {
   const [evmAddr,       setEvmAddr]       = useState('')
   const [starkAddr,     setStarkAddr]     = useState('')
@@ -219,7 +225,7 @@ export default function CreateLink() {
   const evmValid    = isAddress(evmAddr)
   const starkValid  = isValidStarkAddr(starkAddr)
   const solanaValid = isValidSolanaAddr(solanaAddr)
-  const isValidAmt  = amtDirty && parseFloat(amt) > 0 && !isNaN(parseFloat(amt))
+  const isValidAmt  = amtDirty && /^(?:\d+|\d*\.\d+)$/.test(amt) && Number(amt) > 0
 
   // In access mode event collection is always on
   const effectiveEventMode = accessMode || eventMode
@@ -702,12 +708,12 @@ export default function CreateLink() {
             </label>
             <div className="relative">
               <input
-                type="number"
+                type="text"
+                inputMode="decimal"
+                autoComplete="off"
                 placeholder="0.0"
-                min="0"
-                step="any"
                 value={amt}
-                onChange={(e) => { setAmt(e.target.value); setGeneratedLink('') }}
+                onChange={(e) => { setAmt(normalizeAmountInput(e.target.value)); setGeneratedLink('') }}
                 className={cn(
                   'w-full rounded-xl border bg-gray-50/60 px-4 py-3 pr-28 text-sm',
                   'placeholder:text-gray-400 transition-all focus:bg-white focus:outline-none focus:ring-2',
