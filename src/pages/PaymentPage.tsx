@@ -1035,8 +1035,8 @@ export default function PaymentPage() {
     return msg.includes('user rejected') || msg.includes('user denied') || msg.includes('rejected the request')
   }
 
-  async function tryBasePaymasterCall(data: `0x${string}`) {
-    if (chain !== 'base' || !address || !BASE_PAYMASTER_URL || !basePaymasterAvailable) return false
+  async function tryBasePaymasterCall(data: `0x${string}`): Promise<'sent' | 'failed' | 'unavailable'> {
+    if (chain !== 'base' || !address || !BASE_PAYMASTER_URL || !basePaymasterAvailable) return 'unavailable'
 
     try {
       setBasePaymasterError(null)
@@ -1053,11 +1053,16 @@ export default function PaymentPage() {
         },
       })
       setBasePaymasterCallId(result.id)
-      return true
+      return 'sent'
     } catch (err) {
-      if (isUserRejected(err)) throw err
-      setBasePaymasterError(err instanceof Error ? err.message.slice(0, 160) : String(err).slice(0, 160))
-      return false
+      const fallbackMessage = 'Sponsored Base transaction was not accepted. Use Coinbase Smart Wallet/Base Account, or pay with Send via Address.'
+      if (isUserRejected(err)) {
+        setBasePaymasterError('Sponsored transaction rejected in wallet.')
+      } else {
+        const msg = err instanceof Error ? err.message : String(err)
+        setBasePaymasterError(msg ? msg.slice(0, 160) : fallbackMessage)
+      }
+      return 'failed'
     }
   }
 
@@ -1109,7 +1114,7 @@ export default function PaymentPage() {
       })
       if (chain === 'base') {
         const sponsored = await tryBasePaymasterCall(concat([baseCallData, BASE_BUILDER_CODE]))
-        if (sponsored) return
+        if (sponsored !== 'unavailable') return
       }
       sendTransaction({
         to: MULTICALL3_ADDRESS, value: 0n, chainId: targetChainId,
@@ -1182,7 +1187,7 @@ export default function PaymentPage() {
                         : (basePaymasterTxHash ?? evmTxHash)
   const isWalletPending = chain === 'starknet' ? isStarkPending   : chain === 'solana' ? isSolanaPending   : chain === 'arbitrum' ? (ghoRelayPending || isSignPending) : isEvmWalletPending || isSignPending || isBasePaymasterPending
   const isConfirming    = chain === 'starknet' ? isStarkConfirming : chain === 'solana' ? isSolanaConfirming : chain === 'arbitrum' ? isGhoConfirming : (isEvmConfirming || isBasePaymasterConfirming)
-  const isSendError     = chain === 'starknet' ? !!starkError : chain === 'solana' ? !!solanaError : chain === 'arbitrum' ? !!ghoRelayError : (isEvmSendError || isEvmReverted || isBasePaymasterStatusError || isBasePaymasterFailed)
+  const isSendError     = chain === 'starknet' ? !!starkError : chain === 'solana' ? !!solanaError : chain === 'arbitrum' ? !!ghoRelayError : (isEvmSendError || isEvmReverted || isBasePaymasterStatusError || isBasePaymasterFailed || !!basePaymasterError)
   const sendErrorMsg    = chain === 'starknet' ? starkError
                         : chain === 'solana'   ? solanaError
                         : chain === 'arbitrum' ? ghoRelayError
@@ -1190,6 +1195,8 @@ export default function PaymentPage() {
                           ? (basePaymasterStatusError?.message ?? basePaymasterError ?? 'Sponsored transaction failed').slice(0, 140)
                         : isBasePaymasterFailed
                           ? 'Sponsored transaction failed on Base.'
+                        : basePaymasterError
+                          ? basePaymasterError
                         : isEvmReverted
                           ? 'Transaction reverted. The permit may have expired or your USDC balance was insufficient.'
                           : (evmSendError?.message ?? 'An unknown error occurred').slice(0, 140)
