@@ -193,6 +193,17 @@ function friendlyErrorMsg(raw: string): string {
   return raw.slice(0, 120)
 }
 
+function readableErrorMsg(err: unknown, fallback: string) {
+  if (err instanceof Error) return err.message
+  if (typeof err === 'string') return err
+  try {
+    const json = JSON.stringify(err)
+    return json && json !== '{}' ? json : fallback
+  } catch {
+    return fallback
+  }
+}
+
 // ─── Component ───────────────────────────────────────────────────────────────
 export default function PaymentPage() {
   const [searchParams] = useSearchParams()
@@ -1162,7 +1173,8 @@ export default function PaymentPage() {
       setIsSolanaConfirmed(true)
       void refreshCircleSolanaBalance(session.wallet.address)
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Circle Solana wallet payment failed.'
+      console.error('[circle-solana-email] payment failed:', err)
+      const msg = readableErrorMsg(err, 'Circle Solana wallet payment failed.')
       setCircleSolanaError(msg.slice(0, 160))
       setIsSolanaConfirming(false)
     } finally {

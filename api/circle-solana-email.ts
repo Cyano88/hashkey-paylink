@@ -54,10 +54,18 @@ function circleError(res: Response, err: unknown) {
   if (e.message === 'CIRCLE_API_KEY not configured') {
     return res.status(503).json({ ok: false, error: e.message })
   }
+  const detail = (() => {
+    try {
+      return e.body ? JSON.stringify(e.body).slice(0, 400) : undefined
+    } catch {
+      return undefined
+    }
+  })()
   return res.status(e.status ?? 500).json({
     ok: false,
     code: e.code ?? e.body?.code,
     error: e.body?.message ?? e.body?.error ?? e.message ?? 'Circle request failed',
+    detail,
   })
 }
 

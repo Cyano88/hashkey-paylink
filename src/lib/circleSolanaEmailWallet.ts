@@ -47,6 +47,17 @@ function apiError(data: { error?: string; message?: string; code?: number }) {
   return msg
 }
 
+function readableError(err: unknown) {
+  if (err instanceof Error) return err.message
+  if (typeof err === 'string') return err
+  try {
+    const json = JSON.stringify(err)
+    return json && json !== '{}' ? json : 'Circle Solana wallet request failed.'
+  } catch {
+    return 'Circle Solana wallet request failed.'
+  }
+}
+
 async function circleSolanaApi<T>(payload: Record<string, unknown>): Promise<T> {
   const res = await fetch('/api/circle-solana-email', {
     method: 'POST',
@@ -95,13 +106,13 @@ async function ensureInitializedWallet(sdk: W3SSdk, userToken: string, encryptio
   if (wallet) return wallet
 
   try {
-    const init = await circleSolanaApi<{ challengeId?: string }>({
-      action: 'initializeUser',
-      userToken,
-    })
-    if (init.challengeId) await executeChallenge(sdk, init.challengeId)
+      const init = await circleSolanaApi<{ challengeId?: string }>({
+        action: 'initializeUser',
+        userToken,
+      })
+      if (init.challengeId) await executeChallenge(sdk, init.challengeId)
   } catch (err) {
-    if (err instanceof Error && err.message !== 'already_initialized') throw err
+    if (readableError(err) !== 'already_initialized') throw err
   }
 
   wallet = await getWallet(userToken)
