@@ -80,6 +80,9 @@ function friendlyCircleError(err: unknown) {
   const msg = err instanceof Error ? err.message : String(err)
   const lower = msg.toLowerCase()
   if (lower.includes('not configured')) return msg
+  if (lower.includes('entity config')) {
+    return 'Circle Modular Wallet is not configured for this domain. In Circle Console, make the Client Key allowed domain exactly match the Passkey domain, then redeploy.'
+  }
   if (lower.includes('credential') || lower.includes('passkey')) return 'Passkey login was not completed.'
   if (lower.includes('insufficient')) return 'Insufficient USDC in the Circle smart wallet.'
   if (lower.includes('user rejected') || lower.includes('notallowederror') || lower.includes('cancel')) {
