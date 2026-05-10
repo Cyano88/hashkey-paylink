@@ -37,6 +37,10 @@ export function canUseCircleSolanaEmailWallet() {
   return ENABLED && !!APP_ID
 }
 
+function isSolanaAddress(address: string) {
+  return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(address)
+}
+
 function apiError(data: { error?: string; message?: string; code?: number }) {
   const msg = data.error ?? data.message ?? 'Circle Solana wallet request failed.'
   if (data.code === 155106 || msg.toLowerCase().includes('already initialized')) return 'already_initialized'
@@ -152,6 +156,9 @@ export async function connectCircleSolanaEmailWallet(email: string): Promise<Sol
   })
 
   const wallet = await ensureInitializedWallet(sdk, login.userToken, login.encryptionKey)
+  if (!isSolanaAddress(wallet.address)) {
+    throw new Error('Circle returned a non-Solana wallet address. Check that the User-Controlled Wallet App ID and API key are both Mainnet and Solana-enabled.')
+  }
   return {
     userToken: login.userToken,
     encryptionKey: login.encryptionKey,

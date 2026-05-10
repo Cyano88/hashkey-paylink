@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express'
 import crypto from 'crypto'
+import { PublicKey } from '@solana/web3.js'
 
 const CIRCLE_BASE_URL = (process.env.CIRCLE_BASE_URL ?? 'https://api.circle.com').replace(/\/+$/, '')
 const CIRCLE_API_KEY = process.env.CIRCLE_API_KEY
@@ -60,8 +61,20 @@ function circleError(res: Response, err: unknown) {
   })
 }
 
+function isSolanaAddress(address: string) {
+  try {
+    const key = new PublicKey(address)
+    return key.toBase58() === address
+  } catch {
+    return false
+  }
+}
+
 function solanaWallet(wallets: Array<{ id: string; address: string; blockchain: string }>) {
-  return wallets.find((wallet) => wallet.blockchain === SOLANA_BLOCKCHAIN || wallet.blockchain === 'SOL')
+  return wallets.find((wallet) =>
+    (wallet.blockchain === SOLANA_BLOCKCHAIN || wallet.blockchain === 'SOL') &&
+    isSolanaAddress(wallet.address),
+  )
 }
 
 export default async function handler(req: Request, res: Response) {
@@ -130,6 +143,15 @@ export default async function handler(req: Request, res: Response) {
       const { userToken, walletId, rawTransaction, memo } = params
       if (!userToken || !walletId || !rawTransaction) {
         return res.status(400).json({ ok: false, error: 'Missing userToken, walletId, or rawTransaction' })
+      }
+      const walletData = await circleJson<{ wallets: Array<{ id: string; address: string; blockchain: string }> }>('/v1/w3s/wallets', {
+        method: 'GET',
+        userToken,
+        headers: { accept: 'application/json' },
+      })
+      const wallet = walletData.wallets?.find((item) => item.id === walletId)
+      if (!wallet || !isSolanaAddress(wallet.address)) {
+        return res.status(400).json({ ok: false, error: 'Circle did not return a valid Solana wallet address. Reconnect with email and try again.' })
       }
       const data = await circleJson('/v1/w3s/user/sign/transaction', {
         method: 'POST',
