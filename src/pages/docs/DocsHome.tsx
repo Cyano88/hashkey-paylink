@@ -102,7 +102,7 @@ export default function DocsHome() {
         <ul className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
           <li>• <strong className="text-gray-800 dark:text-gray-200">Platform fee:</strong> 0.2% (20 bps), deducted atomically on-chain</li>
           <li>• <strong className="text-gray-800 dark:text-gray-200">Chains:</strong> Base · HashKey · Arc · Starknet · Solana · Arbitrum</li>
-          <li>• <strong className="text-gray-800 dark:text-gray-200">Asset:</strong> USDC (6 decimals on EVM) — GHO on Arbitrum (18 decimals)</li>
+          <li>• <strong className="text-gray-800 dark:text-gray-200">Asset:</strong> USDC across Base, Arc, Starknet, Solana, and Arbitrum</li>
           <li>• <strong className="text-gray-800 dark:text-gray-200">Archive contract:</strong> <code className="font-mono text-xs bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded">0x79a804C49e1E5EBC279A228Ab73a7570A0D0819a</code> — 0G Mainnet (Chain ID 16661)</li>
           <li>• <strong className="text-gray-800 dark:text-gray-200">SDK:</strong> <code className="font-mono text-xs bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded">@hashpaylink/sdk</code> on npm</li>
           <li>• <strong className="text-gray-800 dark:text-gray-200">Live at:</strong> <a href="https://hashpaylink.com" target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline">hashpaylink.com</a></li>

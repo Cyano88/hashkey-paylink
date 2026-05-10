@@ -322,7 +322,7 @@ export default function PaymentPage() {
   const { isLoading: isEvmConfirming, isSuccess: isEvmConfirmed, isError: isEvmReverted } =
     useWaitForTransactionReceipt({ hash: evmTxHash })
 
-  // ── GHO relay state (Arbitrum — relayer submits tx on payer's behalf) ──────
+  // ── Arbitrum USDC relay state — relayer submits tx on payer's behalf ──────
   const [ghoRelayHash,    setGhoRelayHash]    = useState<`0x${string}` | undefined>(undefined)
   const [ghoRelayPending, setGhoRelayPending] = useState(false)
   const [ghoRelayError,   setGhoRelayError]   = useState<string | null>(null)
@@ -415,10 +415,10 @@ export default function PaymentPage() {
       setRouterDeployed(null)
       return
     }
-    const factory = ROUTER_FACTORY[chain as 'base' | 'hashkey' | 'arc']
+    const factory = ROUTER_FACTORY[chain as 'base' | 'hashkey' | 'arc' | 'arbitrum']
     if (!factory) { setRouterAddr(null); setRouterDeployed(null); return }
 
-    const client = EVM_CLIENTS[chain as 'base' | 'hashkey' | 'arc']
+    const client = EVM_CLIENTS[chain as 'base' | 'hashkey' | 'arc' | 'arbitrum']
     let cancelled = false
     setRouterAddr(null)
     setRouterDeployed(null)
@@ -450,7 +450,7 @@ export default function PaymentPage() {
   useEffect(() => {
     if (manualPayDetected || chain === 'starknet' || chain === 'solana' || !resolvedEvm) return
 
-    const evmChain = chain as 'base' | 'hashkey' | 'arc'
+    const evmChain = chain as 'base' | 'hashkey' | 'arc' | 'arbitrum'
     const client   = EVM_CLIENTS[evmChain]
 
     let unwatchTransfer: (() => void) | undefined
@@ -476,9 +476,7 @@ export default function PaymentPage() {
       }, 2_000)
 
     } else {
-      const tokenAddress = chain === 'base'
-        ? CHAIN_META.base.tokenAddress
-        : CHAIN_META.arc.tokenAddress
+      const tokenAddress = CHAIN_META[evmChain as 'base' | 'arc' | 'arbitrum'].tokenAddress
 
       const watchTarget = (routerAddr ?? resolvedEvm) as `0x${string}`
       const requestedUnits = parseUnits(effectiveAmt || '0', meta.decimals)
@@ -533,7 +531,7 @@ export default function PaymentPage() {
   useEffect(() => {
     if (!manualPayDetected || !isRouterAddress || !routerAddr || chain === 'hashkey') return
     setSweepState('calling')
-    const evmChain = chain as 'base' | 'arc'
+    const evmChain = chain as 'base' | 'arc' | 'arbitrum'
     fetch('/api/sweep', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -740,7 +738,7 @@ export default function PaymentPage() {
   // ── Manual claim fallback ─────────────────────────────────────────────────
   async function handleManualClaim() {
     if (!routerAddr || !isRouterAddress) return
-    const tokenAddress = chain === 'base' ? CHAIN_META.base.tokenAddress : CHAIN_META.arc.tokenAddress
+    const tokenAddress = CHAIN_META[chain as 'base' | 'arc' | 'arbitrum'].tokenAddress
     setSweepState('calling')
     try {
       const res  = await fetch('/api/sweep', {
@@ -782,7 +780,7 @@ export default function PaymentPage() {
     if (!resolvedEvm || chain === 'starknet') return
     setIsManualChecking(true)
     try {
-      const evmChain = chain as 'base' | 'hashkey' | 'arc'
+      const evmChain = chain as 'base' | 'hashkey' | 'arc' | 'arbitrum'
       const client   = EVM_CLIENTS[evmChain]
       if (chain === 'hashkey') {
         const bal          = await client.getBalance({ address: resolvedEvm as `0x${string}` })
@@ -791,7 +789,7 @@ export default function PaymentPage() {
           setReceivedAmount(bal); setManualTxHash(null); setManualPayDetected(true)
         }
       } else {
-        const tokenAddress   = chain === 'base' ? CHAIN_META.base.tokenAddress : CHAIN_META.arc.tokenAddress
+        const tokenAddress   = CHAIN_META[evmChain as 'base' | 'arc' | 'arbitrum'].tokenAddress
         const target         = (routerAddr ?? resolvedEvm) as `0x${string}`
         const requestedUnits = parseUnits(effectiveAmt || '0', meta.decimals)
         const balance = await client.readContract({
@@ -845,6 +843,7 @@ export default function PaymentPage() {
       const cid =
         c === 'base'    ? CHAIN_META.base.chainId    :
         c === 'arc'     ? CHAIN_META.arc.chainId     :
+        c === 'arbitrum' ? CHAIN_META.arbitrum.chainId :
         CHAIN_META.hashkey.chainId
       switchChain({ chainId: cid })
     }
@@ -852,7 +851,7 @@ export default function PaymentPage() {
 
   // ── Copy handlers ─────────────────────────────────────────────────────────
   async function handleCopyHash() {
-    const hash = chain === 'starknet' ? starkTxHash : chain === 'solana' ? solanaTxHash : evmTxHash
+    const hash = chain === 'starknet' ? starkTxHash : chain === 'solana' ? solanaTxHash : chain === 'arbitrum' ? ghoRelayHash : evmTxHash
     if (!hash) return
     await copyToClipboard(hash)
     setHashCopied(true)
@@ -866,38 +865,39 @@ export default function PaymentPage() {
     setTimeout(() => setAddrCopied(false), 3000)
   }
 
-  // ── Fetch GHO gas estimate when Arbitrum chain is active ─────────────────
+  // ── Fetch Arbitrum USDC gas estimate when Arbitrum chain is active ───────
   useEffect(() => {
     if (chain !== 'arbitrum') return
     fetch('/api/relay-gho')
       .then(r => r.json())
-      .then((d: { ok: boolean; gasReimbGho?: string }) => {
-        if (d.gasReimbGho) setGhoGasEstimate(BigInt(d.gasReimbGho))
+      .then((d: { ok: boolean; gasReimbUsdc?: string; gasReimbGho?: string }) => {
+        const reimb = d.gasReimbUsdc ?? d.gasReimbGho
+        if (reimb) setGhoGasEstimate(BigInt(reimb))
       })
       .catch(() => {})
   }, [chain])
 
-  // ── GHO relay pay (Arbitrum — relayer submits tx, payer only signs) ───────
+  // ── Arbitrum USDC relay pay — relayer submits tx, payer only signs ───────
   async function handleGhoRelayPay() {
     if (!address || !activeRecipient) return
     setGhoRelayError(null)
     setGhoRelayPending(true)
 
     const tokenAddress = CHAIN_META.arbitrum.tokenAddress
-    const totalUnits   = parseUnits(effectiveAmt || '0', 18)
+    const totalUnits   = parseUnits(effectiveAmt || '0', CHAIN_META.arbitrum.decimals)
     const deadline     = BigInt(Math.floor(Date.now() / 1000) + 3600)
     const nonce        = permitNonce ?? 0n
 
     // Refresh gas estimate just before signing so it's accurate
-    let gasReimbGho = ghoGasEstimate
     try {
-      const est = await fetch('/api/relay-gho').then(r => r.json()) as { ok: boolean; gasReimbGho?: string }
-      if (est.gasReimbGho) { gasReimbGho = BigInt(est.gasReimbGho); setGhoGasEstimate(gasReimbGho) }
+      const est = await fetch('/api/relay-gho').then(r => r.json()) as { ok: boolean; gasReimbUsdc?: string; gasReimbGho?: string }
+      const reimb = est.gasReimbUsdc ?? est.gasReimbGho
+      if (reimb) setGhoGasEstimate(BigInt(reimb))
     } catch { /* use cached */ }
 
     try {
       const sig = await signTypedDataAsync({
-        domain: { name: 'Gho Token', version: '1', chainId: 42161, verifyingContract: tokenAddress },
+        domain: { name: 'USD Coin', version: '2', chainId: 42161, verifyingContract: tokenAddress },
         types: {
           Permit: [
             { name: 'owner',    type: 'address' },
@@ -1003,11 +1003,8 @@ export default function PaymentPage() {
     const feeUnits     = totalUnits * feeBps / 10_000n
     const recipientUnits = totalUnits - feeUnits
     const nonce        = permitNonce ?? 0n
-    // GHO EIP-712 domain: name="Gho Token", version="1"
     const permitDomain = chain === 'arc'
       ? { name: 'USDC',      version: '2', chainId: targetChainId, verifyingContract: tokenAddress }
-      : chain === 'arbitrum'
-      ? { name: 'Gho Token', version: '1', chainId: targetChainId, verifyingContract: tokenAddress }
       : { name: 'USD Coin',  version: '2', chainId: targetChainId, verifyingContract: tokenAddress }
     try {
       const sig = await signTypedDataAsync({
@@ -1708,7 +1705,7 @@ export default function PaymentPage() {
                 <span className="text-[11px] font-normal text-slate-400 tracking-wide">Gas reimb (relayer pays ETH)</span>
                 <span className="font-mono text-[11px] text-slate-400">
                   {ghoGasEstimate > 0n
-                    ? `~${(Number(ghoGasEstimate) / 1e18).toFixed(4)} GHO`
+                    ? `~${(Number(ghoGasEstimate) / 1e6).toFixed(4)} USDC`
                     : '…'}
                 </span>
               </div>
@@ -1717,7 +1714,7 @@ export default function PaymentPage() {
               <div className="flex items-center gap-2 border-t border-amber-200 bg-amber-50 dark:border-amber-400/20 dark:bg-amber-400/10 px-4 py-2.5">
                 <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500 dark:text-amber-400" />
                 <span className="text-[11px] text-amber-700 dark:text-amber-300">
-                  Minimum 1 GHO recommended to keep relay costs proportional.
+                  Minimum 1 USDC recommended to keep relay costs proportional.
                 </span>
               </div>
             )}

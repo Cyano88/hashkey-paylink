@@ -17,7 +17,7 @@ export default function Chains() {
             ['Arc',      'USDC',  'EIP-2612 permit + Multicall3 or CREATE2 ghost vault', '5042002'],
             ['Starknet', 'USDC',  'AVNU Paymaster sponsors all STRK fees',              'SN_MAIN'],
             ['Solana',   'USDC',  'Relayer keypair covers all SOL fees',                 'mainnet-beta'],
-            ['Arbitrum', 'GHO',   'Relayer covers ETH gas for stablecoin transfer',      '42161'],
+            ['Arbitrum', 'USDC',  'Relayer covers ETH gas for stablecoin transfer',      '42161'],
           ]}
         />
       </Section>
@@ -91,14 +91,14 @@ export default function Chains() {
         </SubSection>
       </Section>
 
-      <Section title="Arbitrum (GHO)">
-        <p>Arbitrum support uses GHO stablecoin (18 decimals) instead of USDC. The relayer covers ETH gas for transfers. This chain is not shown in the default chain switcher on single-chain links but is available for multi-chain configurations.</p>
-        <InfoBox type="warning">GHO has 18 decimal places, unlike USDC which has 6. Be careful with amount formatting if integrating directly with the Arbitrum relay endpoint.</InfoBox>
+      <Section title="Arbitrum">
+        <p>Arbitrum support uses Circle native USDC on Arbitrum One. The relayer covers ETH gas for connected-wallet relays and ghost-vault sweeps, keeping the payer experience aligned with Hash PayLink's gas-sponsored USDC flow.</p>
+        <InfoBox type="info">Use native Arbitrum USDC at <Code>0xaf88d065e77c8cC2239327C5EDb3A432268e5831</Code>. Do not send bridged USDC.e to Hash PayLink Arbitrum vaults.</InfoBox>
         <Table
           headers={['Property', 'Value']}
           rows={[
             ['Chain ID',     '42161'],
-            ['Asset',        'GHO (18 decimals)'],
+            ['Asset',        'USDC (6 decimals)'],
             ['Relayer key',  'RELAYER_PRIVATE_KEY_ARB env var'],
             ['Factory',      'PAYLINK_FACTORY_V2_ARB env var'],
           ]}

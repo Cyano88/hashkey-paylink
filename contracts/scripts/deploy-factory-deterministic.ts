@@ -49,8 +49,8 @@ const USDC_PER_CHAIN: Record<string, string> = {
   base:    '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',  // Circle USDC on Base
   arc:     '0x3600000000000000000000000000000000000000',  // Arc native USDC precompile
   hashkey: '',                                             // HashKey uses native HSK
-  // GHO on Arbitrum One — verify at arbiscan.io before mainnet deployment
-  arbitrum:'0x7dfF72693f6A4149b17e7C6314655f6A9F7c8B33',
+  // Circle native USDC on Arbitrum One. Do not use bridged USDC.e.
+  arbitrum:'0xaf88d065e77c8cC2239327C5EDb3A432268e5831',
 }
 
 // ── Fixed salts ────────────────────────────────────────────────────────────────

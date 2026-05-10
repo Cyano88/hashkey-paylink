@@ -1,11 +1,11 @@
 /**
  * /api/relay-gho
  *
- * Gasless GHO relay for Arbitrum One.
+ * Gasless USDC relay for Arbitrum One.
  * Payer signs an EIP-2612 permit off-chain (free). This endpoint submits the
- * Multicall3 transaction paying gas on the payer's behalf, reimbursed from GHO.
+ * Multicall3 transaction paying gas on the payer's behalf, reimbursed from USDC.
  *
- * GET  /api/relay-gho          → returns estimated gas reimbursement in GHO (18-dec)
+ * GET  /api/relay-gho          → returns estimated gas reimbursement in USDC (6-dec)
  * POST /api/relay-gho          → submits relay tx, returns txHash
  *
  * Required env vars:
@@ -15,7 +15,7 @@
  * Fee split per transaction:
  *   recipient   = amount - platformFee (0.2%) - gasReimb
  *   treasury    = platformFee (0.2%)
- *   relayer     = gasReimb (covers ETH gas cost on Arbitrum, capped at 0.5 GHO)
+ *   relayer     = gasReimb (covers ETH gas cost on Arbitrum, capped at 0.5 USDC)
  */
 
 import type { Request, Response } from 'express'
@@ -33,16 +33,16 @@ import { privateKeyToAccount } from 'viem/accounts'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-// GHO on Arbitrum One — verify at arbiscan.io before mainnet deployment
-const GHO_ADDRESS  = '0x7dfF72693f6A4149b17e7C6314655f6A9F7c8B33' as `0x${string}`
+// Circle native USDC on Arbitrum One. Do not use bridged USDC.e.
+const ARBITRUM_USDC_ADDRESS = '0xaf88d065e77c8cC2239327C5EDb3A432268e5831' as `0x${string}`
 const MULTICALL3   = '0xcA11bde05977b3631167028862bE2a173976CA11' as `0x${string}`
 const TREASURY     = '0xcE5dF9e1115F81a2Fc2F65941B20B820d508e753' as `0x${string}`
 
 const PLATFORM_FEE_BPS  = 20n          // 0.2%
 const ESTIMATED_GAS     = 200_000n     // Multicall3 + permit + 3x transferFrom (~170k actual + buffer)
-// Arbitrum gas is ~10-50x cheaper than Ethereum — cap at 0.5 GHO ($0.50)
-const MAX_GAS_REIMB_GHO = parseUnits('0.5', 18)
-const MIN_GAS_REIMB_GHO = parseUnits('0.01', 18)
+// Arbitrum gas is cheap — cap reimbursement at 0.5 USDC.
+const MAX_GAS_REIMB_USDC = parseUnits('0.5', 6)
+const MIN_GAS_REIMB_USDC = parseUnits('0.01', 6)
 const FALLBACK_ETH_USD  = 3_000n
 
 // ─── ABIs ─────────────────────────────────────────────────────────────────────
@@ -75,7 +75,7 @@ async function getEthPriceUsd(): Promise<bigint> {
   }
 }
 
-async function calcGasReimbGho(publicClient: ReturnType<typeof createPublicClient>): Promise<bigint> {
+async function calcGasReimbUsdc(publicClient: ReturnType<typeof createPublicClient>): Promise<bigint> {
   try {
     const [block, ethUsd] = await Promise.all([
       publicClient.getBlock({ blockTag: 'latest' }),
@@ -83,15 +83,15 @@ async function calcGasReimbGho(publicClient: ReturnType<typeof createPublicClien
     ])
     const baseFee  = block.baseFeePerGas ?? 500_000_000n  // fallback 0.5 gwei
     const gasPrice = baseFee + 200_000_000n               // + 0.2 gwei tip
-    const raw      = gasPrice * ESTIMATED_GAS * ethUsd
-    console.log('[relay-gho] baseFee gwei:', Number(baseFee)/1e9, 'ethUsd:', ethUsd.toString(), 'gasUnits GHO:', Number(raw)/1e18)
-    if (raw < MIN_GAS_REIMB_GHO) return MIN_GAS_REIMB_GHO
-    if (raw > MAX_GAS_REIMB_GHO) return MAX_GAS_REIMB_GHO
+    const raw      = gasPrice * ESTIMATED_GAS * ethUsd * 1_000_000n / 1_000_000_000_000_000_000n
+    console.log('[relay-arbitrum-usdc] baseFee gwei:', Number(baseFee)/1e9, 'ethUsd:', ethUsd.toString(), 'gasUnits USDC:', Number(raw)/1e6)
+    if (raw < MIN_GAS_REIMB_USDC) return MIN_GAS_REIMB_USDC
+    if (raw > MAX_GAS_REIMB_USDC) return MAX_GAS_REIMB_USDC
     return raw
   } catch (err) {
-    // RPC failed — use a safe fixed fallback of 0.5 GHO (~$0.50 at current gas)
-    console.warn('[relay-gho] calcGasReimbGho failed, using fallback:', err instanceof Error ? err.message : err)
-    return 500_000_000_000_000_000n  // 0.5 GHO
+    // RPC failed — use a safe fixed fallback of 0.5 USDC.
+    console.warn('[relay-arbitrum-usdc] calcGasReimbUsdc failed, using fallback:', err instanceof Error ? err.message : err)
+    return 500_000n  // 0.5 USDC
   }
 }
 
@@ -112,11 +112,11 @@ export default async function handler(req: Request, res: Response) {
   if (req.method === 'GET') {
     try {
       const { publicClient } = getClients()
-      const gasReimbGho = await calcGasReimbGho(publicClient)
-      return res.json({ ok: true, gasReimbGho: gasReimbGho.toString() })
+      const gasReimbUsdc = await calcGasReimbUsdc(publicClient)
+      return res.json({ ok: true, gasReimbUsdc: gasReimbUsdc.toString(), gasReimbGho: gasReimbUsdc.toString() })
     } catch (err) {
       // Return min floor as safe fallback so UI always has a value
-      return res.json({ ok: true, gasReimbGho: MIN_GAS_REIMB_GHO.toString() })
+      return res.json({ ok: true, gasReimbUsdc: MIN_GAS_REIMB_USDC.toString(), gasReimbGho: MIN_GAS_REIMB_USDC.toString() })
     }
   }
 
@@ -147,15 +147,15 @@ export default async function handler(req: Request, res: Response) {
 
   try {
     // Calculate gas reimbursement fresh server-side — never trust client value
-    const gasUnits       = await calcGasReimbGho(publicClient)
+    const gasUnits       = await calcGasReimbUsdc(publicClient)
     const totalUnits     = BigInt(amount)
     const feeUnits       = totalUnits * PLATFORM_FEE_BPS / 10_000n
     const recipientUnits = totalUnits - feeUnits - gasUnits
 
     if (recipientUnits <= 0n) {
-      const gasGho = (Number(gasUnits) / 1e18).toFixed(4)
-      const minGho = (Number(gasUnits + feeUnits) / 1e18 + 0.01).toFixed(2)
-      return res.status(400).json({ ok: false, error: `Amount too small — relay gas cost is ~${gasGho} GHO on Arbitrum. Send at least ${minGho} GHO.` })
+      const gasUsdc = (Number(gasUnits) / 1e6).toFixed(4)
+      const minUsdc = (Number(gasUnits + feeUnits) / 1e6 + 0.01).toFixed(2)
+      return res.status(400).json({ ok: false, error: `Amount too small — relay gas cost is ~${gasUsdc} USDC on Arbitrum. Send at least ${minUsdc} USDC.` })
     }
 
     // Build Multicall3 calldata: permit → pay recipient → pay treasury → reimburse relayer
@@ -164,28 +164,28 @@ export default async function handler(req: Request, res: Response) {
       functionName: 'aggregate3',
       args: [[
         {
-          target: GHO_ADDRESS, allowFailure: false,
+          target: ARBITRUM_USDC_ADDRESS, allowFailure: false,
           callData: encodeFunctionData({
             abi: PERMIT_ABI, functionName: 'permit',
             args: [owner as `0x${string}`, MULTICALL3, totalUnits, BigInt(deadline), Number(v), r as `0x${string}`, s as `0x${string}`],
           }),
         },
         {
-          target: GHO_ADDRESS, allowFailure: false,
+          target: ARBITRUM_USDC_ADDRESS, allowFailure: false,
           callData: encodeFunctionData({
             abi: TRANSFER_FROM_ABI, functionName: 'transferFrom',
             args: [owner as `0x${string}`, recipient as `0x${string}`, recipientUnits],
           }),
         },
         {
-          target: GHO_ADDRESS, allowFailure: false,
+          target: ARBITRUM_USDC_ADDRESS, allowFailure: false,
           callData: encodeFunctionData({
             abi: TRANSFER_FROM_ABI, functionName: 'transferFrom',
             args: [owner as `0x${string}`, TREASURY, feeUnits],
           }),
         },
         {
-          target: GHO_ADDRESS, allowFailure: false,
+          target: ARBITRUM_USDC_ADDRESS, allowFailure: false,
           callData: encodeFunctionData({
             abi: TRANSFER_FROM_ABI, functionName: 'transferFrom',
             args: [owner as `0x${string}`, account.address, gasUnits],
@@ -201,7 +201,7 @@ export default async function handler(req: Request, res: Response) {
       gas:   400_000n,
     })
 
-    console.log('[relay-gho arb] submitted', txHash, 'recipient', recipientUnits.toString(), 'gas', gasUnits.toString())
+    console.log('[relay-arbitrum-usdc] submitted', txHash, 'recipient', recipientUnits.toString(), 'gas', gasUnits.toString())
 
     return res.status(200).json({
       ok:              true,
@@ -212,7 +212,7 @@ export default async function handler(req: Request, res: Response) {
     })
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
-    console.error('[relay-gho]', msg)
+    console.error('[relay-arbitrum-usdc]', msg)
     return res.status(500).json({ ok: false, error: msg.slice(0, 200) })
   }
 }

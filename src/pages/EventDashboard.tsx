@@ -458,7 +458,7 @@ export default function EventDashboard() {
               counterFlash ? 'text-emerald-600' : 'text-gray-900')}>
               ${total.toFixed(2)}
             </p>
-            <p className="text-[10px] text-gray-400 mt-0.5">USDC · GHO</p>
+            <p className="text-[10px] text-gray-400 mt-0.5">USDC</p>
           </div>
         </div>
 
@@ -539,15 +539,6 @@ export default function EventDashboard() {
                           {hskPrice
                             ? `≈ $${(parseFloat(p.amount || '0') * hskPrice).toFixed(2)}`
                             : 'HashKey'}
-                        </p>
-                      </>
-                    ) : p.chain === 'arbitrum' ? (
-                      <>
-                        <p className="text-sm font-semibold text-gray-900">
-                          {parseFloat(p.amount || '0').toFixed(4)} GHO
-                        </p>
-                        <p className="text-[10px] text-gray-400">
-                          ≈ ${parseFloat(p.amount || '0').toFixed(2)}
                         </p>
                       </>
                     ) : (

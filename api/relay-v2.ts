@@ -7,8 +7,7 @@
  *  • Base     — ERC-20 USDC relay.  Calls relay(linkId, recipient, gasReimbUsdc)
  *  • Arc      — ERC-20 USDC relay (Arc native USDC precompile, gas IS USDC)
  *  • HashKey  — Native HSK relay.  Calls relayNative(linkId, recipient, gasReimbNative)
- *  • Arbitrum — ERC-20 GHO relay (18-dec). gasReimb passed as 0 — Arbitrum gas is
- *               negligible (~$0.02) and capped to near-zero by contract MAX_GAS_REIMB.
+ *  • Arbitrum — native USDC relay (6-dec). Relayer pays ETH gas and is reimbursed in USDC.
  *
  * Required env vars (Render → Environment)
  * ─────────────────────────────────────────
@@ -91,7 +90,7 @@ async function getEthPriceUsd(): Promise<bigint> {
 // Returns USDC (6-dec) reimbursement for ERC-20 chains
 async function calcGasReimbUsdc(
   publicClient: ReturnType<typeof createPublicClient>,
-  chainKey: 'base' | 'arc',
+  chainKey: 'base' | 'arc' | 'arbitrum',
 ): Promise<bigint> {
   const gasPrice = await publicClient.getGasPrice()
   if (chainKey === 'arc') {
@@ -200,21 +199,27 @@ export default async function handler(req: Request, res: Response) {
         gasReimbNative:   gasReimbNative.toString(),
       })
     } else if (chainKey === 'arbitrum') {
-      // ── ERC-20 GHO relay (Arbitrum One) ──────────────────────────────────
-      // GHO has 18 decimals. Contract MAX_GAS_REIMB = 1_000_000 (≈ 0 GHO) so
-      // gas reimb is passed as 0 — Arbitrum relay costs ~$0.02 which is negligible.
+      // ── ERC-20 USDC relay (Arbitrum One) ─────────────────────────────────
+      // Relayer reimbursement is paid in native USDC with 6 decimals.
+      let gasReimbUsdc: bigint
+      try {
+        gasReimbUsdc = await calcGasReimbUsdc(publicClient, chainKey)
+      } catch {
+        gasReimbUsdc = 100_000n  // 0.10 USDC fallback
+      }
+
       txHash = await walletClient.writeContract({
         address:      factoryAddr as `0x${string}`,
         abi:          RELAY_ABI,
         functionName: 'relay',
-        args:         [linkId as `0x${string}`, recipient as `0x${string}`, 0n],
+        args:         [linkId as `0x${string}`, recipient as `0x${string}`, gasReimbUsdc],
         gas:          400_000n,
       })
 
       return res.status(200).json({
         ok:           true,
         txHash,
-        gasReimbUsdc: '0',
+        gasReimbUsdc: gasReimbUsdc.toString(),
       })
     } else {
       // ── ERC-20 USDC relay (Base / Arc) ────────────────────────────────────

@@ -186,23 +186,22 @@ export const CHAIN_META = {
   arbitrum: {
     key:          'arbitrum' as const,
     label:        'Arbitrum',
-    asset:        'GHO',
-    decimals:     18,
+    asset:        'USDC',
+    decimals:     6,
     chainId:      42161,
-    // GHO token — Arbitrum One (Aave CCIP cross-chain deployment)
-    // Verify address at arbiscan.io before mainnet use: search "GHO Token"
-    tokenAddress: '0x7dfF72693f6A4149b17e7C6314655f6A9F7c8B33' as `0x${string}`,
+    // Circle native USDC on Arbitrum One. Do not use bridged USDC.e here.
+    tokenAddress: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831' as `0x${string}`,
     explorerUrl:  'https://arbiscan.io',
     explorerName: 'Arbiscan',
-    // Glow: Arbitrum brand blue #2D374B / GHO purple blend
-    glowStyle:    '0 0 52px -8px rgba(182,80,158,0.28), 0 0 0 1px rgba(182,80,158,0.14)',
-    accentColor:  '#B6509E',
-    badgeBg:      'bg-pink-50',
-    badgeText:    'text-pink-700',
-    badgeBorder:  'border-pink-200',
-    toggleActive: 'bg-[#B6509E] text-white shadow-sm',
-    headerBg:     'from-pink-50 to-purple-50',
-    dotColor:     'bg-[#B6509E]',
-    engineLabel:  'GHO · Permit + Vault · Arbitrum One',
+    // Glow: Arbitrum brand blue
+    glowStyle:    '0 0 52px -8px rgba(40,160,240,0.28), 0 0 0 1px rgba(40,160,240,0.14)',
+    accentColor:  '#28A0F0',
+    badgeBg:      'bg-sky-50',
+    badgeText:    'text-sky-700',
+    badgeBorder:  'border-sky-200',
+    toggleActive: 'bg-[#28A0F0] text-white shadow-sm',
+    headerBg:     'from-sky-50 to-blue-50',
+    dotColor:     'bg-[#28A0F0]',
+    engineLabel:  'USDC · Permit + Vault · Arbitrum One',
   },
 } as const

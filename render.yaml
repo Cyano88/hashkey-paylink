@@ -29,7 +29,7 @@ services:
       - key: PRIVATE_RPC_URL
         sync: false                   # Alchemy backend RPC key (high rate limit)
 
-      # ── Arbitrum + GHO relayer (api/relay-gho.ts + api/relay-v2.ts) ─────────
+      # ── Arbitrum + native USDC relayer (api/relay-gho.ts + api/relay-v2.ts) ─
       - key: RELAYER_PRIVATE_KEY_ARB
         sync: false                   # Arbitrum relayer key — wallet needs ETH on Arbitrum
       - key: PRIVATE_RPC_URL_ARB

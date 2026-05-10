@@ -1168,7 +1168,7 @@ Developer creates a Hash PayLink multi-payer collection link
   https://hashpaylink.com/pay?event=1&id=your-event-id&amt=10&evm=0xYour...
           │
           ▼
-User pays in USDC (Base, Arc, Starknet, Solana) or GHO (Arbitrum)
+User pays in USDC (Base, Arc, Starknet, Solana, Arbitrum)
   — zero gas for payer — any chain — no wallet required for Send via Address
           │
           ▼
