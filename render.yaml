@@ -46,6 +46,8 @@ services:
         sync: false                   # random string; authenticate sweep-keeper cron
       - key: FACTORY_FROM_BLOCK
         value: "45786000"             # Base block before the 0.2% router factory deployment
+      - key: SOLANA_RPC_URL
+        sync: false                   # Solana backend private RPC endpoint
 
 # ── External cron (sweep-keeper) ──────────────────────────────────────────────
 # Render free tier does not include cron jobs.

@@ -6,8 +6,6 @@ import type {
   GetBalancesResult,
   UnifiedBalanceChainIdentifier,
 } from '@circle-fin/unified-balance-kit'
-import { getAssociatedTokenAddress } from '@solana/spl-token'
-import { Connection, PublicKey } from '@solana/web3.js'
 import { EVM_CLIENTS, ERC20_BALANCE_OF_ABI } from './router'
 import { CHAIN_META } from './chains'
 
@@ -107,18 +105,14 @@ async function queryEvmTokenBalance(key: 'base' | 'arc' | 'arbitrum', address: s
 }
 
 async function querySolanaWalletBalance(address: string): Promise<number> {
-  const connection = new Connection('https://api.mainnet-beta.solana.com', 'confirmed')
-  const owner = new PublicKey(address)
-  const mint = new PublicKey(CHAIN_META.solana.tokenAddress)
-  const ata = await getAssociatedTokenAddress(mint, owner)
-  try {
-    const balance = await connection.getTokenAccountBalance(ata)
-    return balance.value.uiAmount ?? 0
-  } catch (error) {
-    const message = error instanceof Error ? error.message.toLowerCase() : ''
-    if (message.includes('could not find account') || message.includes('failed to find account')) return 0
-    throw error
-  }
+  const response = await fetch('/api/solana-balance', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ accountAddress: address }),
+  })
+  const data = await response.json() as { ok?: boolean; balance?: string; error?: string }
+  if (!response.ok || !data.ok) throw new Error(data.error ?? 'Solana balance query failed')
+  return Number(BigInt(data.balance ?? '0')) / 1_000_000
 }
 
 async function queryStarknetBalance(address: string): Promise<number> {
