@@ -27,6 +27,7 @@ type CirclePasskeyPaymentResult =
 
 const CLIENT_KEY = import.meta.env.VITE_CLIENT_KEY as string | undefined
 const CLIENT_URL = import.meta.env.VITE_CLIENT_URL as string | undefined
+const CREDENTIAL_PREFIX = 'hashpaylink_circle_credential'
 
 function isCirclePasskeyChain(chain: ChainKey): chain is CirclePasskeyChain {
   return chain === 'base' || chain === 'arbitrum'
@@ -42,6 +43,35 @@ function circleChainSlug(chain: CirclePasskeyChain) {
 
 function normalizeCircleClientUrl() {
   return (CLIENT_URL ?? '').replace(/\/+$/, '')
+}
+
+function credentialStorageKey(email: string) {
+  const host = typeof window === 'undefined' ? 'server' : window.location.hostname
+  return `${CREDENTIAL_PREFIX}:${host}:${email.trim().toLowerCase()}`
+}
+
+function getStoredCredentialId(email: string) {
+  try {
+    return window.localStorage.getItem(credentialStorageKey(email))
+  } catch {
+    return null
+  }
+}
+
+function setStoredCredentialId(email: string, credentialId: string) {
+  try {
+    window.localStorage.setItem(credentialStorageKey(email), credentialId)
+  } catch {
+    // localStorage can be unavailable in private/browser-restricted contexts.
+  }
+}
+
+function clearStoredCredentialId(email: string) {
+  try {
+    window.localStorage.removeItem(credentialStorageKey(email))
+  } catch {
+    // Ignore storage cleanup failures; the next registration can still proceed.
+  }
 }
 
 function getCircleClientConfig(chain: ChainKey) {
@@ -61,19 +91,26 @@ async function getCredential(email: string) {
   if (!CLIENT_KEY || !clientUrl) throw new Error('Circle wallet is not configured.')
 
   const transport = toPasskeyTransport(clientUrl, CLIENT_KEY)
-  try {
-    return await toWebAuthnCredential({
-      transport,
-      mode: WebAuthnMode.Login,
-      credentialId: email,
-    })
-  } catch {
-    return toWebAuthnCredential({
-      transport,
-      mode: WebAuthnMode.Register,
-      username: email,
-    })
+  const storedCredentialId = getStoredCredentialId(email)
+  if (storedCredentialId) {
+    try {
+      return await toWebAuthnCredential({
+        transport,
+        mode: WebAuthnMode.Login,
+        credentialId: storedCredentialId,
+      })
+    } catch {
+      clearStoredCredentialId(email)
+    }
   }
+
+  const credential = await toWebAuthnCredential({
+    transport,
+    mode: WebAuthnMode.Register,
+    username: email,
+  })
+  setStoredCredentialId(email, credential.id)
+  return credential
 }
 
 function friendlyCircleError(err: unknown) {
@@ -83,7 +120,7 @@ function friendlyCircleError(err: unknown) {
   if (lower.includes('entity config')) {
     return 'Circle Modular Wallet is not configured for this domain. In Circle Console, make the Client Key allowed domain exactly match the Passkey domain, then redeploy.'
   }
-  if (lower.includes('credential') || lower.includes('passkey')) return 'Passkey login was not completed.'
+  if (lower.includes('credential') || lower.includes('passkey')) return 'Passkey setup was not completed. Use a browser/device with passkeys enabled, or create the passkey on this device first.'
   if (lower.includes('insufficient')) return 'Insufficient USDC in the Circle smart wallet.'
   if (lower.includes('user rejected') || lower.includes('notallowederror') || lower.includes('cancel')) {
     return 'Passkey confirmation was cancelled.'
