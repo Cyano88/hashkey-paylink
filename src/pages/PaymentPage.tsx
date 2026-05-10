@@ -2535,7 +2535,6 @@ export default function PaymentPage() {
               No Solana Address Available
             </button>
           ) : payMode === 'wallet' && chain === 'solana' ? (
-            !solanaWalletAddr ? (
               <div className="space-y-2">
                 {showCircleSolanaEmailPay && !manualPayDetected && (
                   <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50/70 p-3">
@@ -2616,6 +2615,8 @@ export default function PaymentPage() {
                     </div>
                   </div>
                 )}
+                {!solanaWalletAddr ? (
+                  <>
                 <button
                   onClick={connectSolana}
                   disabled={isSolanaConnecting || (isEventMode && !attendeeName.trim())}
@@ -2626,8 +2627,8 @@ export default function PaymentPage() {
                     : <><Wallet className="h-4 w-4" /> Connect Solana Wallet</>}
                 </button>
                 <p className="text-center text-xs text-gray-400">Phantom, Solflare & other Solana wallets</p>
-              </div>
-            ) : (
+                  </>
+                ) : (
               <button
                 onClick={handlePay}
                 disabled={isSolanaPending || isSolanaConfirming || (isEventMode && !attendeeName.trim()) || flexPayDisabled}
@@ -2642,7 +2643,8 @@ export default function PaymentPage() {
                 : isSolanaConfirming ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirming on Chain…</>
                 : <><Zap className="h-4 w-4" /> Pay {formatAmount(effectiveAmt, 6)} USDC on Solana</>}
               </button>
-            )
+                )}
+              </div>
           ) : payMode === 'wallet' && chain === 'starknet' ? (
             !starkAccount ? (
               <div className="space-y-2">
