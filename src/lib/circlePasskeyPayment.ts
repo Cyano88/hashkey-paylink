@@ -117,6 +117,9 @@ function friendlyCircleError(err: unknown) {
   const msg = err instanceof Error ? err.message : String(err)
   const lower = msg.toLowerCase()
   if (lower.includes('not configured')) return msg
+  if (lower.includes('default policy') || lower.includes('policy is not found')) {
+    return 'Smart wallet gas sponsorship is not enabled yet. In Circle Console, create and enable a mainnet Gas Station policy for Modular Wallets, add a payment method, then redeploy.'
+  }
   if (lower.includes('entity config')) {
     return 'Circle Modular Wallet is not configured for this domain. In Circle Console, make the Client Key allowed domain exactly match the Passkey domain, then redeploy.'
   }
