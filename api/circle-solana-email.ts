@@ -40,6 +40,12 @@ async function circleJson<T extends Record<string, unknown> = Record<string, unk
   })
   const body = await res.json().catch(() => ({})) as CircleResponse<T>
   if (!res.ok) {
+    console.error('[circle-solana-email] Circle API failed', {
+      path,
+      status: res.status,
+      code: body.code,
+      message: body.message ?? body.error,
+    })
     const err = new Error(body.message ?? body.error ?? `Circle request failed: ${res.status}`)
     ;(err as Error & { status?: number; code?: number; body?: CircleResponse }).status = res.status
     ;(err as Error & { status?: number; code?: number; body?: CircleResponse }).code = body.code
@@ -170,6 +176,12 @@ export default async function handler(req: Request, res: Response) {
           memo: memo || 'Hash PayLink USDC payment on Solana',
         }),
       })
+      if (!data.challengeId) {
+        console.error('[circle-solana-email] Missing signing challenge', {
+          walletId,
+          keys: Object.keys(data),
+        })
+      }
       return res.json({ ok: true, ...data })
     }
 

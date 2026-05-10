@@ -69,11 +69,22 @@ async function circleSolanaApi<T>(payload: Record<string, unknown>): Promise<T> 
   return data as T
 }
 
-function sdkError(error?: CircleSdkError) {
+function sdkError(error?: unknown) {
   if (!error) return 'Circle wallet action did not complete.'
-  const lower = error.message.toLowerCase()
+  if (typeof error === 'string') return error
+  if (error instanceof Error) return error.message
+  const message = (error as Partial<CircleSdkError>).message
+  if (!message) {
+    try {
+      const body = JSON.stringify(error)
+      return body && body !== '{}' ? body.slice(0, 160) : 'Circle wallet action did not complete.'
+    } catch {
+      return 'Circle wallet action did not complete.'
+    }
+  }
+  const lower = message.toLowerCase()
   if (lower.includes('cancel') || lower.includes('user')) return 'Circle wallet confirmation was cancelled.'
-  return error.message.slice(0, 160)
+  return message.slice(0, 160)
 }
 
 function executeChallenge(sdk: W3SSdk, challengeId: string) {
@@ -200,7 +211,7 @@ export async function signCircleSolanaTransaction(params: {
   if (!challenge.challengeId) throw new Error('Circle did not return a signing challenge.')
   const result = await executeChallenge(sdk, challenge.challengeId)
   if (result.type !== 'SIGN_TRANSACTION' || !result.data?.signedTransaction) {
-    throw new Error('Circle did not return a signed Solana transaction.')
+    throw new Error(`Circle did not return a signed Solana transaction. Status: ${result.status || 'unknown'}`)
   }
   return result.data.signedTransaction
 }
