@@ -1035,6 +1035,16 @@ export default function PaymentPage() {
     return msg.includes('user rejected') || msg.includes('user denied') || msg.includes('rejected the request')
   }
 
+  function isSendCallsUnavailable(err: unknown) {
+    const msg = err instanceof Error ? err.message.toLowerCase() : String(err).toLowerCase()
+    return msg.includes('wallet_sendcalls') && (
+      msg.includes('does not exist') ||
+      msg.includes('not available') ||
+      msg.includes('unsupported') ||
+      msg.includes('not supported')
+    )
+  }
+
   async function tryBasePaymasterCall(data: `0x${string}`): Promise<'sent' | 'failed' | 'unavailable'> {
     if (chain !== 'base' || !address || !BASE_PAYMASTER_URL || !basePaymasterAvailable) return 'unavailable'
 
@@ -1055,6 +1065,8 @@ export default function PaymentPage() {
       setBasePaymasterCallId(result.id)
       return 'sent'
     } catch (err) {
+      if (isSendCallsUnavailable(err)) return 'unavailable'
+
       const fallbackMessage = 'Sponsored Base transaction was not accepted. Use Coinbase Smart Wallet/Base Account, or pay with Send via Address.'
       if (isUserRejected(err)) {
         setBasePaymasterError('Sponsored transaction rejected in wallet.')
