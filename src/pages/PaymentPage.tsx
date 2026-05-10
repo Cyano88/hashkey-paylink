@@ -219,7 +219,7 @@ export default function PaymentPage() {
 
   const resolvedStark  = starkParam || (legacyChain === 'starknet' ? evmParam : '')
   const resolvedEvm    = legacyChain === 'starknet' ? '' : evmParam
-  const resolvedSolana = searchParams.get('sol') ?? ''
+  const resolvedSolana = (searchParams.get('sol') ?? '').trim()
   const isMultiChain   = searchParams.get('multi') === '1'
   const isFlex         = searchParams.get('flex')  === '1'
 
