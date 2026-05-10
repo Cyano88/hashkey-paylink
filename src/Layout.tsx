@@ -12,6 +12,10 @@ import type { ChainKey } from './lib/chains'
 // ─── Input detection ─────────────────────────────────────────────────────────
 const TX_HASH_RE = /^0x[0-9a-fA-F]{1,64}$/
 const EVM_ADDR_RE = /^0x[0-9a-fA-F]{40}$/
+const SOLANA_ADDR_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/
+const STARKNET_ADDR_RE = /^0x[0-9a-fA-F]{64}$/
+
+const fmtAddr = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`
 
 function detectInput(raw: string): 'tx_hash' | 'evm_addr' | 'unknown' {
   const v = raw.trim()
@@ -173,15 +177,18 @@ function StarknetIcon({ className }: { className?: string }) {
 // Pure display component — all switching logic lives in Layout.
 function NetworkToolkit({
   activeKey,
+  label,
   locked,
   onSwitch,
 }: {
   activeKey: ChainKey | null
+  label?: string
   locked?: boolean
   onSwitch?: (key: ChainKey) => void
 }) {
   const [open, setOpen] = useState(false)
   const displayNet = activeKey ? CHAIN_META[activeKey] : null
+  const displayLabel = label ?? displayNet?.label ?? 'Network'
   const otherNets  = ALL_NETWORKS.filter(n => n.key !== activeKey)
 
   function handleSwitch(key: ChainKey) {
@@ -204,7 +211,7 @@ function NetworkToolkit({
         ) : (
           <span className={`h-2 w-2 shrink-0 rounded-full ${displayNet?.dotColor ?? 'bg-gray-400'}`} />
         )}
-        <span className="hidden sm:inline">{displayNet?.label ?? 'Network'}</span>
+        <span className="hidden sm:inline">{displayLabel}</span>
         {!locked && <ChevronDown className="h-3.5 w-3.5 text-gray-400 dark:text-gray-500" />}
       </button>
 
@@ -245,6 +252,55 @@ function NetworkToolkit({
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
+type DashboardRecipient = {
+  label: string
+  address: string
+}
+
+function DashboardRecipientDropdown({ recipients }: { recipients: DashboardRecipient[] }) {
+  const [open, setOpen] = useState(false)
+  const first = recipients[0]
+  if (!first) return null
+
+  if (recipients.length === 1) {
+    return (
+      <span className="hidden sm:block select-none font-mono text-[13px] text-gray-400 dark:text-gray-500 pointer-events-none">
+        {fmtAddr(first.address)}
+      </span>
+    )
+  }
+
+  return (
+    <div className="relative hidden sm:block">
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className="inline-flex h-9 items-center gap-1.5 rounded-full border border-gray-200 dark:border-white/10 bg-white dark:bg-[#1c1c20] px-3 font-mono text-[13px] text-gray-500 dark:text-gray-400 shadow-sm transition-colors hover:bg-gray-50 dark:hover:bg-white/5"
+      >
+        {fmtAddr(first.address)}
+        <ChevronDown className="h-3.5 w-3.5 text-gray-400 dark:text-gray-500" />
+      </button>
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 z-50 mt-2 w-72 overflow-hidden rounded-xl border border-gray-200 dark:border-white/8 bg-white dark:bg-[#1c1c20] shadow-md">
+            <div className="border-b border-gray-100 dark:border-white/6 px-3.5 py-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">Watching</p>
+            </div>
+            {recipients.map(item => (
+              <div key={`${item.label}-${item.address}`} className="flex items-center justify-between gap-3 px-3.5 py-2.5">
+                <span className="text-[12px] font-medium text-gray-600 dark:text-gray-300">{item.label}</span>
+                <span className="font-mono text-[12px] text-gray-500 dark:text-gray-400">{fmtAddr(item.address)}</span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 export default function Layout() {
   const { pathname } = useLocation()
   const [searchParams] = useSearchParams()
@@ -253,10 +309,28 @@ export default function Layout() {
   // Both the pay page and the dashboard show a locked chain pill from the URL param
   const pageNetParam = (isPayPage || isDashPage) ? (searchParams.get('net') as ChainKey | null) : null
   const activeNet = (pageNetParam && pageNetParam in CHAIN_META) ? pageNetParam : null
-  // Recipient address shown on dashboard header (evm or solana)
-  const dashRecipient = isDashPage
-    ? (searchParams.get('evm') || searchParams.get('sol') || '')
-    : ''
+  const dashEvm = (searchParams.get('evm') ?? '').trim()
+  const dashSol = (searchParams.get('sol') ?? '').trim()
+  const dashStark = (searchParams.get('stark') ?? '').trim()
+  const dashMulti = searchParams.get('multi') === '1'
+  const dashEvmValid = EVM_ADDR_RE.test(dashEvm)
+  const dashSolValid = SOLANA_ADDR_RE.test(dashSol)
+  const dashStarkValid = STARKNET_ADDR_RE.test(dashStark)
+  const dashboardRecipients: DashboardRecipient[] = isDashPage
+    ? [
+        ...(dashEvmValid ? [{ label: dashMulti ? 'EVM networks' : activeNet ? CHAIN_META[activeNet].label : 'EVM', address: dashEvm }] : []),
+        ...(dashSolValid ? [{ label: 'Solana', address: dashSol }] : []),
+        ...(dashStarkValid ? [{ label: 'Starknet', address: dashStark }] : []),
+      ]
+    : []
+  const dashboardSingleNetwork =
+    dashMulti && !dashEvmValid && dashSolValid && !dashStarkValid ? 'solana' :
+    dashMulti && !dashEvmValid && !dashSolValid && dashStarkValid ? 'starknet' :
+    null
+  const dashboardActiveNet = isDashPage ? (dashboardSingleNetwork ?? activeNet) : activeNet
+  const dashboardNetworkLabel = isDashPage && dashMulti
+    ? dashboardSingleNetwork ? CHAIN_META[dashboardSingleNetwork].label : 'All Networks'
+    : undefined
 
   // ── Wallet connections ───────────────────────────────────────────────────────
   const { address: evmAddress, isConnected: evmConnected, chainId: evmChainId } = useAccount()
@@ -272,7 +346,6 @@ export default function Layout() {
     : null
   const connectedNetKey: ChainKey | null = starkAddress ? 'starknet' : solanaAddress ? 'solana' : evmNetKey
   const displayAddress = starkAddress ?? solanaAddress ?? evmAddress ?? null
-  const fmtAddr = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`
 
   // selectedNet = user's intent (which network they want); may lead connectedNetKey during transition
   const [selectedNet, setSelectedNet] = useState<ChainKey | null>(null)
@@ -450,15 +523,13 @@ export default function Layout() {
 
             {/* 1. Network Toolkit — locked pill on pay/dashboard pages; interactive elsewhere */}
             {(isPayPage || isDashPage)
-              ? <NetworkToolkit activeKey={isPayPage ? (payChain ?? activeNet) : activeNet} locked />
+              ? <NetworkToolkit activeKey={isPayPage ? (payChain ?? activeNet) : dashboardActiveNet} label={dashboardNetworkLabel} locked />
               : <NetworkToolkit activeKey={selectedNet ?? 'base'} onSwitch={handleNetworkSelect} />
             }
 
             {/* Recipient address — dashboard only, truncated, muted */}
-            {isDashPage && dashRecipient && (
-              <span className="hidden sm:block select-none font-mono text-[13px] text-gray-400 dark:text-gray-500 pointer-events-none">
-                {fmtAddr(dashRecipient)}
-              </span>
+            {isDashPage && dashboardRecipients.length > 0 && (
+              <DashboardRecipientDropdown recipients={dashboardRecipients} />
             )}
 
             {/* Power — pay page only, between network indicator and theme toggle */}
