@@ -43,6 +43,8 @@ const NICK_FACTORY = '0x4e59b44847b379578588920cA78FbF26c0B4956C'
 
 // ── Chain-agnostic config (same on all chains) ─────────────────────────────────
 const TREASURY = '0xcE5dF9e1115F81a2Fc2F65941B20B820d508e753'
+const DEFAULT_OWNER_RELAYER = '0x51080f31A21BeDafe50180944606044C12Ea88E4'
+const EXPECTED_V2_FACTORY = '0x2268B8aad138a550FEf46C621756fEb26b587F78'
 
 // ── Chain-specific token addresses ───────────────────────────────────────────
 const USDC_PER_CHAIN: Record<string, string> = {
@@ -87,13 +89,20 @@ async function main() {
   const chainName  = network.name
   const chainUsdc  = USDC_PER_CHAIN[chainName] ?? ''
   const dryRun     = process.env.DRY_RUN === '1'
+  const owner       = process.env.FACTORY_OWNER ?? DEFAULT_OWNER_RELAYER
+  const relayer     = process.env.FACTORY_INITIAL_RELAYER ?? DEFAULT_OWNER_RELAYER
   const balance    = await provider.getBalance(deployer.address)
+
+  if (!ethers.isAddress(owner)) throw new Error('FACTORY_OWNER is not a valid address')
+  if (!ethers.isAddress(relayer)) throw new Error('FACTORY_INITIAL_RELAYER is not a valid address')
 
   console.log('══════════════════════════════════════════════════════')
   console.log('HashKey PayLink — Deterministic Factory Deployment')
   console.log('══════════════════════════════════════════════════════')
   console.log(`Network:   ${chainName}`)
   console.log(`Deployer:  ${deployer.address}`)
+  console.log(`Owner:     ${owner}`)
+  console.log(`Relayer:   ${relayer}`)
   console.log(`Balance:   ${ethers.formatEther(balance)} native`)
   console.log(`Treasury:  ${TREASURY}`)
   console.log(`USDC:      ${chainUsdc || '(not configured — call setUSDC manually)'}`)
@@ -115,11 +124,15 @@ async function main() {
     V2Factory.bytecode,
     ethers.AbiCoder.defaultAbiCoder().encode(
       ['address', 'address', 'address'],
-      [TREASURY, deployer.address, deployer.address],  // treasury, relayer, owner
+      [TREASURY, relayer, owner],  // treasury, relayer, owner
     ),
   ])
   const v2Address = ethers.getCreate2Address(NICK_FACTORY, SALT_V2, ethers.keccak256(v2Initcode))
   console.log(`Predicted:  ${v2Address}`)
+
+  if (v2Address.toLowerCase() !== EXPECTED_V2_FACTORY.toLowerCase()) {
+    throw new Error(`Predicted factory ${v2Address} does not match expected ${EXPECTED_V2_FACTORY}. Refusing to deploy because vault addresses would differ.`)
+  }
 
   const v2Code = await provider.getCode(v2Address)
   if (v2Code !== '0x') {
@@ -191,7 +204,9 @@ async function main() {
   console.log('Update these on Render (same values on every chain):')
   console.log(`  VITE_FACTORY_V2         = ${v2Address}`)
   console.log(`  VITE_FACTORY_V2_ARC     = ${v2Address}`)
+  console.log(`  VITE_FACTORY_V2_ARB     = ${v2Address}`)
   console.log(`  PAYLINK_FACTORY_V2_ARC  = ${v2Address}`)
+  console.log(`  PAYLINK_FACTORY_V2_ARB  = ${v2Address}`)
   console.log(`  ROUTER_FACTORY          = ${routerAddress}`)
   console.log()
   console.log('Run on every chain you support:')
