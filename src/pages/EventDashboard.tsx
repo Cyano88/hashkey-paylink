@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
 import { QRCodeCanvas } from 'qrcode.react'
-import { formatUnits } from 'viem'
+import { formatUnits, isAddress } from 'viem'
 import {
   ArrowLeft, CheckCheck, Copy, Download, DollarSign,
-  ExternalLink, RefreshCw, Users, Zap,
+  ExternalLink, RefreshCw, Users, Zap, Info, AlertCircle, ChevronDown, ChevronUp,
 } from 'lucide-react'
 import { CHAIN_META } from '../lib/chains'
 import { EVM_CLIENTS } from '../lib/router'
 import { cn, truncateAddress } from '../lib/utils'
+import { queryBalances, type UnifiedBalanceBreakdown, type UnifiedBalanceChainKey } from '../lib/unifiedBalance'
 
 // Minimal ERC-20 Transfer ABI for getLogs
 const TRANSFER_ABI = [{
@@ -51,6 +52,22 @@ export default function EventDashboard() {
   const fxBufParam = searchParams.get('fxbuf')  ?? ''
   const fxSrcParam = searchParams.get('fxsrc')  ?? ''
   const fxRateParam= searchParams.get('fxrate') ?? ''
+  const evmValid = isAddress(evm)
+  const solanaValid = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(sol)
+  const starkValid = /^0x[0-9a-fA-F]{64}$/.test(stark)
+  const balanceChains: UnifiedBalanceChainKey[] = (() => {
+    if (multiParam === '1') {
+      const chains: UnifiedBalanceChainKey[] = []
+      if (evmValid) chains.push('base', 'arc', 'arbitrum')
+      if (solanaValid) chains.push('solana')
+      if (starkValid) chains.push('starknet')
+      return chains
+    }
+    if (netParam === 'solana') return solanaValid ? ['solana'] : []
+    if (netParam === 'starknet') return starkValid ? ['starknet'] : []
+    if (netParam === 'base' || netParam === 'arc' || netParam === 'arbitrum') return evmValid ? [netParam] : []
+    return evmValid ? ['base'] : []
+  })()
 
   // Which EVM chains to watch for flash/toast notifications.
   // New links carry ?net= so we scope to exactly that chain.
@@ -82,6 +99,11 @@ export default function EventDashboard() {
   const [hskPrice,     setHskPrice]     = useState<number | null>(null)
   const [counterFlash, setCounterFlash] = useState(false)
   const [toasts,       setToasts]       = useState<Toast[]>([])
+  const [balanceRows,  setBalanceRows]  = useState<UnifiedBalanceBreakdown[]>([])
+  const [globalBalance,setGlobalBalance]= useState(0)
+  const [balanceLoading,setBalanceLoading]= useState(false)
+  const [balanceError, setBalanceError] = useState<string | null>(null)
+  const [balanceOpen,  setBalanceOpen]  = useState(false)
 
   const qrRef      = useRef<HTMLDivElement>(null)
   const qrHiResRef = useRef<HTMLDivElement>(null)
@@ -123,6 +145,53 @@ export default function EventDashboard() {
   })()
 
   const total = payments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0)
+
+  function fmtBalance(n: number) {
+    return n.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 })
+  }
+
+  useEffect(() => {
+    let cancelled = false
+    if (balanceChains.length === 0) {
+      setBalanceRows([])
+      setGlobalBalance(0)
+      setBalanceError(null)
+      setBalanceLoading(false)
+      return
+    }
+
+    setBalanceLoading(true)
+    setBalanceError(null)
+    queryBalances({
+      evmAddress: evmValid ? evm : undefined,
+      solanaAddress: solanaValid ? sol : undefined,
+      starknetAddress: starkValid ? stark : undefined,
+      chains: balanceChains,
+    })
+      .then(result => {
+        if (cancelled) return
+        setGlobalBalance(result.total)
+        setBalanceRows(result.rows)
+        setBalanceError(result.rows.some(row => row.status === 'error') ? 'Some selected chains could not be queried' : null)
+      })
+      .catch(error => {
+        if (cancelled) return
+        setBalanceError(error instanceof Error ? error.message.slice(0, 120) : 'Unified balance query failed')
+        setGlobalBalance(0)
+        setBalanceRows(balanceChains.map(key => ({
+          key,
+          label: key === 'base' ? 'Base' : key === 'arc' ? 'Arc' : key === 'arbitrum' ? 'Arbitrum' : key === 'solana' ? 'Solana' : 'Starknet',
+          balance: 0,
+          status: 'error',
+        })))
+      })
+      .finally(() => {
+        if (!cancelled) setBalanceLoading(false)
+      })
+
+    return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [evm, sol, stark, multiParam, netParam])
 
   // ── Server registry poll (every 5s) — only source for the payment log ──────
   const fetchPayments = useCallback(async () => {
@@ -311,6 +380,58 @@ export default function EventDashboard() {
       </div>
 
       {/* ── Stats + QR ── */}
+      <div className={cn(
+        'rounded-2xl border border-gray-100 bg-white p-5 shadow-sm transition-all',
+        balanceLoading && 'animate-pulse',
+      )}>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">Unified Global Balance</p>
+              {balanceError ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                  <AlertCircle className="h-3 w-3" /> Partial
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                  <Info className="h-3 w-3" /> Read-only
+                </span>
+              )}
+            </div>
+            <p className="mt-2 font-mono text-3xl font-bold tracking-tight text-gray-900">
+              {balanceLoading ? '$--.----' : `$${fmtBalance(globalBalance)}`}
+              <span className="ml-2 text-sm font-semibold text-gray-400">USDC</span>
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setBalanceOpen(open => !open)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-all"
+          >
+            Breakdown
+            {balanceOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+          </button>
+        </div>
+
+        {balanceOpen && (
+          <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+            {balanceRows.map(row => (
+              <div key={row.key} className="rounded-lg border border-gray-100 bg-gray-50/60 px-3 py-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-semibold text-gray-600">{row.label}</span>
+                  <span className={cn(
+                    'h-1.5 w-1.5 rounded-full',
+                    row.status === 'ok' ? 'bg-emerald-500' : row.status === 'error' ? 'bg-amber-500' : 'bg-gray-300',
+                  )} />
+                </div>
+                <p className="mt-1 font-mono text-sm font-bold text-gray-900">${fmtBalance(row.balance)}</p>
+                {row.error && <p className="mt-1 text-[10px] leading-snug text-amber-600">{row.error}</p>}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       <div className="grid gap-4 sm:grid-cols-3">
         <div className="col-span-2 grid grid-cols-2 gap-4">
 
