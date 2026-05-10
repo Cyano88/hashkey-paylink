@@ -345,6 +345,7 @@ export default function PaymentPage() {
   const [circlePasskeyPending, setCirclePasskeyPending] = useState(false)
   const [circlePasskeyError, setCirclePasskeyError] = useState<string | null>(null)
   const [circleSmartAccount, setCircleSmartAccount] = useState<`0x${string}` | null>(null)
+  const [circleWalletCopied, setCircleWalletCopied] = useState(false)
 
   const { isLoading: isEvmConfirming, isSuccess: isEvmConfirmed, isError: isEvmReverted } =
     useWaitForTransactionReceipt({ hash: evmTxHash })
@@ -407,6 +408,17 @@ export default function PaymentPage() {
       ? CHAIN_META.arbitrum.chainId
       : CHAIN_META.arc.chainId) as number,
     query: { enabled: (chain === 'base' || chain === 'arc' || chain === 'arbitrum') && !!address },
+  })
+  const { data: circleWalletBalance } = useReadContract({
+    address: chain === 'arbitrum' ? CHAIN_META.arbitrum.tokenAddress : CHAIN_META.base.tokenAddress,
+    abi: ERC20_BALANCE_OF_ABI,
+    functionName: 'balanceOf',
+    args: [circleSmartAccount ?? '0x0000000000000000000000000000000000000000'],
+    chainId: chain === 'arbitrum' ? CHAIN_META.arbitrum.chainId : CHAIN_META.base.chainId,
+    query: {
+      enabled: !!circleSmartAccount && (chain === 'base' || chain === 'arbitrum'),
+      refetchInterval: 10_000,
+    },
   })
 
   // ── Starknet ──────────────────────────────────────────────────────────────
@@ -893,7 +905,7 @@ export default function PaymentPage() {
     setSolanaDirectStatus('idle'); setSolanaDirectTxHash(null); setSolanaDirectError(null)
     setManualPayDetected(false); setManualTxHash(null); setReceivedAmount(null)
     setCirclePaymasterPending(false); setCirclePaymasterTxHash(null); setCirclePaymasterError(null)
-    setCirclePasskeyPending(false); setCirclePasskeyError(null); setCircleSmartAccount(null)
+    setCirclePasskeyPending(false); setCirclePasskeyError(null); setCircleSmartAccount(null); setCircleWalletCopied(false)
     setRouterAddr(null); setRouterDeployed(null); setShowCheckButton(false)
     setSweepState('idle'); setSweepTxHash(null); setSweepBalanceUsdc(null)
     // Reset direct send state
@@ -925,6 +937,13 @@ export default function PaymentPage() {
     await copyToClipboard(displayAddress)
     setAddrCopied(true)
     setTimeout(() => setAddrCopied(false), 3000)
+  }
+
+  async function handleCopyCircleWallet() {
+    if (!circleSmartAccount) return
+    await copyToClipboard(circleSmartAccount)
+    setCircleWalletCopied(true)
+    setTimeout(() => setCircleWalletCopied(false), 2200)
   }
 
   // ── Fetch Arbitrum USDC gas estimate when Arbitrum chain is active ───────
@@ -2272,13 +2291,39 @@ export default function PaymentPage() {
                 )}
               >
                 {circlePasskeyPending
-                  ? <><Loader2 className="h-4 w-4 animate-spin" /> Opening Circle wallet</>
-                  : <><Zap className="h-4 w-4" /> Continue with email</>}
+                  ? <><Loader2 className="h-4 w-4 animate-spin" /> {circleSmartAccount ? 'Paying with Circle wallet' : 'Opening Circle wallet'}</>
+                  : circleSmartAccount
+                    ? <><Zap className="h-4 w-4" /> Pay {formatAmount(effectiveAmt, meta.decimals)} {meta.asset}</>
+                    : <><Zap className="h-4 w-4" /> Continue with email</>}
               </button>
               {circleSmartAccount && (
-                <p className="text-center font-mono text-[11px] text-gray-400">
-                  Circle wallet {truncateAddress(circleSmartAccount, 6)}
-                </p>
+                <div className="rounded-lg border border-gray-200 bg-white/70 px-3 py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+                        Circle wallet
+                      </p>
+                      <p className="truncate font-mono text-[11px] text-gray-600">
+                        {truncateAddress(circleSmartAccount, 6)}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleCopyCircleWallet}
+                      className="shrink-0 rounded-md border border-gray-200 bg-white px-2 py-1 text-[10px] font-semibold text-gray-600 transition-all hover:bg-gray-50 active:scale-95"
+                    >
+                      {circleWalletCopied ? 'Copied' : 'Copy'}
+                    </button>
+                  </div>
+                  <div className="mt-2 flex items-center justify-between border-t border-gray-100 pt-2 text-[11px]">
+                    <span className="text-gray-400">{meta.label} balance</span>
+                    <span className="font-mono font-semibold text-gray-700">
+                      {circleWalletBalance == null
+                        ? 'Checking...'
+                        : `${formatAmount((Number(circleWalletBalance) / Math.pow(10, meta.decimals)).toString(), meta.decimals)} ${meta.asset}`}
+                    </span>
+                  </div>
+                </div>
               )}
               {circlePasskeyError && (
                 <p className="text-center text-[11px] font-medium text-red-600">{circlePasskeyError}</p>
