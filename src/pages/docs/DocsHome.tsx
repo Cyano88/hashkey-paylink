@@ -100,7 +100,7 @@ export default function DocsHome() {
       <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-900/40 p-6 space-y-3">
         <h2 className="text-base font-semibold text-gray-900 dark:text-white">Key facts</h2>
         <ul className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
-          <li>• <strong className="text-gray-800 dark:text-gray-200">Platform fee:</strong> 0.2% (20 bps), deducted atomically on-chain</li>
+          <li>• <strong className="text-gray-800 dark:text-gray-200">Platform fee:</strong> 0.2% (20 bps), deducted atomically on-chain; sponsored EVM payments may include gas recovery</li>
           <li>• <strong className="text-gray-800 dark:text-gray-200">Chains:</strong> Base · HashKey · Arc · Starknet · Solana · Arbitrum</li>
           <li>• <strong className="text-gray-800 dark:text-gray-200">Asset:</strong> USDC across Base, Arc, Starknet, Solana, and Arbitrum</li>
           <li>• <strong className="text-gray-800 dark:text-gray-200">Archive contract:</strong> <code className="font-mono text-xs bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded">0x79a804C49e1E5EBC279A228Ab73a7570A0D0819a</code> — 0G Mainnet (Chain ID 16661)</li>

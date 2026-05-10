@@ -664,15 +664,15 @@ https://hashpaylink.com/pay?evm=0xYour...&sol=YourSolana...&amt=25&memo=Invoice+
 
 ## Fee Engine
 
-Hash PayLink charges a **0.2% platform fee** (20 bps) on every transaction, shown transparently before the user signs.
+Hash PayLink charges a **0.2% platform fee** (20 bps) on every transaction. Sponsored EVM payments can also include a configured USDC gas recovery amount routed to treasury in the same settlement transaction.
 
 ```
 User pays:        10.00 USDC
 Platform fee:      0.02 USDC  (0.2%)
-Recipient gets:    9.98 USDC
+Recipient gets:    9.98 USDC before any sponsored gas recovery
 ```
 
-The fee is collected **atomically in the same transaction** — there is no separate fee transfer, no trust required.
+The fee is collected **atomically in the same transaction** — there is no separate fee transfer, no trust required. Defaults: Base sponsored payments recover 0.01 USDC, and Arbitrum sponsored payments recover 0.03 USDC, capped so tiny payments still leave a recipient amount.
 
 ---
 

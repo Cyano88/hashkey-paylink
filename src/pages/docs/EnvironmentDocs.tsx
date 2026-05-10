@@ -47,6 +47,8 @@ export default function EnvironmentDocs() {
             ['VITE_CIRCLE_PAYMASTER_V08_ARB', 'No',  'Circle Paymaster v0.8 address for Arbitrum. Override only if Circle rotates the address.'],
             ['VITE_CLIENT_KEY',               'No',  'Circle Modular Wallets public client key. Required for the Continue with email gasless payment path.'],
             ['VITE_CLIENT_URL',               'No',  'Circle Modular Wallets client URL. Required for passkey login and gasless user operations.'],
+            ['VITE_BASE_GAS_RECOVERY_USDC',   'No',  'USDC amount routed to treasury on sponsored Base payments to offset gas sponsorship. Default: 0.01.'],
+            ['VITE_ARBITRUM_GAS_RECOVERY_USDC','No', 'USDC amount routed to treasury on sponsored Arbitrum payments to offset gas sponsorship. Default: 0.03.'],
             ['PRIVATE_RPC_URL',               'No',  'Base RPC endpoint. Falls back to public RPC.'],
             ['PRIVATE_RPC_URL_ARC',           'No',  'Arc RPC endpoint.'],
             ['PRIVATE_RPC_URL_HASHKEY',       'No',  'HashKey RPC endpoint.'],

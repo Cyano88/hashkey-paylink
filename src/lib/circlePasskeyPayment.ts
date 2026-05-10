@@ -11,6 +11,7 @@ import { createBundlerClient, toWebAuthnAccount } from 'viem/account-abstraction
 import { arbitrum, base } from 'viem/chains'
 import type { ChainKey } from './chains'
 import { CHAIN_META, EVM_TREASURY, PLATFORM_FEE_BPS } from './chains'
+import { getSponsoredGasRecoveryUnits } from './gasRecovery'
 
 type CirclePasskeyChain = Extract<ChainKey, 'base' | 'arbitrum'>
 
@@ -183,7 +184,9 @@ export async function sendCirclePasskeyPayment({
     const meta = CHAIN_META[config.chain]
     const totalUnits = parseUnits(amount || '0', meta.decimals)
     const feeUnits = totalUnits * BigInt(PLATFORM_FEE_BPS) / 10_000n
-    const recipientUnits = totalUnits - feeUnits
+    const gasRecoveryUnits = getSponsoredGasRecoveryUnits(config.chain, totalUnits, feeUnits, meta.decimals)
+    const treasuryUnits = feeUnits + gasRecoveryUnits
+    const recipientUnits = totalUnits - treasuryUnits
     if (totalUnits <= 0n || recipientUnits <= 0n) return { status: 'failed', reason: 'Enter a valid amount.' }
 
     const { account, smartAccount, transport } = await getCircleSmartAccount(chain, email)
@@ -214,7 +217,7 @@ export async function sendCirclePasskeyPayment({
       account,
       calls: [
         encodeTransfer(recipient, meta.tokenAddress, recipientUnits),
-        encodeTransfer(EVM_TREASURY, meta.tokenAddress, feeUnits),
+        encodeTransfer(EVM_TREASURY, meta.tokenAddress, treasuryUnits),
       ],
       paymaster: true,
     })

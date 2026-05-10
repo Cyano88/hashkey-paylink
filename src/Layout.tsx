@@ -83,11 +83,11 @@ function keywordReply(input: string): ChatMsg | null {
 
   // ── Fees ─────────────────────────────────────────────────────────────────────
   if (has('fee', 'fees', 'cost', 'charge', '0.2', 'platform fee', 'how much', 'percentage', 'deduction', 'cut', 'commission', 'pricing', 'free'))
-    return { from: 'bot', text: 'Hash PayLink charges a flat 0.2% platform fee, deducted automatically at settlement. For example, a 100 USDC payment results in 99.8 USDC before any gas reimbursement. No subscription fees, no hidden charges.' }
+    return { from: 'bot', text: 'Hash PayLink charges a flat 0.2% platform fee, deducted automatically at settlement. Sponsored EVM payments can include a small configured gas recovery amount in the same treasury transfer. No subscription fees.' }
 
   // ── Gas / gasless ────────────────────────────────────────────────────────────
   if (has('gas', 'gasless', 'free gas', 'sponsored', 'network fee', 'transaction fee', 'avnu', 'paymaster'))
-    return { from: 'bot', text: 'Gas is fully sponsored on Base (EIP-2612 permit + Multicall3), Arc (native USDC gas covered by relayer), Starknet (AVNU Paymaster — no STRK needed), HashKey (relayer pays HSK gas), and Solana (relayer pays SOL fee). Payers only send the payment amount — nothing extra.' }
+    return { from: 'bot', text: 'Gas is sponsored on Base smart-wallet/paymaster flows, Arc, Starknet, HashKey, and Solana wallet-connect payments. Sponsored EVM payments can include a configured USDC recovery amount routed to treasury as part of settlement.' }
 
   // ── Confirmation time ────────────────────────────────────────────────────────
   if (has('how long', 'how fast', 'speed', 'instant', 'confirmation time', 'finality', 'settlement time', 'how quick'))

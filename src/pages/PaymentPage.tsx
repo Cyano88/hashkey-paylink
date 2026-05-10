@@ -56,6 +56,7 @@ import { getFxMeta, formatLocalAmt, fetchFxRate } from '../lib/fx'
 import { getCirclePaymasterConfig } from '../lib/circlePaymaster'
 import { sendCirclePaymasterPayment } from '../lib/circlePaymasterPayment'
 import { canUseCirclePasskeyPayments, prepareCirclePasskeyWallet, sendCirclePasskeyPayment } from '../lib/circlePasskeyPayment'
+import { getSponsoredGasRecoveryUnits } from '../lib/gasRecovery'
 
 const CHAINS: ChainKey[] = ['base', 'starknet', 'arc', 'solana', 'arbitrum']
 
@@ -1199,8 +1200,10 @@ export default function PaymentPage() {
     const decimals = chain === 'arbitrum' ? CHAIN_META.arbitrum.decimals : CHAIN_META.base.decimals
     const totalUnits = parseUnits(effectiveAmt || '0', decimals)
     const feeUnits = totalUnits * BigInt(PLATFORM_FEE_BPS) / 10_000n
-    const recipientUnits = totalUnits - feeUnits
-    await tryCirclePaymasterTransfer(recipientUnits, feeUnits, { surfaceUnavailable: true })
+    const gasRecoveryUnits = getSponsoredGasRecoveryUnits(chain, totalUnits, feeUnits, decimals)
+    const treasuryUnits = feeUnits + gasRecoveryUnits
+    const recipientUnits = totalUnits - treasuryUnits
+    await tryCirclePaymasterTransfer(recipientUnits, treasuryUnits, { surfaceUnavailable: true })
   }
 
   async function handleCirclePasskeyPay() {
@@ -1250,7 +1253,10 @@ export default function PaymentPage() {
     const totalUnits   = parseUnits(effectiveAmt || '0', meta_.decimals)
     const feeBps       = BigInt(PLATFORM_FEE_BPS)
     const feeUnits     = totalUnits * feeBps / 10_000n
+    const gasRecoveryUnits = getSponsoredGasRecoveryUnits(chain, totalUnits, feeUnits, meta_.decimals)
+    const sponsoredFeeUnits = feeUnits + gasRecoveryUnits
     const recipientUnits = totalUnits - feeUnits
+    const sponsoredRecipientUnits = totalUnits - sponsoredFeeUnits
     const nonce        = permitNonce ?? 0n
     const permitDomain = chain === 'arc'
       ? { name: 'USDC',      version: '2', chainId: targetChainId, verifyingContract: tokenAddress }
@@ -1288,8 +1294,25 @@ export default function PaymentPage() {
           })},
         ]],
       })
+      const sponsoredBaseCallData = encodeFunctionData({
+        abi: MULTICALL3_AGGREGATE3_ABI, functionName: 'aggregate3',
+        args: [[
+          { target: tokenAddress, allowFailure: false, callData: encodeFunctionData({
+              abi: ERC20_PERMIT_ABI, functionName: 'permit',
+              args: [address, MULTICALL3_ADDRESS, totalUnits, deadline, Number(v), r, s],
+          })},
+          { target: tokenAddress, allowFailure: false, callData: encodeFunctionData({
+              abi: ERC20_TRANSFER_FROM_ABI, functionName: 'transferFrom',
+              args: [address, activeRecipient as `0x${string}`, sponsoredRecipientUnits],
+          })},
+          { target: tokenAddress, allowFailure: false, callData: encodeFunctionData({
+              abi: ERC20_TRANSFER_FROM_ABI, functionName: 'transferFrom',
+              args: [address, EVM_TREASURY, sponsoredFeeUnits],
+          })},
+        ]],
+      })
       if (chain === 'base') {
-        const sponsored = await tryBasePaymasterCall(concat([baseCallData, BASE_BUILDER_CODE]))
+        const sponsored = await tryBasePaymasterCall(concat([sponsoredBaseCallData, BASE_BUILDER_CODE]))
         if (sponsored !== 'unavailable') return
       }
       sendTransaction({

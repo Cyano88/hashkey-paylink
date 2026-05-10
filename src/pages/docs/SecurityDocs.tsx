@@ -38,7 +38,7 @@ export default function SecurityDocs() {
           <p>The factory contract includes collision resistance checks to prevent two payments from targeting the same vault address, which would cause fund mixing.</p>
         </SubSection>
         <SubSection title="Platform fee enforcement">
-          <p>The 0.2% platform fee (20 bps) is deducted atomically in the same transaction as the transfer. There is no separate fee collection step — the fee cannot be increased after the user signs.</p>
+          <p>The 0.2% platform fee (20 bps) is deducted atomically in the same transaction as the transfer. Sponsored Base and Arbitrum flows can include a configured USDC gas recovery amount in the same treasury transfer. There is no separate fee collection step — the fee cannot be increased after the user signs.</p>
         </SubSection>
       </Section>
 
