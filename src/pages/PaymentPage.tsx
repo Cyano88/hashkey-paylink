@@ -55,7 +55,7 @@ import { cn, truncateAddress, formatAmount, memoToHex, copyToClipboard } from '.
 import { getFxMeta, formatLocalAmt, fetchFxRate } from '../lib/fx'
 import { getCirclePaymasterConfig } from '../lib/circlePaymaster'
 import { sendCirclePaymasterPayment } from '../lib/circlePaymasterPayment'
-import { canUseCirclePasskeyPayments, sendCirclePasskeyPayment } from '../lib/circlePasskeyPayment'
+import { canUseCirclePasskeyPayments, prepareCirclePasskeyWallet, sendCirclePasskeyPayment } from '../lib/circlePasskeyPayment'
 
 const CHAINS: ChainKey[] = ['base', 'starknet', 'arc', 'solana', 'arbitrum']
 
@@ -409,7 +409,11 @@ export default function PaymentPage() {
       : CHAIN_META.arc.chainId) as number,
     query: { enabled: (chain === 'base' || chain === 'arc' || chain === 'arbitrum') && !!address },
   })
-  const { data: circleWalletBalance } = useReadContract({
+  const {
+    data: circleWalletBalance,
+    isFetching: isCircleWalletBalanceFetching,
+    refetch: refetchCircleWalletBalance,
+  } = useReadContract({
     address: chain === 'arbitrum' ? CHAIN_META.arbitrum.tokenAddress : CHAIN_META.base.tokenAddress,
     abi: ERC20_BALANCE_OF_ABI,
     functionName: 'balanceOf',
@@ -417,7 +421,7 @@ export default function PaymentPage() {
     chainId: chain === 'arbitrum' ? CHAIN_META.arbitrum.chainId : CHAIN_META.base.chainId,
     query: {
       enabled: !!circleSmartAccount && (chain === 'base' || chain === 'arbitrum'),
-      refetchInterval: 10_000,
+      refetchInterval: 3_000,
     },
   })
 
@@ -466,6 +470,22 @@ export default function PaymentPage() {
   const circlePaymasterConfig = getCirclePaymasterConfig(chain)
   const showCirclePaymasterButton = !!circlePaymasterConfig && (chain === 'base' || chain === 'arbitrum')
   const showCirclePasskeyPay = canUseCirclePasskeyPayments(chain)
+  const circleRequiredUnits = (() => {
+    try {
+      return parseUnits(effectiveAmt || '0', meta.decimals)
+    } catch {
+      return 0n
+    }
+  })()
+  const circleWalletHasEnough =
+    typeof circleWalletBalance === 'bigint' &&
+    circleRequiredUnits > 0n &&
+    circleWalletBalance >= circleRequiredUnits
+  const circleWalletNeedsFunds =
+    !!circleSmartAccount &&
+    typeof circleWalletBalance === 'bigint' &&
+    circleRequiredUnits > 0n &&
+    circleWalletBalance < circleRequiredUnits
 
   const missingStark   = chain === 'starknet' && !resolvedStark
   const missingSolana  = chain === 'solana'   && !resolvedSolana
@@ -479,6 +499,11 @@ export default function PaymentPage() {
   const canDirectSend =
     ((chain === 'base' || chain === 'arc' || chain === 'arbitrum') && isAddress(resolvedEvm) && !!FACTORY_V2_ADDRESSES[chain as 'base' | 'arc' | 'arbitrum']) ||
     (chain === 'solana' && !!resolvedSolana)
+
+  useEffect(() => {
+    if (!circleWalletHasEnough) return
+    if (circlePasskeyError?.toLowerCase().includes('usdc')) setCirclePasskeyError(null)
+  }, [circlePasskeyError, circleWalletHasEnough])
 
   // ── Step 1: Predict router address + check deployment ────────────────────
   useEffect(() => {
@@ -1190,6 +1215,16 @@ export default function PaymentPage() {
     setCirclePasskeyError(null)
     setCirclePaymasterTxHash(null)
     try {
+      if (!circleSmartAccount) {
+        const wallet = await prepareCirclePasskeyWallet(chain, email)
+        if (wallet.status === 'ready') {
+          setCircleSmartAccount(wallet.smartAccount)
+        } else {
+          setCirclePasskeyError(wallet.reason)
+        }
+        return
+      }
+
       const result = await sendCirclePasskeyPayment({
         chain,
         email,
@@ -1200,7 +1235,7 @@ export default function PaymentPage() {
       if (result.status === 'sent') {
         setCirclePaymasterTxHash(result.txHash)
       } else {
-        setCirclePasskeyError(result.reason)
+        if (!circleWalletHasEnough) setCirclePasskeyError(result.reason)
       }
     } finally {
       setCirclePasskeyPending(false)
@@ -2304,8 +2339,8 @@ export default function PaymentPage() {
                       <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
                         Smart wallet
                       </p>
-                      <p className="truncate font-mono text-[11px] text-gray-600">
-                        {truncateAddress(circleSmartAccount, 6)}
+                      <p className="truncate text-[11px] text-gray-500">
+                        {circleWalletNeedsFunds ? `Fund with ${meta.label} ${meta.asset}` : `${meta.label} ${meta.asset} ready`}
                       </p>
                     </div>
                     <button
@@ -2318,11 +2353,22 @@ export default function PaymentPage() {
                   </div>
                   <div className="mt-2 flex items-center justify-between border-t border-gray-100 pt-2 text-[11px]">
                     <span className="text-gray-400">{meta.label} balance</span>
-                    <span className="font-mono font-semibold text-gray-700">
-                      {circleWalletBalance == null
-                        ? 'Checking...'
-                        : `${formatAmount((Number(circleWalletBalance) / Math.pow(10, meta.decimals)).toString(), meta.decimals)} ${meta.asset}`}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-semibold text-gray-700">
+                        {circleWalletBalance == null
+                          ? 'Checking...'
+                          : `${formatAmount((Number(circleWalletBalance) / Math.pow(10, meta.decimals)).toString(), meta.decimals)} ${meta.asset}`}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => refetchCircleWalletBalance()}
+                        className="rounded-md p-1 text-gray-400 transition-all hover:bg-gray-100 hover:text-gray-700 active:scale-95"
+                        aria-label="Refresh smart wallet balance"
+                        title="Refresh balance"
+                      >
+                        <RefreshCw className={cn('h-3 w-3', isCircleWalletBalanceFetching && 'animate-spin')} />
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}

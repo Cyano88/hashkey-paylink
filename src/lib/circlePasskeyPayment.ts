@@ -25,6 +25,10 @@ type CirclePasskeyPaymentResult =
   | { status: 'sent'; txHash: Hex; userOpHash: Hex; smartAccount: Address }
   | { status: 'failed'; reason: string; smartAccount?: Address }
 
+type CirclePasskeyWalletResult =
+  | { status: 'ready'; smartAccount: Address }
+  | { status: 'failed'; reason: string }
+
 const CLIENT_KEY = import.meta.env.VITE_CLIENT_KEY as string | undefined
 const CLIENT_URL = import.meta.env.VITE_CLIENT_URL as string | undefined
 const CREDENTIAL_PREFIX = 'hashpaylink_circle_credential'
@@ -124,7 +128,7 @@ function friendlyCircleError(err: unknown) {
     return 'Circle Modular Wallet is not configured for this domain. In Circle Console, make the Client Key allowed domain exactly match the Passkey domain, then redeploy.'
   }
   if (lower.includes('credential') || lower.includes('passkey')) return 'Passkey setup was not completed. Use a browser/device with passkeys enabled, or create the passkey on this device first.'
-  if (lower.includes('insufficient')) return 'Insufficient USDC in the Circle smart wallet.'
+  if (lower.includes('insufficient')) return 'Add USDC to Smart wallet to continue.'
   if (lower.includes('user rejected') || lower.includes('notallowederror') || lower.includes('cancel')) {
     return 'Passkey confirmation was cancelled.'
   }
@@ -133,6 +137,37 @@ function friendlyCircleError(err: unknown) {
 
 export function canUseCirclePasskeyPayments(chain: ChainKey) {
   return !!getCircleClientConfig(chain)
+}
+
+async function getCircleSmartAccount(chain: ChainKey, email: string) {
+  const config = getCircleClientConfig(chain)
+  if (!config) throw new Error('Smart wallet is not configured for this chain.')
+  const credential = await getCredential(email.trim())
+  const transport = toModularTransport(config.chainUrl, config.clientKey)
+  const client = createPublicClient({
+    chain: viemChainFor(config.chain),
+    transport,
+  })
+  const account = await toCircleSmartAccount({
+    client,
+    owner: toWebAuthnAccount({ credential }),
+    name: `hash-paylink-${email.trim().toLowerCase()}`,
+  })
+  return {
+    account,
+    smartAccount: account.address as Address,
+    transport,
+    chain: config.chain,
+  }
+}
+
+export async function prepareCirclePasskeyWallet(chain: ChainKey, email: string): Promise<CirclePasskeyWalletResult> {
+  try {
+    const { smartAccount } = await getCircleSmartAccount(chain, email)
+    return { status: 'ready', smartAccount }
+  } catch (err) {
+    return { status: 'failed', reason: friendlyCircleError(err) }
+  }
 }
 
 export async function sendCirclePasskeyPayment({
@@ -151,18 +186,11 @@ export async function sendCirclePasskeyPayment({
     const recipientUnits = totalUnits - feeUnits
     if (totalUnits <= 0n || recipientUnits <= 0n) return { status: 'failed', reason: 'Enter a valid amount.' }
 
-    const credential = await getCredential(email.trim())
-    const transport = toModularTransport(config.chainUrl, config.clientKey)
+    const { account, smartAccount, transport } = await getCircleSmartAccount(chain, email)
     const client = createPublicClient({
       chain: viemChainFor(config.chain),
       transport,
     })
-    const account = await toCircleSmartAccount({
-      client,
-      owner: toWebAuthnAccount({ credential }),
-      name: `hash-paylink-${email.trim().toLowerCase()}`,
-    })
-    const smartAccount = account.address as Address
     const balance = await client.readContract({
       address: meta.tokenAddress,
       abi: erc20Abi,
@@ -172,7 +200,7 @@ export async function sendCirclePasskeyPayment({
     if (balance < totalUnits) {
       return {
         status: 'failed',
-        reason: `Insufficient USDC in Smart wallet ${smartAccount}.`,
+        reason: 'Add USDC to Smart wallet to continue.',
         smartAccount,
       }
     }
