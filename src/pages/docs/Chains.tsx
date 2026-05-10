@@ -24,7 +24,7 @@ export default function Chains() {
 
       <Section title="Base">
         <SubSection title="EIP-2612 Permit + Multicall3">
-          <p>The payer signs an off-chain EIP-712 typed message (permit) authorizing USDC spending. The relayer combines the permit and transfer into a single Multicall3 call — one atomic transaction. The payer covers negligible ETH gas (fractions of a cent).</p>
+          <p>The payer signs an off-chain EIP-712 typed message (permit) authorizing USDC spending. Hash PayLink first attempts to submit the Multicall3 payment through Coinbase/CDP Paymaster when configured and supported by the connected Base wallet. If sponsorship is unavailable, it falls back to the standard wallet transaction path.</p>
         </SubSection>
         <SubSection title="CREATE2 Ghost Vault">
           <p>The Send via Address flow computes a deterministic vault address using CREATE2. The payer sends USDC directly to this address from any wallet or CEX without connecting a browser extension. The relayer detects the deposit and sweeps funds to the recipient, covering ETH gas. The payer contributes only USDC.</p>

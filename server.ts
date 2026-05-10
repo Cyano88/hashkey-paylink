@@ -35,6 +35,7 @@ import {
 } from './api/relay-solana.js'
 import fxRateHandler from './api/fx-rate.js'
 import relayGhoHandler from './api/relay-gho.js'
+import basePaymasterHandler from './api/base-paymaster.js'
 import agentVerifyHandler   from './api/agent-verify.js'
 import agentAskHandler     from './api/agent-ask.js'
 import checkAgentUrlHandler from './api/check-agent-url.js'
@@ -72,6 +73,7 @@ app.get('/api/solana-vault',           getSolanaVaultAddress)
 app.post('/api/solana-sweep',          sweepSolanaVault)
 app.get('/api/fx-rate',                fxRateHandler)
 app.all('/api/relay-gho',              relayGhoHandler)
+app.all('/api/base-paymaster',         basePaymasterHandler)
 // ── Agentic Economy — 0G payment verification primitives ─────────────────────
 app.all('/api/agent-verify',           agentVerifyHandler)
 app.post('/api/agent-ask',             agentAskHandler)

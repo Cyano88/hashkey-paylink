@@ -7,6 +7,8 @@ import {
   useSwitchChain,
   useDisconnect,
   useSendTransaction,
+  useSendCalls,
+  useWaitForCallsStatus,
   useWaitForTransactionReceipt,
   useSignTypedData,
   useReadContract,
@@ -25,6 +27,7 @@ import {
 // ─── Base Builder Code (ERC-8021) ─────────────────────────────────────────────
 // Appended to calldata on Base Mainnet transactions only. Hex of "bc_8qtb7tny".
 const BASE_BUILDER_CODE = '0x62635f3871746237746e79' as `0x${string}`
+const BASE_PAYMASTER_URL = import.meta.env.VITE_BASE_PAYMASTER_URL as string | undefined
 import {
   ArrowLeft, ArrowRight, CheckCircle2, ExternalLink, AlertCircle, Loader2, ArrowLeftRight,
   RefreshCw, ShieldCheck, Zap, Copy, CheckCheck, Wallet,
@@ -321,6 +324,40 @@ export default function PaymentPage() {
 
   const { isLoading: isEvmConfirming, isSuccess: isEvmConfirmed, isError: isEvmReverted } =
     useWaitForTransactionReceipt({ hash: evmTxHash })
+
+  const {
+    sendCallsAsync: sendSponsoredCallsAsync,
+    isPending: isBasePaymasterPending,
+  } = useSendCalls()
+  const [basePaymasterCallId, setBasePaymasterCallId] = useState<string | null>(null)
+  const [basePaymasterTxHash, setBasePaymasterTxHash] = useState<`0x${string}` | null>(null)
+  const [basePaymasterError, setBasePaymasterError] = useState<string | null>(null)
+  const [basePaymasterAvailable, setBasePaymasterAvailable] = useState(false)
+  const {
+    data: basePaymasterStatus,
+    isLoading: isBasePaymasterConfirming,
+    isError: isBasePaymasterStatusError,
+    error: basePaymasterStatusError,
+  } = useWaitForCallsStatus({
+    id: basePaymasterCallId ?? '',
+    pollingInterval: 2_000,
+    query: { enabled: !!basePaymasterCallId && !basePaymasterTxHash },
+  })
+
+  useEffect(() => {
+    const receiptHash = basePaymasterStatus?.receipts?.[0]?.transactionHash
+    if (receiptHash) setBasePaymasterTxHash(receiptHash as `0x${string}`)
+  }, [basePaymasterStatus])
+
+  useEffect(() => {
+    if (!BASE_PAYMASTER_URL) return
+    let cancelled = false
+    fetch(BASE_PAYMASTER_URL)
+      .then(r => r.json())
+      .then((d: { configured?: boolean }) => { if (!cancelled) setBasePaymasterAvailable(!!d.configured) })
+      .catch(() => { if (!cancelled) setBasePaymasterAvailable(false) })
+    return () => { cancelled = true }
+  }, [])
 
   // ── Arbitrum USDC relay state — relayer submits tx on payer's behalf ──────
   const [ghoRelayHash,    setGhoRelayHash]    = useState<`0x${string}` | undefined>(undefined)
@@ -993,6 +1030,37 @@ export default function PaymentPage() {
     }
   }
 
+  function isUserRejected(err: unknown) {
+    const msg = err instanceof Error ? err.message.toLowerCase() : String(err).toLowerCase()
+    return msg.includes('user rejected') || msg.includes('user denied') || msg.includes('rejected the request')
+  }
+
+  async function tryBasePaymasterCall(data: `0x${string}`) {
+    if (chain !== 'base' || !address || !BASE_PAYMASTER_URL || !basePaymasterAvailable) return false
+
+    try {
+      setBasePaymasterError(null)
+      setBasePaymasterTxHash(null)
+      setBasePaymasterCallId(null)
+      const result = await sendSponsoredCallsAsync({
+        account: address,
+        chainId: CHAIN_META.base.chainId,
+        calls: [{ to: MULTICALL3_ADDRESS, value: 0n, data }],
+        capabilities: {
+          paymasterService: {
+            url: BASE_PAYMASTER_URL,
+          },
+        },
+      })
+      setBasePaymasterCallId(result.id)
+      return true
+    } catch (err) {
+      if (isUserRejected(err)) throw err
+      setBasePaymasterError(err instanceof Error ? err.message.slice(0, 160) : String(err).slice(0, 160))
+      return false
+    }
+  }
+
   async function handleEvmPermitPay() {
     if (!address) return
     const meta_       = chain === 'arc' ? CHAIN_META.arc : chain === 'arbitrum' ? CHAIN_META.arbitrum : CHAIN_META.base
@@ -1039,6 +1107,10 @@ export default function PaymentPage() {
           })},
         ]],
       })
+      if (chain === 'base') {
+        const sponsored = await tryBasePaymasterCall(concat([baseCallData, BASE_BUILDER_CODE]))
+        if (sponsored) return
+      }
       sendTransaction({
         to: MULTICALL3_ADDRESS, value: 0n, chainId: targetChainId,
         // Append Base Builder Code on Base Mainnet only (ERC-8021)
@@ -1099,19 +1171,25 @@ export default function PaymentPage() {
   // ── Unified aliases ───────────────────────────────────────────────────────
   // directStatus === 'success' is included so EVM Send-via-Address relay
   // immediately transitions to the full-screen success card (same as Solana).
-  const isConfirmed     = (chain === 'starknet' ? isStarkConfirmed : chain === 'solana' ? isSolanaConfirmed : chain === 'arbitrum' ? isGhoConfirmed : isEvmConfirmed) || manualPayDetected || directStatus === 'success'
+  const isBasePaymasterConfirmed = !!basePaymasterTxHash && basePaymasterStatus?.status === 'success'
+  const isBasePaymasterFailed = basePaymasterStatus?.status === 'failure'
+  const isConfirmed     = (chain === 'starknet' ? isStarkConfirmed : chain === 'solana' ? isSolanaConfirmed : chain === 'arbitrum' ? isGhoConfirmed : (isEvmConfirmed || isBasePaymasterConfirmed)) || manualPayDetected || directStatus === 'success'
   const txHash          = directStatus === 'success'   ? (directTxHash as `0x${string}` | null)
                         : manualPayDetected            ? manualTxHash
                         : chain === 'starknet'         ? starkTxHash
                         : chain === 'solana'           ? solanaTxHash
                         : chain === 'arbitrum'         ? (ghoRelayHash ?? null)
-                        : evmTxHash
-  const isWalletPending = chain === 'starknet' ? isStarkPending   : chain === 'solana' ? isSolanaPending   : chain === 'arbitrum' ? (ghoRelayPending || isSignPending) : isEvmWalletPending || isSignPending
-  const isConfirming    = chain === 'starknet' ? isStarkConfirming : chain === 'solana' ? isSolanaConfirming : chain === 'arbitrum' ? isGhoConfirming : isEvmConfirming
-  const isSendError     = chain === 'starknet' ? !!starkError : chain === 'solana' ? !!solanaError : chain === 'arbitrum' ? !!ghoRelayError : (isEvmSendError || isEvmReverted)
+                        : (basePaymasterTxHash ?? evmTxHash)
+  const isWalletPending = chain === 'starknet' ? isStarkPending   : chain === 'solana' ? isSolanaPending   : chain === 'arbitrum' ? (ghoRelayPending || isSignPending) : isEvmWalletPending || isSignPending || isBasePaymasterPending
+  const isConfirming    = chain === 'starknet' ? isStarkConfirming : chain === 'solana' ? isSolanaConfirming : chain === 'arbitrum' ? isGhoConfirming : (isEvmConfirming || isBasePaymasterConfirming)
+  const isSendError     = chain === 'starknet' ? !!starkError : chain === 'solana' ? !!solanaError : chain === 'arbitrum' ? !!ghoRelayError : (isEvmSendError || isEvmReverted || isBasePaymasterStatusError || isBasePaymasterFailed)
   const sendErrorMsg    = chain === 'starknet' ? starkError
                         : chain === 'solana'   ? solanaError
                         : chain === 'arbitrum' ? ghoRelayError
+                        : isBasePaymasterStatusError
+                          ? (basePaymasterStatusError?.message ?? basePaymasterError ?? 'Sponsored transaction failed').slice(0, 140)
+                        : isBasePaymasterFailed
+                          ? 'Sponsored transaction failed on Base.'
                         : isEvmReverted
                           ? 'Transaction reverted. The permit may have expired or your USDC balance was insufficient.'
                           : (evmSendError?.message ?? 'An unknown error occurred').slice(0, 140)
@@ -1130,7 +1208,7 @@ export default function PaymentPage() {
                  : chain === 'starknet' ? starkTxHash
                  : chain === 'solana'   ? (solanaTxHash ?? solanaDirectTxHash)
                  : chain === 'arbitrum' ? (ghoRelayHash ?? directTxHash ?? null)
-                 : (evmTxHash ?? directTxHash ?? null)
+                 : (basePaymasterTxHash ?? evmTxHash ?? directTxHash ?? null)
     const txHash = txH ?? `manual_${Date.now()}`
     const actualAmt = receivedAmount != null
       ? (Number(receivedAmount) / Math.pow(10, meta.decimals)).toFixed(meta.decimals <= 6 ? 6 : 8)
@@ -2124,6 +2202,7 @@ export default function PaymentPage() {
               )}>
               {isSignPending        ? <><Loader2 className="h-4 w-4 animate-spin" /> Sign Permit in Wallet…</>
               : ghoRelayPending     ? <><Loader2 className="h-4 w-4 animate-spin" /> Relaying via HashPayLink…</>
+              : isBasePaymasterPending ? <><Loader2 className="h-4 w-4 animate-spin" /> Requesting sponsored gas…</>
               : isEvmWalletPending  ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirm in Wallet…</>
               : isConfirming        ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirming on Chain…</>
               : isSweeping          ? <><Loader2 className="h-4 w-4 animate-spin" /> Routing payment…</>

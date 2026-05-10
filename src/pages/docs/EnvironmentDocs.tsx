@@ -38,6 +38,8 @@ export default function EnvironmentDocs() {
             ['VITE_FACTORY_V2',               'Yes', 'Browser-accessible factory address (Base). Used by frontend to compute vault addresses.'],
             ['VITE_FACTORY_V2_ARC',           'No',  'Browser-accessible Arc factory.'],
             ['VITE_FACTORY_V2_ARB',           'No',  'Browser-accessible Arbitrum factory.'],
+            ['CDP_PAYMASTER_URL',             'No',  'Server-side Coinbase/CDP Base Paymaster URL used by /api/base-paymaster.'],
+            ['VITE_BASE_PAYMASTER_URL',       'No',  'Browser-visible paymaster proxy path. Use /api/base-paymaster.'],
             ['PRIVATE_RPC_URL',               'No',  'Base RPC endpoint. Falls back to public RPC.'],
             ['PRIVATE_RPC_URL_ARC',           'No',  'Arc RPC endpoint.'],
             ['PRIVATE_RPC_URL_HASHKEY',       'No',  'HashKey RPC endpoint.'],
