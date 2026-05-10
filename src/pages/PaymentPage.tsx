@@ -56,7 +56,10 @@ import { getFxMeta, formatLocalAmt, fetchFxRate } from '../lib/fx'
 import { getCirclePaymasterConfig } from '../lib/circlePaymaster'
 import { sendCirclePaymasterPayment } from '../lib/circlePaymasterPayment'
 import { canUseCirclePasskeyPayments, prepareCirclePasskeyWallet, sendCirclePasskeyPayment } from '../lib/circlePasskeyPayment'
+import { canUseCircleSolanaEmailWallet, connectCircleSolanaEmailWallet, signCircleSolanaTransaction } from '../lib/circleSolanaEmailWallet'
 import { getSponsoredGasRecoveryUnits } from '../lib/gasRecovery'
+
+type CircleSolanaSession = Awaited<ReturnType<typeof connectCircleSolanaEmailWallet>>
 
 const CHAINS: ChainKey[] = ['base', 'starknet', 'arc', 'solana', 'arbitrum']
 
@@ -450,6 +453,13 @@ export default function PaymentPage() {
   const [solanaDirectError,    setSolanaDirectError]    = useState<string | null>(null)
   const [solanaAddrCopied,     setSolanaAddrCopied]     = useState(false)
   const [solanaDirHashCopied,  setSolanaDirHashCopied]  = useState(false)
+  const [circleSolanaEmail,    setCircleSolanaEmail]    = useState('')
+  const [circleSolanaSession,  setCircleSolanaSession]  = useState<CircleSolanaSession | null>(null)
+  const [circleSolanaPending,  setCircleSolanaPending]  = useState(false)
+  const [circleSolanaError,    setCircleSolanaError]    = useState<string | null>(null)
+  const [circleSolanaBalance,  setCircleSolanaBalance]  = useState<bigint | null>(null)
+  const [circleSolanaFetching, setCircleSolanaFetching] = useState(false)
+  const [circleSolanaCopied,   setCircleSolanaCopied]   = useState(false)
 
   // ── Derived ───────────────────────────────────────────────────────────────
   const isEvmChain    = chain !== 'starknet' && chain !== 'solana'
@@ -471,6 +481,7 @@ export default function PaymentPage() {
   const circlePaymasterConfig = getCirclePaymasterConfig(chain)
   const showCirclePaymasterButton = !!circlePaymasterConfig && (chain === 'base' || chain === 'arbitrum')
   const showCirclePasskeyPay = canUseCirclePasskeyPayments(chain)
+  const showCircleSolanaEmailPay = chain === 'solana' && canUseCircleSolanaEmailWallet()
   const circleRequiredUnits = (() => {
     try {
       return parseUnits(effectiveAmt || '0', meta.decimals)
@@ -487,6 +498,15 @@ export default function PaymentPage() {
     typeof circleWalletBalance === 'bigint' &&
     circleRequiredUnits > 0n &&
     circleWalletBalance < circleRequiredUnits
+  const circleSolanaHasEnough =
+    circleSolanaBalance !== null &&
+    circleRequiredUnits > 0n &&
+    circleSolanaBalance >= circleRequiredUnits
+  const circleSolanaNeedsFunds =
+    !!circleSolanaSession &&
+    circleSolanaBalance !== null &&
+    circleRequiredUnits > 0n &&
+    circleSolanaBalance < circleRequiredUnits
 
   const missingStark   = chain === 'starknet' && !resolvedStark
   const missingSolana  = chain === 'solana'   && !resolvedSolana
@@ -929,6 +949,8 @@ export default function PaymentPage() {
     setSolanaError(null); setSolanaTxHash(null)
     setSolanaLinkId(null); setSolanaVaultAddr(null)
     setSolanaDirectStatus('idle'); setSolanaDirectTxHash(null); setSolanaDirectError(null)
+    setCircleSolanaPending(false); setCircleSolanaError(null); setCircleSolanaBalance(null)
+    setCircleSolanaSession(null); setCircleSolanaCopied(false)
     setManualPayDetected(false); setManualTxHash(null); setReceivedAmount(null)
     setCirclePaymasterPending(false); setCirclePaymasterTxHash(null); setCirclePaymasterError(null)
     setCirclePasskeyPending(false); setCirclePasskeyError(null); setCircleSmartAccount(null); setCircleWalletCopied(false)
@@ -970,6 +992,13 @@ export default function PaymentPage() {
     await copyToClipboard(circleSmartAccount)
     setCircleWalletCopied(true)
     setTimeout(() => setCircleWalletCopied(false), 2200)
+  }
+
+  async function handleCopyCircleSolanaWallet() {
+    if (!circleSolanaSession?.wallet.address) return
+    await copyToClipboard(circleSolanaSession.wallet.address)
+    setCircleSolanaCopied(true)
+    setTimeout(() => setCircleSolanaCopied(false), 2200)
   }
 
   // ── Fetch Arbitrum USDC gas estimate when Arbitrum chain is active ───────
@@ -1051,6 +1080,94 @@ export default function PaymentPage() {
     else if (chain === 'starknet') handleStarknetPay()
     else if (chain === 'solana') await handleSolanaPay()
     else handleHashKeyPay()
+  }
+
+  async function refreshCircleSolanaBalance(walletAddress = circleSolanaSession?.wallet.address) {
+    if (!walletAddress) return
+    setCircleSolanaFetching(true)
+    try {
+      const res = await fetch('/api/solana-balance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accountAddress: walletAddress }),
+      })
+      const data = await res.json() as { ok: boolean; balance?: string }
+      if (data.ok) setCircleSolanaBalance(BigInt(data.balance ?? '0'))
+    } catch {
+      // Balance polling is advisory; payment submit will still validate on-chain.
+    } finally {
+      setCircleSolanaFetching(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!circleSolanaSession?.wallet.address || chain !== 'solana') return
+    void refreshCircleSolanaBalance(circleSolanaSession.wallet.address)
+    const timer = setInterval(() => {
+      void refreshCircleSolanaBalance(circleSolanaSession.wallet.address)
+    }, 4_000)
+    return () => clearInterval(timer)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [circleSolanaSession?.wallet.address, chain])
+
+  async function handleCircleSolanaEmailPay() {
+    if (!resolvedSolana || !showCircleSolanaEmailPay) return
+    const email = circleSolanaEmail.trim()
+    if (!email && !circleSolanaSession) {
+      setCircleSolanaError('Enter your email to continue with Smart wallet.')
+      return
+    }
+
+    setCircleSolanaPending(true)
+    setCircleSolanaError(null)
+    try {
+      let session = circleSolanaSession
+      if (!session) {
+        session = await connectCircleSolanaEmailWallet(email)
+        setCircleSolanaSession(session)
+        await refreshCircleSolanaBalance(session.wallet.address)
+        return
+      }
+
+      if (circleSolanaBalance !== null && !circleSolanaHasEnough) {
+        setCircleSolanaError('Add USDC to Smart wallet to continue.')
+        return
+      }
+
+      const buildRes = await fetch('/api/solana-build-tx', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ from: session.wallet.address, to: resolvedSolana, amount: effectiveAmt }),
+      })
+      const buildData = await buildRes.json() as { ok: boolean; tx?: string; error?: string }
+      if (!buildData.ok || !buildData.tx) throw new Error(buildData.error ?? 'Failed to build transaction')
+
+      const signedB64 = await signCircleSolanaTransaction({
+        session,
+        rawTransaction: buildData.tx,
+        memo: `Hash PayLink ${formatAmount(effectiveAmt, 6)} USDC`,
+      })
+
+      setIsSolanaPending(false)
+      setIsSolanaConfirming(true)
+      const relayRes = await fetch('/api/solana-relay', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ tx: signedB64 }),
+      })
+      const relayData = await relayRes.json() as { ok: boolean; txHash?: string; error?: string }
+      if (!relayData.ok || !relayData.txHash) throw new Error(relayData.error ?? 'Relay failed')
+      setSolanaTxHash(relayData.txHash)
+      setIsSolanaConfirming(false)
+      setIsSolanaConfirmed(true)
+      void refreshCircleSolanaBalance(session.wallet.address)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Circle Solana wallet payment failed.'
+      setCircleSolanaError(msg.slice(0, 160))
+      setIsSolanaConfirming(false)
+    } finally {
+      setCircleSolanaPending(false)
+    }
   }
 
   async function handleSolanaPay() {
@@ -1384,11 +1501,11 @@ export default function PaymentPage() {
                         : chain === 'solana'           ? solanaTxHash
                         : chain === 'arbitrum'         ? (circlePaymasterTxHash ?? ghoRelayHash ?? null)
                         : (circlePaymasterTxHash ?? basePaymasterTxHash ?? evmTxHash)
-  const isWalletPending = chain === 'starknet' ? isStarkPending   : chain === 'solana' ? isSolanaPending   : chain === 'arbitrum' ? (ghoRelayPending || circlePaymasterPending || circlePasskeyPending || isSignPending) : isEvmWalletPending || circlePaymasterPending || circlePasskeyPending || isSignPending || isBasePaymasterPending
+  const isWalletPending = chain === 'starknet' ? isStarkPending   : chain === 'solana' ? (isSolanaPending || circleSolanaPending)   : chain === 'arbitrum' ? (ghoRelayPending || circlePaymasterPending || circlePasskeyPending || isSignPending) : isEvmWalletPending || circlePaymasterPending || circlePasskeyPending || isSignPending || isBasePaymasterPending
   const isConfirming    = chain === 'starknet' ? isStarkConfirming : chain === 'solana' ? isSolanaConfirming : chain === 'arbitrum' ? (isGhoConfirming || isCirclePaymasterConfirming) : (isEvmConfirming || isBasePaymasterConfirming || isCirclePaymasterConfirming)
-  const isSendError     = chain === 'starknet' ? !!starkError : chain === 'solana' ? !!solanaError : chain === 'arbitrum' ? (!!ghoRelayError || !!circlePaymasterError) : (isEvmSendError || isEvmReverted || isBasePaymasterStatusError || isBasePaymasterFailed || !!basePaymasterError || !!circlePaymasterError)
+  const isSendError     = chain === 'starknet' ? !!starkError : chain === 'solana' ? (!!solanaError || !!circleSolanaError) : chain === 'arbitrum' ? (!!ghoRelayError || !!circlePaymasterError) : (isEvmSendError || isEvmReverted || isBasePaymasterStatusError || isBasePaymasterFailed || !!basePaymasterError || !!circlePaymasterError)
   const sendErrorMsg    = chain === 'starknet' ? starkError
-                        : chain === 'solana'   ? solanaError
+                        : chain === 'solana'   ? (circleSolanaError ?? solanaError)
                         : chain === 'arbitrum' ? (circlePaymasterError ?? ghoRelayError)
                         : isBasePaymasterStatusError
                           ? (basePaymasterStatusError?.message ?? basePaymasterError ?? 'Sponsored transaction failed').slice(0, 140)
@@ -1410,7 +1527,7 @@ export default function PaymentPage() {
     // In Send-via-Address mode the payer never connects a wallet so address is
     // undefined. Fall back to the vault address as the payer identifier.
     const payer  = chain === 'starknet' ? (starkAccount ?? '')
-      : chain === 'solana' ? (solanaWalletAddr ?? solanaVaultAddr ?? '')
+      : chain === 'solana' ? (circleSolanaSession?.wallet.address ?? solanaWalletAddr ?? solanaVaultAddr ?? '')
       : (address ?? directVault ?? '')
     const txH    = manualPayDetected ? manualTxHash
                  : chain === 'starknet' ? starkTxHash
@@ -2420,6 +2537,85 @@ export default function PaymentPage() {
           ) : payMode === 'wallet' && chain === 'solana' ? (
             !solanaWalletAddr ? (
               <div className="space-y-2">
+                {showCircleSolanaEmailPay && !manualPayDetected && (
+                  <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50/70 p-3">
+                    {!circleSolanaSession && (
+                      <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2.5">
+                        <input
+                          type="email"
+                          value={circleSolanaEmail}
+                          onChange={(e) => setCircleSolanaEmail(e.target.value)}
+                          placeholder="Email for gasless payment"
+                          disabled={circleSolanaPending || (isEventMode && !attendeeName.trim())}
+                          className="min-w-0 flex-1 bg-transparent text-sm text-gray-800 placeholder:text-gray-400 outline-none"
+                        />
+                        <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">Gasless</span>
+                      </div>
+                    )}
+                    <button
+                      onClick={handleCircleSolanaEmailPay}
+                      disabled={circleSolanaPending || isSolanaConfirming || (isEventMode && !attendeeName.trim()) || flexPayDisabled}
+                      className={cn(
+                        'flex w-full items-center justify-center gap-2 rounded-xl px-6 py-3.5 text-sm font-semibold transition-all',
+                        circleSolanaPending || isSolanaConfirming
+                          ? 'cursor-not-allowed bg-gray-100 text-gray-500'
+                          : 'bg-black text-white shadow-button hover:bg-gray-800 active:scale-[0.98]',
+                      )}
+                    >
+                      {circleSolanaPending
+                        ? <><Loader2 className="h-4 w-4 animate-spin" /> {circleSolanaSession ? 'Paying with Smart wallet' : 'Opening Smart wallet'}</>
+                        : circleSolanaSession
+                          ? <><Zap className="h-4 w-4" /> Pay {formatAmount(effectiveAmt, 6)} USDC</>
+                          : <><Zap className="h-4 w-4" /> Continue with email</>}
+                    </button>
+                    {circleSolanaSession && (
+                      <div className="rounded-lg border border-gray-200 bg-white/70 px-3 py-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Smart wallet</p>
+                            <p className="truncate text-[11px] text-gray-500">
+                              {circleSolanaNeedsFunds ? 'Fund with Solana USDC' : 'Solana USDC ready'}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleCopyCircleSolanaWallet}
+                            className="shrink-0 rounded-md border border-gray-200 bg-white px-2 py-1 text-[10px] font-semibold text-gray-600 transition-all hover:bg-gray-50 active:scale-95"
+                          >
+                            {circleSolanaCopied ? 'Copied' : 'Copy to fund'}
+                          </button>
+                        </div>
+                        <div className="mt-2 flex items-center justify-between border-t border-gray-100 pt-2 text-[11px]">
+                          <span className="text-gray-400">Solana balance</span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono font-semibold text-gray-700">
+                              {circleSolanaBalance == null
+                                ? 'Checking...'
+                                : `${formatAmount((Number(circleSolanaBalance) / 1_000_000).toString(), 6)} USDC`}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => refreshCircleSolanaBalance()}
+                              className="rounded-md p-1 text-gray-400 transition-all hover:bg-gray-100 hover:text-gray-700 active:scale-95"
+                              aria-label="Refresh smart wallet balance"
+                              title="Refresh balance"
+                            >
+                              <RefreshCw className={cn('h-3 w-3', circleSolanaFetching && 'animate-spin')} />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {circleSolanaError && (
+                      <p className="text-center text-[11px] font-medium text-red-600">{circleSolanaError}</p>
+                    )}
+                    <div className="flex items-center gap-3">
+                      <div className="h-px flex-1 bg-gray-200" />
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">or</span>
+                      <div className="h-px flex-1 bg-gray-200" />
+                    </div>
+                  </div>
+                )}
                 <button
                   onClick={connectSolana}
                   disabled={isSolanaConnecting || (isEventMode && !attendeeName.trim())}

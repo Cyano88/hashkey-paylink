@@ -19,6 +19,7 @@
     "@anthropic-ai/sdk": "^0.95.0",
     "@circle-fin/modular-wallets-core": "^1.0.13",
     "@circle-fin/unified-balance-kit": "^1.1.0",
+    "@circle-fin/w3s-pw-web-sdk": "^1.1.11",
     "@coral-xyz/anchor": "^0.32.1",
     "@rainbow-me/rainbowkit": "^2.2.4",
     "@solana/spl-token": "^0.4.14",

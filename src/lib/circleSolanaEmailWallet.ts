@@ -1,0 +1,188 @@
+import { W3SSdk } from '@circle-fin/w3s-pw-web-sdk'
+
+type CircleSdkError = {
+  message: string
+}
+
+type CircleChallengeResult = {
+  type: string
+  status: string
+  data?: {
+    signedTransaction?: string
+  }
+}
+
+type CircleEmailLoginResult = {
+  userToken: string
+  encryptionKey: string
+  refreshToken?: string
+}
+
+type SolanaCircleWallet = {
+  id: string
+  address: string
+  blockchain: string
+}
+
+type SolanaEmailSession = {
+  userToken: string
+  encryptionKey: string
+  wallet: SolanaCircleWallet
+}
+
+const APP_ID = import.meta.env.VITE_CIRCLE_USER_WALLET_APP_ID as string | undefined
+const ENABLED = import.meta.env.VITE_CIRCLE_SOLANA_EMAIL_ENABLED === 'true'
+
+export function canUseCircleSolanaEmailWallet() {
+  return ENABLED && !!APP_ID
+}
+
+function apiError(data: { error?: string; message?: string; code?: number }) {
+  const msg = data.error ?? data.message ?? 'Circle Solana wallet request failed.'
+  if (data.code === 155106 || msg.toLowerCase().includes('already initialized')) return 'already_initialized'
+  return msg
+}
+
+async function circleSolanaApi<T>(payload: Record<string, unknown>): Promise<T> {
+  const res = await fetch('/api/circle-solana-email', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  const data = await res.json().catch(() => ({})) as { ok?: boolean; error?: string; message?: string; code?: number }
+  if (!res.ok || data.ok === false) throw new Error(apiError(data))
+  return data as T
+}
+
+function sdkError(error?: CircleSdkError) {
+  if (!error) return 'Circle wallet action did not complete.'
+  const lower = error.message.toLowerCase()
+  if (lower.includes('cancel') || lower.includes('user')) return 'Circle wallet confirmation was cancelled.'
+  return error.message.slice(0, 160)
+}
+
+function executeChallenge(sdk: W3SSdk, challengeId: string) {
+  return new Promise<CircleChallengeResult>((resolve, reject) => {
+    sdk.execute(challengeId, (error, result) => {
+      if (error) {
+        reject(new Error(sdkError(error)))
+        return
+      }
+      if (!result) {
+        reject(new Error('Circle wallet action did not complete.'))
+        return
+      }
+      resolve(result as CircleChallengeResult)
+    })
+  })
+}
+
+async function getWallet(userToken: string): Promise<SolanaCircleWallet | null> {
+  const data = await circleSolanaApi<{ wallet?: SolanaCircleWallet | null }>({
+    action: 'listWallets',
+    userToken,
+  })
+  return data.wallet ?? null
+}
+
+async function ensureInitializedWallet(sdk: W3SSdk, userToken: string, encryptionKey: string) {
+  sdk.setAuthentication({ userToken, encryptionKey })
+  let wallet = await getWallet(userToken)
+  if (wallet) return wallet
+
+  try {
+    const init = await circleSolanaApi<{ challengeId?: string }>({
+      action: 'initializeUser',
+      userToken,
+    })
+    if (init.challengeId) await executeChallenge(sdk, init.challengeId)
+  } catch (err) {
+    if (err instanceof Error && err.message !== 'already_initialized') throw err
+  }
+
+  wallet = await getWallet(userToken)
+  if (wallet) return wallet
+
+  const created = await circleSolanaApi<{ challengeId?: string }>({
+    action: 'createWallet',
+    userToken,
+  })
+  if (!created.challengeId) throw new Error('Circle did not return a Solana wallet challenge.')
+  await executeChallenge(sdk, created.challengeId)
+
+  wallet = await getWallet(userToken)
+  if (!wallet) throw new Error('Circle Solana wallet is not ready yet.')
+  return wallet
+}
+
+export async function connectCircleSolanaEmailWallet(email: string): Promise<SolanaEmailSession> {
+  if (!APP_ID) throw new Error('Circle Solana email wallet is not configured.')
+  const sdk = new W3SSdk({ appSettings: { appId: APP_ID } })
+  const deviceId = await sdk.getDeviceId()
+  const otp = await circleSolanaApi<{
+    deviceToken: string
+    deviceEncryptionKey: string
+    otpToken: string
+  }>({
+    action: 'requestEmailOtp',
+    deviceId,
+    email,
+  })
+
+  const login = await new Promise<CircleEmailLoginResult>((resolve, reject) => {
+    sdk.updateConfigs({
+      appSettings: { appId: APP_ID },
+      loginConfigs: {
+        deviceToken: otp.deviceToken,
+        deviceEncryptionKey: otp.deviceEncryptionKey,
+        otpToken: otp.otpToken,
+      },
+    }, (error, result) => {
+      if (error) {
+        reject(new Error(sdkError(error)))
+        return
+      }
+      if (!result?.userToken || !result.encryptionKey) {
+        reject(new Error('Circle email verification did not return a wallet session.'))
+        return
+      }
+      resolve(result)
+    })
+    sdk.verifyOtp()
+  })
+
+  const wallet = await ensureInitializedWallet(sdk, login.userToken, login.encryptionKey)
+  return {
+    userToken: login.userToken,
+    encryptionKey: login.encryptionKey,
+    wallet,
+  }
+}
+
+export async function signCircleSolanaTransaction(params: {
+  session: SolanaEmailSession
+  rawTransaction: string
+  memo: string
+}) {
+  if (!APP_ID) throw new Error('Circle Solana email wallet is not configured.')
+  const sdk = new W3SSdk({
+    appSettings: { appId: APP_ID },
+    authentication: {
+      userToken: params.session.userToken,
+      encryptionKey: params.session.encryptionKey,
+    },
+  })
+  const challenge = await circleSolanaApi<{ challengeId?: string }>({
+    action: 'signPayment',
+    userToken: params.session.userToken,
+    walletId: params.session.wallet.id,
+    rawTransaction: params.rawTransaction,
+    memo: params.memo,
+  })
+  if (!challenge.challengeId) throw new Error('Circle did not return a signing challenge.')
+  const result = await executeChallenge(sdk, challenge.challengeId)
+  if (result.type !== 'SIGN_TRANSACTION' || !result.data?.signedTransaction) {
+    throw new Error('Circle did not return a signed Solana transaction.')
+  }
+  return result.data.signedTransaction
+}
