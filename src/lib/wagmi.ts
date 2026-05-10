@@ -20,11 +20,11 @@ const walletGroups = [
   {
     groupName: 'Popular',
     wallets: [
+      coinbaseWallet, // Coinbase Smart Wallet/Base Account -> sponsored Base path
       metaMaskWallet,
-      injectedWallet,
-      coinbaseWallet, // Coinbase Smart Wallet → handles EIP-7702 delegation
-      braveWallet,
       rabbyWallet,
+      injectedWallet,
+      braveWallet,
       ...(projectId ? [walletConnectWallet] : []),
     ],
   },

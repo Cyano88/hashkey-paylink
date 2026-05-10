@@ -12,12 +12,12 @@ export default function Chains() {
         <Table
           headers={['Chain', 'Asset', 'Gas model', 'Chain ID']}
           rows={[
-            ['Base',     'USDC',  'EIP-2612 permit + Multicall3 or CREATE2 ghost vault', '8453'],
+            ['Base',     'USDC',  'Coinbase Paymaster, Circle Paymaster architecture, or CREATE2 ghost vault', '8453'],
             ['HashKey',  'HSK + USDC', 'Direct native HSK transfer (~0.0001 HSK)', '177'],
             ['Arc',      'USDC',  'EIP-2612 permit + Multicall3 or CREATE2 ghost vault', '5042002'],
             ['Starknet', 'USDC',  'AVNU Paymaster sponsors all STRK fees',              'SN_MAIN'],
             ['Solana',   'USDC',  'Relayer keypair covers all SOL fees',                 'mainnet-beta'],
-            ['Arbitrum', 'USDC',  'Relayer covers ETH gas for stablecoin transfer',      '42161'],
+            ['Arbitrum', 'USDC',  'Relayer today; Circle Paymaster architecture prepared', '42161'],
           ]}
         />
       </Section>
@@ -25,6 +25,9 @@ export default function Chains() {
       <Section title="Base">
         <SubSection title="EIP-2612 Permit + Multicall3">
           <p>The payer signs an off-chain EIP-712 typed message (permit) authorizing USDC spending. Hash PayLink first attempts Coinbase/CDP Paymaster sponsorship for compatible Coinbase Smart Wallet/Base Account connections. If the connected wallet does not support <Code>wallet_sendCalls</Code>, it falls back to the standard wallet transaction path, which requires the payer wallet to hold Base ETH for gas.</p>
+        </SubSection>
+        <SubSection title="Circle Paymaster architecture">
+          <p>Circle Paymaster is prepared as an ERC-4337 user-operation path for Base and Arbitrum. The minimal payer UI uses Circle Modular Wallets for Continue with email, then pays gas in USDC through Circle's paymaster flow. It does not sponsor the payment amount and does not custody payer or merchant funds. Keep <Code>VITE_CIRCLE_PAYMASTER_ENABLED</Code> disabled unless testing the connected-wallet EIP-7702 path separately.</p>
         </SubSection>
         <SubSection title="CREATE2 Ghost Vault">
           <p>The Send via Address flow computes a deterministic vault address using CREATE2. The payer sends USDC directly to this address from any wallet or CEX without connecting a browser extension. The relayer detects the deposit and sweeps funds to the recipient, covering ETH gas. The payer contributes only USDC.</p>
@@ -92,7 +95,7 @@ export default function Chains() {
       </Section>
 
       <Section title="Arbitrum">
-        <p>Arbitrum support uses Circle native USDC on Arbitrum One. The relayer covers ETH gas for connected-wallet relays and ghost-vault sweeps, keeping the payer experience aligned with Hash PayLink's gas-sponsored USDC flow.</p>
+        <p>Arbitrum support uses Circle native USDC on Arbitrum One. The current production path uses the Hash PayLink relayer for connected-wallet relays and ghost-vault sweeps. Circle Paymaster support is prepared as a later ERC-4337/EIP-7702 path where gas can be paid in USDC through a bundler.</p>
         <InfoBox type="info">Use native Arbitrum USDC at <Code>0xaf88d065e77c8cC2239327C5EDb3A432268e5831</Code>. Do not send bridged USDC.e to Hash PayLink Arbitrum vaults.</InfoBox>
         <Table
           headers={['Property', 'Value']}

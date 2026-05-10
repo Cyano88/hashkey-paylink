@@ -17,6 +17,7 @@
   "dependencies": {
     "@0gfoundation/0g-ts-sdk": "^1.2.8",
     "@anthropic-ai/sdk": "^0.95.0",
+    "@circle-fin/modular-wallets-core": "^1.0.13",
     "@circle-fin/unified-balance-kit": "^1.1.0",
     "@coral-xyz/anchor": "^0.32.1",
     "@rainbow-me/rainbowkit": "^2.2.4",

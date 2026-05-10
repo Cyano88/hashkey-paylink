@@ -22,6 +22,20 @@ services:
         sync: false                   # your Alchemy frontend RPC key
       - key: VITE_BASE_PAYMASTER_URL
         value: "/api/base-paymaster"   # optional Coinbase/CDP Base paymaster proxy
+      - key: VITE_CIRCLE_PAYMASTER_ENABLED
+        value: "false"                 # enable only after Circle AA payment path is wired
+      - key: VITE_CIRCLE_BUNDLER_URL_BASE
+        value: "https://public.pimlico.io/v2/8453/rpc"
+      - key: VITE_CIRCLE_BUNDLER_URL_ARB
+        value: "https://public.pimlico.io/v2/42161/rpc"
+      - key: VITE_CIRCLE_PAYMASTER_V08_BASE
+        value: "0x0578cFB241215b77442a541325d6A4E6dFE700Ec"
+      - key: VITE_CIRCLE_PAYMASTER_V08_ARB
+        value: "0x0578cFB241215b77442a541325d6A4E6dFE700Ec"
+      - key: VITE_CLIENT_KEY
+        sync: false                   # Circle Modular Wallet public client key
+      - key: VITE_CLIENT_URL
+        sync: false                   # Circle Modular Wallet client URL
 
       # ── V2 relayer (api/relay-v2.ts) ──────────────────────────────────────
       - key: PAYLINK_FACTORY_V2
