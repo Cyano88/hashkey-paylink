@@ -33,6 +33,7 @@ type CirclePasskeyWalletResult =
 const CLIENT_KEY = import.meta.env.VITE_CLIENT_KEY as string | undefined
 const CLIENT_URL = import.meta.env.VITE_CLIENT_URL as string | undefined
 const CREDENTIAL_PREFIX = 'hashpaylink_circle_credential'
+const WALLET_NAME_PREFIX = 'hashpaylink_circle_wallet_name'
 
 function isCirclePasskeyChain(chain: ChainKey): chain is CirclePasskeyChain {
   return chain === 'base' || chain === 'arbitrum'
@@ -55,6 +56,23 @@ function credentialStorageKey(email: string) {
   return `${CREDENTIAL_PREFIX}:${host}:${email.trim().toLowerCase()}`
 }
 
+function walletNameStorageKey(email: string) {
+  const host = typeof window === 'undefined' ? 'server' : window.location.hostname
+  return `${WALLET_NAME_PREFIX}:${host}:${email.trim().toLowerCase()}`
+}
+
+function legacyWalletName(email: string) {
+  return `hash-paylink-${email.trim().toLowerCase()}`
+}
+
+function evmWalletName(email: string) {
+  return `hash-paylink-evm-${email.trim().toLowerCase()}`
+}
+
+function evmUsername(email: string) {
+  return `hashpaylink-evm-${email.trim().toLowerCase()}`
+}
+
 function getStoredCredentialId(email: string) {
   try {
     return window.localStorage.getItem(credentialStorageKey(email))
@@ -63,9 +81,18 @@ function getStoredCredentialId(email: string) {
   }
 }
 
-function setStoredCredentialId(email: string, credentialId: string) {
+function getStoredWalletName(email: string) {
+  try {
+    return window.localStorage.getItem(walletNameStorageKey(email))
+  } catch {
+    return null
+  }
+}
+
+function setStoredCredential(email: string, credentialId: string, walletName: string) {
   try {
     window.localStorage.setItem(credentialStorageKey(email), credentialId)
+    window.localStorage.setItem(walletNameStorageKey(email), walletName)
   } catch {
     // localStorage can be unavailable in private/browser-restricted contexts.
   }
@@ -74,6 +101,7 @@ function setStoredCredentialId(email: string, credentialId: string) {
 function clearStoredCredentialId(email: string) {
   try {
     window.localStorage.removeItem(credentialStorageKey(email))
+    window.localStorage.removeItem(walletNameStorageKey(email))
   } catch {
     // Ignore storage cleanup failures; the next registration can still proceed.
   }
@@ -96,14 +124,18 @@ async function getCredential(email: string) {
   if (!CLIENT_KEY || !clientUrl) throw new Error('Smart wallet is not configured.')
 
   const transport = toPasskeyTransport(clientUrl, CLIENT_KEY)
+  const normalizedEmail = email.trim().toLowerCase()
+  const legacyName = legacyWalletName(normalizedEmail)
+  const scopedName = evmWalletName(normalizedEmail)
   const storedCredentialId = getStoredCredentialId(email)
   if (storedCredentialId) {
     try {
-      return await toWebAuthnCredential({
+      const credential = await toWebAuthnCredential({
         transport,
         mode: WebAuthnMode.Login,
         credentialId: storedCredentialId,
       })
+      return { credential, walletName: getStoredWalletName(email) ?? legacyName }
     } catch {
       clearStoredCredentialId(email)
     }
@@ -114,8 +146,8 @@ async function getCredential(email: string) {
       transport,
       mode: WebAuthnMode.Login,
     })
-    setStoredCredentialId(email, credential.id)
-    return credential
+    setStoredCredential(email, credential.id, getStoredWalletName(email) ?? legacyName)
+    return { credential, walletName: getStoredWalletName(email) ?? legacyName }
   } catch {
     // No discoverable passkey on this device/browser. Fall through to first-time registration.
   }
@@ -124,14 +156,14 @@ async function getCredential(email: string) {
     const credential = await toWebAuthnCredential({
       transport,
       mode: WebAuthnMode.Register,
-      username: email,
+      username: evmUsername(normalizedEmail),
     })
-    setStoredCredentialId(email, credential.id)
-    return credential
+    setStoredCredential(email, credential.id, scopedName)
+    return { credential, walletName: scopedName }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     if (msg.toLowerCase().includes('username is duplicated')) {
-      throw new Error('This email already has a Smart wallet. Use the same device/passkey you created it with, or reset the wallet user in Circle Console.')
+      throw new Error('This email already has a Smart wallet. Use the same device/passkey you created it with, or use a different email.')
     }
     throw err
   }
@@ -147,8 +179,8 @@ function friendlyCircleError(err: unknown) {
   if (lower.includes('entity config')) {
     return 'Circle Modular Wallet is not configured for this domain. In Circle Console, make the Client Key allowed domain exactly match the Passkey domain, then redeploy.'
   }
+  if (lower.includes('username is duplicated')) return 'This email already has a Smart wallet. Use the same device/passkey you created it with, or use a different email.'
   if (lower.includes('credential') || lower.includes('passkey')) return 'Passkey setup was not completed. Use a browser/device with passkeys enabled, or create the passkey on this device first.'
-  if (lower.includes('username is duplicated')) return 'This email already has a Smart wallet. Use the same device/passkey you created it with, or reset the wallet user in Circle Console.'
   if (lower.includes('insufficient')) return 'Add USDC to Smart wallet to continue.'
   if (lower.includes('user rejected') || lower.includes('notallowederror') || lower.includes('cancel')) {
     return 'Passkey confirmation was cancelled.'
@@ -163,7 +195,7 @@ export function canUseCirclePasskeyPayments(chain: ChainKey) {
 async function getCircleSmartAccount(chain: ChainKey, email: string) {
   const config = getCircleClientConfig(chain)
   if (!config) throw new Error('Smart wallet is not configured for this chain.')
-  const credential = await getCredential(email.trim())
+  const { credential, walletName } = await getCredential(email.trim())
   const transport = toModularTransport(config.chainUrl, config.clientKey)
   const client = createPublicClient({
     chain: viemChainFor(config.chain),
@@ -172,7 +204,7 @@ async function getCircleSmartAccount(chain: ChainKey, email: string) {
   const account = await toCircleSmartAccount({
     client,
     owner: toWebAuthnAccount({ credential }),
-    name: `hash-paylink-${email.trim().toLowerCase()}`,
+    name: walletName,
   })
   return {
     account,
