@@ -1660,12 +1660,11 @@ export default function PaymentPage() {
                         : chain === 'solana'           ? solanaTxHash
                         : chain === 'arbitrum'         ? (circlePaymasterTxHash ?? ghoRelayHash ?? null)
                         : (circlePaymasterTxHash ?? basePaymasterTxHash ?? evmTxHash)
-  const circleSolanaPageError = circleSolanaError && !isSmartWalletBalanceError(circleSolanaError)
   const isWalletPending = chain === 'starknet' ? isStarkPending   : chain === 'solana' ? (isSolanaPending || circleSolanaPending)   : chain === 'arbitrum' ? (ghoRelayPending || circlePaymasterPending || circlePasskeyPending || circleEvmPaymentProcessing || isSignPending) : isEvmWalletPending || circlePaymasterPending || circlePasskeyPending || circleEvmPaymentProcessing || isSignPending || isBasePaymasterPending
   const isConfirming    = chain === 'starknet' ? isStarkConfirming : chain === 'solana' ? isSolanaConfirming : chain === 'arbitrum' ? (isGhoConfirming || isCirclePaymasterConfirming) : (isEvmConfirming || isBasePaymasterConfirming || isCirclePaymasterConfirming)
-  const isSendError     = chain === 'starknet' ? !!starkError : chain === 'solana' ? (!!solanaError || !!circleSolanaPageError) : chain === 'arbitrum' ? (!!ghoRelayError || !!circlePaymasterError) : (isEvmSendError || isEvmReverted || isBasePaymasterStatusError || isBasePaymasterFailed || !!basePaymasterError || !!circlePaymasterError)
+  const isSendError     = chain === 'starknet' ? !!starkError : chain === 'solana' ? !!solanaError : chain === 'arbitrum' ? (!!ghoRelayError || !!circlePaymasterError) : (isEvmSendError || isEvmReverted || isBasePaymasterStatusError || isBasePaymasterFailed || !!basePaymasterError || !!circlePaymasterError)
   const sendErrorMsg    = chain === 'starknet' ? starkError
-                        : chain === 'solana'   ? (circleSolanaPageError || solanaError)
+                        : chain === 'solana'   ? solanaError
                         : chain === 'arbitrum' ? (circlePaymasterError ?? ghoRelayError)
                         : isBasePaymasterStatusError
                           ? (basePaymasterStatusError?.message ?? basePaymasterError ?? 'Sponsored transaction failed').slice(0, 140)
@@ -2768,7 +2767,9 @@ export default function PaymentPage() {
                       </div>
                     )}
                     {circleSolanaError && (
-                      <p className="text-center text-[11px] font-medium text-red-600">{circleSolanaError}</p>
+                      <p className="text-center text-[11px] font-medium text-red-600">
+                        {isSmartWalletBalanceError(circleSolanaError) ? circleSolanaError : `Transaction failed: ${circleSolanaError}`}
+                      </p>
                     )}
                     <div className="flex items-center gap-3">
                       <div className="h-px flex-1 bg-gray-200" />
