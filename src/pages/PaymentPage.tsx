@@ -645,6 +645,7 @@ export default function PaymentPage() {
           if (value >= requestedUnits * 99n / 100n) {
             setReceivedAmount(isRouterAddress && !isCircleEmailEvmWatch ? value * 9950n / 10000n : value)
             setManualTxHash(log.transactionHash ?? null)
+            setCirclePasskeyError(null)
             setManualPayDetected(true)
           }
         },
@@ -2510,16 +2511,16 @@ export default function PaymentPage() {
           )}
 
           {payMode === 'wallet' && showCircleEmailPay && chain !== 'starknet' && chain !== 'solana' && !manualPayDetected && (
-            <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50/70 p-3">
+            <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
               {!circleSmartAccount && (
-                <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2.5">
+                <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.06]">
                   <input
                     type="email"
                     value={circleEmail}
                     onChange={(e) => setCircleEmail(e.target.value)}
                     placeholder="Email for gasless payment"
                     disabled={circlePasskeyPending || (isEventMode && !attendeeName.trim())}
-                    className="min-w-0 flex-1 bg-transparent text-sm text-gray-800 placeholder:text-gray-400 outline-none"
+                    className="min-w-0 flex-1 bg-transparent text-sm text-gray-800 placeholder:text-gray-400 outline-none dark:text-white dark:placeholder:text-gray-500"
                   />
                   <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">Gasless</span>
                 </div>
@@ -2530,8 +2531,8 @@ export default function PaymentPage() {
                 className={cn(
                   'flex w-full items-center justify-center gap-2 rounded-xl px-6 py-3.5 text-sm font-semibold transition-all',
                   circlePasskeyPending
-                    ? 'cursor-not-allowed bg-gray-100 text-gray-500'
-                    : 'bg-black text-white shadow-button hover:bg-gray-800 active:scale-[0.98]',
+                    ? 'cursor-not-allowed bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400'
+                    : 'bg-black text-white shadow-button hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200',
                 )}
               >
                 {circlePasskeyPending
@@ -2541,28 +2542,28 @@ export default function PaymentPage() {
                     : <><Zap className="h-4 w-4" /> Continue with email</>}
               </button>
               {circleSmartAccount && (
-                <div className="rounded-lg border border-gray-200 bg-white/70 px-3 py-2">
+                <div className="rounded-lg border border-gray-200 bg-white/70 px-3 py-2 dark:border-white/10 dark:bg-white/[0.06]">
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
                         Smart wallet
                       </p>
-                      <p className="truncate text-[11px] text-gray-500">
+                      <p className="truncate text-[11px] text-gray-500 dark:text-gray-300">
                         {circleWalletNeedsFunds ? `Fund with ${meta.label} ${meta.asset}` : `${meta.label} ${meta.asset} ready`}
                       </p>
                     </div>
                     <button
                       type="button"
                       onClick={handleCopyCircleWallet}
-                      className="shrink-0 rounded-md border border-gray-200 bg-white px-2 py-1 text-[10px] font-semibold text-gray-600 transition-all hover:bg-gray-50 active:scale-95"
+                      className="shrink-0 rounded-md border border-gray-200 bg-white px-2 py-1 text-[10px] font-semibold text-gray-600 transition-all hover:bg-gray-50 active:scale-95 dark:border-white/10 dark:bg-white/[0.08] dark:text-gray-200 dark:hover:bg-white/[0.14]"
                     >
                       {circleWalletCopied ? 'Copied' : 'Copy to fund'}
                     </button>
                   </div>
-                  <div className="mt-2 flex items-center justify-between border-t border-gray-100 pt-2 text-[11px]">
-                    <span className="text-gray-400">{meta.label} balance</span>
+                  <div className="mt-2 flex items-center justify-between border-t border-gray-100 pt-2 text-[11px] dark:border-white/10">
+                    <span className="text-gray-400 dark:text-gray-500">{meta.label} balance</span>
                     <div className="flex items-center gap-2">
-                      <span className="font-mono font-semibold text-gray-700">
+                      <span className="font-mono font-semibold text-gray-700 dark:text-gray-100">
                         {circleWalletBalance == null
                           ? 'Checking...'
                           : `${formatAmount((Number(circleWalletBalance) / Math.pow(10, meta.decimals)).toString(), meta.decimals)} ${meta.asset}`}
@@ -2570,7 +2571,7 @@ export default function PaymentPage() {
                       <button
                         type="button"
                         onClick={() => refetchCircleWalletBalance()}
-                        className="rounded-md p-1 text-gray-400 transition-all hover:bg-gray-100 hover:text-gray-700 active:scale-95"
+                        className="rounded-md p-1 text-gray-400 transition-all hover:bg-gray-100 hover:text-gray-700 active:scale-95 dark:text-gray-500 dark:hover:bg-white/10 dark:hover:text-gray-200"
                         aria-label="Refresh smart wallet balance"
                         title="Refresh balance"
                       >
@@ -2581,12 +2582,12 @@ export default function PaymentPage() {
                 </div>
               )}
               {circlePasskeyError && (
-                <p className="text-center text-[11px] font-medium text-red-600">{circlePasskeyError}</p>
+                <p className="text-center text-[11px] font-medium text-red-600 dark:text-red-300">{circlePasskeyError}</p>
               )}
               <div className="flex items-center gap-3">
-                <div className="h-px flex-1 bg-gray-200" />
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">or</span>
-                <div className="h-px flex-1 bg-gray-200" />
+                <div className="h-px flex-1 bg-gray-200 dark:bg-white/10" />
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">or</span>
+                <div className="h-px flex-1 bg-gray-200 dark:bg-white/10" />
               </div>
             </div>
           )}

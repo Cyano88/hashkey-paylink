@@ -302,7 +302,7 @@ export async function sendCircleEvmEmailPayment(params: {
   if (txHash) return txHash
   const transactionId = findTransactionId(result.data)
   if (transactionId) {
-    const hash = await pollTransactionHash(params.session, transactionId)
+    const hash = await pollTransactionHash(params.session, transactionId).catch(() => null)
     if (hash) return hash
   }
   return null

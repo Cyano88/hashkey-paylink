@@ -26,6 +26,7 @@ const EVM_CHAINS = {
 } as const
 
 const ERC20_TRANSFER_ABI = parseAbi(['function transfer(address to, uint256 amount) returns (bool)'])
+const SMART_WALLET_BATCH_ABI = parseAbi(['function executeBatch((address target,uint256 value,bytes data)[] calls)'])
 
 type CircleResponse<T = unknown> = {
   data?: T
@@ -231,6 +232,14 @@ export default async function handler(req: Request, res: Response) {
         functionName: 'transfer',
         args: [EVM_TREASURY as `0x${string}`, treasuryAmount],
       })
+      const batchCallData = encodeFunctionData({
+        abi: SMART_WALLET_BATCH_ABI,
+        functionName: 'executeBatch',
+        args: [[
+          { target: tokenAddress as `0x${string}`, value: 0n, data: recipientCallData },
+          { target: tokenAddress as `0x${string}`, value: 0n, data: treasuryCallData },
+        ]],
+      })
 
       const data = await circleJson('/v1/w3s/user/transactions/contractExecution', {
         method: 'POST',
@@ -241,11 +250,7 @@ export default async function handler(req: Request, res: Response) {
           feeLevel: 'HIGH',
           refId: `hashpaylink-${chain}`,
           contractAddress: walletAddress,
-          abiFunctionSignature: 'executeBatch((address,uint256,bytes)[])',
-          abiParameters: [[
-            [tokenAddress, '0', recipientCallData],
-            [tokenAddress, '0', treasuryCallData],
-          ]],
+          callData: batchCallData,
         }),
       })
       return res.json({ ok: true, ...data })
