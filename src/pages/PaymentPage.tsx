@@ -32,7 +32,7 @@ const BASE_PAYMASTER_URL = import.meta.env.VITE_BASE_PAYMASTER_URL as string | u
 import {
   ArrowLeft, ArrowRight, CheckCircle2, ExternalLink, AlertCircle, Loader2, ArrowLeftRight,
   RefreshCw, ShieldCheck, Zap, Copy, CheckCheck, Wallet,
-  AlertTriangle, Radio,
+  AlertTriangle, Radio, Mail, X,
 } from 'lucide-react'
 import {
   CHAIN_META, PLATFORM_FEE_BPS, EVM_TREASURY, STARK_TREASURY, type ChainKey,
@@ -2838,6 +2838,57 @@ export default function PaymentPage() {
           </button>
         </div>
       )}
+
+      <div className="mt-10 animate-fade-in">
+        <p className="mb-4 text-center text-[11px] font-semibold uppercase tracking-widest text-gray-400">
+          How it works
+        </p>
+        <div className="grid grid-cols-3 gap-3">
+          {[
+            { n: '1', title: 'Review request', body: 'Check amount, memo, and network' },
+            { n: '2', title: 'Choose payment', body: 'Send to address or connect wallet' },
+            { n: '3', title: 'Confirm payment', body: 'Wait for the success screen' },
+          ].map(({ n, title, body }) => (
+            <div key={n} className="rounded-xl border border-gray-100 bg-white p-4 text-center shadow-sm">
+              <div className="mx-auto mb-2.5 flex h-7 w-7 items-center justify-center rounded-full bg-gray-100 text-xs font-bold text-gray-600">
+                {n}
+              </div>
+              <p className="text-xs font-semibold text-gray-800">{title}</p>
+              <p className="mt-0.5 text-xs text-gray-400 leading-relaxed">{body}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-6 border-t border-gray-100 pt-5 flex items-center justify-center gap-8">
+          <a
+            href="mailto:support@hashpaylink.com"
+            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-900 transition-colors"
+          >
+            <Mail className="h-3.5 w-3.5" />
+            support@hashpaylink.com
+          </a>
+          <a
+            href="https://x.com/Hash_PayLink"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-900 transition-colors"
+          >
+            <X className="h-3.5 w-3.5" />
+            @Hash_PayLink
+          </a>
+          <Link
+            to="/docs"
+            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-900 transition-colors"
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+            Docs
+          </Link>
+        </div>
+
+        <p className="mt-6 text-center text-xs text-gray-400">
+          Built on Base &middot; Arbitrum &middot; Starknet &middot; Arc &middot; Solana &middot; Circle
+        </p>
+      </div>
     </div>
   )
 }
