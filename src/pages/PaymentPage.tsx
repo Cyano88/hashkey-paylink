@@ -644,7 +644,13 @@ export default function PaymentPage() {
           if (!log)   return
           const value = (log.args as { value?: bigint }).value ?? 0n
           if (value >= requestedUnits * 99n / 100n) {
-            setReceivedAmount(isRouterAddress && !isCircleEmailEvmWatch ? value * 9950n / 10000n : value)
+            setReceivedAmount(
+              isCircleEmailEvmWatch
+                ? circleRequiredUnits
+                : isRouterAddress
+                  ? value * 9950n / 10000n
+                  : value,
+            )
             setManualTxHash(log.transactionHash ?? null)
             setCirclePasskeyError(null)
             setManualPayDetected(true)
@@ -693,6 +699,7 @@ export default function PaymentPage() {
   // ── Auto-sweep keeper ─────────────────────────────────────────────────────
   useEffect(() => {
     if (!manualPayDetected || !isRouterAddress || !routerAddr || chain === 'hashkey') return
+    if (payMode === 'wallet' && showCircleEvmEmailPay && circleEvmEmailSession) return
     setSweepState('calling')
     const evmChain = chain as 'base' | 'arc' | 'arbitrum'
     fetch('/api/sweep', {
