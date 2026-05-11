@@ -20,6 +20,7 @@ import {
 import { CHAIN_META } from '../lib/chains'
 import { cn, truncateAddress } from '../lib/utils'
 import { queryBalances, type UnifiedBalanceBreakdown, type UnifiedBalanceChainKey } from '../lib/unifiedBalance'
+import { isValidSolanaAddress } from '../lib/solanaAddress'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -66,7 +67,7 @@ export default function Dashboard() {
   const client = EVM_CLIENTS.base
   const meta   = CHAIN_META.base
   const evmValid = isAddress(evmAddr)
-  const solanaValid = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(solanaAddr)
+  const solanaValid = isValidSolanaAddress(solanaAddr)
   const starkValid = /^0x[0-9a-fA-F]{64}$/.test(starkAddr)
   const hasDashboardAddress = evmValid || solanaValid || starkValid
   const balanceChains: UnifiedBalanceChainKey[] = (() => {

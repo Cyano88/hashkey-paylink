@@ -59,6 +59,38 @@ function loadRelayer(): Keypair {
   return Keypair.fromSecretKey(Buffer.from(raw, 'base64'))
 }
 
+function parseSolanaAddress(label: string, value?: string): PublicKey {
+  const normalized = value?.trim()
+  if (!normalized) throw new Error(`${label} is required`)
+  try {
+    return new PublicKey(normalized)
+  } catch {
+    throw new Error(`${label} is not a valid Solana address`)
+  }
+}
+
+function getSolanaTreasury(feeRaw: bigint): PublicKey | null {
+  if (feeRaw === 0n) return null
+  return parseSolanaAddress('Solana treasury address', process.env.SOLANA_TREASURY)
+}
+
+function decodeSignedTransaction(tx: string): Buffer {
+  const normalized = tx.trim()
+  try {
+    const bytes = Buffer.from(normalized, 'base64')
+    Transaction.from(bytes)
+    return bytes
+  } catch { /* try base58 below */ }
+
+  try {
+    const bytes = Buffer.from(bs58.decode(normalized))
+    Transaction.from(bytes)
+    return bytes
+  } catch {
+    throw new Error('Signed Solana transaction is not valid')
+  }
+}
+
 /** Deterministically derive a vault keypair from a linkId string */
 function deriveVaultKeypair(linkId: string): Keypair {
   const seed = crypto.createHash('sha256')
@@ -102,8 +134,8 @@ export async function buildSolanaTx(req: Request, res: Response): Promise<void> 
   try {
     const connection = new Connection(getRpc(), 'confirmed')
 
-    const fromPubkey = new PublicKey(from)
-    const toPubkey   = new PublicKey(to)
+    const fromPubkey = parseSolanaAddress('Sender address', from)
+    const toPubkey   = parseSolanaAddress('Recipient address', to)
 
     const totalRaw      = BigInt(Math.round(parseFloat(amount) * Math.pow(10, USDC_DECIMALS)))
     const feeRaw        = totalRaw * BigInt(PLATFORM_FEE_BPS) / 10_000n
@@ -122,10 +154,9 @@ export async function buildSolanaTx(req: Request, res: Response): Promise<void> 
       fromATA, USDC_MINT, toATA, fromPubkey, recipientRaw, USDC_DECIMALS,
     ))
 
-    // Transfer fee to treasury (optional)
-    const treasury = process.env.SOLANA_TREASURY
-    if (treasury && feeRaw > 0n) {
-      const treasuryPubkey = new PublicKey(treasury)
+    // Transfer fee to treasury. Fail closed when configured fees cannot be routed.
+    const treasuryPubkey = getSolanaTreasury(feeRaw)
+    if (treasuryPubkey) {
       const treasuryATA = await ensureATA(connection, tx, USDC_MINT, treasuryPubkey, relayer.publicKey)
       tx.add(createTransferCheckedInstruction(
         fromATA, USDC_MINT, treasuryATA, fromPubkey, feeRaw, USDC_DECIMALS,
@@ -158,7 +189,7 @@ export async function relaySolanaTx(req: Request, res: Response): Promise<void> 
 
   try {
     const connection = new Connection(getRpc(), 'confirmed')
-    const txBytes    = Buffer.from(txBase64, 'base64')
+    const txBytes    = decodeSignedTransaction(txBase64)
     const tx         = Transaction.from(txBytes)
 
     const txHash = await connection.sendRawTransaction(tx.serialize(), {
@@ -216,7 +247,7 @@ export async function sweepSolanaVault(req: Request, res: Response): Promise<voi
     const feeRaw       = balanceRaw * BigInt(PLATFORM_FEE_BPS) / 10_000n
     const recipientRaw = balanceRaw - feeRaw
 
-    const recipientPubkey = new PublicKey(recipient)
+    const recipientPubkey = parseSolanaAddress('Recipient address', recipient)
     const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash()
     const tx = new Transaction({ feePayer: relayer.publicKey, recentBlockhash: blockhash })
 
@@ -226,9 +257,8 @@ export async function sweepSolanaVault(req: Request, res: Response): Promise<voi
       vaultATA, USDC_MINT, recipientATA, vaultKeypair.publicKey, recipientRaw, USDC_DECIMALS,
     ))
 
-    const treasury = process.env.SOLANA_TREASURY
-    if (treasury && feeRaw > 0n) {
-      const treasuryPubkey = new PublicKey(treasury)
+    const treasuryPubkey = getSolanaTreasury(feeRaw)
+    if (treasuryPubkey) {
       const treasuryATA = await ensureATA(connection, tx, USDC_MINT, treasuryPubkey, relayer.publicKey)
       tx.add(createTransferCheckedInstruction(
         vaultATA, USDC_MINT, treasuryATA, vaultKeypair.publicKey, feeRaw, USDC_DECIMALS,
