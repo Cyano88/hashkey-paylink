@@ -56,11 +56,13 @@ import { getFxMeta, formatLocalAmt, fetchFxRate } from '../lib/fx'
 import { getCirclePaymasterConfig } from '../lib/circlePaymaster'
 import { sendCirclePaymasterPayment } from '../lib/circlePaymasterPayment'
 import { canUseCirclePasskeyPayments, prepareCirclePasskeyWallet, sendCirclePasskeyPayment } from '../lib/circlePasskeyPayment'
+import { canUseCircleEvmEmailWallet, connectCircleEvmEmailWallet, sendCircleEvmEmailPayment } from '../lib/circleEvmEmailWallet'
 import { canUseCircleSolanaEmailWallet, connectCircleSolanaEmailWallet, signCircleSolanaTransaction } from '../lib/circleSolanaEmailWallet'
 import { getSponsoredGasRecoveryUnits } from '../lib/gasRecovery'
 import { isValidSolanaAddress } from '../lib/solanaAddress'
 
 type CircleSolanaSession = Awaited<ReturnType<typeof connectCircleSolanaEmailWallet>>
+type CircleEvmEmailSession = Awaited<ReturnType<typeof connectCircleEvmEmailWallet>>
 
 const CHAINS: ChainKey[] = ['base', 'starknet', 'arc', 'solana', 'arbitrum']
 
@@ -361,6 +363,7 @@ export default function PaymentPage() {
   const [circlePasskeyPending, setCirclePasskeyPending] = useState(false)
   const [circlePasskeyError, setCirclePasskeyError] = useState<string | null>(null)
   const [circleSmartAccount, setCircleSmartAccount] = useState<`0x${string}` | null>(null)
+  const [circleEvmEmailSession, setCircleEvmEmailSession] = useState<CircleEvmEmailSession | null>(null)
   const [circleWalletCopied, setCircleWalletCopied] = useState(false)
 
   const { isLoading: isEvmConfirming, isSuccess: isEvmConfirmed, isError: isEvmReverted } =
@@ -492,7 +495,9 @@ export default function PaymentPage() {
   const isRouterAddress = isEvmChain && !!routerAddr
   const circlePaymasterConfig = getCirclePaymasterConfig(chain)
   const showCirclePaymasterButton = !!circlePaymasterConfig && (chain === 'base' || chain === 'arbitrum')
+  const showCircleEvmEmailPay = canUseCircleEvmEmailWallet(chain)
   const showCirclePasskeyPay = canUseCirclePasskeyPayments(chain)
+  const showCircleEmailPay = showCircleEvmEmailPay || showCirclePasskeyPay
   const showCircleSolanaEmailPay = chain === 'solana' && canUseCircleSolanaEmailWallet()
   const circleRequiredUnits = (() => {
     try {
@@ -965,7 +970,7 @@ export default function PaymentPage() {
     setCircleSolanaSession(null); setCircleSolanaCopied(false)
     setManualPayDetected(false); setManualTxHash(null); setReceivedAmount(null)
     setCirclePaymasterPending(false); setCirclePaymasterTxHash(null); setCirclePaymasterError(null)
-    setCirclePasskeyPending(false); setCirclePasskeyError(null); setCircleSmartAccount(null); setCircleWalletCopied(false)
+    setCirclePasskeyPending(false); setCirclePasskeyError(null); setCircleSmartAccount(null); setCircleEvmEmailSession(null); setCircleWalletCopied(false)
     setRouterAddr(null); setRouterDeployed(null); setShowCheckButton(false)
     setSweepState('idle'); setSweepTxHash(null); setSweepBalanceUsdc(null)
     // Reset direct send state
@@ -1345,7 +1350,7 @@ export default function PaymentPage() {
   }
 
   async function handleCirclePasskeyPay() {
-    if (!activeRecipient || !showCirclePasskeyPay || !isAddress(activeRecipient)) return
+    if (!activeRecipient || !showCircleEmailPay || !isAddress(activeRecipient)) return
     const email = circleEmail.trim()
     if (!email) {
       setCirclePasskeyError('Enter your email to continue with Smart wallet.')
@@ -1356,6 +1361,31 @@ export default function PaymentPage() {
     setCirclePasskeyError(null)
     setCirclePaymasterTxHash(null)
     try {
+      if (showCircleEvmEmailPay) {
+        let session = circleEvmEmailSession
+        if (!session || session.chain !== chain) {
+          session = await connectCircleEvmEmailWallet(email, chain)
+          setCircleEvmEmailSession(session)
+          setCircleSmartAccount(session.wallet.address)
+          await refetchCircleWalletBalance()
+          return
+        }
+
+        if (circleWalletBalance !== undefined && circleWalletBalance !== null && !circleWalletHasEnough) {
+          setCirclePasskeyError('Add USDC to Smart wallet to continue.')
+          return
+        }
+
+        const txHash = await sendCircleEvmEmailPayment({
+          session,
+          recipient: activeRecipient as `0x${string}`,
+          amount: effectiveAmt,
+        })
+        if (txHash) setCirclePaymasterTxHash(txHash)
+        void refetchCircleWalletBalance()
+        return
+      }
+
       if (!circleSmartAccount) {
         const wallet = await prepareCirclePasskeyWallet(chain, email)
         if (wallet.status === 'ready') {
@@ -1378,6 +1408,8 @@ export default function PaymentPage() {
       } else {
         if (!circleWalletHasEnough) setCirclePasskeyError(result.reason)
       }
+    } catch (err) {
+      setCirclePasskeyError(readableErrorMsg(err, 'Circle email wallet payment failed.').slice(0, 160))
     } finally {
       setCirclePasskeyPending(false)
     }
@@ -2462,7 +2494,7 @@ export default function PaymentPage() {
             </div>
           )}
 
-          {payMode === 'wallet' && showCirclePasskeyPay && chain !== 'starknet' && chain !== 'solana' && !manualPayDetected && (
+          {payMode === 'wallet' && showCircleEmailPay && chain !== 'starknet' && chain !== 'solana' && !manualPayDetected && (
             <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50/70 p-3">
               {!circleSmartAccount && (
                 <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2.5">
@@ -2698,9 +2730,9 @@ export default function PaymentPage() {
                 className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-6 py-3.5 text-sm font-semibold text-gray-800 transition-all hover:bg-gray-50 active:scale-[0.98]"
               >
                 <Wallet className="h-4 w-4" />
-                {showCirclePasskeyPay ? 'Connect EOA Wallet' : 'Connect Wallet to Pay'}
+                {showCircleEmailPay ? 'Connect EOA Wallet' : 'Connect Wallet to Pay'}
               </button>
-              {showCirclePasskeyPay && (
+              {showCircleEmailPay && (
                 <p className="text-center text-xs text-gray-400">Gas in ETH</p>
               )}
             </div>
