@@ -37,7 +37,7 @@ services:
       - key: VITE_CLIENT_URL
         sync: false                   # Circle Modular Wallet client URL
       - key: VITE_CIRCLE_EVM_EMAIL_ENABLED
-        value: "false"                # Set true after Base/Arbitrum Circle User-Controlled SCA live test
+        value: "true"                 # Base/Arbitrum Circle User-Controlled SCA email wallet payments
       - key: BASE_GAS_RECOVERY_USDC
         value: "0.01"
       - key: ARBITRUM_GAS_RECOVERY_USDC

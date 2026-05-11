@@ -37,7 +37,7 @@ export type CircleEvmEmailSession = {
 }
 
 const APP_ID = import.meta.env.VITE_CIRCLE_USER_WALLET_APP_ID as string | undefined
-const ENABLED = import.meta.env.VITE_CIRCLE_EVM_EMAIL_ENABLED === 'true'
+const ENABLED = import.meta.env.VITE_CIRCLE_EVM_EMAIL_ENABLED !== 'false'
 
 const CHAIN_CONFIG = {
   base: { blockchain: 'BASE', label: 'Base' },

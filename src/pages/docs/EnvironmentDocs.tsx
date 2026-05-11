@@ -47,7 +47,7 @@ export default function EnvironmentDocs() {
             ['VITE_CIRCLE_PAYMASTER_V08_ARB', 'No',  'Circle Paymaster v0.8 address for Arbitrum. Override only if Circle rotates the address.'],
             ['VITE_CLIENT_KEY',               'No',  'Circle Modular Wallets public client key. Required for the Continue with email gasless payment path.'],
             ['VITE_CLIENT_URL',               'No',  'Circle Modular Wallets client URL. Required for passkey login and gasless user operations.'],
-            ['VITE_CIRCLE_EVM_EMAIL_ENABLED', 'No',  'Feature flag for Base/Arbitrum Circle User-Controlled SCA email wallet payments. Keep false until live-tested.'],
+            ['VITE_CIRCLE_EVM_EMAIL_ENABLED', 'No',  'Feature flag for Base/Arbitrum Circle User-Controlled SCA email wallet payments. Defaults to enabled unless explicitly false.'],
             ['VITE_CIRCLE_SOLANA_EMAIL_ENABLED','No','Feature flag for the Solana Circle User-Controlled Wallets email prototype.'],
             ['VITE_CIRCLE_USER_WALLET_APP_ID','No', 'Public Circle Wallet App ID used by the Solana email wallet Web SDK.'],
             ['CIRCLE_API_KEY',                'No',  'Server-side Circle API key for User-Controlled Wallet OTP, wallet, and signing calls. Never expose with VITE_.'],
