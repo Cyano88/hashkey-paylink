@@ -109,13 +109,32 @@ async function getCredential(email: string) {
     }
   }
 
-  const credential = await toWebAuthnCredential({
-    transport,
-    mode: WebAuthnMode.Register,
-    username: email,
-  })
-  setStoredCredentialId(email, credential.id)
-  return credential
+  try {
+    const credential = await toWebAuthnCredential({
+      transport,
+      mode: WebAuthnMode.Login,
+    })
+    setStoredCredentialId(email, credential.id)
+    return credential
+  } catch {
+    // No discoverable passkey on this device/browser. Fall through to first-time registration.
+  }
+
+  try {
+    const credential = await toWebAuthnCredential({
+      transport,
+      mode: WebAuthnMode.Register,
+      username: email,
+    })
+    setStoredCredentialId(email, credential.id)
+    return credential
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    if (msg.toLowerCase().includes('username is duplicated')) {
+      throw new Error('This email already has a Smart wallet. Use the same device/passkey you created it with, or reset the wallet user in Circle Console.')
+    }
+    throw err
+  }
 }
 
 function friendlyCircleError(err: unknown) {
@@ -129,6 +148,7 @@ function friendlyCircleError(err: unknown) {
     return 'Circle Modular Wallet is not configured for this domain. In Circle Console, make the Client Key allowed domain exactly match the Passkey domain, then redeploy.'
   }
   if (lower.includes('credential') || lower.includes('passkey')) return 'Passkey setup was not completed. Use a browser/device with passkeys enabled, or create the passkey on this device first.'
+  if (lower.includes('username is duplicated')) return 'This email already has a Smart wallet. Use the same device/passkey you created it with, or reset the wallet user in Circle Console.'
   if (lower.includes('insufficient')) return 'Add USDC to Smart wallet to continue.'
   if (lower.includes('user rejected') || lower.includes('notallowederror') || lower.includes('cancel')) {
     return 'Passkey confirmation was cancelled.'
