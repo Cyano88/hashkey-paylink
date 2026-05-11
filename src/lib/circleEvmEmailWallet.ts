@@ -11,6 +11,8 @@ type CircleChallengeResult = {
   type: string
   status: string
   data?: {
+    id?: string
+    transaction?: Record<string, unknown>
     transactionId?: string
     txHash?: Hex
     transactionHash?: Hex
@@ -81,6 +83,44 @@ function readableError(err: unknown) {
   } catch {
     return 'Circle email wallet request failed.'
   }
+}
+
+function isHexHash(value: unknown): value is Hex {
+  return typeof value === 'string' && /^0x[a-fA-F0-9]{64}$/.test(value)
+}
+
+function findTxHash(value: unknown): Hex | null {
+  if (!value || typeof value !== 'object') return null
+  const record = value as Record<string, unknown>
+  const direct = record.txHash ?? record.transactionHash ?? record.tx_hash
+  if (isHexHash(direct)) return direct
+  for (const nested of Object.values(record)) {
+    if (nested && typeof nested === 'object') {
+      const found = findTxHash(nested)
+      if (found) return found
+    }
+  }
+  return null
+}
+
+function findTransactionId(value: unknown): string | null {
+  if (!value || typeof value !== 'object') return null
+  const record = value as Record<string, unknown>
+  const direct = record.transactionId ?? record.transactionID ?? record.id
+  if (typeof direct === 'string' && direct) return direct
+  for (const nested of Object.values(record)) {
+    if (nested && typeof nested === 'object') {
+      const found = findTransactionId(nested)
+      if (found) return found
+    }
+  }
+  return null
+}
+
+function transactionState(value: unknown) {
+  if (!value || typeof value !== 'object') return ''
+  const record = value as Record<string, unknown>
+  return String(record.state ?? record.status ?? '').toUpperCase()
 }
 
 async function circleWalletApi<T>(payload: Record<string, unknown>): Promise<T> {
@@ -224,10 +264,34 @@ async function pollTransactionHash(session: CircleEvmEmailSession, transactionId
       userToken: session.userToken,
       transactionId,
     })
-    const txHash = data.transaction?.txHash ?? data.transaction?.transactionHash
+    const txHash = findTxHash(data.transaction)
     if (txHash) return txHash
-    const state = (data.transaction?.state ?? data.transaction?.status ?? '').toUpperCase()
+    const state = transactionState(data.transaction)
     if (state.includes('FAILED') || state.includes('CANCEL')) throw new Error('Circle email wallet transaction failed.')
+    await new Promise(resolve => setTimeout(resolve, 2_500))
+  }
+  return null
+}
+
+async function pollRecentTransactionHash(session: CircleEvmEmailSession, from: string) {
+  const deadline = Date.now() + 90_000
+  while (Date.now() < deadline) {
+    const data = await circleWalletApi<{
+      transactions?: Array<Record<string, unknown>>
+    }>({
+      action: 'listRecentEvmTransactions',
+      userToken: session.userToken,
+      walletId: session.wallet.id,
+      chain: session.chain,
+      from,
+    })
+    const transactions = data.transactions ?? []
+    for (const tx of transactions) {
+      const state = transactionState(tx)
+      if (state.includes('FAILED') || state.includes('CANCEL')) continue
+      const hash = findTxHash(tx)
+      if (hash) return hash
+    }
     await new Promise(resolve => setTimeout(resolve, 2_500))
   }
   return null
@@ -257,10 +321,14 @@ export async function sendCircleEvmEmailPayment(params: {
     totalUnits: totalUnits.toString(),
   })
   if (!challenge.challengeId) throw new Error('Circle did not return an EVM payment challenge.')
+  const submittedFrom = new Date(Date.now() - 15_000).toISOString()
   const result = await executeChallenge(sdk, challenge.challengeId)
-  const txHash = result.data?.txHash ?? result.data?.transactionHash
+  const txHash = findTxHash(result)
   if (txHash) return txHash
-  const transactionId = result.data?.transactionId
-  if (transactionId) return await pollTransactionHash(params.session, transactionId)
-  return null
+  const transactionId = findTransactionId(result.data)
+  if (transactionId) {
+    const hash = await pollTransactionHash(params.session, transactionId)
+    if (hash) return hash
+  }
+  return await pollRecentTransactionHash(params.session, submittedFrom)
 }
