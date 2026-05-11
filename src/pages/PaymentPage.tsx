@@ -364,6 +364,7 @@ export default function PaymentPage() {
   const [circlePasskeyError, setCirclePasskeyError] = useState<string | null>(null)
   const [circleSmartAccount, setCircleSmartAccount] = useState<`0x${string}` | null>(null)
   const [circleEvmEmailSession, setCircleEvmEmailSession] = useState<CircleEvmEmailSession | null>(null)
+  const [circleEvmPaymentProcessing, setCircleEvmPaymentProcessing] = useState(false)
   const [circleWalletCopied, setCircleWalletCopied] = useState(false)
 
   const { isLoading: isEvmConfirming, isSuccess: isEvmConfirmed, isError: isEvmReverted } =
@@ -653,6 +654,7 @@ export default function PaymentPage() {
             )
             setManualTxHash(log.transactionHash ?? null)
             setCirclePasskeyError(null)
+            setCircleEvmPaymentProcessing(false)
             setManualPayDetected(true)
           }
         },
@@ -1005,7 +1007,7 @@ export default function PaymentPage() {
     setCircleSolanaSession(null); setCircleSolanaCopied(false)
     setManualPayDetected(false); setManualTxHash(null); setReceivedAmount(null)
     setCirclePaymasterPending(false); setCirclePaymasterTxHash(null); setCirclePaymasterError(null)
-    setCirclePasskeyPending(false); setCirclePasskeyError(null); setCircleSmartAccount(null); setCircleEvmEmailSession(null); setCircleWalletCopied(false)
+    setCirclePasskeyPending(false); setCirclePasskeyError(null); setCircleSmartAccount(null); setCircleEvmEmailSession(null); setCircleEvmPaymentProcessing(false); setCircleWalletCopied(false)
     setRouterAddr(null); setRouterDeployed(null); setShowCheckButton(false)
     setSweepState('idle'); setSweepTxHash(null); setSweepBalanceUsdc(null)
     // Reset direct send state
@@ -1411,6 +1413,7 @@ export default function PaymentPage() {
           return
         }
 
+        setCircleEvmPaymentProcessing(true)
         const txHash = await sendCircleEvmEmailPayment({
           session,
           recipient: activeRecipient as `0x${string}`,
@@ -1444,6 +1447,7 @@ export default function PaymentPage() {
         if (!circleWalletHasEnough) setCirclePasskeyError(result.reason)
       }
     } catch (err) {
+      setCircleEvmPaymentProcessing(false)
       setCirclePasskeyError(readableErrorMsg(err, 'Circle email wallet payment failed.').slice(0, 160))
     } finally {
       setCirclePasskeyPending(false)
@@ -1589,7 +1593,7 @@ export default function PaymentPage() {
                         : chain === 'solana'           ? solanaTxHash
                         : chain === 'arbitrum'         ? (circlePaymasterTxHash ?? ghoRelayHash ?? null)
                         : (circlePaymasterTxHash ?? basePaymasterTxHash ?? evmTxHash)
-  const isWalletPending = chain === 'starknet' ? isStarkPending   : chain === 'solana' ? (isSolanaPending || circleSolanaPending)   : chain === 'arbitrum' ? (ghoRelayPending || circlePaymasterPending || circlePasskeyPending || isSignPending) : isEvmWalletPending || circlePaymasterPending || circlePasskeyPending || isSignPending || isBasePaymasterPending
+  const isWalletPending = chain === 'starknet' ? isStarkPending   : chain === 'solana' ? (isSolanaPending || circleSolanaPending)   : chain === 'arbitrum' ? (ghoRelayPending || circlePaymasterPending || circlePasskeyPending || circleEvmPaymentProcessing || isSignPending) : isEvmWalletPending || circlePaymasterPending || circlePasskeyPending || circleEvmPaymentProcessing || isSignPending || isBasePaymasterPending
   const isConfirming    = chain === 'starknet' ? isStarkConfirming : chain === 'solana' ? isSolanaConfirming : chain === 'arbitrum' ? (isGhoConfirming || isCirclePaymasterConfirming) : (isEvmConfirming || isBasePaymasterConfirming || isCirclePaymasterConfirming)
   const isSendError     = chain === 'starknet' ? !!starkError : chain === 'solana' ? (!!solanaError || !!circleSolanaError) : chain === 'arbitrum' ? (!!ghoRelayError || !!circlePaymasterError) : (isEvmSendError || isEvmReverted || isBasePaymasterStatusError || isBasePaymasterFailed || !!basePaymasterError || !!circlePaymasterError)
   const sendErrorMsg    = chain === 'starknet' ? starkError
@@ -2538,7 +2542,7 @@ export default function PaymentPage() {
                     value={circleEmail}
                     onChange={(e) => setCircleEmail(e.target.value)}
                     placeholder="Email for gasless payment"
-                    disabled={circlePasskeyPending || (isEventMode && !attendeeName.trim())}
+                    disabled={circlePasskeyPending || circleEvmPaymentProcessing || (isEventMode && !attendeeName.trim())}
                     className="min-w-0 flex-1 bg-transparent text-sm text-gray-800 placeholder:text-gray-400 outline-none dark:text-white dark:placeholder:text-gray-500"
                   />
                   <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">Gasless</span>
@@ -2546,16 +2550,18 @@ export default function PaymentPage() {
               )}
               <button
                 onClick={handleCirclePasskeyPay}
-                disabled={circlePasskeyPending || (isEventMode && !attendeeName.trim()) || flexPayDisabled}
+                disabled={circlePasskeyPending || circleEvmPaymentProcessing || (isEventMode && !attendeeName.trim()) || flexPayDisabled}
                 className={cn(
                   'flex w-full items-center justify-center gap-2 rounded-xl px-6 py-3.5 text-sm font-semibold transition-all',
-                  circlePasskeyPending
+                  circlePasskeyPending || circleEvmPaymentProcessing
                     ? 'cursor-not-allowed bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400'
                     : 'bg-black text-white shadow-button hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200',
                 )}
               >
-                {circlePasskeyPending
-                  ? <><Loader2 className="h-4 w-4 animate-spin" /> {circleSmartAccount ? 'Paying with Smart wallet' : 'Opening Smart wallet'}</>
+                {circleEvmPaymentProcessing
+                  ? <><Loader2 className="h-4 w-4 animate-spin" /> Payment processing</>
+                  : circlePasskeyPending
+                  ? <><Loader2 className="h-4 w-4 animate-spin" /> {circleSmartAccount ? 'Confirming payment' : 'Opening Smart wallet'}</>
                   : circleSmartAccount
                     ? <><Zap className="h-4 w-4" /> Pay {formatAmount(effectiveAmt, meta.decimals)} {meta.asset}</>
                     : <><Zap className="h-4 w-4" /> Continue with email</>}
