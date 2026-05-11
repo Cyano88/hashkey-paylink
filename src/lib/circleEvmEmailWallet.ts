@@ -150,6 +150,22 @@ function executeChallenge(sdk: W3SSdk, challengeId: string) {
   })
 }
 
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string) {
+  return new Promise<T>((resolve, reject) => {
+    const timer = window.setTimeout(() => reject(new Error(message)), ms)
+    promise.then(
+      value => {
+        window.clearTimeout(timer)
+        resolve(value)
+      },
+      error => {
+        window.clearTimeout(timer)
+        reject(error)
+      },
+    )
+  })
+}
+
 async function getWallet(userToken: string, chain: Extract<ChainKey, 'base' | 'arbitrum'>): Promise<CircleEvmWallet | null> {
   const data = await circleWalletApi<{ wallet?: CircleEvmWallet | null }>({
     action: 'listWallets',
@@ -218,7 +234,7 @@ export async function connectCircleEvmEmailWallet(
     email,
   })
 
-  const login = await new Promise<CircleEmailLoginResult>((resolve, reject) => {
+  const login = await withTimeout(new Promise<CircleEmailLoginResult>((resolve, reject) => {
     sdk.updateConfigs({
       appSettings: { appId: APP_ID },
       loginConfigs: {
@@ -238,7 +254,7 @@ export async function connectCircleEvmEmailWallet(
       resolve(result)
     })
     sdk.verifyOtp()
-  })
+  }), 90_000, 'Email verification was cancelled or expired. Try again.')
 
   const wallet = await ensureEvmWallet(sdk, login.userToken, login.encryptionKey, chain)
   return {

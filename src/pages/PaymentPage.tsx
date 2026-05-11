@@ -1170,6 +1170,10 @@ export default function PaymentPage() {
       setCircleSolanaError('Recipient Solana address is invalid. Ask the organizer for a new payment link.')
       return
     }
+    if (flexPayDisabled || !effectiveAmt || parseFloat(effectiveAmt) <= 0) {
+      setCircleSolanaError('Enter an amount to continue.')
+      return
+    }
     const email = circleSolanaEmail.trim()
     if (!email && !circleSolanaSession) {
       setCircleSolanaError('Enter your email to continue with Smart wallet.')
@@ -1178,9 +1182,11 @@ export default function PaymentPage() {
 
     setCircleSolanaPending(true)
     setCircleSolanaError(null)
+    let wasConnecting = false
     try {
       let session = circleSolanaSession
       if (!session) {
+        wasConnecting = true
         session = await connectCircleSolanaEmailWallet(email)
         setCircleSolanaSession(session)
         await refreshCircleSolanaBalance(session.wallet.address)
@@ -1222,6 +1228,7 @@ export default function PaymentPage() {
     } catch (err) {
       console.error('[circle-solana-email] payment failed:', err)
       const msg = readableErrorMsg(err, 'Circle Solana wallet payment failed.')
+      if (wasConnecting) setCircleSolanaSession(null)
       setCircleSolanaError(msg.slice(0, 160))
       setIsSolanaConfirming(false)
     } finally {
@@ -1388,6 +1395,10 @@ export default function PaymentPage() {
 
   async function handleCirclePasskeyPay() {
     if (!activeRecipient || !showCircleEmailPay || !isAddress(activeRecipient)) return
+    if (flexPayDisabled || !effectiveAmt || parseFloat(effectiveAmt) <= 0) {
+      setCirclePasskeyError('Enter an amount to continue.')
+      return
+    }
     const email = circleEmail.trim()
     if (!email) {
       setCirclePasskeyError('Enter your email to continue with Smart wallet.')
@@ -1397,10 +1408,12 @@ export default function PaymentPage() {
     setCirclePasskeyPending(true)
     setCirclePasskeyError(null)
     setCirclePaymasterTxHash(null)
+    let wasConnecting = false
     try {
       if (showCircleEvmEmailPay) {
         let session = circleEvmEmailSession
         if (!session || session.chain !== chain) {
+          wasConnecting = true
           session = await connectCircleEvmEmailWallet(email, chain)
           setCircleEvmEmailSession(session)
           setCircleSmartAccount(session.wallet.address)
@@ -1448,6 +1461,10 @@ export default function PaymentPage() {
       }
     } catch (err) {
       setCircleEvmPaymentProcessing(false)
+      if (wasConnecting) {
+        setCircleEvmEmailSession(null)
+        setCircleSmartAccount(null)
+      }
       setCirclePasskeyError(readableErrorMsg(err, 'Circle email wallet payment failed.').slice(0, 160))
     } finally {
       setCirclePasskeyPending(false)
@@ -2550,7 +2567,7 @@ export default function PaymentPage() {
               )}
               <button
                 onClick={handleCirclePasskeyPay}
-                disabled={circlePasskeyPending || circleEvmPaymentProcessing || (isEventMode && !attendeeName.trim()) || flexPayDisabled}
+                disabled={circlePasskeyPending || circleEvmPaymentProcessing || (isEventMode && !attendeeName.trim())}
                 className={cn(
                   'flex w-full items-center justify-center gap-2 rounded-xl px-6 py-3.5 text-sm font-semibold transition-all',
                   circlePasskeyPending || circleEvmPaymentProcessing
@@ -2647,7 +2664,7 @@ export default function PaymentPage() {
                     )}
                     <button
                       onClick={handleCircleSolanaEmailPay}
-                      disabled={circleSolanaPending || isSolanaConfirming || (isEventMode && !attendeeName.trim()) || flexPayDisabled}
+                      disabled={circleSolanaPending || isSolanaConfirming || (isEventMode && !attendeeName.trim())}
                       className={cn(
                         'flex w-full items-center justify-center gap-2 rounded-xl px-6 py-3.5 text-sm font-semibold transition-all',
                         circleSolanaPending || isSolanaConfirming
