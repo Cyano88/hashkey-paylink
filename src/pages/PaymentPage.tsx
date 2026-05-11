@@ -1396,8 +1396,7 @@ export default function PaymentPage() {
           recipient: activeRecipient as `0x${string}`,
           amount: effectiveAmt,
         })
-        if (!txHash) throw new Error('Payment submitted. Waiting for Circle to index the transaction hash. Refresh the page shortly.')
-        setCirclePaymasterTxHash(txHash)
+        if (txHash) setCirclePaymasterTxHash(txHash)
         void refetchCircleWalletBalance()
         return
       }

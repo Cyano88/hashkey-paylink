@@ -262,28 +262,6 @@ export default async function handler(req: Request, res: Response) {
       return res.json({ ok: true, transaction: data.transaction ?? data })
     }
 
-    if (action === 'listRecentEvmTransactions') {
-      const { userToken, walletId, chain, from } = params
-      if (!userToken || !walletId || !chain) return res.status(400).json({ ok: false, error: 'Missing userToken, walletId, or chain' })
-      if (chain !== 'base' && chain !== 'arbitrum') {
-        return res.status(400).json({ ok: false, error: 'Unsupported EVM email wallet chain' })
-      }
-      const query = new URLSearchParams({
-        walletIds: walletId,
-        blockchain: EVM_CHAINS[chain].blockchain,
-        operation: 'CONTRACT_EXECUTION',
-        txType: 'OUTBOUND',
-        includeAll: 'true',
-      })
-      if (from) query.set('from', from)
-      const data = await circleJson<{ transactions?: Array<Record<string, unknown>> }>(`/v1/w3s/transactions?${query.toString()}`, {
-        method: 'GET',
-        userToken,
-        headers: { accept: 'application/json' },
-      })
-      return res.json({ ok: true, transactions: data.transactions ?? [] })
-    }
-
     if (action === 'signPayment') {
       const { userToken, walletId, rawTransaction, memo } = params
       if (!userToken || !walletId || !rawTransaction) {

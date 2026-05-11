@@ -273,30 +273,6 @@ async function pollTransactionHash(session: CircleEvmEmailSession, transactionId
   return null
 }
 
-async function pollRecentTransactionHash(session: CircleEvmEmailSession, from: string) {
-  const deadline = Date.now() + 90_000
-  while (Date.now() < deadline) {
-    const data = await circleWalletApi<{
-      transactions?: Array<Record<string, unknown>>
-    }>({
-      action: 'listRecentEvmTransactions',
-      userToken: session.userToken,
-      walletId: session.wallet.id,
-      chain: session.chain,
-      from,
-    })
-    const transactions = data.transactions ?? []
-    for (const tx of transactions) {
-      const state = transactionState(tx)
-      if (state.includes('FAILED') || state.includes('CANCEL')) continue
-      const hash = findTxHash(tx)
-      if (hash) return hash
-    }
-    await new Promise(resolve => setTimeout(resolve, 2_500))
-  }
-  return null
-}
-
 export async function sendCircleEvmEmailPayment(params: {
   session: CircleEvmEmailSession
   recipient: Address
@@ -321,7 +297,6 @@ export async function sendCircleEvmEmailPayment(params: {
     totalUnits: totalUnits.toString(),
   })
   if (!challenge.challengeId) throw new Error('Circle did not return an EVM payment challenge.')
-  const submittedFrom = new Date(Date.now() - 15_000).toISOString()
   const result = await executeChallenge(sdk, challenge.challengeId)
   const txHash = findTxHash(result)
   if (txHash) return txHash
@@ -330,5 +305,5 @@ export async function sendCircleEvmEmailPayment(params: {
     const hash = await pollTransactionHash(params.session, transactionId)
     if (hash) return hash
   }
-  return await pollRecentTransactionHash(params.session, submittedFrom)
+  return null
 }
