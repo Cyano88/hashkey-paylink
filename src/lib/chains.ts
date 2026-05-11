@@ -100,7 +100,7 @@ export const CHAIN_META = {
     toggleActive: 'bg-[#0052FF] text-white shadow-sm',
     headerBg: 'from-blue-50 to-sky-50',
     dotColor: 'bg-[#0052FF]',
-    engineLabel: 'EIP-7702 · Gas Sponsored',
+    engineLabel: 'Smart Wallet · Gas Sponsored',
   },
   starknet: {
     key: 'starknet' as const,
@@ -181,7 +181,7 @@ export const CHAIN_META = {
     toggleActive: 'bg-[#14F195] text-gray-900 shadow-sm',
     headerBg:     'from-green-50 to-emerald-50',
     dotColor:     'bg-[#14F195]',
-    engineLabel:  'Gasless · Fee Sponsored',
+    engineLabel:  'Smart Wallet · Gas Sponsored',
   },
   arbitrum: {
     key:          'arbitrum' as const,
@@ -202,6 +202,6 @@ export const CHAIN_META = {
     toggleActive: 'bg-[#28A0F0] text-white shadow-sm',
     headerBg:     'from-sky-50 to-blue-50',
     dotColor:     'bg-[#28A0F0]',
-    engineLabel:  'USDC · Permit + Vault · Arbitrum One',
+    engineLabel:  'Smart Wallet · Gas Sponsored',
   },
 } as const

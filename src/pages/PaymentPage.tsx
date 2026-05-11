@@ -310,7 +310,7 @@ export default function PaymentPage() {
   )
 
   // ── Direct Send state (shared across Base, Arc, Starknet) ────────────────
-  const [payMode,          setPayMode]          = useState<'wallet' | 'direct'>(modeParam === 'wallet' || chain === 'starknet' ? 'wallet' : 'direct')
+  const [payMode,          setPayMode]          = useState<'wallet' | 'direct'>(modeParam === 'direct' && chain !== 'starknet' ? 'direct' : 'wallet')
   const [directLinkId,     setDirectLinkId]     = useState<string | null>(null)
   // EVM chains (Base / Arc): the CREATE2 ghost vault address
   const [directVault,      setDirectVault]      = useState<`0x${string}` | null>(null)
@@ -725,9 +725,9 @@ export default function PaymentPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [manualPayDetected])
 
-  // ── Reset payMode on chain switch: Starknet wallet-only, all others direct ─
+  // ── Reset payMode on chain switch: Smart Wallet is primary; direct is explicit ─
   useEffect(() => {
-    setPayMode(modeParam === 'wallet' || chain === 'starknet' ? 'wallet' : 'direct')
+    setPayMode(modeParam === 'direct' && chain !== 'starknet' ? 'direct' : 'wallet')
   }, [chain, modeParam])
 
   // ── V2 EVM: Generate linkId + compute ghost vault address ─────────────────
@@ -1861,7 +1861,7 @@ export default function PaymentPage() {
                   className="flex w-full items-center justify-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-xs font-semibold text-white hover:bg-amber-600 active:scale-[0.98] transition-all"
                 >
                   <Zap className="h-3.5 w-3.5" />
-                  Retry Distribution (Gasless)
+                  Retry Distribution (Gas Sponsored)
                 </button>
                 {isConnected && (
                   <p className="text-center text-[10px] text-amber-600">
@@ -2002,6 +2002,17 @@ export default function PaymentPage() {
           <div className="flex justify-center px-4 pt-3">
             <div className="flex rounded-xl border border-gray-200 bg-gray-100/80 p-0.5 text-xs font-semibold">
               <button
+                onClick={() => setPayMode('wallet')}
+                className={cn(
+                  'rounded-lg px-4 py-1.5 transition-all duration-150',
+                  payMode === 'wallet'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700',
+                )}
+              >
+                Smart Wallet
+              </button>
+              <button
                 onClick={() => setPayMode('direct')}
                 className={cn(
                   'rounded-lg px-4 py-1.5 transition-all duration-150',
@@ -2011,17 +2022,6 @@ export default function PaymentPage() {
                 )}
               >
                 Send via Address
-              </button>
-              <button
-                onClick={() => setPayMode('wallet')}
-                className={cn(
-                  'rounded-lg px-4 py-1.5 transition-all duration-150',
-                  payMode === 'wallet'
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-500 hover:text-gray-700',
-                )}
-              >
-                Connect Wallet
               </button>
             </div>
           </div>
@@ -2545,7 +2545,7 @@ export default function PaymentPage() {
                     disabled={circlePasskeyPending || circleEvmPaymentProcessing || (isEventMode && !attendeeName.trim())}
                     className="min-w-0 flex-1 bg-transparent text-sm text-gray-800 placeholder:text-gray-400 outline-none dark:text-white dark:placeholder:text-gray-500"
                   />
-                  <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">Gasless</span>
+                  <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">Gas Sponsored</span>
                 </div>
               )}
               <button
@@ -2642,7 +2642,7 @@ export default function PaymentPage() {
                           disabled={circleSolanaPending || (isEventMode && !attendeeName.trim())}
                           className="min-w-0 flex-1 bg-transparent text-sm text-gray-800 placeholder:text-gray-400 outline-none"
                         />
-                        <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">Gasless</span>
+                        <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">Gas Sponsored</span>
                       </div>
                     )}
                     <button
