@@ -2886,7 +2886,27 @@ export default function PaymentPage() {
         </div>
 
         <p className="mt-6 text-center text-xs text-gray-400">
-          Built on Base &middot; Arbitrum &middot; Starknet &middot; Arc &middot; Solana &middot; Circle
+          Built on{' '}
+          {[
+            { label: 'Base',      href: 'https://basescan.org' },
+            { label: 'Arbitrum', href: 'https://arbiscan.io' },
+            { label: 'Starknet', href: 'https://starkscan.co' },
+            { label: 'Arc',      href: 'https://testnet.arcscan.app' },
+            { label: 'Solana',   href: 'https://solscan.io' },
+            { label: 'Circle',   href: 'https://www.circle.com' },
+          ].map((item, i, arr) => (
+            <span key={item.label}>
+              <a
+                href={item.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-gray-500 underline-offset-2 hover:underline transition-colors"
+              >
+                {item.label}
+              </a>
+              {i < arr.length - 1 && ' · '}
+            </span>
+          ))}
         </p>
       </div>
     </div>
