@@ -208,6 +208,15 @@ function readableErrorMsg(err: unknown, fallback: string) {
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
+const SMART_WALLET_FUNDING_ERROR = 'Add USDC to Smart wallet to continue.'
+const SMART_WALLET_AMOUNT_ERROR = 'Enter an amount to continue.'
+
+function isSmartWalletBalanceError(msg: string | null) {
+  if (!msg) return false
+  const s = msg.toLowerCase()
+  return msg === SMART_WALLET_FUNDING_ERROR || msg === SMART_WALLET_AMOUNT_ERROR || s.includes('insufficient usdc')
+}
+
 export default function PaymentPage() {
   const [searchParams] = useSearchParams()
   const { onPayChainChange } = useOutletContext<LayoutOutletContext>()
@@ -547,9 +556,50 @@ export default function PaymentPage() {
     (chain === 'solana' && !!resolvedSolana)
 
   useEffect(() => {
-    if (!circleWalletHasEnough) return
-    if (circlePasskeyError?.toLowerCase().includes('usdc')) setCirclePasskeyError(null)
-  }, [circlePasskeyError, circleWalletHasEnough])
+    if (!circleSmartAccount || typeof circleWalletBalance !== 'bigint') return
+    if (circleRequiredUnits <= 0n) {
+      if (isSmartWalletBalanceError(circlePasskeyError)) setCirclePasskeyError(null)
+      return
+    }
+    if (circleWalletNeedsFunds) {
+      if (!circlePasskeyPending && !circleEvmPaymentProcessing && circlePasskeyError !== SMART_WALLET_FUNDING_ERROR) {
+        setCirclePasskeyError(SMART_WALLET_FUNDING_ERROR)
+      }
+      return
+    }
+    if (isSmartWalletBalanceError(circlePasskeyError)) setCirclePasskeyError(null)
+  }, [
+    circleSmartAccount,
+    circleWalletBalance,
+    circleRequiredUnits,
+    circleWalletNeedsFunds,
+    circlePasskeyPending,
+    circleEvmPaymentProcessing,
+    circlePasskeyError,
+  ])
+
+  useEffect(() => {
+    if (!circleSolanaSession || circleSolanaBalance === null) return
+    if (circleRequiredUnits <= 0n) {
+      if (isSmartWalletBalanceError(circleSolanaError)) setCircleSolanaError(null)
+      return
+    }
+    if (circleSolanaNeedsFunds) {
+      if (!circleSolanaPending && !isSolanaConfirming && circleSolanaError !== SMART_WALLET_FUNDING_ERROR) {
+        setCircleSolanaError(SMART_WALLET_FUNDING_ERROR)
+      }
+      return
+    }
+    if (isSmartWalletBalanceError(circleSolanaError)) setCircleSolanaError(null)
+  }, [
+    circleSolanaSession,
+    circleSolanaBalance,
+    circleRequiredUnits,
+    circleSolanaNeedsFunds,
+    circleSolanaPending,
+    isSolanaConfirming,
+    circleSolanaError,
+  ])
 
   // ── Step 1: Predict router address + check deployment ────────────────────
   useEffect(() => {
@@ -1171,7 +1221,7 @@ export default function PaymentPage() {
       return
     }
     if (flexPayDisabled || !effectiveAmt || parseFloat(effectiveAmt) <= 0) {
-      setCircleSolanaError('Enter an amount to continue.')
+      setCircleSolanaError(SMART_WALLET_AMOUNT_ERROR)
       return
     }
     const email = circleSolanaEmail.trim()
@@ -1194,7 +1244,7 @@ export default function PaymentPage() {
       }
 
       if (circleSolanaBalance !== null && !circleSolanaHasEnough) {
-        setCircleSolanaError('Add USDC to Smart wallet to continue.')
+        setCircleSolanaError(SMART_WALLET_FUNDING_ERROR)
         return
       }
 
@@ -1396,7 +1446,7 @@ export default function PaymentPage() {
   async function handleCirclePasskeyPay() {
     if (!activeRecipient || !showCircleEmailPay || !isAddress(activeRecipient)) return
     if (flexPayDisabled || !effectiveAmt || parseFloat(effectiveAmt) <= 0) {
-      setCirclePasskeyError('Enter an amount to continue.')
+      setCirclePasskeyError(SMART_WALLET_AMOUNT_ERROR)
       return
     }
     const email = circleEmail.trim()
@@ -1422,7 +1472,7 @@ export default function PaymentPage() {
         }
 
         if (circleWalletBalance !== undefined && circleWalletBalance !== null && !circleWalletHasEnough) {
-          setCirclePasskeyError('Add USDC to Smart wallet to continue.')
+          setCirclePasskeyError(SMART_WALLET_FUNDING_ERROR)
           return
         }
 
