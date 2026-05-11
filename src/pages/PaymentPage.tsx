@@ -624,6 +624,7 @@ export default function PaymentPage() {
         payMode === 'wallet' &&
         showCircleEvmEmailPay &&
         !!circleEvmEmailSession &&
+        circleEvmEmailMerchantUnits != null &&
         (chain === 'base' || chain === 'arbitrum')
       const watchTarget = (isCircleEmailEvmWatch ? resolvedEvm : (routerAddr ?? resolvedEvm)) as `0x${string}`
       const requestedUnits =
@@ -676,7 +677,18 @@ export default function PaymentPage() {
       if (hskTimer) clearInterval(hskTimer)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chain, resolvedEvm, routerAddr, manualPayDetected, amt])
+  }, [
+    chain,
+    resolvedEvm,
+    routerAddr,
+    manualPayDetected,
+    amt,
+    effectiveAmt,
+    payMode,
+    showCircleEvmEmailPay,
+    circleEvmEmailSession?.wallet.address,
+    circleEvmEmailMerchantUnits?.toString(),
+  ])
 
   // ── Auto-sweep keeper ─────────────────────────────────────────────────────
   useEffect(() => {
