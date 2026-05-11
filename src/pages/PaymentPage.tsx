@@ -515,6 +515,13 @@ export default function PaymentPage() {
     typeof circleWalletBalance === 'bigint' &&
     circleRequiredUnits > 0n &&
     circleWalletBalance < circleRequiredUnits
+  const circleEvmEmailMerchantUnits = (() => {
+    if (!showCircleEvmEmailPay || circleRequiredUnits <= 0n || (chain !== 'base' && chain !== 'arbitrum')) return null
+    const feeUnits = circleRequiredUnits * BigInt(PLATFORM_FEE_BPS) / 10_000n
+    const gasRecoveryUnits = getSponsoredGasRecoveryUnits(chain, circleRequiredUnits, feeUnits, meta.decimals)
+    const merchantUnits = circleRequiredUnits - feeUnits - gasRecoveryUnits
+    return merchantUnits > 0n ? merchantUnits : null
+  })()
   const circleSolanaHasEnough =
     circleSolanaBalance !== null &&
     circleRequiredUnits > 0n &&
@@ -613,8 +620,16 @@ export default function PaymentPage() {
     } else {
       const tokenAddress = CHAIN_META[evmChain as 'base' | 'arc' | 'arbitrum'].tokenAddress
 
-      const watchTarget = (routerAddr ?? resolvedEvm) as `0x${string}`
-      const requestedUnits = parseUnits(effectiveAmt || '0', meta.decimals)
+      const isCircleEmailEvmWatch =
+        payMode === 'wallet' &&
+        showCircleEvmEmailPay &&
+        !!circleEvmEmailSession &&
+        (chain === 'base' || chain === 'arbitrum')
+      const watchTarget = (isCircleEmailEvmWatch ? resolvedEvm : (routerAddr ?? resolvedEvm)) as `0x${string}`
+      const requestedUnits =
+        isCircleEmailEvmWatch && circleEvmEmailMerchantUnits
+          ? circleEvmEmailMerchantUnits
+          : parseUnits(effectiveAmt || '0', meta.decimals)
 
       unwatchTransfer = client.watchContractEvent({
         address:         tokenAddress,
@@ -628,7 +643,7 @@ export default function PaymentPage() {
           if (!log)   return
           const value = (log.args as { value?: bigint }).value ?? 0n
           if (value >= requestedUnits * 99n / 100n) {
-            setReceivedAmount(isRouterAddress ? value * 9950n / 10000n : value)
+            setReceivedAmount(isRouterAddress && !isCircleEmailEvmWatch ? value * 9950n / 10000n : value)
             setManualTxHash(log.transactionHash ?? null)
             setManualPayDetected(true)
           }
