@@ -69,6 +69,11 @@ function parseSolanaAddress(label: string, value?: string): PublicKey {
   }
 }
 
+function getSolanaTreasury(feeRaw: bigint): PublicKey | null {
+  if (feeRaw === 0n) return null
+  return parseSolanaAddress('Solana treasury address', process.env.SOLANA_TREASURY)
+}
+
 function decodeSignedTransaction(tx: string): Buffer {
   const normalized = tx.trim()
   try {
@@ -149,10 +154,9 @@ export async function buildSolanaTx(req: Request, res: Response): Promise<void> 
       fromATA, USDC_MINT, toATA, fromPubkey, recipientRaw, USDC_DECIMALS,
     ))
 
-    // Transfer fee to treasury (optional)
-    const treasury = process.env.SOLANA_TREASURY
-    if (treasury && feeRaw > 0n) {
-      const treasuryPubkey = parseSolanaAddress('Solana treasury address', treasury)
+    // Transfer fee to treasury. Fail closed when configured fees cannot be routed.
+    const treasuryPubkey = getSolanaTreasury(feeRaw)
+    if (treasuryPubkey) {
       const treasuryATA = await ensureATA(connection, tx, USDC_MINT, treasuryPubkey, relayer.publicKey)
       tx.add(createTransferCheckedInstruction(
         fromATA, USDC_MINT, treasuryATA, fromPubkey, feeRaw, USDC_DECIMALS,
@@ -253,9 +257,8 @@ export async function sweepSolanaVault(req: Request, res: Response): Promise<voi
       vaultATA, USDC_MINT, recipientATA, vaultKeypair.publicKey, recipientRaw, USDC_DECIMALS,
     ))
 
-    const treasury = process.env.SOLANA_TREASURY
-    if (treasury && feeRaw > 0n) {
-      const treasuryPubkey = parseSolanaAddress('Solana treasury address', treasury)
+    const treasuryPubkey = getSolanaTreasury(feeRaw)
+    if (treasuryPubkey) {
       const treasuryATA = await ensureATA(connection, tx, USDC_MINT, treasuryPubkey, relayer.publicKey)
       tx.add(createTransferCheckedInstruction(
         vaultATA, USDC_MINT, treasuryATA, vaultKeypair.publicKey, feeRaw, USDC_DECIMALS,
