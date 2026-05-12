@@ -22,30 +22,48 @@ import { isValidSolanaAddress } from '../lib/solanaAddress'
 
 interface PaymentRow {
   id:               string
-  txHash:           `0x${string}`
+  txHash:           string
   blockNumber:      bigint
   timestamp:        number | null
-  sender:           `0x${string}`
+  sender:           string
   recipientAmount:  bigint
   treasuryAmount:   bigint
   gasCostWei:       bigint
   gasReimbUsdc:     bigint   // V2 only — gas reimb taken in USDC (0n for V1)
   status:           'settled' | 'incoming'
-  flow:             'v1' | 'v2'
+  flow:             'v1' | 'v2' | 'registry'
+  chain:            keyof typeof CHAIN_META
+  label?:           string
 }
 
 interface ApiPaymentRow {
   id: string
-  txHash: `0x${string}`
+  txHash: string
   blockNumber: string
   timestamp: number | null
-  sender: `0x${string}`
+  sender: string
   recipientAmount: string
   treasuryAmount: string
   gasCostWei: string
   gasReimbUsdc: string
   status: 'settled' | 'incoming'
   flow: 'v1' | 'v2'
+}
+
+interface EventPaymentRow {
+  eventId: string
+  txHash: string
+  chain: string
+  payer: string
+  memo: string
+  amount: string
+  ts: number
+}
+
+function chainKey(value: string | undefined): keyof typeof CHAIN_META {
+  return value === 'solana' || value === 'starknet' || value === 'arc' || value === 'arbitrum' || value === 'hashkey'
+    ? value
+    : 'base'
 }
 
 function hydratePaymentRow(row: ApiPaymentRow): PaymentRow {
@@ -56,6 +74,28 @@ function hydratePaymentRow(row: ApiPaymentRow): PaymentRow {
     treasuryAmount: BigInt(row.treasuryAmount),
     gasCostWei: BigInt(row.gasCostWei),
     gasReimbUsdc: BigInt(row.gasReimbUsdc),
+    chain: 'base',
+  }
+}
+
+function eventPaymentToRow(row: EventPaymentRow, index: number): PaymentRow {
+  const amount = Number.parseFloat(row.amount || '0')
+  const units = Number.isFinite(amount) ? BigInt(Math.round(amount * 1_000_000)) : 0n
+  const chain = chainKey(row.chain)
+  return {
+    id: `event-${row.txHash || index}-${row.ts}`,
+    txHash: row.txHash || '',
+    blockNumber: BigInt(Math.max(0, row.ts || 0)),
+    timestamp: row.ts || null,
+    sender: row.payer || '',
+    recipientAmount: units,
+    treasuryAmount: 0n,
+    gasCostWei: 0n,
+    gasReimbUsdc: 0n,
+    status: 'settled',
+    flow: 'registry',
+    chain,
+    label: row.memo || row.payer || 'Payment',
   }
 }
 
@@ -66,6 +106,7 @@ export default function Dashboard() {
   const evmAddr = (searchParams.get('evm') ?? '').trim()
   const solanaAddr = (searchParams.get('sol') ?? '').trim()
   const starkAddr = (searchParams.get('stark') ?? '').trim()
+  const eventId = (searchParams.get('id') ?? '').trim()
   const netParam = (searchParams.get('net') ?? '').trim() as UnifiedBalanceChainKey | ''
   const isMultiChain = searchParams.get('multi') === '1'
 
@@ -155,6 +196,26 @@ export default function Dashboard() {
 
   // Load payment events through the backend reader.
   const loadPayments = useCallback(async (opts?: { silent?: boolean; fromBlock?: bigint; merge?: boolean }) => {
+    if (eventId) {
+      if (!opts?.silent) setIsLoading(true)
+      setLoadError(null)
+      try {
+        const response = await fetch(`/api/list-event-payments?id=${encodeURIComponent(eventId)}`)
+        const data = await response.json() as { ok?: boolean; error?: string; payments?: EventPaymentRow[] }
+        if (!response.ok || !data.ok) throw new Error(data.error ?? 'Failed to load payments')
+        const nextRows = (data.payments ?? []).map(eventPaymentToRow)
+        setPayments(nextRows.sort((a, b) => Number(b.blockNumber - a.blockNumber)))
+        setRouterChecked(true)
+        setScanCursor(null)
+      } catch (err) {
+        setRouterChecked(true)
+        setLoadError(err instanceof Error ? err.message.slice(0, 120) : 'Failed to load payments')
+      } finally {
+        if (!opts?.silent) setIsLoading(false)
+      }
+      return
+    }
+
     if (!evmValid) {
       setRouterAddr(null)
       setRouterChecked(true)
@@ -195,7 +256,7 @@ export default function Dashboard() {
     } finally {
       if (!opts?.silent) setIsLoading(false)
     }
-  }, [evmAddr, evmValid])
+  }, [eventId, evmAddr, evmValid])
 
   useEffect(() => {
     setRouterChecked(false)
@@ -204,13 +265,19 @@ export default function Dashboard() {
 
   // Lightweight live poll from the latest scanned block.
   useEffect(() => {
+    if (eventId) {
+      const timer = window.setInterval(() => {
+        void loadPayments({ silent: true })
+      }, 5_000)
+      return () => window.clearInterval(timer)
+    }
     if (!evmValid || scanCursor == null) return
     const timer = window.setInterval(() => {
       const overlap = scanCursor > 20n ? scanCursor - 20n : scanCursor
       void loadPayments({ silent: true, fromBlock: overlap, merge: true })
     }, 8_000)
     return () => window.clearInterval(timer)
-  }, [evmValid, scanCursor, loadPayments])
+  }, [eventId, evmValid, scanCursor, loadPayments])
 
   // ── Computed helpers ──────────────────────────────────────────────────
   function gasCostUsdc(wei: bigint) { return Number(wei) / 1e18 * ethPrice }
@@ -234,6 +301,7 @@ export default function Dashboard() {
     const d = new Date(ts)
     return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   }
+  function rowMeta(row: PaymentRow) { return CHAIN_META[row.chain] ?? meta }
 
   // ── No address ────────────────────────────────────────────────────────
   if (!hasDashboardAddress) {
@@ -429,6 +497,7 @@ export default function Dashboard() {
                   const gas     = gasCostUsdc(row.gasCostWei)
                   const net     = netUsdc(row)
                   const isOpen  = expandedRow === row.id
+                  const chainMeta = rowMeta(row)
 
                   return (
                     <Fragment key={row.id}>
@@ -437,19 +506,24 @@ export default function Dashboard() {
                           {fmtTs(row.timestamp)}
                         </td>
                         <td className="px-4 py-3 text-xs text-gray-600">
-                          {row.flow === 'v2' ? (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-600 border border-blue-100">
-                              Direct Send
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="inline-flex items-center rounded-full border border-gray-100 bg-gray-50 px-2 py-0.5 text-[10px] font-semibold text-gray-600">
+                              {chainMeta.label}
                             </span>
-                          ) : (
-                            <a
-                              href={`${meta.explorerUrl}/address/${row.sender}`}
-                              target="_blank" rel="noopener noreferrer"
-                              className="font-mono hover:text-blue-600 transition-colors"
-                            >
-                              {truncateAddress(row.sender, 6)}
-                            </a>
-                          )}
+                            {row.flow === 'v2' || row.flow === 'registry' ? (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-600 border border-blue-100">
+                                {row.label ?? 'Direct Send'}
+                              </span>
+                            ) : (
+                              <a
+                                href={`${chainMeta.explorerUrl}/address/${row.sender}`}
+                                target="_blank" rel="noopener noreferrer"
+                                className="font-mono hover:text-blue-600 transition-colors"
+                              >
+                                {truncateAddress(row.sender, 6)}
+                              </a>
+                            )}
+                          </div>
                         </td>
                         <td className="px-4 py-3 text-right font-mono text-xs text-gray-700">
                           ${fmt(gross)}
@@ -475,7 +549,7 @@ export default function Dashboard() {
                         </td>
                         <td className="px-4 py-3 text-right">
                           <a
-                            href={`${meta.explorerUrl}/tx/${row.txHash}`}
+                            href={`${chainMeta.explorerUrl}/tx/${row.txHash}`}
                             target="_blank" rel="noopener noreferrer"
                             className="inline-flex items-center gap-1 rounded-lg border border-transparent px-2 py-1 text-[11px] text-blue-500 hover:border-blue-100 hover:bg-blue-50 hover:text-blue-700 transition-all"
                           >
