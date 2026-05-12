@@ -374,15 +374,15 @@ export default function Dashboard() {
           <div>
             <div className="flex items-center gap-2">
               <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Unified Global Balance</p>
-              {balanceError ? (
-                <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
-                  <AlertCircle className="h-3 w-3" /> Partial
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
-                  <Info className="h-3 w-3" /> Read-only
-                </span>
-              )}
+              <span className={cn(
+                'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold',
+                balanceError ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700',
+              )}>
+                {balanceError ? <><AlertCircle className="h-3 w-3" /> Partial</> : <><Info className="h-3 w-3" /> Read-only</>}
+                <span className="text-gray-300">·</span>
+                <img src="/brand/circle-logo.jpeg" alt="" className="h-3 w-3 rounded-full object-cover" />
+                <span>Powered by Circle</span>
+              </span>
             </div>
             <p className="mt-2 font-mono text-3xl font-bold tracking-tight text-gray-900">
               {balanceLoading ? '$--.----' : `$${fmt(globalBalance)}`}
