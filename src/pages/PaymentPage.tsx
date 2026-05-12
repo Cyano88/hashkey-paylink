@@ -228,6 +228,7 @@ export default function PaymentPage() {
   const legacyChain = searchParams.get('chain')  as ChainKey | null
   const netParam    = searchParams.get('net')    as ChainKey | null
   const modeParam   = searchParams.get('mode')
+  const isTelegramSource = searchParams.get('source') === 'telegram'
 
   const resolvedStark  = starkParam || (legacyChain === 'starknet' ? evmParam : '')
   const resolvedEvm    = legacyChain === 'starknet' ? '' : evmParam
@@ -552,8 +553,11 @@ export default function PaymentPage() {
 
   // Whether Direct Send is available for the current chain
   const canDirectSend =
-    ((chain === 'base' || chain === 'arc' || chain === 'arbitrum') && isAddress(resolvedEvm) && !!FACTORY_V2_ADDRESSES[chain as 'base' | 'arc' | 'arbitrum']) ||
-    (chain === 'solana' && !!resolvedSolana)
+    !isTelegramSource &&
+    (
+      ((chain === 'base' || chain === 'arc' || chain === 'arbitrum') && isAddress(resolvedEvm) && !!FACTORY_V2_ADDRESSES[chain as 'base' | 'arc' | 'arbitrum']) ||
+      (chain === 'solana' && !!resolvedSolana)
+    )
 
   useEffect(() => {
     if (!circleSmartAccount || typeof circleWalletBalance !== 'bigint') return
@@ -2676,11 +2680,13 @@ export default function PaymentPage() {
               {circlePasskeyError && (
                 <p className="text-center text-[11px] font-medium text-red-600 dark:text-red-300">{circlePasskeyError}</p>
               )}
-              <div className="flex items-center gap-3">
-                <div className="h-px flex-1 bg-gray-200 dark:bg-white/10" />
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">or</span>
-                <div className="h-px flex-1 bg-gray-200 dark:bg-white/10" />
-              </div>
+              {!isTelegramSource && (
+                <div className="flex items-center gap-3">
+                  <div className="h-px flex-1 bg-gray-200 dark:bg-white/10" />
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">or</span>
+                  <div className="h-px flex-1 bg-gray-200 dark:bg-white/10" />
+                </div>
+              )}
             </div>
           )}
 
@@ -2771,14 +2777,16 @@ export default function PaymentPage() {
                         {isSmartWalletBalanceError(circleSolanaError) ? circleSolanaError : `Transaction failed: ${circleSolanaError}`}
                       </p>
                     )}
-                    <div className="flex items-center gap-3">
-                      <div className="h-px flex-1 bg-gray-200" />
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">or</span>
-                      <div className="h-px flex-1 bg-gray-200" />
-                    </div>
+                    {!isTelegramSource && (
+                      <div className="flex items-center gap-3">
+                        <div className="h-px flex-1 bg-gray-200" />
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">or</span>
+                        <div className="h-px flex-1 bg-gray-200" />
+                      </div>
+                    )}
                   </div>
                 )}
-                {!solanaWalletAddr ? (
+                {!isTelegramSource && !solanaWalletAddr ? (
                   <>
                 <button
                   onClick={connectSolana}
@@ -2791,7 +2799,7 @@ export default function PaymentPage() {
                 </button>
                 <p className="text-center text-xs text-gray-400">Phantom, Solflare & other Solana wallets</p>
                   </>
-                ) : (
+                ) : !isTelegramSource ? (
               <button
                 onClick={handlePay}
                 disabled={isSolanaPending || isSolanaConfirming || (isEventMode && !attendeeName.trim()) || flexPayDisabled}
@@ -2806,7 +2814,7 @@ export default function PaymentPage() {
                 : isSolanaConfirming ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirming on Chain…</>
                 : <><Zap className="h-4 w-4" /> Pay {formatAmount(effectiveAmt, 6)} USDC on Solana</>}
               </button>
-                )}
+                ) : null}
               </div>
           ) : payMode === 'wallet' && chain === 'starknet' ? (
             !starkAccount ? (
@@ -2829,7 +2837,7 @@ export default function PaymentPage() {
                 : <><Zap className="h-4 w-4" /> Pay {formatAmount(effectiveAmt, 6)} USDC on Starknet</>}
               </button>
             )
-          ) : payMode === 'wallet' && !isConnected ? (
+          ) : payMode === 'wallet' && !isTelegramSource && !isConnected ? (
             <div className={cn(
               'flex flex-col items-center gap-1.5',
               isEventMode && !attendeeName.trim() && 'pointer-events-none opacity-50 select-none',
@@ -2872,6 +2880,13 @@ export default function PaymentPage() {
               </button>
             </div>
           ) : null /* direct mode — no CTA button, address panel above handles it */ }
+
+          {isTelegramSource && (showCircleEmailPay || showCircleSolanaEmailPay) && (
+            <div className="flex items-center justify-center gap-2 pt-1 text-[11px] font-semibold text-gray-400 dark:text-gray-500">
+              <img src="/brand/circle-logo.jpeg" alt="" className="h-4 w-4 rounded-full object-cover" />
+              <span>Powered by Circle</span>
+            </div>
+          )}
 
           <p className="flex items-center justify-center gap-1.5 text-xs text-gray-400">
             <ShieldCheck className="h-3.5 w-3.5" />
