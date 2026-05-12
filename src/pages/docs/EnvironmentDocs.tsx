@@ -61,7 +61,11 @@ export default function EnvironmentDocs() {
             ['PRIVATE_RPC_URL_ARC',           'No',  'Arc RPC endpoint.'],
             ['PRIVATE_RPC_URL_HASHKEY',       'No',  'HashKey RPC endpoint.'],
             ['PRIVATE_RPC_URL_ARB',           'No',  'Arbitrum RPC endpoint.'],
-            ['VITE_RPC_URL',                  'No',  'Frontend RPC for balance polling.'],
+            ['VITE_RPC_URL',                  'No',  'Frontend Base RPC fallback used by dashboard event watching, router prediction, and balance polling.'],
+            ['VITE_RPC_URL_BASE',             'No',  'Frontend Base RPC. Prefer your private/high-rate-limit provider. Falls back to VITE_RPC_URL, then public Base RPC.'],
+            ['VITE_RPC_URL_ARC',              'No',  'Frontend Arc RPC for dashboard/router reads.'],
+            ['VITE_RPC_URL_ARB',              'No',  'Frontend Arbitrum RPC for dashboard/router reads.'],
+            ['VITE_RPC_URL_HASHKEY',          'No',  'Frontend HashKey RPC for dashboard/router reads.'],
             ['FACTORY_FROM_BLOCK',            'No',  'Block from which to scan factory events. Optimization to avoid scanning from genesis.'],
             ['CRON_SECRET',                   'No',  'Secret token for authenticating /api/sweep-keeper cron requests.'],
           ]}

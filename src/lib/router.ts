@@ -10,12 +10,19 @@ import { createPublicClient, http } from 'viem'
 import { base, arbitrum } from 'viem/chains'
 import { hashkeyMainnet, arcChain } from './chains'
 
+const RPC_URLS = {
+  base:     import.meta.env.VITE_RPC_URL_BASE     ?? import.meta.env.VITE_RPC_URL     ?? 'https://mainnet.base.org',
+  hashkey:  import.meta.env.VITE_RPC_URL_HASHKEY  ?? 'https://mainnet.hsk.xyz',
+  arc:      import.meta.env.VITE_RPC_URL_ARC      ?? 'https://rpc.testnet.arc.network',
+  arbitrum: import.meta.env.VITE_RPC_URL_ARB      ?? 'https://arb1.arbitrum.io/rpc',
+} as const
+
 // ─── Stable public clients ────────────────────────────────────────────────────
 export const EVM_CLIENTS = {
-  base:     createPublicClient({ chain: base,           transport: http('https://mainnet.base.org') }),
-  hashkey:  createPublicClient({ chain: hashkeyMainnet, transport: http('https://mainnet.hsk.xyz')  }),
-  arc:      createPublicClient({ chain: arcChain,       transport: http('https://rpc.testnet.arc.network') }),
-  arbitrum: createPublicClient({ chain: arbitrum,       transport: http('https://arb1.arbitrum.io/rpc') }),
+  base:     createPublicClient({ chain: base,           transport: http(RPC_URLS.base) }),
+  hashkey:  createPublicClient({ chain: hashkeyMainnet, transport: http(RPC_URLS.hashkey) }),
+  arc:      createPublicClient({ chain: arcChain,       transport: http(RPC_URLS.arc) }),
+  arbitrum: createPublicClient({ chain: arbitrum,       transport: http(RPC_URLS.arbitrum) }),
 } as const
 
 // ─── Factory addresses ────────────────────────────────────────────────────────

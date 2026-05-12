@@ -35,14 +35,21 @@ const connectors = connectorsForWallets(walletGroups, {
   projectId: projectId || 'not_configured',
 })
 
+const RPC_URLS = {
+  base:     import.meta.env.VITE_RPC_URL_BASE    ?? import.meta.env.VITE_RPC_URL,
+  arc:      import.meta.env.VITE_RPC_URL_ARC     ?? 'https://rpc.testnet.arc.network',
+  arbitrum: import.meta.env.VITE_RPC_URL_ARB     ?? 'https://arb1.arbitrum.io/rpc',
+  hashkey:  import.meta.env.VITE_RPC_URL_HASHKEY ?? 'https://mainnet.hsk.xyz',
+} as const
+
 // ─── Wagmi Config — Base + Arc + Arbitrum + HashKey ──────────────────────────
 export const wagmiConfig = createConfig({
   chains: [base, arcChain, arbitrum, hashkeyMainnet],
   connectors,
   transports: {
-    [base.id]:           http(),
-    [arcChain.id]:       http('https://rpc.testnet.arc.network'),
-    [arbitrum.id]:       http('https://arb1.arbitrum.io/rpc'),
-    [hashkeyMainnet.id]: http('https://mainnet.hsk.xyz'),
+    [base.id]:           http(RPC_URLS.base),
+    [arcChain.id]:       http(RPC_URLS.arc),
+    [arbitrum.id]:       http(RPC_URLS.arbitrum),
+    [hashkeyMainnet.id]: http(RPC_URLS.hashkey),
   },
 })
