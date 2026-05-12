@@ -2854,7 +2854,7 @@ export default function PaymentPage() {
                 <p className="text-center text-xs text-gray-400">Gas in ETH</p>
               )}
             </div>
-          ) : payMode === 'wallet' && !isCorrectNetwork ? (
+          ) : payMode === 'wallet' && !isTelegramSource && !isCorrectNetwork ? (
             <button onClick={() => switchChain({ chainId: targetChainId })} disabled={isSwitching}
               className="flex w-full items-center justify-center gap-2 rounded-xl px-6 py-4 text-sm font-semibold text-white transition-all active:scale-[0.98] disabled:opacity-70"
               style={{ backgroundColor: meta.accentColor }}>
@@ -2862,7 +2862,7 @@ export default function PaymentPage() {
                 ? <><Loader2 className="h-4 w-4 animate-spin" /> Switching…</>
                 : <><RefreshCw className="h-4 w-4" /> Switch to {meta.label}</>}
             </button>
-          ) : payMode === 'wallet' ? (
+          ) : payMode === 'wallet' && !isTelegramSource ? (
             <div className="space-y-2">
               <button onClick={handlePay} disabled={isWalletPending || isConfirming || (isEventMode && !attendeeName.trim()) || flexPayDisabled}
               className={cn(
