@@ -38,8 +38,18 @@ interface PaymentRow {
   flow:             'v1' | 'v2'
 }
 
-// Oldest block to scan from (Base mainnet factory deployment area)
-const FROM_BLOCK = 29_500_000n
+function readBlockEnv(value: string | undefined, fallback: bigint) {
+  try {
+    const clean = (value ?? '').trim()
+    return clean ? BigInt(clean) : fallback
+  } catch {
+    return fallback
+  }
+}
+
+// Oldest Base block to scan from. Keep this near the current factory deployment
+// so hosted RPCs do not reject large eth_getLogs ranges.
+const FROM_BLOCK = readBlockEnv(import.meta.env.VITE_FACTORY_FROM_BLOCK, 45_786_000n)
 
 // ─── Component ───────────────────────────────────────────────────────────────
 

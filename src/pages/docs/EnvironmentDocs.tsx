@@ -66,6 +66,7 @@ export default function EnvironmentDocs() {
             ['VITE_RPC_URL_ARC',              'No',  'Frontend Arc RPC for dashboard/router reads.'],
             ['VITE_RPC_URL_ARB',              'No',  'Frontend Arbitrum RPC for dashboard/router reads.'],
             ['VITE_RPC_URL_HASHKEY',          'No',  'Frontend HashKey RPC for dashboard/router reads.'],
+            ['VITE_FACTORY_FROM_BLOCK',       'No',  'Frontend dashboard start block for Base factory event scans. Default: 45786000. Keep this near factory deployment to avoid large eth_getLogs ranges.'],
             ['FACTORY_FROM_BLOCK',            'No',  'Block from which to scan factory events. Optimization to avoid scanning from genesis.'],
             ['CRON_SECRET',                   'No',  'Secret token for authenticating /api/sweep-keeper cron requests.'],
           ]}
