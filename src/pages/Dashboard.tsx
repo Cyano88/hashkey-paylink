@@ -130,7 +130,8 @@ export default function Dashboard() {
   const starkValid = /^0x[0-9a-fA-F]{64}$/.test(starkAddr)
   const hasDashboardAddress = evmValid || solanaValid || starkValid
   const balanceChains: UnifiedBalanceChainKey[] = (() => {
-    if (isMultiChain) {
+    const isPortfolioBalanceView = isMultiChain || Boolean(eventId)
+    if (isPortfolioBalanceView) {
       const chains: UnifiedBalanceChainKey[] = []
       if (evmValid) chains.push('base', 'arc', 'arbitrum')
       if (solanaValid) chains.push('solana')
@@ -192,7 +193,7 @@ export default function Dashboard() {
 
     return () => { cancelled = true }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [evmAddr, solanaAddr, starkAddr, isMultiChain, netParam])
+  }, [evmAddr, solanaAddr, starkAddr, eventId, isMultiChain, netParam])
 
   // Load payment events through the backend reader.
   const loadPayments = useCallback(async (opts?: { silent?: boolean; fromBlock?: bigint; merge?: boolean }) => {
