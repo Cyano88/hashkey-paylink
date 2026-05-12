@@ -12,7 +12,7 @@ import { base } from 'viem/chains'
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000' as const
 const ROUTER_FACTORY = '0x70Dd5226eB973268263A9AcD8BC48b4E59E7beCA' as const
 const DEFAULT_FROM_BLOCK = 45_786_000n
-const DEFAULT_LOG_CHUNK_SIZE = 50_000n
+const DEFAULT_LOG_CHUNK_SIZE = 2_000n
 
 const FACTORY_ABI = parseAbi([
   'function getRouterAddress(address recipient) view returns (address)',
@@ -73,7 +73,19 @@ async function getLogsChunked<TLog>(
   const chunkSize = readPositiveBlock(process.env.DASHBOARD_LOG_CHUNK_SIZE, DEFAULT_LOG_CHUNK_SIZE)
   for (let from = fromBlock; from <= toBlock; from += chunkSize) {
     const end = from + chunkSize - 1n > toBlock ? toBlock : from + chunkSize - 1n
-    logs.push(...await getLogs(from, end))
+    try {
+      logs.push(...await getLogs(from, end))
+    } catch (err) {
+      // Some hosted RPCs still reject dense ranges. Split once more before
+      // surfacing an error to the dashboard.
+      if (end > from) {
+        const mid = from + ((end - from) / 2n)
+        logs.push(...await getLogsChunked(getLogs, from, mid))
+        logs.push(...await getLogsChunked(getLogs, mid + 1n, end))
+        continue
+      }
+      throw err
+    }
   }
   return logs
 }
