@@ -1,9 +1,9 @@
 /**
  * Recipient Settlement Dashboard — /dashboard?evm=0x...
  *
- * Shows all PaymentRouted events from the recipient's router in real-time.
- * Uses viem EVM_CLIENTS (stateless public client — no wallet required).
- * Rows transition from 'incoming' to 'settled' instantly when the sweep event arrives.
+ * Shows all PaymentRouted events from the recipient's router.
+ * EVM history is loaded through the backend so large log scans do not run in the browser.
+ * The frontend remains read-only and polls the backend for new settlement rows.
  */
 
 import { useEffect, useState, useCallback, Fragment } from 'react'
@@ -13,10 +13,6 @@ import {
   CheckCircle2, Clock, ExternalLink, Loader2, Link2,
   RefreshCw, TrendingUp, Wallet, Info, AlertCircle, ChevronDown, ChevronUp,
 } from 'lucide-react'
-import {
-  EVM_CLIENTS, ROUTER_FACTORY, FACTORY_GET_ROUTER_ABI,
-  PAYMENT_ROUTED_ABI, PAYMENT_RELAYED_ABI, FACTORY_V2_ADDRESS,
-} from '../lib/router'
 import { CHAIN_META } from '../lib/chains'
 import { cn, truncateAddress } from '../lib/utils'
 import { queryBalances, type UnifiedBalanceBreakdown, type UnifiedBalanceChainKey } from '../lib/unifiedBalance'
@@ -38,18 +34,30 @@ interface PaymentRow {
   flow:             'v1' | 'v2'
 }
 
-function readBlockEnv(value: string | undefined, fallback: bigint) {
-  try {
-    const clean = (value ?? '').trim()
-    return clean ? BigInt(clean) : fallback
-  } catch {
-    return fallback
-  }
+interface ApiPaymentRow {
+  id: string
+  txHash: `0x${string}`
+  blockNumber: string
+  timestamp: number | null
+  sender: `0x${string}`
+  recipientAmount: string
+  treasuryAmount: string
+  gasCostWei: string
+  gasReimbUsdc: string
+  status: 'settled' | 'incoming'
+  flow: 'v1' | 'v2'
 }
 
-// Oldest Base block to scan from. Keep this near the current factory deployment
-// so hosted RPCs do not reject large eth_getLogs ranges.
-const FROM_BLOCK = readBlockEnv(import.meta.env.VITE_FACTORY_FROM_BLOCK, 45_786_000n)
+function hydratePaymentRow(row: ApiPaymentRow): PaymentRow {
+  return {
+    ...row,
+    blockNumber: BigInt(row.blockNumber),
+    recipientAmount: BigInt(row.recipientAmount),
+    treasuryAmount: BigInt(row.treasuryAmount),
+    gasCostWei: BigInt(row.gasCostWei),
+    gasReimbUsdc: BigInt(row.gasReimbUsdc),
+  }
+}
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
@@ -64,6 +72,7 @@ export default function Dashboard() {
   const [routerAddr,    setRouterAddr]    = useState<`0x${string}` | null>(null)
   const [routerChecked, setRouterChecked] = useState(false)
   const [payments,      setPayments]      = useState<PaymentRow[]>([])
+  const [scanCursor,    setScanCursor]    = useState<bigint | null>(null)
   const [isLoading,     setIsLoading]     = useState(false)
   const [loadError,     setLoadError]     = useState<string | null>(null)
   const [ethPrice,      setEthPrice]      = useState(2_500)
@@ -74,7 +83,6 @@ export default function Dashboard() {
   const [balanceError,  setBalanceError]  = useState<string | null>(null)
   const [balanceOpen,   setBalanceOpen]   = useState(false)
 
-  const client = EVM_CLIENTS.base
   const meta   = CHAIN_META.base
   const evmValid = isAddress(evmAddr)
   const solanaValid = isValidSolanaAddress(solanaAddr)
@@ -101,20 +109,6 @@ export default function Dashboard() {
       .then((d: { ethereum?: { usd?: number } }) => { if (d?.ethereum?.usd) setEthPrice(d.ethereum.usd) })
       .catch(() => {})
   }, [])
-
-  // ── Predict router address ──────────────────────────────────────────────
-  useEffect(() => {
-    if (!evmValid) { setRouterAddr(null); setRouterChecked(true); return }
-    const factory = ROUTER_FACTORY['base']
-    if (!factory) return
-    setRouterChecked(false)
-    client.readContract({
-      address: factory, abi: FACTORY_GET_ROUTER_ABI,
-      functionName: 'getRouterAddress', args: [evmAddr as `0x${string}`],
-    })
-      .then(addr => { setRouterAddr(addr); setRouterChecked(true) })
-      .catch(() => setRouterChecked(true))
-  }, [evmAddr, evmValid])
 
   useEffect(() => {
     let cancelled = false
@@ -159,146 +153,64 @@ export default function Dashboard() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [evmAddr, solanaAddr, starkAddr, isMultiChain, netParam])
 
-  // ── Build a V1 PaymentRow from a PaymentRouted log ───────────────────
-  async function rowFromLog(log: {
-    transactionHash: `0x${string}` | null
-    blockNumber: bigint | null
-    logIndex: number
-    args: unknown
-  }): Promise<PaymentRow | null> {
-    if (!log.transactionHash || log.blockNumber == null) return null
-    const args = log.args as {
-      sender?: `0x${string}`
-      recipientAmount?: bigint
-      treasuryAmount?: bigint
+  // Load payment events through the backend reader.
+  const loadPayments = useCallback(async (opts?: { silent?: boolean; fromBlock?: bigint; merge?: boolean }) => {
+    if (!evmValid) {
+      setRouterAddr(null)
+      setRouterChecked(true)
+      setPayments([])
+      setScanCursor(null)
+      return
     }
-    const [receipt, block] = await Promise.all([
-      client.getTransactionReceipt({ hash: log.transactionHash }),
-      client.getBlock({ blockNumber: log.blockNumber }),
-    ])
-    return {
-      id:              `${log.transactionHash}-${log.logIndex}`,
-      txHash:          log.transactionHash,
-      blockNumber:     log.blockNumber,
-      timestamp:       block.timestamp ? Number(block.timestamp) * 1_000 : null,
-      sender:          args.sender ?? '0x0000000000000000000000000000000000000000',
-      recipientAmount: args.recipientAmount ?? 0n,
-      treasuryAmount:  args.treasuryAmount  ?? 0n,
-      gasCostWei:      receipt.gasUsed * receipt.effectiveGasPrice,
-      gasReimbUsdc:    0n,
-      status:          'settled',
-      flow:            'v1',
-    }
-  }
 
-  // ── Build a V2 PaymentRow from a PaymentRelayed log ───────────────────
-  async function rowFromRelayedLog(log: {
-    transactionHash: `0x${string}` | null
-    blockNumber: bigint | null
-    logIndex: number
-    args: unknown
-  }): Promise<PaymentRow | null> {
-    if (!log.transactionHash || log.blockNumber == null) return null
-    const args = log.args as {
-      payout?:      bigint
-      platformFee?: bigint
-      gasReimb?:    bigint
-    }
-    const block = await client.getBlock({ blockNumber: log.blockNumber })
-    return {
-      id:              `v2-${log.transactionHash}-${log.logIndex}`,
-      txHash:          log.transactionHash,
-      blockNumber:     log.blockNumber,
-      timestamp:       block.timestamp ? Number(block.timestamp) * 1_000 : null,
-      sender:          '0x0000000000000000000000000000000000000000',  // not in event
-      recipientAmount: args.payout      ?? 0n,
-      treasuryAmount:  args.platformFee ?? 0n,
-      gasCostWei:      0n,  // gas was reimbursed in USDC, not ETH
-      gasReimbUsdc:    args.gasReimb ?? 0n,
-      status:          'settled',
-      flow:            'v2',
-    }
-  }
-
-  // ── Load historical events (V1 PaymentRouted + V2 PaymentRelayed) ─────
-  const loadPayments = useCallback(async () => {
-    if (!routerAddr && !evmValid) return
-    setIsLoading(true); setLoadError(null)
+    if (!opts?.silent) setIsLoading(true)
+    setLoadError(null)
     try {
-      // V1: events from the per-recipient router contract
-      const v1Promise = routerAddr
-        ? client.getLogs({ address: routerAddr, event: PAYMENT_ROUTED_ABI[0], fromBlock: FROM_BLOCK, toBlock: 'latest' })
-            .then(logs => Promise.all(logs.map(rowFromLog)))
-        : Promise.resolve([])
+      const params = new URLSearchParams({ evm: evmAddr })
+      if (opts?.fromBlock != null) params.set('fromBlock', opts.fromBlock.toString())
+      const response = await fetch(`/api/dashboard-payments?${params.toString()}`)
+      const data = await response.json() as {
+        ok?: boolean
+        error?: string
+        routerAddr?: `0x${string}`
+        latestBlock?: string
+        rows?: ApiPaymentRow[]
+      }
+      if (!response.ok || !data.ok) throw new Error(data.error ?? 'Failed to load payments')
 
-      // V2: events from PayLinkFactoryV2, filtered by recipient
-      const v2Promise = FACTORY_V2_ADDRESS && evmValid
-        ? client.getLogs({
-            address:   FACTORY_V2_ADDRESS,
-            event:     PAYMENT_RELAYED_ABI[0],
-            fromBlock: FROM_BLOCK,
-            toBlock:   'latest',
-            args:      { recipient: evmAddr as `0x${string}` },
-          }).then(logs => Promise.all(logs.map(rowFromRelayedLog)))
-        : Promise.resolve([])
+      setRouterAddr(data.routerAddr ?? null)
+      setRouterChecked(true)
+      if (data.latestBlock) setScanCursor(BigInt(data.latestBlock))
 
-      const [v1Rows, v2Rows] = await Promise.all([v1Promise, v2Promise])
-      const all = [...v1Rows, ...v2Rows].filter(Boolean) as PaymentRow[]
-      setPayments(all.sort((a, b) => Number(b.blockNumber - a.blockNumber)))
+      const nextRows = (data.rows ?? []).map(hydratePaymentRow)
+      setPayments(prev => {
+        const merged = new Map<string, PaymentRow>()
+        if (opts?.merge) prev.forEach(row => merged.set(row.id, row))
+        nextRows.forEach(row => merged.set(row.id, row))
+        return [...merged.values()].sort((a, b) => Number(b.blockNumber - a.blockNumber))
+      })
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message.slice(0, 100) : 'Failed to load payments')
+      setRouterChecked(true)
+      setLoadError(err instanceof Error ? err.message.slice(0, 120) : 'Failed to load payments')
     } finally {
-      setIsLoading(false)
+      if (!opts?.silent) setIsLoading(false)
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [routerAddr, evmAddr, evmValid])
+  }, [evmAddr, evmValid])
 
   useEffect(() => {
-    if (routerAddr || (FACTORY_V2_ADDRESS && evmValid)) loadPayments()
-  }, [routerAddr, evmAddr, evmValid, loadPayments])
+    setRouterChecked(false)
+    loadPayments()
+  }, [loadPayments])
 
-  // ── Real-time listener: V1 PaymentRouted + V2 PaymentRelayed ─────────
+  // Lightweight live poll from the latest scanned block.
   useEffect(() => {
-    const unwatchers: (() => void)[] = []
-
-    if (routerAddr) {
-      unwatchers.push(client.watchContractEvent({
-        address:         routerAddr,
-        abi:             PAYMENT_ROUTED_ABI,
-        eventName:       'PaymentRouted',
-        pollingInterval: 2_000,
-        onLogs: async (logs) => {
-          const newRows = (await Promise.all(logs.map(rowFromLog))).filter(Boolean) as PaymentRow[]
-          setPayments(prev => {
-            const seen = new Set(prev.map(p => p.id))
-            const fresh = newRows.filter(r => !seen.has(r.id))
-            return fresh.length ? [...fresh, ...prev] : prev
-          })
-        },
-      }))
-    }
-
-    if (FACTORY_V2_ADDRESS && evmValid) {
-      unwatchers.push(client.watchContractEvent({
-        address:         FACTORY_V2_ADDRESS,
-        abi:             PAYMENT_RELAYED_ABI,
-        eventName:       'PaymentRelayed',
-        pollingInterval: 2_000,
-        args:            { recipient: evmAddr as `0x${string}` },
-        onLogs: async (logs) => {
-          const newRows = (await Promise.all(logs.map(rowFromRelayedLog))).filter(Boolean) as PaymentRow[]
-          setPayments(prev => {
-            const seen = new Set(prev.map(p => p.id))
-            const fresh = newRows.filter(r => !seen.has(r.id))
-            return fresh.length ? [...fresh, ...prev] : prev
-          })
-        },
-      }))
-    }
-
-    return () => unwatchers.forEach(u => u())
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [routerAddr, evmAddr, evmValid])
+    if (!evmValid || scanCursor == null) return
+    const timer = window.setInterval(() => {
+      const overlap = scanCursor > 20n ? scanCursor - 20n : scanCursor
+      void loadPayments({ silent: true, fromBlock: overlap, merge: true })
+    }, 8_000)
+    return () => window.clearInterval(timer)
+  }, [evmValid, scanCursor, loadPayments])
 
   // ── Computed helpers ──────────────────────────────────────────────────
   function gasCostUsdc(wei: bigint) { return Number(wei) / 1e18 * ethPrice }
@@ -367,7 +279,7 @@ export default function Dashboard() {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={loadPayments}
+            onClick={() => loadPayments()}
             disabled={isLoading}
             className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-all disabled:opacity-50"
           >
@@ -479,7 +391,7 @@ export default function Dashboard() {
           <div className="flex flex-col items-center gap-3 py-16 text-center">
             <AlertCircle className="h-8 w-8 text-red-300" />
             <p className="text-sm text-gray-500">{loadError}</p>
-            <button onClick={loadPayments} className="text-xs text-blue-500 underline underline-offset-2 hover:text-blue-700">
+            <button onClick={() => loadPayments()} className="text-xs text-blue-500 underline underline-offset-2 hover:text-blue-700">
               Try again
             </button>
           </div>

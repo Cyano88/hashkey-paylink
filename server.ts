@@ -40,6 +40,7 @@ import circleSolanaEmailHandler from './api/circle-solana-email.js'
 import agentVerifyHandler   from './api/agent-verify.js'
 import agentAskHandler     from './api/agent-ask.js'
 import checkAgentUrlHandler from './api/check-agent-url.js'
+import dashboardPaymentsHandler from './api/dashboard-payments.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -80,6 +81,7 @@ app.post('/api/circle-solana-email',   circleSolanaEmailHandler)
 app.all('/api/agent-verify',           agentVerifyHandler)
 app.post('/api/agent-ask',             agentAskHandler)
 app.get('/api/check-agent-url',        checkAgentUrlHandler)
+app.get('/api/dashboard-payments',     dashboardPaymentsHandler)
 app.get('/api/health',                 (_req, res) => res.json({ ok: true, ts: Date.now() }))
 // OG tag injection — must be before the SPA catch-all
 app.get('/stream/:vaultAddress',       streamOgHandler)
