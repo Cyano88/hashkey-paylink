@@ -1,9 +1,9 @@
 /**
- * PaymentRouterFactory integration + stable public clients.
+ * Stable public EVM clients and PayLinkFactoryV2 ABIs.
  *
- * Public clients are created once at module load (singletons) so they are
- * never re-instantiated on React re-renders. Components import EVM_CLIENTS
- * and call viem methods directly for router prediction and event watching.
+ * The legacy PaymentRouterFactory flow is no longer part of the active payment
+ * path. Components import EVM_CLIENTS and V2 ABIs for direct recipient payments
+ * and CREATE2 ghost-vault relays.
  */
 
 import { createPublicClient, http } from 'viem'
@@ -17,7 +17,6 @@ const RPC_URLS = {
   arbitrum: import.meta.env.VITE_RPC_URL_ARB      ?? 'https://arb1.arbitrum.io/rpc',
 } as const
 
-// ─── Stable public clients ────────────────────────────────────────────────────
 export const EVM_CLIENTS = {
   base:     createPublicClient({ chain: base,           transport: http(RPC_URLS.base) }),
   hashkey:  createPublicClient({ chain: hashkeyMainnet, transport: http(RPC_URLS.hashkey) }),
@@ -25,46 +24,7 @@ export const EVM_CLIENTS = {
   arbitrum: createPublicClient({ chain: arbitrum,       transport: http(RPC_URLS.arbitrum) }),
 } as const
 
-// ─── Factory addresses ────────────────────────────────────────────────────────
-export const ROUTER_FACTORY: Partial<Record<'base' | 'hashkey' | 'arc' | 'arbitrum', `0x${string}`>> = {
-  base:    '0x70Dd5226eB973268263A9AcD8BC48b4E59E7beCA',
-  hashkey: '0x70Dd5226eB973268263A9AcD8BC48b4E59E7beCA',
-  arc:     '0x70Dd5226eB973268263A9AcD8BC48b4E59E7beCA',
-}
-
-// ─── Factory ABIs ─────────────────────────────────────────────────────────────
-
-export const FACTORY_GET_ROUTER_ABI = [{
-  name: 'getRouterAddress',
-  type: 'function' as const,
-  stateMutability: 'view' as const,
-  inputs:  [{ name: 'recipient', type: 'address' }],
-  outputs: [{ name: '',          type: 'address' }],
-}] as const
-
-export const FACTORY_DEPLOY_ROUTER_ABI = [{
-  name: 'deployRouter',
-  type: 'function' as const,
-  stateMutability: 'nonpayable' as const,
-  inputs:  [{ name: 'recipient', type: 'address' }],
-  outputs: [{ name: '',          type: 'address' }],
-}] as const
-
-// ─── Router event ABIs ────────────────────────────────────────────────────────
-
-/** Emitted by PaymentRouter after every successful sweep split */
-export const PAYMENT_ROUTED_ABI = [{
-  name: 'PaymentRouted',
-  type: 'event' as const,
-  inputs: [
-    { name: 'token',           type: 'address', indexed: true  },
-    { name: 'sender',          type: 'address', indexed: true  },
-    { name: 'recipientAmount', type: 'uint256', indexed: false },
-    { name: 'treasuryAmount',  type: 'uint256', indexed: false },
-  ],
-}] as const
-
-/** Standard ERC-20 Transfer — used to detect USDC arriving at router instantly */
+/** Standard ERC-20 Transfer, used for direct recipient receipt detection. */
 export const ERC20_TRANSFER_ABI = [{
   name: 'Transfer',
   type: 'event' as const,
@@ -75,16 +35,7 @@ export const ERC20_TRANSFER_ABI = [{
   ],
 }] as const
 
-/** Router sweep ABI — called by keeper or connected wallet to trigger split */
-export const ROUTER_SWEEP_ABI = [{
-  name: 'sweep',
-  type: 'function' as const,
-  stateMutability: 'nonpayable' as const,
-  inputs:  [{ name: 'token', type: 'address' }],
-  outputs: [],
-}] as const
-
-/** ERC-20 balanceOf — used for manual "Check Status" polls */
+/** ERC-20 balanceOf, used by the manual "Check Status" poll. */
 export const ERC20_BALANCE_OF_ABI = [{
   name: 'balanceOf',
   type: 'function' as const,
@@ -93,12 +44,9 @@ export const ERC20_BALANCE_OF_ABI = [{
   outputs: [{ name: '',        type: 'uint256' }],
 }] as const
 
-// ─── V2: PayLinkFactoryV2 (Direct Send / Ghost Address flow) ─────────────────
-
 /**
  * Per-chain PayLinkFactoryV2 addresses.
- * All three chains fall back to VITE_FACTORY_V2 if their dedicated var is not
- * set — useful once the deterministic factory is deployed (same address everywhere).
+ * All chains fall back to VITE_FACTORY_V2 if their dedicated var is not set.
  */
 export const FACTORY_V2_ADDRESSES: Partial<Record<'base' | 'arc' | 'hashkey' | 'arbitrum', `0x${string}`>> = {
   base:     (import.meta.env.VITE_FACTORY_V2         ?? '') as `0x${string}`,
@@ -107,10 +55,10 @@ export const FACTORY_V2_ADDRESSES: Partial<Record<'base' | 'arc' | 'hashkey' | '
   arbitrum: (import.meta.env.VITE_FACTORY_V2_ARB     ?? import.meta.env.VITE_FACTORY_V2 ?? '') as `0x${string}`,
 }
 
-/** Convenience alias — Base factory address (backward compat). */
+/** Convenience alias: Base factory address. */
 export const FACTORY_V2_ADDRESS = FACTORY_V2_ADDRESSES.base ?? ('' as `0x${string}`)
 
-/** Emitted by PayLinkFactoryV2.relay() after a successful ghost-vault sweep */
+/** Emitted by PayLinkFactoryV2.relay() after a successful ghost-vault sweep. */
 export const PAYMENT_RELAYED_ABI = [{
   name: 'PaymentRelayed',
   type: 'event' as const,
@@ -123,7 +71,7 @@ export const PAYMENT_RELAYED_ABI = [{
   ],
 }] as const
 
-/** Emitted by PayLinkFactoryV2.relayNative() after a native token (HSK) split */
+/** Emitted by PayLinkFactoryV2.relayNative() after a native token split. */
 export const NATIVE_PAYMENT_RELAYED_ABI = [{
   name: 'NativePaymentRelayed',
   type: 'event' as const,
@@ -136,7 +84,7 @@ export const NATIVE_PAYMENT_RELAYED_ABI = [{
   ],
 }] as const
 
-/** getVaultAddress(linkId, recipient) — pre-computes the ghost vault address off-chain */
+/** getVaultAddress(linkId, recipient): pre-computes the ghost vault address. */
 export const FACTORY_V2_GET_VAULT_ABI = [{
   name: 'getVaultAddress',
   type: 'function' as const,

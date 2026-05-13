@@ -148,7 +148,6 @@ export default function Dashboard() {
   const isMultiChain = searchParams.get('multi') === '1'
   const telegramUrl = telegramReturnUrl(searchParams)
 
-  const [routerAddr,    setRouterAddr]    = useState<`0x${string}` | null>(null)
   const [routerChecked, setRouterChecked] = useState(false)
   const [payments,      setPayments]      = useState<PaymentRow[]>([])
   const [scanCursor,    setScanCursor]    = useState<bigint | null>(null)
@@ -256,7 +255,6 @@ export default function Dashboard() {
     }
 
     if (!evmValid) {
-      setRouterAddr(null)
       setRouterChecked(true)
       setPayments([])
       setScanCursor(null)
@@ -272,13 +270,11 @@ export default function Dashboard() {
       const data = await response.json() as {
         ok?: boolean
         error?: string
-        routerAddr?: `0x${string}`
         latestBlock?: string
         rows?: ApiPaymentRow[]
       }
       if (!response.ok || !data.ok) throw new Error(data.error ?? 'Failed to load payments')
 
-      setRouterAddr(data.routerAddr ?? null)
       setRouterChecked(true)
       if (data.latestBlock) setScanCursor(BigInt(data.latestBlock))
 
@@ -374,15 +370,6 @@ export default function Dashboard() {
                 ? truncateAddress(solanaAddr, 12)
                 : truncateAddress(starkAddr, 12)}
           </p>
-          {routerAddr && (
-            <p className="mt-1 flex items-center gap-1.5 text-[11px] text-gray-400">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-              Router: <span className="font-mono">{truncateAddress(routerAddr, 8)}</span>
-              <a href={`${meta.explorerUrl}/address/${routerAddr}`} target="_blank" rel="noopener noreferrer">
-                <ExternalLink className="h-2.5 w-2.5 text-gray-300 hover:text-gray-500" />
-              </a>
-            </p>
-          )}
         </div>
         <div className="flex items-center gap-2">
           <button

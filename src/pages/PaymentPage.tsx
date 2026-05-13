@@ -12,7 +12,6 @@ import {
   useWaitForTransactionReceipt,
   useSignTypedData,
   useReadContract,
-  useWriteContract,
   useWalletClient,
 } from 'wagmi'
 import { ConnectButton, useConnectModal } from '@rainbow-me/rainbowkit'
@@ -39,13 +38,8 @@ import {
 } from '../lib/chains'
 import {
   EVM_CLIENTS,
-  ROUTER_FACTORY,
-  FACTORY_GET_ROUTER_ABI,
-  FACTORY_DEPLOY_ROUTER_ABI,
-  PAYMENT_ROUTED_ABI,
   ERC20_TRANSFER_ABI,
   ERC20_BALANCE_OF_ABI,
-  ROUTER_SWEEP_ABI,
   FACTORY_V2_ADDRESSES,
 } from '../lib/router'
 import { useStarknet } from '../lib/StarknetContext'
@@ -282,9 +276,6 @@ export default function PaymentPage() {
   const [receivedAmount,    setReceivedAmount]    = useState<bigint | null>(null)
   const [showCheckButton,   setShowCheckButton]   = useState(false)
   const [isManualChecking,  setIsManualChecking]  = useState(false)
-  const [sweepState,        setSweepState]        = useState<'idle' | 'calling' | 'pending_profitability' | 'done' | 'failed'>('idle')
-  const [sweepTxHash,       setSweepTxHash]       = useState<string | null>(null)
-  const [sweepBalanceUsdc,  setSweepBalanceUsdc]  = useState<number | null>(null)
 
   // ── Event mode ─────────────────────────────────────────────────────────────
   // Capture event params from the INITIAL URL at mount — before the direct-send
@@ -350,8 +341,6 @@ export default function PaymentPage() {
   const directPollRef    = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // ── Router state (predicted via public RPC, no wallet needed) ─────────────
-  const [routerAddr,    setRouterAddr]    = useState<`0x${string}` | null>(null)
-  const [routerDeployed, setRouterDeployed] = useState<boolean | null>(null)
 
   // ── Stale-closure guards ─────────────────────────────────────────────────
   const detectedRef = useRef(false)
@@ -435,8 +424,6 @@ export default function PaymentPage() {
     useWaitForTransactionReceipt({ hash: ghoRelayHash, chainId: 42161 })
 
   const { signTypedDataAsync, isPending: isSignPending, reset: resetPermitSign } = useSignTypedData()
-
-  const { writeContract: callSweep, isPending: isSweeping } = useWriteContract()
 
   const { data: permitNonce } = useReadContract({
     address: chain === 'base'
@@ -523,8 +510,7 @@ export default function PaymentPage() {
   const activeRecipient = chain === 'starknet' ? resolvedStark
     : chain === 'solana' ? resolvedSolana
     : resolvedEvm
-  const displayAddress  = (isEvmChain && routerAddr) ? routerAddr : activeRecipient
-  const isRouterAddress = isEvmChain && !!routerAddr
+  const displayAddress  = activeRecipient
   const circlePaymasterConfig = getCirclePaymasterConfig(chain)
   const showCirclePaymasterButton = !!circlePaymasterConfig && (chain === 'base' || chain === 'arbitrum')
   const showCircleEvmEmailPay = canUseCircleEvmEmailWallet(chain)
@@ -633,43 +619,6 @@ export default function PaymentPage() {
   ])
 
   // ── Step 1: Predict router address + check deployment ────────────────────
-  useEffect(() => {
-    if (!resolvedEvm || chain === 'starknet') {
-      setRouterAddr(null)
-      setRouterDeployed(null)
-      return
-    }
-    const factory = ROUTER_FACTORY[chain as 'base' | 'hashkey' | 'arc' | 'arbitrum']
-    if (!factory) { setRouterAddr(null); setRouterDeployed(null); return }
-
-    const client = EVM_CLIENTS[chain as 'base' | 'hashkey' | 'arc' | 'arbitrum']
-    let cancelled = false
-    setRouterAddr(null)
-    setRouterDeployed(null)
-
-    async function predict() {
-      try {
-        const router = await client.readContract({
-          address: factory!,
-          abi: FACTORY_GET_ROUTER_ABI,
-          functionName: 'getRouterAddress',
-          args: [resolvedEvm as `0x${string}`],
-        })
-        if (cancelled) return
-        setRouterAddr(router)
-
-        const code = await client.getBytecode({ address: router })
-        if (cancelled) return
-        setRouterDeployed(!!code && code !== '0x')
-      } catch {
-        if (!cancelled) { setRouterAddr(null); setRouterDeployed(false) }
-      }
-    }
-    predict()
-    return () => { cancelled = true }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resolvedEvm, chain])
-
   // ── Step 2: Real-time payment listener ───────────────────────────────────
   useEffect(() => {
     if (manualPayDetected || chain === 'starknet' || chain === 'solana' || !resolvedEvm) return
@@ -678,7 +627,6 @@ export default function PaymentPage() {
     const client   = EVM_CLIENTS[evmChain]
 
     let unwatchTransfer: (() => void) | undefined
-    let unwatchRouted:   (() => void) | undefined
     let hskTimer:        ReturnType<typeof setInterval> | undefined
 
     if (chain === 'hashkey') {
@@ -708,7 +656,7 @@ export default function PaymentPage() {
         !!circleEvmEmailSession &&
         circleEvmEmailMerchantUnits != null &&
         (chain === 'base' || chain === 'arbitrum')
-      const watchTarget = (isCircleEmailEvmWatch ? resolvedEvm : (routerAddr ?? resolvedEvm)) as `0x${string}`
+      const watchTarget = resolvedEvm as `0x${string}`
       const requestedUnits =
         isCircleEmailEvmWatch && circleEvmEmailMerchantUnits
           ? circleEvmEmailMerchantUnits
@@ -729,9 +677,7 @@ export default function PaymentPage() {
             setReceivedAmount(
               isCircleEmailEvmWatch
                 ? circleRequiredUnits
-                : isRouterAddress
-                  ? value * 9950n / 10000n
-                  : value,
+                : value,
             )
             setManualTxHash(log.transactionHash ?? null)
             setCirclePasskeyError(null)
@@ -741,35 +687,16 @@ export default function PaymentPage() {
         },
       })
 
-      if (routerAddr) {
-        unwatchRouted = client.watchContractEvent({
-          address:         routerAddr,
-          abi:             PAYMENT_ROUTED_ABI,
-          eventName:       'PaymentRouted',
-          pollingInterval: 2_000,
-          onLogs(logs) {
-            if (detectedRef.current) return
-            const log = logs[0]
-            if (!log)  return
-            const args = log.args as { recipientAmount?: bigint }
-            if (args.recipientAmount != null) setReceivedAmount(args.recipientAmount)
-            setManualTxHash(log.transactionHash ?? null)
-            setManualPayDetected(true)
-          },
-        })
-      }
     }
 
     return () => {
       unwatchTransfer?.()
-      unwatchRouted?.()
       if (hskTimer) clearInterval(hskTimer)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     chain,
     resolvedEvm,
-    routerAddr,
     manualPayDetected,
     amt,
     effectiveAmt,
@@ -780,32 +707,6 @@ export default function PaymentPage() {
   ])
 
   // ── Auto-sweep keeper ─────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!manualPayDetected || !isRouterAddress || !routerAddr || chain === 'hashkey') return
-    if (payMode === 'wallet' && showCircleEvmEmailPay && circleEvmEmailSession) return
-    setSweepState('calling')
-    const evmChain = chain as 'base' | 'arc' | 'arbitrum'
-    fetch('/api/sweep', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ router: routerAddr, chain: evmChain }),
-    })
-      .then(r => r.json())
-      .then((data: { ok: boolean; status?: string; tx?: string; balanceUsdc?: number }) => {
-        if (data.balanceUsdc != null) setSweepBalanceUsdc(data.balanceUsdc)
-        if (data.status === 'swept' || data.status === 'empty') {
-          setSweepTxHash(data.tx ?? null)
-          setSweepState('done')
-        } else if (data.status === 'pending_profitability') {
-          setSweepState('pending_profitability')
-        } else {
-          setSweepState('failed')
-        }
-      })
-      .catch(() => setSweepState('failed'))
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [manualPayDetected])
-
   // ── Reset payMode on chain switch: Smart Wallet is primary; direct is explicit ─
   useEffect(() => {
     setPayMode(modeParam === 'direct' && chain !== 'starknet' ? 'direct' : 'wallet')
@@ -989,37 +890,6 @@ export default function PaymentPage() {
   }, [solanaDirectStatus])
 
   // ── Manual claim fallback ─────────────────────────────────────────────────
-  async function handleManualClaim() {
-    if (!routerAddr || !isRouterAddress) return
-    const tokenAddress = CHAIN_META[chain as 'base' | 'arc' | 'arbitrum'].tokenAddress
-    setSweepState('calling')
-    try {
-      const res  = await fetch('/api/sweep', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ router: routerAddr, chain }),
-      })
-      const data = await res.json() as { ok: boolean; status?: string; tx?: string }
-      if (data.ok && (data.status === 'swept' || data.status === 'empty')) {
-        setSweepTxHash(data.tx ?? null)
-        setSweepState('done')
-        return
-      }
-    } catch { /* fall through to wallet sweep */ }
-    if (isConnected) {
-      callSweep({
-        address:      routerAddr,
-        abi:          ROUTER_SWEEP_ABI,
-        functionName: 'sweep',
-        args:         [tokenAddress],
-        chainId:      targetChainId,
-      })
-      setSweepState('done')
-    } else {
-      setSweepState('failed')
-    }
-  }
-
   // ── "Check Status" button ─────────────────────────────────────────────────
   useEffect(() => {
     if (manualPayDetected || chain === 'starknet' || chain === 'solana' || !resolvedEvm) return
@@ -1043,14 +913,14 @@ export default function PaymentPage() {
         }
       } else {
         const tokenAddress   = CHAIN_META[evmChain as 'base' | 'arc' | 'arbitrum'].tokenAddress
-        const target         = (routerAddr ?? resolvedEvm) as `0x${string}`
+        const target         = resolvedEvm as `0x${string}`
         const requestedUnits = parseUnits(effectiveAmt || '0', meta.decimals)
         const balance = await client.readContract({
           address: tokenAddress, abi: ERC20_BALANCE_OF_ABI,
           functionName: 'balanceOf', args: [target],
         })
         if (balance >= requestedUnits * 99n / 100n) {
-          setReceivedAmount(isRouterAddress ? balance * 9950n / 10000n : balance)
+          setReceivedAmount(balance)
           setManualTxHash(null); setManualPayDetected(true)
         }
       }
@@ -1089,8 +959,7 @@ export default function PaymentPage() {
     setManualPayDetected(false); setManualTxHash(null); setReceivedAmount(null)
     setCirclePaymasterPending(false); setCirclePaymasterTxHash(null); setCirclePaymasterError(null)
     setCirclePasskeyPending(false); setCirclePasskeyError(null); setCircleSmartAccount(null); setCircleEvmEmailSession(null); setCircleEvmPaymentProcessing(false); setCircleWalletCopied(false)
-    setRouterAddr(null); setRouterDeployed(null); setShowCheckButton(false)
-    setSweepState('idle'); setSweepTxHash(null); setSweepBalanceUsdc(null)
+    setShowCheckButton(false)
     // Reset direct send state
     setDirectLinkId(null); setDirectVault(null); setStarkDirectAddr(null)
     setDirectStatus('idle'); setDirectTxHash(null); setDirectError(null)
@@ -1880,9 +1749,7 @@ export default function PaymentPage() {
   // ────────────────────────────────────────────────────────────────────────────
   if (isConfirmed) {
     const explorerTxUrl    = txHash      ? `${meta.explorerUrl}/tx/${txHash}`      : null
-    const sweepExplorerUrl = sweepTxHash ? `${meta.explorerUrl}/tx/${sweepTxHash}` : null
     void explorerTxUrl
-    void sweepExplorerUrl
 
     const recipientAmt = receivedAmount != null
       ? Number(receivedAmount) / Math.pow(10, meta.decimals)
@@ -1895,20 +1762,9 @@ export default function PaymentPage() {
       ? (requested - (recipientAmt ?? 0)).toFixed(meta.decimals <= 6 ? 4 : 6)
       : null
 
-    // isRouterAddress already implies chain !== 'starknet'; only exclude hashkey separately
-    const showSweepStatus = isRouterAddress && chain !== 'hashkey'
-    const sweepLabel =
-      sweepState === 'calling'               ? 'Distributing funds…' :
-      sweepState === 'done'                  ? 'Funds distributed to recipient ✓' :
-      sweepState === 'pending_profitability' ? 'Payment Secured — Optimizing network route for delivery…' :
-      sweepState === 'failed'                ? 'Auto-distribution failed' : null
-
-    const requestedUsdc = parseFloat(effectiveAmt) || 0
-    const isBatch = sweepBalanceUsdc != null && sweepBalanceUsdc > requestedUsdc * 1.01
-
     const primaryExplorerUrl = chain === 'hashkey'
       ? (txHash ? `${meta.explorerUrl}/tx/${txHash}` : null)
-      : (sweepTxHash ? `${meta.explorerUrl}/tx/${sweepTxHash}` : txHash ? `${meta.explorerUrl}/tx/${txHash}` : null)
+      : (txHash ? `${meta.explorerUrl}/tx/${txHash}` : null)
 
     return (
       <div className="mx-auto max-w-md animate-scale-in">
@@ -1949,7 +1805,7 @@ export default function PaymentPage() {
                     {recipientAmt.toFixed(meta.decimals <= 6 ? 4 : 6)} {meta.asset}
                   </span>
                   {' '}
-                  {isUnder ? 'received — ' : 'received via payment router'}
+                  {isUnder ? 'received — ' : 'received by recipient'}
                   {isUnder && (
                     <span className={cn(
                       'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold',
@@ -1969,75 +1825,13 @@ export default function PaymentPage() {
                   <span className="font-semibold text-gray-900">
                     {formatAmount(effectiveAmt, meta.decimals)} {meta.asset}
                   </span>{' '}
-                  {manualPayDetected && directStatus !== 'success' ? 'received at router' : 'delivered successfully'}
+                  {manualPayDetected && directStatus !== 'success' ? 'received by recipient' : 'delivered successfully'}
                 </>
               )}
             </p>
           </div>
 
           <div className="p-6 space-y-4">
-            {showSweepStatus && sweepLabel && (
-              <div className={cn(
-                'flex items-center gap-2.5 rounded-xl border px-3.5 py-2.5',
-                sweepState === 'calling'               ? 'border-blue-100 bg-blue-50'
-                : sweepState === 'done'                ? 'border-emerald-100 bg-emerald-50'
-                : sweepState === 'pending_profitability' ? 'border-amber-200 bg-amber-50'
-                : 'border-red-100 bg-red-50',
-              )}>
-                {sweepState === 'calling'               && <Loader2     className="h-3.5 w-3.5 shrink-0 animate-spin text-blue-500" />}
-                {sweepState === 'done'                  && <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-500" />}
-                {sweepState === 'pending_profitability' && <Loader2     className="h-3.5 w-3.5 shrink-0 animate-spin text-amber-500" />}
-                {sweepState === 'failed'                && <AlertCircle  className="h-3.5 w-3.5 shrink-0 text-red-400" />}
-                <p className={cn(
-                  'flex-1 text-[11px] font-medium',
-                  sweepState === 'calling'               ? 'text-blue-700'
-                  : sweepState === 'done'                ? 'text-emerald-700'
-                  : sweepState === 'pending_profitability' ? 'text-amber-700'
-                  : 'text-red-600',
-                )}>
-                  {sweepLabel}
-                </p>
-                {sweepTxHash && (
-                  <a href={`${meta.explorerUrl}/tx/${sweepTxHash}`} target="_blank" rel="noopener noreferrer">
-                    <ExternalLink className="h-3 w-3 text-emerald-400 hover:text-emerald-600" />
-                  </a>
-                )}
-              </div>
-            )}
-            {showSweepStatus && isBatch && sweepState === 'done' && (
-              <div className="rounded-xl border border-blue-100 bg-blue-50 px-3.5 py-2.5">
-                <p className="text-[11px] text-blue-700 font-medium">
-                  Settled: {sweepBalanceUsdc!.toFixed(4)} USDC
-                  {' '}<span className="font-normal text-blue-500">(includes previous pending balances)</span>
-                </p>
-              </div>
-            )}
-
-            {showSweepStatus && sweepState === 'failed' && (
-              <div className="rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-3 space-y-2">
-                <p className="text-[11px] text-amber-700 font-medium">
-                  The automatic distributor couldn't complete the sweep. You can claim manually:
-                </p>
-                <button
-                  onClick={handleManualClaim}
-                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-xs font-semibold text-white hover:bg-amber-600 active:scale-[0.98] transition-all"
-                >
-                  <Zap className="h-3.5 w-3.5" />
-                  Retry Distribution (Gas Sponsored)
-                </button>
-                {isConnected && (
-                  <p className="text-center text-[10px] text-amber-600">
-                    or connect wallet — Manual Claim uses your gas
-                  </p>
-                )}
-                {!isConnected && (
-                  <div className="flex justify-center pt-1">
-                    <ConnectButton label="Connect to Claim Manually" />
-                  </div>
-                )}
-              </div>
-            )}
-
             <div className="divide-y divide-gray-100 rounded-xl border border-gray-100 bg-gray-50/60 overflow-hidden">
               <Row label="Amount"    value={`${formatAmount(effectiveAmt, meta.decimals)} ${meta.asset}`} mono={false} />
               <Row label="Recipient" value={truncateAddress(activeRecipient, 8)} mono />
@@ -3046,7 +2840,6 @@ export default function PaymentPage() {
               : isBasePaymasterPending ? <><Loader2 className="h-4 w-4 animate-spin" /> Requesting sponsored gas…</>
               : isEvmWalletPending  ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirm in Wallet…</>
               : isConfirming        ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirming on Chain…</>
-              : isSweeping          ? <><Loader2 className="h-4 w-4 animate-spin" /> Routing payment…</>
               : <><Zap className="h-4 w-4" /> Pay {formatAmount(effectiveAmt, meta.decimals)} {meta.asset} on {meta.label}</>}
               </button>
             </div>

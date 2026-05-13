@@ -20,7 +20,7 @@ The active product is selected by hostname — StreamPay loads automatically on 
 hashkey-paylink/
 ├── src/                      # Hash PayLink — React frontend
 ├── api/                      # Hash PayLink — Express API handlers
-├── contracts/                # Hardhat project (FeeRouter + PayLinkFactoryV2)
+├── contracts/                # Hardhat project (PayLinkFactoryV2 + archived router contracts)
 ├── modules/
 │   └── streampay/            # StreamPay — fully self-contained module
 ├── server.ts                 # Shared Express server
@@ -86,18 +86,18 @@ This is the core innovation of Hash PayLink. **On every supported chain, the pay
 
 ---
 
-### Base & Arc — EIP-2612 Permit + Multicall3 (Wallet Connect)
+### Base & Arbitrum — Circle Smart Wallet / EVM Wallet Checkout
 
-1. The payer signs an **EIP-2612 permit** — an off-chain typed signature (`signTypedData`) that authorises the FeeRouter contract to spend their USDC. This signature costs zero gas.
-2. Hash PayLink combines the `permit()` call and the `transferFrom()` in a single **Multicall3 `aggregate3`** transaction.
-3. The payer's wallet submits **one transaction** that simultaneously validates the permit and routes USDC to the recipient minus the platform fee. The payer pays the (small) Base/Arc gas fee in ETH/USDC — but on Base this is fractions of a cent, and on Arc the native USDC gas model keeps it negligible.
-4. On **Base Mainnet**, every transaction appends the ERC-8021 Base Builder Code (`bc_8qtb7tny`) to the calldata for Base attribution.
+1. Circle email smart-wallet payments route USDC directly to the merchant and treasury in one hosted checkout flow.
+2. Connected EVM wallet payments use direct recipient/treasury transfers. There is no active legacy PaymentRouter dependency in the production app.
+3. Sponsored smart-wallet payments can include a small transparent USDC gas recovery amount routed to treasury.
+4. On **Base Mainnet**, every supported connected-wallet transaction appends the ERC-8021 Base Builder Code (`bc_8qtb7tny`) to calldata for Base attribution.
 
-> **Why this matters:** The payer never approves a separate ERC-20 `approve()` transaction. The permit and payment happen atomically in a single signature + one tx.
+> **Why this matters:** the production payment surface stays direct and stateless. Hash PayLink does not custody funds or depend on a pre-deployed merchant router.
 
 ---
 
-### Base & Arc — CREATE2 Ghost Vault (Send via Address)
+### Base, Arbitrum & Arc — CREATE2 Ghost Vault (Send via Address)
 
 1. When the payer selects "Send via Address", Hash PayLink calls `PayLinkFactoryV2.getVaultAddress(linkId, recipient)` — a **pure on-chain computation** that predicts a deterministic CREATE2 address. No transaction needed.
 2. The payer sends USDC to this address from **any wallet, CEX withdrawal, or existing balance** — no wallet connection required.
@@ -194,7 +194,6 @@ After payment confirmation, the payer sees a full-screen success card with:
 - Chain-specific glow effect and brand colors
 - Exact amount received (actual on-chain value)
 - Transaction hash with direct explorer link
-- Sweep/distribution status (Base/Arc router flows)
 - Event registration confirmation (multi-payer mode)
 
 ---
@@ -704,17 +703,12 @@ Hash PayLink remains stateless and non-custodial: this is fee/revenue analytics 
 ```
 src/
 ├── lib/
-│   ├── chains.ts              ← ChainKey, CHAIN_META (all 5 chains), PLATFORM_FEE_BPS
-│   ├── wagmi.ts               ← wagmiConfig (Base + HashKey + Arc)
-│   ├── router.ts              ← FeeRouter factory + ABI constants
+│   ├── chains.ts              ← ChainKey, CHAIN_META, PLATFORM_FEE_BPS
+│   ├── wagmi.ts               ← wagmiConfig
+│   ├── router.ts              ← EVM clients + PayLinkFactoryV2 ABI constants
 │   ├── utils.ts               ← encodeErc20Transfer, fee helpers, formatAmount
 │   ├── StarknetContext.tsx    ← Global Starknet wallet state (ArgentX/Braavos)
 │   └── SolanaContext.tsx      ← Global Solana wallet state (Phantom/Solflare/Backpack)
-│
-├── sdk/                       ← @hashpaylink/sdk public surface
-│   ├── index.ts               ← Exports: PayLinkButton, CHAIN_META, types
-│   ├── PayLinkButton.tsx      ← Drop-in component (hosted + inline modes)
-│   └── types.ts               ← TypeScript interfaces
 │
 ├── pages/
 │   ├── CreateLink.tsx         ← Link generator — all options, QR download
@@ -728,13 +722,15 @@ src/
 api/
 ├── relay-v2.ts                ← EVM Direct Send relay (Base + Arc)
 ├── relay-solana.ts            ← Solana gasless relay + vault sweep
-├── sweep.ts                   ← EVM FeeRouter sweep
 ├── event-register.ts          ← Multi-payer event log
 └── tx-status.ts               ← Hash Assistant tx lookup
 
 contracts/
 ├── PayLinkFactoryV2.sol       ← CREATE2 vault factory + relay logic
-└── FeeRouter.sol              ← On-chain fee splitting router
+└── PaymentRouter*.sol         ← Archived legacy router contracts
+
+packages/
+└── sdk/                       ← @hashpaylink/sdk public package
 ```
 
 ---
@@ -761,6 +757,8 @@ SOLANA_RPC_URL=                   # Private QuickNode Solana RPC
 PAYLINK_FACTORY_V2=               # PayLinkFactoryV2 contract address (Base)
 PAYLINK_FACTORY_V2_ARC=           # PayLinkFactoryV2 contract address (Arc)
 TREASURY_ADDRESS=                 # EVM treasury cold wallet
+ADMIN_SECRET=                     # Long random secret for protected maintenance endpoints
+CRON_SECRET=                      # Optional long random secret for cron/maintenance calls
 SOLANA_TREASURY=                  # Solana treasury wallet address
 ```
 

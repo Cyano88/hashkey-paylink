@@ -62,17 +62,9 @@ Content-Type: application/json
 
       <Section title="EVM Relay">
         <SubSection title="POST /api/relay-v2">
-          <p>Gasless relay for Base, Arc, HashKey, and Arbitrum. Executes EIP-2612 permit + Multicall3 transfer atomically, or sweeps a ghost vault. The payer covers negligible gas on the source chain.</p>
+          <p>Gasless relay for Base, Arc, HashKey, and Arbitrum. Executes EIP-2612 permit + Multicall3 transfer atomically, or settles a PayLinkFactoryV2 ghost vault. The legacy router sweep endpoints are not mounted in production.</p>
           <CodeBlock lang="json">{`POST /api/relay-v2
 { "chain": "base", "permit": { ... }, "transfer": { ... } }`}</CodeBlock>
-        </SubSection>
-
-        <SubSection title="POST /api/sweep">
-          <p>Triggers immediate sweep of a ghost vault to the recipient. Used when a direct USDC send to the vault address is detected.</p>
-        </SubSection>
-
-        <SubSection title="GET /api/sweep-keeper">
-          <p>Batch sweep endpoint for the cron keeper. Scans for unswept vault balances and settles them. Protected by <Code>CRON_SECRET</Code> environment variable.</p>
         </SubSection>
       </Section>
 

@@ -29,8 +29,9 @@ export default function EnvironmentDocs() {
             ['RELAYER_PRIVATE_KEY_ARC',       'No',  'Arc-specific relayer key. Falls back to RELAYER_PRIVATE_KEY.'],
             ['RELAYER_PRIVATE_KEY_HASHKEY',   'No',  'HashKey-specific relayer key. Falls back to RELAYER_PRIVATE_KEY.'],
             ['RELAYER_PRIVATE_KEY_ARB',       'No',  'Arbitrum-specific relayer key. Falls back to RELAYER_PRIVATE_KEY.'],
-            ['KEEPER_PRIVATE_KEY',            'No',  'Wallet for batch ghost-vault sweeps. Used by /api/sweep-keeper cron.'],
             ['TREASURY_ADDRESS',              'No',  'EVM treasury wallet that receives platform fees.'],
+            ['ADMIN_SECRET',                   'Yes', 'Long random secret for protected maintenance endpoints. Keep separate from public VITE_ variables.'],
+            ['CRON_SECRET',                    'No',  'Optional long random secret for authenticated cron/maintenance calls.'],
             ['PAYLINK_FACTORY_V2',            'Yes', 'PayLinkFactoryV2 contract address on Base.'],
             ['PAYLINK_FACTORY_V2_ARC',        'No',  'Factory address on Arc.'],
             ['PAYLINK_FACTORY_V2_HASHKEY',    'No',  'Factory address on HashKey.'],
@@ -67,7 +68,6 @@ export default function EnvironmentDocs() {
             ['VITE_RPC_URL_ARB',              'No',  'Frontend Arbitrum RPC for wallet clients and lightweight reads.'],
             ['VITE_RPC_URL_HASHKEY',          'No',  'Frontend HashKey RPC for wallet clients and lightweight reads.'],
             ['FACTORY_FROM_BLOCK',            'No',  'Server-side Base block from which to scan dashboard/factory events. Default: 45786000.'],
-            ['CRON_SECRET',                   'No',  'Secret token for authenticating /api/sweep-keeper cron requests.'],
           ]}
         />
       </Section>

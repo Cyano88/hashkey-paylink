@@ -3,8 +3,6 @@
  *
  * Serves:
  *   - /api/relay-v2      POST  — V2 ghost-vault relay (RELAYER_PRIVATE_KEY)
- *   - /api/sweep         POST  — immediate single-router sweep (KEEPER_PRIVATE_KEY)
- *   - /api/sweep-keeper  GET   — batch sweep keeper (hit by external cron)
  *   - /api/relay-stream  POST  — Streampay gasless claim/cancel on Arc
  *   - /api/health        GET   — liveness probe (used by RelayerWakeUp component)
  *   - /*                       — Vite production build (dist/)
@@ -20,8 +18,6 @@ import recoverStarknetHandler from './api/recover-starknet.js'
 import starkBalanceHandler    from './api/starknet-balance.js'
 import solanaBalanceHandler   from './api/solana-balance.js'
 import setupRelayerHandler    from './api/setup-relayer.js'
-import sweepHandler           from './api/sweep.js'
-import keeperHandler          from './api/sweep-keeper.js'
 // ── Streampay module ──────────────────────────────────────────────────────────
 import relayStreamHandler               from './modules/streampay/api/relay-stream.js'
 import streamOgHandler                 from './modules/streampay/api/stream-og.js'
@@ -61,8 +57,6 @@ app.post('/api/starknet-balance',      starkBalanceHandler)
 app.post('/api/solana-balance',        solanaBalanceHandler)
 app.get('/api/setup-starknet-relayer', setupRelayerHandler)
 app.post('/api/recover-starknet',      recoverStarknetHandler)
-app.all('/api/sweep',                  relayLimiter, sweepHandler)       // frontend uses POST; cron can use GET
-app.get('/api/sweep-keeper',           keeperHandler)
 // ── Streampay routes ──────────────────────────────────────────────────────────
 app.post('/api/relay-stream',          relayLimiter, relayStreamHandler)
 app.post('/api/settle-poa',            relayLimiter, settlePoaHandler)

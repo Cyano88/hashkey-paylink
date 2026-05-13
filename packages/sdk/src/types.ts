@@ -10,26 +10,45 @@ export interface PaymentSuccessParams {
   timestamp: number
 }
 
-export interface PayLinkButtonProps {
-  /** EVM recipient address (Base, HashKey, Arc) — 0x + 40 hex chars */
+export interface PayLinkUrlOptions {
+  /** Hosted checkout origin. Defaults to https://hashpaylink.com. */
+  baseUrl?: string
+  /** Preferred checkout network for single-chain links. */
+  network?: ChainKey
+  /** EVM recipient address for Base, Arbitrum, Arc, or HashKey. */
   recipientEVM?: string
-  /** Starknet recipient address — 0x + exactly 64 hex chars */
+  /** Solana recipient address. */
+  recipientSolana?: string
+  /** Starknet recipient address. */
   recipientStark?: string
-  /** Payment amount e.g. "10" for 10 USDC */
-  amount: string
-  /** Optional memo stored on-chain in tx input data */
+  /** Fixed payment amount in USDC unless network is hashkey native HSK. */
+  amount?: string
+  /** Let payer enter amount at checkout. */
+  flexibleAmount?: boolean
+  /** Optional payment memo or invoice label. */
   memo?: string
-  /** Platform fee in basis points. Default: 20 (0.2%). Set 0 to disable. */
+  /** Enable multi-chain checkout when more than one recipient type is supplied. */
+  multiChain?: boolean
+  /** Optional event/dashboard identifier for multi-payer links. */
+  eventId?: string
+  /** Preserve source attribution, for example "telegram" or a partner id. */
+  source?: string
+  /** Initial checkout mode. Wallet is the production default; direct shows send-via-address. */
+  mode?: 'wallet' | 'direct'
+}
+
+export interface PayLinkButtonProps extends PayLinkUrlOptions {
+  /** Platform fee in basis points. Default: 20 (0.2%). */
   platformFeeBps?: number
-  /** Called after on-chain confirmation */
+  /** Called by host apps that separately observe payment success. */
   onPaymentSuccess?: (params: PaymentSuccessParams) => void
-  /** Called on wallet rejection or tx failure */
+  /** Called by host apps that separately observe payment errors. */
   onPaymentError?: (error: Error) => void
-  /** Custom button label */
+  /** Custom button label. */
   label?: string
   /**
-   * true (default) = hosted checkout opens in new tab — zero config.
-   * false = inline widget — requires WagmiProvider + StarknetProvider in host app.
+   * true (default) renders a compact hosted-checkout link.
+   * false renders a small checkout card that still opens hosted checkout.
    */
   hosted?: boolean
 }

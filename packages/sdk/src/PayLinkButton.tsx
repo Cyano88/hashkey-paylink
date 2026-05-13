@@ -1,119 +1,147 @@
 import { ExternalLink, Zap } from 'lucide-react'
 import { CHAIN_META, PLATFORM_FEE_BPS } from './chains'
 import type { PayLinkButtonProps } from './types'
-
-const HOSTED_BASE_URL = 'https://hashpaylink.com'
+import { buildPayLinkUrl } from './url'
 
 export function PayLinkButton({
   recipientEVM,
+  recipientSolana,
   recipientStark,
   amount,
+  flexibleAmount,
   memo,
+  network = 'base',
+  multiChain,
+  eventId,
+  source,
+  mode = 'wallet',
+  baseUrl,
   platformFeeBps = PLATFORM_FEE_BPS,
   onPaymentSuccess: _onSuccess,
   onPaymentError: _onError,
   label,
   hosted = true,
 }: PayLinkButtonProps) {
+  const checkoutUrl = buildPayLinkUrl({
+    baseUrl,
+    network,
+    recipientEVM,
+    recipientSolana,
+    recipientStark,
+    amount,
+    flexibleAmount,
+    memo,
+    multiChain,
+    eventId,
+    source,
+    mode,
+  })
+  const meta = CHAIN_META[network]
+  const displayAmount = flexibleAmount ? 'USDC' : `${amount} ${meta.asset}`
   const feePct = ((platformFeeBps / 10_000) * 100).toFixed(1)
+  const buttonLabel = label ?? (flexibleAmount ? 'Pay with Hash PayLink' : `Pay ${displayAmount}`)
 
-  function buildCheckoutUrl() {
-    const params = new URLSearchParams({ amt: amount })
-    if (recipientEVM)   params.set('evm',   recipientEVM)
-    if (recipientStark) params.set('stark', recipientStark)
-    if (memo?.trim())   params.set('memo',  memo.trim())
-    return `${HOSTED_BASE_URL}/pay?${params.toString()}`
-  }
-
-  // ── Hosted mode: pure anchor, zero wallet setup required ──────────────────
   if (hosted) {
     return (
       <a
-        href={buildCheckoutUrl()}
+        href={checkoutUrl}
         target="_blank"
         rel="noopener noreferrer"
         style={{
-          display: 'inline-flex', alignItems: 'center', gap: '8px',
-          borderRadius: '12px', background: '#000', padding: '12px 20px',
-          fontSize: '14px', fontWeight: 600, color: '#fff', textDecoration: 'none',
-          transition: 'background 0.15s',
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 8,
+          borderRadius: 12,
+          background: '#000',
+          padding: '12px 18px',
+          fontFamily: 'system-ui, sans-serif',
+          fontSize: 14,
+          fontWeight: 700,
+          color: '#fff',
+          textDecoration: 'none',
         }}
       >
         <Zap size={16} />
-        {label ?? `Pay ${amount} USDC`}
-        <ExternalLink size={14} style={{ opacity: 0.6 }} />
+        {buttonLabel}
+        <ExternalLink size={14} style={{ opacity: 0.65 }} />
       </a>
     )
   }
 
-  // ── Inline widget ─────────────────────────────────────────────────────────
   return (
     <div style={{
-      overflow: 'hidden', borderRadius: '16px', border: '1px solid #e5e7eb',
-      background: '#fff', boxShadow: '0 4px 24px -4px rgba(0,0,0,0.08)',
-      maxWidth: '360px', fontFamily: 'system-ui, sans-serif',
+      overflow: 'hidden',
+      borderRadius: 14,
+      border: '1px solid #e5e7eb',
+      background: '#fff',
+      boxShadow: '0 10px 30px -18px rgba(0,0,0,0.35)',
+      maxWidth: 360,
+      fontFamily: 'system-ui, sans-serif',
     }}>
-      {/* Header */}
-      <div style={{ background: '#f9fafb', borderBottom: '1px solid #e5e7eb', padding: '20px', textAlign: 'center' }}>
-        <p style={{ fontSize: '11px', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#9ca3af', margin: '0 0 4px' }}>
-          Payment Request
+      <div style={{ borderBottom: '1px solid #eef0f3', padding: 18 }}>
+        <p style={{ margin: 0, color: '#6b7280', fontSize: 12, fontWeight: 700 }}>
+          Hash PayLink
         </p>
-        <p style={{ fontSize: '28px', fontWeight: 700, color: '#111', margin: 0 }}>
-          {amount} <span style={{ fontSize: '16px', fontWeight: 600, color: '#9ca3af' }}>USDC · HSK</span>
+        <p style={{ margin: '6px 0 0', color: '#111827', fontSize: 28, fontWeight: 800 }}>
+          {displayAmount}
         </p>
-        {memo && (
-          <span style={{ display: 'inline-block', marginTop: '8px', borderRadius: '999px', border: '1px solid #e5e7eb', background: '#fff', padding: '2px 12px', fontSize: '12px', color: '#6b7280' }}>
-            "{memo}"
-          </span>
+        {memo?.trim() && (
+          <p style={{ margin: '8px 0 0', color: '#6b7280', fontSize: 13 }}>
+            {memo.trim()}
+          </p>
         )}
       </div>
-
-      {/* Chain pills */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '4px', padding: '12px' }}>
-        {(['base', 'starknet', 'hashkey', 'arc'] as const).map((c) => {
-          const m = CHAIN_META[c]
-          const unavailable = c === 'starknet' && !recipientStark
-          return (
-            <span key={c} style={{
-              display: 'inline-flex', alignItems: 'center', gap: '4px',
-              borderRadius: '8px', padding: '4px 10px', fontSize: '12px', fontWeight: 500,
-              background: unavailable ? '#f3f4f6' : '#f5f3ff',
-              color: unavailable ? '#d1d5db' : m.accentColor,
-            }}>
-              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: unavailable ? '#d1d5db' : m.accentColor, display: 'inline-block' }} />
-              {m.label}
-            </span>
-          )
-        })}
-      </div>
-
-      {/* Fee */}
-      {platformFeeBps > 0 && (
-        <p style={{ textAlign: 'center', fontSize: '11px', color: '#9ca3af', margin: '0 0 4px' }}>
-          Includes {feePct}% platform fee
-        </p>
-      )}
-
-      {/* CTA */}
-      <div style={{ padding: '12px 16px 16px' }}>
+      <div style={{ padding: 16 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
+          {Object.values(CHAIN_META)
+            .filter((chain) => multiChain || chain.key === network)
+            .map((chain) => (
+              <span key={chain.key} style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                borderRadius: 8,
+                background: '#f9fafb',
+                border: '1px solid #eef0f3',
+                padding: '5px 8px',
+                color: chain.accentColor,
+                fontSize: 12,
+                fontWeight: 700,
+              }}>
+                <span style={{ width: 6, height: 6, borderRadius: 999, background: chain.accentColor }} />
+                {chain.label}
+              </span>
+            ))}
+        </div>
+        {platformFeeBps > 0 && (
+          <p style={{ margin: '0 0 12px', color: '#9ca3af', fontSize: 11 }}>
+            Includes {feePct}% transparent platform fee.
+          </p>
+        )}
         <a
-          href={buildCheckoutUrl()}
+          href={checkoutUrl}
           target="_blank"
           rel="noopener noreferrer"
           style={{
-            display: 'flex', width: '100%', alignItems: 'center', justifyContent: 'center',
-            gap: '8px', borderRadius: '12px', background: '#000', padding: '12px 20px',
-            fontSize: '14px', fontWeight: 600, color: '#fff', textDecoration: 'none',
+            display: 'flex',
+            width: '100%',
             boxSizing: 'border-box',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 8,
+            borderRadius: 12,
+            background: '#000',
+            padding: '12px 16px',
+            color: '#fff',
+            textDecoration: 'none',
+            fontSize: 14,
+            fontWeight: 700,
           }}
         >
           <Zap size={16} />
-          {label ?? `Pay ${amount} USDC`}
-          <ExternalLink size={14} style={{ opacity: 0.5 }} />
+          {buttonLabel}
+          <ExternalLink size={14} style={{ opacity: 0.65 }} />
         </a>
-        <p style={{ textAlign: 'center', fontSize: '10px', color: '#9ca3af', margin: '8px 0 0' }}>
-          Powered by Hash PayLink SDK · Non-custodial
-        </p>
       </div>
     </div>
   )

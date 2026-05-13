@@ -1,7 +1,7 @@
 {
   "name": "@hashpaylink/sdk",
   "version": "1.0.0",
-  "description": "The Stripe of the Modular Future. One line of code to accept stablecoins across Arc, Base, Starknet, and HashKey.",
+  "description": "React button and URL helpers for Hash PayLink hosted USDC checkout.",
   "author": "Hash PayLink Contributors",
   "license": "MIT",
   "homepage": "https://hashpaylink.com",
@@ -11,8 +11,8 @@
     "directory": "packages/sdk"
   },
   "keywords": [
-    "web3", "payments", "stablecoins", "usdc", "arc", "base", "starknet",
-    "hashkey", "payfi", "react", "wagmi", "crypto", "defi"
+    "web3", "payments", "stablecoins", "usdc", "arc", "base", "arbitrum", "solana", "starknet",
+    "hashkey", "payfi", "react", "crypto", "defi"
   ],
   "type": "module",
   "main": "./dist/index.cjs",
@@ -35,10 +35,7 @@
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
-    "react": ">=18",
-    "react-dom": ">=18",
-    "viem": ">=2",
-    "wagmi": ">=2"
+    "react": ">=18"
   },
   "devDependencies": {
     "@types/react": "^18.3.1",

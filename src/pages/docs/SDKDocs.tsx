@@ -10,7 +10,7 @@ export default function SDKDocs() {
 
       <Section title="Installation">
         <CodeBlock lang="bash">{`npm install @hashpaylink/sdk`}</CodeBlock>
-        <InfoBox type="info">The SDK requires React 18+, wagmi v2, and viem v2 for inline mode. Hosted mode has zero dependencies.</InfoBox>
+        <InfoBox type="info">The SDK is intentionally thin: it builds current hosted Hash PayLink checkout URLs and renders React payment buttons. Wallet execution stays inside the hosted checkout.</InfoBox>
       </Section>
 
       <Section title="PayLinkButton">
@@ -19,11 +19,9 @@ export default function SDKDocs() {
 
 <PayLinkButton
   recipientEVM="0xYourAddress"
+  network="base"
   amount="25"
   memo="Invoice #042"
-  onPaymentSuccess={({ txHash, chain }) => {
-    console.log('Paid on', chain, txHash)
-  }}
 />`}</CodeBlock>
       </Section>
 
@@ -34,12 +32,15 @@ export default function SDKDocs() {
             ['recipientEVM',     'string',   'one of',  'EVM (Base / HashKey / Arc / Arbitrum) recipient address'],
             ['recipientStark',   'string',   'one of',  'Starknet recipient address (66 chars)'],
             ['recipientSolana',  'string',   'one of',  'Solana recipient address (base58)'],
-            ['amount',           'string',   'no',      'Fixed USDC amount. Omit to enable flexible amount.'],
+            ['network',          'string',   'no',      'base | arbitrum | solana | starknet | arc | hashkey. Defaults to base.'],
+            ['amount',           'string',   'no',      'Fixed USDC amount. Required unless flexibleAmount is true.'],
             ['memo',             'string',   'no',      'Payment memo shown to payer'],
-            ['flex',             'boolean',  'no',      'Allow payer to enter any amount'],
+            ['flexibleAmount',   'boolean',  'no',      'Allow payer to enter any amount'],
             ['multiChain',       'boolean',  'no',      'Show all chain options simultaneously'],
+            ['eventId',          'string',   'no',      'Optional multi-payer dashboard/event ID'],
+            ['mode',             'string',   'no',      'wallet | direct. Defaults to wallet.'],
             ['platformFeeBps',   'number',   'no',      'Additional platform fee in basis points (20 bps default)'],
-            ['hosted',           'boolean',  'no',      'true = opens in new tab (default). false = inline widget.'],
+            ['hosted',           'boolean',  'no',      'true = compact link button. false = embedded card that opens hosted checkout.'],
             ['label',            'string',   'no',      'Custom button label text'],
             ['onPaymentSuccess', 'function', 'no',      'Callback: ({ txHash, chain }) => void'],
             ['onPaymentError',   'function', 'no',      'Callback: (error: Error) => void'],
@@ -57,27 +58,33 @@ export default function SDKDocs() {
 // Opens: https://hashpaylink.com/pay?evm=0xABC...&amt=10&memo=Premium+Access`}</CodeBlock>
       </Section>
 
-      <Section title="Inline mode">
-        <p>In inline mode, the checkout widget embeds directly in your page. Requires wagmi + RainbowKit provider setup.</p>
-        <CodeBlock lang="typescript">{`import { WagmiProvider } from 'wagmi'
-import { RainbowKitProvider } from '@rainbow-me/rainbowkit'
-import { PayLinkButton } from '@hashpaylink/sdk'
-import { config } from './wagmi'
+      <Section title="Embedded card">
+        <p>Set <Code>hosted={false}</Code> to render a compact checkout card inside your page. It still opens the hosted checkout for wallet execution, which avoids duplicating wallet and relayer logic inside merchant apps.</p>
+        <CodeBlock lang="typescript">{`import { PayLinkButton } from '@hashpaylink/sdk'
 
 function App() {
   return (
-    <WagmiProvider config={config}>
-      <RainbowKitProvider>
-        <PayLinkButton
-          recipientEVM="0xABC..."
-          amount="10"
-          hosted={false}
-          onPaymentSuccess={({ txHash }) => console.log(txHash)}
-        />
-      </RainbowKitProvider>
-    </WagmiProvider>
+    <PayLinkButton
+      recipientEVM="0xABC..."
+      recipientSolana="BASE58..."
+      amount="10"
+      multiChain
+      hosted={false}
+    />
   )
 }`}</CodeBlock>
+      </Section>
+
+      <Section title="URL helper">
+        <CodeBlock lang="typescript">{`import { buildPayLinkUrl } from '@hashpaylink/sdk'
+
+const url = buildPayLinkUrl({
+  recipientEVM: '0xABC...',
+  recipientSolana: 'BASE58...',
+  amount: '10',
+  multiChain: true,
+  memo: 'Invoice #042',
+})`}</CodeBlock>
       </Section>
 
       <Section title="URL API (no SDK required)">
@@ -116,17 +123,22 @@ function App() {
             ['flex',    '1 = flexible amount mode'],
             ['event',   '1 = multi-payer collection mode'],
             ['id',      'Event ID for multi-payer dashboard'],
-            ['net',     'Lock to chain: base | hashkey | arc | starknet | solana | arbitrum'],
+            ['net',     'Lock to chain: base | arbitrum | solana | starknet | arc | hashkey'],
             ['fx',      'Show local currency FX: ngn | ghs | kes | sgd'],
             ['fxrate',  'Custom exchange rate if fx param is set'],
           ]}
         />
       </Section>
 
-      <Section title="MULTICALL3_ADDRESS export">
-        <p>The SDK exports the Multicall3 contract address used for atomic permit + transfer on EVM chains:</p>
-        <CodeBlock lang="typescript">{`import { MULTICALL3_ADDRESS } from '@hashpaylink/sdk'
-// '0xcA11bde05977b3631167028862bE2a173976CA11'`}</CodeBlock>
+      <Section title="Validation helpers">
+        <p>The SDK exports small helpers for URL construction and input validation.</p>
+        <CodeBlock lang="typescript">{`import {
+  buildPayLinkUrl,
+  isValidEvmAddress,
+  isLikelySolanaAddress,
+  isValidStarknetAddress,
+  SUPPORTED_NETWORKS,
+} from '@hashpaylink/sdk'`}</CodeBlock>
       </Section>
 
       <NavFooter

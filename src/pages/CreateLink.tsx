@@ -3,11 +3,6 @@ import { useOutletContext, Link } from 'react-router-dom'
 import type { LayoutOutletContext } from '../Layout'
 import {
   useAccount,
-  useChainId,
-  useSwitchChain,
-  usePublicClient,
-  useWriteContract,
-  useWaitForTransactionReceipt,
 } from 'wagmi'
 import {
   Link2,
@@ -41,12 +36,10 @@ import {
 import { QRCodeCanvas } from 'qrcode.react'
 import { FX_CURRENCIES, getFxMeta, formatLocalAmt, fetchFxRate } from '../lib/fx'
 import { isAddress } from 'viem'
-import { ConnectButton } from '@rainbow-me/rainbowkit'
 import { cn, truncateAddress, formatAmount, copyToClipboard } from '../lib/utils'
 import { useStarknet } from '../lib/StarknetContext'
 import { useSolana }   from '../lib/SolanaContext'
 import { CHAIN_META, type ChainKey } from '../lib/chains'
-import { EVM_CLIENTS, ROUTER_FACTORY, FACTORY_GET_ROUTER_ABI, FACTORY_DEPLOY_ROUTER_ABI } from '../lib/router'
 import { isValidSolanaAddress } from '../lib/solanaAddress'
 
 // ─── Starknet address: 0x followed by exactly 64 hex chars ──────────────────
@@ -57,7 +50,7 @@ const isValidSolanaAddr = isValidSolanaAddress
 
 const CHAINS: ChainKey[] = ['base', 'starknet', 'arc', 'solana', 'arbitrum']
 
-type VaultStep = 'idle' | 'checking' | 'needs_deploy' | 'deploying' | 'ready' | 'skipped'
+type VaultStep = 'idle' | 'ready'
 
 function normalizeAmountInput(value: string) {
   const normalized = value.replace(',', '.').replace(/[^\d.]/g, '')
@@ -104,39 +97,12 @@ export default function CreateLink() {
   // Derived early so useEffect hooks below can reference it without TDZ error
   const isEvmNet = selectedNet !== 'starknet' && selectedNet !== 'solana'
   const [vaultStep,     setVaultStep]     = useState<VaultStep>('idle')
-  const [deployError,   setDeployError]   = useState<string | null>(null)
   // Background check — null=checking, true=deployed, false=not deployed
-  const [routerDeployed, setRouterDeployed] = useState<boolean | null>(null)
 
   // ── Wallet hooks ──────────────────────────────────────────────────────────
-  const { isConnected, address: connectedEvm } = useAccount()
+  const { address: connectedEvm } = useAccount()
   const { address: connectedStark }            = useStarknet()
   const { address: connectedSolana, disconnect: disconnectSolana } = useSolana()
-  const chainId                                = useChainId()
-  const { switchChain, isPending: isSwitching } = useSwitchChain()
-
-  const baseChainId  = CHAIN_META.base.chainId
-  const isOnBase     = chainId === baseChainId
-  const publicClient = usePublicClient({ chainId: baseChainId })
-
-  const {
-    writeContract: callDeployRouter,
-    data:          deployTxHash,
-    isPending:     isDeployPending,
-    reset:         resetDeploy,
-  } = useWriteContract()
-
-  const { isSuccess: isDeployConfirmed, isError: isDeployReverted } =
-    useWaitForTransactionReceipt({ hash: deployTxHash })
-
-  // When deploy tx confirms, mark vault as ready
-  useEffect(() => {
-    if (isDeployConfirmed) setVaultStep('ready')
-  }, [isDeployConfirmed])
-
-  useEffect(() => {
-    if (isDeployReverted) setDeployError('Transaction reverted. Please try again.')
-  }, [isDeployReverted])
 
   // ── Connected wallet auto-fill ─────────────────────────────────────────
   useEffect(() => {
@@ -172,35 +138,10 @@ export default function CreateLink() {
   useEffect(() => {
     setVaultStep('idle')
     setGeneratedLink('')
-    setDeployError(null)
-    setRouterDeployed(null)
-    resetDeploy()
   }, [evmAddr])  // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Background router check (no wallet needed — uses public client) ────
   // Once a router is deployed for this address, every future link auto-shows Active.
-  useEffect(() => {
-    if (!isAddress(evmAddr)) { setRouterDeployed(null); return }
-    let cancelled = false
-    setRouterDeployed(null)
-    async function checkDeployment() {
-      try {
-        const factory = ROUTER_FACTORY['base']
-        if (!factory) { if (!cancelled) setRouterDeployed(false); return }
-        const router = await EVM_CLIENTS.base.readContract({
-          address: factory, abi: FACTORY_GET_ROUTER_ABI,
-          functionName: 'getRouterAddress', args: [evmAddr as `0x${string}`],
-        })
-        const code = await EVM_CLIENTS.base.getBytecode({ address: router })
-        if (!cancelled) setRouterDeployed(!!code && code.length > 2)
-      } catch {
-        if (!cancelled) setRouterDeployed(false)
-      }
-    }
-    checkDeployment()
-    return () => { cancelled = true }
-  }, [evmAddr])
-
   // ── FX preview rate ───────────────────────────────────────────────────────
   useEffect(() => {
     if (!fxShow || !eventMode || !fxCurrency) { setFxPreviewRate(null); return }
@@ -399,25 +340,6 @@ export default function CreateLink() {
   }
 
   // ── Deploy vault handler ───────────────────────────────────────────────
-  async function handleDeployVault() {
-    const factory = ROUTER_FACTORY['base']
-    if (!factory || !evmValid) return
-    setDeployError(null)
-    setVaultStep('deploying')
-    try {
-      callDeployRouter({
-        address: factory,
-        abi: FACTORY_DEPLOY_ROUTER_ABI,
-        functionName: 'deployRouter',
-        args: [evmAddr as `0x${string}`],
-        chainId: baseChainId,
-      })
-    } catch (err) {
-      setDeployError(err instanceof Error ? err.message.slice(0, 120) : 'Deploy failed')
-      setVaultStep('needs_deploy')
-    }
-  }
-
   // ── Copy / reset ───────────────────────────────────────────────────────
   async function handleCopy() {
     if (!generatedLink) return
@@ -429,7 +351,7 @@ export default function CreateLink() {
   function handleReset() {
     setEvmAddr(''); setStarkAddr(''); setSolanaAddr(''); setAmt(''); setMemo('')
     setGeneratedLink(''); setCopied(false); setMultiChainMode(false); setFlexAmount(false)
-    setVaultStep('idle'); setDeployError(null); setRouterDeployed(null); resetDeploy()
+    setVaultStep('idle')
     setAccessMode(false); setAgentUrl(''); setAgentUrlStatus('idle')
   }
 

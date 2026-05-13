@@ -456,7 +456,7 @@ Hash PayLink ships with a full dark / light mode toggle.
 
 ## 15. SDK — Developer Integration Guide
 
-The Hash PayLink SDK lets any web application accept USDC payments across five chains with minimal code.
+The Hash PayLink SDK lets any web application create current hosted Hash PayLink checkout buttons and URLs with minimal code. Wallet execution remains inside the hosted checkout so merchant apps do not duplicate relayer or smart-wallet logic.
 
 ### Installation
 
@@ -484,19 +484,12 @@ export default function CheckoutPage({ invoice }) {
       recipientSolana="YourSolanaAddress"
       amount={invoice.total.toString()}
       memo={`Invoice #${invoice.id}`}
-      onPaymentSuccess={async ({ txHash, chain, amount }) => {
-        // Mark the invoice as paid in your database
-        await fetch('/api/invoices/confirm', {
-          method: 'POST',
-          body: JSON.stringify({ invoiceId: invoice.id, txHash, chain }),
-        })
-      }}
     />
   )
 }
 ```
 
-When the payer clicks the button, a full Hash PayLink checkout opens in a new tab. Your app receives `onPaymentSuccess` after on-chain confirmation — with the transaction hash and chain.
+When the payer clicks the button, a full Hash PayLink checkout opens in a new tab. Use event dashboards, webhook-style backend polling, or your own explorer/indexer flow to reconcile confirmed payments.
 
 **What the payer sees:**
 ```
@@ -528,7 +521,7 @@ https://hashpaylink.com/pay?evm=0xYour...&sol=YourSolana...&amt=25&memo=Invoice+
 
 | Param | Description | Example |
 |---|---|---|
-| `evm` | EVM recipient (Base · HashKey · Arc) | `0xAbCd…` |
+| `evm` | EVM recipient (Base · Arbitrum · Arc · HashKey) | `0xAbCd…` |
 | `stark` | Starknet recipient | `0x04a3…` (64 hex chars) |
 | `sol` | Solana recipient | `YourBase58Address` |
 | `amt` | Fixed USDC amount | `10` |
@@ -725,6 +718,8 @@ PRIVATE_RPC_URL_ARC=              # Private Arc RPC
 PAYLINK_FACTORY_V2=               # PayLinkFactoryV2 contract address on Base
 PAYLINK_FACTORY_V2_ARC=           # PayLinkFactoryV2 contract address on Arc
 TREASURY_ADDRESS=                 # EVM treasury wallet (receives platform fees)
+ADMIN_SECRET=                     # Long random secret for protected maintenance endpoints
+CRON_SECRET=                      # Optional long random secret for cron/maintenance calls
 
 # ── Solana Relay ─────────────────────────────────────────────────────────
 RELAYER_PRIVATE_KEY_SOLANA=       # Base58 or JSON-array Solana keypair
