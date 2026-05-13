@@ -310,7 +310,6 @@ export default function Dashboard() {
     return Math.max(0, Number(row.recipientAmount) / 1e6)
   }
   const totalReceived = payments.reduce((s, p) => s + receivedUsdc(p), 0)
-  const activeChainCount = new Set(payments.map(p => p.chain)).size
 
   function fmt(n: number) {
     if (!Number.isFinite(n) || Math.abs(n) < 0.0000005) return '0'
@@ -446,11 +445,10 @@ export default function Dashboard() {
       </div>
 
       {payments.length > 0 && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-2 gap-3">
           {[
             { label: 'Paid',      value: String(payments.length), color: 'text-gray-900 dark:text-gray-50', border: 'border-gray-100 dark:border-white/10' },
             { label: 'Collected', value: fmtUsdc(totalReceived),  color: 'text-emerald-700 dark:text-emerald-300', border: 'border-emerald-100 dark:border-emerald-900/50', bg: 'bg-emerald-50/60 dark:bg-emerald-950/20' },
-            { label: 'Networks',  value: String(activeChainCount), color: 'text-gray-900 dark:text-gray-50', border: 'border-gray-100 dark:border-white/10' },
           ].map(({ label, value, color, border, bg }) => (
             <div key={label} className={cn('rounded-xl border p-4 shadow-sm', border, bg ?? 'bg-white dark:bg-[#17181c]')}>
               <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500">{label}</p>

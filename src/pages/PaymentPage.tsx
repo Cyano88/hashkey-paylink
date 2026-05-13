@@ -556,6 +556,15 @@ export default function PaymentPage() {
     circleRequiredUnits > 0n &&
     circleSolanaBalance < circleRequiredUnits
 
+  function expectedEvmRecipientUnits() {
+    const totalUnits = parseUnits(effectiveAmt || '0', meta.decimals)
+    if (totalUnits <= 0n) return 0n
+    const feeUnits = totalUnits * BigInt(PLATFORM_FEE_BPS) / 10_000n
+    const gasRecoveryUnits = getSponsoredGasRecoveryUnits(chain, totalUnits, feeUnits, meta.decimals)
+    const conservativeUnits = totalUnits - feeUnits - gasRecoveryUnits
+    return conservativeUnits > 0n ? conservativeUnits : totalUnits - feeUnits
+  }
+
   const missingStark   = chain === 'starknet' && !resolvedStark
   const missingSolana  = chain === 'solana'   && !resolvedSolana
   const effectiveMemo  = isEventMode ? attendeeName : (isFlex ? (flexMemo || memo) : memo)
@@ -892,12 +901,51 @@ export default function PaymentPage() {
   // ── Manual claim fallback ─────────────────────────────────────────────────
   // ── "Check Status" button ─────────────────────────────────────────────────
   useEffect(() => {
-    if (manualPayDetected || chain === 'starknet' || chain === 'solana' || !resolvedEvm) return
+    if (manualPayDetected || chain === 'starknet' || chain === 'solana' || !resolvedEvm || payMode !== 'wallet') {
+      setShowCheckButton(false)
+      return
+    }
+    const alreadyConfirmed =
+      isEvmConfirmed ||
+      isCirclePaymasterConfirmed ||
+      basePaymasterStatus?.status === 'success'
+    const submittedOrFinalizing =
+      circleEvmPaymentProcessing ||
+      circlePasskeyPending ||
+      circlePaymasterPending ||
+      isEvmConfirming ||
+      isCirclePaymasterConfirming ||
+      isBasePaymasterConfirming ||
+      !!evmTxHash ||
+      !!circlePaymasterTxHash ||
+      !!basePaymasterTxHash ||
+      !!basePaymasterCallId
+    if (alreadyConfirmed || !submittedOrFinalizing) {
+      setShowCheckButton(false)
+      return
+    }
     setShowCheckButton(false)
-    const timer = setTimeout(() => setShowCheckButton(true), 15_000)
+    const timer = setTimeout(() => setShowCheckButton(true), 12_000)
     return () => clearTimeout(timer)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chain, resolvedEvm, manualPayDetected])
+  }, [
+    manualPayDetected,
+    chain,
+    resolvedEvm,
+    payMode,
+    isEvmConfirmed,
+    isCirclePaymasterConfirmed,
+    basePaymasterStatus?.status,
+    circleEvmPaymentProcessing,
+    circlePasskeyPending,
+    circlePaymasterPending,
+    isEvmConfirming,
+    isCirclePaymasterConfirming,
+    isBasePaymasterConfirming,
+    evmTxHash,
+    circlePaymasterTxHash,
+    basePaymasterTxHash,
+    basePaymasterCallId,
+  ])
 
   async function handleManualCheck() {
     if (!resolvedEvm || chain === 'starknet') return
@@ -905,23 +953,67 @@ export default function PaymentPage() {
     try {
       const evmChain = chain as 'base' | 'hashkey' | 'arc' | 'arbitrum'
       const client   = EVM_CLIENTS[evmChain]
+      const knownTxHash = (circlePaymasterTxHash ?? basePaymasterTxHash ?? evmTxHash) as `0x${string}` | null
+      if (knownTxHash) {
+        try {
+          const receipt = await client.getTransactionReceipt({ hash: knownTxHash })
+          if (receipt.status === 'success') {
+            setManualTxHash(knownTxHash)
+            setReceivedAmount(chain === 'hashkey' ? parseEther(effectiveAmt || '0') : expectedEvmRecipientUnits())
+            setCircleEvmPaymentProcessing(false)
+            setCirclePasskeyPending(false)
+            setCirclePasskeyError(null)
+            setManualPayDetected(true)
+            setShowCheckButton(false)
+            return
+          }
+        } catch { /* receipt may not be indexed yet; fall through to transfer scan */ }
+      }
       if (chain === 'hashkey') {
         const bal          = await client.getBalance({ address: resolvedEvm as `0x${string}` })
         const requestedWei = parseEther(effectiveAmt || '0')
         if (bal >= requestedWei * 99n / 100n) {
-          setReceivedAmount(bal); setManualTxHash(null); setManualPayDetected(true)
+          setReceivedAmount(bal); setManualTxHash(null); setManualPayDetected(true); setShowCheckButton(false)
         }
       } else {
         const tokenAddress   = CHAIN_META[evmChain as 'base' | 'arc' | 'arbitrum'].tokenAddress
         const target         = resolvedEvm as `0x${string}`
-        const requestedUnits = parseUnits(effectiveAmt || '0', meta.decimals)
-        const balance = await client.readContract({
-          address: tokenAddress, abi: ERC20_BALANCE_OF_ABI,
-          functionName: 'balanceOf', args: [target],
+        const requestedUnits = expectedEvmRecipientUnits()
+        const latestBlock = await client.getBlockNumber()
+        const fromBlock = latestBlock > 5_000n ? latestBlock - 5_000n : 0n
+        type TransferLog = {
+          args: { value?: bigint }
+          transactionHash?: `0x${string}` | null
+        }
+        const getTransferLogs = client.getLogs as unknown as (args: {
+          address: `0x${string}`
+          abi: typeof ERC20_TRANSFER_ABI
+          eventName: 'Transfer'
+          args: { to: `0x${string}` }
+          fromBlock: bigint
+          toBlock: bigint
+        }) => Promise<TransferLog[]>
+        const logs = await getTransferLogs({
+          address: tokenAddress,
+          abi: ERC20_TRANSFER_ABI,
+          eventName: 'Transfer',
+          args: { to: target },
+          fromBlock,
+          toBlock: latestBlock,
         })
-        if (balance >= requestedUnits * 99n / 100n) {
-          setReceivedAmount(balance)
-          setManualTxHash(null); setManualPayDetected(true)
+        const match = [...logs].reverse().find(log => {
+          const value = (log.args as { value?: bigint }).value ?? 0n
+          return value >= requestedUnits * 99n / 100n
+        })
+        if (match) {
+          const value = (match.args as { value?: bigint }).value ?? requestedUnits
+          setReceivedAmount(circleEvmEmailSession ? circleRequiredUnits : value)
+          setManualTxHash(match.transactionHash ?? null)
+          setCircleEvmPaymentProcessing(false)
+          setCirclePasskeyPending(false)
+          setCirclePasskeyError(null)
+          setManualPayDetected(true)
+          setShowCheckButton(false)
         }
       }
     } catch { /* ignore */ }
