@@ -18,6 +18,8 @@ import { cn, truncateAddress } from '../lib/utils'
 import { queryBalances, type UnifiedBalanceBreakdown, type UnifiedBalanceChainKey } from '../lib/unifiedBalance'
 import { isValidSolanaAddress } from '../lib/solanaAddress'
 
+const OG_GLOBAL_ARCHIVE_URL = 'https://chainscan.0g.ai/address/0x79a804C49e1E5EBC279A228Ab73a7570A0D0819a#events'
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface PaymentRow {
@@ -109,6 +111,29 @@ function telegramReturnUrl(params: URLSearchParams) {
   } catch {
     return ''
   }
+}
+
+function OgArchiveLink({ className }: { className?: string }) {
+  return (
+    <a
+      href={OG_GLOBAL_ARCHIVE_URL}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={cn(
+        'inline-flex items-center gap-2 rounded-xl border border-purple-100 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 shadow-sm transition-all hover:border-purple-200 hover:bg-purple-50/40 active:scale-[0.98]',
+        className,
+      )}
+    >
+      <span className="relative flex h-5 w-5 items-center justify-center">
+        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-purple-300 opacity-40" />
+        <span className="relative inline-flex h-5 w-5 items-center justify-center rounded-full border border-purple-200 bg-purple-50 text-[8px] font-bold text-purple-600">
+          0G
+        </span>
+      </span>
+      View 0G Global Archive
+      <ExternalLink className="h-3.5 w-3.5 text-gray-400" />
+    </a>
+  )
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -493,13 +518,7 @@ export default function Dashboard() {
             <p className="text-sm font-medium text-gray-500">No payments received yet</p>
             <p className="mt-1 text-xs text-gray-400">Share your PayLink to get started</p>
             {telegramUrl ? (
-              <a
-                href={telegramUrl}
-                className="mt-6 inline-flex items-center gap-2 rounded-xl bg-black px-5 py-2.5 text-sm font-medium text-white hover:bg-gray-800 transition-all"
-              >
-                <Link2 className="h-4 w-4" />
-                Create with Telegram
-              </a>
+              <OgArchiveLink className="mt-6" />
             ) : (
               <Link
                 to="/"
@@ -648,13 +667,7 @@ export default function Dashboard() {
       {/* ── CTA at bottom ────────────────────────────────────────────────── */}
       <div className="flex justify-center pb-4">
         {telegramUrl ? (
-          <a
-            href={telegramUrl}
-            className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 hover:border-gray-300 transition-all active:scale-[0.98]"
-          >
-            <Link2 className="h-4 w-4" />
-            Create with Telegram
-          </a>
+          <OgArchiveLink />
         ) : (
           <Link
             to="/"

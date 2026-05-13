@@ -258,9 +258,9 @@ export default function PaymentPage() {
     return 'base'
   })
 
-  // Multi-chain links: chain toggle free before payment, locked only by success card after.
-  // Single-chain links: locked to the net= param chain.
-  const netLocked = !!netParam && !isMultiChain
+  // Normal multi-chain links can switch chains; Telegram links are intentionally
+  // locked to the bot-selected network so a Base request stays Base-only.
+  const netLocked = !!netParam && (!isMultiChain || isTelegramSource)
 
   // Sync header pill with initial chain on mount
   useEffect(() => { onPayChainChange(chain) }, [])  // eslint-disable-line react-hooks/exhaustive-deps
