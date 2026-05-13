@@ -337,7 +337,7 @@ export async function sendCircleEvmEmailPayment(params: {
   const result = await executeChallenge(sdk, challenge.challengeId)
   const txHash = findTxHash(result)
   if (txHash) return txHash
-  const transactionId = findTransactionId(result.data)
+  const transactionId = findTransactionId(result)
   if (transactionId) {
     const hash = await pollTransactionHash(params.session, transactionId).catch(() => null)
     if (hash) return hash
