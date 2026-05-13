@@ -217,6 +217,18 @@ function isSmartWalletBalanceError(msg: string | null) {
   return msg === SMART_WALLET_FUNDING_ERROR || msg === SMART_WALLET_AMOUNT_ERROR || s.includes('insufficient usdc')
 }
 
+function telegramReturnUrl(params: URLSearchParams) {
+  if (params.get('source') !== 'telegram') return ''
+  const raw = (params.get('return') ?? '').trim()
+  if (!raw) return ''
+  try {
+    const url = new URL(raw)
+    return url.protocol === 'https:' && url.hostname === 't.me' ? url.toString() : ''
+  } catch {
+    return ''
+  }
+}
+
 export default function PaymentPage() {
   const [searchParams] = useSearchParams()
   const { onPayChainChange } = useOutletContext<LayoutOutletContext>()
@@ -229,6 +241,7 @@ export default function PaymentPage() {
   const netParam    = searchParams.get('net')    as ChainKey | null
   const modeParam   = searchParams.get('mode')
   const isTelegramSource = searchParams.get('source') === 'telegram'
+  const telegramUrl = telegramReturnUrl(searchParams)
 
   const resolvedStark  = starkParam || (legacyChain === 'starknet' ? evmParam : '')
   const resolvedEvm    = legacyChain === 'starknet' ? '' : evmParam
@@ -2007,9 +2020,15 @@ export default function PaymentPage() {
               </div>
             )}
 
-            <Link to="/" className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-2.5 text-sm font-medium text-white hover:bg-gray-800 transition-all active:scale-[0.98]">
-              Create your own Hash PayLink
-            </Link>
+            {telegramUrl ? (
+              <a href={telegramUrl} className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-2.5 text-sm font-medium text-white hover:bg-gray-800 transition-all active:scale-[0.98]">
+                Create with Telegram
+              </a>
+            ) : (
+              <Link to="/" className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-2.5 text-sm font-medium text-white hover:bg-gray-800 transition-all active:scale-[0.98]">
+                Create your own Hash PayLink
+              </Link>
+            )}
           </div>
         </div>
       </div>

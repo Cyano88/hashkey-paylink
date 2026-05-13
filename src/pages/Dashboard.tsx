@@ -99,6 +99,18 @@ function eventPaymentToRow(row: EventPaymentRow, index: number): PaymentRow {
   }
 }
 
+function telegramReturnUrl(params: URLSearchParams) {
+  if (params.get('source') !== 'telegram') return ''
+  const raw = (params.get('return') ?? '').trim()
+  if (!raw) return ''
+  try {
+    const url = new URL(raw)
+    return url.protocol === 'https:' && url.hostname === 't.me' ? url.toString() : ''
+  } catch {
+    return ''
+  }
+}
+
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function Dashboard() {
@@ -109,6 +121,7 @@ export default function Dashboard() {
   const eventId = (searchParams.get('id') ?? '').trim()
   const netParam = (searchParams.get('net') ?? '').trim() as UnifiedBalanceChainKey | ''
   const isMultiChain = searchParams.get('multi') === '1'
+  const telegramUrl = telegramReturnUrl(searchParams)
 
   const [routerAddr,    setRouterAddr]    = useState<`0x${string}` | null>(null)
   const [routerChecked, setRouterChecked] = useState(false)
@@ -355,13 +368,23 @@ export default function Dashboard() {
             <RefreshCw className={cn('h-3.5 w-3.5', isLoading && 'animate-spin')} />
             Refresh
           </button>
-          <Link
-            to="/"
-            className="flex items-center gap-1.5 rounded-xl bg-black px-4 py-2 text-xs font-semibold text-white hover:bg-gray-800 transition-all"
-          >
-            <Link2 className="h-3.5 w-3.5" />
-            New PayLink
-          </Link>
+          {telegramUrl ? (
+            <a
+              href={telegramUrl}
+              className="flex items-center gap-1.5 rounded-xl bg-black px-4 py-2 text-xs font-semibold text-white hover:bg-gray-800 transition-all"
+            >
+              <Link2 className="h-3.5 w-3.5" />
+              New Telegram PayLink
+            </a>
+          ) : (
+            <Link
+              to="/"
+              className="flex items-center gap-1.5 rounded-xl bg-black px-4 py-2 text-xs font-semibold text-white hover:bg-gray-800 transition-all"
+            >
+              <Link2 className="h-3.5 w-3.5" />
+              New PayLink
+            </Link>
+          )}
         </div>
       </div>
 
@@ -372,10 +395,10 @@ export default function Dashboard() {
       )}>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Unified Global Balance</p>
               <span className={cn(
-                'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold',
+                'inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold',
                 balanceError ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700',
               )}>
                 {balanceError ? <><AlertCircle className="h-3 w-3" /> Partial</> : <><Info className="h-3 w-3" /> Read-only</>}
@@ -469,13 +492,23 @@ export default function Dashboard() {
             <TrendingUp className="mx-auto mb-4 h-10 w-10 text-gray-200" />
             <p className="text-sm font-medium text-gray-500">No payments received yet</p>
             <p className="mt-1 text-xs text-gray-400">Share your PayLink to get started</p>
-            <Link
-              to="/"
-              className="mt-6 inline-flex items-center gap-2 rounded-xl bg-black px-5 py-2.5 text-sm font-medium text-white hover:bg-gray-800 transition-all"
-            >
-              <Link2 className="h-4 w-4" />
-              Create a HashPay Link
-            </Link>
+            {telegramUrl ? (
+              <a
+                href={telegramUrl}
+                className="mt-6 inline-flex items-center gap-2 rounded-xl bg-black px-5 py-2.5 text-sm font-medium text-white hover:bg-gray-800 transition-all"
+              >
+                <Link2 className="h-4 w-4" />
+                Create with Telegram
+              </a>
+            ) : (
+              <Link
+                to="/"
+                className="mt-6 inline-flex items-center gap-2 rounded-xl bg-black px-5 py-2.5 text-sm font-medium text-white hover:bg-gray-800 transition-all"
+              >
+                <Link2 className="h-4 w-4" />
+                Create a HashPay Link
+              </Link>
+            )}
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -614,13 +647,23 @@ export default function Dashboard() {
 
       {/* ── CTA at bottom ────────────────────────────────────────────────── */}
       <div className="flex justify-center pb-4">
-        <Link
-          to="/"
-          className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 hover:border-gray-300 transition-all active:scale-[0.98]"
-        >
-          <Link2 className="h-4 w-4" />
-          Create a new HashPay Link
-        </Link>
+        {telegramUrl ? (
+          <a
+            href={telegramUrl}
+            className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 hover:border-gray-300 transition-all active:scale-[0.98]"
+          >
+            <Link2 className="h-4 w-4" />
+            Create with Telegram
+          </a>
+        ) : (
+          <Link
+            to="/"
+            className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 hover:border-gray-300 transition-all active:scale-[0.98]"
+          >
+            <Link2 className="h-4 w-4" />
+            Create a new HashPay Link
+          </Link>
+        )}
       </div>
     </div>
   )

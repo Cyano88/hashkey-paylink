@@ -37,6 +37,18 @@ type ServerPayment = {
 
 type Toast = { id: number; addr: string; amount: string; chain: string }
 
+function telegramReturnUrl(params: URLSearchParams) {
+  if (params.get('source') !== 'telegram') return ''
+  const raw = (params.get('return') ?? '').trim()
+  if (!raw) return ''
+  try {
+    const url = new URL(raw)
+    return url.protocol === 'https:' && url.hostname === 't.me' ? url.toString() : ''
+  } catch {
+    return ''
+  }
+}
+
 export default function EventDashboard() {
   const [searchParams] = useSearchParams()
   const eventId   = searchParams.get('id')    ?? ''
@@ -53,6 +65,7 @@ export default function EventDashboard() {
   const fxBufParam = searchParams.get('fxbuf')  ?? ''
   const fxSrcParam = searchParams.get('fxsrc')  ?? ''
   const fxRateParam= searchParams.get('fxrate') ?? ''
+  const telegramUrl = telegramReturnUrl(searchParams)
   const evmValid = isAddress(evm)
   const solanaValid = isValidSolanaAddress(sol)
   const starkValid = /^0x[0-9a-fA-F]{64}$/.test(stark)
@@ -354,9 +367,15 @@ export default function EventDashboard() {
       {/* ── Header ── */}
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
         <div>
-          <Link to="/" className="mb-1 inline-flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-600 transition-colors">
-            <ArrowLeft className="h-3.5 w-3.5" /> Create a new link
-          </Link>
+          {telegramUrl ? (
+            <a href={telegramUrl} className="mb-1 inline-flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-600 transition-colors">
+              <ArrowLeft className="h-3.5 w-3.5" /> Create with Telegram
+            </a>
+          ) : (
+            <Link to="/" className="mb-1 inline-flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-600 transition-colors">
+              <ArrowLeft className="h-3.5 w-3.5" /> Create a new link
+            </Link>
+          )}
           <h1 className="text-2xl font-bold text-gray-900">{eventName}</h1>
           <div className="mt-1 flex items-center gap-2">
             <span className="relative flex h-2 w-2">
@@ -387,10 +406,10 @@ export default function EventDashboard() {
       )}>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">Unified Global Balance</p>
               <span className={cn(
-                'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold',
+                'inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold',
                 balanceError ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700',
               )}>
                 {balanceError ? <><AlertCircle className="h-3 w-3" /> Partial</> : <><Info className="h-3 w-3" /> Read-only</>}
