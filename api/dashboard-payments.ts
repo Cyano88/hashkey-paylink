@@ -10,11 +10,16 @@ import { createPublicClient, http, isAddress, parseAbi, type Address } from 'vie
 import { base } from 'viem/chains'
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000' as const
+const BASE_USDC = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' as const
 const DEFAULT_FROM_BLOCK = 45_786_000n
 const DEFAULT_LOG_CHUNK_SIZE = 2_000n
 
 const PAYMENT_RELAYED_ABI = parseAbi([
   'event PaymentRelayed(bytes32 indexed linkId, address indexed recipient, uint256 payout, uint256 platformFee, uint256 gasReimb)',
+])
+
+const ERC20_TRANSFER_ABI = parseAbi([
+  'event Transfer(address indexed from, address indexed to, uint256 value)',
 ])
 
 interface PaymentRow {
@@ -28,7 +33,7 @@ interface PaymentRow {
   gasCostWei: string
   gasReimbUsdc: string
   status: 'settled' | 'incoming'
-  flow: 'v2'
+  flow: 'direct' | 'v2'
 }
 
 interface DashboardLog {
@@ -119,6 +124,38 @@ export default async function handler(req: Request, res: Response) {
           latestBlock,
         )
       : []
+    const v2TxHashes = new Set(v2Logs.map(log => log.transactionHash).filter(Boolean))
+
+    const directLogs = await getLogsChunked<DashboardLog>(
+      (start, end) => publicClient.getLogs({
+        address: BASE_USDC,
+        event: ERC20_TRANSFER_ABI[0],
+        fromBlock: start,
+        toBlock: end,
+        args: { to: evm as Address },
+      }),
+      fromBlock,
+      latestBlock,
+    )
+
+    for (const log of directLogs) {
+      if (!log.transactionHash || log.blockNumber == null) continue
+      if (v2TxHashes.has(log.transactionHash)) continue
+      const block = await publicClient.getBlock({ blockNumber: log.blockNumber })
+      rows.push({
+        id: `direct-${log.transactionHash}-${log.logIndex}`,
+        txHash: log.transactionHash,
+        blockNumber: log.blockNumber.toString(),
+        timestamp: block.timestamp ? Number(block.timestamp) * 1_000 : null,
+        sender: (log.args.from as `0x${string}` | undefined) ?? ZERO_ADDRESS,
+        recipientAmount: ((log.args.value as bigint | undefined) ?? 0n).toString(),
+        treasuryAmount: '0',
+        gasCostWei: '0',
+        gasReimbUsdc: '0',
+        status: 'settled',
+        flow: 'direct',
+      })
+    }
 
     for (const log of v2Logs) {
       if (!log.transactionHash || log.blockNumber == null) continue

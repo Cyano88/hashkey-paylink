@@ -1,7 +1,7 @@
 /**
  * Recipient Settlement Dashboard — /dashboard?evm=0x...
  *
- * Shows all PaymentRouted events from the recipient's router.
+ * Shows direct USDC receipts and PayLinkFactoryV2 settlements for the recipient.
  * EVM history is loaded through the backend so large log scans do not run in the browser.
  * The frontend remains read-only and polls the backend for new settlement rows.
  */
@@ -33,7 +33,7 @@ interface PaymentRow {
   gasCostWei:       bigint
   gasReimbUsdc:     bigint   // V2 only — gas reimb taken in USDC (0n for V1)
   status:           'settled' | 'incoming'
-  flow:             'v1' | 'v2' | 'registry'
+  flow:             'direct' | 'v2' | 'registry'
   chain:            keyof typeof CHAIN_META
   label?:           string
 }
@@ -49,7 +49,7 @@ interface ApiPaymentRow {
   gasCostWei: string
   gasReimbUsdc: string
   status: 'settled' | 'incoming'
-  flow: 'v1' | 'v2'
+  flow: 'direct' | 'v2'
 }
 
 interface EventPaymentRow {
@@ -317,10 +317,11 @@ export default function Dashboard() {
   // ── Computed helpers ──────────────────────────────────────────────────
   function gasCostUsdc(wei: bigint) { return Number(wei) / 1e18 * ethPrice }
   function netUsdc(row: PaymentRow) {
-    if (row.flow === 'v2') return Number(row.recipientAmount) / 1e6  // gas already subtracted on-chain
+    if (row.flow === 'direct' || row.flow === 'v2') return Number(row.recipientAmount) / 1e6
     return Math.max(0, Number(row.recipientAmount) / 1e6 - gasCostUsdc(row.gasCostWei))
   }
   function grossUsdc(row: PaymentRow) {
+    if (row.flow === 'direct') return Number(row.recipientAmount) / 1e6
     if (row.flow === 'v2') return Number(row.recipientAmount + row.treasuryAmount + row.gasReimbUsdc) / 1e6
     return Number(row.recipientAmount + row.treasuryAmount) / 1e6
   }
@@ -614,7 +615,14 @@ export default function Dashboard() {
                                 <p className="font-mono text-sm font-semibold text-red-500">−${fmt(fee)} USDC</p>
                               </div>
                               <div className="text-gray-300">—</div>
-                              {row.flow === 'v2' ? (
+                              {row.flow === 'direct' ? (
+                                <div className="space-y-0.5">
+                                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Settlement Path</p>
+                                  <p className="font-mono text-sm font-semibold text-gray-600">
+                                    Direct to recipient
+                                  </p>
+                                </div>
+                              ) : row.flow === 'v2' ? (
                                 <div className="space-y-0.5">
                                   <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Gas Reimb (USDC)</p>
                                   <p className="font-mono text-sm font-semibold text-red-400">
