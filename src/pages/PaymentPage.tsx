@@ -1574,7 +1574,12 @@ export default function PaymentPage() {
           recipient: activeRecipient as `0x${string}`,
           amount: effectiveAmt,
         })
-        if (txHash) setCirclePaymasterTxHash(txHash)
+        if (txHash) {
+          setCirclePaymasterTxHash(txHash)
+        } else {
+          setCircleEvmPaymentProcessing(false)
+          setCirclePasskeyError('Payment was submitted, but Circle did not return a transaction hash yet. Check wallet activity or wait a minute before trying again.')
+        }
         void refetchCircleWalletBalance()
         return
       }
