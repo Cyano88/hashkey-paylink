@@ -1782,7 +1782,7 @@ export default function PaymentPage() {
     // undefined. Fall back to the vault address as the payer identifier.
     const payer  = chain === 'starknet' ? (argentStarkSession?.address ?? starkAccount ?? '')
       : chain === 'solana' ? (circleSolanaSession?.wallet.address ?? solanaWalletAddr ?? solanaVaultAddr ?? '')
-      : (address ?? directVault ?? '')
+      : (address ?? circleEvmEmailSession?.wallet.address ?? circleSmartAccount ?? directVault ?? '')
     const txH    = manualPayDetected ? manualTxHash
                  : chain === 'starknet' ? starkTxHash
                  : chain === 'solana'   ? (solanaTxHash ?? solanaDirectTxHash)
