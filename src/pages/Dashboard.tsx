@@ -1,16 +1,16 @@
 /**
- * Recipient Settlement Dashboard — /dashboard?evm=0x...
+ * Recipient Settlement Dashboard - /dashboard?evm=0x...
  *
  * Shows direct USDC receipts and PayLinkFactoryV2 settlements for the recipient.
  * EVM history is loaded through the backend so large log scans do not run in the browser.
  * The frontend remains read-only and polls the backend for new settlement rows.
  */
 
-import { useEffect, useState, useCallback, Fragment } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
 import { isAddress } from 'viem'
 import {
-  CheckCircle2, Clock, ExternalLink, Loader2, Link2,
+  CheckCircle2, ExternalLink, Loader2, Link2,
   RefreshCw, TrendingUp, Wallet, Info, AlertCircle, ChevronDown, ChevronUp,
 } from 'lucide-react'
 import { CHAIN_META } from '../lib/chains'
@@ -20,7 +20,7 @@ import { isValidSolanaAddress } from '../lib/solanaAddress'
 
 const OG_GLOBAL_ARCHIVE_URL = 'https://chainscan.0g.ai/address/0x79a804C49e1E5EBC279A228Ab73a7570A0D0819a#events'
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// Types
 
 interface PaymentRow {
   id:               string
@@ -31,7 +31,7 @@ interface PaymentRow {
   recipientAmount:  bigint
   treasuryAmount:   bigint
   gasCostWei:       bigint
-  gasReimbUsdc:     bigint   // V2 only — gas reimb taken in USDC (0n for V1)
+  gasReimbUsdc:     bigint   // V2 only - gas reimb taken in USDC (0n for V1)
   status:           'settled' | 'incoming'
   flow:             'direct' | 'v2' | 'registry'
   chain:            keyof typeof CHAIN_META
@@ -120,23 +120,23 @@ function OgArchiveLink({ className }: { className?: string }) {
       target="_blank"
       rel="noopener noreferrer"
       className={cn(
-        'inline-flex items-center gap-2 rounded-xl border border-purple-100 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 shadow-sm transition-all hover:border-purple-200 hover:bg-purple-50/40 active:scale-[0.98]',
+        'inline-flex items-center gap-2 rounded-xl border border-purple-100 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 shadow-sm transition-all hover:border-purple-200 hover:bg-purple-50/40 active:scale-[0.98] dark:border-purple-900/50 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:bg-purple-950/30',
         className,
       )}
     >
       <span className="relative flex h-5 w-5 items-center justify-center">
         <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-purple-300 opacity-40" />
-        <span className="relative inline-flex h-5 w-5 items-center justify-center rounded-full border border-purple-200 bg-purple-50 text-[8px] font-bold text-purple-600">
+        <span className="relative inline-flex h-5 w-5 items-center justify-center rounded-full border border-purple-200 bg-purple-50 text-[8px] font-bold text-purple-600 dark:border-purple-800 dark:bg-purple-950/60 dark:text-purple-300">
           0G
         </span>
       </span>
       View 0G Global Archive
-      <ExternalLink className="h-3.5 w-3.5 text-gray-400" />
+      <ExternalLink className="h-3.5 w-3.5 text-gray-400 dark:text-gray-500" />
     </a>
   )
 }
 
-// ─── Component ───────────────────────────────────────────────────────────────
+// Component
 
 export default function Dashboard() {
   const [searchParams] = useSearchParams()
@@ -153,8 +153,6 @@ export default function Dashboard() {
   const [scanCursor,    setScanCursor]    = useState<bigint | null>(null)
   const [isLoading,     setIsLoading]     = useState(false)
   const [loadError,     setLoadError]     = useState<string | null>(null)
-  const [ethPrice,      setEthPrice]      = useState(2_500)
-  const [expandedRow,   setExpandedRow]   = useState<string | null>(null)
   const [balanceRows,   setBalanceRows]   = useState<UnifiedBalanceBreakdown[]>([])
   const [globalBalance, setGlobalBalance] = useState(0)
   const [balanceLoading,setBalanceLoading]= useState(false)
@@ -181,14 +179,7 @@ export default function Dashboard() {
     return evmValid ? ['base'] : []
   })()
 
-  // ── Fetch ETH price (for gas cost in USD) ──────────────────────────────
-  useEffect(() => {
-    fetch('https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd')
-      .then(r => r.json())
-      .then((d: { ethereum?: { usd?: number } }) => { if (d?.ethereum?.usd) setEthPrice(d.ethereum.usd) })
-      .catch(() => {})
-  }, [])
-
+  // Load unified balances for selected dashboard chains.
   useEffect(() => {
     let cancelled = false
     if (balanceChains.length === 0) {
@@ -314,32 +305,29 @@ export default function Dashboard() {
     return () => window.clearInterval(timer)
   }, [eventId, evmValid, scanCursor, loadPayments])
 
-  // ── Computed helpers ──────────────────────────────────────────────────
-  function gasCostUsdc(wei: bigint) { return Number(wei) / 1e18 * ethPrice }
-  function netUsdc(row: PaymentRow) {
-    if (row.flow === 'direct' || row.flow === 'v2') return Number(row.recipientAmount) / 1e6
-    return Math.max(0, Number(row.recipientAmount) / 1e6 - gasCostUsdc(row.gasCostWei))
+  // Computed helpers
+  function receivedUsdc(row: PaymentRow) {
+    return Math.max(0, Number(row.recipientAmount) / 1e6)
   }
-  function grossUsdc(row: PaymentRow) {
-    if (row.flow === 'direct') return Number(row.recipientAmount) / 1e6
-    if (row.flow === 'v2') return Number(row.recipientAmount + row.treasuryAmount + row.gasReimbUsdc) / 1e6
-    return Number(row.recipientAmount + row.treasuryAmount) / 1e6
+  const totalReceived = payments.reduce((s, p) => s + receivedUsdc(p), 0)
+  const activeChainCount = new Set(payments.map(p => p.chain)).size
+
+  function fmt(n: number) {
+    if (!Number.isFinite(n) || Math.abs(n) < 0.0000005) return '0'
+    return n.toLocaleString('en-US', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: n >= 1 ? 2 : 6,
+    })
   }
-  function feeUsdc(row: PaymentRow) { return Number(row.treasuryAmount) / 1e6 }
-
-  const totalGross = payments.reduce((s, p) => s + grossUsdc(p), 0)
-  const totalNet   = payments.reduce((s, p) => s + netUsdc(p), 0)
-  const totalFee   = payments.reduce((s, p) => s + feeUsdc(p), 0)
-
-  function fmt(n: number) { return n.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 }) }
+  function fmtUsdc(n: number) { return `${fmt(n)} USDC` }
   function fmtTs(ts: number | null) {
-    if (!ts) return '—'
+    if (!ts) return '-'
     const d = new Date(ts)
     return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   }
   function rowMeta(row: PaymentRow) { return CHAIN_META[row.chain] ?? meta }
 
-  // ── No address ────────────────────────────────────────────────────────
+  // No address
   if (!hasDashboardAddress) {
     return (
       <div className="mx-auto max-w-lg py-20 text-center animate-fade-in">
@@ -360,11 +348,11 @@ export default function Dashboard() {
   return (
     <div className="mx-auto max-w-5xl animate-fade-in space-y-6">
 
-      {/* ── Header ───────────────────────────────────────────────────────── */}
+      {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-gray-900">Payments Received</h1>
-          <p className="mt-0.5 font-mono text-xs text-gray-400">
+          <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-gray-50">Payments Received</h1>
+          <p className="mt-0.5 font-mono text-xs text-gray-400 dark:text-gray-500">
             {evmValid
               ? truncateAddress(evmAddr, 12)
               : solanaValid
@@ -376,7 +364,7 @@ export default function Dashboard() {
           <button
             onClick={() => loadPayments()}
             disabled={isLoading}
-            className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-all disabled:opacity-50"
+            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 text-xs font-semibold text-gray-600 hover:bg-gray-50 dark:border-white/10 dark:bg-white/5 dark:text-gray-300 dark:hover:bg-white/10 transition-all disabled:opacity-50"
           >
             <RefreshCw className={cn('h-3.5 w-3.5', isLoading && 'animate-spin')} />
             Refresh
@@ -384,7 +372,7 @@ export default function Dashboard() {
           {telegramUrl ? (
             <a
               href={telegramUrl}
-              className="flex items-center gap-1.5 rounded-xl bg-black px-4 py-2 text-xs font-semibold text-white hover:bg-gray-800 transition-all"
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-black px-3 text-xs font-semibold text-white hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200 transition-all"
             >
               <Link2 className="h-3.5 w-3.5" />
               New Telegram PayLink
@@ -392,7 +380,7 @@ export default function Dashboard() {
           ) : (
             <Link
               to="/"
-              className="flex items-center gap-1.5 rounded-xl bg-black px-4 py-2 text-xs font-semibold text-white hover:bg-gray-800 transition-all"
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-black px-3 text-xs font-semibold text-white hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200 transition-all"
             >
               <Link2 className="h-3.5 w-3.5" />
               New PayLink
@@ -401,34 +389,34 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* ── Summary cards ────────────────────────────────────────────────── */}
+      {/* Summary cards */}
       <div className={cn(
-        'rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition-all',
+        'rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition-all dark:border-white/10 dark:bg-[#17181c]',
         balanceLoading && 'animate-pulse',
       )}>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Unified Global Balance</p>
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500">Unified Global Balance</p>
               <span className={cn(
                 'inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold',
-                balanceError ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700',
+                balanceError ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300' : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
               )}>
                 {balanceError ? <><AlertCircle className="h-3 w-3" /> Partial</> : <><Info className="h-3 w-3" /> Read-only</>}
-                <span className="text-gray-300">·</span>
+                <span className="text-gray-300">/</span>
                 <img src="/brand/circle-logo.jpeg" alt="" className="h-3 w-3 rounded-full object-cover" />
                 <span>Powered by Circle</span>
               </span>
             </div>
-            <p className="mt-2 font-mono text-3xl font-bold tracking-tight text-gray-900">
-              {balanceLoading ? '$--.----' : `$${fmt(globalBalance)}`}
-              <span className="ml-2 text-sm font-semibold text-gray-400">USDC</span>
+            <p className="mt-2 font-mono text-3xl font-bold tracking-tight text-gray-900 dark:text-gray-50">
+              {balanceLoading ? '--' : fmt(globalBalance)}
+              <span className="ml-2 text-sm font-semibold text-gray-400 dark:text-gray-500">USDC</span>
             </p>
           </div>
           <button
             type="button"
             onClick={() => setBalanceOpen(open => !open)}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-all"
+            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 text-xs font-semibold text-gray-600 hover:bg-gray-50 dark:border-white/10 dark:bg-white/5 dark:text-gray-300 dark:hover:bg-white/10 transition-all"
           >
             Breakdown
             {balanceOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
@@ -438,15 +426,15 @@ export default function Dashboard() {
         {balanceOpen && (
           <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
             {balanceRows.map(row => (
-              <div key={row.key} className="rounded-lg border border-gray-100 bg-gray-50/60 px-3 py-2">
+              <div key={row.key} className="rounded-lg border border-gray-100 bg-gray-50/60 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-semibold text-gray-600">{row.label}</span>
+                  <span className="text-xs font-semibold text-gray-600 dark:text-gray-300">{row.label}</span>
                   <span className={cn(
                     'h-1.5 w-1.5 rounded-full',
                     row.status === 'ok' ? 'bg-emerald-500' : row.status === 'error' ? 'bg-amber-500' : 'bg-gray-300',
                   )} />
                 </div>
-                <p className="mt-1 font-mono text-sm font-bold text-gray-900">${fmt(row.balance)}</p>
+                <p className="mt-1 font-mono text-sm font-bold text-gray-900 dark:text-gray-100">{fmtUsdc(row.balance)}</p>
                 {row.error && <p className="mt-1 text-[10px] leading-snug text-amber-600">{row.error}</p>}
               </div>
             ))}
@@ -458,26 +446,25 @@ export default function Dashboard() {
       </div>
 
       {payments.length > 0 && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           {[
-            { label: 'Payments',     value: String(payments.length),        color: 'text-gray-900',    border: 'border-gray-100' },
-            { label: 'Gross',        value: `$${fmt(totalGross)} USDC`,     color: 'text-gray-900',    border: 'border-gray-100' },
-            { label: 'Fees Paid',    value: `-$${fmt(totalFee)} USDC`,      color: 'text-red-600',     border: 'border-red-100'  },
-            { label: 'Net Received', value: `$${fmt(totalNet)} USDC`,       color: 'text-emerald-700', border: 'border-emerald-100', bg: 'bg-emerald-50/60' },
+            { label: 'Paid',      value: String(payments.length), color: 'text-gray-900 dark:text-gray-50', border: 'border-gray-100 dark:border-white/10' },
+            { label: 'Collected', value: fmtUsdc(totalReceived),  color: 'text-emerald-700 dark:text-emerald-300', border: 'border-emerald-100 dark:border-emerald-900/50', bg: 'bg-emerald-50/60 dark:bg-emerald-950/20' },
+            { label: 'Networks',  value: String(activeChainCount), color: 'text-gray-900 dark:text-gray-50', border: 'border-gray-100 dark:border-white/10' },
           ].map(({ label, value, color, border, bg }) => (
-            <div key={label} className={cn('rounded-xl border p-4 shadow-sm', border, bg ?? 'bg-white')}>
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">{label}</p>
+            <div key={label} className={cn('rounded-xl border p-4 shadow-sm', border, bg ?? 'bg-white dark:bg-[#17181c]')}>
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500">{label}</p>
               <p className={cn('mt-1 text-lg font-bold leading-tight', color)}>{value}</p>
             </div>
           ))}
         </div>
       )}
 
-      {/* ── Table ─────────────────────────────────────────────────────────── */}
-      <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+      {/* Table */}
+      <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-[#17181c]">
         {/* Live indicator */}
-        <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3">
-          <p className="text-sm font-semibold text-gray-800">Settlement History</p>
+        <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3 dark:border-white/10">
+          <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">Settlement History</p>
           <div className="flex items-center gap-1.5 text-[11px] text-emerald-600 font-medium">
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
@@ -488,29 +475,29 @@ export default function Dashboard() {
         </div>
 
         {isLoading ? (
-          <div className="flex items-center justify-center gap-3 py-16 text-gray-400">
+          <div className="flex items-center justify-center gap-3 py-16 text-gray-400 dark:text-gray-500">
             <Loader2 className="h-5 w-5 animate-spin" />
-            <span className="text-sm">Loading payment history…</span>
+            <span className="text-sm">Loading payment history...</span>
           </div>
         ) : loadError ? (
           <div className="flex flex-col items-center gap-3 py-16 text-center">
             <AlertCircle className="h-8 w-8 text-red-300" />
-            <p className="text-sm text-gray-500">{loadError}</p>
-            <button onClick={() => loadPayments()} className="text-xs text-blue-500 underline underline-offset-2 hover:text-blue-700">
+            <p className="text-sm text-gray-500 dark:text-gray-400">{loadError}</p>
+            <button onClick={() => loadPayments()} className="text-xs text-blue-500 underline underline-offset-2 hover:text-blue-400">
               Try again
             </button>
           </div>
         ) : payments.length === 0 ? (
           <div className="py-16 text-center">
-            <TrendingUp className="mx-auto mb-4 h-10 w-10 text-gray-200" />
-            <p className="text-sm font-medium text-gray-500">No payments received yet</p>
-            <p className="mt-1 text-xs text-gray-400">Share your PayLink to get started</p>
+            <TrendingUp className="mx-auto mb-4 h-10 w-10 text-gray-200 dark:text-gray-700" />
+            <p className="text-sm font-medium text-gray-500 dark:text-gray-300">No payments received yet</p>
+            <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">Share your PayLink to get started</p>
             {telegramUrl ? (
               <OgArchiveLink className="mt-6" />
             ) : (
               <Link
                 to="/"
-                className="mt-6 inline-flex items-center gap-2 rounded-xl bg-black px-5 py-2.5 text-sm font-medium text-white hover:bg-gray-800 transition-all"
+                className="mt-6 inline-flex items-center gap-2 rounded-xl bg-black px-5 py-2.5 text-sm font-medium text-white hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200 transition-all"
               >
                 <Link2 className="h-4 w-4" />
                 Create a HashPay Link
@@ -521,136 +508,66 @@ export default function Dashboard() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-100 bg-gray-50/60">
-                  {['Date', 'From', 'Gross', 'Net Received ⓘ', 'Status', 'Explorer'].map((h, i) => (
+                <tr className="border-b border-gray-100 bg-gray-50/60 dark:border-white/10 dark:bg-white/[0.03]">
+                  {['Date', 'From', 'Received', 'Status', 'Explorer'].map((h, i) => (
                     <th key={h} className={cn(
-                      'px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-400',
+                      'px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500',
                       i >= 2 ? 'text-right' : 'text-left',
-                      i === 4 ? 'text-center' : '',
+                      i === 3 ? 'text-center' : '',
                     )}>{h}</th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50">
+              <tbody className="divide-y divide-gray-50 dark:divide-white/10">
                 {payments.map((row) => {
-                  const gross   = grossUsdc(row)
-                  const fee     = feeUsdc(row)
-                  const gas     = gasCostUsdc(row.gasCostWei)
-                  const net     = netUsdc(row)
-                  const isOpen  = expandedRow === row.id
+                  const received = receivedUsdc(row)
                   const chainMeta = rowMeta(row)
 
                   return (
-                    <Fragment key={row.id}>
-                      <tr className="group hover:bg-gray-50/60 transition-colors">
-                        <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
-                          {fmtTs(row.timestamp)}
-                        </td>
-                        <td className="px-4 py-3 text-xs text-gray-600">
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <span className="inline-flex items-center rounded-full border border-gray-100 bg-gray-50 px-2 py-0.5 text-[10px] font-semibold text-gray-600">
-                              {chainMeta.label}
-                            </span>
-                            {row.flow === 'v2' || row.flow === 'registry' ? (
-                              <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-600 border border-blue-100">
-                                {row.label ?? 'Direct Send'}
-                              </span>
-                            ) : (
-                              <a
-                                href={`${chainMeta.explorerUrl}/address/${row.sender}`}
-                                target="_blank" rel="noopener noreferrer"
-                                className="font-mono hover:text-blue-600 transition-colors"
-                              >
-                                {truncateAddress(row.sender, 6)}
-                              </a>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-right font-mono text-xs text-gray-700">
-                          ${fmt(gross)}
-                        </td>
-                        {/* Net Received — click to expand breakdown */}
-                        <td className="px-4 py-3 text-right">
-                          <button
-                            onClick={() => setExpandedRow(isOpen ? null : row.id)}
-                            className="ml-auto flex items-center justify-end gap-1 font-mono text-xs font-semibold text-emerald-700 hover:text-emerald-900 transition-colors"
-                            title="Click to see breakdown"
-                          >
-                            ${fmt(net)}
-                            {isOpen
-                              ? <ChevronUp   className="h-3 w-3 text-gray-400" />
-                              : <ChevronDown className="h-3 w-3 text-gray-400" />}
-                          </button>
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
-                            <CheckCircle2 className="h-2.5 w-2.5" />
-                            Settled
+                    <tr key={row.id} className="group hover:bg-gray-50/60 transition-colors dark:hover:bg-white/[0.03]">
+                      <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap dark:text-gray-400">
+                        {fmtTs(row.timestamp)}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-300">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="inline-flex items-center rounded-full border border-gray-100 bg-gray-50 px-2 py-0.5 text-[10px] font-semibold text-gray-600 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-300">
+                            {chainMeta.label}
                           </span>
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <a
-                            href={`${chainMeta.explorerUrl}/tx/${row.txHash}`}
-                            target="_blank" rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 rounded-lg border border-transparent px-2 py-1 text-[11px] text-blue-500 hover:border-blue-100 hover:bg-blue-50 hover:text-blue-700 transition-all"
-                          >
-                            {truncateAddress(row.txHash, 4)}
-                            <ExternalLink className="h-3 w-3" />
-                          </a>
-                        </td>
-                      </tr>
-
-                      {/* ── Breakdown row ─────────────────────────────────── */}
-                      {isOpen && (
-                        <tr className="bg-gray-50/80 animate-slide-up">
-                          <td colSpan={6} className="px-5 py-4">
-                            <div className="flex flex-wrap items-center gap-6">
-                              <div className="space-y-0.5">
-                                <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Gross Amount</p>
-                                <p className="font-mono text-sm font-semibold text-gray-800">${fmt(gross)} USDC</p>
-                              </div>
-                              <div className="text-gray-300">—</div>
-                              <div className="space-y-0.5">
-                                <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Protocol Fee (0.2%)</p>
-                                <p className="font-mono text-sm font-semibold text-red-500">−${fmt(fee)} USDC</p>
-                              </div>
-                              <div className="text-gray-300">—</div>
-                              {row.flow === 'direct' ? (
-                                <div className="space-y-0.5">
-                                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Settlement Path</p>
-                                  <p className="font-mono text-sm font-semibold text-gray-600">
-                                    Direct to recipient
-                                  </p>
-                                </div>
-                              ) : row.flow === 'v2' ? (
-                                <div className="space-y-0.5">
-                                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Gas Reimb (USDC)</p>
-                                  <p className="font-mono text-sm font-semibold text-red-400">
-                                    −${fmt(Number(row.gasReimbUsdc) / 1e6)} USDC
-                                    <span className="ml-1 text-[10px] font-normal text-gray-400">(relayer reimbursed)</span>
-                                  </p>
-                                </div>
-                              ) : (
-                                <div className="space-y-0.5">
-                                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Network Gas (actual)</p>
-                                  <p className="font-mono text-sm font-semibold text-red-400">
-                                    −${fmt(gas)} USDC
-                                    <span className="ml-1 text-[10px] font-normal text-gray-400">
-                                      ({(Number(row.gasCostWei) / 1e18).toFixed(8)} ETH)
-                                    </span>
-                                  </p>
-                                </div>
-                              )}
-                              <div className="text-gray-300">=</div>
-                              <div className="space-y-0.5">
-                                <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-600">Net Received</p>
-                                <p className="font-mono text-base font-bold text-emerald-700">${fmt(net)} USDC</p>
-                              </div>
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </Fragment>
+                          {row.flow === 'v2' || row.flow === 'registry' ? (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-blue-100 bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-600 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-300">
+                              {row.label ?? 'Direct Send'}
+                            </span>
+                          ) : (
+                            <a
+                              href={`${chainMeta.explorerUrl}/address/${row.sender}`}
+                              target="_blank" rel="noopener noreferrer"
+                              className="font-mono hover:text-blue-600 transition-colors dark:hover:text-blue-300"
+                            >
+                              {truncateAddress(row.sender, 6)}
+                            </a>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+                        {fmtUsdc(received)}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+                          <CheckCircle2 className="h-2.5 w-2.5" />
+                          Settled
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <a
+                          href={`${chainMeta.explorerUrl}/tx/${row.txHash}`}
+                          target="_blank" rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 rounded-lg border border-transparent px-2 py-1 text-[11px] text-blue-500 hover:border-blue-100 hover:bg-blue-50 hover:text-blue-700 transition-all dark:text-blue-300 dark:hover:border-blue-900/50 dark:hover:bg-blue-950/30"
+                        >
+                          {truncateAddress(row.txHash, 4)}
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      </td>
+                    </tr>
                   )
                 })}
               </tbody>
@@ -659,14 +576,14 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* ── CTA at bottom ────────────────────────────────────────────────── */}
+      {/* CTA at bottom */}
       <div className="flex justify-center pb-4">
         {telegramUrl ? (
           <OgArchiveLink />
         ) : (
           <Link
             to="/"
-            className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 hover:border-gray-300 transition-all active:scale-[0.98]"
+            className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 hover:border-gray-300 transition-all active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:bg-white/10"
           >
             <Link2 className="h-4 w-4" />
             Create a new HashPay Link
