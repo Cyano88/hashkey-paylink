@@ -17,6 +17,7 @@
   "dependencies": {
     "@0gfoundation/0g-ts-sdk": "^1.2.8",
     "@anthropic-ai/sdk": "^0.95.0",
+    "@argent/invisible-sdk": "^1.0.0",
     "@circle-fin/modular-wallets-core": "^1.0.13",
     "@circle-fin/unified-balance-kit": "^1.1.0",
     "@circle-fin/w3s-pw-web-sdk": "^1.1.11",

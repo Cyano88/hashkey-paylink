@@ -58,11 +58,13 @@ import { sendCirclePaymasterPayment } from '../lib/circlePaymasterPayment'
 import { canUseCirclePasskeyPayments, prepareCirclePasskeyWallet, sendCirclePasskeyPayment } from '../lib/circlePasskeyPayment'
 import { canUseCircleEvmEmailWallet, connectCircleEvmEmailWallet, sendCircleEvmEmailPayment } from '../lib/circleEvmEmailWallet'
 import { canUseCircleSolanaEmailWallet, connectCircleSolanaEmailWallet, signCircleSolanaTransaction } from '../lib/circleSolanaEmailWallet'
+import { canUseArgentStarknetEmailWallet, connectArgentStarknetEmailWallet } from '../lib/argentStarknetWallet'
 import { getSponsoredGasRecoveryUnits } from '../lib/gasRecovery'
 import { isValidSolanaAddress } from '../lib/solanaAddress'
 
 type CircleSolanaSession = Awaited<ReturnType<typeof connectCircleSolanaEmailWallet>>
 type CircleEvmEmailSession = Awaited<ReturnType<typeof connectCircleEvmEmailWallet>>
+type ArgentStarknetSession = Awaited<ReturnType<typeof connectArgentStarknetEmailWallet>>
 
 const CHAINS: ChainKey[] = ['base', 'starknet', 'arc', 'solana', 'arbitrum']
 
@@ -475,6 +477,12 @@ export default function PaymentPage() {
   const [isStarkConfirming, setIsStarkConfirming] = useState(false)
   const [isStarkConfirmed,  setIsStarkConfirmed]  = useState(false)
   const [starkError,        setStarkError]        = useState<string | null>(null)
+  const [argentStarkSession, setArgentStarkSession] = useState<ArgentStarknetSession | null>(null)
+  const [argentStarkPending, setArgentStarkPending] = useState(false)
+  const [argentStarkBalance, setArgentStarkBalance] = useState<bigint | null>(null)
+  const [argentStarkFetching, setArgentStarkFetching] = useState(false)
+  const [argentStarkCopied, setArgentStarkCopied] = useState(false)
+  const [argentStarkError, setArgentStarkError] = useState<string | null>(null)
   const starkPollAbort = useRef<AbortController | null>(null)
 
   // ── Solana ────────────────────────────────────────────────────────────────
@@ -523,6 +531,7 @@ export default function PaymentPage() {
   const showCirclePasskeyPay = canUseCirclePasskeyPayments(chain)
   const showCircleEmailPay = showCircleEvmEmailPay || showCirclePasskeyPay
   const showCircleSolanaEmailPay = chain === 'solana' && canUseCircleSolanaEmailWallet()
+  const showArgentStarknetEmailPay = chain === 'starknet' && canUseArgentStarknetEmailWallet()
   const circleRequiredUnits = (() => {
     try {
       return parseUnits(effectiveAmt || '0', meta.decimals)
@@ -530,6 +539,11 @@ export default function PaymentPage() {
       return 0n
     }
   })()
+  const starkSmartWalletHasEnough =
+    argentStarkBalance !== null &&
+    circleRequiredUnits > 0n &&
+    argentStarkBalance >= circleRequiredUnits
+  const starkSmartWalletNeedsFunds = !!argentStarkSession && argentStarkBalance != null && circleRequiredUnits > 0n && argentStarkBalance < circleRequiredUnits
   const circleWalletHasEnough =
     typeof circleWalletBalance === 'bigint' &&
     circleRequiredUnits > 0n &&
@@ -1203,6 +1217,67 @@ export default function PaymentPage() {
     else handleHashKeyPay()
   }
 
+  async function refreshArgentStarkBalance(walletAddress = argentStarkSession?.address) {
+    if (!walletAddress) return
+    setArgentStarkFetching(true)
+    try {
+      const balance = await starkUsdcBalance(CHAIN_META.starknet.tokenAddress, walletAddress)
+      setArgentStarkBalance(balance)
+    } catch {
+      // Balance polling is advisory; payment submit still validates on-chain.
+    } finally {
+      setArgentStarkFetching(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!argentStarkSession?.address || chain !== 'starknet') return
+    void refreshArgentStarkBalance(argentStarkSession.address)
+    const timer = setInterval(() => {
+      void refreshArgentStarkBalance(argentStarkSession.address)
+    }, 4_000)
+    return () => clearInterval(timer)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [argentStarkSession?.address, chain])
+
+  async function handleCopyArgentStarkWallet() {
+    if (!argentStarkSession?.address) return
+    await copyToClipboard(argentStarkSession.address)
+    setArgentStarkCopied(true)
+    setTimeout(() => setArgentStarkCopied(false), 2500)
+  }
+
+  async function handleArgentStarknetEmailPay() {
+    if (!resolvedStark || !showArgentStarknetEmailPay) return
+    if (flexPayDisabled || !effectiveAmt || parseFloat(effectiveAmt) <= 0) {
+      setArgentStarkError(SMART_WALLET_AMOUNT_ERROR)
+      return
+    }
+
+    setArgentStarkPending(true)
+    setArgentStarkError(null)
+    try {
+      let session = argentStarkSession
+      if (!session) {
+        session = await connectArgentStarknetEmailWallet()
+        setArgentStarkSession(session)
+        await refreshArgentStarkBalance(session.address)
+        return
+      }
+
+      if (argentStarkBalance !== null && !starkSmartWalletHasEnough) {
+        setArgentStarkError(SMART_WALLET_FUNDING_ERROR)
+        return
+      }
+
+      await handleStarknetPay(session)
+    } catch (err) {
+      setArgentStarkError(err instanceof Error ? err.message.slice(0, 140) : 'Smart wallet payment failed.')
+    } finally {
+      setArgentStarkPending(false)
+    }
+  }
+
   async function refreshCircleSolanaBalance(walletAddress = circleSolanaSession?.wallet.address) {
     if (!walletAddress) return
     setCircleSolanaFetching(true)
@@ -1634,9 +1709,9 @@ export default function PaymentPage() {
     })
   }
 
-  async function handleStarknetPay() {
+  async function handleStarknetPay(sessionAccount?: ArgentStarknetSession) {
     const provider = window.starknet
-    if (!provider?.account) { setStarkError('Wallet not connected.'); return }
+    if (!sessionAccount && !provider?.account) { setStarkError('Wallet not connected.'); return }
     setIsStarkPending(true); setStarkError(null)
     try {
       const totalUnits = BigInt(Math.round(parseFloat(effectiveAmt || '0') * 1e6))
@@ -1646,12 +1721,15 @@ export default function PaymentPage() {
         low:  '0x' + (n & BigInt('0xffffffffffffffffffffffffffffffff')).toString(16),
         high: '0x0',
       })
-      const result = await provider.account.execute([
+      const calls = [
         { contractAddress: CHAIN_META.starknet.tokenAddress, entrypoint: 'transfer',
           calldata: [resolvedStark, toU256(recipUnits).low, toU256(recipUnits).high] },
         { contractAddress: CHAIN_META.starknet.tokenAddress, entrypoint: 'transfer',
           calldata: [STARK_TREASURY, toU256(feeUnits).low, toU256(feeUnits).high] },
-      ])
+      ]
+      const result = sessionAccount
+        ? await sessionAccount.execute(calls)
+        : await provider!.account!.execute(calls)
       setStarkTxHash(result.transaction_hash)
       setIsStarkPending(false); setIsStarkConfirming(true)
       const ctrl = new AbortController()
@@ -1702,7 +1780,7 @@ export default function PaymentPage() {
   async function doRegister(name: string) {
     // In Send-via-Address mode the payer never connects a wallet so address is
     // undefined. Fall back to the vault address as the payer identifier.
-    const payer  = chain === 'starknet' ? (starkAccount ?? '')
+    const payer  = chain === 'starknet' ? (argentStarkSession?.address ?? starkAccount ?? '')
       : chain === 'solana' ? (circleSolanaSession?.wallet.address ?? solanaWalletAddr ?? solanaVaultAddr ?? '')
       : (address ?? directVault ?? '')
     const txH    = manualPayDetected ? manualTxHash
@@ -2838,11 +2916,85 @@ export default function PaymentPage() {
           ) : payMode === 'wallet' && chain === 'starknet' ? (
             !starkAccount ? (
               <div className="space-y-2">
+                {showArgentStarknetEmailPay && !manualPayDetected && (
+                  <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50/70 p-3">
+                    <button
+                      onClick={handleArgentStarknetEmailPay}
+                      disabled={argentStarkPending || isStarkPending || isStarkConfirming || (isEventMode && !attendeeName.trim()) || flexPayDisabled}
+                      className={cn(
+                        'flex w-full items-center justify-center gap-2 rounded-xl px-6 py-3.5 text-sm font-semibold transition-all',
+                        argentStarkPending || isStarkPending || isStarkConfirming
+                          ? 'cursor-not-allowed bg-gray-100 text-gray-500'
+                          : 'bg-black text-white shadow-button hover:bg-gray-800 active:scale-[0.98]',
+                      )}
+                    >
+                      {isStarkConfirming
+                        ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirming on Chain</>
+                        : isStarkPending
+                        ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirming payment</>
+                        : argentStarkPending
+                        ? <><Loader2 className="h-4 w-4 animate-spin" /> {argentStarkSession ? 'Preparing payment' : 'Opening Smart wallet'}</>
+                        : argentStarkSession
+                          ? <><Zap className="h-4 w-4" /> Pay {formatAmount(effectiveAmt, 6)} USDC</>
+                          : <><Mail className="h-4 w-4" /> Continue with email</>}
+                    </button>
+                    {argentStarkSession && (
+                      <div className="rounded-lg border border-gray-200 bg-white/70 px-3 py-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Smart wallet</p>
+                            <p className="truncate text-[11px] text-gray-500">
+                              {starkSmartWalletNeedsFunds ? 'Fund with Starknet USDC' : 'Starknet USDC ready'}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleCopyArgentStarkWallet}
+                            className="shrink-0 rounded-md border border-gray-200 bg-white px-2 py-1 text-[10px] font-semibold text-gray-600 transition-all hover:bg-gray-50 active:scale-95"
+                          >
+                            {argentStarkCopied ? 'Copied' : 'Copy to fund'}
+                          </button>
+                        </div>
+                        <div className="mt-2 flex items-center justify-between border-t border-gray-100 pt-2 text-[11px]">
+                          <span className="text-gray-400">Starknet balance</span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono font-semibold text-gray-700">
+                              {argentStarkBalance == null
+                                ? 'Checking...'
+                                : `${formatAmount((Number(argentStarkBalance) / 1_000_000).toString(), 6)} USDC`}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => refreshArgentStarkBalance()}
+                              className="rounded-md p-1 text-gray-400 transition-all hover:bg-gray-100 hover:text-gray-700 active:scale-95"
+                              aria-label="Refresh smart wallet balance"
+                              title="Refresh balance"
+                            >
+                              <RefreshCw className={cn('h-3 w-3', argentStarkFetching && 'animate-spin')} />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {argentStarkError && (
+                      <p className="text-center text-[11px] font-medium text-red-600">
+                        {isSmartWalletBalanceError(argentStarkError) ? argentStarkError : `Transaction failed: ${argentStarkError}`}
+                      </p>
+                    )}
+                    {!isTelegramSource && (
+                      <div className="flex items-center gap-3">
+                        <div className="h-px flex-1 bg-gray-200" />
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">or</span>
+                        <div className="h-px flex-1 bg-gray-200" />
+                      </div>
+                    )}
+                  </div>
+                )}
                 <button onClick={connectStarknet} disabled={isStarkConnecting || !window.starknet || (isEventMode && !attendeeName.trim())}
                   className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#6236FF] px-6 py-4 text-sm font-semibold text-white transition-all hover:bg-[#5025EE] active:scale-[0.98] disabled:opacity-60">
-                  {isStarkConnecting ? <><Loader2 className="h-4 w-4 animate-spin" /> Connecting…</> : <><Wallet className="h-4 w-4" /> Connect Starknet Wallet</>}
+                  {isStarkConnecting ? <><Loader2 className="h-4 w-4 animate-spin" /> Connecting…</> : <><Wallet className="h-4 w-4" /> {showArgentStarknetEmailPay ? 'Use ArgentX / Braavos' : 'Connect Starknet Wallet'}</>}
                 </button>
-                <p className="text-center text-xs text-gray-400">ArgentX, Braavos & other Starknet wallets</p>
+                <p className="text-center text-xs text-gray-400">{showArgentStarknetEmailPay ? 'Browser wallet fallback' : 'ArgentX, Braavos & other Starknet wallets'}</p>
               </div>
             ) : (
               <button onClick={handlePay} disabled={isStarkPending || isStarkConfirming || (isEventMode && !attendeeName.trim()) || flexPayDisabled}

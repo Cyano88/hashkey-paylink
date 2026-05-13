@@ -120,7 +120,7 @@ export const CHAIN_META = {
     toggleActive: 'bg-[#6236FF] text-white shadow-sm',
     headerBg: 'from-purple-50 to-violet-50',
     dotColor: 'bg-[#6236FF]',
-    engineLabel: 'AVNU Paymaster · Gas Sponsored',
+    engineLabel: 'Smart Wallet · USDC Gas',
   },
   hashkey: {
     key: 'hashkey' as const,
