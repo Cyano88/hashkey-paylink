@@ -7,20 +7,21 @@
  * the Hash PayLink verification API.
  */
 import type { Request, Response } from 'express'
+import { assertPublicHttpUrl } from './security.js'
 
 export default async function handler(req: Request, res: Response) {
   const raw = (req.query.url ?? req.body?.url) as string | undefined
   if (!raw) return res.status(400).json({ compatible: false, error: 'Missing url param' })
+  if (raw.length > 2048) return res.status(400).json({ compatible: false, error: 'URL is too long' })
 
   let parsed: URL
   try {
-    parsed = new URL(raw)
-  } catch {
-    return res.status(400).json({ compatible: false, error: 'Invalid URL' })
-  }
-
-  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    return res.status(400).json({ compatible: false, error: 'Only http/https URLs allowed' })
+    parsed = await assertPublicHttpUrl(raw)
+  } catch (err) {
+    return res.status(400).json({
+      compatible: false,
+      error: err instanceof Error ? err.message : 'Invalid URL',
+    })
   }
 
   parsed.searchParams.set('eventId', 'test')
@@ -32,6 +33,7 @@ export default async function handler(req: Request, res: Response) {
     const r = await fetch(parsed.toString(), {
       signal: controller.signal,
       headers: { Accept: 'application/json' },
+      redirect: 'manual',
     })
     clearTimeout(timeout)
     const contentType = r.headers.get('content-type') ?? ''

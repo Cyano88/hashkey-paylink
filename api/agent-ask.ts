@@ -29,6 +29,18 @@ const ARCHIVE_ABI = [
   'event PaymentArchived(string indexed eventId, bytes32 indexed rootHash, string chain, string payer, string amount, uint256 ts)',
 ]
 
+const MAX_EVENT_ID_LENGTH = 128
+const MAX_PAYER_LENGTH = 128
+const MAX_QUESTION_LENGTH = 4_000
+
+function normalizeBoundedString(value: unknown, field: string, maxLength: number): string {
+  if (typeof value !== 'string') throw new Error(`${field} must be a string`)
+  const normalized = value.trim()
+  if (!normalized) throw new Error(`${field} is required`)
+  if (normalized.length > maxLength) throw new Error(`${field} is too long`)
+  return normalized
+}
+
 // ─── Payment verification (same logic as agent-verify, kept local) ────────────
 
 async function verifyPayment(eventId: string, payer: string) {
@@ -99,10 +111,17 @@ export default async function handler(req: Request, res: Response) {
   if (req.method !== 'POST')
     return res.status(405).json({ error: 'Method not allowed' })
 
-  const { eventId, payer, question } = (req.body ?? {}) as Record<string, string>
+  const { eventId: rawEventId, payer: rawPayer, question: rawQuestion } = (req.body ?? {}) as Record<string, unknown>
+  let eventId: string
+  let payer: string
+  let question: string
 
-  if (!eventId || !payer || !question) {
-    return res.status(400).json({ error: 'Missing required fields: eventId, payer, question' })
+  try {
+    eventId = normalizeBoundedString(rawEventId, 'eventId', MAX_EVENT_ID_LENGTH)
+    payer = normalizeBoundedString(rawPayer, 'payer', MAX_PAYER_LENGTH)
+    question = normalizeBoundedString(rawQuestion, 'question', MAX_QUESTION_LENGTH)
+  } catch (err) {
+    return res.status(400).json({ error: err instanceof Error ? err.message : 'Invalid request' })
   }
 
   try {

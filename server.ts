@@ -41,47 +41,52 @@ import agentVerifyHandler   from './api/agent-verify.js'
 import agentAskHandler     from './api/agent-ask.js'
 import checkAgentUrlHandler from './api/check-agent-url.js'
 import dashboardPaymentsHandler from './api/dashboard-payments.js'
+import { rateLimit } from './api/rate-limit.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const app = express()
 
 // Parse JSON bodies before any route handler sees req.body.
-app.use(express.json())
+app.use(express.json({ limit: '64kb' }))
+
+const strictLimiter = rateLimit({ name: 'strict', windowMs: 60_000, max: 20 })
+const relayLimiter = rateLimit({ name: 'relay', windowMs: 60_000, max: 30 })
+const readLimiter = rateLimit({ name: 'read', windowMs: 60_000, max: 120 })
 
 // ── API routes ────────────────────────────────────────────────────────────────
-app.post('/api/relay-v2',              relayV2Handler)
+app.post('/api/relay-v2',              relayLimiter, relayV2Handler)
 app.post('/api/relay-starknet',        relayStarknetHandler)
 app.post('/api/tx-status',             txStatusHandler)
 app.post('/api/starknet-balance',      starkBalanceHandler)
 app.post('/api/solana-balance',        solanaBalanceHandler)
 app.get('/api/setup-starknet-relayer', setupRelayerHandler)
 app.post('/api/recover-starknet',      recoverStarknetHandler)
-app.all('/api/sweep',                  sweepHandler)       // frontend uses POST; cron can use GET
+app.all('/api/sweep',                  relayLimiter, sweepHandler)       // frontend uses POST; cron can use GET
 app.get('/api/sweep-keeper',           keeperHandler)
 // ── Streampay routes ──────────────────────────────────────────────────────────
-app.post('/api/relay-stream',          relayStreamHandler)
-app.post('/api/settle-poa',            settlePoaHandler)
-app.post('/api/store-content',         storeContent)
-app.get('/api/get-content',            getContent)
+app.post('/api/relay-stream',          relayLimiter, relayStreamHandler)
+app.post('/api/settle-poa',            relayLimiter, settlePoaHandler)
+app.post('/api/store-content',         strictLimiter, storeContent)
+app.get('/api/get-content',            readLimiter, getContent)
 app.post('/api/register-vault',        registerVault)
 app.get('/api/get-vault',              getVault)
 app.get('/api/list-viewers',           listViewers)
-app.post('/api/event-register',        registerEventPayment)
-app.get('/api/list-event-payments',    listEventPayments)
+app.post('/api/event-register',        relayLimiter, registerEventPayment)
+app.get('/api/list-event-payments',    readLimiter, listEventPayments)
 // ── Solana relay ──────────────────────────────────────────────────────────────
-app.post('/api/solana-build-tx',       buildSolanaTx)
-app.post('/api/solana-relay',          relaySolanaTx)
-app.get('/api/solana-vault',           getSolanaVaultAddress)
-app.post('/api/solana-sweep',          sweepSolanaVault)
+app.post('/api/solana-build-tx',       relayLimiter, buildSolanaTx)
+app.post('/api/solana-relay',          relayLimiter, relaySolanaTx)
+app.get('/api/solana-vault',           readLimiter, getSolanaVaultAddress)
+app.post('/api/solana-sweep',          relayLimiter, sweepSolanaVault)
 app.get('/api/fx-rate',                fxRateHandler)
 app.all('/api/relay-gho',              relayGhoHandler)
 app.all('/api/base-paymaster',         basePaymasterHandler)
 app.post('/api/circle-solana-email',   circleSolanaEmailHandler)
 // ── Agentic Economy — 0G payment verification primitives ─────────────────────
-app.all('/api/agent-verify',           agentVerifyHandler)
-app.post('/api/agent-ask',             agentAskHandler)
-app.get('/api/check-agent-url',        checkAgentUrlHandler)
-app.get('/api/dashboard-payments',     dashboardPaymentsHandler)
+app.all('/api/agent-verify',           strictLimiter, agentVerifyHandler)
+app.post('/api/agent-ask',             strictLimiter, agentAskHandler)
+app.get('/api/check-agent-url',        strictLimiter, checkAgentUrlHandler)
+app.get('/api/dashboard-payments',     readLimiter, dashboardPaymentsHandler)
 app.get('/api/health',                 (_req, res) => res.json({ ok: true, ts: Date.now() }))
 // OG tag injection — must be before the SPA catch-all
 app.get('/stream/:vaultAddress',       streamOgHandler)

@@ -674,6 +674,18 @@ Recipient gets:    9.98 USDC before any sponsored gas recovery
 
 The fee is collected **atomically in the same transaction** — there is no separate fee transfer, no trust required. Defaults: Base sponsored payments recover 0.01 USDC, and Arbitrum sponsored payments recover 0.03 USDC, capped so tiny payments still leave a recipient amount.
 
+### DefiLlama Fee Analytics
+
+Hash PayLink has a merged DefiLlama fees adapter: [DefiLlama/dimension-adapters#6932](https://github.com/DefiLlama/dimension-adapters/pull/6932). The adapter tracks USDC transfers received by the Hash PayLink EVM treasury on Base and Arbitrum from `2026-05-01` onward.
+
+Reported metrics:
+- `dailyFees`
+- `dailyUserFees`
+- `dailyRevenue`
+- `dailyProtocolRevenue`
+
+Hash PayLink remains stateless and non-custodial: this is fee/revenue analytics only, not TVL. Solana and Starknet treasury tracking are planned follow-up adapter updates once their data sources can run cleanly in DefiLlama CI.
+
 ---
 
 ## Real-Time Payment Detection

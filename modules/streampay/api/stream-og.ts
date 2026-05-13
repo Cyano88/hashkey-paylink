@@ -76,6 +76,14 @@ const DEFAULT_OG = {
 
 // ── HTML injection ────────────────────────────────────────────────────────────
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+}
+
 function injectOgTags(
   html: string,
   title: string,
@@ -86,25 +94,29 @@ function injectOgTags(
   const origin = process.env.RENDER_EXTERNAL_URL
     ?? process.env.VITE_APP_URL
     ?? 'https://hashkey-paylink.onrender.com'
+  const safeTitle = escapeHtml(title)
+  const safeDescription = escapeHtml(description)
+  const safeImage = escapeHtml(`${origin}${image}`)
+  const safeUrl = escapeHtml(`${origin}${url}`)
 
   const tags = `
   <!-- Streampay dynamic OG tags -->
   <meta property="og:type"        content="website" />
   <meta property="og:site_name"   content="Hash PayLink · Streampay" />
-  <meta property="og:title"       content="${title}" />
-  <meta property="og:description" content="${description}" />
-  <meta property="og:image"       content="${origin}${image}" />
-  <meta property="og:url"         content="${origin}${url}" />
+  <meta property="og:title"       content="${safeTitle}" />
+  <meta property="og:description" content="${safeDescription}" />
+  <meta property="og:image"       content="${safeImage}" />
+  <meta property="og:url"         content="${safeUrl}" />
   <meta name="twitter:card"        content="summary_large_image" />
   <meta name="twitter:site"        content="@Hash_PayLink" />
-  <meta name="twitter:title"       content="${title}" />
-  <meta name="twitter:description" content="${description}" />
-  <meta name="twitter:image"       content="${origin}${image}" />
+  <meta name="twitter:title"       content="${safeTitle}" />
+  <meta name="twitter:description" content="${safeDescription}" />
+  <meta name="twitter:image"       content="${safeImage}" />
   <!-- /Streampay OG tags -->`
 
   // Replace the generic <title> and inject OG tags before </head>
   return html
-    .replace(/<title>[^<]*<\/title>/, `<title>${title}</title>`)
+    .replace(/<title>[^<]*<\/title>/, `<title>${safeTitle}</title>`)
     .replace('</head>', `${tags}\n</head>`)
 }
 

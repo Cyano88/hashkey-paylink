@@ -76,6 +76,7 @@ function getSolanaTreasury(feeRaw: bigint): PublicKey | null {
 
 function decodeSignedTransaction(tx: string): Buffer {
   const normalized = tx.trim()
+  if (normalized.length > 16_384) throw new Error('Signed Solana transaction is too large')
   try {
     const bytes = Buffer.from(normalized, 'base64')
     Transaction.from(bytes)
@@ -91,12 +92,23 @@ function decodeSignedTransaction(tx: string): Buffer {
   }
 }
 
-/** Deterministically derive a vault keypair from a linkId string */
-function deriveVaultKeypair(linkId: string): Keypair {
+/** Deterministically derive a vault keypair from a linkId + recipient pair. */
+function deriveVaultKeypair(linkId: string, recipient: string): Keypair {
   const seed = crypto.createHash('sha256')
-    .update(`hashpaylink_sol_vault_${linkId}`)
+    .update(`hashpaylink_sol_vault_v2_${linkId}_${recipient}`)
     .digest()
   return Keypair.fromSeed(seed)
+}
+
+function parseUsdcAmount(amount: string): bigint {
+  const normalized = amount.trim()
+  const match = normalized.match(/^(\d+)(?:\.(\d{0,6})?)?$/)
+  if (!match) throw new Error('Amount must be a positive USDC value with up to 6 decimals')
+  const whole = BigInt(match[1])
+  const fraction = BigInt((match[2] ?? '').padEnd(USDC_DECIMALS, '0'))
+  const value = whole * 10n ** BigInt(USDC_DECIMALS) + fraction
+  if (value <= 0n) throw new Error('Amount must be greater than zero')
+  return value
 }
 
 /** Create the ATA for a wallet if it doesn't already exist, returns the ATA pubkey */
@@ -137,15 +149,20 @@ export async function buildSolanaTx(req: Request, res: Response): Promise<void> 
     const fromPubkey = parseSolanaAddress('Sender address', from)
     const toPubkey   = parseSolanaAddress('Recipient address', to)
 
-    const totalRaw      = BigInt(Math.round(parseFloat(amount) * Math.pow(10, USDC_DECIMALS)))
+    const totalRaw      = parseUsdcAmount(amount)
     const feeRaw        = totalRaw * BigInt(PLATFORM_FEE_BPS) / 10_000n
     const recipientRaw  = totalRaw - feeRaw
+    if (recipientRaw <= 0n) throw new Error('Payment amount is too small after fees')
 
     const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash()
     const tx = new Transaction({ feePayer: relayer.publicKey, recentBlockhash: blockhash })
 
     // Ensure sender ATA exists (if it doesn't, payment will fail — sender must have USDC)
     const fromATA = await getAssociatedTokenAddress(USDC_MINT, fromPubkey)
+    const fromAccount = await getAccount(connection, fromATA)
+    if (BigInt(fromAccount.amount.toString()) < totalRaw) {
+      throw new Error('Sender has insufficient Solana USDC for this payment')
+    }
     // Ensure recipient ATA exists (relayer creates it if needed, covers rent)
     const toATA = await ensureATA(connection, tx, USDC_MINT, toPubkey, relayer.publicKey)
 
@@ -209,13 +226,15 @@ export async function relaySolanaTx(req: Request, res: Response): Promise<void> 
 
 // ── GET /api/solana-vault ─────────────────────────────────────────────────────
 export async function getSolanaVaultAddress(req: Request, res: Response): Promise<void> {
-  const { linkId } = req.query as { linkId?: string }
-  if (!linkId) { res.status(400).json({ ok: false, error: 'Missing linkId' }); return }
+  const { linkId, recipient } = req.query as { linkId?: string; recipient?: string }
+  if (!linkId || !recipient) { res.status(400).json({ ok: false, error: 'Missing linkId / recipient' }); return }
+  try { parseSolanaAddress('Recipient address', recipient) }
+  catch (err) { res.status(400).json({ ok: false, error: (err as Error).message }); return }
 
   // Return the vault WALLET address (public key), not the ATA.
   // Standard Solana UX: sender sends USDC to a wallet address and their
   // wallet auto-creates the ATA. The sweep reads the ATA derived from this key.
-  const vaultKeypair = deriveVaultKeypair(linkId)
+  const vaultKeypair = deriveVaultKeypair(linkId, recipient)
   res.json({ ok: true, vaultAddress: vaultKeypair.publicKey.toString() })
 }
 
@@ -230,7 +249,8 @@ export async function sweepSolanaVault(req: Request, res: Response): Promise<voi
 
   try {
     const connection   = new Connection(getRpc(), 'confirmed')
-    const vaultKeypair = deriveVaultKeypair(linkId)
+    const recipientPubkey = parseSolanaAddress('Recipient address', recipient)
+    const vaultKeypair = deriveVaultKeypair(linkId, recipient)
     const vaultATA     = await getAssociatedTokenAddress(USDC_MINT, vaultKeypair.publicKey)
 
     // Check USDC balance at vault ATA
@@ -247,7 +267,6 @@ export async function sweepSolanaVault(req: Request, res: Response): Promise<voi
     const feeRaw       = balanceRaw * BigInt(PLATFORM_FEE_BPS) / 10_000n
     const recipientRaw = balanceRaw - feeRaw
 
-    const recipientPubkey = parseSolanaAddress('Recipient address', recipient)
     const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash()
     const tx = new Transaction({ feePayer: relayer.publicKey, recentBlockhash: blockhash })
 

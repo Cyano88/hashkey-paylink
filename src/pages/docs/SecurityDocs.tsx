@@ -66,6 +66,12 @@ export default function SecurityDocs() {
         </ul>
       </Section>
 
+      <Section title="DefiLlama fee reporting">
+        <p>Hash PayLink has a merged DefiLlama fees adapter that tracks USDC transfers received by the EVM treasury on Base and Arbitrum from <Code>2026-05-01</Code> onward.</p>
+        <p className="mt-2">The adapter reports fees and protocol revenue only. Hash PayLink remains stateless and non-custodial, so TVL is not counted.</p>
+        <p className="mt-2"><a href="https://github.com/DefiLlama/dimension-adapters/pull/6932" target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline">View merged adapter PR</a></p>
+      </Section>
+
       <Section title="Phishing warning">
         <p>Hash PayLink is a non-custodial platform. The team will:</p>
         <ul className="list-none space-y-1 mt-2">

@@ -12,6 +12,7 @@
 
 import type { Request, Response } from 'express'
 import { ec, num, hash, constants } from 'starknet'
+import { requireAdminSecret } from './security.js'
 
 const DEFAULT_RPC_URL    = 'https://rpc.starknet.lava.build'
 const DEFAULT_CLASS_HASH = '0x061dac032f228abef9c6626f995015233097ae253a7f72d68552db02f2971b8f'
@@ -67,6 +68,8 @@ function computeDeployAccountV3Hash(
 }
 
 export default async function handler(req: Request, res: Response) {
+  if (!requireAdminSecret(req, res)) return
+
   const rpcUrl      = process.env.STARKNET_RPC_URL             ?? DEFAULT_RPC_URL
   const classHash   = process.env.STARKNET_OZ_CLASS_HASH       ?? DEFAULT_CLASS_HASH
   const rawKey      = process.env.STARKNET_RELAYER_PRIVATE_KEY ?? ''

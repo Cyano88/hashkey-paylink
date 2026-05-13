@@ -26,16 +26,30 @@ const ARCHIVE_ABI = [
   'event PaymentArchived(string indexed eventId, bytes32 indexed rootHash, string chain, string payer, string amount, uint256 ts)',
 ]
 
+const MAX_EVENT_ID_LENGTH = 128
+const MAX_PAYER_LENGTH = 128
+
+function normalizeBoundedString(value: unknown, field: string, maxLength: number): string {
+  if (typeof value !== 'string') throw new Error(`${field} must be a string`)
+  const normalized = value.trim()
+  if (!normalized) throw new Error(`${field} is required`)
+  if (normalized.length > maxLength) throw new Error(`${field} is too long`)
+  return normalized
+}
+
 // ─── Handler ──────────────────────────────────────────────────────────────────
 
 export default async function handler(req: Request, res: Response) {
-  const eventId = (req.query.eventId ?? req.body?.eventId) as string | undefined
-  const payer   = (req.query.payer   ?? req.body?.payer)   as string | undefined
+  let eventId: string
+  let payer: string
 
-  if (!eventId || !payer) {
+  try {
+    eventId = normalizeBoundedString(req.query.eventId ?? req.body?.eventId, 'eventId', MAX_EVENT_ID_LENGTH)
+    payer = normalizeBoundedString(req.query.payer ?? req.body?.payer, 'payer', MAX_PAYER_LENGTH)
+  } catch (err) {
     return res.status(400).json({
       verified: false,
-      error: 'Missing required params: eventId, payer',
+      error: err instanceof Error ? err.message : 'Invalid request',
     })
   }
 

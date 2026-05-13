@@ -57,14 +57,25 @@ const hashkeyChain = defineChain({
 
 const RELAY_ABI = parseAbi([
   'function relay(bytes32 linkId, address recipient, uint256 gasReimbUsdc) returns (uint256)',
+  'function getVaultAddress(bytes32 linkId, address recipient) view returns (address)',
 ])
 
 const RELAY_NATIVE_ABI = parseAbi([
   'function relayNative(bytes32 linkId, address recipient, uint256 gasReimbNative) returns (uint256)',
+  'function getVaultAddress(bytes32 linkId, address recipient) view returns (address)',
+])
+
+const ERC20_BALANCE_ABI = parseAbi([
+  'function balanceOf(address account) view returns (uint256)',
 ])
 
 // ─── Base Builder Code (ERC-8021) ─────────────────────────────────────────────
 const BASE_BUILDER_CODE = '0x62635f3871746237746e79' as `0x${string}`
+const TOKEN_BY_CHAIN = {
+  base: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+  arc: '0x3600000000000000000000000000000000000000',
+  arbitrum: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',
+} as const
 
 // ─── Gas reimbursement ────────────────────────────────────────────────────────
 
@@ -176,6 +187,37 @@ export default async function handler(req: Request, res: Response) {
 
   const publicClient = createPublicClient({ chain: viemChain, transport: http(rpcUrl) })
   const walletClient = createWalletClient({ account, chain: viemChain, transport: http(rpcUrl) })
+
+  try {
+    const vault = await publicClient.readContract({
+      address: factoryAddr as `0x${string}`,
+      abi: chainKey === 'hashkey' ? RELAY_NATIVE_ABI : RELAY_ABI,
+      functionName: 'getVaultAddress',
+      args: [linkId as `0x${string}`, recipient as `0x${string}`],
+    }) as `0x${string}`
+
+    if (chainKey === 'hashkey') {
+      const balance = await publicClient.getBalance({ address: vault })
+      if (balance === 0n) {
+        return res.status(200).json({ ok: false, status: 'waiting', error: 'Vault is not funded yet' })
+      }
+    } else {
+      const tokenAddress = TOKEN_BY_CHAIN[chainKey]
+      const balance = await publicClient.readContract({
+        address: tokenAddress,
+        abi: ERC20_BALANCE_ABI,
+        functionName: 'balanceOf',
+        args: [vault],
+      }) as bigint
+      if (balance === 0n) {
+        return res.status(200).json({ ok: false, status: 'waiting', error: 'Vault is not funded yet' })
+      }
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('[relay-v2:preflight]', chainKey, msg)
+    return res.status(502).json({ ok: false, error: 'Unable to verify vault funding before relay' })
+  }
 
   // ── Broadcast ─────────────────────────────────────────────────────────────
   try {

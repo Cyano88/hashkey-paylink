@@ -697,6 +697,12 @@ All gasless EVM operations use **EIP-712 structured typed data** — not raw `et
 
 Payment validity is enforced on-chain. The Hash PayLink backend is a **relay layer only** — it cannot forge signatures, steal funds, or prevent direct payments. You can always pay directly to the recipient address without using Hash PayLink's relay infrastructure.
 
+### DefiLlama Fee Reporting
+
+Hash PayLink's DefiLlama fees adapter was merged in [DefiLlama/dimension-adapters#6932](https://github.com/DefiLlama/dimension-adapters/pull/6932). It reports USDC transfers received by the Hash PayLink EVM treasury on Base and Arbitrum from `2026-05-01` onward.
+
+The adapter reports `dailyFees`, `dailyUserFees`, `dailyRevenue`, and `dailyProtocolRevenue`. It is a fees/revenue adapter only: Hash PayLink remains stateless and non-custodial, so there is no TVL to count. Solana and Starknet treasury tracking can be added in follow-up adapter updates once their data source is compatible with DefiLlama CI.
+
 ### Open Source
 
 The complete payment and relay logic is publicly auditable:

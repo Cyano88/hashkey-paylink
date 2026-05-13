@@ -37,6 +37,14 @@ const arcChain = defineChain({
 
 const ERC20_ABI  = parseAbi(['function balanceOf(address) view returns (uint256)'])
 const ROUTER_ABI = parseAbi(['function sweep(address token) external'])
+const ROUTER_VERIFY_ABI = parseAbi([
+  'function recipient() view returns (address)',
+  'function treasury() view returns (address)',
+])
+const FACTORY_ABI = parseAbi(['function getRouterAddress(address recipient) view returns (address)'])
+const BASE_ROUTER_FACTORY = '0x70Dd5226eB973268263A9AcD8BC48b4E59E7beCA' as const
+const ARC_ROUTER_FACTORY  = '0x70Dd5226eB973268263A9AcD8BC48b4E59E7beCA' as const
+const EVM_TREASURY = '0xcE5dF9e1115F81a2Fc2F65941B20B820d508e753'
 
 // ─── ETH price helper ────────────────────────────────────────────────────────
 
@@ -72,6 +80,10 @@ export default async function handler(req: Request, res: Response) {
   const tokenAddress = chain === 'base' ? USDC_BASE : USDC_ARC
   const viemChain    = chain === 'base' ? base : arcChain
   const rpcUrl       = chain === 'base' ? 'https://mainnet.base.org' : 'https://rpc.testnet.arc.network'
+  const expectedTreasury = (process.env.TREASURY_ADDRESS ?? EVM_TREASURY).toLowerCase()
+  const factoryAddress = chain === 'base'
+    ? BASE_ROUTER_FACTORY
+    : process.env.PAYMENT_ROUTER_FACTORY_ARC ?? ARC_ROUTER_FACTORY
 
   const account      = privateKeyToAccount(rawKey as `0x${string}`)
   const publicClient = createPublicClient({ chain: viemChain, transport: http(rpcUrl) })
@@ -84,6 +96,43 @@ export default async function handler(req: Request, res: Response) {
   }
 
   // ── Guard 2: balance check ───────────────────────────────────────────────
+  if (!factoryAddress || !isAddress(factoryAddress)) {
+    return res.status(503).json({ ok: false, error: `router factory not configured for ${chain}` })
+  }
+
+  let routerRecipient: `0x${string}`
+  let routerTreasury: `0x${string}`
+  try {
+    ;[routerRecipient, routerTreasury] = await Promise.all([
+      publicClient.readContract({
+        address: router as `0x${string}`,
+        abi: ROUTER_VERIFY_ABI,
+        functionName: 'recipient',
+      }) as Promise<`0x${string}`>,
+      publicClient.readContract({
+        address: router as `0x${string}`,
+        abi: ROUTER_VERIFY_ABI,
+        functionName: 'treasury',
+      }) as Promise<`0x${string}`>,
+    ])
+  } catch {
+    return res.status(400).json({ ok: false, error: 'not a Hash PayLink router' })
+  }
+
+  if (routerTreasury.toLowerCase() !== expectedTreasury) {
+    return res.status(400).json({ ok: false, error: 'router treasury mismatch' })
+  }
+
+  const expectedRouter = await publicClient.readContract({
+    address: factoryAddress as `0x${string}`,
+    abi: FACTORY_ABI,
+    functionName: 'getRouterAddress',
+    args: [routerRecipient],
+  }) as `0x${string}`
+  if (expectedRouter.toLowerCase() !== router.toLowerCase()) {
+    return res.status(400).json({ ok: false, error: 'router factory mismatch' })
+  }
+
   const balance = await publicClient.readContract({
     address: tokenAddress, abi: ERC20_ABI,
     functionName: 'balanceOf', args: [router as `0x${string}`],

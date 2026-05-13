@@ -58,6 +58,23 @@ function readableError(err: unknown) {
   }
 }
 
+function emailVerificationError(err: unknown) {
+  const message = readableError(err)
+  const lower = message.toLowerCase()
+  if (
+    lower.includes('failed to fetch') ||
+    lower.includes('networkerror') ||
+    lower.includes('network error') ||
+    lower.includes('load failed')
+  ) {
+    return 'Email verification could not reach Circle. Request a new code, disable VPN/ad blockers, and try again.'
+  }
+  if (lower.includes('expired') || lower.includes('invalid') || lower.includes('otp') || lower.includes('code')) {
+    return 'Email verification code is invalid or expired. Request a new code and try again.'
+  }
+  return message
+}
+
 async function circleSolanaApi<T>(payload: Record<string, unknown>): Promise<T> {
   const res = await fetch('/api/circle-solana-email', {
     method: 'POST',
@@ -181,17 +198,21 @@ export async function connectCircleSolanaEmailWallet(email: string): Promise<Sol
       },
     }, (error, result) => {
       if (error) {
-        reject(new Error(sdkError(error)))
+        reject(new Error(emailVerificationError(error)))
         return
       }
       if (!result?.userToken || !result.encryptionKey) {
-        reject(new Error('Circle email verification did not return a wallet session.'))
+        reject(new Error('Circle email verification did not return a wallet session. Request a new code and try again.'))
         return
       }
       resolve(result)
     })
-    sdk.verifyOtp()
-  }), 90_000, 'Email verification was cancelled or expired. Try again.')
+    try {
+      sdk.verifyOtp()
+    } catch (err) {
+      reject(new Error(emailVerificationError(err)))
+    }
+  }), 90_000, 'Email verification was cancelled or expired. Request a new code and try again.')
 
   const wallet = await ensureInitializedWallet(sdk, login.userToken, login.encryptionKey)
   if (!isSolanaAddress(wallet.address)) {

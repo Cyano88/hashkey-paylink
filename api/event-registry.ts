@@ -15,6 +15,23 @@ type PaymentEntry = {
   ogTxHash?:   string
 }
 
+const MAX_EVENT_ID_LENGTH = 128
+const MAX_TEXT_LENGTH = 256
+const MAX_AMOUNT_LENGTH = 64
+
+function cleanString(value: unknown, field: string, maxLength: number): string {
+  if (typeof value !== 'string') throw new Error(`${field} must be a string`)
+  const normalized = value.trim()
+  if (!normalized) throw new Error(`${field} is required`)
+  if (normalized.length > maxLength) throw new Error(`${field} is too long`)
+  return normalized
+}
+
+function cleanOptionalString(value: unknown, maxLength: number): string {
+  if (typeof value !== 'string') return ''
+  return value.trim().slice(0, maxLength)
+}
+
 // ── Persistent storage ────────────────────────────────────────────────────────
 // Set DATA_PATH env var to a Render Persistent Disk mount point (e.g. /data).
 // Without it the registry is in-memory only and resets on each deploy.
@@ -48,11 +65,25 @@ function persistRegistry(): void {
 const registry = loadRegistry()
 
 export function registerEventPayment(req: Request, res: Response): void {
-  const { eventId, txHash, chain, payer, memo, amount } = req.body as Partial<PaymentEntry>
-  if (!eventId || !txHash || !memo) {
-    res.status(400).json({ ok: false, error: 'Missing required fields' })
+  let eventId: string
+  let txHash: string
+  let payer: string
+  let memo: string
+  let chain: string
+  let amount: string
+
+  try {
+    eventId = cleanString(req.body?.eventId, 'eventId', MAX_EVENT_ID_LENGTH)
+    txHash = cleanString(req.body?.txHash, 'txHash', MAX_TEXT_LENGTH)
+    payer = cleanString(req.body?.payer, 'payer', MAX_TEXT_LENGTH)
+    memo = cleanString(req.body?.memo, 'memo', MAX_TEXT_LENGTH)
+    chain = cleanOptionalString(req.body?.chain, MAX_TEXT_LENGTH)
+    amount = cleanOptionalString(req.body?.amount, MAX_AMOUNT_LENGTH)
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err instanceof Error ? err.message : 'Invalid request' })
     return
   }
+
   const entries = registry.get(eventId) ?? []
   // Deduplicate by txHash (for real on-chain txs) OR by payer+eventId for manual detections
   const isDupe = txHash.startsWith('manual_')
@@ -62,7 +93,7 @@ export function registerEventPayment(req: Request, res: Response): void {
     res.json({ ok: true, duplicate: true })
     return
   }
-  const entry: PaymentEntry = { eventId, txHash, chain: chain ?? '', payer, memo, amount: amount ?? '', ts: Date.now() }
+  const entry: PaymentEntry = { eventId, txHash, chain, payer, memo, amount, ts: Date.now() }
   entries.push(entry)
   registry.set(eventId, entries)
   persistRegistry()
@@ -88,8 +119,13 @@ export function registerEventPayment(req: Request, res: Response): void {
 }
 
 export function listEventPayments(req: Request, res: Response): void {
-  const id = req.query.id as string
-  if (!id) { res.status(400).json({ ok: false, error: 'Missing id' }); return }
+  let id: string
+  try {
+    id = cleanString(req.query.id, 'id', MAX_EVENT_ID_LENGTH)
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err instanceof Error ? err.message : 'Invalid request' })
+    return
+  }
   const entries = registry.get(id) ?? []
   res.json({ ok: true, payments: [...entries].sort((a, b) => b.ts - a.ts) })
 }

@@ -931,7 +931,7 @@ export default function PaymentPage() {
     setSolanaLinkId(linkId)
     setSolanaVaultAddr(null)
     setSolanaDirectStatus('idle')
-    fetch(`/api/solana-vault?linkId=${encodeURIComponent(linkId)}`)
+    fetch(`/api/solana-vault?linkId=${encodeURIComponent(linkId)}&recipient=${encodeURIComponent(resolvedSolana)}`)
       .then(r => r.json())
       .then((data: { ok: boolean; vaultAddress?: string; error?: string }) => {
         if (data.ok && data.vaultAddress) {

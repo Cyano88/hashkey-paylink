@@ -29,7 +29,7 @@ contract GhostVaultV2 {
         address token = IPayLinkFactory(factory).USDC();
         if (token != address(0)) {
             uint256 bal = IERC20Min(token).balanceOf(address(this));
-            if (bal > 0) IERC20Min(token).transfer(factory, bal);
+            if (bal > 0) require(IERC20Min(token).transfer(factory, bal), "GhostVault: token transfer failed");
         }
 
         // ── Native token sweep (HSK on HashKey, ETH on Ethereum) ──────────────
@@ -137,17 +137,19 @@ contract PayLinkFactoryV2 {
     // ─── Admin ────────────────────────────────────────────────────────────────
 
     function setRelayer(address _relayer) external onlyOwner {
+        require(_relayer != address(0), "V2: zero relayer");
         emit RelayerUpdated(relayer, _relayer);
         relayer = _relayer;
     }
 
     function transferOwnership(address newOwner) external onlyOwner {
+        require(newOwner != address(0), "V2: zero owner");
         emit OwnershipTransferred(owner, newOwner);
         owner = newOwner;
     }
 
     function rescueTokens(address token, uint256 amount) external onlyOwner {
-        IERC20Min(token).transfer(owner, amount);
+        require(IERC20Min(token).transfer(owner, amount), "V2: rescue transfer failed");
     }
 
     function rescueNative(uint256 amount) external onlyOwner {
@@ -194,8 +196,8 @@ contract PayLinkFactoryV2 {
         payout = total - platformFee - gasReimb;
         require(payout > 0, "V2: payout is zero");
 
-        IERC20Min(USDC).transfer(TREASURY, platformFee + gasReimb);
-        IERC20Min(USDC).transfer(recipient, payout);
+        require(IERC20Min(USDC).transfer(TREASURY, platformFee + gasReimb), "V2: treasury transfer failed");
+        require(IERC20Min(USDC).transfer(recipient, payout), "V2: recipient transfer failed");
 
         emit PaymentRelayed(linkId, recipient, payout, platformFee, gasReimb);
     }
