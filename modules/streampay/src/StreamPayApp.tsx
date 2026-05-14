@@ -1,6 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes, useParams, useSearchParams } from 'react-router-dom'
 import { StreamPayLayout } from './components/StreamPayLayout'
 import { StreamView }      from './components/StreamView'
+import { RecipientWalletSetup } from './components/RecipientWalletSetup'
 import { CreatorPage }     from './components/creator/CreatorPage'
 import { StreamGate }      from './components/creator/StreamGate'
 
@@ -22,6 +23,7 @@ export default function StreamPayApp() {
           <Route index                           element={<StreamPage />} />
           <Route path="stream"                   element={<StreamPage />} />
           <Route path="stream/:vaultAddress"     element={<StreamPage />} />
+          <Route path="recipient"                element={<RecipientWalletSetup />} />
           {/* Creator / Event-Sovereign flows */}
           <Route path="creator"                  element={<CreatorPage />} />
           <Route path="gate"                     element={<StreamGate />} />
