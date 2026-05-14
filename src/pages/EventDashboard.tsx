@@ -86,12 +86,17 @@ export default function EventDashboard() {
 
   // Which EVM chains to watch for flash/toast notifications.
   // New links carry ?n= so we scope to exactly that chain.
-  // Legacy links (no net param) fall back to watching both Base & Arc.
-  const evmChainsToWatch: ('base' | 'arc')[] =
-    netParam === 'base' ? ['base'] :
-    netParam === 'arc'  ? ['arc']  :
-    netParam            ? []       :   // starknet / solana / hashkey — no EVM poll
-    evm                 ? ['base', 'arc'] : []  // legacy fallback
+  // Legacy links (no net param) fall back to watching all supported EVM chains.
+  const evmChainsToWatch: ('base' | 'arc' | 'arbitrum')[] =
+    !evmValid ? [] :
+    multiParam === '1'      ? ['base', 'arc', 'arbitrum'] :
+    netParam === 'base'     ? ['base'] :
+    netParam === 'arc'      ? ['arc'] :
+    netParam === 'arbitrum' ? ['arbitrum'] :
+    netParam                ? [] :
+    ['base', 'arc', 'arbitrum']
+  const watchSolana = solanaValid && (multiParam === '1' || netParam === 'solana')
+  const watchStarknet = starkValid && (multiParam === '1' || netParam === 'starknet')
 
   // Human-readable label for the live-watching indicator
   const watchLabel =
@@ -102,7 +107,7 @@ export default function EventDashboard() {
     netParam === 'solana'    ? 'Solana'     :
     netParam === 'arbitrum'  ? 'Arbitrum'   :
     netParam === 'hashkey'   ? 'HashKey'    :
-    'Base & Arc'
+    'EVM Chains'
 
   // Server registry is the single source of truth for the payment log.
   // It is keyed by eventId — only shows payments for THIS event.
@@ -233,11 +238,23 @@ export default function EventDashboard() {
   // This gives the organiser an instant visual ping when a payment arrives,
   // regardless of whether the payer's name has been registered yet.
   useEffect(() => {
-    if (!evm) return
+    if (evmChainsToWatch.length === 0 && !watchSolana && !watchStarknet) return
 
     const fromBlock: Record<string, bigint> = {}
+    const lastBalance: Partial<Record<'solana' | 'starknet', number>> = {}
 
-    async function pollChain(chainKey: 'base' | 'arc', chainLabel: string, decimals: number) {
+    function flashReceived(addr: string, amount: string, chainLabel: string) {
+      setCounterFlash(true)
+      setTimeout(() => setCounterFlash(false), 1800)
+
+      const id = ++toastId.current
+      setToasts(prev => [...prev, { id, addr, amount, chain: chainLabel }])
+      setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 5_000)
+
+      fetchPayments()
+    }
+
+    async function pollChain(chainKey: 'base' | 'arc' | 'arbitrum', chainLabel: string, decimals: number) {
       const client = EVM_CLIENTS[chainKey]
       try {
         const latest = await client.getBlockNumber()
@@ -260,29 +277,63 @@ export default function EventDashboard() {
           if (!from || value === undefined) continue
           const amount = parseFloat(formatUnits(value, decimals)).toFixed(2)
 
-          // Flash the counter cards green
-          setCounterFlash(true)
-          setTimeout(() => setCounterFlash(false), 1800)
-
-          // Toast: "Payment received · …XXXX"
-          const id = ++toastId.current
-          setToasts(prev => [...prev, { id, addr: from, amount, chain: chainLabel }])
-          setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 5_000)
-
-          // Pull server registry immediately so the name shows ASAP
-          fetchPayments()
+          flashReceived(from, amount, chainLabel)
         }
       } catch { /* silent — watcher is best-effort */ }
+    }
+
+    async function pollSolanaBalance() {
+      try {
+        const response = await fetch('/api/solana-balance', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ accountAddress: sol.trim() }),
+        })
+        const data = await response.json() as { ok?: boolean; balance?: string }
+        if (!response.ok || !data.ok) return
+        const balance = Number(BigInt(data.balance ?? '0')) / 1_000_000
+        const previous = lastBalance.solana
+        lastBalance.solana = balance
+        if (previous == null) return
+        const delta = balance - previous
+        if (delta > 0.0000005) flashReceived(sol.trim(), delta.toFixed(2), CHAIN_META.solana.label)
+      } catch { /* silent - watcher is best-effort */ }
+    }
+
+    async function pollStarknetBalance() {
+      try {
+        const response = await fetch('/api/starknet-balance', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ accountAddress: stark.trim() }),
+        })
+        const data = await response.json() as { ok?: boolean; balance?: string }
+        if (!response.ok || !data.ok) return
+        const balance = Number(BigInt(data.balance ?? '0x0')) / 1_000_000
+        const previous = lastBalance.starknet
+        lastBalance.starknet = balance
+        if (previous == null) return
+        const delta = balance - previous
+        if (delta > 0.0000005) flashReceived(stark.trim(), delta.toFixed(2), CHAIN_META.starknet.label)
+      } catch { /* silent - watcher is best-effort */ }
     }
 
     const t = setInterval(() => {
       for (const key of evmChainsToWatch) {
         void pollChain(key, CHAIN_META[key].label, CHAIN_META[key].decimals)
       }
+      if (watchSolana) void pollSolanaBalance()
+      if (watchStarknet) void pollStarknetBalance()
     }, 5_000)
 
+    for (const key of evmChainsToWatch) {
+      void pollChain(key, CHAIN_META[key].label, CHAIN_META[key].decimals)
+    }
+    if (watchSolana) void pollSolanaBalance()
+    if (watchStarknet) void pollStarknetBalance()
+
     return () => clearInterval(t)
-  }, [evm, fetchPayments, evmChainsToWatch.join(',')])
+  }, [evm, evmChainsToWatch.join(','), fetchPayments, sol, stark, watchSolana, watchStarknet])
 
   // ── QR download ───────────────────────────────────────────────────────────
   function downloadQR() {
