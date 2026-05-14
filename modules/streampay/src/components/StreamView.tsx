@@ -216,6 +216,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
   const [actionError, setActionError] = useState<string | null>(null)
   const [circleEmail, setCircleEmail] = useState('')
   const [circleSession, setCircleSession] = useState<CircleEvmEmailSession | null>(null)
+  const [circleCopied, setCircleCopied] = useState<'wallet' | 'recipient' | null>(null)
 
   // Poll for transaction receipt every 3s after broadcast
   function pollReceipt(hash: `0x${string}`, attempts = 0) {
@@ -350,6 +351,12 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
       setActionError(cleanRelayError(msg))
       setActionState('error')
     }
+  }
+
+  async function copyCircleAddress(kind: 'wallet' | 'recipient', value: string) {
+    await navigator.clipboard.writeText(value)
+    setCircleCopied(kind)
+    setTimeout(() => setCircleCopied(null), 2500)
   }
 
   async function handleCancel() {
@@ -555,13 +562,39 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
                     )}
 
                     {circleSession && (
-                      <div className="rounded-xl border border-blue-100 dark:border-blue-900/40 bg-white dark:bg-[#15151a] px-3 py-2.5 space-y-1">
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500">Circle wallet</p>
-                        <p className="truncate font-mono text-[11px] text-gray-600 dark:text-gray-300">
-                          {circleSession.wallet.address}
-                        </p>
+                      <div className="rounded-xl border border-blue-100 dark:border-blue-900/40 bg-white dark:bg-[#15151a] px-3 py-2.5 space-y-2">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500">Circle wallet</p>
+                            <p className="truncate font-mono text-[11px] text-gray-600 dark:text-gray-300">
+                              {circleSession.wallet.address}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => copyCircleAddress('wallet', circleSession.wallet.address)}
+                            className="shrink-0 rounded-lg border border-gray-200 dark:border-white/10 px-2.5 py-1.5 text-[11px] font-semibold text-gray-600 dark:text-gray-300"
+                          >
+                            {circleCopied === 'wallet' ? 'Copied' : 'Copy'}
+                          </button>
+                        </div>
                         {!circleWalletMatches && (
-                          <p className="text-[11px] font-semibold text-red-500">This wallet is not the stream recipient.</p>
+                          <div className="rounded-lg border border-red-100 bg-red-50 px-2.5 py-2 space-y-2">
+                            <p className="text-[11px] font-semibold text-red-500">This wallet is not the stream recipient.</p>
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="text-[10px] font-bold uppercase tracking-wider text-red-300">Expected recipient</p>
+                                <p className="truncate font-mono text-[11px] text-red-500">{info._recipient}</p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => copyCircleAddress('recipient', info._recipient)}
+                                className="shrink-0 rounded-lg border border-red-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-red-500"
+                              >
+                                {circleCopied === 'recipient' ? 'Copied' : 'Copy'}
+                              </button>
+                            </div>
+                          </div>
                         )}
                       </div>
                     )}
