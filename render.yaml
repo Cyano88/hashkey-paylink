@@ -54,6 +54,12 @@ services:
         sync: false                   # Circle server API key for wallet OTP/signing
       - key: CIRCLE_BASE_URL
         value: "https://api.circle.com"
+      - key: UPSTASH_REDIS_REST_URL
+        sync: false                   # durable Circle recipient email-hash -> wallet mapping
+      - key: UPSTASH_REDIS_REST_TOKEN
+        sync: false                   # Upstash Redis REST token
+      - key: CIRCLE_RECIPIENT_WALLET_KEY_PREFIX
+        value: "circle-recipient-wallet"
 
       # ── V2 relayer (api/relay-v2.ts) ──────────────────────────────────────
       - key: PAYLINK_FACTORY_V2
