@@ -7,6 +7,12 @@ import { isAddress, parseAbi, parseEventLogs } from 'viem'
 import { Mail, X as XIcon } from 'lucide-react'
 import { STREAM_VAULT_FACTORY_ABI } from '../lib/streamVaultAbi'
 import { formatUsdcFull } from './TriStateBar'
+import {
+  canUseCircleEvmEmailWallet,
+  connectCircleEvmEmailWallet,
+  sendCircleArcStream,
+  type CircleEvmEmailSession,
+} from '../../../../src/lib/circleEvmEmailWallet'
 
 const ARC_CHAIN_ID = 5042002
 const ARC_USDC     = '0x3600000000000000000000000000000000000000' as const
@@ -26,6 +32,34 @@ const DURATIONS = [
 ]
 
 type Step = 'form' | 'funding' | 'creating' | 'success'
+
+function readPrefill() {
+  const params = new URLSearchParams(window.location.search)
+  const rawDuration = (params.get('duration') ?? '').trim().toLowerCase()
+  const amount = (params.get('amount') ?? '').trim()
+  const recipient = (params.get('recipient') ?? '').trim()
+  const reason = (params.get('reason') ?? '').trim()
+  const source = (params.get('src') ?? '').trim().toLowerCase()
+  const wallet = (params.get('wallet') ?? params.get('mode') ?? '').trim().toLowerCase()
+  const preferCircle = source === 'telegram' || wallet === 'circle' || wallet === 'smart'
+  let durationPreset: bigint | null = null
+  let customDays = ''
+
+  const match = rawDuration.match(/^(\d+)([dhw])$/)
+  if (match) {
+    const value = BigInt(match[1])
+    const unit = match[2]
+    const seconds = unit === 'h'
+      ? value * 3_600n
+      : unit === 'w'
+        ? value * 7n * 86_400n
+        : value * 86_400n
+    durationPreset = DURATIONS.find(item => item.secs === seconds)?.secs ?? null
+    if (!durationPreset) customDays = (Number(seconds) / 86_400).toString()
+  }
+
+  return { amount, recipient, reason, durationPreset, customDays, preferCircle }
+}
 
 function parseUsdc(val: string): bigint {
   const n = parseFloat(val)
@@ -53,6 +87,7 @@ function buildStreamLink(vault: `0x${string}`, reason: string): string {
 }
 
 export function CreateStreamForm() {
+  const [prefill] = useState(readPrefill)
   const { address: connectedAddr, isConnected } = useAccount()
   const chainId                = useChainId()
   const { switchChain }        = useSwitchChain()
@@ -62,11 +97,11 @@ export function CreateStreamForm() {
   const isOnArc     = chainId === ARC_CHAIN_ID
   const factoryAddr = (import.meta.env.VITE_STREAM_FACTORY_ADDRESS ?? '') as `0x${string}`
 
-  const [recipient,      setRecipient]      = useState('')
-  const [amount,         setAmount]         = useState('')
-  const [durationPreset, setDurationPreset] = useState<bigint | null>(null)
-  const [customDays,     setCustomDays]     = useState('')
-  const [reason,         setReason]         = useState('')
+  const [recipient,      setRecipient]      = useState(prefill.recipient)
+  const [amount,         setAmount]         = useState(prefill.amount)
+  const [durationPreset, setDurationPreset] = useState<bigint | null>(prefill.durationPreset)
+  const [customDays,     setCustomDays]     = useState(prefill.customDays)
+  const [reason,         setReason]         = useState(prefill.reason)
   const [salt] = useState<`0x${string}`>(genSalt)
 
   const [step,         setStep]         = useState<Step>('form')
@@ -75,6 +110,10 @@ export function CreateStreamForm() {
   const [streamLink,   setStreamLink]   = useState<string | null>(null)
   const [deployTxHash, setDeployTxHash] = useState<string | null>(null)
   const [copied,       setCopied]       = useState(false)
+  const [circleEmail,      setCircleEmail]      = useState('')
+  const [circleSession,    setCircleSession]    = useState<CircleEvmEmailSession | null>(null)
+  const [circleBalance,    setCircleBalance]    = useState<bigint | null>(null)
+  const [circleCopied,     setCircleCopied]     = useState(false)
 
   const recipientValid = isAddress(recipient)
   const amountBn       = parseUsdc(amount)
@@ -84,6 +123,10 @@ export function CreateStreamForm() {
   const durationValid  = durationSecs > 0n
   const isFormValid    = recipientValid && amountValid && durationValid
                          && isConnected && isOnArc && !!factoryAddr
+  const circleConfigured = canUseCircleEvmEmailWallet('arc')
+  const circleAvailable = prefill.preferCircle
+  const circleReady = recipientValid && amountValid && durationValid && !!factoryAddr
+  const circleNeedsFunds = circleBalance !== null && amountValid && circleBalance < amountBn
 
   const { data: usdcBalance } = useReadContract({
     address:      ARC_USDC,
@@ -96,6 +139,19 @@ export function CreateStreamForm() {
 
   const isWorking   = step === 'funding' || step === 'creating'
   const deployReady = isFormValid && !isWorking && !insufficientFunds
+  const circleDeployReady = circleAvailable && circleConfigured && circleReady && !isWorking && !circleNeedsFunds
+
+  async function refreshCircleBalance(walletAddress = circleSession?.wallet.address) {
+    if (!walletAddress || !publicClient) return null
+    const balance = await publicClient.readContract({
+      address: ARC_USDC,
+      abi: ERC20_ABI,
+      functionName: 'balanceOf',
+      args: [walletAddress],
+    }) as bigint
+    setCircleBalance(balance)
+    return balance
+  }
 
   async function handleDeploy() {
     if (!deployReady || !connectedAddr || !publicClient) return
@@ -143,11 +199,86 @@ export function CreateStreamForm() {
     }
   }
 
+  async function handleCircleDeploy() {
+    if (!circleDeployReady || !publicClient) return
+    const email = circleEmail.trim()
+    if (!email && !circleSession) {
+      setError('Enter your email to continue with Circle Smart Wallet.')
+      return
+    }
+
+    setError(null)
+    const startTime = BigInt(Math.floor(Date.now() / 1000) + 120)
+    const endTime   = startTime + durationSecs
+    try {
+      setStep('funding')
+      setStatusMsg(circleSession ? 'Preparing Circle Smart Wallet...' : 'Opening Circle Smart Wallet...')
+      const session = circleSession ?? await connectCircleEvmEmailWallet(email, 'arc')
+      setCircleSession(session)
+
+      const balance = await refreshCircleBalance(session.wallet.address)
+      if (balance !== null && balance < amountBn) {
+        setError('Fund your Circle Arc smart wallet with USDC to continue.')
+        setStep('form')
+        setStatusMsg('')
+        return
+      }
+
+      const predicted = await publicClient.readContract({
+        address: factoryAddr, abi: STREAM_VAULT_FACTORY_ABI,
+        functionName: 'getVaultAddress',
+        args: [session.wallet.address, recipient as `0x${string}`, amountBn, startTime, endTime, salt],
+      }) as `0x${string}`
+
+      setStep('creating')
+      setStatusMsg('Confirm stream in Circle Smart Wallet...')
+      const txHash = await sendCircleArcStream({
+        session,
+        factoryAddress: factoryAddr,
+        recipient: recipient as `0x${string}`,
+        amountUnits: amountBn.toString(),
+        startTime: startTime.toString(),
+        endTime: endTime.toString(),
+        salt,
+        predictedVault: predicted,
+      })
+      if (!txHash) throw new Error('Circle did not return an Arc transaction hash yet. Check Circle transaction history and try again.')
+
+      setDeployTxHash(txHash)
+      setStatusMsg('Deploying on Arc...')
+      const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash })
+      const logs  = parseEventLogs({ abi: STREAM_VAULT_FACTORY_ABI, logs: receipt.logs })
+      const event = logs.find(l => l.eventName === 'StreamCreated')
+      const vault = (event?.args as { vault?: `0x${string}` })?.vault
+      if (!vault) throw new Error('Could not extract vault address from receipt.')
+
+      setStreamLink(buildStreamLink(vault, reason))
+      void refreshCircleBalance(session.wallet.address)
+      setStep('success')
+      setStatusMsg('')
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      if (msg.toLowerCase().includes('cancel') || msg.toLowerCase().includes('rejected') || msg.toLowerCase().includes('denied')) {
+        setStep('form'); setStatusMsg(''); return
+      }
+      setError(msg.slice(0, 180))
+      setStep('form')
+      setStatusMsg('')
+    }
+  }
+
   function handleCopy() {
     if (!streamLink) return
     navigator.clipboard.writeText(streamLink)
     setCopied(true)
     setTimeout(() => setCopied(false), 3000)
+  }
+
+  async function handleCopyCircleWallet() {
+    if (!circleSession?.wallet.address) return
+    await navigator.clipboard.writeText(circleSession.wallet.address)
+    setCircleCopied(true)
+    setTimeout(() => setCircleCopied(false), 3000)
   }
 
   // ── Success screen ────────────────────────────────────────────────────────
@@ -232,6 +363,7 @@ export function CreateStreamForm() {
   // ── Status hint ───────────────────────────────────────────────────────────
   const hint = (() => {
     if (isWorking) return step === 'funding' ? 'Step 1 of 2 — funding vault' : 'Step 2 of 2 — deploying stream'
+    if (circleAvailable) return 'Circle Smart Wallet signs and deploys the Arc stream from Telegram'
     if (!isConnected) return 'Connect your wallet in the header above to continue'
     if (!isOnArc) return null
     if (insufficientFunds) return null
@@ -409,6 +541,70 @@ export function CreateStreamForm() {
 
               {/* ── CTA ── */}
               <div className="space-y-2.5 pt-1">
+                {circleAvailable && (
+                  <div className="rounded-2xl border border-blue-100 dark:border-blue-900/30 bg-blue-50/40 dark:bg-blue-950/20 p-3.5 space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-[12px] font-bold text-gray-800 dark:text-gray-100">Circle Smart Wallet on Arc</p>
+                        <p className="text-[11px] text-gray-500 dark:text-gray-400">Default for Telegram StreamPay links</p>
+                      </div>
+                    </div>
+
+                    {!circleSession && (
+                      <input
+                        type="email"
+                        placeholder="email@example.com"
+                        value={circleEmail}
+                        onChange={e => setCircleEmail(e.target.value)}
+                        disabled={isWorking}
+                        className="w-full rounded-xl border-2 border-blue-100 dark:border-blue-900/40 bg-white dark:bg-[#15151a] px-4 py-3 text-[13px] text-gray-800 dark:text-gray-100 placeholder:text-gray-300 dark:placeholder:text-gray-600 focus:outline-none focus:border-blue-300 transition-colors disabled:opacity-50 min-h-[46px]"
+                      />
+                    )}
+
+                    {circleSession && (
+                      <div className="rounded-xl border border-blue-100 dark:border-blue-900/40 bg-white dark:bg-[#15151a] px-3 py-2.5 space-y-2">
+                        <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500">Smart wallet</p>
+                            <p className="truncate font-mono text-[11px] text-gray-600 dark:text-gray-300">
+                              {circleSession.wallet.address.slice(0, 8)}...{circleSession.wallet.address.slice(-6)}
+                            </p>
+                      </div>
+                          <button
+                            type="button"
+                            onClick={handleCopyCircleWallet}
+                            className="shrink-0 rounded-lg border border-gray-200 dark:border-white/10 px-2.5 py-1.5 text-[11px] font-semibold text-gray-600 dark:text-gray-300"
+                          >
+                            {circleCopied ? 'Copied' : 'Copy'}
+                          </button>
+                        </div>
+                        <p className={`text-[11px] font-semibold ${circleNeedsFunds ? 'text-red-500' : 'text-gray-500'}`}>
+                          Balance: {circleBalance === null ? 'checking...' : `${formatUsdcFull(circleBalance)} USDC`}
+                          {circleNeedsFunds ? ' - fund this wallet first' : ''}
+                        </p>
+                      </div>
+                    )}
+
+                    <button
+                      onClick={circleDeployReady ? handleCircleDeploy : undefined}
+                      disabled={!circleDeployReady}
+                      className="flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-[14px] font-bold transition-all active:scale-[0.98] min-h-[52px]"
+                      style={circleDeployReady
+                        ? { background: '#111827', color: '#ffffff', cursor: 'pointer' }
+                        : { background: '#e5e7eb', color: '#9ca3af', cursor: 'not-allowed' }}
+                    >
+                      {isWorking
+                        ? <><Spinner /><span className="text-[13px] font-medium">{statusMsg}</span></>
+                        : 'Start with Circle Smart Wallet'}
+                    </button>
+                    <div className="flex justify-center">
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 dark:border-white/10 bg-white dark:bg-[#15151a] px-3 py-1">
+                        <img src="/brand/circle-logo.jpeg" alt="" className="h-3 w-3 rounded-full object-cover" />
+                        <span className="text-[10px] font-semibold text-gray-400 dark:text-gray-500">Powered by Circle</span>
+                      </span>
+                    </div>
+                  </div>
+                )}
 
                 {/* Wrong network — replace primary button */}
                 {isConnected && !isOnArc && (
@@ -422,7 +618,7 @@ export function CreateStreamForm() {
                 )}
 
                 {/* START STREAMING — always visible, state reflects readiness */}
-                {(!isConnected || isOnArc) && (
+                {(!circleAvailable && (!isConnected || isOnArc)) && (
                   <button
                     onClick={deployReady ? handleDeploy : undefined}
                     disabled={!deployReady}
@@ -433,16 +629,21 @@ export function CreateStreamForm() {
                   >
                     {isWorking
                       ? <><Spinner /><span className="text-[13px] font-medium tracking-normal">{statusMsg}</span></>
-                      : 'START STREAMING'}
+                      : circleAvailable ? 'Use Connected Wallet Instead' : 'START STREAMING'}
                   </button>
                 )}
 
-                {insufficientFunds && !isWorking && (
+                {circleNeedsFunds && !isWorking && (
+                  <p className="text-center text-[12px] font-semibold text-red-500">
+                    Fund the Circle Smart Wallet above, then try again
+                  </p>
+                )}
+                {insufficientFunds && !isWorking && !circleNeedsFunds && (
                   <p className="text-center text-[12px] font-semibold text-red-500">
                     Insufficient USDC — fund your Arc wallet first
                   </p>
                 )}
-                {hint && !insufficientFunds && (
+                {hint && !insufficientFunds && !circleNeedsFunds && (
                   <p className="text-center text-[12px] text-gray-400">{hint}</p>
                 )}
                 {error && (

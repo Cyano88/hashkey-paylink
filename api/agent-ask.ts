@@ -33,6 +33,27 @@ const MAX_EVENT_ID_LENGTH = 128
 const MAX_PAYER_LENGTH = 128
 const MAX_QUESTION_LENGTH = 4_000
 
+const CIRCLE_ARC_SYSTEM_PROMPT = [
+  'You are the Hash PayLink Circle/Arc Strategy Agent.',
+  'Access is only granted after a verified Hash PayLink payment archived on 0G.',
+  '',
+  'Your specialty:',
+  '- Circle Developer Platform and USDC-native product strategy',
+  '- Arc ecosystem product ideas and migration planning',
+  '- agentic economic activity with stablecoin payments',
+  '- Hash PayLink instant payments, StreamPay, paid AI access, and 0G verification',
+  '- practical MVPs, grant positioning, technical architecture, and milestone design',
+  '',
+  'Response standards:',
+  '- Give specific, high-signal recommendations, not generic startup advice.',
+  '- Prefer concrete build plans, integration steps, and grant-ready positioning.',
+  '- Distinguish clearly between what is already built, what is testnet, and what is a future milestone.',
+  '- Be honest that Arc is testnet when relevant.',
+  '- Do not claim official Circle, Arc, or 0G partnership, endorsement, grant approval, or guaranteed acceptance.',
+  '- Do not provide financial, legal, tax, or compliance advice. For regulated questions, give product/technical framing and advise professional review.',
+  '- Keep answers concise but valuable.',
+].join('\n')
+
 function normalizeBoundedString(value: unknown, field: string, maxLength: number): string {
   if (typeof value !== 'string') throw new Error(`${field} must be a string`)
   const normalized = value.trim()
@@ -86,8 +107,8 @@ async function getAiResponse(question: string, payerName: string, chain: string,
       const client  = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
       const message = await client.messages.create({
         model:      'claude-haiku-4-5-20251001',
-        max_tokens: 512,
-        system:     `You are a helpful AI assistant. Access has been granted to ${payerName} who made a verified payment of ${amount} on ${chain}, confirmed on 0G decentralized storage. Be concise and helpful.`,
+        max_tokens: 900,
+        system:     `${CIRCLE_ARC_SYSTEM_PROMPT}\n\nVerified access context: ${payerName} paid ${amount} on ${chain}, confirmed on 0G decentralized storage.`,
         messages:   [{ role: 'user', content: question }],
       })
       const block = message.content[0]
@@ -102,7 +123,16 @@ async function getAiResponse(question: string, payerName: string, chain: string,
     console.warn('[agent-ask] ANTHROPIC_API_KEY not set')
   }
 
-  return `Access granted. Your payment of ${amount} on ${chain} has been verified on 0G decentralized storage — no trusted intermediary required.\n\nYou asked: "${question}"\n\nThis response is issued only to verified payers. Integrate any AI model here — the payment verification layer is chain-agnostic and trustless.`
+  const fallbackLines = [
+    `Access granted. Your payment of ${amount} on ${chain} has been verified on 0G decentralized storage.`,
+    '',
+    `You asked: "${question}"`,
+    '',
+    'Hash PayLink Circle/Arc Strategy Agent guidance:',
+    '',
+    'Build around agentic USDC commerce: instant PayLinks for one-time settlement, StreamPay on Arc for time-based budgets and retainers, and 0G proofs for verifiable AI access. A strong MVP should show a paid request, a verified 0G archive proof, and either an AI answer unlock or an Arc USDC stream for ongoing work. Frame Arc as the programmable USDC settlement environment and Circle as the stablecoin platform layer.',
+  ]
+  return fallbackLines.join('\n')
 }
 
 // ─── Handler ──────────────────────────────────────────────────────────────────

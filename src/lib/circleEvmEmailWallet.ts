@@ -35,7 +35,7 @@ export type CircleEvmEmailSession = {
   userToken: string
   encryptionKey: string
   wallet: CircleEvmWallet
-  chain: Extract<ChainKey, 'base' | 'arbitrum'>
+  chain: Extract<ChainKey, 'base' | 'arbitrum' | 'arc'>
 }
 
 const APP_ID = import.meta.env.VITE_CIRCLE_USER_WALLET_APP_ID as string | undefined
@@ -44,10 +44,11 @@ const ENABLED = import.meta.env.VITE_CIRCLE_EVM_EMAIL_ENABLED !== 'false'
 const CHAIN_CONFIG = {
   base: { blockchain: 'BASE', label: 'Base' },
   arbitrum: { blockchain: 'ARB', label: 'Arbitrum' },
+  arc: { blockchain: 'ARC-TESTNET', label: 'Arc' },
 } as const
 
 export function canUseCircleEvmEmailWallet(chain: ChainKey) {
-  return ENABLED && !!APP_ID && (chain === 'base' || chain === 'arbitrum')
+  return ENABLED && !!APP_ID && (chain === 'base' || chain === 'arbitrum' || chain === 'arc')
 }
 
 function apiError(data: { error?: string; message?: string; code?: number }) {
@@ -183,7 +184,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number, message: string) {
   })
 }
 
-async function getWallet(userToken: string, chain: Extract<ChainKey, 'base' | 'arbitrum'>): Promise<CircleEvmWallet | null> {
+async function getWallet(userToken: string, chain: Extract<ChainKey, 'base' | 'arbitrum' | 'arc'>): Promise<CircleEvmWallet | null> {
   const data = await circleWalletApi<{ wallet?: CircleEvmWallet | null }>({
     action: 'listWallets',
     userToken,
@@ -196,7 +197,7 @@ async function ensureEvmWallet(
   sdk: W3SSdk,
   userToken: string,
   encryptionKey: string,
-  chain: Extract<ChainKey, 'base' | 'arbitrum'>,
+  chain: Extract<ChainKey, 'base' | 'arbitrum' | 'arc'>,
 ) {
   sdk.setAuthentication({ userToken, encryptionKey })
   let wallet = await getWallet(userToken, chain)
@@ -238,7 +239,7 @@ export async function connectCircleEvmEmailWallet(
   chain: ChainKey,
 ): Promise<CircleEvmEmailSession> {
   if (!APP_ID) throw new Error('Circle email wallet is not configured.')
-  if (chain !== 'base' && chain !== 'arbitrum') throw new Error('Circle email wallet is not enabled for this chain.')
+  if (chain !== 'base' && chain !== 'arbitrum' && chain !== 'arc') throw new Error('Circle email wallet is not enabled for this chain.')
   const sdk = new W3SSdk({ appSettings: { appId: APP_ID } })
   const deviceId = await sdk.getDeviceId()
   const otp = await circleWalletApi<{
@@ -334,6 +335,50 @@ export async function sendCircleEvmEmailPayment(params: {
     totalUnits: totalUnits.toString(),
   })
   if (!challenge.challengeId) throw new Error('Circle did not return an EVM payment challenge.')
+  const result = await executeChallenge(sdk, challenge.challengeId)
+  const txHash = findTxHash(result)
+  if (txHash) return txHash
+  const transactionId = findTransactionId(result.data)
+  if (transactionId) {
+    const hash = await pollTransactionHash(params.session, transactionId).catch(() => null)
+    if (hash) return hash
+  }
+  return null
+}
+
+export async function sendCircleArcStream(params: {
+  session: CircleEvmEmailSession
+  factoryAddress: Address
+  recipient: Address
+  amountUnits: string
+  startTime: string
+  endTime: string
+  salt: Hex
+  predictedVault: Address
+}) {
+  if (!APP_ID) throw new Error('Circle email wallet is not configured.')
+  if (params.session.chain !== 'arc') throw new Error('Arc StreamPay requires an Arc Circle smart wallet.')
+  const sdk = new W3SSdk({
+    appSettings: { appId: APP_ID },
+    authentication: {
+      userToken: params.session.userToken,
+      encryptionKey: params.session.encryptionKey,
+    },
+  })
+  const challenge = await circleWalletApi<{ challengeId?: string }>({
+    action: 'executeArcStream',
+    userToken: params.session.userToken,
+    walletId: params.session.wallet.id,
+    walletAddress: params.session.wallet.address,
+    factoryAddress: params.factoryAddress,
+    recipient: params.recipient,
+    amountUnits: params.amountUnits,
+    startTime: params.startTime,
+    endTime: params.endTime,
+    salt: params.salt,
+    predictedVault: params.predictedVault,
+  })
+  if (!challenge.challengeId) throw new Error('Circle did not return an Arc stream challenge.')
   const result = await executeChallenge(sdk, challenge.challengeId)
   const txHash = findTxHash(result)
   if (txHash) return txHash
