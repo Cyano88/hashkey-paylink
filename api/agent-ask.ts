@@ -134,7 +134,7 @@ export default async function handler(req: Request, res: Response) {
         paymentRequired: true,
         message:         `No verified payment found for "${payer}" on event ${eventId}.`,
         hint:            'Payment may still be archiving to 0G (~30–60s after confirmation)',
-        paymentLink:     `https://hashpaylink.com/pay?event=1&id=${encodeURIComponent(eventId)}`,
+        paymentLink:     `https://hashpaylink.com/pay?v=1&id=${encodeURIComponent(eventId)}`,
       })
     }
 

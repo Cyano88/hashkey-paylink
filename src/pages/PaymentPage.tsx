@@ -55,6 +55,7 @@ import { canUseCircleSolanaEmailWallet, connectCircleSolanaEmailWallet, signCirc
 import { canUseArgentStarknetEmailWallet, connectArgentStarknetEmailWallet } from '../lib/argentStarknetWallet'
 import { getSponsoredGasRecoveryUnits } from '../lib/gasRecovery'
 import { isValidSolanaAddress } from '../lib/solanaAddress'
+import { getPaylinkParam, hasPaylinkFlag, isTelegramSourceParam } from '../lib/paylinkParams'
 
 type CircleSolanaSession = Awaited<ReturnType<typeof connectCircleSolanaEmailWallet>>
 type CircleEvmEmailSession = Awaited<ReturnType<typeof connectCircleEvmEmailWallet>>
@@ -214,8 +215,8 @@ function isSmartWalletBalanceError(msg: string | null) {
 }
 
 function telegramReturnUrl(params: URLSearchParams) {
-  if (params.get('source') !== 'telegram') return ''
-  const raw = (params.get('return') ?? '').trim()
+  if (!isTelegramSourceParam(params)) return ''
+  const raw = getPaylinkParam(params, 'return', 'r').trim()
   if (!raw) return ''
   try {
     const url = new URL(raw)
@@ -229,21 +230,21 @@ export default function PaymentPage() {
   const [searchParams] = useSearchParams()
   const { onPayChainChange } = useOutletContext<LayoutOutletContext>()
 
-  const evmParam    = searchParams.get('evm')    ?? searchParams.get('to') ?? ''
-  const starkParam  = searchParams.get('stark')  ?? ''
-  const amt         = searchParams.get('amt')    ?? ''
-  const memo        = searchParams.get('memo')   ?? ''
+  const evmParam    = getPaylinkParam(searchParams, 'evm', 'e') || searchParams.get('to') || ''
+  const starkParam  = getPaylinkParam(searchParams, 'stark', 'k')
+  const amt         = getPaylinkParam(searchParams, 'amt', 'a')
+  const memo        = getPaylinkParam(searchParams, 'memo', 'm')
   const legacyChain = searchParams.get('chain')  as ChainKey | null
-  const netParam    = searchParams.get('net')    as ChainKey | null
+  const netParam    = (getPaylinkParam(searchParams, 'net', 'n') || null) as ChainKey | null
   const modeParam   = searchParams.get('mode')
-  const isTelegramSource = searchParams.get('source') === 'telegram'
+  const isTelegramSource = isTelegramSourceParam(searchParams)
   const telegramUrl = telegramReturnUrl(searchParams)
 
   const resolvedStark  = starkParam || (legacyChain === 'starknet' ? evmParam : '')
   const resolvedEvm    = legacyChain === 'starknet' ? '' : evmParam
-  const resolvedSolana = (searchParams.get('sol') ?? '').trim()
-  const isMultiChain   = searchParams.get('multi') === '1'
-  const isFlex         = searchParams.get('flex')  === '1'
+  const resolvedSolana = getPaylinkParam(searchParams, 'sol', 's').trim()
+  const isMultiChain   = hasPaylinkFlag(searchParams, 'multi', 'x')
+  const isFlex         = hasPaylinkFlag(searchParams, 'flex', 'f')
 
   // netParam (from new link format) takes priority; legacy chain param as fallback
   const [chain, setChain] = useState<ChainKey>(() => {
@@ -281,18 +282,18 @@ export default function PaymentPage() {
   // Capture event params from the INITIAL URL at mount — before the direct-send
   // V2 flow can overwrite ?id= via window.history.replaceState.
   const [initParams] = useState(() => new URLSearchParams(window.location.search))
-  const isEventMode      = initParams.get('event') === '1'
+  const isEventMode      = hasPaylinkFlag(initParams, 'event', 'v')
   const eventId          = initParams.get('id') ?? ''
-  const agentUrl         = initParams.get('agent') ?? ''
+  const agentUrl         = getPaylinkParam(initParams, 'agent', 'g')
   const [attendeeName,   setAttendeeName]   = useState('')
   const [eventRegStatus, setEventRegStatus] = useState<'idle' | 'pending' | 'ok' | 'error'>('idle')
   const eventRegistered  = useRef(false)
 
   // ── FX display (event mode only — reads params baked into the URL at link creation) ──
-  const fxCurrency  = isEventMode ? (initParams.get('fx') ?? '') : ''
-  const fxShow      = isEventMode && initParams.get('fxshow') === '1' && !!fxCurrency
-  const fxSrc       = initParams.get('fxsrc') === 'custom' ? 'custom' : 'live'
-  const fxCustomVal = parseFloat(initParams.get('fxrate') ?? '0') || 0
+  const fxCurrency  = isEventMode ? getPaylinkParam(initParams, 'fx', 'fx') : ''
+  const fxShow      = isEventMode && hasPaylinkFlag(initParams, 'fxshow', 'fs') && !!fxCurrency
+  const fxSrc       = getPaylinkParam(initParams, 'fxsrc', 'xs') === 'custom' ? 'custom' : 'live'
+  const fxCustomVal = parseFloat(getPaylinkParam(initParams, 'fxrate', 'xr') || '0') || 0
 
   const [fxRate,    setFxRate]    = useState<number | null>(fxSrc === 'custom' && fxCustomVal > 0 ? fxCustomVal : null)
   const [fxLoading, setFxLoading] = useState(false)
@@ -1823,7 +1824,7 @@ export default function PaymentPage() {
             <p className="mb-4 text-xs text-gray-400">
               A valid link looks like:{' '}
               <code className="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-[11px] text-gray-600">
-                /pay?evm=0x…&amp;amt=10&amp;memo=Coffee
+                /pay?e=0x…&amp;a=10&amp;m=Coffee
               </code>
             </p>
             <Link to="/" className="inline-flex items-center gap-2 rounded-xl bg-black px-5 py-2.5 text-sm font-medium text-white hover:bg-gray-800 transition-all">

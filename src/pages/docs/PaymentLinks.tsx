@@ -10,12 +10,12 @@ export default function PaymentLinks() {
 
       <Section title="Single-payer links">
         <p>A standard payment link is a URL with your recipient address, amount, and optional memo encoded as query params. Share it as a link or QR code. The payer opens it, connects a wallet or uses Send via Address, and pays.</p>
-        <CodeBlock lang="url">{`https://hashpaylink.com/pay?evm=0xYourAddress&amt=25&memo=Invoice+042`}</CodeBlock>
+        <CodeBlock lang="url">{`https://hashpaylink.com/pay?e=0xYourAddress&a=25&m=Invoice+042`}</CodeBlock>
         <p className="mt-2">The 0.2% platform fee is deducted atomically in the transaction. Gas-sponsored EVM payments may also route a small configured recovery amount to treasury. The payer sees the exact amount they'll send before signing.</p>
       </Section>
 
       <Section title="Multi-payer collection">
-        <p>Multi-payer collection turns a single link into a group payment hub. Enable it by adding <Code>event=1&id=YOUR_EVENT_ID</Code> to the URL or toggling the option on the create page.</p>
+        <p>Multi-payer collection turns a single link into a group payment hub. Enable it by adding <Code>v=1&id=YOUR_EVENT_ID</Code> to the URL or toggling the option on the create page.</p>
         <SubSection title="How it works">
           <p>Each payer enters their name before paying. The organizer gets a live dashboard at <Code>/event?id=YOUR_EVENT_ID</Code> showing every payment in real time — payer name, amount, chain, timestamp, and 0G archive status.</p>
         </SubSection>
@@ -35,8 +35,8 @@ export default function PaymentLinks() {
       </Section>
 
       <Section title="Flexible amount">
-        <p>Enable flexible amount by adding <Code>flex=1</Code> to the URL or toggling the option on the create page. The payer enters any amount they choose before paying. Useful for tips, donations, restaurants, or pay-what-you-want pricing.</p>
-        <CodeBlock lang="url">{`https://hashpaylink.com/pay?evm=0xYourAddress&flex=1&memo=Tip+Jar`}</CodeBlock>
+        <p>Enable flexible amount by adding <Code>f=1</Code> to the URL or toggling the option on the create page. The payer enters any amount they choose before paying. Useful for tips, donations, restaurants, or pay-what-you-want pricing.</p>
+        <CodeBlock lang="url">{`https://hashpaylink.com/pay?e=0xYourAddress&f=1&m=Tip+Jar`}</CodeBlock>
       </Section>
 
       <Section title="QR codes">
@@ -46,8 +46,8 @@ export default function PaymentLinks() {
 
       <Section title="Local currency FX display">
         <p>Show the USDC amount alongside a local currency equivalent using the <Code>fx</Code> URL parameter. Supported currencies: NGN, GHS, KES, SGD.</p>
-        <CodeBlock lang="url">{`https://hashpaylink.com/pay?evm=0xYour...&amt=10&event=1&id=event-1&fx=NGN`}</CodeBlock>
-        <p className="mt-2">Rates are fetched live from Fixer.io (requires <Code>FIXER_API_KEY</Code> env var) and cached for 10 minutes. A custom rate can be passed directly with <Code>fxrate=1500</Code>.</p>
+        <CodeBlock lang="url">{`https://hashpaylink.com/pay?e=0xYour...&a=10&v=1&id=event-1&fx=NGN&fs=1`}</CodeBlock>
+        <p className="mt-2">Rates are fetched live from Fixer.io (requires <Code>FIXER_API_KEY</Code> env var) and cached for 10 minutes. A custom rate can be passed directly with <Code>xr=1500</Code>.</p>
       </Section>
 
       <Section title="Underpayment detection">

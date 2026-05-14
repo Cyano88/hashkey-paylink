@@ -55,7 +55,7 @@ export default function SDKDocs() {
   amount="10"
   memo="Premium Access"
 />
-// Opens: https://hashpaylink.com/pay?evm=0xABC...&amt=10&memo=Premium+Access`}</CodeBlock>
+// Opens: https://hashpaylink.com/pay?e=0xABC...&a=10&m=Premium+Access`}</CodeBlock>
       </Section>
 
       <Section title="Embedded card">
@@ -91,23 +91,23 @@ const url = buildPayLinkUrl({
         <p>Every Hash PayLink feature is accessible via direct URL construction — no npm package, no React, no installation.</p>
 
         <SubSection title="Single payer">
-          <CodeBlock lang="url">{`https://hashpaylink.com/pay?evm=0xABC...&amt=25&memo=Invoice+042`}</CodeBlock>
+          <CodeBlock lang="url">{`https://hashpaylink.com/pay?e=0xABC...&a=25&m=Invoice+042`}</CodeBlock>
         </SubSection>
 
         <SubSection title="Multi-chain link">
-          <CodeBlock lang="url">{`https://hashpaylink.com/pay?evm=0xABC...&sol=BASE58...&stark=0x064...&amt=10`}</CodeBlock>
+          <CodeBlock lang="url">{`https://hashpaylink.com/pay?e=0xABC...&s=BASE58...&k=0x064...&a=10&x=1`}</CodeBlock>
         </SubSection>
 
         <SubSection title="Multi-payer event">
-          <CodeBlock lang="url">{`https://hashpaylink.com/pay?evm=0xABC...&amt=10&event=1&id=my-workshop-2025`}</CodeBlock>
+          <CodeBlock lang="url">{`https://hashpaylink.com/pay?e=0xABC...&a=10&v=1&id=my-workshop-2025`}</CodeBlock>
         </SubSection>
 
         <SubSection title="Flexible amount">
-          <CodeBlock lang="url">{`https://hashpaylink.com/pay?evm=0xABC...&flex=1&memo=Tip+Jar`}</CodeBlock>
+          <CodeBlock lang="url">{`https://hashpaylink.com/pay?e=0xABC...&f=1&m=Tip+Jar`}</CodeBlock>
         </SubSection>
 
         <SubSection title="Chain-locked">
-          <CodeBlock lang="url">{`https://hashpaylink.com/pay?evm=0xABC...&amt=5&net=base`}</CodeBlock>
+          <CodeBlock lang="url">{`https://hashpaylink.com/pay?e=0xABC...&a=5&n=base`}</CodeBlock>
         </SubSection>
       </Section>
 
@@ -115,17 +115,17 @@ const url = buildPayLinkUrl({
         <Table
           headers={['Parameter', 'Description']}
           rows={[
-            ['evm',     'EVM recipient address (Base / HashKey / Arc / Arbitrum)'],
-            ['sol',     'Solana recipient address (base58)'],
-            ['stark',   'Starknet recipient address'],
-            ['amt',     'Fixed USDC amount. Omit for flexible.'],
-            ['memo',    'URL-encoded payment memo'],
-            ['flex',    '1 = flexible amount mode'],
-            ['event',   '1 = multi-payer collection mode'],
+            ['e',       'EVM recipient address (Base / HashKey / Arc / Arbitrum)'],
+            ['s',       'Solana recipient address (base58)'],
+            ['k',       'Starknet recipient address'],
+            ['a',       'Fixed USDC amount. Omit for flexible.'],
+            ['m',       'URL-encoded payment memo'],
+            ['f',       '1 = flexible amount mode'],
+            ['v',       '1 = multi-payer collection mode'],
             ['id',      'Event ID for multi-payer dashboard'],
-            ['net',     'Lock to chain: base | arbitrum | solana | starknet | arc | hashkey'],
+            ['n',       'Lock to chain: base | arbitrum | solana | starknet | arc | hashkey'],
             ['fx',      'Show local currency FX: ngn | ghs | kes | sgd'],
-            ['fxrate',  'Custom exchange rate if fx param is set'],
+            ['xr',      'Custom exchange rate if fx param is set'],
           ]}
         />
       </Section>

@@ -41,6 +41,7 @@ import { useStarknet } from '../lib/StarknetContext'
 import { useSolana }   from '../lib/SolanaContext'
 import { CHAIN_META, type ChainKey } from '../lib/chains'
 import { isValidSolanaAddress } from '../lib/solanaAddress'
+import { setPaylinkParam } from '../lib/paylinkParams'
 
 // ─── Starknet address: 0x followed by exactly 64 hex chars ──────────────────
 const isValidStarkAddr = (v: string) => /^0x[0-9a-fA-F]{64}$/.test(v)
@@ -260,62 +261,62 @@ export default function CreateLink() {
   // ── Build link URL ─────────────────────────────────────────────────────
   function buildLink() {
     if (multiChainMode) {
-      const params = new URLSearchParams({ multi: '1' })
-      if (!flexAmount) params.set('amt', amt); else params.set('flex', '1')
-      if (evmValid)    params.set('evm', evmAddr)
-      if (starkValid)  params.set('stark', starkAddr)
-      if (solanaValid) params.set('sol', solanaAddr)
-      if (memo.trim()) params.set('memo', memo.trim())
+      const params = new URLSearchParams({ x: '1' })
+      if (!flexAmount) params.set('a', amt); else params.set('f', '1')
+      if (evmValid)    setPaylinkParam(params, 'e', evmAddr)
+      if (starkValid)  setPaylinkParam(params, 'k', starkAddr)
+      if (solanaValid) setPaylinkParam(params, 's', solanaAddr)
+      setPaylinkParam(params, 'm', memo)
       if (effectiveEventMode && eventId) {
-        params.set('event', '1'); params.set('id', eventId)
+        params.set('v', '1'); params.set('id', eventId)
         if (fxShow && fxCurrency) {
-          params.set('fx', fxCurrency); params.set('fxshow', '1')
+          params.set('fx', fxCurrency); params.set('fs', '1')
           if (fxSrc === 'custom' && parseFloat(fxCustomRate) > 0) {
-            params.set('fxsrc', 'custom'); params.set('fxrate', fxCustomRate)
+            params.set('xs', 'custom'); params.set('xr', fxCustomRate)
           }
         }
       }
-      if (accessMode && agentUrl) params.set('agent', agentUrl)
+      if (accessMode && agentUrl) setPaylinkParam(params, 'g', agentUrl)
       return `${window.location.origin}/pay?${params.toString()}`
     }
-    const params = new URLSearchParams({ net: selectedNet })
-    if (!flexAmount) params.set('amt', amt); else params.set('flex', '1')
-    if (selectedNet === 'solana')  params.set('sol', solanaAddr)
-    else if (isEvmNet)             params.set('evm', evmAddr)
-    else                           params.set('stark', starkAddr)
-    if (memo.trim()) params.set('memo', memo.trim())
+    const params = new URLSearchParams({ n: selectedNet })
+    if (!flexAmount) params.set('a', amt); else params.set('f', '1')
+    if (selectedNet === 'solana')  setPaylinkParam(params, 's', solanaAddr)
+    else if (isEvmNet)             setPaylinkParam(params, 'e', evmAddr)
+    else                           setPaylinkParam(params, 'k', starkAddr)
+    setPaylinkParam(params, 'm', memo)
     if (effectiveEventMode && eventId) {
-      params.set('event', '1'); params.set('id', eventId)
+      params.set('v', '1'); params.set('id', eventId)
       if (fxShow && fxCurrency) {
-        params.set('fx', fxCurrency); params.set('fxshow', '1')
+        params.set('fx', fxCurrency); params.set('fs', '1')
         if (fxSrc === 'custom' && parseFloat(fxCustomRate) > 0) {
-          params.set('fxsrc', 'custom'); params.set('fxrate', fxCustomRate)
+          params.set('xs', 'custom'); params.set('xr', fxCustomRate)
         }
       }
     }
-    if (accessMode && agentUrl) params.set('agent', agentUrl)
+    if (accessMode && agentUrl) setPaylinkParam(params, 'g', agentUrl)
     return `${window.location.origin}/pay?${params.toString()}`
   }
 
   function buildDashboardLink() {
     const params = new URLSearchParams({ id: eventId })
-    if (!flexAmount) params.set('amt', amt)
-    else             params.set('flex', '1')
+    if (!flexAmount) params.set('a', amt)
+    else             params.set('f', '1')
     if (multiChainMode) {
-      params.set('multi', '1')
-      if (evmValid)    params.set('evm', evmAddr)
-      if (starkValid)  params.set('stark', starkAddr)
-      if (solanaValid) params.set('sol', solanaAddr)
+      params.set('x', '1')
+      if (evmValid)    setPaylinkParam(params, 'e', evmAddr)
+      if (starkValid)  setPaylinkParam(params, 'k', starkAddr)
+      if (solanaValid) setPaylinkParam(params, 's', solanaAddr)
     } else {
-      params.set('net', selectedNet)
-      if (selectedNet === 'solana') params.set('sol', solanaAddr)
-      else                          params.set('evm', evmAddr)
+      params.set('n', selectedNet)
+      if (selectedNet === 'solana') setPaylinkParam(params, 's', solanaAddr)
+      else                          setPaylinkParam(params, 'e', evmAddr)
     }
-    if (memo.trim()) params.set('name', memo.trim())
+    setPaylinkParam(params, 'm', memo)
     if (fxShow && fxCurrency) {
-      params.set('fx', fxCurrency); params.set('fxshow', '1')
+      params.set('fx', fxCurrency); params.set('fs', '1')
       if (fxSrc === 'custom' && parseFloat(fxCustomRate) > 0) {
-        params.set('fxsrc', 'custom'); params.set('fxrate', fxCustomRate)
+        params.set('xs', 'custom'); params.set('xr', fxCustomRate)
       }
     }
     return `${window.location.origin}/event?${params.toString()}`

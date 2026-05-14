@@ -56,20 +56,20 @@ export function buildPayLinkUrl(options: PayLinkUrlOptions) {
   if (!recipientEVM && !recipientSolana && !recipientStark) throw new Error('at least one recipient address is required')
 
   const params = new URLSearchParams()
-  if (flexibleAmount) params.set('flex', '1')
-  else if (amount) params.set('amt', amount.trim())
-  if (network) params.set('net', network)
-  if (multiChain) params.set('multi', '1')
-  if (recipientEVM) params.set('evm', recipientEVM.trim())
-  if (recipientSolana) params.set('sol', recipientSolana.trim())
-  if (recipientStark) params.set('stark', recipientStark.trim())
-  if (memo?.trim()) params.set('memo', memo.trim().slice(0, 120))
+  if (flexibleAmount) params.set('f', '1')
+  else if (amount) params.set('a', amount.trim())
+  if (network) params.set('n', network)
+  if (multiChain) params.set('x', '1')
+  if (recipientEVM) params.set('e', recipientEVM.trim())
+  if (recipientSolana) params.set('s', recipientSolana.trim())
+  if (recipientStark) params.set('k', recipientStark.trim())
+  if (memo?.trim()) params.set('m', memo.trim().slice(0, 120))
   if (eventId?.trim()) {
-    params.set('event', '1')
+    params.set('v', '1')
     params.set('id', eventId.trim())
   }
   if (source?.trim()) params.set('src', source.trim().slice(0, 40))
-  if (mode) params.set('mode', mode)
+  if (mode && mode !== 'wallet') params.set('mode', mode)
 
   return `${cleanBaseUrl(baseUrl)}/pay?${params.toString()}`
 }

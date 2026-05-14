@@ -1,5 +1,5 @@
 /**
- * Recipient Settlement Dashboard - /dashboard?evm=0x...
+ * Recipient Settlement Dashboard - /dashboard?e=0x...
  *
  * Shows direct USDC receipts and PayLinkFactoryV2 settlements for the recipient.
  * EVM history is loaded through the backend so large log scans do not run in the browser.
@@ -17,6 +17,7 @@ import { CHAIN_META } from '../lib/chains'
 import { cn, truncateAddress } from '../lib/utils'
 import { queryBalances, type UnifiedBalanceBreakdown, type UnifiedBalanceChainKey } from '../lib/unifiedBalance'
 import { isValidSolanaAddress } from '../lib/solanaAddress'
+import { getPaylinkParam, hasPaylinkFlag, isTelegramSourceParam } from '../lib/paylinkParams'
 
 const OG_GLOBAL_ARCHIVE_URL = 'https://chainscan.0g.ai/address/0x79a804C49e1E5EBC279A228Ab73a7570A0D0819a#events'
 
@@ -102,8 +103,8 @@ function eventPaymentToRow(row: EventPaymentRow, index: number): PaymentRow {
 }
 
 function telegramReturnUrl(params: URLSearchParams) {
-  if (params.get('source') !== 'telegram') return ''
-  const raw = (params.get('return') ?? '').trim()
+  if (!isTelegramSourceParam(params)) return ''
+  const raw = getPaylinkParam(params, 'return', 'r').trim()
   if (!raw) return ''
   try {
     const url = new URL(raw)
@@ -140,12 +141,12 @@ function OgArchiveLink({ className }: { className?: string }) {
 
 export default function Dashboard() {
   const [searchParams] = useSearchParams()
-  const evmAddr = (searchParams.get('evm') ?? '').trim()
-  const solanaAddr = (searchParams.get('sol') ?? '').trim()
-  const starkAddr = (searchParams.get('stark') ?? '').trim()
+  const evmAddr = getPaylinkParam(searchParams, 'evm', 'e').trim()
+  const solanaAddr = getPaylinkParam(searchParams, 'sol', 's').trim()
+  const starkAddr = getPaylinkParam(searchParams, 'stark', 'k').trim()
   const eventId = (searchParams.get('id') ?? '').trim()
-  const netParam = (searchParams.get('net') ?? '').trim() as UnifiedBalanceChainKey | ''
-  const isMultiChain = searchParams.get('multi') === '1'
+  const netParam = getPaylinkParam(searchParams, 'net', 'n').trim() as UnifiedBalanceChainKey | ''
+  const isMultiChain = hasPaylinkFlag(searchParams, 'multi', 'x')
   const telegramUrl = telegramReturnUrl(searchParams)
 
   const [routerChecked, setRouterChecked] = useState(false)
@@ -335,7 +336,7 @@ export default function Dashboard() {
         </div>
         <h2 className="text-lg font-semibold text-gray-700">No address provided</h2>
         <p className="mt-1 text-sm text-gray-400">
-          Add <code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs">?evm=0x...</code>, <code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs">?sol=...</code>, or <code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs">?stark=0x...</code> to the URL
+          Add <code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs">?e=0x...</code>, <code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs">?s=...</code>, or <code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs">?k=0x...</code> to the URL
         </p>
         <Link to="/" className="mt-6 inline-flex items-center gap-2 rounded-xl bg-black px-5 py-2.5 text-sm font-medium text-white hover:bg-gray-800 transition-all">
           <Link2 className="h-4 w-4" /> Create a PayLink

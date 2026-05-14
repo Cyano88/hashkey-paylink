@@ -204,11 +204,11 @@ A single Hash PayLink can carry addresses for **multiple chains simultaneously**
 
 **URL format:**
 ```
-https://hashpaylink.com/pay?multi=1&amt=10&evm=0xYour...&stark=0xYourStark...&sol=YourSolana...
+https://hashpaylink.com/pay?x=1&a=10&e=0xYour...&k=0xYourStark...&s=YourSolana...
 ```
 
 **How it works:**
-- `multi=1` unlocks all chain selectors
+- `x=1` unlocks all chain selectors
 - The payer chooses their preferred chain — only the relevant address is used for that payment
 - The organizer receives funds on whichever chain the payer chose
 
@@ -377,7 +377,7 @@ The organizer dashboard is a **live, shareable payment monitoring page** — no 
 
 **URL format:**
 ```
-https://hashpaylink.com/event?id=YOUR_EVENT_ID&evm=0xYour...&amt=10
+https://hashpaylink.com/event?id=YOUR_EVENT_ID&e=0xYour...&a=10
 ```
 
 **Dashboard shows:**
@@ -641,7 +641,7 @@ The integration is designed to be **modular** — Hash PayLink handles all walle
 For platforms that can't install npm packages, embed a direct link:
 
 ```
-https://hashpaylink.com/pay?evm=0xYour...&sol=YourSolana...&amt=25&memo=Invoice+042
+https://hashpaylink.com/pay?e=0xYour...&s=YourSolana...&a=25&m=Invoice+042
 ```
 
 **Full URL parameter reference:**
@@ -961,7 +961,7 @@ curl -X POST https://hashpaylink.com/api/agent-ask \
 {
   "error": "Payment required",
   "paymentRequired": true,
-  "paymentLink": "https://hashpaylink.com/pay?event=1&id=evt_abc123"
+  "paymentLink": "https://hashpaylink.com/pay?v=1&id=evt_abc123"
 }
 ```
 
@@ -990,7 +990,7 @@ That's it. No database. No login system. No payment processor contract.
 
 #### How it works in plain English
 
-1. **You create a payment event** on hashpaylink.com. You get an `eventId` and a payment link like `https://hashpaylink.com/pay?event=1&id=your-event-id&amt=50&evm=0xYourWallet`. This is your paywall.
+1. **You create a payment event** on hashpaylink.com. You get an `eventId` and a payment link like `https://hashpaylink.com/pay?v=1&id=your-event-id&a=50&e=0xYourWallet`. This is your paywall.
 
 2. **Your customer pays.** They open the link, type their name, pick a chain (Base, Solana, Starknet, Arc, or Arbitrum), and pay in USDC. Zero gas. No app needed.
 
@@ -1036,7 +1036,7 @@ Step 1 — Create a payment event
   → enter your wallet address → Generate → copy your eventId
 
 Step 2 — Share the payment link with your students
-  https://hashpaylink.com/pay?event=1&id=YOUR_EVENT_ID&amt=50&evm=0xYourWallet
+  https://hashpaylink.com/pay?v=1&id=YOUR_EVENT_ID&a=50&e=0xYourWallet
   Put this link on your website, in your emails, or as a QR code
 
 Step 3 — Add the payment check to your AI backend
@@ -1071,7 +1071,7 @@ async function serveWithPaymentGate(eventId: string, payer: string, question: st
   if (!verification.verified) {
     return {
       error: 'Payment required',
-      paymentLink: `https://hashpaylink.com/pay?event=1&id=${eventId}`,
+      paymentLink: `https://hashpaylink.com/pay?v=1&id=${eventId}`,
     }
   }
 
@@ -1094,7 +1094,7 @@ def serve_with_payment_gate(event_id: str, payer: str, question: str):
     if not res.get("verified"):
         return {
             "error": "Payment required",
-            "payment_link": f"https://hashpaylink.com/pay?event=1&id={event_id}"
+            "payment_link": f"https://hashpaylink.com/pay?v=1&id={event_id}"
         }
 
     # Verified — serve your response
@@ -1119,7 +1119,7 @@ function requireHashPayLinkPayment(eventId: string) {
     if (!result.verified) {
       return res.status(402).json({
         error: 'Payment required',
-        paymentLink: `https://hashpaylink.com/pay?event=1&id=${eventId}`,
+        paymentLink: `https://hashpaylink.com/pay?v=1&id=${eventId}`,
       })
     }
 
@@ -1175,7 +1175,7 @@ User wants access to an AI service
           │
           ▼
 Developer creates a Hash PayLink multi-payer collection link
-  https://hashpaylink.com/pay?event=1&id=your-event-id&amt=10&evm=0xYour...
+  https://hashpaylink.com/pay?v=1&id=your-event-id&a=10&e=0xYour...
           │
           ▼
 User pays in USDC (Base, Arc, Starknet, Solana, Arbitrum)

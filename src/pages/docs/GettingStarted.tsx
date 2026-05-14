@@ -51,19 +51,20 @@ export default function GettingStarted() {
 
       <Section title="URL structure">
         <p>A Hash PayLink URL encodes all payment parameters directly:</p>
-        <CodeBlock lang="url">{`https://hashpaylink.com/pay?evm=0xABC...&amt=25&memo=Invoice%20042&event=1&id=my-event`}</CodeBlock>
+        <CodeBlock lang="url">{`https://hashpaylink.com/pay?e=0xABC...&a=25&m=Invoice%20042&v=1&id=my-event`}</CodeBlock>
         <p className="mt-2">Key parameters:</p>
         <ul className="list-none space-y-1 mt-1 font-mono text-xs">
-          <li><Code>evm</Code> — EVM recipient address</li>
-          <li><Code>sol</Code> — Solana recipient address</li>
-          <li><Code>stark</Code> — Starknet recipient address</li>
-          <li><Code>amt</Code> — USDC amount (omit for flexible)</li>
-          <li><Code>memo</Code> — payment memo</li>
-          <li><Code>event=1</Code> — enables multi-payer collection mode</li>
+          <li><Code>e</Code> — EVM recipient address</li>
+          <li><Code>s</Code> — Solana recipient address</li>
+          <li><Code>k</Code> — Starknet recipient address</li>
+          <li><Code>a</Code> — USDC amount (omit for flexible)</li>
+          <li><Code>m</Code> — payment memo</li>
+          <li><Code>v=1</Code> — enables multi-payer collection mode</li>
           <li><Code>id</Code> — event ID for the organizer dashboard</li>
-          <li><Code>flex=1</Code> — enables flexible amount mode</li>
-          <li><Code>net</Code> — lock to a specific chain (base, hashkey, arc, starknet, solana, arbitrum)</li>
+          <li><Code>f=1</Code> — enables flexible amount mode</li>
+          <li><Code>n</Code> — lock to a specific chain (base, hashkey, arc, starknet, solana, arbitrum)</li>
         </ul>
+        <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">Legacy long parameters still work for existing links.</p>
       </Section>
 
       <NavFooter

@@ -236,7 +236,7 @@ Hash PayLink processes and settles all payments in USDC on-chain. If you want to
 
 **Generated URL structure:**
 ```
-https://hashpaylink.com/pay?net=base&evm=0xYour...&amt=10&memo=Coffee
+https://hashpaylink.com/pay?n=base&e=0xYour...&a=10&m=Coffee
 ```
 
 All parameters are in the URL — no database, no backend state, fully stateless.
@@ -295,7 +295,7 @@ For events, classes, group collections, and any scenario where many people pay o
 
 Organisers who do not want to set a fixed price enable **Flexible Amount**.
 
-**On the create page:** toggle **Flexible Amount** ON → amount field disappears → `flex=1` is baked into the link URL.
+**On the create page:** toggle **Flexible Amount** ON → amount field disappears → `f=1` is baked into the link URL.
 
 **On the payer card:**
 ```
@@ -382,7 +382,7 @@ The organiser dashboard is a **live, shareable monitoring page** — no login, n
 
 **URL format:**
 ```
-https://hashpaylink.com/event?id=EVENT_ID&evm=0xYour...&amt=10&name=My+Event
+https://hashpaylink.com/event?id=EVENT_ID&e=0xYour...&a=10&m=My+Event
 ```
 
 **Dashboard features:**
@@ -514,7 +514,7 @@ When the payer clicks the button, a full Hash PayLink checkout opens in a new ta
 Embed a payment link directly in emails, HTML, Notion pages, or anywhere that accepts a URL:
 
 ```
-https://hashpaylink.com/pay?evm=0xYour...&sol=YourSolana...&amt=25&memo=Invoice+042
+https://hashpaylink.com/pay?e=0xYour...&s=YourSolana...&a=25&m=Invoice+042
 ```
 
 **Full URL parameter reference:**

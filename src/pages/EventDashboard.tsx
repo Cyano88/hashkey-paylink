@@ -11,6 +11,7 @@ import { EVM_CLIENTS } from '../lib/router'
 import { cn, truncateAddress } from '../lib/utils'
 import { queryBalances, type UnifiedBalanceBreakdown, type UnifiedBalanceChainKey } from '../lib/unifiedBalance'
 import { isValidSolanaAddress } from '../lib/solanaAddress'
+import { getPaylinkParam, hasPaylinkFlag, isTelegramSourceParam, setPaylinkParam } from '../lib/paylinkParams'
 
 // Minimal ERC-20 Transfer ABI for getLogs
 const TRANSFER_ABI = [{
@@ -38,8 +39,8 @@ type ServerPayment = {
 type Toast = { id: number; addr: string; amount: string; chain: string }
 
 function telegramReturnUrl(params: URLSearchParams) {
-  if (params.get('source') !== 'telegram') return ''
-  const raw = (params.get('return') ?? '').trim()
+  if (!isTelegramSourceParam(params)) return ''
+  const raw = getPaylinkParam(params, 'return', 'r').trim()
   if (!raw) return ''
   try {
     const url = new URL(raw)
@@ -52,19 +53,19 @@ function telegramReturnUrl(params: URLSearchParams) {
 export default function EventDashboard() {
   const [searchParams] = useSearchParams()
   const eventId   = searchParams.get('id')    ?? ''
-  const evm       = searchParams.get('evm')   ?? ''
-  const sol       = searchParams.get('sol')   ?? ''
-  const stark     = searchParams.get('stark') ?? ''
-  const amt       = searchParams.get('amt')   ?? ''
-  const eventName = searchParams.get('name')  ?? 'Event'
-  const netParam   = searchParams.get('net')    ?? ''
-  const multiParam = searchParams.get('multi')  ?? ''
-  const flexParam  = searchParams.get('flex')   ?? ''
-  const fxParam    = searchParams.get('fx')     ?? ''
-  const fxShowParam= searchParams.get('fxshow') ?? ''
-  const fxBufParam = searchParams.get('fxbuf')  ?? ''
-  const fxSrcParam = searchParams.get('fxsrc')  ?? ''
-  const fxRateParam= searchParams.get('fxrate') ?? ''
+  const evm       = getPaylinkParam(searchParams, 'evm', 'e')
+  const sol       = getPaylinkParam(searchParams, 'sol', 's')
+  const stark     = getPaylinkParam(searchParams, 'stark', 'k')
+  const amt       = getPaylinkParam(searchParams, 'amt', 'a')
+  const eventName = getPaylinkParam(searchParams, 'name', 'm') || 'Event'
+  const netParam   = getPaylinkParam(searchParams, 'net', 'n')
+  const multiParam = hasPaylinkFlag(searchParams, 'multi', 'x') ? '1' : ''
+  const flexParam  = hasPaylinkFlag(searchParams, 'flex', 'f') ? '1' : ''
+  const fxParam    = getPaylinkParam(searchParams, 'fx', 'fx')
+  const fxShowParam= hasPaylinkFlag(searchParams, 'fxshow', 'fs') ? '1' : ''
+  const fxBufParam = getPaylinkParam(searchParams, 'fxbuf', 'xb')
+  const fxSrcParam = getPaylinkParam(searchParams, 'fxsrc', 'xs')
+  const fxRateParam= getPaylinkParam(searchParams, 'fxrate', 'xr')
   const telegramUrl = telegramReturnUrl(searchParams)
   const evmValid = isAddress(evm)
   const solanaValid = isValidSolanaAddress(sol)
@@ -84,7 +85,7 @@ export default function EventDashboard() {
   })()
 
   // Which EVM chains to watch for flash/toast notifications.
-  // New links carry ?net= so we scope to exactly that chain.
+  // New links carry ?n= so we scope to exactly that chain.
   // Legacy links (no net param) fall back to watching both Base & Arc.
   const evmChainsToWatch: ('base' | 'arc')[] =
     netParam === 'base' ? ['base'] :
@@ -137,23 +138,23 @@ export default function EventDashboard() {
   }, [netParam, payments, hskPrice])
 
   const paymentLink = (() => {
-    const p = new URLSearchParams({ memo: eventName, event: '1', id: eventId })
-    if (flexParam === '1') p.set('flex', '1')
-    else if (amt)          p.set('amt', amt)
+    const p = new URLSearchParams({ m: eventName, v: '1', id: eventId })
+    if (flexParam === '1') p.set('f', '1')
+    else if (amt)          p.set('a', amt)
     if (multiParam === '1') {
-      p.set('multi', '1')
-      if (evm)   p.set('evm',   evm)
-      if (stark) p.set('stark', stark)
-      if (solanaValid) p.set('sol', sol.trim())
+      p.set('x', '1')
+      setPaylinkParam(p, 'e', evm)
+      setPaylinkParam(p, 'k', stark)
+      if (solanaValid) setPaylinkParam(p, 's', sol.trim())
     } else {
-      if (netParam) p.set('net', netParam)
-      if (solanaValid) p.set('sol', sol.trim())
-      else if (evm) p.set('evm', evm)
+      setPaylinkParam(p, 'n', netParam)
+      if (solanaValid) setPaylinkParam(p, 's', sol.trim())
+      else setPaylinkParam(p, 'e', evm)
     }
     if (fxParam && fxShowParam === '1') {
-      p.set('fx', fxParam); p.set('fxshow', '1')
-      if (fxBufParam) p.set('fxbuf', fxBufParam)
-      if (fxSrcParam === 'custom' && fxRateParam) { p.set('fxsrc', 'custom'); p.set('fxrate', fxRateParam) }
+      p.set('fx', fxParam); p.set('fs', '1')
+      setPaylinkParam(p, 'xb', fxBufParam)
+      if (fxSrcParam === 'custom' && fxRateParam) { p.set('xs', 'custom'); p.set('xr', fxRateParam) }
     }
     return `${window.location.origin}/pay?${p.toString()}`
   })()
