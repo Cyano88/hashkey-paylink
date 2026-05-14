@@ -8,6 +8,7 @@ import { useSolana }   from './lib/SolanaContext'
 import { useTheme }    from './lib/ThemeContext'
 import { CHAIN_META } from './lib/chains'
 import type { ChainKey } from './lib/chains'
+import { getPaylinkParam, hasPaylinkFlag } from './lib/paylinkParams'
 
 // ─── Input detection ─────────────────────────────────────────────────────────
 const TX_HASH_RE = /^0x[0-9a-fA-F]{1,64}$/
@@ -307,12 +308,12 @@ export default function Layout() {
   const isPayPage  = pathname === '/pay'
   const isDashPage = pathname === '/event'
   // Both the pay page and the dashboard show a locked chain pill from the URL param
-  const pageNetParam = (isPayPage || isDashPage) ? (searchParams.get('net') as ChainKey | null) : null
+  const pageNetParam = (isPayPage || isDashPage) ? (getPaylinkParam(searchParams, 'net', 'n') as ChainKey | '') : ''
   const activeNet = (pageNetParam && pageNetParam in CHAIN_META) ? pageNetParam : null
-  const dashEvm = (searchParams.get('evm') ?? '').trim()
-  const dashSol = (searchParams.get('sol') ?? '').trim()
-  const dashStark = (searchParams.get('stark') ?? '').trim()
-  const dashMulti = searchParams.get('multi') === '1'
+  const dashEvm = getPaylinkParam(searchParams, 'evm', 'e').trim()
+  const dashSol = getPaylinkParam(searchParams, 'sol', 's').trim()
+  const dashStark = getPaylinkParam(searchParams, 'stark', 'k').trim()
+  const dashMulti = hasPaylinkFlag(searchParams, 'multi', 'x')
   const dashEvmValid = EVM_ADDR_RE.test(dashEvm)
   const dashSolValid = SOLANA_ADDR_RE.test(dashSol)
   const dashStarkValid = STARKNET_ADDR_RE.test(dashStark)
