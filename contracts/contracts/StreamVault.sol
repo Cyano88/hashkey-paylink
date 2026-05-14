@@ -4,6 +4,10 @@ pragma solidity ^0.8.24;
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ECDSA}  from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
+interface IERC1271 {
+    function isValidSignature(bytes32 hash, bytes memory signature) external view returns (bytes4 magicValue);
+}
+
 /**
  * @title  StreamVault
  * @notice One vault per payment stream. Deployed deterministically via CREATE2
@@ -305,7 +309,20 @@ contract StreamVault {
         bytes32 digest = keccak256(
             abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR, structHash)
         );
-        address recovered = ECDSA.recover(digest, sig);
-        if (recovered != expectedSigner) revert InvalidSignature();
+        bool valid = expectedSigner.code.length == 0
+            ? ECDSA.recover(digest, sig) == expectedSigner
+            : _isValidContractSignature(expectedSigner, digest, sig);
+        if (!valid) revert InvalidSignature();
+    }
+
+    function _isValidContractSignature(
+        address signer,
+        bytes32 digest,
+        bytes calldata sig
+    ) internal view returns (bool) {
+        (bool ok, bytes memory result) = signer.staticcall(
+            abi.encodeCall(IERC1271.isValidSignature, (digest, sig))
+        );
+        return ok && result.length >= 32 && bytes4(result) == IERC1271.isValidSignature.selector;
     }
 }

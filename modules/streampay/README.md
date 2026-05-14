@@ -20,7 +20,7 @@ USDC streaming payments on Arc Network. Two sovereign flows in one platform.
 
 | Contract | Address | Purpose |
 |---|---|---|
-| `StreamVaultFactory` | `0x05e621a4d9860a0066d29b7ed376fb926d5a773e` | CREATE2 factory — deploys one `StreamVault` per stream |
+| `StreamVaultFactory` | `0x1C20e33B6d82E27234f417EeD613a88b9640638f` | CREATE2 factory — deploys one `StreamVault` per stream |
 | `PoASettlement` | `0x91DbDb49c8C68e5775554D42A1B5ce15C89C814B` | Settles Proof-of-Attention ghost-vault signatures |
 | USDC (Arc precompile) | `0x3600000000000000000000000000000000000000` | Native USDC on Arc |
 
@@ -181,8 +181,8 @@ Copy `.env.example` (or set manually):
 ```
 RELAYER_PRIVATE_KEY_ARC=0x...
 PRIVATE_RPC_URL_ARC=https://rpc.testnet.arc.network
-STREAM_FACTORY_ADDRESS=0x05e621a4d9860a0066d29b7ed376fb926d5a773e
-VITE_STREAM_FACTORY_ADDRESS=0x05e621a4d9860a0066d29b7ed376fb926d5a773e
+STREAM_FACTORY_ADDRESS=0x1C20e33B6d82E27234f417EeD613a88b9640638f
+VITE_STREAM_FACTORY_ADDRESS=0x1C20e33B6d82E27234f417EeD613a88b9640638f
 ARC_POA_CONTRACT=0x91DbDb49c8C68e5775554D42A1B5ce15C89C814B
 VITE_POA_CONTRACT=0x91DbDb49c8C68e5775554D42A1B5ce15C89C814B
 ```

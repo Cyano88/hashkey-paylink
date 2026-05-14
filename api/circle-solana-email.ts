@@ -330,6 +330,23 @@ export default async function handler(req: Request, res: Response) {
       return res.json({ ok: true, transaction: data.transaction ?? data })
     }
 
+    if (action === 'signTypedData') {
+      const { userToken, walletId, data: typedData, memo } = params
+      if (!userToken || !walletId || !typedData) {
+        return res.status(400).json({ ok: false, error: 'Missing userToken, walletId, or typed data' })
+      }
+      const result = await circleJson('/v1/w3s/user/sign/typedData', {
+        method: 'POST',
+        userToken,
+        body: JSON.stringify({
+          walletId,
+          data: typedData,
+          memo: memo || 'Hash PayLink typed-data signature',
+        }),
+      })
+      return res.json({ ok: true, ...result })
+    }
+
     if (action === 'signPayment') {
       const { userToken, walletId, rawTransaction, memo } = params
       if (!userToken || !walletId || !rawTransaction) {

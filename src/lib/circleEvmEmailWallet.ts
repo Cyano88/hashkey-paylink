@@ -346,6 +346,20 @@ export async function sendCircleEvmEmailPayment(params: {
   return null
 }
 
+function findSignature(value: unknown): Hex | null {
+  if (!value || typeof value !== 'object') return null
+  const record = value as Record<string, unknown>
+  const direct = record.signature ?? record.sig
+  if (typeof direct === 'string' && /^0x[a-fA-F0-9]+$/.test(direct)) return direct as Hex
+  for (const nested of Object.values(record)) {
+    if (nested && typeof nested === 'object') {
+      const found = findSignature(nested)
+      if (found) return found
+    }
+  }
+  return null
+}
+
 export async function sendCircleArcStream(params: {
   session: CircleEvmEmailSession
   factoryAddress: Address
@@ -388,4 +402,65 @@ export async function sendCircleArcStream(params: {
     if (hash) return hash
   }
   return null
+}
+
+export async function signCircleArcStreamClaim(params: {
+  session: CircleEvmEmailSession
+  vaultAddress: Address
+  amountUnits: string
+  nonce: string
+  deadline: string
+}) {
+  if (!APP_ID) throw new Error('Circle email wallet is not configured.')
+  if (params.session.chain !== 'arc') throw new Error('Arc StreamPay claim requires an Arc Circle smart wallet.')
+  const sdk = new W3SSdk({
+    appSettings: { appId: APP_ID },
+    authentication: {
+      userToken: params.session.userToken,
+      encryptionKey: params.session.encryptionKey,
+    },
+  })
+  const typedData = {
+    types: {
+      EIP712Domain: [
+        { name: 'name', type: 'string' },
+        { name: 'version', type: 'string' },
+        { name: 'chainId', type: 'uint256' },
+        { name: 'verifyingContract', type: 'address' },
+      ],
+      Claim: [
+        { name: 'recipient', type: 'address' },
+        { name: 'amount', type: 'uint256' },
+        { name: 'nonce', type: 'uint256' },
+        { name: 'deadline', type: 'uint256' },
+      ],
+    },
+    primaryType: 'Claim',
+    domain: {
+      name: 'StreamVault',
+      version: '1',
+      chainId: 5042002,
+      verifyingContract: params.vaultAddress,
+    },
+    message: {
+      recipient: params.session.wallet.address,
+      amount: params.amountUnits,
+      nonce: params.nonce,
+      deadline: params.deadline,
+    },
+  }
+  const challenge = await circleWalletApi<{ challengeId?: string }>({
+    action: 'signTypedData',
+    userToken: params.session.userToken,
+    walletId: params.session.wallet.id,
+    data: JSON.stringify(typedData),
+    memo: 'Claim Arc StreamPay USDC',
+  })
+  if (!challenge.challengeId) throw new Error('Circle did not return a typed-data signing challenge.')
+  const result = await executeChallenge(sdk, challenge.challengeId)
+  const signature = findSignature(result)
+  if (!signature) {
+    throw new Error('Circle did not return a usable EVM signature for this claim.')
+  }
+  return signature
 }

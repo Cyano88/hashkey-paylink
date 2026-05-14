@@ -11,6 +11,12 @@ import { TriStateBar, formatUsdc, formatUsdcFull } from './TriStateBar'
 import { CreateStreamForm, HashPayLinkBadge } from './CreateStreamForm'
 import { StreamNotFound }    from './StreamNotFound'
 import { STREAM_VAULT_ABI }  from '../lib/streamVaultAbi'
+import {
+  canUseCircleEvmEmailWallet,
+  connectCircleEvmEmailWallet,
+  signCircleArcStreamClaim,
+  type CircleEvmEmailSession,
+} from '../../../../src/lib/circleEvmEmailWallet'
 
 // ── Standalone Arc public client ──────────────────────────────────────────────
 const arcClient = createPublicClient({
@@ -58,6 +64,12 @@ function timeRemaining(endTime: bigint): string {
 }
 
 function shortAddr(a: string) { return `${a.slice(0, 6)}…${a.slice(-4)}` }
+
+function isTelegramStreamPay(params: URLSearchParams) {
+  const source = (params.get('src') ?? '').toLowerCase()
+  const wallet = (params.get('wallet') ?? params.get('mode') ?? '').toLowerCase()
+  return source === 'telegram' || wallet === 'circle'
+}
 
 function cleanRelayError(msg: string): string {
   if (msg.toLowerCase().includes('missing or invalid')) return 'Transaction rejected by Arc — please try again.'
@@ -122,6 +134,8 @@ export function StreamView({ vaultAddress }: { vaultAddress?: `0x${string}` }) {
 
 // ── Stream Detail ─────────────────────────────────────────────────────────────
 function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; reason?: string }) {
+  const [params] = useSearchParams()
+  const telegramMode = isTelegramStreamPay(params)
   const { address: connectedAddr, isConnected } = useAccount()
   const chainId = useChainId()
   const { switchChain } = useSwitchChain()
@@ -200,6 +214,8 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
   const [actionState, setActionState] = useState<ActionState>('idle')
   const [txHash,      setTxHash]      = useState<`0x${string}` | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [circleEmail, setCircleEmail] = useState('')
+  const [circleSession, setCircleSession] = useState<CircleEvmEmailSession | null>(null)
 
   // Poll for transaction receipt every 3s after broadcast
   function pollReceipt(hash: `0x${string}`, attempts = 0) {
@@ -269,6 +285,66 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
       if (msg.toLowerCase().includes('rejected') || msg.toLowerCase().includes('denied')) {
+        setActionState('idle'); return
+      }
+      setActionError(cleanRelayError(msg))
+      setActionState('error')
+    }
+  }
+
+  async function handleCircleClaim() {
+    if (!info || !stream || stream.claimable === 0n) return
+    const email = circleEmail.trim()
+    if (!email && !circleSession) {
+      setActionError('Enter your email to continue with Circle Smart Wallet.')
+      setActionState('error')
+      return
+    }
+
+    setActionState('signing'); setActionError(null); setTxHash(null)
+    try {
+      const session = circleSession ?? await connectCircleEvmEmailWallet(email, 'arc')
+      setCircleSession(session)
+
+      if (session.wallet.address.toLowerCase() !== info._recipient.toLowerCase()) {
+        setActionError(`This stream belongs to ${shortAddr(info._recipient)}. Use that Circle wallet to claim.`)
+        setActionState('error')
+        return
+      }
+
+      const deadline = BigInt(Math.floor(Date.now() / 1000) + 600)
+      const nonce = await arcClient.readContract({
+        address: vaultAddress, abi: STREAM_VAULT_ABI,
+        functionName: 'nonces', args: [session.wallet.address],
+      }) as bigint
+
+      const sig = await signCircleArcStreamClaim({
+        session,
+        vaultAddress,
+        amountUnits: stream.claimable.toString(),
+        nonce: nonce.toString(),
+        deadline: deadline.toString(),
+      })
+
+      setActionState('relaying')
+      const res = await fetch('/api/relay-stream', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'claim', vaultAddress, sig,
+          nonce: nonce.toString(), deadline: deadline.toString(),
+          amount: stream.claimable.toString(),
+        }),
+      })
+      const data = await res.json() as { ok: boolean; txHash?: string; error?: string }
+      if (!data.ok) throw new Error(data.error ?? 'Relay failed')
+
+      const hash = data.txHash as `0x${string}`
+      setTxHash(hash)
+      setActionState('pending')
+      pollReceipt(hash)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      if (msg.toLowerCase().includes('cancel') || msg.toLowerCase().includes('rejected') || msg.toLowerCase().includes('denied')) {
         setActionState('idle'); return
       }
       setActionError(cleanRelayError(msg))
@@ -433,16 +509,130 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
           {/* ── Actions ─────────────────────────────────────────────────── */}
           {!isCancelled && (
             <div className="space-y-2.5">
+              {telegramMode && (() => {
+                const claimable = stream?.claimable ?? 0n
+                const hasBalance = claimable > 0n
+                const circleConfigured = canUseCircleEvmEmailWallet('arc')
+                const circleWalletMatches = !!circleSession && circleSession.wallet.address.toLowerCase() === info._recipient.toLowerCase()
+
+                if (actionState === 'confirmed' && txHash) {
+                  return (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 py-3">
+                        <svg className="h-4 w-4 text-emerald-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                        </svg>
+                        <span className="text-[13px] font-semibold text-emerald-700">Claim confirmed</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => window.open(`${ARC_EXPLORER}/tx/${txHash}`, '_blank', 'noopener,noreferrer')}
+                        className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-gray-200 py-3 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer"
+                      >
+                        <ExtLinkIcon />
+                        View on Arcscan
+                      </button>
+                    </div>
+                  )
+                }
+
+                return (
+                  <div className="rounded-2xl border border-blue-100 dark:border-blue-900/30 bg-blue-50/40 dark:bg-blue-950/20 p-3.5 space-y-3">
+                    <div className="min-w-0">
+                      <p className="text-[12px] font-bold text-gray-800 dark:text-gray-100">Claim with Circle Smart Wallet</p>
+                      <p className="text-[11px] text-gray-500 dark:text-gray-400">Telegram StreamPay claims stay inside Circle on Arc</p>
+                    </div>
+
+                    {!circleSession && (
+                      <input
+                        type="email"
+                        placeholder="email@example.com"
+                        value={circleEmail}
+                        onChange={e => setCircleEmail(e.target.value)}
+                        disabled={actionState === 'signing' || actionState === 'relaying' || actionState === 'pending'}
+                        className="w-full rounded-xl border-2 border-blue-100 dark:border-blue-900/40 bg-white dark:bg-[#15151a] px-4 py-3 text-[13px] text-gray-800 dark:text-gray-100 placeholder:text-gray-300 dark:placeholder:text-gray-600 focus:outline-none focus:border-blue-300 transition-colors disabled:opacity-50 min-h-[46px]"
+                      />
+                    )}
+
+                    {circleSession && (
+                      <div className="rounded-xl border border-blue-100 dark:border-blue-900/40 bg-white dark:bg-[#15151a] px-3 py-2.5 space-y-1">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500">Circle wallet</p>
+                        <p className="truncate font-mono text-[11px] text-gray-600 dark:text-gray-300">
+                          {circleSession.wallet.address}
+                        </p>
+                        {!circleWalletMatches && (
+                          <p className="text-[11px] font-semibold text-red-500">This wallet is not the stream recipient.</p>
+                        )}
+                      </div>
+                    )}
+
+                    {actionState === 'pending' && txHash ? (
+                      <button disabled
+                        className="flex w-full items-center justify-center gap-2.5 rounded-xl py-3.5 text-[13px] font-semibold"
+                        style={{ background: '#f3f4f6', color: '#6b7280', cursor: 'default' }}
+                      >
+                        Claim submitted on Arc
+                      </button>
+                    ) : actionState === 'signing' || actionState === 'relaying' ? (
+                      <button disabled
+                        className="flex w-full items-center justify-center gap-2.5 rounded-xl py-3.5 text-[13px] font-semibold"
+                        style={{ background: '#111827', color: '#ffffff', opacity: 0.75, cursor: 'wait' }}
+                      >
+                        <svg className="h-4 w-4 animate-spin shrink-0" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                        {actionState === 'signing' ? 'Confirm in Circle Smart Wallet' : 'Broadcasting claim to Arc'}
+                      </button>
+                    ) : !hasBalance ? (
+                      <div className="rounded-xl border border-gray-100 bg-white dark:bg-[#15151a] py-3.5 text-center text-[12px] font-medium text-gray-500 dark:text-gray-400">
+                        {isComplete ? 'All funds withdrawn' : 'Earnings are still accruing'}
+                      </div>
+                    ) : (
+                      <button
+                        onClick={circleConfigured ? handleCircleClaim : undefined}
+                        disabled={!circleConfigured}
+                        className="flex w-full items-center justify-center gap-2.5 rounded-xl py-3.5 text-[13px] font-semibold transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+                        style={{ background: '#111827', color: '#ffffff' }}
+                      >
+                        Claim {formatUsdc(claimable)} with Circle
+                      </button>
+                    )}
+
+                    {actionState === 'error' && actionError && (
+                      <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-center space-y-1">
+                        <p className="text-[12px] font-semibold text-red-600">{actionError}</p>
+                        <button
+                          onClick={() => { setActionState('idle'); setActionError(null) }}
+                          className="text-[11px] font-semibold text-red-500 underline underline-offset-2"
+                        >
+                          Try again
+                        </button>
+                      </div>
+                    )}
+
+                    {!circleConfigured && (
+                      <p className="text-center text-[12px] font-semibold text-red-500">Circle Smart Wallet is not configured.</p>
+                    )}
+                    <div className="flex justify-center">
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 dark:border-white/10 bg-white dark:bg-[#15151a] px-3 py-1">
+                        <img src="/brand/circle-logo.jpeg" alt="" className="h-3 w-3 rounded-full object-cover" />
+                        <span className="text-[10px] font-semibold text-gray-400 dark:text-gray-500">Powered by Circle</span>
+                      </span>
+                    </div>
+                  </div>
+                )
+              })()}
 
               {/* Wallet not connected — header handles Connect Wallet */}
-              {!isConnected && (
+              {!telegramMode && !isConnected && (
                 <div className="rounded-xl border border-gray-100 bg-gray-50 py-3.5 text-center text-[12px] text-gray-400">
                   Connect your wallet above to interact
                 </div>
               )}
 
               {/* Wrong network */}
-              {isConnected && !isOnArc && (
+              {!telegramMode && isConnected && !isOnArc && (
                 <button
                   onClick={() => switchChain({ chainId: ARC_CHAIN_ID })}
                   className="flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-[13px] font-semibold transition-colors active:scale-[0.98] min-h-[52px]"
@@ -453,7 +643,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
               )}
 
               {/* ── Recipient withdraw flow ── */}
-              {isRecipient && isOnArc && (() => {
+              {!telegramMode && isRecipient && isOnArc && (() => {
                 const claimable = stream?.claimable ?? 0n
                 const hasBalance = claimable > 0n
 
@@ -601,7 +791,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
               {/* Recipient complete — already handled inside the IIFE above */}
 
               {/* Sender cancel */}
-              {isSender && !isComplete && isOnArc && (
+              {!telegramMode && isSender && !isComplete && isOnArc && (
                 <button
                   onClick={handleCancel}
                   disabled={actionState !== 'idle' && actionState !== 'error'}
@@ -615,7 +805,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
               )}
 
               {/* Observer */}
-              {!isRecipient && !isSender && isConnected && (
+              {!telegramMode && !isRecipient && !isSender && isConnected && (
                 <a href="/"
                   className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 py-2.5 text-[13px] font-medium text-gray-500 hover:bg-gray-50 transition-colors"
                 >

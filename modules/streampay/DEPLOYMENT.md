@@ -75,8 +75,8 @@ Add these to Render → Service → Environment tab:
 
 | Variable | Value | Notes |
 |---|---|---|
-| `STREAM_FACTORY_ADDRESS` | `0x05e621a4d9860a0066d29b7ed376fb926d5a773e` | Server-side factory address (Arc Testnet) |
-| `VITE_STREAM_FACTORY_ADDRESS` | `0x05e621a4d9860a0066d29b7ed376fb926d5a773e` | Browser-side factory address (must match above) |
+| `STREAM_FACTORY_ADDRESS` | `0x1C20e33B6d82E27234f417EeD613a88b9640638f` | Server-side factory address (Arc Testnet) |
+| `VITE_STREAM_FACTORY_ADDRESS` | `0x1C20e33B6d82E27234f417EeD613a88b9640638f` | Browser-side factory address (must match above) |
 | `RELAYER_PRIVATE_KEY_ARC` | `0x...` | Arc relayer wallet private key |
 | `PRIVATE_RPC_URL_ARC` | `https://rpc.testnet.arc.network` | Arc RPC |
 | `RENDER_EXTERNAL_URL` | `https://hashkey-paylink.onrender.com` | Used for OG image absolute URLs |

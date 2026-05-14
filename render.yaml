@@ -38,10 +38,22 @@ services:
         sync: false                   # Circle Modular Wallet client URL
       - key: VITE_CIRCLE_EVM_EMAIL_ENABLED
         value: "true"                 # Base/Arbitrum Circle User-Controlled SCA email wallet payments
+      - key: VITE_CIRCLE_USER_WALLET_APP_ID
+        sync: false                   # Circle User-Controlled Wallet Web SDK app id
+      - key: STREAM_FACTORY_ADDRESS
+        value: "0x1C20e33B6d82E27234f417EeD613a88b9640638f"
+      - key: VITE_STREAM_FACTORY_ADDRESS
+        value: "0x1C20e33B6d82E27234f417EeD613a88b9640638f"
       - key: BASE_GAS_RECOVERY_USDC
         value: "0.01"
       - key: ARBITRUM_GAS_RECOVERY_USDC
         value: "0.03"
+      - key: ARC_GAS_RECOVERY_USDC
+        value: "0"
+      - key: CIRCLE_API_KEY
+        sync: false                   # Circle server API key for wallet OTP/signing
+      - key: CIRCLE_BASE_URL
+        value: "https://api.circle.com"
 
       # ── V2 relayer (api/relay-v2.ts) ──────────────────────────────────────
       - key: PAYLINK_FACTORY_V2
