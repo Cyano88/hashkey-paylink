@@ -36,9 +36,11 @@ export type CircleEvmEmailSession = {
   encryptionKey: string
   wallet: CircleEvmWallet
   chain: Extract<ChainKey, 'base' | 'arbitrum' | 'arc'>
+  appId?: string
 }
 
 const APP_ID = import.meta.env.VITE_CIRCLE_USER_WALLET_APP_ID as string | undefined
+const ARC_TESTNET_APP_ID = import.meta.env.VITE_CIRCLE_USER_WALLET_APP_ID_ARC_TESTNET as string | undefined
 const ENABLED = import.meta.env.VITE_CIRCLE_EVM_EMAIL_ENABLED !== 'false'
 
 const CHAIN_CONFIG = {
@@ -48,7 +50,11 @@ const CHAIN_CONFIG = {
 } as const
 
 export function canUseCircleEvmEmailWallet(chain: ChainKey) {
-  return ENABLED && !!APP_ID && (chain === 'base' || chain === 'arbitrum' || chain === 'arc')
+  return ENABLED && !!appIdForChain(chain) && (chain === 'base' || chain === 'arbitrum' || chain === 'arc')
+}
+
+function appIdForChain(chain: ChainKey) {
+  return chain === 'arc' ? (ARC_TESTNET_APP_ID ?? APP_ID) : APP_ID
 }
 
 function apiError(data: { error?: string; message?: string; code?: number }) {
@@ -238,9 +244,10 @@ export async function connectCircleEvmEmailWallet(
   email: string,
   chain: ChainKey,
 ): Promise<CircleEvmEmailSession> {
-  if (!APP_ID) throw new Error('Circle email wallet is not configured.')
   if (chain !== 'base' && chain !== 'arbitrum' && chain !== 'arc') throw new Error('Circle email wallet is not enabled for this chain.')
-  const sdk = new W3SSdk({ appSettings: { appId: APP_ID } })
+  const appId = appIdForChain(chain)
+  if (!appId) throw new Error('Circle email wallet is not configured.')
+  const sdk = new W3SSdk({ appSettings: { appId } })
   const deviceId = await sdk.getDeviceId()
   const otp = await circleWalletApi<{
     deviceToken: string
@@ -248,13 +255,14 @@ export async function connectCircleEvmEmailWallet(
     otpToken: string
   }>({
     action: 'requestEmailOtp',
+    chain,
     deviceId,
     email,
   })
 
   const login = await withTimeout(new Promise<CircleEmailLoginResult>((resolve, reject) => {
     sdk.updateConfigs({
-      appSettings: { appId: APP_ID },
+      appSettings: { appId },
       loginConfigs: {
         deviceToken: otp.deviceToken,
         deviceEncryptionKey: otp.deviceEncryptionKey,
@@ -284,6 +292,7 @@ export async function connectCircleEvmEmailWallet(
     encryptionKey: login.encryptionKey,
     wallet,
     chain,
+    appId,
   }
 }
 
@@ -301,6 +310,7 @@ async function pollTransactionHash(session: CircleEvmEmailSession, transactionId
       action: 'getTransaction',
       userToken: session.userToken,
       transactionId,
+      chain: session.chain,
     })
     const txHash = findTxHash(data.transaction)
     if (txHash) return txHash
@@ -316,9 +326,10 @@ export async function sendCircleEvmEmailPayment(params: {
   recipient: Address
   amount: string
 }) {
-  if (!APP_ID) throw new Error('Circle email wallet is not configured.')
+  const appId = params.session.appId ?? appIdForChain(params.session.chain)
+  if (!appId) throw new Error('Circle email wallet is not configured.')
   const sdk = new W3SSdk({
-    appSettings: { appId: APP_ID },
+    appSettings: { appId },
     authentication: {
       userToken: params.session.userToken,
       encryptionKey: params.session.encryptionKey,
@@ -370,10 +381,11 @@ export async function sendCircleArcStream(params: {
   salt: Hex
   predictedVault: Address
 }) {
-  if (!APP_ID) throw new Error('Circle email wallet is not configured.')
   if (params.session.chain !== 'arc') throw new Error('Arc StreamPay requires an Arc Circle smart wallet.')
+  const appId = params.session.appId ?? appIdForChain(params.session.chain)
+  if (!appId) throw new Error('Circle email wallet is not configured.')
   const sdk = new W3SSdk({
-    appSettings: { appId: APP_ID },
+    appSettings: { appId },
     authentication: {
       userToken: params.session.userToken,
       encryptionKey: params.session.encryptionKey,
@@ -411,10 +423,11 @@ export async function signCircleArcStreamClaim(params: {
   nonce: string
   deadline: string
 }) {
-  if (!APP_ID) throw new Error('Circle email wallet is not configured.')
   if (params.session.chain !== 'arc') throw new Error('Arc StreamPay claim requires an Arc Circle smart wallet.')
+  const appId = params.session.appId ?? appIdForChain(params.session.chain)
+  if (!appId) throw new Error('Circle email wallet is not configured.')
   const sdk = new W3SSdk({
-    appSettings: { appId: APP_ID },
+    appSettings: { appId },
     authentication: {
       userToken: params.session.userToken,
       encryptionKey: params.session.encryptionKey,
@@ -453,6 +466,7 @@ export async function signCircleArcStreamClaim(params: {
     action: 'signTypedData',
     userToken: params.session.userToken,
     walletId: params.session.wallet.id,
+    chain: params.session.chain,
     data: JSON.stringify(typedData),
     memo: 'Claim Arc StreamPay USDC',
   })

@@ -5,6 +5,7 @@ import { encodeFunctionData, isAddress, parseAbi } from 'viem'
 
 const CIRCLE_BASE_URL = (process.env.CIRCLE_BASE_URL ?? 'https://api.circle.com').replace(/\/+$/, '')
 const CIRCLE_API_KEY = process.env.CIRCLE_API_KEY
+const CIRCLE_TEST_API_KEY = process.env.CIRCLE_TEST_API_KEY ?? process.env.CIRCLE_API_KEY_TEST
 const SOLANA_BLOCKCHAIN = process.env.CIRCLE_SOLANA_BLOCKCHAIN ?? 'SOL'
 const EVM_TREASURY = '0xcE5dF9e1115F81a2Fc2F65941B20B820d508e753'
 const PLATFORM_FEE_BPS = 20n
@@ -44,11 +45,27 @@ type CircleResponse<T = unknown> = {
   error?: string
 }
 
-function circleHeaders(userToken?: string) {
-  if (!CIRCLE_API_KEY) throw new Error('CIRCLE_API_KEY not configured')
+function isTestnetBlockchain(blockchain: string | undefined) {
+  return !!blockchain && blockchain.toUpperCase().includes('TESTNET')
+}
+
+function circleApiKey(input?: { chain?: string; blockchain?: string }) {
+  const chain = input?.chain?.toLowerCase()
+  const needsTestKey = chain === 'arc' || isTestnetBlockchain(input?.blockchain)
+  if (needsTestKey) {
+    if (CIRCLE_TEST_API_KEY) return CIRCLE_TEST_API_KEY
+    if (CIRCLE_API_KEY?.startsWith('TEST_API')) return CIRCLE_API_KEY
+    throw new Error('CIRCLE_TEST_API_KEY not configured for Arc testnet')
+  }
+  if (CIRCLE_API_KEY) return CIRCLE_API_KEY
+  if (CIRCLE_TEST_API_KEY) return CIRCLE_TEST_API_KEY
+  throw new Error('CIRCLE_API_KEY not configured')
+}
+
+function circleHeaders(userToken?: string, apiKey = circleApiKey()) {
   return {
     'Content-Type': 'application/json',
-    Authorization: `Bearer ${CIRCLE_API_KEY}`,
+    Authorization: `Bearer ${apiKey}`,
     'X-Request-Id': crypto.randomUUID(),
     ...(userToken ? { 'X-User-Token': userToken } : {}),
   }
@@ -58,14 +75,16 @@ type CircleInit = {
   method?: string
   body?: string
   userToken?: string
+  apiKey?: string
   headers?: Record<string, string>
 }
 
 async function circleJson<T extends Record<string, unknown> = Record<string, unknown>>(path: string, init: CircleInit = {}) {
+  const { apiKey, ...requestInit } = init
   const res = await fetch(`${CIRCLE_BASE_URL}${path}`, {
-    ...init,
+    ...requestInit,
     headers: {
-      ...circleHeaders(init.userToken),
+      ...circleHeaders(init.userToken, apiKey),
       ...(init.headers ?? {}),
     },
   })
@@ -88,7 +107,7 @@ async function circleJson<T extends Record<string, unknown> = Record<string, unk
 
 function circleError(res: Response, err: unknown) {
   const e = err as Error & { status?: number; code?: number; body?: CircleResponse }
-  if (e.message === 'CIRCLE_API_KEY not configured') {
+  if (e.message === 'CIRCLE_API_KEY not configured' || e.message === 'CIRCLE_TEST_API_KEY not configured for Arc testnet') {
     return res.status(503).json({ ok: false, error: e.message })
   }
   const detail = (() => {
@@ -159,10 +178,11 @@ export default async function handler(req: Request, res: Response) {
 
   try {
     if (action === 'requestEmailOtp') {
-      const { deviceId, email } = params
+      const { deviceId, email, chain } = params
       if (!deviceId || !email) return res.status(400).json({ ok: false, error: 'Missing deviceId or email' })
       const data = await circleJson('/v1/w3s/users/email/token', {
         method: 'POST',
+        apiKey: circleApiKey({ chain }),
         body: JSON.stringify({ idempotencyKey: crypto.randomUUID(), deviceId, email }),
       })
       return res.json({ ok: true, ...data })
@@ -174,6 +194,7 @@ export default async function handler(req: Request, res: Response) {
       const data = await circleJson('/v1/w3s/user/initialize', {
         method: 'POST',
         userToken,
+        apiKey: circleApiKey({ blockchain }),
         body: JSON.stringify({
           idempotencyKey: crypto.randomUUID(),
           accountType: accountType || 'EOA',
@@ -189,6 +210,7 @@ export default async function handler(req: Request, res: Response) {
       const data = await circleJson('/v1/w3s/user/wallets', {
         method: 'POST',
         userToken,
+        apiKey: circleApiKey({ blockchain }),
         body: JSON.stringify({
           idempotencyKey: crypto.randomUUID(),
           accountType: accountType || 'EOA',
@@ -205,6 +227,7 @@ export default async function handler(req: Request, res: Response) {
       const data = await circleJson<{ wallets: Array<{ id: string; address: string; blockchain: string }> }>('/v1/w3s/wallets', {
         method: 'GET',
         userToken,
+        apiKey: circleApiKey({ chain }),
         headers: { accept: 'application/json' },
       })
       const wallet = chain === 'base' || chain === 'arbitrum' || chain === 'arc'
@@ -257,6 +280,7 @@ export default async function handler(req: Request, res: Response) {
       const data = await circleJson('/v1/w3s/user/transactions/contractExecution', {
         method: 'POST',
         userToken,
+        apiKey: circleApiKey({ chain }),
         body: JSON.stringify({
           idempotencyKey: crypto.randomUUID(),
           walletId,
@@ -307,6 +331,7 @@ export default async function handler(req: Request, res: Response) {
       const data = await circleJson('/v1/w3s/user/transactions/contractExecution', {
         method: 'POST',
         userToken,
+        apiKey: circleApiKey({ chain: 'arc' }),
         body: JSON.stringify({
           idempotencyKey: crypto.randomUUID(),
           walletId,
@@ -320,24 +345,26 @@ export default async function handler(req: Request, res: Response) {
     }
 
     if (action === 'getTransaction') {
-      const { userToken, transactionId } = params
+      const { userToken, transactionId, chain } = params
       if (!userToken || !transactionId) return res.status(400).json({ ok: false, error: 'Missing userToken or transactionId' })
       const data = await circleJson<{ transaction?: Record<string, unknown> }>(`/v1/w3s/transactions/${encodeURIComponent(transactionId)}`, {
         method: 'GET',
         userToken,
+        apiKey: circleApiKey({ chain }),
         headers: { accept: 'application/json' },
       })
       return res.json({ ok: true, transaction: data.transaction ?? data })
     }
 
     if (action === 'signTypedData') {
-      const { userToken, walletId, data: typedData, memo } = params
+      const { userToken, walletId, data: typedData, memo, chain } = params
       if (!userToken || !walletId || !typedData) {
         return res.status(400).json({ ok: false, error: 'Missing userToken, walletId, or typed data' })
       }
       const result = await circleJson('/v1/w3s/user/sign/typedData', {
         method: 'POST',
         userToken,
+        apiKey: circleApiKey({ chain }),
         body: JSON.stringify({
           walletId,
           data: typedData,
@@ -355,6 +382,7 @@ export default async function handler(req: Request, res: Response) {
       const walletData = await circleJson<{ wallets: Array<{ id: string; address: string; blockchain: string }> }>('/v1/w3s/wallets', {
         method: 'GET',
         userToken,
+        apiKey: circleApiKey(),
         headers: { accept: 'application/json' },
       })
       const wallet = walletData.wallets?.find((item) => item.id === walletId)
@@ -364,6 +392,7 @@ export default async function handler(req: Request, res: Response) {
       const data = await circleJson('/v1/w3s/user/sign/transaction', {
         method: 'POST',
         userToken,
+        apiKey: circleApiKey(),
         body: JSON.stringify({
           walletId,
           rawTransaction,

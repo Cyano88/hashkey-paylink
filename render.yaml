@@ -40,6 +40,8 @@ services:
         value: "true"                 # Base/Arbitrum Circle User-Controlled SCA email wallet payments
       - key: VITE_CIRCLE_USER_WALLET_APP_ID
         sync: false                   # Circle User-Controlled Wallet Web SDK app id
+      - key: VITE_CIRCLE_USER_WALLET_APP_ID_ARC_TESTNET
+        sync: false                   # Circle test app id for Arc testnet StreamPay
       - key: STREAM_FACTORY_ADDRESS
         value: "0x1C20e33B6d82E27234f417EeD613a88b9640638f"
       - key: VITE_STREAM_FACTORY_ADDRESS
@@ -52,6 +54,8 @@ services:
         value: "0"
       - key: CIRCLE_API_KEY
         sync: false                   # Circle server API key for wallet OTP/signing
+      - key: CIRCLE_TEST_API_KEY
+        sync: false                   # Circle TEST_API key for Arc testnet StreamPay
       - key: CIRCLE_BASE_URL
         value: "https://api.circle.com"
       - key: UPSTASH_REDIS_REST_URL
