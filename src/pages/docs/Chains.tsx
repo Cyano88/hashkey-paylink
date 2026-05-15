@@ -17,7 +17,7 @@ export default function Chains() {
             ['Arc',      'USDC',  'EIP-2612 permit + Multicall3 or CREATE2 ghost vault', '5042002'],
             ['Starknet', 'USDC',  'AVNU Paymaster sponsors all STRK fees',              'SN_MAIN'],
             ['Solana',   'USDC',  'Circle/connected wallet signs; Hash PayLink relayer pays SOL fees/rent', 'mainnet-beta'],
-            ['Arbitrum', 'USDC',  'Connected-wallet relayer, Circle smart wallet path, or CREATE2 ghost vault', '42161'],
+            ['Arbitrum', 'USDC',  'Connected-wallet relayer, Circle Paymaster / smart wallet, or CREATE2 ghost vault', '42161'],
           ]}
         />
       </Section>
@@ -98,7 +98,7 @@ export default function Chains() {
       </Section>
 
       <Section title="Arbitrum">
-        <p>Arbitrum support uses Circle native USDC on Arbitrum One. Connected-wallet payments use a permit signature and Hash PayLink relayer submission, so the relayer pays ETH gas. Circle Smart Wallet payments use the Circle smart-wallet path where configured. Send via Address uses the Arbitrum ghost vault and relayer sweep path.</p>
+        <p>Arbitrum support uses Circle native USDC on Arbitrum One. Connected-wallet payments use a permit signature and Hash PayLink relayer submission, so the relayer pays ETH gas. Circle Paymaster is configured for the Arbitrum Circle Smart Wallet path, and Send via Address uses the Arbitrum ghost vault and relayer sweep path.</p>
         <InfoBox type="info">Use native Arbitrum USDC at <Code>0xaf88d065e77c8cC2239327C5EDb3A432268e5831</Code>. Do not send bridged USDC.e to Hash PayLink Arbitrum vaults.</InfoBox>
         <Table
           headers={['Property', 'Value']}

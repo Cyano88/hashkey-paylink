@@ -77,7 +77,7 @@ Hash PayLink is a **stateless, non-custodial payment infrastructure** that turns
 | 🟣 **Starknet** | USDC | ~2 s | AVNU Paymaster · Sponsored | Wallet Connect | — |
 | 🩵 **Arc** | USDC | Sub-second | Native USDC Gas | Wallet Connect · Send via Address | 5042002 |
 | 🟢 **Solana** | USDC | ~0.5 s | Relayer Sponsored | Circle Smart Wallet · Wallet Connect · Send via Address | — |
-| 🔷 **Arbitrum** | USDC | ~2 s | Relayer Sponsored · Circle Smart Wallet | Wallet Connect · Send via Address | 42161 |
+| 🔷 **Arbitrum** | USDC | ~2 s | Relayer Sponsored · Circle Paymaster / Smart Wallet | Wallet Connect · Send via Address | 42161 |
 
 ---
 
@@ -95,11 +95,11 @@ This is the core innovation of Hash PayLink. **On every supported chain, the pay
 4. Sponsored smart-wallet payments can include a configured internal USDC gas recovery amount routed to treasury.
 5. On **Base Mainnet**, every supported connected-wallet transaction appends the ERC-8021 Base Builder Code (`bc_8qtb7tny`) to calldata for Base attribution.
 
-### Arbitrum — Connected-Wallet Relayer / Circle Smart Wallet
+### Arbitrum — Connected-Wallet Relayer / Circle Paymaster
 
 1. Connected-wallet Arbitrum payments use an EIP-2612 permit signature. The payer signs off-chain, then Hash PayLink submits the transaction through `/api/relay-gho`.
 2. The Hash PayLink Arbitrum relayer pays ETH gas. The payer needs Arbitrum USDC, not Arbitrum ETH.
-3. Circle Smart Wallet payments use the Circle smart-wallet path where configured.
+3. Circle Paymaster is configured for the Arbitrum Circle Smart Wallet path, so compatible Circle smart-wallet payments can use Circle's paymaster route instead of the Hash PayLink `/api/relay-gho` fallback.
 4. Arbitrum Send via Address uses the same ghost-vault settlement model described below.
 
 > **Why this matters:** the production payment surface stays direct and stateless. Hash PayLink does not custody funds or depend on a pre-deployed merchant router.

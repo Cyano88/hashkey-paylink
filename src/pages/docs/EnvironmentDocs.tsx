@@ -41,7 +41,7 @@ export default function EnvironmentDocs() {
             ['VITE_FACTORY_V2_ARB',           'No',  'Browser-accessible Arbitrum factory.'],
             ['CDP_PAYMASTER_URL',             'No',  'Server-side Coinbase/CDP Base Paymaster URL used by /api/base-paymaster.'],
             ['VITE_BASE_PAYMASTER_URL',       'No',  'Browser-visible paymaster proxy path. Use /api/base-paymaster.'],
-            ['VITE_CIRCLE_PAYMASTER_ENABLED', 'No',  'Feature flag for Circle Paymaster. Keep false until the ERC-4337/EIP-7702 payment path is enabled.'],
+            ['VITE_CIRCLE_PAYMASTER_ENABLED', 'No',  'Feature flag for Circle Paymaster on supported Base and Arbitrum smart-wallet paths.'],
             ['VITE_CIRCLE_BUNDLER_URL_BASE',  'No',  'ERC-4337 bundler RPC used by Circle Paymaster on Base. Default: public Pimlico Base endpoint.'],
             ['VITE_CIRCLE_BUNDLER_URL_ARB',   'No',  'ERC-4337 bundler RPC used by Circle Paymaster on Arbitrum. Default: public Pimlico Arbitrum endpoint.'],
             ['VITE_CIRCLE_PAYMASTER_V08_BASE','No',  'Circle Paymaster v0.8 address for Base. Override only if Circle rotates the address.'],
