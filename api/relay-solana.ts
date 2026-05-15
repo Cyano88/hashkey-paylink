@@ -19,6 +19,9 @@
  *   RELAYER_PRIVATE_KEY_SOLANA    — base64 OR JSON-array encoded 64-byte keypair
  *   SOLANA_TREASURY               — recipient Solana address for the 0.2% fee
  *                                   (optional — fee skipped if not set)
+ *   SOLANA_GAS_RECOVERY_USDC      — optional USDC recovery amount routed to
+ *                                   SOLANA_TREASURY to offset sponsored SOL
+ *                                   fees/rent. Defaults to 0.01 USDC.
  */
 
 import type { Request, Response } from 'express'
@@ -40,6 +43,7 @@ import bs58   from 'bs58'
 const USDC_MINT     = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v')
 const USDC_DECIMALS = 6
 const PLATFORM_FEE_BPS = 20 // 0.2%
+const DEFAULT_GAS_RECOVERY_RAW = 10_000n // 0.01 USDC
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -72,6 +76,23 @@ function parseSolanaAddress(label: string, value?: string): PublicKey {
 function getSolanaTreasury(feeRaw: bigint): PublicKey | null {
   if (feeRaw === 0n) return null
   return parseSolanaAddress('Solana treasury address', process.env.SOLANA_TREASURY)
+}
+
+function parseOptionalUsdcAmount(value: string | undefined, fallback: bigint): bigint {
+  if (!value || !value.trim()) return fallback
+  try {
+    return parseUsdcAmount(value)
+  } catch {
+    return fallback
+  }
+}
+
+function getGasRecoveryRaw(totalRaw: bigint, feeRaw: bigint): bigint {
+  const configured = parseOptionalUsdcAmount(process.env.SOLANA_GAS_RECOVERY_USDC, DEFAULT_GAS_RECOVERY_RAW)
+  if (configured <= 0n) return 0n
+  const maxRecoverable = totalRaw - feeRaw - 1n
+  if (maxRecoverable <= 0n) return 0n
+  return configured > maxRecoverable ? maxRecoverable : configured
 }
 
 function decodeSignedTransaction(tx: string): Buffer {
@@ -149,9 +170,11 @@ export async function buildSolanaTx(req: Request, res: Response): Promise<void> 
     const fromPubkey = parseSolanaAddress('Sender address', from)
     const toPubkey   = parseSolanaAddress('Recipient address', to)
 
-    const totalRaw      = parseUsdcAmount(amount)
-    const feeRaw        = totalRaw * BigInt(PLATFORM_FEE_BPS) / 10_000n
-    const recipientRaw  = totalRaw - feeRaw
+    const totalRaw       = parseUsdcAmount(amount)
+    const feeRaw         = totalRaw * BigInt(PLATFORM_FEE_BPS) / 10_000n
+    const gasRecoveryRaw = getGasRecoveryRaw(totalRaw, feeRaw)
+    const treasuryRaw    = feeRaw + gasRecoveryRaw
+    const recipientRaw   = totalRaw - treasuryRaw
     if (recipientRaw <= 0n) throw new Error('Payment amount is too small after fees')
 
     const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash()
@@ -171,12 +194,12 @@ export async function buildSolanaTx(req: Request, res: Response): Promise<void> 
       fromATA, USDC_MINT, toATA, fromPubkey, recipientRaw, USDC_DECIMALS,
     ))
 
-    // Transfer fee to treasury. Fail closed when configured fees cannot be routed.
-    const treasuryPubkey = getSolanaTreasury(feeRaw)
+    // Transfer platform fee + sponsored gas/rent recovery to treasury.
+    const treasuryPubkey = getSolanaTreasury(treasuryRaw)
     if (treasuryPubkey) {
       const treasuryATA = await ensureATA(connection, tx, USDC_MINT, treasuryPubkey, relayer.publicKey)
       tx.add(createTransferCheckedInstruction(
-        fromATA, USDC_MINT, treasuryATA, fromPubkey, feeRaw, USDC_DECIMALS,
+        fromATA, USDC_MINT, treasuryATA, fromPubkey, treasuryRaw, USDC_DECIMALS,
       ))
     }
 
@@ -189,6 +212,7 @@ export async function buildSolanaTx(req: Request, res: Response): Promise<void> 
       tx: Buffer.from(serialised).toString('base64'),
       lastValidBlockHeight,
       feeAmount: (Number(feeRaw) / Math.pow(10, USDC_DECIMALS)).toFixed(USDC_DECIMALS),
+      gasRecoveryAmount: (Number(gasRecoveryRaw) / Math.pow(10, USDC_DECIMALS)).toFixed(USDC_DECIMALS),
     })
   } catch (err) {
     res.status(500).json({ ok: false, error: (err as Error).message })
@@ -264,8 +288,11 @@ export async function sweepSolanaVault(req: Request, res: Response): Promise<voi
 
     if (balanceRaw === 0n) { res.json({ ok: false, status: 'waiting' }); return }
 
-    const feeRaw       = balanceRaw * BigInt(PLATFORM_FEE_BPS) / 10_000n
-    const recipientRaw = balanceRaw - feeRaw
+    const feeRaw         = balanceRaw * BigInt(PLATFORM_FEE_BPS) / 10_000n
+    const gasRecoveryRaw = getGasRecoveryRaw(balanceRaw, feeRaw)
+    const treasuryRaw    = feeRaw + gasRecoveryRaw
+    const recipientRaw   = balanceRaw - treasuryRaw
+    if (recipientRaw <= 0n) { res.status(400).json({ ok: false, error: 'Vault balance too small after fees' }); return }
 
     const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash()
     const tx = new Transaction({ feePayer: relayer.publicKey, recentBlockhash: blockhash })
@@ -276,11 +303,11 @@ export async function sweepSolanaVault(req: Request, res: Response): Promise<voi
       vaultATA, USDC_MINT, recipientATA, vaultKeypair.publicKey, recipientRaw, USDC_DECIMALS,
     ))
 
-    const treasuryPubkey = getSolanaTreasury(feeRaw)
+    const treasuryPubkey = getSolanaTreasury(treasuryRaw)
     if (treasuryPubkey) {
       const treasuryATA = await ensureATA(connection, tx, USDC_MINT, treasuryPubkey, relayer.publicKey)
       tx.add(createTransferCheckedInstruction(
-        vaultATA, USDC_MINT, treasuryATA, vaultKeypair.publicKey, feeRaw, USDC_DECIMALS,
+        vaultATA, USDC_MINT, treasuryATA, vaultKeypair.publicKey, treasuryRaw, USDC_DECIMALS,
       ))
     }
 
@@ -302,7 +329,14 @@ export async function sweepSolanaVault(req: Request, res: Response): Promise<voi
     })
     await connection.confirmTransaction({ signature: txHash, blockhash, lastValidBlockHeight }, 'confirmed')
 
-    res.json({ ok: true, status: 'swept', txHash, recipientAmount: recipientRaw.toString() })
+    res.json({
+      ok: true,
+      status: 'swept',
+      txHash,
+      recipientAmount: recipientRaw.toString(),
+      feeAmount: feeRaw.toString(),
+      gasRecoveryAmount: gasRecoveryRaw.toString(),
+    })
   } catch (err) {
     const msg = (err as Error).message ?? 'Unknown sweep error'
     console.error('[solana-sweep] failed:', msg)

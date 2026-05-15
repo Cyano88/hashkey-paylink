@@ -4,11 +4,13 @@ import type { ChainKey } from './chains'
 const DEFAULT_RECOVERY_USDC: Partial<Record<ChainKey, string>> = {
   base: '0.01',
   arbitrum: '0.03',
+  solana: '0.01',
 }
 
 function configuredRecoveryAmount(chain: ChainKey) {
   if (chain === 'base') return import.meta.env.VITE_BASE_GAS_RECOVERY_USDC ?? DEFAULT_RECOVERY_USDC.base
   if (chain === 'arbitrum') return import.meta.env.VITE_ARBITRUM_GAS_RECOVERY_USDC ?? DEFAULT_RECOVERY_USDC.arbitrum
+  if (chain === 'solana') return import.meta.env.VITE_SOLANA_GAS_RECOVERY_USDC ?? DEFAULT_RECOVERY_USDC.solana
   return '0'
 }
 

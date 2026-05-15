@@ -79,6 +79,8 @@ export default function EnvironmentDocs() {
             ['RELAYER_PRIVATE_KEY_SOLANA', 'Yes', 'Solana relayer keypair. Accepts base58 string, JSON array, or base64 encoded.'],
             ['SOLANA_RPC_URL',             'No',  'Solana RPC endpoint. Falls back to mainnet-beta public RPC.'],
             ['SOLANA_TREASURY',            'No',  'Solana treasury wallet address for fee collection.'],
+            ['SOLANA_GAS_RECOVERY_USDC',   'No',  'Server-side USDC amount routed to Solana treasury to offset sponsored SOL fees/rent. Default: 0.01.'],
+            ['VITE_SOLANA_GAS_RECOVERY_USDC','No','Browser-visible Solana gas recovery display amount. Keep in sync with SOLANA_GAS_RECOVERY_USDC. Default: 0.01.'],
           ]}
         />
       </Section>

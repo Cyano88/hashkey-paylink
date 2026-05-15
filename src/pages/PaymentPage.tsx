@@ -526,6 +526,11 @@ export default function PaymentPage() {
       return 0n
     }
   })()
+  const sponsoredGasRecoveryUnits = (() => {
+    if (circleRequiredUnits <= 0n) return 0n
+    const feeUnits = circleRequiredUnits * BigInt(PLATFORM_FEE_BPS) / 10_000n
+    return getSponsoredGasRecoveryUnits(chain, circleRequiredUnits, feeUnits, meta.decimals)
+  })()
   const starkSmartWalletHasEnough =
     argentStarkBalance !== null &&
     circleRequiredUnits > 0n &&
@@ -2257,6 +2262,14 @@ export default function PaymentPage() {
                   {ghoGasEstimate > 0n
                     ? `~${(Number(ghoGasEstimate) / 1e6).toFixed(4)} USDC`
                     : '…'}
+                </span>
+              </div>
+            )}
+            {chain === 'solana' && sponsoredGasRecoveryUnits > 0n && (
+              <div className="flex items-center justify-between bg-gray-50/60 px-4 py-2 border-t border-dashed border-gray-100">
+                <span className="text-[11px] font-normal text-slate-400 tracking-wide">Gas recovery (relayer pays SOL)</span>
+                <span className="font-mono text-[11px] text-slate-400">
+                  {(Number(sponsoredGasRecoveryUnits) / 1e6).toFixed(4)} USDC
                 </span>
               </div>
             )}
