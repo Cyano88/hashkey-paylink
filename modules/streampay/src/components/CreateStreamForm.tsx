@@ -79,6 +79,10 @@ function genSalt(): `0x${string}` {
   return `0x${[...arr].map(b => b.toString(16).padStart(2, '0')).join('')}` as `0x${string}`
 }
 
+function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
 function buildStreamLink(vault: `0x${string}`, reason: string): string {
   const { hostname, origin } = window.location
   const isDedicatedHost =
@@ -163,6 +167,17 @@ export function CreateStreamForm() {
     } finally {
       setCircleBalanceRefreshing(false)
     }
+  }
+
+  async function waitForPredictedVault(vaultAddress: `0x${string}`) {
+    if (!publicClient) return false
+    const deadline = Date.now() + 120_000
+    while (Date.now() < deadline) {
+      const bytecode = await publicClient.getBytecode({ address: vaultAddress }).catch(() => undefined)
+      if (bytecode && bytecode !== '0x') return true
+      await sleep(2_500)
+    }
+    return false
   }
 
   useEffect(() => {
@@ -268,7 +283,18 @@ export function CreateStreamForm() {
         salt,
         predictedVault: predicted,
       })
-      if (!txHash) throw new Error('Circle did not return an Arc transaction hash yet. Check Circle transaction history and try again.')
+      if (!txHash) {
+        setStatusMsg('Waiting for Arc stream confirmation...')
+        const deployed = await waitForPredictedVault(predicted)
+        if (!deployed) {
+          throw new Error('Circle submitted the stream, but Arc confirmation is still pending. Refresh this page in a minute and check the stream link again.')
+        }
+        setStreamLink(buildStreamLink(predicted, reason))
+        void refreshCircleBalance(session.wallet.address)
+        setStep('success')
+        setStatusMsg('')
+        return
+      }
 
       setDeployTxHash(txHash)
       setStatusMsg('Deploying on Arc...')

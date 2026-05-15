@@ -297,7 +297,7 @@ export async function connectCircleEvmEmailWallet(
 }
 
 async function pollTransactionHash(session: CircleEvmEmailSession, transactionId: string) {
-  const deadline = Date.now() + 90_000
+  const deadline = Date.now() + 180_000
   while (Date.now() < deadline) {
     const data = await circleWalletApi<{
       transaction?: {
@@ -349,7 +349,7 @@ export async function sendCircleEvmEmailPayment(params: {
   const result = await executeChallenge(sdk, challenge.challengeId)
   const txHash = findTxHash(result)
   if (txHash) return txHash
-  const transactionId = findTransactionId(result.data)
+  const transactionId = findTransactionId(result)
   if (transactionId) {
     const hash = await pollTransactionHash(params.session, transactionId).catch(() => null)
     if (hash) return hash
@@ -408,7 +408,7 @@ export async function sendCircleArcStream(params: {
   const result = await executeChallenge(sdk, challenge.challengeId)
   const txHash = findTxHash(result)
   if (txHash) return txHash
-  const transactionId = findTransactionId(result.data)
+  const transactionId = findTransactionId(result)
   if (transactionId) {
     const hash = await pollTransactionHash(params.session, transactionId).catch(() => null)
     if (hash) return hash
