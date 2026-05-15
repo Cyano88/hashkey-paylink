@@ -12,22 +12,22 @@ export default function Chains() {
         <Table
           headers={['Chain', 'Asset', 'Gas model', 'Chain ID']}
           rows={[
-            ['Base',     'USDC',  'Coinbase Paymaster, Circle Paymaster architecture, or CREATE2 ghost vault', '8453'],
+            ['Base',     'USDC',  'Circle smart wallet, Coinbase/CDP Paymaster, normal wallet fallback, or CREATE2 ghost vault', '8453'],
             ['HashKey',  'HSK + USDC', 'Direct native HSK transfer (~0.0001 HSK)', '177'],
             ['Arc',      'USDC',  'EIP-2612 permit + Multicall3 or CREATE2 ghost vault', '5042002'],
             ['Starknet', 'USDC',  'AVNU Paymaster sponsors all STRK fees',              'SN_MAIN'],
-            ['Solana',   'USDC',  'Relayer keypair covers all SOL fees',                 'mainnet-beta'],
-            ['Arbitrum', 'USDC',  'Relayer today; Circle Paymaster architecture prepared', '42161'],
+            ['Solana',   'USDC',  'Circle/connected wallet signs; Hash PayLink relayer pays SOL fees/rent', 'mainnet-beta'],
+            ['Arbitrum', 'USDC',  'Connected-wallet relayer, Circle smart wallet path, or CREATE2 ghost vault', '42161'],
           ]}
         />
       </Section>
 
       <Section title="Base">
-        <SubSection title="EIP-2612 Permit + Multicall3">
+        <SubSection title="Connected wallet">
           <p>The payer signs an off-chain EIP-712 typed message (permit) authorizing USDC spending. Hash PayLink first attempts Coinbase/CDP Paymaster sponsorship for compatible Coinbase Smart Wallet/Base Account connections. If the connected wallet does not support <Code>wallet_sendCalls</Code>, it falls back to the standard wallet transaction path, which requires the payer wallet to hold Base ETH for gas.</p>
         </SubSection>
-        <SubSection title="Circle Paymaster architecture">
-          <p>Circle Paymaster is prepared as an ERC-4337 user-operation path for Base and Arbitrum. The minimal payer UI uses Circle Modular Wallets for Continue with email, then pays gas in USDC through Circle's paymaster flow. It does not sponsor the payment amount and does not custody payer or merchant funds. Keep <Code>VITE_CIRCLE_PAYMASTER_ENABLED</Code> disabled unless testing the connected-wallet EIP-7702 path separately.</p>
+        <SubSection title="Circle Smart Wallet">
+          <p>The Circle email smart-wallet path abstracts gas for Base payments. The payer funds the Circle smart wallet with USDC and confirms the payment without needing Base ETH. A configured USDC recovery amount can be routed internally to treasury to offset sponsored gas economics.</p>
         </SubSection>
         <SubSection title="CREATE2 Ghost Vault">
           <p>The Send via Address flow computes a deterministic vault address using CREATE2. The payer sends USDC directly to this address from any wallet or CEX without connecting a browser extension. The relayer detects the deposit and sweeps funds to the recipient, covering ETH gas. The payer contributes only USDC.</p>
@@ -85,9 +85,12 @@ export default function Chains() {
       </Section>
 
       <Section title="Solana">
-        <p>The Hash PayLink relayer keypair pays all SOL transaction fees. Payers sign only the USDC transfer instruction — no SOL required. The relayer acts as the fee payer on every Solana transaction.</p>
+        <p>For Solana Circle Smart Wallet and connected-wallet payments, the payer signs the USDC transfer while the Hash PayLink Solana relayer is the fee payer. The payer needs USDC only; the relayer pays SOL network fees and any one-time ATA rent for missing recipient or treasury token accounts.</p>
+        <SubSection title="Circle Smart Wallet on Solana">
+          <p>Circle provides the smart-wallet signing UX. Hash PayLink builds the transaction with the relayer as fee payer, Circle signs it, and Hash PayLink relays it. Recipient and treasury ATAs are not temporary, so they are not closed after direct payments; once they exist, future payments to the same addresses are cheaper.</p>
+        </SubSection>
         <SubSection title="Send via Address on Solana">
-          <p>Each payment link generates a deterministic Associated Token Account (ATA) vault. The payer sends USDC to the ATA. The relayer polls for deposits, sweeps the balance to the recipient's ATA, and closes the vault ATA to recover ~0.002 SOL rent — keeping the relayer self-funded over time.</p>
+          <p>Each payment link generates a deterministic vault address. The payer sends USDC to the vault from any wallet or exchange. The relayer polls for deposits, sweeps the balance to the recipient's ATA, routes the platform fee and configured recovery to treasury, and closes the temporary vault ATA to recover rent.</p>
         </SubSection>
         <SubSection title="Compatible wallets">
           <p>Phantom and Solflare are supported. The Solana recipient address is a base58-encoded public key.</p>
@@ -95,7 +98,7 @@ export default function Chains() {
       </Section>
 
       <Section title="Arbitrum">
-        <p>Arbitrum support uses Circle native USDC on Arbitrum One. The current production path uses the Hash PayLink relayer for connected-wallet relays and ghost-vault sweeps. Circle Paymaster support is prepared as a later ERC-4337/EIP-7702 path where gas can be paid in USDC through a bundler.</p>
+        <p>Arbitrum support uses Circle native USDC on Arbitrum One. Connected-wallet payments use a permit signature and Hash PayLink relayer submission, so the relayer pays ETH gas. Circle Smart Wallet payments use the Circle smart-wallet path where configured. Send via Address uses the Arbitrum ghost vault and relayer sweep path.</p>
         <InfoBox type="info">Use native Arbitrum USDC at <Code>0xaf88d065e77c8cC2239327C5EDb3A432268e5831</Code>. Do not send bridged USDC.e to Hash PayLink Arbitrum vaults.</InfoBox>
         <Table
           headers={['Property', 'Value']}

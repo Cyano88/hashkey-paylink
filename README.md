@@ -72,11 +72,12 @@ Hash PayLink is a **stateless, non-custodial payment infrastructure** that turns
 
 | Chain | Asset | Finality | Gas Model | Pay Modes | Chain ID |
 |---|---|---|---|---|---|
-| 🔵 **Base** | USDC | ~2 s | EIP-7702 Sponsored | Wallet Connect · Send via Address | 8453 |
+| 🔵 **Base** | USDC | ~2 s | Circle/Paymaster Sponsored · Wallet fallback | Wallet Connect · Send via Address | 8453 |
 | 🟡 **HashKey** | HSK | ~3 s | Native HSK | Wallet Connect | 177 |
 | 🟣 **Starknet** | USDC | ~2 s | AVNU Paymaster · Sponsored | Wallet Connect | — |
 | 🩵 **Arc** | USDC | Sub-second | Native USDC Gas | Wallet Connect · Send via Address | 5042002 |
-| 🟢 **Solana** | USDC | ~0.5 s | Relayer Sponsored | Wallet Connect · Send via Address | — |
+| 🟢 **Solana** | USDC | ~0.5 s | Relayer Sponsored | Circle Smart Wallet · Wallet Connect · Send via Address | — |
+| 🔷 **Arbitrum** | USDC | ~2 s | Relayer Sponsored · Circle Smart Wallet | Wallet Connect · Send via Address | 42161 |
 
 ---
 
@@ -86,12 +87,20 @@ This is the core innovation of Hash PayLink. **On every supported chain, the pay
 
 ---
 
-### Base & Arbitrum — Circle Smart Wallet / EVM Wallet Checkout
+### Base — Circle Smart Wallet / EVM Wallet Checkout
 
-1. Circle email smart-wallet payments route USDC directly to the merchant and treasury in one hosted checkout flow.
-2. Connected EVM wallet payments use direct recipient/treasury transfers. There is no active legacy PaymentRouter dependency in the production app.
-3. Sponsored smart-wallet payments can include a small transparent USDC gas recovery amount routed to treasury.
-4. On **Base Mainnet**, every supported connected-wallet transaction appends the ERC-8021 Base Builder Code (`bc_8qtb7tny`) to calldata for Base attribution.
+1. Circle email smart-wallet payments route USDC directly to the merchant and treasury in one hosted checkout flow. The payer needs USDC, not Base ETH.
+2. Connected Base wallet payments first try Coinbase/CDP Paymaster sponsorship for compatible Coinbase Smart Wallet/Base Account connections.
+3. If the connected wallet does not support the sponsored call path, Base falls back to a standard wallet transaction, which requires the payer to hold Base ETH.
+4. Sponsored smart-wallet payments can include a configured internal USDC gas recovery amount routed to treasury.
+5. On **Base Mainnet**, every supported connected-wallet transaction appends the ERC-8021 Base Builder Code (`bc_8qtb7tny`) to calldata for Base attribution.
+
+### Arbitrum — Connected-Wallet Relayer / Circle Smart Wallet
+
+1. Connected-wallet Arbitrum payments use an EIP-2612 permit signature. The payer signs off-chain, then Hash PayLink submits the transaction through `/api/relay-gho`.
+2. The Hash PayLink Arbitrum relayer pays ETH gas. The payer needs Arbitrum USDC, not Arbitrum ETH.
+3. Circle Smart Wallet payments use the Circle smart-wallet path where configured.
+4. Arbitrum Send via Address uses the same ghost-vault settlement model described below.
 
 > **Why this matters:** the production payment surface stays direct and stateless. Hash PayLink does not custody funds or depend on a pre-deployed merchant router.
 
@@ -132,14 +141,15 @@ This is the core innovation of Hash PayLink. **On every supported chain, the pay
 
 ---
 
-### Solana — Relayer as Fee Payer (Wallet Connect)
+### Solana — Circle Smart Wallet / Relayer as Fee Payer
 
-1. When the payer chooses "Connect Wallet" on Solana, their wallet address is sent to Hash PayLink's relay server.
+1. When the payer chooses Circle Smart Wallet or Connect Wallet on Solana, their wallet address is sent to Hash PayLink's relay server.
 2. The server calls `/api/solana-build-tx` and builds a Solana transaction with `feePayer: relayer.publicKey` — the **relayer's wallet pays all SOL network fees**, not the payer.
 3. The relayer partially signs the transaction as fee payer.
-4. The partially-signed transaction (base64-encoded) is returned to the payer's Phantom/Solflare/Backpack wallet.
+4. The partially-signed transaction (base64-encoded) is returned to Circle Smart Wallet or the payer's Phantom/Solflare/Backpack wallet for signing.
 5. The payer signs **only the USDC `transferChecked` instruction** — authorising the USDC transfer from their Associated Token Account (ATA) to the recipient's ATA.
-6. The fully-signed transaction is submitted via `/api/solana-relay`. The platform fee (0.2%) is routed to the Hash PayLink treasury ATA atomically.
+6. The fully-signed transaction is submitted via `/api/solana-relay`. The platform fee (0.2%) and configured internal gas recovery are routed to the Hash PayLink treasury ATA atomically.
+7. Recipient and treasury ATAs are not temporary accounts, so they are not closed after direct payments. If the relayer creates them once, later payments to the same addresses are cheaper.
 
 > **Payer needs:** USDC on Solana. Zero SOL.
 
@@ -151,8 +161,8 @@ This is the core innovation of Hash PayLink. **On every supported chain, the pay
 2. The vault's Associated Token Account (ATA) address is returned to the payer.
 3. The payer sends USDC to this ATA from any Solana wallet — no connection required.
 4. Hash PayLink polls the vault ATA every 3 seconds. On USDC arrival, `/api/solana-sweep` executes:
-   - Transfers `balance - 0.2% fee` to the recipient's ATA
-   - Transfers the 0.2% fee to the Hash PayLink treasury ATA
+   - Transfers net USDC to the recipient's ATA
+   - Transfers the 0.2% platform fee plus configured internal gas recovery to the Hash PayLink treasury ATA
    - **Closes the vault ATA** — returning ~0.002 SOL rent back to the relayer
 5. This rent recovery keeps the relayer **self-funding** — every sweep replenishes SOL that covers future sweeps. No manual top-ups required.
 6. The sweep response returns the exact `recipientAmount` (actual USDC received), which is shown in the success card and logged on the organizer dashboard.
