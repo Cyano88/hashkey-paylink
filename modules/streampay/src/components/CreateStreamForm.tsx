@@ -1,10 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   useAccount, useChainId, useSwitchChain,
   useReadContract, useWriteContract, usePublicClient,
 } from 'wagmi'
 import { isAddress, parseAbi, parseEventLogs } from 'viem'
-import { Mail, X as XIcon } from 'lucide-react'
+import { Mail, RefreshCw, X as XIcon } from 'lucide-react'
 import { STREAM_VAULT_FACTORY_ABI } from '../lib/streamVaultAbi'
 import { formatUsdcFull } from './TriStateBar'
 import {
@@ -67,6 +67,12 @@ function parseUsdc(val: string): bigint {
   return BigInt(Math.round(n * 1_000_000))
 }
 
+function formatWalletUsdc(value: bigint) {
+  if (value === 0n) return '0'
+  const full = formatUsdcFull(value)
+  return full.includes('.') ? full.replace(/\.?0+$/, '') : full
+}
+
 function genSalt(): `0x${string}` {
   const arr = new Uint8Array(32)
   crypto.getRandomValues(arr)
@@ -113,6 +119,7 @@ export function CreateStreamForm() {
   const [circleEmail,      setCircleEmail]      = useState('')
   const [circleSession,    setCircleSession]    = useState<CircleEvmEmailSession | null>(null)
   const [circleBalance,    setCircleBalance]    = useState<bigint | null>(null)
+  const [circleBalanceRefreshing, setCircleBalanceRefreshing] = useState(false)
   const [circleCopied,     setCircleCopied]     = useState(false)
 
   const recipientValid = isAddress(recipient)
@@ -143,15 +150,35 @@ export function CreateStreamForm() {
 
   async function refreshCircleBalance(walletAddress = circleSession?.wallet.address) {
     if (!walletAddress || !publicClient) return null
-    const balance = await publicClient.readContract({
-      address: ARC_USDC,
-      abi: ERC20_ABI,
-      functionName: 'balanceOf',
-      args: [walletAddress],
-    }) as bigint
-    setCircleBalance(balance)
-    return balance
+    setCircleBalanceRefreshing(true)
+    try {
+      const balance = await publicClient.readContract({
+        address: ARC_USDC,
+        abi: ERC20_ABI,
+        functionName: 'balanceOf',
+        args: [walletAddress],
+      }) as bigint
+      setCircleBalance(balance)
+      return balance
+    } finally {
+      setCircleBalanceRefreshing(false)
+    }
   }
+
+  useEffect(() => {
+    if (!circleSession?.wallet.address || !publicClient || isWorking) return
+    const walletAddress = circleSession.wallet.address
+    const first = window.setTimeout(() => {
+      void refreshCircleBalance(walletAddress)
+    }, 2_000)
+    const interval = window.setInterval(() => {
+      void refreshCircleBalance(walletAddress)
+    }, 8_000)
+    return () => {
+      window.clearTimeout(first)
+      window.clearInterval(interval)
+    }
+  }, [circleSession?.wallet.address, publicClient, isWorking])
 
   async function handleDeploy() {
     if (!deployReady || !connectedAddr || !publicClient) return
@@ -218,7 +245,6 @@ export function CreateStreamForm() {
 
       const balance = await refreshCircleBalance(session.wallet.address)
       if (balance !== null && balance < amountBn) {
-        setError('Fund your Circle Arc smart wallet with USDC to continue.')
         setStep('form')
         setStatusMsg('')
         return
@@ -578,10 +604,22 @@ export function CreateStreamForm() {
                             {circleCopied ? 'Copied' : 'Copy'}
                           </button>
                         </div>
-                        <p className={`text-[11px] font-semibold ${circleNeedsFunds ? 'text-red-500' : 'text-gray-500'}`}>
-                          Balance: {circleBalance === null ? 'checking...' : `${formatUsdcFull(circleBalance)} USDC`}
-                          {circleNeedsFunds ? ' - fund this wallet first' : ''}
-                        </p>
+                        <div className="flex items-center justify-between gap-2">
+                          <p className={`min-w-0 text-[11px] font-semibold ${circleNeedsFunds ? 'text-red-500' : 'text-gray-500'}`}>
+                            Balance: {circleBalance === null ? 'checking...' : `${formatWalletUsdc(circleBalance)} USDC`}
+                            {circleNeedsFunds ? ' - fund wallet first' : ''}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => refreshCircleBalance()}
+                            disabled={circleBalanceRefreshing || isWorking}
+                            aria-label="Refresh Circle wallet balance"
+                            title="Refresh balance"
+                            className="shrink-0 rounded-md p-1 text-gray-400 transition-colors hover:text-gray-700 disabled:opacity-50 dark:text-gray-500 dark:hover:text-gray-200"
+                          >
+                            <RefreshCw className={`h-3 w-3 ${circleBalanceRefreshing ? 'animate-spin' : ''}`} />
+                          </button>
+                        </div>
                       </div>
                     )}
 
@@ -633,11 +671,6 @@ export function CreateStreamForm() {
                   </button>
                 )}
 
-                {circleNeedsFunds && !isWorking && (
-                  <p className="text-center text-[12px] font-semibold text-red-500">
-                    Fund the Circle Smart Wallet above, then try again
-                  </p>
-                )}
                 {insufficientFunds && !isWorking && !circleNeedsFunds && (
                   <p className="text-center text-[12px] font-semibold text-red-500">
                     Insufficient USDC — fund your Arc wallet first
