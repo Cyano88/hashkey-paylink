@@ -22,6 +22,11 @@
  *   SOLANA_GAS_RECOVERY_USDC      — optional USDC recovery amount routed to
  *                                   SOLANA_TREASURY to offset sponsored SOL
  *                                   fees/rent. Defaults to 0.01 USDC.
+ *   SOLANA_ATA_RECOVERY_USDC      — optional extra USDC recovery when the
+ *                                   relayer must create the recipient USDC
+ *                                   ATA. Defaults to 0.40 USDC.
+ *   SOLANA_MIN_RECIPIENT_USDC     — minimum recipient payout after fees and
+ *                                   recovery. Defaults to 0.10 USDC.
  */
 
 import type { Request, Response } from 'express'
@@ -44,6 +49,8 @@ const USDC_MINT     = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1
 const USDC_DECIMALS = 6
 const PLATFORM_FEE_BPS = 20 // 0.2%
 const DEFAULT_GAS_RECOVERY_RAW = 10_000n // 0.01 USDC
+const DEFAULT_ATA_RECOVERY_RAW = 400_000n // 0.40 USDC
+const DEFAULT_MIN_RECIPIENT_RAW = 100_000n // 0.10 USDC
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -87,12 +94,36 @@ function parseOptionalUsdcAmount(value: string | undefined, fallback: bigint): b
   }
 }
 
-function getGasRecoveryRaw(totalRaw: bigint, feeRaw: bigint): bigint {
-  const configured = parseOptionalUsdcAmount(process.env.SOLANA_GAS_RECOVERY_USDC, DEFAULT_GAS_RECOVERY_RAW)
+function getGasRecoveryRaw(totalRaw: bigint, feeRaw: bigint, createsRecipientAta: boolean): bigint {
+  const baseRecovery = parseOptionalUsdcAmount(process.env.SOLANA_GAS_RECOVERY_USDC, DEFAULT_GAS_RECOVERY_RAW)
+  const ataRecovery = createsRecipientAta
+    ? parseOptionalUsdcAmount(process.env.SOLANA_ATA_RECOVERY_USDC, DEFAULT_ATA_RECOVERY_RAW)
+    : 0n
+  const configured = baseRecovery + ataRecovery
   if (configured <= 0n) return 0n
-  const maxRecoverable = totalRaw - feeRaw - 1n
-  if (maxRecoverable <= 0n) return 0n
-  return configured > maxRecoverable ? maxRecoverable : configured
+
+  const minRecipient = parseOptionalUsdcAmount(process.env.SOLANA_MIN_RECIPIENT_USDC, DEFAULT_MIN_RECIPIENT_RAW)
+  const maxRecoverable = totalRaw - feeRaw - minRecipient
+  if (maxRecoverable < configured) {
+    if (createsRecipientAta) {
+      const minimumTotal = ceilDiv((configured + minRecipient) * 10_000n, 10_000n - BigInt(PLATFORM_FEE_BPS))
+      throw new Error(
+        `First-time Solana recipient payments require at least ${formatUsdc(minimumTotal)} USDC to cover sponsored token-account setup.`,
+      )
+    }
+    return maxRecoverable > 0n ? maxRecoverable : 0n
+  }
+  return configured
+}
+
+function ceilDiv(numerator: bigint, denominator: bigint): bigint {
+  return (numerator + denominator - 1n) / denominator
+}
+
+function formatUsdc(raw: bigint): string {
+  const whole = raw / 1_000_000n
+  const fraction = (raw % 1_000_000n).toString().padStart(6, '0').replace(/0+$/, '')
+  return fraction ? `${whole}.${fraction}` : whole.toString()
 }
 
 function decodeSignedTransaction(tx: string): Buffer {
@@ -139,16 +170,18 @@ async function ensureATA(
   mint: PublicKey,
   owner: PublicKey,
   payer: PublicKey,
-): Promise<PublicKey> {
+): Promise<{ ata: PublicKey; created: boolean }> {
   const ata = await getAssociatedTokenAddress(mint, owner)
   try {
     await getAccount(connection, ata)
   } catch (e) {
     if (e instanceof TokenAccountNotFoundError) {
       tx.add(createAssociatedTokenAccountInstruction(payer, ata, owner, mint))
+      return { ata, created: true }
     }
+    throw e
   }
-  return ata
+  return { ata, created: false }
 }
 
 // ── POST /api/solana-build-tx ─────────────────────────────────────────────────
@@ -171,12 +204,6 @@ export async function buildSolanaTx(req: Request, res: Response): Promise<void> 
     const toPubkey   = parseSolanaAddress('Recipient address', to)
 
     const totalRaw       = parseUsdcAmount(amount)
-    const feeRaw         = totalRaw * BigInt(PLATFORM_FEE_BPS) / 10_000n
-    const gasRecoveryRaw = getGasRecoveryRaw(totalRaw, feeRaw)
-    const treasuryRaw    = feeRaw + gasRecoveryRaw
-    const recipientRaw   = totalRaw - treasuryRaw
-    if (recipientRaw <= 0n) throw new Error('Payment amount is too small after fees')
-
     const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash()
     const tx = new Transaction({ feePayer: relayer.publicKey, recentBlockhash: blockhash })
 
@@ -187,7 +214,13 @@ export async function buildSolanaTx(req: Request, res: Response): Promise<void> 
       throw new Error('Sender has insufficient Solana USDC for this payment')
     }
     // Ensure recipient ATA exists (relayer creates it if needed, covers rent)
-    const toATA = await ensureATA(connection, tx, USDC_MINT, toPubkey, relayer.publicKey)
+    const { ata: toATA, created: createsRecipientAta } = await ensureATA(connection, tx, USDC_MINT, toPubkey, relayer.publicKey)
+
+    const feeRaw         = totalRaw * BigInt(PLATFORM_FEE_BPS) / 10_000n
+    const gasRecoveryRaw = getGasRecoveryRaw(totalRaw, feeRaw, createsRecipientAta)
+    const treasuryRaw    = feeRaw + gasRecoveryRaw
+    const recipientRaw   = totalRaw - treasuryRaw
+    if (recipientRaw <= 0n) throw new Error('Payment amount is too small after fees')
 
     // Transfer to recipient
     tx.add(createTransferCheckedInstruction(
@@ -197,7 +230,7 @@ export async function buildSolanaTx(req: Request, res: Response): Promise<void> 
     // Transfer platform fee + sponsored gas/rent recovery to treasury.
     const treasuryPubkey = getSolanaTreasury(treasuryRaw)
     if (treasuryPubkey) {
-      const treasuryATA = await ensureATA(connection, tx, USDC_MINT, treasuryPubkey, relayer.publicKey)
+      const { ata: treasuryATA } = await ensureATA(connection, tx, USDC_MINT, treasuryPubkey, relayer.publicKey)
       tx.add(createTransferCheckedInstruction(
         fromATA, USDC_MINT, treasuryATA, fromPubkey, treasuryRaw, USDC_DECIMALS,
       ))
@@ -213,6 +246,7 @@ export async function buildSolanaTx(req: Request, res: Response): Promise<void> 
       lastValidBlockHeight,
       feeAmount: (Number(feeRaw) / Math.pow(10, USDC_DECIMALS)).toFixed(USDC_DECIMALS),
       gasRecoveryAmount: (Number(gasRecoveryRaw) / Math.pow(10, USDC_DECIMALS)).toFixed(USDC_DECIMALS),
+      ataRecoveryApplied: createsRecipientAta,
     })
   } catch (err) {
     res.status(500).json({ ok: false, error: (err as Error).message })
@@ -288,16 +322,16 @@ export async function sweepSolanaVault(req: Request, res: Response): Promise<voi
 
     if (balanceRaw === 0n) { res.json({ ok: false, status: 'waiting' }); return }
 
-    const feeRaw         = balanceRaw * BigInt(PLATFORM_FEE_BPS) / 10_000n
-    const gasRecoveryRaw = getGasRecoveryRaw(balanceRaw, feeRaw)
-    const treasuryRaw    = feeRaw + gasRecoveryRaw
-    const recipientRaw   = balanceRaw - treasuryRaw
-    if (recipientRaw <= 0n) { res.status(400).json({ ok: false, error: 'Vault balance too small after fees' }); return }
-
     const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash()
     const tx = new Transaction({ feePayer: relayer.publicKey, recentBlockhash: blockhash })
 
-    const recipientATA = await ensureATA(connection, tx, USDC_MINT, recipientPubkey, relayer.publicKey)
+    const { ata: recipientATA, created: createsRecipientAta } = await ensureATA(connection, tx, USDC_MINT, recipientPubkey, relayer.publicKey)
+
+    const feeRaw         = balanceRaw * BigInt(PLATFORM_FEE_BPS) / 10_000n
+    const gasRecoveryRaw = getGasRecoveryRaw(balanceRaw, feeRaw, createsRecipientAta)
+    const treasuryRaw    = feeRaw + gasRecoveryRaw
+    const recipientRaw   = balanceRaw - treasuryRaw
+    if (recipientRaw <= 0n) { res.status(400).json({ ok: false, error: 'Vault balance too small after fees' }); return }
 
     tx.add(createTransferCheckedInstruction(
       vaultATA, USDC_MINT, recipientATA, vaultKeypair.publicKey, recipientRaw, USDC_DECIMALS,
@@ -305,7 +339,7 @@ export async function sweepSolanaVault(req: Request, res: Response): Promise<voi
 
     const treasuryPubkey = getSolanaTreasury(treasuryRaw)
     if (treasuryPubkey) {
-      const treasuryATA = await ensureATA(connection, tx, USDC_MINT, treasuryPubkey, relayer.publicKey)
+      const { ata: treasuryATA } = await ensureATA(connection, tx, USDC_MINT, treasuryPubkey, relayer.publicKey)
       tx.add(createTransferCheckedInstruction(
         vaultATA, USDC_MINT, treasuryATA, vaultKeypair.publicKey, treasuryRaw, USDC_DECIMALS,
       ))
@@ -336,6 +370,7 @@ export async function sweepSolanaVault(req: Request, res: Response): Promise<voi
       recipientAmount: recipientRaw.toString(),
       feeAmount: feeRaw.toString(),
       gasRecoveryAmount: gasRecoveryRaw.toString(),
+      ataRecoveryApplied: createsRecipientAta,
     })
   } catch (err) {
     const msg = (err as Error).message ?? 'Unknown sweep error'

@@ -148,7 +148,7 @@ This is the core innovation of Hash PayLink. **On every supported chain, the pay
 3. The relayer partially signs the transaction as fee payer.
 4. The partially-signed transaction (base64-encoded) is returned to Circle Smart Wallet or the payer's Phantom/Solflare/Backpack wallet for signing.
 5. The payer signs **only the USDC `transferChecked` instruction** — authorising the USDC transfer from their Associated Token Account (ATA) to the recipient's ATA.
-6. The fully-signed transaction is submitted via `/api/solana-relay`. The platform fee (0.2%) and configured internal gas recovery are routed to the Hash PayLink treasury ATA atomically.
+6. The fully-signed transaction is submitted via `/api/solana-relay`. The platform fee (0.2%), configured internal gas recovery, and any first-time recipient ATA recovery are routed to the Hash PayLink treasury ATA atomically.
 7. Recipient and treasury ATAs are not temporary accounts, so they are not closed after direct payments. If the relayer creates them once, later payments to the same addresses are cheaper.
 
 > **Payer needs:** USDC on Solana. Zero SOL.
@@ -163,6 +163,7 @@ This is the core innovation of Hash PayLink. **On every supported chain, the pay
 4. Hash PayLink polls the vault ATA every 3 seconds. On USDC arrival, `/api/solana-sweep` executes:
    - Transfers net USDC to the recipient's ATA
    - Transfers the 0.2% platform fee plus configured internal gas recovery to the Hash PayLink treasury ATA
+   - Adds configured recipient ATA recovery only when the sweep has to create the recipient's USDC token account
    - **Closes the vault ATA** — returning ~0.002 SOL rent back to the relayer
 5. This rent recovery keeps the relayer **self-funding** — every sweep replenishes SOL that covers future sweeps. No manual top-ups required.
 6. The sweep response returns the exact `recipientAmount` (actual USDC received), which is shown in the success card and logged on the organizer dashboard.

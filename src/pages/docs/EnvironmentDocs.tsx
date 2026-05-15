@@ -79,7 +79,9 @@ export default function EnvironmentDocs() {
             ['RELAYER_PRIVATE_KEY_SOLANA', 'Yes', 'Solana relayer keypair. Accepts base58 string, JSON array, or base64 encoded.'],
             ['SOLANA_RPC_URL',             'No',  'Solana RPC endpoint. Falls back to mainnet-beta public RPC.'],
             ['SOLANA_TREASURY',            'No',  'Solana treasury wallet address for fee collection.'],
-            ['SOLANA_GAS_RECOVERY_USDC',   'No',  'Server-side USDC amount routed to Solana treasury to offset sponsored SOL fees/rent. Default: 0.01.'],
+            ['SOLANA_GAS_RECOVERY_USDC',   'No',  'Server-side base USDC amount routed to Solana treasury to offset sponsored SOL fees. Default: 0.01.'],
+            ['SOLANA_ATA_RECOVERY_USDC',   'No',  'Extra server-side USDC recovery when the relayer creates a first-time recipient USDC ATA. Default: 0.40.'],
+            ['SOLANA_MIN_RECIPIENT_USDC',  'No',  'Minimum recipient payout after Solana fee/recovery deductions. First-time recipient payments below this threshold are rejected instead of being drained by ATA recovery. Default: 0.10.'],
           ]}
         />
       </Section>

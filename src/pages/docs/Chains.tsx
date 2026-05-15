@@ -85,12 +85,12 @@ export default function Chains() {
       </Section>
 
       <Section title="Solana">
-        <p>For Solana Circle Smart Wallet and connected-wallet payments, the payer signs the USDC transfer while the Hash PayLink Solana relayer is the fee payer. The payer needs USDC only; the relayer pays SOL network fees and any one-time ATA rent for missing recipient or treasury token accounts.</p>
+        <p>For Solana Circle Smart Wallet and connected-wallet payments, the payer signs the USDC transfer while the Hash PayLink Solana relayer is the fee payer. The payer needs USDC only; the relayer pays SOL network fees and any one-time ATA rent for missing recipient or treasury token accounts. When a first-time recipient ATA must be created, Hash PayLink can route an extra configured USDC recovery amount to treasury; tiny first-time-recipient payments are rejected instead of deducting almost the whole payment.</p>
         <SubSection title="Circle Smart Wallet on Solana">
           <p>Circle provides the smart-wallet signing UX. Hash PayLink builds the transaction with the relayer as fee payer, Circle signs it, and Hash PayLink relays it. Recipient and treasury ATAs are not temporary, so they are not closed after direct payments; once they exist, future payments to the same addresses are cheaper.</p>
         </SubSection>
         <SubSection title="Send via Address on Solana">
-          <p>Each payment link generates a deterministic vault address. The payer sends USDC to the vault from any wallet or exchange. The relayer polls for deposits, sweeps the balance to the recipient's ATA, routes the platform fee and configured recovery to treasury, and closes the temporary vault ATA to recover rent.</p>
+          <p>Each payment link generates a deterministic vault address. The payer sends USDC to the vault from any wallet or exchange. The relayer polls for deposits, sweeps the balance to the recipient's ATA, routes the platform fee and configured recovery to treasury, applies first-time recipient ATA recovery only when needed, and closes the temporary vault ATA to recover rent.</p>
         </SubSection>
         <SubSection title="Compatible wallets">
           <p>Phantom and Solflare are supported. The Solana recipient address is a base58-encoded public key.</p>
