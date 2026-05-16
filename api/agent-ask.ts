@@ -33,13 +33,14 @@ const MAX_EVENT_ID_LENGTH = 128
 const MAX_PAYER_LENGTH = 128
 const MAX_QUESTION_LENGTH = 4_000
 
-const CIRCLE_ARC_SYSTEM_PROMPT = [
-  'You are the Hash PayLink Circle/Arc Strategy Agent.',
+const HASH_PAYLINK_SYSTEM_PROMPT = [
+  'You are the Hash PayLink Strategy Agent for Circle, Arc, 0G, Polymarket, and agentic USDC commerce.',
   'Access is only granted after a verified Hash PayLink payment archived on 0G.',
   '',
   'Your specialty:',
   '- Circle Developer Platform and USDC-native product strategy',
   '- Arc ecosystem product ideas and migration planning',
+  '- Polymarket funding workflows, LP reward-market interpretation, maker spread planning, and portfolio explanation',
   '- agentic economic activity with stablecoin payments',
   '- Hash PayLink instant payments, StreamPay, paid AI access, and 0G verification',
   '- practical MVPs, grant positioning, technical architecture, and milestone design',
@@ -47,9 +48,12 @@ const CIRCLE_ARC_SYSTEM_PROMPT = [
   'Response standards:',
   '- Give specific, high-signal recommendations, not generic startup advice.',
   '- Prefer concrete build plans, integration steps, and grant-ready positioning.',
+  '- For Polymarket questions, explain the data needed, reward constraints, spread logic, risks, and next operational step.',
+  '- Do not invent live Polymarket prices, rewards, odds, balances, or positions. If no structured data is supplied, say what to check live.',
+  '- Treat LP spread suggestions as educational market-structure analysis, not financial advice.',
   '- Distinguish clearly between what is already built, what is testnet, and what is a future milestone.',
   '- Be honest that Arc is testnet when relevant.',
-  '- Do not claim official Circle, Arc, or 0G partnership, endorsement, grant approval, or guaranteed acceptance.',
+  '- Do not claim official Circle, Arc, 0G, or Polymarket partnership, endorsement, badges, grant approval, or guaranteed acceptance.',
   '- Do not provide financial, legal, tax, or compliance advice. For regulated questions, give product/technical framing and advise professional review.',
   '- Keep answers concise but valuable.',
 ].join('\n')
@@ -108,7 +112,7 @@ async function getAiResponse(question: string, payerName: string, chain: string,
       const message = await client.messages.create({
         model:      'claude-haiku-4-5-20251001',
         max_tokens: 900,
-        system:     `${CIRCLE_ARC_SYSTEM_PROMPT}\n\nVerified access context: ${payerName} paid ${amount} on ${chain}, confirmed on 0G decentralized storage.`,
+        system:     `${HASH_PAYLINK_SYSTEM_PROMPT}\n\nVerified access context: ${payerName} paid ${amount} on ${chain}, confirmed on 0G decentralized storage.`,
         messages:   [{ role: 'user', content: question }],
       })
       const block = message.content[0]
@@ -128,9 +132,9 @@ async function getAiResponse(question: string, payerName: string, chain: string,
     '',
     `You asked: "${question}"`,
     '',
-    'Hash PayLink Circle/Arc Strategy Agent guidance:',
+    'Hash PayLink Strategy Agent guidance:',
     '',
-    'Build around agentic USDC commerce: instant PayLinks for one-time settlement, StreamPay on Arc for time-based budgets and retainers, and 0G proofs for verifiable AI access. A strong MVP should show a paid request, a verified 0G archive proof, and either an AI answer unlock or an Arc USDC stream for ongoing work. Frame Arc as the programmable USDC settlement environment and Circle as the stablecoin platform layer.',
+    'Build around agentic USDC commerce: instant PayLinks for one-time settlement, StreamPay on Arc for time-based budgets and retainers, Polymarket funding/LP intelligence for prediction-market users, and 0G proofs for verifiable AI access. A strong MVP should show a paid request, a verified 0G archive proof, and either an AI answer unlock, an Arc USDC stream, or a Polymarket funding/LP workflow. Frame Arc as the programmable USDC settlement environment, Circle as the stablecoin platform layer, and Polymarket as a high-signal consumer workflow. This is product strategy, not financial advice.',
   ]
   return fallbackLines.join('\n')
 }
