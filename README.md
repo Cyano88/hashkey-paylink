@@ -9,6 +9,21 @@ This repository contains **two independent products** deployed together on a sin
 
 The active product is selected by hostname — StreamPay loads automatically on `streampay.xyz` once DNS is configured. See [`modules/streampay/README.md`](modules/streampay/README.md) for StreamPay-specific documentation.
 
+## 0G-Powered Ecosystem
+
+0G is the verifiable memory and proof layer for the Hash PayLink ecosystem. Hash PayLink handles payment creation and multi-chain settlement; 0G turns the resulting payment events into permanent, independently verifiable records that agents, dashboards, APIs, and future StreamPay modules can trust without relying on a centralized database.
+
+| Product surface | How 0G is used |
+|---|---|
+| **Multi-Payer Collection** | Every payer row is uploaded as a JSON record to 0G Storage and anchored through `PayLinkArchive` on 0G Mainnet. |
+| **Organizer Dashboard** | Each payment shows a live 0G archive badge and explorer proof, so event organizers can prove who paid, when, on which chain, and for how much. |
+| **Access Mode** | AI agents, APIs, and gated services call `/api/agent-verify` to unlock access only after a 0G-anchored payment proof exists. |
+| **Photon Telegram Agent** | Telegram creates PayLinks, asks users to pay, then verifies 0G proofs before returning paid AI answers. |
+| **Built-in AI Agent** | `/api/agent-ask` checks `PayLinkArchive` on 0G Mainnet before returning Anthropic-powered Circle/Arc/Hash PayLink strategy responses. |
+| **StreamPay / Creator PoA** | StreamPay produces time-based and attention-based payment events; the product architecture is designed to attach those stream and PoA settlement records to the same 0G proof layer. |
+
+The hackathon thesis is simple: **0G makes Hash PayLink payments agent-readable.** A payment is no longer just a chain transaction; it becomes persistent agent memory that can unlock AI responses, prove event attendance, verify creator access, and support autonomous payment workflows.
+
 > **Agentic Economy — Trustless Payment-Gated AI**
 > Hash PayLink uses [0G decentralized storage](https://0g.ai) to create permanent, verifiable payment proofs — enabling any AI agent to confirm payment before responding, with no database, no login system, and no intermediary.
 > **Live demo:** [hashpaylink.com/agent](https://hashpaylink.com/agent) · **Verification API:** `GET https://hashpaylink.com/api/agent-verify?eventId=test-0g-1778114523394&payer=HashPayLink+0G+Test`
@@ -809,6 +824,28 @@ We'll respond within 24 hours with your branded QR code and dashboard URL.
 
 Hash PayLink integrates [0G decentralized storage](https://0g.ai) to permanently archive every payment record made through multi-payer collection links. Payment proofs are stored on 0G Storage and anchored on-chain via the `PayLinkArchive` smart contract deployed on 0G Mainnet (Chain ID 16661).
 
+### What 0G Powers Across Hash PayLink
+
+0G is not a passive backup. It is the shared proof substrate used across the Hash PayLink product suite:
+
+1. **Permanent payment memory** — every supported payment chain can feed into one durable proof layer, so a Base, Arbitrum, Solana, Starknet, Arc, or HashKey payment can be represented as a normalized 0G archive record.
+2. **Trustless agent access** — AI agents do not need Hash PayLink sessions or private databases. They can check `PayLinkArchive` on 0G Mainnet and unlock only after a payer is verified.
+3. **Cross-product receipts** — collection payments, AI access payments, and future StreamPay/PoA settlement records can share the same root-hash plus on-chain-anchor pattern.
+4. **Audit-ready dashboards** — organizers and creators can export or show a public 0G proof instead of asking users to trust a private dashboard row.
+5. **Composable developer primitive** — any external agent can use `/api/agent-verify` or query 0G directly to build pay-per-use AI, paid APIs, course tutors, event assistants, or creator unlocks.
+
+For the 0G APAC Hackathon, Hash PayLink demonstrates 0G Storage, 0G Chain, and an agent-verification pattern in one user flow:
+
+```
+Telegram or web request
+  -> Hash PayLink creates a USDC PayLink
+  -> payer completes payment on any supported chain
+  -> payment JSON is uploaded to 0G Storage
+  -> root hash is anchored on 0G Mainnet through PayLinkArchive
+  -> AI agent calls /api/agent-verify
+  -> verified answer/content/access is returned with a 0G proof link
+```
+
 ### Why 0G Storage
 
 The current Web3 payment landscape has a silent problem: payment records live on centralized servers. If the server goes down, the payment history disappears — even though the on-chain transaction is permanent.
@@ -906,6 +943,21 @@ A footer counter shows how many payments in the event have been successfully arc
 ```
 [0G]  Payment records permanently archived on 0G decentralized storage — 5/5 archived
 ```
+
+---
+
+### Product-by-Product 0G Usage
+
+| Product | 0G role | Demo proof |
+|---|---|---|
+| **Hash PayLink checkout** | Normalizes confirmed payments into archive records containing event ID, payer, chain, amount, tx hash, and timestamp. | Pay any multi-payer collection and watch the dashboard badge move from pending to archived. |
+| **Multi-Payer Dashboard** | Displays 0G archive state per payer and links to the 0G Chain transaction that anchored the proof. | Open `/event?id=...` or `/dashboard?id=...` after payment. |
+| **Access Mode** | Converts a payment into reusable access credentials for AI agents, APIs, and gated content. | Use an access link, then call `/api/agent-verify`. |
+| **Built-in AI Access** | `/api/agent-ask` refuses unpaid users and answers only after payment is verified from 0G. | `POST /api/agent-ask` with a verified event ID and payer name. |
+| **Photon Telegram Agent** | Telegram commands create paid AI requests, then `/answer payer-name` checks the same 0G proof path before returning the answer. | `/askpaid ...`, pay, then `/answer your-name`. |
+| **StreamPay and Creator PoA** | Stream and attention settlement records are designed to become 0G-verifiable receipts using the same archive pattern. | Current StreamPay demo shows Arc streams; the repository documents the 0G extension path. |
+
+This makes the architecture bigger than a payment app: Hash PayLink is a payment execution layer, while 0G is the durable agent memory layer.
 
 ---
 
@@ -1207,6 +1259,39 @@ Service       402 + payment link
 responds      (user pays, then retries)
 + proof
 ```
+
+---
+
+### Clean 0G APAC Demo Flow
+
+Use this sequence for the 3-minute hackathon video:
+
+1. **Open Hash PayLink and create a multi-payer collection**  
+   Show amount, memo, recipient wallet, and multi-payer collection enabled. Explain that this creates the payment event ID that 0G will later verify.
+
+2. **Pay the link from one supported chain**  
+   Use the fastest available path for the recording: Base, Arbitrum, Solana, or Circle Smart Wallet. The important visual is the payer name entered on the checkout.
+
+3. **Open the organizer dashboard**  
+   Show the payer row, amount, chain, transaction hash, and the 0G badge. If the badge is still pending, say archiving is non-blocking and refresh until the explorer link appears.
+
+4. **Click the 0G proof**  
+   Open the 0G explorer transaction for `PayLinkArchive`. Show that the payment record is anchored on 0G Mainnet with event ID, root hash, payer, chain, amount, and timestamp.
+
+5. **Verify through the API**  
+   Open or show:
+   ```bash
+   GET https://hashpaylink.com/api/agent-verify?eventId=YOUR_EVENT_ID&payer=YOUR_PAYER_NAME
+   ```
+   Show `verified: true`, `rootHash`, `ogTxHash`, and the 0G explorer link.
+
+6. **Unlock paid AI access**  
+   Use the Photon Telegram flow or `/api/agent-ask`: user asks a paid AI question, pays through Hash PayLink, the agent checks 0G, and only then returns the answer with proof.
+
+7. **Show the ecosystem extension**  
+   End on StreamPay and Access Mode: "The same 0G proof layer can verify one-time payments, paid AI access, future streaming receipts, and creator proof-of-attention settlements."
+
+The key line for judges: **Hash PayLink turns any USDC payment into a permanent 0G-backed credential that AI agents can verify before acting.**
 
 ---
 

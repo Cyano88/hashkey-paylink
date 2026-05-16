@@ -30,6 +30,22 @@ export default function ZeroGStorage() {
         <InfoBox type="tip">The archive is fire-and-forget — payment registration is never blocked by 0G. If the upload fails, the payment is still captured in the server registry and the badge stays grey.</InfoBox>
       </Section>
 
+      <Section title="What 0G powers in Hash PayLink">
+        <p>0G is the persistent proof layer behind the full Hash PayLink ecosystem. Payment chains handle settlement; 0G turns each settlement into agent-readable memory.</p>
+        <Table
+          headers={['Product surface', '0G role']}
+          rows={[
+            ['Multi-Payer Collection', 'Uploads every payer row as a content-addressed JSON record and anchors the root hash on 0G Mainnet.'],
+            ['Organizer Dashboard', 'Shows live archive badges and links each payment to its 0G explorer proof.'],
+            ['Access Mode', 'Lets AI agents, APIs, and gated apps verify payment with /api/agent-verify before serving content.'],
+            ['Photon Telegram Agent', 'Creates paid AI requests in chat, then unlocks answers only after the 0G payment proof exists.'],
+            ['Built-in AI Agent', 'POST /api/agent-ask reads PayLinkArchive on 0G Mainnet before returning an Anthropic-backed answer.'],
+            ['StreamPay and Creator PoA', 'Stream and attention settlement receipts are designed to use the same archive pattern as durable 0G records.'],
+          ]}
+        />
+        <InfoBox type="info">The core primitive is reusable: USDC payment -&gt; 0G archive -&gt; on-chain root hash -&gt; agent verifies -&gt; service responds with proof.</InfoBox>
+      </Section>
+
       <Section title="PayLinkArchive contract">
         <Table
           headers={['Property', 'Value']}
@@ -127,6 +143,29 @@ const match = events.find(e => e.args[3].toLowerCase() === 'alice')`}</CodeBlock
         <p className="mt-2">Demo credentials:</p>
         <CodeBlock lang="text">{`Event ID: test-0g-1778114523394
 Payer:    HashPayLink 0G Test`}</CodeBlock>
+      </Section>
+
+      <Section title="0G APAC demo sequence">
+        <p>For a short judging demo, show one complete proof loop end to end:</p>
+        <ol className="list-none space-y-3 mt-3">
+          {[
+            ['1', 'Create collection', 'Create a multi-payer Hash PayLink and copy the event ID.'],
+            ['2', 'Pay', 'Enter a payer name, complete a USDC payment, and return to the dashboard.'],
+            ['3', 'Archive', 'Show the dashboard 0G badge changing from pending to archived.'],
+            ['4', 'Inspect proof', 'Open the 0G explorer link for the PayLinkArchive transaction.'],
+            ['5', 'Verify', 'Call /api/agent-verify with eventId and payer to return verified: true plus rootHash and ogTxHash.'],
+            ['6', 'Unlock AI', 'Use /api/agent-ask or the Photon bot so the AI responds only after the 0G proof exists.'],
+          ].map(([num, title, desc]) => (
+            <li key={num} className="flex gap-4">
+              <span className="shrink-0 h-6 w-6 rounded-full bg-purple-100 dark:bg-purple-950/50 text-purple-600 dark:text-purple-400 text-xs font-bold flex items-center justify-center mt-0.5">{num}</span>
+              <div>
+                <strong className="text-gray-800 dark:text-gray-200">{title}: </strong>
+                <span>{desc}</span>
+              </div>
+            </li>
+          ))}
+        </ol>
+        <InfoBox type="tip">Judging line: Hash PayLink turns any USDC payment into a permanent 0G-backed credential that AI agents can verify before acting.</InfoBox>
       </Section>
 
       <NavFooter

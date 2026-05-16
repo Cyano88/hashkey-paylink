@@ -22,7 +22,7 @@ const cards = [
   {
     icon: Database,
     title: '0G Storage',
-    description: 'Every payment is permanently archived on 0G decentralized storage with on-chain proof.',
+    description: '0G is the verifiable memory layer for payments, dashboards, AI access, and future StreamPay receipts.',
     path: '/docs/0g-storage',
     color: 'text-purple-500',
     bg: 'bg-purple-50 dark:bg-purple-950/40',
@@ -70,8 +70,18 @@ export default function DocsHome() {
           Every payment made through a multi-payer collection link is permanently archived to <strong className="text-gray-800 dark:text-gray-200">0G decentralized storage</strong> and anchored on-chain via the <code className="text-sm font-mono bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">PayLinkArchive</code> smart contract. This creates immutable payment proofs that AI agents, APIs, and external services can verify trustlessly — no Hash PayLink server required.
         </p>
         <p className="text-gray-600 dark:text-gray-400 leading-relaxed">
-          The platform hosts two products on a single service: <strong className="text-gray-800 dark:text-gray-200">Hash PayLink</strong> for payment collection, and <strong className="text-gray-800 dark:text-gray-200">StreamPay</strong> for USDC payroll streaming and creator paywalls.
+          The platform hosts two products on a single service: <strong className="text-gray-800 dark:text-gray-200">Hash PayLink</strong> for payment collection, and <strong className="text-gray-800 dark:text-gray-200">StreamPay</strong> for USDC payroll streaming and creator paywalls. 0G connects the ecosystem by making payments, AI unlocks, dashboard rows, and future stream receipts independently verifiable.
         </p>
+      </div>
+
+      <div className="rounded-xl border border-purple-200 dark:border-purple-900/50 bg-purple-50/60 dark:bg-purple-950/20 p-6 space-y-3">
+        <h2 className="text-base font-semibold text-gray-900 dark:text-white">0G across the ecosystem</h2>
+        <ul className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
+          <li>â€¢ <strong className="text-gray-800 dark:text-gray-200">Payment archive:</strong> confirmed multi-payer records are uploaded to 0G Storage and anchored on 0G Mainnet.</li>
+          <li>â€¢ <strong className="text-gray-800 dark:text-gray-200">Agent verification:</strong> paid AI services call <code className="font-mono text-xs bg-white dark:bg-gray-900 px-1 py-0.5 rounded">/api/agent-verify</code> before responding.</li>
+          <li>â€¢ <strong className="text-gray-800 dark:text-gray-200">Telegram paid access:</strong> Photon requests use Hash PayLink payments, then unlock answers only after the 0G proof exists.</li>
+          <li>â€¢ <strong className="text-gray-800 dark:text-gray-200">StreamPay extension:</strong> stream and proof-of-attention settlement receipts follow the same durable proof pattern.</li>
+        </ul>
       </div>
 
       <div>

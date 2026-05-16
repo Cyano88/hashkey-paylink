@@ -74,6 +74,20 @@ export default function StreamPayDocs() {
         </ol>
       </Section>
 
+      <Section title="0G proof extension">
+        <p>StreamPay is part of the same Hash PayLink proof architecture. Payroll streams and creator proof-of-attention sessions settle on Arc today, and their settlement records are designed to become 0G-verifiable receipts using the same archive pattern as multi-payer collections.</p>
+        <Table
+          headers={['StreamPay event', '0G record']}
+          rows={[
+            ['Stream created', 'Vault address, sender, recipient, total amount, start/end time, Arc transaction hash.'],
+            ['Claim submitted', 'Recipient, claim amount, already withdrawn amount, relayer transaction hash.'],
+            ['Stream cancelled', 'Unlocked recipient amount, refunded sender amount, cancellation transaction hash.'],
+            ['Creator PoA settled', 'Content ID, viewer session, attention duration, creator payout, settlement proof.'],
+          ]}
+        />
+        <InfoBox type="info">The shared 0G model lets Hash PayLink prove both instant payments and time-based payment outcomes: who paid, what unlocked, when it settled, and which on-chain transaction backs the record.</InfoBox>
+      </Section>
+
       <Section title="WebAuthn passkey integration">
         <p>StreamPay uses WebAuthn passkeys for viewer authentication in the Creator Studio. No wallet connection is required after initial setup. Passkey signatures are stored in <Code>localStorage</Code> under the key pattern <Code>sp_poa_{'{contentId}'}_{'{viewer}'}</Code>.</p>
         <p className="mt-2">If a viewer closes their tab mid-session without signing, <Code>navigator.sendBeacon</Code> submits a partial PoA proof automatically.</p>
