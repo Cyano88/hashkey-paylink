@@ -344,6 +344,48 @@ export default async function handler(req: Request, res: Response) {
       return res.json({ ok: true, vault: predictedVault, ...data })
     }
 
+    if (action === 'deployEvmWallet') {
+      const { userToken, walletId, walletAddress, chain } = params
+      if (!userToken || !walletId || !walletAddress || !chain) {
+        return res.status(400).json({ ok: false, error: 'Missing userToken, walletId, walletAddress, or chain' })
+      }
+      if (chain !== 'base' && chain !== 'arbitrum' && chain !== 'arc') {
+        return res.status(400).json({ ok: false, error: 'Unsupported EVM email wallet chain' })
+      }
+      if (!isAddress(walletAddress)) {
+        return res.status(400).json({ ok: false, error: 'Invalid EVM wallet address' })
+      }
+
+      const tokenAddress = EVM_CHAINS[chain].tokenAddress
+      const selfTransferCallData = encodeFunctionData({
+        abi: ERC20_TRANSFER_ABI,
+        functionName: 'transfer',
+        args: [walletAddress as `0x${string}`, 0n],
+      })
+      const batchCallData = encodeFunctionData({
+        abi: SMART_WALLET_BATCH_ABI,
+        functionName: 'executeBatch',
+        args: [[
+          { target: tokenAddress as `0x${string}`, value: 0n, data: selfTransferCallData },
+        ]],
+      })
+
+      const data = await circleJson('/v1/w3s/user/transactions/contractExecution', {
+        method: 'POST',
+        userToken,
+        apiKey: circleApiKey({ chain }),
+        body: JSON.stringify({
+          idempotencyKey: crypto.randomUUID(),
+          walletId,
+          feeLevel: 'HIGH',
+          refId: `hashpaylink-${chain}-wallet-activate`,
+          contractAddress: walletAddress,
+          callData: batchCallData,
+        }),
+      })
+      return res.json({ ok: true, ...data })
+    }
+
     if (action === 'getTransaction') {
       const { userToken, transactionId, chain } = params
       if (!userToken || !transactionId) return res.status(400).json({ ok: false, error: 'Missing userToken or transactionId' })

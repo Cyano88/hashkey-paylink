@@ -14,6 +14,7 @@ import { STREAM_VAULT_ABI }  from '../lib/streamVaultAbi'
 import {
   canUseCircleEvmEmailWallet,
   connectCircleEvmEmailWallet,
+  deployCircleEvmEmailWallet,
   signCircleArcStreamClaim,
   type CircleEvmEmailSession,
 } from '../../../../src/lib/circleEvmEmailWallet'
@@ -319,13 +320,28 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
         functionName: 'nonces', args: [session.wallet.address],
       }) as bigint
 
-      const sig = await signCircleArcStreamClaim({
-        session,
-        vaultAddress,
-        amountUnits: stream.claimable.toString(),
-        nonce: nonce.toString(),
-        deadline: deadline.toString(),
-      })
+      let sig: `0x${string}`
+      try {
+        sig = await signCircleArcStreamClaim({
+          session,
+          vaultAddress,
+          amountUnits: stream.claimable.toString(),
+          nonce: nonce.toString(),
+          deadline: deadline.toString(),
+        })
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        if (!msg.toLowerCase().includes('undeployed wallet')) throw err
+        setActionError('Activating Circle wallet on Arc. Confirm once, then sign the claim.')
+        await deployCircleEvmEmailWallet({ session })
+        sig = await signCircleArcStreamClaim({
+          session,
+          vaultAddress,
+          amountUnits: stream.claimable.toString(),
+          nonce: nonce.toString(),
+          deadline: deadline.toString(),
+        })
+      }
 
       setActionState('relaying')
       const res = await fetch('/api/relay-stream', {

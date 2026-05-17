@@ -416,6 +416,37 @@ export async function sendCircleArcStream(params: {
   return null
 }
 
+export async function deployCircleEvmEmailWallet(params: {
+  session: CircleEvmEmailSession
+}) {
+  const appId = params.session.appId ?? appIdForChain(params.session.chain)
+  if (!appId) throw new Error('Circle email wallet is not configured.')
+  const sdk = new W3SSdk({
+    appSettings: { appId },
+    authentication: {
+      userToken: params.session.userToken,
+      encryptionKey: params.session.encryptionKey,
+    },
+  })
+  const challenge = await circleWalletApi<{ challengeId?: string }>({
+    action: 'deployEvmWallet',
+    userToken: params.session.userToken,
+    walletId: params.session.wallet.id,
+    walletAddress: params.session.wallet.address,
+    chain: params.session.chain,
+  })
+  if (!challenge.challengeId) throw new Error('Circle did not return a wallet activation challenge.')
+  const result = await executeChallenge(sdk, challenge.challengeId)
+  const txHash = findTxHash(result)
+  if (txHash) return txHash
+  const transactionId = findTransactionId(result)
+  if (transactionId) {
+    const hash = await pollTransactionHash(params.session, transactionId).catch(() => null)
+    if (hash) return hash
+  }
+  return null
+}
+
 export async function signCircleArcStreamClaim(params: {
   session: CircleEvmEmailSession
   vaultAddress: Address

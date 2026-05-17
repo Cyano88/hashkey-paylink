@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import {
   canUseCircleEvmEmailWallet,
   connectCircleEvmEmailWallet,
+  deployCircleEvmEmailWallet,
   type CircleEvmEmailSession,
 } from '../../../../src/lib/circleEvmEmailWallet'
 
@@ -29,6 +30,8 @@ export function RecipientWalletSetup() {
     try {
       const next = await connectCircleEvmEmailWallet(email, 'arc')
       setSession(next)
+      setStatus('Activating Circle wallet on Arc...')
+      await deployCircleEvmEmailWallet({ session: next })
       setStatus('Registering wallet for Telegram StreamPay...')
       const res = await fetch('/api/circle-recipient-wallet', {
         method: 'POST',
