@@ -83,7 +83,7 @@ app.all('/api/circle-recipient-wallet', strictLimiter, circleRecipientWalletHand
 // ── Agentic Economy — 0G payment verification primitives ─────────────────────
 app.all('/api/agent-verify',           strictLimiter, agentVerifyHandler)
 app.post('/api/agent-ask',             strictLimiter, agentAskHandler)
-app.post('/api/agent-wallet',          strictLimiter, agentWalletHandler)
+app.all('/api/agent-wallet',           strictLimiter, agentWalletHandler)
 app.get('/api/x402/polymarket-scout',  strictLimiter, x402PolymarketScoutHandler)
 app.get('/api/check-agent-url',        strictLimiter, checkAgentUrlHandler)
 app.get('/api/dashboard-payments',     readLimiter, dashboardPaymentsHandler)
