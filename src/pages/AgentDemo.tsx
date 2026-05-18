@@ -54,6 +54,7 @@ export default function AgentDemo() {
   const [currentAgentWallet, setCurrentAgentWallet] = useState(agentWallet)
   const [walletEmail, setWalletEmail] = useState('')
   const [walletOtp, setWalletOtp] = useState('')
+  const [walletMode, setWalletMode] = useState<'create' | 'login'>('create')
   const [walletStep, setWalletStep] = useState<'idle' | 'otp' | 'done'>('idle')
   const [walletBusy, setWalletBusy] = useState(false)
   const [walletError, setWalletError] = useState<string | null>(null)
@@ -69,6 +70,17 @@ export default function AgentDemo() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, isAsking])
+
+  useEffect(() => {
+    if (!showAgentProfile) return
+    const slug = agentSlug || 'hashpaylink-agent'
+    fetch(`/api/agent-wallet?agent=${encodeURIComponent(slug)}`)
+      .then(res => res.ok ? res.json() : undefined)
+      .then((data: { walletAddress?: string } | undefined) => {
+        if (data?.walletAddress) setCurrentAgentWallet(data.walletAddress)
+      })
+      .catch(() => undefined)
+  }, [agentSlug, showAgentProfile])
 
   // Auto-verify when eventId + payer arrive via access link URL params
   useEffect(() => {
@@ -160,7 +172,8 @@ export default function AgentDemo() {
     return `/?${p.toString()}`
   }
 
-  async function callAgentWallet(action: 'init' | 'complete') {
+  async function callAgentWallet(action: 'init' | 'complete', mode: 'create' | 'login' = walletMode) {
+    setWalletMode(mode)
     setWalletBusy(true)
     setWalletError(null)
     try {
@@ -241,9 +254,12 @@ export default function AgentDemo() {
             <div className="mt-5 rounded-xl border border-blue-100 bg-blue-50/60 p-4 dark:border-blue-900/30 dark:bg-blue-900/10">
               <div className="flex items-center gap-2">
                 <Wallet className="h-4 w-4 text-blue-600" />
-                <p className="text-sm font-semibold text-gray-900 dark:text-white">Create Circle Agent Wallet</p>
+                <p className="text-sm font-semibold text-gray-900 dark:text-white">Connect Circle Agent Wallet</p>
               </div>
-              <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_120px]">
+              <p className="mt-1 text-xs text-blue-700 dark:text-blue-300">
+                Create a wallet, or login with the same Circle email to reconnect an existing one.
+              </p>
+              <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_120px_150px]">
                 <input
                   type="email"
                   value={walletEmail}
@@ -254,12 +270,21 @@ export default function AgentDemo() {
                 />
                 <button
                   type="button"
-                  onClick={() => callAgentWallet('init')}
+                  onClick={() => callAgentWallet('init', 'create')}
                   disabled={walletBusy || !walletEmail.trim() || walletStep === 'done'}
                   className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white transition-all hover:bg-blue-700 disabled:opacity-50"
                 >
-                  {walletBusy && walletStep === 'idle' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wallet className="h-4 w-4" />}
-                  Send OTP
+                  {walletBusy && walletStep === 'idle' && walletMode === 'create' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wallet className="h-4 w-4" />}
+                  Create
+                </button>
+                <button
+                  type="button"
+                  onClick={() => callAgentWallet('init', 'login')}
+                  disabled={walletBusy || !walletEmail.trim() || walletStep === 'done'}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm font-semibold text-blue-700 transition-all hover:bg-blue-50 disabled:opacity-50 dark:border-blue-900/40 dark:bg-white/[0.04] dark:text-blue-300"
+                >
+                  {walletBusy && walletStep === 'idle' && walletMode === 'login' ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                  Login
                 </button>
               </div>
 
@@ -286,7 +311,9 @@ export default function AgentDemo() {
 
               {walletError && <p className="mt-2 text-xs font-medium text-red-600">{walletError}</p>}
               {walletStep === 'otp' && !walletError && (
-                <p className="mt-2 text-xs text-blue-700 dark:text-blue-300">Circle sent an OTP to your email. Enter it here to create and attach the agent wallet.</p>
+                <p className="mt-2 text-xs text-blue-700 dark:text-blue-300">
+                  Circle sent an OTP to your email. Enter it here to {walletMode === 'login' ? 'reconnect and attach' : 'create and attach'} the agent wallet.
+                </p>
               )}
             </div>
           )}
@@ -334,6 +361,8 @@ export default function AgentDemo() {
       )}
 
       {/* ── Hero ──────────────────────────────────────────────────────────── */}
+      {!showAgentProfile && (
+        <>
       <div className="rounded-2xl border border-purple-100 bg-white p-6 shadow-sm dark:bg-[#1c1c20] dark:border-purple-900/30">
         <div className="flex items-start gap-4">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-purple-50 dark:bg-purple-900/20">
@@ -562,6 +591,9 @@ export default function AgentDemo() {
           View all archived payments on 0G Explorer <ExternalLink className="h-3 w-3" />
         </a>
       </div>
+
+        </>
+      )}
 
     </div>
   )
