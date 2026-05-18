@@ -20,6 +20,7 @@ type PendingSession = {
 
 type StoreData = {
   pending: Record<string, PendingSession>
+  agents?: Record<string, { walletAddress: string; chain: string; updatedAt: number }>
 }
 
 function normalizeEmail(value: unknown) {
@@ -47,7 +48,7 @@ async function readStore(): Promise<StoreData> {
   try {
     return JSON.parse(await readFile(STORE_PATH, 'utf8')) as StoreData
   } catch {
-    return { pending: {} }
+    return { pending: {}, agents: {} }
   }
 }
 
@@ -96,6 +97,21 @@ async function runCircle(args: string[], key: string) {
 }
 
 export default async function handler(req: Request, res: Response) {
+  if (req.method === 'GET') {
+    const agentSlug = normalizeSlug(req.query.agent)
+    if (!agentSlug) return res.status(400).json({ ok: false, error: 'Missing agent name.' })
+    const store = await readStore()
+    const record = store.agents?.[agentSlug]
+    return res.json({
+      ok: true,
+      found: !!record,
+      agentSlug,
+      walletAddress: record?.walletAddress,
+      chain: record?.chain,
+      updatedAt: record?.updatedAt,
+    })
+  }
+
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed' })
   if (!CIRCLE_CLI_ENABLED) {
     return res.status(503).json({
@@ -148,6 +164,7 @@ export default async function handler(req: Request, res: Response) {
       const walletAddress = parseWalletAddress(listOutput)
       if (!walletAddress) return res.status(502).json({ ok: false, error: 'Circle login completed, but no wallet address was found.' })
       delete store.pending[id]
+      store.agents = { ...(store.agents ?? {}), [agentSlug]: { walletAddress, chain, updatedAt: Date.now() } }
       await writeStore(store)
       return res.json({ ok: true, walletAddress, chain, agentSlug })
     }
