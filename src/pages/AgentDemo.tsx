@@ -321,13 +321,18 @@ export default function AgentDemo() {
             <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
               <ShieldCheck className="h-4 w-4 text-gray-400" />
               <p className="mt-2 text-xs font-semibold text-gray-800 dark:text-gray-100">Balance</p>
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-gray-500" title={treasuryBalanceError || undefined}>
                 {treasuryBalance !== null
                   ? `${Number(treasuryBalance).toLocaleString(undefined, { maximumFractionDigits: 6 })} USDC`
                   : currentAgentWallet
                   ? treasuryBalanceError || treasuryBalanceChecked ? 'Unavailable' : 'Checking...'
                   : 'No wallet'}
               </p>
+              {treasuryBalanceError && (
+                <p className="mt-1 line-clamp-2 text-[10px] leading-tight text-amber-600 dark:text-amber-300">
+                  {treasuryBalanceError}
+                </p>
+              )}
               {agentWalletChain && <p className="mt-0.5 text-[10px] font-medium text-gray-400">{agentWalletChain}</p>}
             </div>
           </div>

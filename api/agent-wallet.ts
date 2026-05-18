@@ -114,13 +114,16 @@ function parseBalance(output: string) {
       if (Array.isArray(item)) queue.push(...item)
       if (typeof item !== 'object') continue
       const record = item as Record<string, unknown>
+      const token = String(record.token ?? record.symbol ?? record.currency ?? record.asset ?? '').toLowerCase()
       const raw =
         record.balance ??
         record.amount ??
         record.availableBalance ??
         record.available ??
+        record.formattedBalance ??
+        record.formatted ??
         record.value
-      if (typeof raw === 'number' || typeof raw === 'string') {
+      if ((token === '' || token === 'usdc' || token.includes('usdc')) && (typeof raw === 'number' || typeof raw === 'string')) {
         const value = String(raw)
         if (/^\d+(\.\d+)?$/.test(value)) return value
       }
@@ -130,6 +133,7 @@ function parseBalance(output: string) {
     // CLI can return text tables depending on version; parse those below.
   }
   return output.match(/\b\d+(?:\.\d+)?\s+USDC\b/i)?.[0]?.replace(/\s+USDC/i, '')
+    ?? output.match(/\bUSDC\b[^\d]*(\d+(?:\.\d+)?)/i)?.[1]
 }
 
 async function runCircle(args: string[], key: string) {
@@ -158,7 +162,13 @@ export default async function handler(req: Request, res: Response) {
     let balance: string | undefined
     let balanceError: string | undefined
     let balanceChecked = false
-    if (record?.walletAddress && record.sessionId && req.query.balance === '1' && CIRCLE_CLI_ENABLED) {
+    if (record?.walletAddress && req.query.balance === '1' && !record.sessionId) {
+      balanceChecked = true
+      balanceError = 'Reconnect this agent wallet to enable balance lookup.'
+    } else if (record?.walletAddress && req.query.balance === '1' && !CIRCLE_CLI_ENABLED) {
+      balanceChecked = true
+      balanceError = 'Circle CLI balance lookup is not enabled on this server.'
+    } else if (record?.walletAddress && record.sessionId && req.query.balance === '1' && CIRCLE_CLI_ENABLED) {
       balanceChecked = true
       try {
         const key = `${agentSlug}_${record.sessionId}`
