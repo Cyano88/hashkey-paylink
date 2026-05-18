@@ -105,15 +105,30 @@ function parseWalletAddress(output: string) {
 }
 
 function parseBalance(output: string) {
+  const cleanOutput = output.replace(/\u001b\[[0-9;]*m/g, '')
   try {
-    const parsed = JSON.parse(output) as unknown
+    const parsed = JSON.parse(cleanOutput) as unknown
     const queue = [parsed]
     while (queue.length) {
       const item = queue.shift()
       if (!item) continue
+      if (typeof item === 'string') {
+        const textValue = parseBalanceText(item)
+        if (textValue !== undefined) return textValue
+        continue
+      }
       if (Array.isArray(item)) queue.push(...item)
       if (typeof item !== 'object') continue
       const record = item as Record<string, unknown>
+      for (const [key, value] of Object.entries(record)) {
+        if (/usdc/i.test(key)) {
+          if (typeof value === 'number' || typeof value === 'string') {
+            const parsedValue = String(value).match(/\d+(?:\.\d+)?/)?.[0]
+            if (parsedValue !== undefined) return parsedValue
+          }
+          if (value && typeof value === 'object') queue.push(value)
+        }
+      }
       const token = String(record.token ?? record.symbol ?? record.currency ?? record.asset ?? '').toLowerCase()
       const raw =
         record.balance ??
@@ -132,8 +147,24 @@ function parseBalance(output: string) {
   } catch {
     // CLI can return text tables depending on version; parse those below.
   }
-  return output.match(/\b\d+(?:\.\d+)?\s+USDC\b/i)?.[0]?.replace(/\s+USDC/i, '')
+  return parseBalanceText(cleanOutput)
+}
+
+function parseBalanceText(output: string) {
+  const direct = output.match(/\b\d+(?:\.\d+)?\s+USDC\b/i)?.[0]?.replace(/\s+USDC/i, '')
     ?? output.match(/\bUSDC\b[^\d]*(\d+(?:\.\d+)?)/i)?.[1]
+  if (direct !== undefined) return direct
+  if (/\bUSDC\b/i.test(output)) {
+    const tableNumber = output.match(/[│|]\s*(\d+(?:\.\d+)?)\s*[│|]/)?.[1]
+    if (tableNumber !== undefined) return tableNumber
+  }
+  const withoutAddresses = output.replace(/0x[a-fA-F0-9]{40}/g, '')
+  const labelled = withoutAddresses.match(/\b(?:balance|available|amount|total)\b[^\d]*(\d+(?:\.\d+)?)/i)?.[1]
+  if (labelled !== undefined) return labelled
+  const numericValues = [...withoutAddresses.matchAll(/\b\d+(?:\.\d+)?\b/g)].map(match => match[0])
+  if (numericValues.length === 1) return numericValues[0]
+  if (/no\s+(token\s+)?balances?|not\s+found|empty/i.test(output)) return '0'
+  return undefined
 }
 
 async function runCircle(args: string[], key: string, timeoutMs = 60_000) {
