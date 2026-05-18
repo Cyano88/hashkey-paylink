@@ -14,6 +14,7 @@ import { cn }                           from '../lib/utils'
 import {
   CheckCircle2, AlertCircle, Loader2, Send,
   ExternalLink, ArrowLeft, ShieldCheck, Zap,
+  Wallet, CreditCard, Radio,
 } from 'lucide-react'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -40,8 +41,16 @@ const DEMO_PAYER    = 'HashPayLink 0G Test'
 
 export default function AgentDemo() {
   const params = new URLSearchParams(window.location.search)
+  const agentSlug = params.get('agent') ?? ''
+  const agentWallet = params.get('wallet') ?? params.get('e') ?? ''
+  const agentPrice = params.get('price') ?? '1'
+  const agentStreamPrice = params.get('streamPrice') ?? ''
+  const agentStreamDuration = params.get('streamDuration') ?? ''
+  const agentNetwork = params.get('n') ?? 'base'
+  const showAgentProfile = params.get('profile') === 'agent' || Boolean(agentSlug || agentWallet)
   const [eventId,    setEventId]    = useState(() => params.get('eventId') ?? '')
   const [payer,      setPayer]      = useState(() => params.get('payer')   ?? '')
+  const [fundAmount, setFundAmount] = useState(() => params.get('fund') ?? '10')
   const [verifying,  setVerifying]  = useState(false)
   const [verified,   setVerified]   = useState<VerifyResult | null>(null)
   const [question,   setQuestion]   = useState('')
@@ -119,6 +128,34 @@ export default function AgentDemo() {
     setMessages([])
   }
 
+  function buildAgentFundUrl() {
+    const p = new URLSearchParams()
+    p.set('id', `agent-${agentSlug || 'hashpaylink'}-fund-${Date.now().toString(36)}`)
+    p.set('a', fundAmount.trim() || '10')
+    p.set('m', `Fund agent wallet: ${agentSlug || 'Hash PayLink Agent'}`)
+    p.set('n', agentNetwork)
+    p.set('x', '1')
+    p.set('v', '1')
+    p.set('src', 'agent')
+    if (agentWallet) p.set('e', agentWallet)
+    return `/pay?${p.toString()}`
+  }
+
+  function buildAgentStreamUrl() {
+    if (!agentWallet || !agentStreamPrice || !agentStreamDuration) return ''
+    const p = new URLSearchParams()
+    p.set('app', 'streampay')
+    p.set('amount', agentStreamPrice)
+    p.set('recipient', agentWallet)
+    p.set('duration', agentStreamDuration)
+    p.set('reason', `Agent retainer: ${agentSlug || 'Hash PayLink Agent'}`)
+    p.set('src', 'agent')
+    p.set('wallet', 'circle')
+    return `/?${p.toString()}`
+  }
+
+  const agentStreamUrl = buildAgentStreamUrl()
+
   return (
     <div className="mx-auto max-w-2xl animate-slide-up space-y-6">
 
@@ -126,6 +163,78 @@ export default function AgentDemo() {
       <Link to="/" className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors">
         <ArrowLeft className="h-3.5 w-3.5" /> Create a link
       </Link>
+
+      {showAgentProfile && (
+        <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm dark:bg-[#1c1c20] dark:border-white/10">
+          <div className="flex items-start gap-4">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 dark:bg-blue-900/20">
+              <Wallet className="h-5 w-5 text-blue-600" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">Agent treasury</p>
+              <h1 className="mt-1 truncate text-lg font-semibold text-gray-900 dark:text-white">
+                {agentSlug || 'Hash PayLink Agent'}
+              </h1>
+              <p className="mt-1 truncate font-mono text-xs text-gray-500 dark:text-gray-400">
+                {agentWallet || 'Circle Agent Wallet not configured'}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+            <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
+              <CreditCard className="h-4 w-4 text-gray-400" />
+              <p className="mt-2 text-xs font-semibold text-gray-800 dark:text-gray-100">Ask</p>
+              <p className="text-xs text-gray-500">{agentPrice} USDC once</p>
+            </div>
+            <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
+              <Radio className="h-4 w-4 text-gray-400" />
+              <p className="mt-2 text-xs font-semibold text-gray-800 dark:text-gray-100">Stream</p>
+              <p className="text-xs text-gray-500">
+                {agentStreamPrice && agentStreamDuration ? `${agentStreamPrice} USDC / ${agentStreamDuration}` : 'Not set'}
+              </p>
+            </div>
+            <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
+              <Wallet className="h-4 w-4 text-gray-400" />
+              <p className="mt-2 text-xs font-semibold text-gray-800 dark:text-gray-100">Fund</p>
+              <p className="text-xs text-gray-500">Treasury on {agentNetwork}</p>
+            </div>
+          </div>
+
+          <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+            <div className="flex min-w-0 flex-1 items-center rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">
+              <input
+                value={fundAmount}
+                onChange={e => setFundAmount(e.target.value.replace(/[^\d.]/g, ''))}
+                inputMode="decimal"
+                className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-gray-900 outline-none dark:text-white"
+              />
+              <span className="text-xs font-semibold text-gray-400">USDC</span>
+            </div>
+            <a
+              href={agentWallet ? buildAgentFundUrl() : undefined}
+              aria-disabled={!agentWallet}
+              className={cn(
+                'inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition-all active:scale-[0.98]',
+                agentWallet
+                  ? 'bg-blue-600 text-white hover:bg-blue-700'
+                  : 'pointer-events-none bg-gray-100 text-gray-400 dark:bg-white/[0.06]'
+              )}
+            >
+              <Wallet className="h-4 w-4" /> Fund Agent Wallet
+            </a>
+          </div>
+
+          {agentStreamUrl && (
+            <a
+              href={agentStreamUrl}
+              className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-800 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-100"
+            >
+              <Radio className="h-4 w-4" /> Start StreamPay Retainer
+            </a>
+          )}
+        </div>
+      )}
 
       {/* ── Hero ──────────────────────────────────────────────────────────── */}
       <div className="rounded-2xl border border-purple-100 bg-white p-6 shadow-sm dark:bg-[#1c1c20] dark:border-purple-900/30">
