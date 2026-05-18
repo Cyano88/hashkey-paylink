@@ -88,14 +88,29 @@ export default function AgentDemo() {
 
   async function loadAgentWallet() {
     const slug = agentSlug || 'hashpaylink-agent'
-    const res = await fetch(`/api/agent-wallet?agent=${encodeURIComponent(slug)}&balance=1`)
-    if (!res.ok) return
-    const data = await res.json() as { walletAddress?: string; chain?: string; balance?: string; balanceChecked?: boolean; balanceError?: string }
-    if (data.walletAddress) setCurrentAgentWallet(data.walletAddress)
-    if (data.chain) setAgentWalletChain(data.chain)
-    if (data.balance !== undefined) setTreasuryBalance(data.balance)
-    if (data.balanceChecked) setTreasuryBalanceChecked(true)
-    if (data.balanceError) setTreasuryBalanceError(data.balanceError)
+    const controller = new AbortController()
+    const timeout = window.setTimeout(() => controller.abort(), 12000)
+    setTreasuryBalanceChecked(false)
+    setTreasuryBalanceError('')
+    try {
+      const res = await fetch(`/api/agent-wallet?agent=${encodeURIComponent(slug)}&balance=1`, {
+        signal: controller.signal,
+      })
+      if (!res.ok) throw new Error('Balance unavailable')
+      const data = await res.json() as { walletAddress?: string; chain?: string; balance?: string; balanceChecked?: boolean; balanceError?: string }
+      if (data.walletAddress) setCurrentAgentWallet(data.walletAddress)
+      if (data.chain) setAgentWalletChain(data.chain)
+      if (data.balance !== undefined) setTreasuryBalance(data.balance)
+      if (data.balanceError) setTreasuryBalanceError(data.balanceError)
+      if (data.balance === undefined && !data.balanceError && !data.balanceChecked) {
+        setTreasuryBalanceError('Balance unavailable')
+      }
+    } catch {
+      setTreasuryBalanceError('Balance unavailable')
+    } finally {
+      window.clearTimeout(timeout)
+      setTreasuryBalanceChecked(true)
+    }
   }
 
   useEffect(() => {
@@ -203,10 +218,6 @@ export default function AgentDemo() {
     p.set('src', 'agent')
     p.set('wallet', 'circle')
     return `/?${p.toString()}`
-  }
-
-  function handleStreamAgent() {
-    onNetworkSelect('arc')
   }
 
   async function callAgentWallet(action: 'init' | 'complete', mode: 'create' | 'login' = walletMode) {
@@ -422,13 +433,12 @@ export default function AgentDemo() {
           </div>
 
           {agentStreamUrl && (
-            <Link
-              to={agentStreamUrl}
-              onClick={handleStreamAgent}
+            <a
+              href={agentStreamUrl}
               className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-800 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-100"
             >
               <Radio className="h-4 w-4" /> Start StreamPay Retainer
-            </Link>
+            </a>
           )}
         </div>
       )}
