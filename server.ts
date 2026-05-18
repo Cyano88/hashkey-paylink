@@ -36,6 +36,7 @@ import circleSolanaEmailHandler from './api/circle-solana-email.js'
 import circleRecipientWalletHandler from './api/circle-recipient-wallet.js'
 import agentVerifyHandler   from './api/agent-verify.js'
 import agentAskHandler     from './api/agent-ask.js'
+import agentWalletHandler  from './api/agent-wallet.js'
 import checkAgentUrlHandler from './api/check-agent-url.js'
 import dashboardPaymentsHandler from './api/dashboard-payments.js'
 import { rateLimit } from './api/rate-limit.js'
@@ -81,6 +82,7 @@ app.all('/api/circle-recipient-wallet', strictLimiter, circleRecipientWalletHand
 // ── Agentic Economy — 0G payment verification primitives ─────────────────────
 app.all('/api/agent-verify',           strictLimiter, agentVerifyHandler)
 app.post('/api/agent-ask',             strictLimiter, agentAskHandler)
+app.post('/api/agent-wallet',          strictLimiter, agentWalletHandler)
 app.get('/api/check-agent-url',        strictLimiter, checkAgentUrlHandler)
 app.get('/api/dashboard-payments',     readLimiter, dashboardPaymentsHandler)
 app.get('/api/health',                 (_req, res) => res.json({ ok: true, ts: Date.now() }))

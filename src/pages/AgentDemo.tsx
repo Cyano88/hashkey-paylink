@@ -51,6 +51,12 @@ export default function AgentDemo() {
   const [eventId,    setEventId]    = useState(() => params.get('eventId') ?? '')
   const [payer,      setPayer]      = useState(() => params.get('payer')   ?? '')
   const [fundAmount, setFundAmount] = useState(() => params.get('fund') ?? '10')
+  const [currentAgentWallet, setCurrentAgentWallet] = useState(agentWallet)
+  const [walletEmail, setWalletEmail] = useState('')
+  const [walletOtp, setWalletOtp] = useState('')
+  const [walletStep, setWalletStep] = useState<'idle' | 'otp' | 'done'>('idle')
+  const [walletBusy, setWalletBusy] = useState(false)
+  const [walletError, setWalletError] = useState<string | null>(null)
   const [verifying,  setVerifying]  = useState(false)
   const [verified,   setVerified]   = useState<VerifyResult | null>(null)
   const [question,   setQuestion]   = useState('')
@@ -137,21 +143,51 @@ export default function AgentDemo() {
     p.set('x', '1')
     p.set('v', '1')
     p.set('src', 'agent')
-    if (agentWallet) p.set('e', agentWallet)
+    if (currentAgentWallet) p.set('e', currentAgentWallet)
     return `/pay?${p.toString()}`
   }
 
   function buildAgentStreamUrl() {
-    if (!agentWallet || !agentStreamPrice || !agentStreamDuration) return ''
+    if (!currentAgentWallet || !agentStreamPrice || !agentStreamDuration) return ''
     const p = new URLSearchParams()
     p.set('app', 'streampay')
     p.set('amount', agentStreamPrice)
-    p.set('recipient', agentWallet)
+    p.set('recipient', currentAgentWallet)
     p.set('duration', agentStreamDuration)
     p.set('reason', `Agent retainer: ${agentSlug || 'Hash PayLink Agent'}`)
     p.set('src', 'agent')
     p.set('wallet', 'circle')
     return `/?${p.toString()}`
+  }
+
+  async function callAgentWallet(action: 'init' | 'complete') {
+    setWalletBusy(true)
+    setWalletError(null)
+    try {
+      const res = await fetch('/api/agent-wallet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action,
+          agentSlug: agentSlug || 'hashpaylink-agent',
+          email: walletEmail,
+          otp: walletOtp,
+          testnet: true,
+        }),
+      })
+      const data = await res.json() as { ok?: boolean; error?: string; walletAddress?: string }
+      if (!res.ok || !data.ok) throw new Error(data.error ?? 'Circle Agent Wallet request failed')
+      if (action === 'init') {
+        setWalletStep('otp')
+      } else if (data.walletAddress) {
+        setCurrentAgentWallet(data.walletAddress)
+        setWalletStep('done')
+      }
+    } catch (err) {
+      setWalletError(err instanceof Error ? err.message : 'Circle Agent Wallet request failed')
+    } finally {
+      setWalletBusy(false)
+    }
   }
 
   const agentStreamUrl = buildAgentStreamUrl()
@@ -176,7 +212,7 @@ export default function AgentDemo() {
                 {agentSlug || 'Hash PayLink Agent'}
               </h1>
               <p className="mt-1 truncate font-mono text-xs text-gray-500 dark:text-gray-400">
-                {agentWallet || 'Circle Agent Wallet not configured'}
+                {currentAgentWallet || 'Circle Agent Wallet not configured'}
               </p>
             </div>
           </div>
@@ -201,6 +237,67 @@ export default function AgentDemo() {
             </div>
           </div>
 
+          {!currentAgentWallet && (
+            <div className="mt-5 rounded-xl border border-blue-100 bg-blue-50/60 p-4 dark:border-blue-900/30 dark:bg-blue-900/10">
+              <div className="flex items-center gap-2">
+                <Wallet className="h-4 w-4 text-blue-600" />
+                <p className="text-sm font-semibold text-gray-900 dark:text-white">Create Circle Agent Wallet</p>
+              </div>
+              <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_120px]">
+                <input
+                  type="email"
+                  value={walletEmail}
+                  onChange={e => setWalletEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  disabled={walletBusy || walletStep === 'done'}
+                  className="min-w-0 rounded-lg border border-blue-100 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-blue-200 disabled:opacity-60 dark:border-white/10 dark:bg-white/[0.06] dark:text-white"
+                />
+                <button
+                  type="button"
+                  onClick={() => callAgentWallet('init')}
+                  disabled={walletBusy || !walletEmail.trim() || walletStep === 'done'}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white transition-all hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {walletBusy && walletStep === 'idle' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wallet className="h-4 w-4" />}
+                  Send OTP
+                </button>
+              </div>
+
+              {walletStep === 'otp' && (
+                <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_120px]">
+                  <input
+                    value={walletOtp}
+                    onChange={e => setWalletOtp(e.target.value.trim())}
+                    placeholder="OTP from Circle email"
+                    disabled={walletBusy}
+                    className="min-w-0 rounded-lg border border-blue-100 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-blue-200 disabled:opacity-60 dark:border-white/10 dark:bg-white/[0.06] dark:text-white"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => callAgentWallet('complete')}
+                    disabled={walletBusy || !walletOtp.trim()}
+                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-gray-900 px-3 py-2 text-sm font-semibold text-white transition-all hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-900"
+                  >
+                    {walletBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                    Verify
+                  </button>
+                </div>
+              )}
+
+              {walletError && <p className="mt-2 text-xs font-medium text-red-600">{walletError}</p>}
+              {walletStep === 'otp' && !walletError && (
+                <p className="mt-2 text-xs text-blue-700 dark:text-blue-300">Circle sent an OTP to your email. Enter it here to create and attach the agent wallet.</p>
+              )}
+            </div>
+          )}
+
+          {walletStep === 'done' && currentAgentWallet && (
+            <div className="mt-5 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 dark:border-emerald-900/30 dark:bg-emerald-900/10">
+              <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">Circle Agent Wallet connected</p>
+              <p className="mt-1 truncate font-mono text-xs text-emerald-700/80 dark:text-emerald-300/80">{currentAgentWallet}</p>
+            </div>
+          )}
+
           <div className="mt-5 flex flex-col gap-3 sm:flex-row">
             <div className="flex min-w-0 flex-1 items-center rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">
               <input
@@ -212,11 +309,11 @@ export default function AgentDemo() {
               <span className="text-xs font-semibold text-gray-400">USDC</span>
             </div>
             <a
-              href={agentWallet ? buildAgentFundUrl() : undefined}
-              aria-disabled={!agentWallet}
+              href={currentAgentWallet ? buildAgentFundUrl() : undefined}
+              aria-disabled={!currentAgentWallet}
               className={cn(
                 'inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition-all active:scale-[0.98]',
-                agentWallet
+                currentAgentWallet
                   ? 'bg-blue-600 text-white hover:bg-blue-700'
                   : 'pointer-events-none bg-gray-100 text-gray-400 dark:bg-white/[0.06]'
               )}
