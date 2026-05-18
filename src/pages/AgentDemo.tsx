@@ -54,6 +54,7 @@ export default function AgentDemo() {
   const [currentAgentWallet, setCurrentAgentWallet] = useState(agentWallet)
   const [agentWalletChain, setAgentWalletChain] = useState('')
   const [treasuryBalance, setTreasuryBalance] = useState<string | null>(null)
+  const [treasuryBalanceChecked, setTreasuryBalanceChecked] = useState(false)
   const [treasuryBalanceError, setTreasuryBalanceError] = useState('')
   const [copiedWallet, setCopiedWallet] = useState(false)
   const [walletEmail, setWalletEmail] = useState('')
@@ -79,10 +80,11 @@ export default function AgentDemo() {
     const slug = agentSlug || 'hashpaylink-agent'
     const res = await fetch(`/api/agent-wallet?agent=${encodeURIComponent(slug)}&balance=1`)
     if (!res.ok) return
-    const data = await res.json() as { walletAddress?: string; chain?: string; balance?: string; balanceError?: string }
+    const data = await res.json() as { walletAddress?: string; chain?: string; balance?: string; balanceChecked?: boolean; balanceError?: string }
     if (data.walletAddress) setCurrentAgentWallet(data.walletAddress)
     if (data.chain) setAgentWalletChain(data.chain)
     if (data.balance !== undefined) setTreasuryBalance(data.balance)
+    if (data.balanceChecked) setTreasuryBalanceChecked(true)
     if (data.balanceError) setTreasuryBalanceError(data.balanceError)
   }
 
@@ -213,6 +215,7 @@ export default function AgentDemo() {
         setCurrentAgentWallet(data.walletAddress)
         if (data.chain) setAgentWalletChain(data.chain)
         setTreasuryBalance(null)
+        setTreasuryBalanceChecked(false)
         setTreasuryBalanceError('')
         setWalletStep('done')
         void loadAgentWallet()
@@ -277,7 +280,7 @@ export default function AgentDemo() {
             <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
               <Radio className="h-4 w-4 text-gray-400" />
               <p className="mt-2 text-xs font-semibold text-gray-800 dark:text-gray-100">Stream</p>
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-gray-500" title={treasuryBalanceError || undefined}>
                 {agentStreamPrice && agentStreamDuration ? `${agentStreamPrice} USDC / ${agentStreamDuration}` : 'Not set'}
               </p>
             </div>
@@ -293,7 +296,7 @@ export default function AgentDemo() {
                 {treasuryBalance !== null
                   ? `${Number(treasuryBalance).toLocaleString(undefined, { maximumFractionDigits: 6 })} USDC`
                   : currentAgentWallet
-                  ? treasuryBalanceError ? 'Unavailable' : 'Checking...'
+                  ? treasuryBalanceError || treasuryBalanceChecked ? 'Unavailable' : 'Checking...'
                   : 'No wallet'}
               </p>
               {agentWalletChain && <p className="mt-0.5 text-[10px] font-medium text-gray-400">{agentWalletChain}</p>}

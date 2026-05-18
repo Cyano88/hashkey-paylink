@@ -157,7 +157,9 @@ export default async function handler(req: Request, res: Response) {
     const record = store.agents?.[agentSlug]
     let balance: string | undefined
     let balanceError: string | undefined
+    let balanceChecked = false
     if (record?.walletAddress && record.sessionId && req.query.balance === '1' && CIRCLE_CLI_ENABLED) {
+      balanceChecked = true
       try {
         const key = `${agentSlug}_${record.sessionId}`
         let output = ''
@@ -167,6 +169,7 @@ export default async function handler(req: Request, res: Response) {
           output = await runCircle(['wallet', 'balance', '--address', record.walletAddress, '--chain', record.chain], key)
         }
         balance = parseBalance(output)
+        if (balance === undefined) balanceError = 'Circle CLI returned no parseable USDC balance.'
       } catch (err) {
         balanceError = err instanceof Error ? err.message.slice(0, 240) : 'Balance lookup failed.'
       }
@@ -178,6 +181,7 @@ export default async function handler(req: Request, res: Response) {
       walletAddress: record?.walletAddress,
       chain: record?.chain,
       balance,
+      balanceChecked,
       balanceError,
       updatedAt: record?.updatedAt,
     })
