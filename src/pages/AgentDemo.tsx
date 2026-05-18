@@ -9,8 +9,10 @@
  */
 
 import { useState, useRef, useEffect } from 'react'
-import { Link }                         from 'react-router-dom'
+import { Link, useOutletContext }       from 'react-router-dom'
 import { cn }                           from '../lib/utils'
+import type { LayoutOutletContext }     from '../Layout'
+import type { ChainKey }                from '../lib/chains'
 import {
   CheckCircle2, AlertCircle, Loader2, Send,
   ExternalLink, ArrowLeft, ShieldCheck, Zap,
@@ -40,13 +42,21 @@ const DEMO_PAYER    = 'HashPayLink 0G Test'
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function AgentDemo() {
+  const { selectedNet, onNetworkSelect } = useOutletContext<LayoutOutletContext>()
   const params = new URLSearchParams(window.location.search)
   const agentSlug = params.get('agent') ?? ''
   const agentWallet = params.get('wallet') ?? params.get('e') ?? ''
   const agentPrice = params.get('price') ?? '1'
   const agentStreamPrice = params.get('streamPrice') ?? ''
   const agentStreamDuration = params.get('streamDuration') ?? ''
-  const agentNetwork = params.get('n') ?? 'base'
+  const urlAgentNetwork = params.get('n') ?? 'base'
+  const isAgentTreasuryNetwork = (value: string): value is Extract<ChainKey, 'base' | 'arbitrum' | 'arc'> =>
+    value === 'base' || value === 'arbitrum' || value === 'arc'
+  const agentNetwork = isAgentTreasuryNetwork(selectedNet)
+    ? selectedNet
+    : isAgentTreasuryNetwork(urlAgentNetwork)
+    ? urlAgentNetwork
+    : 'base'
   const showAgentProfile = params.get('profile') === 'agent' || Boolean(agentSlug || agentWallet)
   const [eventId,    setEventId]    = useState(() => params.get('eventId') ?? '')
   const [payer,      setPayer]      = useState(() => params.get('payer')   ?? '')
@@ -178,6 +188,10 @@ export default function AgentDemo() {
     return `/pay?${p.toString()}`
   }
 
+  function handleFundAgent() {
+    onNetworkSelect(agentNetwork)
+  }
+
   function buildAgentStreamUrl() {
     if (!currentAgentWallet || !agentStreamPrice || !agentStreamDuration) return ''
     const p = new URLSearchParams()
@@ -189,6 +203,10 @@ export default function AgentDemo() {
     p.set('src', 'agent')
     p.set('wallet', 'circle')
     return `/?${p.toString()}`
+  }
+
+  function handleStreamAgent() {
+    onNetworkSelect('arc')
   }
 
   async function callAgentWallet(action: 'init' | 'complete', mode: 'create' | 'login' = walletMode) {
@@ -388,8 +406,9 @@ export default function AgentDemo() {
               />
               <span className="text-xs font-semibold text-gray-400">USDC</span>
             </div>
-            <a
-              href={currentAgentWallet ? buildAgentFundUrl() : undefined}
+            <Link
+              to={currentAgentWallet ? buildAgentFundUrl() : '#'}
+              onClick={currentAgentWallet ? handleFundAgent : undefined}
               aria-disabled={!currentAgentWallet}
               className={cn(
                 'inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition-all active:scale-[0.98]',
@@ -399,16 +418,17 @@ export default function AgentDemo() {
               )}
             >
               <Wallet className="h-4 w-4" /> Fund Agent Wallet
-            </a>
+            </Link>
           </div>
 
           {agentStreamUrl && (
-            <a
-              href={agentStreamUrl}
+            <Link
+              to={agentStreamUrl}
+              onClick={handleStreamAgent}
               className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-800 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-100"
             >
               <Radio className="h-4 w-4" /> Start StreamPay Retainer
-            </a>
+            </Link>
           )}
         </div>
       )}

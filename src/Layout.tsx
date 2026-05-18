@@ -180,17 +180,19 @@ function NetworkToolkit({
   activeKey,
   label,
   locked,
+  networks = ALL_NETWORKS,
   onSwitch,
 }: {
   activeKey: ChainKey | null
   label?: string
   locked?: boolean
+  networks?: readonly (typeof CHAIN_META)[ChainKey][]
   onSwitch?: (key: ChainKey) => void
 }) {
   const [open, setOpen] = useState(false)
   const displayNet = activeKey ? CHAIN_META[activeKey] : null
   const displayLabel = label ?? displayNet?.label ?? 'Network'
-  const otherNets  = ALL_NETWORKS.filter(n => n.key !== activeKey)
+  const otherNets  = networks.filter(n => n.key !== activeKey)
 
   function handleSwitch(key: ChainKey) {
     setOpen(false)
@@ -307,6 +309,13 @@ export default function Layout() {
   const [searchParams] = useSearchParams()
   const isPayPage  = pathname === '/pay'
   const isDashPage = pathname === '/event'
+  const isAgentProfilePage = pathname === '/agent' && (
+    searchParams.get('profile') === 'agent' ||
+    !!searchParams.get('agent') ||
+    !!searchParams.get('wallet') ||
+    !!searchParams.get('e')
+  )
+  const agentNetworks = [CHAIN_META.base, CHAIN_META.arbitrum, CHAIN_META.arc] as const
   // Both the pay page and the dashboard show a locked chain pill from the URL param
   const pageNetParam = (isPayPage || isDashPage) ? (getPaylinkParam(searchParams, 'net', 'n') as ChainKey | '') : ''
   const activeNet = (pageNetParam && pageNetParam in CHAIN_META) ? pageNetParam : null
@@ -525,6 +534,12 @@ export default function Layout() {
             {/* 1. Network Toolkit — locked pill on pay/dashboard pages; interactive elsewhere */}
             {(isPayPage || isDashPage)
               ? <NetworkToolkit activeKey={isPayPage ? (payChain ?? activeNet) : dashboardActiveNet} label={dashboardNetworkLabel} locked />
+              : isAgentProfilePage
+              ? <NetworkToolkit
+                  activeKey={selectedNet === 'base' || selectedNet === 'arbitrum' || selectedNet === 'arc' ? selectedNet : 'base'}
+                  networks={agentNetworks}
+                  onSwitch={handleNetworkSelect}
+                />
               : <NetworkToolkit activeKey={selectedNet ?? 'base'} onSwitch={handleNetworkSelect} />
             }
 
