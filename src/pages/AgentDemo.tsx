@@ -89,15 +89,15 @@ export default function AgentDemo() {
   async function loadAgentWallet() {
     const slug = agentSlug || 'hashpaylink-agent'
     const controller = new AbortController()
-    const timeout = window.setTimeout(() => controller.abort(), 12000)
+    const timeout = window.setTimeout(() => controller.abort(), 35000)
     setTreasuryBalanceChecked(false)
     setTreasuryBalanceError('')
     try {
       const res = await fetch(`/api/agent-wallet?agent=${encodeURIComponent(slug)}&balance=1`, {
         signal: controller.signal,
       })
-      if (!res.ok) throw new Error('Balance unavailable')
       const data = await res.json() as { walletAddress?: string; chain?: string; balance?: string; balanceChecked?: boolean; balanceError?: string }
+      if (!res.ok) throw new Error(data.balanceError || 'Balance unavailable')
       if (data.walletAddress) setCurrentAgentWallet(data.walletAddress)
       if (data.chain) setAgentWalletChain(data.chain)
       if (data.balance !== undefined) setTreasuryBalance(data.balance)
@@ -105,8 +105,12 @@ export default function AgentDemo() {
       if (data.balance === undefined && !data.balanceError && !data.balanceChecked) {
         setTreasuryBalanceError('Balance unavailable')
       }
-    } catch {
-      setTreasuryBalanceError('Balance unavailable')
+    } catch (err) {
+      setTreasuryBalanceError(err instanceof DOMException && err.name === 'AbortError'
+        ? 'Balance lookup timed out.'
+        : err instanceof Error
+        ? err.message
+        : 'Balance unavailable')
     } finally {
       window.clearTimeout(timeout)
       setTreasuryBalanceChecked(true)

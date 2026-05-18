@@ -136,11 +136,11 @@ function parseBalance(output: string) {
     ?? output.match(/\bUSDC\b[^\d]*(\d+(?:\.\d+)?)/i)?.[1]
 }
 
-async function runCircle(args: string[], key: string) {
+async function runCircle(args: string[], key: string, timeoutMs = 60_000) {
   const sessionHome = resolve(process.cwd(), 'data', 'circle-web-sessions', safeSessionKey(key))
   await mkdir(sessionHome, { recursive: true })
   const { stdout, stderr } = await execFileAsync(CIRCLE_BIN, args, {
-    timeout: 60_000,
+    timeout: timeoutMs,
     maxBuffer: 128 * 1024,
     shell: false,
     env: {
@@ -174,9 +174,9 @@ export default async function handler(req: Request, res: Response) {
         const key = `${agentSlug}_${record.sessionId}`
         let output = ''
         try {
-          output = await runCircle(['wallet', 'balance', '--address', record.walletAddress, '--chain', record.chain, '--output', 'json'], key)
+          output = await runCircle(['wallet', 'balance', '--address', record.walletAddress, '--chain', record.chain, '--output', 'json'], key, 30_000)
         } catch {
-          output = await runCircle(['wallet', 'balance', '--address', record.walletAddress, '--chain', record.chain], key)
+          output = await runCircle(['wallet', 'balance', '--address', record.walletAddress, '--chain', record.chain], key, 30_000)
         }
         balance = parseBalance(output)
         if (balance === undefined) balanceError = 'Circle CLI returned no parseable USDC balance.'
