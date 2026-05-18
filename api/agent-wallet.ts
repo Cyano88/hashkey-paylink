@@ -9,6 +9,15 @@ const execFileAsync = promisify(execFile)
 const CIRCLE_BIN = process.platform === 'win32' ? 'circle.cmd' : 'circle'
 const STORE_PATH = process.env.AGENT_WALLET_PROVISION_STORE ?? './data/agent-wallet-provisioning.json'
 const CIRCLE_CLI_ENABLED = ['1', 'true', 'yes', 'on'].includes(String(process.env.CIRCLE_CLI_ENABLED ?? '').toLowerCase())
+const SERVICE_SECRET = process.env.AGENT_WALLET_SERVICE_SECRET
+const DEFAULT_SCOUT_URL = `${(process.env.HASH_PAYLINK_BASE_URL ?? 'https://hashpaylink.com').replace(/\/+$/, '')}/api/x402/polymarket-scout`
+const ALLOWED_SERVICE_URLS = new Set(
+  (process.env.AGENT_WALLET_ALLOWED_SERVICE_URLS ?? process.env.X402_POLYMARKET_SCOUT_URL ?? DEFAULT_SCOUT_URL)
+    .split(',')
+    .map(item => item.trim())
+    .filter(Boolean),
+)
+const MAX_SERVICE_AMOUNT = Number(process.env.AGENT_WALLET_MAX_SERVICE_AMOUNT ?? process.env.X402_POLYMARKET_SCOUT_MAX_AMOUNT ?? '0.01')
 
 type PendingSession = {
   agentSlug: string
@@ -20,7 +29,7 @@ type PendingSession = {
 
 type StoreData = {
   pending: Record<string, PendingSession>
-  agents?: Record<string, { walletAddress: string; chain: string; updatedAt: number }>
+  agents?: Record<string, { walletAddress: string; chain: string; emailHash?: string; sessionId?: string; updatedAt: number }>
 }
 
 function normalizeEmail(value: unknown) {
@@ -42,6 +51,22 @@ function emailHash(email: string) {
 
 function sessionId(agentSlug: string, email: string) {
   return crypto.createHash('sha256').update(`${agentSlug}:${email}`).digest('hex').slice(0, 32)
+}
+
+function cleanAmount(value: unknown) {
+  const amount = Number(String(value ?? '').trim())
+  return Number.isFinite(amount) && amount > 0 ? amount : undefined
+}
+
+function extractJsonFromCliOutput(output: string) {
+  const start = output.indexOf('{')
+  const end = output.lastIndexOf('}')
+  if (start < 0 || end <= start) return undefined
+  try {
+    return JSON.parse(output.slice(start, end + 1)) as unknown
+  } catch {
+    return undefined
+  }
 }
 
 async function readStore(): Promise<StoreData> {
@@ -125,13 +150,14 @@ export default async function handler(req: Request, res: Response) {
   const agentSlug = normalizeSlug(req.body?.agentSlug)
   const email = normalizeEmail(req.body?.email)
   const testnet = req.body?.testnet !== false
-  if (!agentSlug || !email) return res.status(400).json({ ok: false, error: 'Missing agent name or email.' })
+  if (!agentSlug) return res.status(400).json({ ok: false, error: 'Missing agent name.' })
 
-  const id = sessionId(agentSlug, email)
+  const id = email ? sessionId(agentSlug, email) : ''
   const key = `${agentSlug}_${id}`
 
   try {
     if (action === 'init') {
+      if (!email) return res.status(400).json({ ok: false, error: 'Missing email.' })
       const args = ['wallet', 'login', email, '--init', ...(testnet ? ['--testnet'] : [])]
       const output = await runCircle(args, key)
       const requestId = parseRequestId(output)
@@ -142,6 +168,7 @@ export default async function handler(req: Request, res: Response) {
     }
 
     if (action === 'complete') {
+      if (!email) return res.status(400).json({ ok: false, error: 'Missing email.' })
       const otp = String(req.body?.otp ?? '').trim()
       if (!/^[a-zA-Z0-9-]{4,32}$/.test(otp)) return res.status(400).json({ ok: false, error: 'Invalid OTP.' })
       const store = await readStore()
@@ -164,9 +191,55 @@ export default async function handler(req: Request, res: Response) {
       const walletAddress = parseWalletAddress(listOutput)
       if (!walletAddress) return res.status(502).json({ ok: false, error: 'Circle login completed, but no wallet address was found.' })
       delete store.pending[id]
-      store.agents = { ...(store.agents ?? {}), [agentSlug]: { walletAddress, chain, updatedAt: Date.now() } }
+      store.agents = {
+        ...(store.agents ?? {}),
+        [agentSlug]: { walletAddress, chain, emailHash: pending.emailHash, sessionId: id, updatedAt: Date.now() },
+      }
       await writeStore(store)
       return res.json({ ok: true, walletAddress, chain, agentSlug })
+    }
+
+    if (action === 'pay-service') {
+      const secret = String(req.headers['x-agent-wallet-secret'] ?? req.body?.secret ?? '')
+      const authorized = SERVICE_SECRET
+        && secret.length === SERVICE_SECRET.length
+        && crypto.timingSafeEqual(Buffer.from(secret), Buffer.from(SERVICE_SECRET))
+      if (!authorized) return res.status(401).json({ ok: false, error: 'Unauthorized' })
+
+      const serviceUrl = String(req.body?.serviceUrl ?? '').trim()
+      const requested = cleanAmount(req.body?.maxAmount)
+      const maxAmount = Math.min(requested ?? MAX_SERVICE_AMOUNT, MAX_SERVICE_AMOUNT)
+      if (!ALLOWED_SERVICE_URLS.has(serviceUrl)) return res.status(403).json({ ok: false, error: 'Service URL is not allowlisted.' })
+      if (!maxAmount || maxAmount <= 0) return res.status(400).json({ ok: false, error: 'Invalid max amount.' })
+
+      const store = await readStore()
+      const record = store.agents?.[agentSlug]
+      if (!record?.walletAddress || !record.sessionId) {
+        return res.status(404).json({ ok: false, error: 'Agent wallet session not found. Create the wallet on the web dashboard first.' })
+      }
+
+      const serviceKey = `${agentSlug}_${record.sessionId}`
+      const output = await runCircle([
+        'services',
+        'pay',
+        serviceUrl,
+        '--address',
+        record.walletAddress,
+        '--chain',
+        'BASE',
+        '--max-amount',
+        String(maxAmount),
+      ], serviceKey)
+
+      return res.json({
+        ok: true,
+        agentSlug,
+        walletAddress: record.walletAddress,
+        serviceUrl,
+        maxAmount: String(maxAmount),
+        response: extractJsonFromCliOutput(output),
+        raw: output.slice(0, 3000),
+      })
     }
 
     return res.status(400).json({ ok: false, error: 'Unknown action.' })
