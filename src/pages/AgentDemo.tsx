@@ -14,7 +14,7 @@ import { cn }                           from '../lib/utils'
 import {
   CheckCircle2, AlertCircle, Loader2, Send,
   ExternalLink, ArrowLeft, ShieldCheck, Zap,
-  Wallet, CreditCard, Radio,
+  Wallet, CreditCard, Radio, Copy,
 } from 'lucide-react'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -52,6 +52,10 @@ export default function AgentDemo() {
   const [payer,      setPayer]      = useState(() => params.get('payer')   ?? '')
   const [fundAmount, setFundAmount] = useState(() => params.get('fund') ?? '10')
   const [currentAgentWallet, setCurrentAgentWallet] = useState(agentWallet)
+  const [agentWalletChain, setAgentWalletChain] = useState('')
+  const [treasuryBalance, setTreasuryBalance] = useState<string | null>(null)
+  const [treasuryBalanceError, setTreasuryBalanceError] = useState('')
+  const [copiedWallet, setCopiedWallet] = useState(false)
   const [walletEmail, setWalletEmail] = useState('')
   const [walletOtp, setWalletOtp] = useState('')
   const [walletMode, setWalletMode] = useState<'create' | 'login'>('create')
@@ -71,16 +75,22 @@ export default function AgentDemo() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, isAsking])
 
+  async function loadAgentWallet() {
+    const slug = agentSlug || 'hashpaylink-agent'
+    const res = await fetch(`/api/agent-wallet?agent=${encodeURIComponent(slug)}&balance=1`)
+    if (!res.ok) return
+    const data = await res.json() as { walletAddress?: string; chain?: string; balance?: string; balanceError?: string }
+    if (data.walletAddress) setCurrentAgentWallet(data.walletAddress)
+    if (data.chain) setAgentWalletChain(data.chain)
+    if (data.balance !== undefined) setTreasuryBalance(data.balance)
+    if (data.balanceError) setTreasuryBalanceError(data.balanceError)
+  }
+
   useEffect(() => {
     if (!showAgentProfile) return
-    const slug = agentSlug || 'hashpaylink-agent'
-    fetch(`/api/agent-wallet?agent=${encodeURIComponent(slug)}`)
-      .then(res => res.ok ? res.json() : undefined)
-      .then((data: { walletAddress?: string } | undefined) => {
-        if (data?.walletAddress) setCurrentAgentWallet(data.walletAddress)
-      })
+    loadAgentWallet()
       .catch(() => undefined)
-  }, [agentSlug, showAgentProfile])
+  }, [agentSlug, showAgentProfile]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-verify when eventId + payer arrive via access link URL params
   useEffect(() => {
@@ -146,6 +156,13 @@ export default function AgentDemo() {
     setMessages([])
   }
 
+  async function copyAgentWallet() {
+    if (!currentAgentWallet) return
+    await navigator.clipboard.writeText(currentAgentWallet)
+    setCopiedWallet(true)
+    window.setTimeout(() => setCopiedWallet(false), 1600)
+  }
+
   function buildAgentFundUrl() {
     const p = new URLSearchParams()
     p.set('id', `agent-${agentSlug || 'hashpaylink'}-fund-${Date.now().toString(36)}`)
@@ -188,13 +205,17 @@ export default function AgentDemo() {
           testnet: true,
         }),
       })
-      const data = await res.json() as { ok?: boolean; error?: string; walletAddress?: string }
+      const data = await res.json() as { ok?: boolean; error?: string; walletAddress?: string; chain?: string }
       if (!res.ok || !data.ok) throw new Error(data.error ?? 'Circle Agent Wallet request failed')
       if (action === 'init') {
         setWalletStep('otp')
       } else if (data.walletAddress) {
         setCurrentAgentWallet(data.walletAddress)
+        if (data.chain) setAgentWalletChain(data.chain)
+        setTreasuryBalance(null)
+        setTreasuryBalanceError('')
         setWalletStep('done')
+        void loadAgentWallet()
       }
     } catch (err) {
       setWalletError(err instanceof Error ? err.message : 'Circle Agent Wallet request failed')
@@ -224,13 +245,30 @@ export default function AgentDemo() {
               <h1 className="mt-1 truncate text-lg font-semibold text-gray-900 dark:text-white">
                 {agentSlug || 'Hash PayLink Agent'}
               </h1>
-              <p className="mt-1 truncate font-mono text-xs text-gray-500 dark:text-gray-400">
-                {currentAgentWallet || 'Circle Agent Wallet not configured'}
-              </p>
+              <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2">
+                <p className="max-w-full truncate font-mono text-xs text-gray-500 dark:text-gray-400">
+                  {currentAgentWallet || 'Circle Agent Wallet not configured'}
+                </p>
+                {currentAgentWallet && (
+                  <button
+                    type="button"
+                    onClick={copyAgentWallet}
+                    className="relative inline-flex h-7 items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 text-[11px] font-semibold text-gray-600 transition-colors hover:bg-gray-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300"
+                  >
+                    <Copy className="h-3 w-3" />
+                    Copy
+                    {copiedWallet && (
+                      <span className="absolute left-1/2 top-full z-10 mt-1 -translate-x-1/2 whitespace-nowrap rounded-md bg-gray-900 px-2 py-1 text-[10px] font-semibold text-white shadow-lg">
+                        Copied
+                      </span>
+                    )}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
-          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+          <div className="mt-5 grid gap-3 sm:grid-cols-4">
             <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
               <CreditCard className="h-4 w-4 text-gray-400" />
               <p className="mt-2 text-xs font-semibold text-gray-800 dark:text-gray-100">Ask</p>
@@ -247,6 +285,18 @@ export default function AgentDemo() {
               <Wallet className="h-4 w-4 text-gray-400" />
               <p className="mt-2 text-xs font-semibold text-gray-800 dark:text-gray-100">Fund</p>
               <p className="text-xs text-gray-500">Treasury on {agentNetwork}</p>
+            </div>
+            <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
+              <ShieldCheck className="h-4 w-4 text-gray-400" />
+              <p className="mt-2 text-xs font-semibold text-gray-800 dark:text-gray-100">Balance</p>
+              <p className="text-xs text-gray-500">
+                {treasuryBalance !== null
+                  ? `${Number(treasuryBalance).toLocaleString(undefined, { maximumFractionDigits: 6 })} USDC`
+                  : currentAgentWallet
+                  ? treasuryBalanceError ? 'Unavailable' : 'Checking...'
+                  : 'No wallet'}
+              </p>
+              {agentWalletChain && <p className="mt-0.5 text-[10px] font-medium text-gray-400">{agentWalletChain}</p>}
             </div>
           </div>
 

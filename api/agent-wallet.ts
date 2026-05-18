@@ -104,6 +104,34 @@ function parseWalletAddress(output: string) {
   return output.match(/0x[a-fA-F0-9]{40}/)?.[0]
 }
 
+function parseBalance(output: string) {
+  try {
+    const parsed = JSON.parse(output) as unknown
+    const queue = [parsed]
+    while (queue.length) {
+      const item = queue.shift()
+      if (!item) continue
+      if (Array.isArray(item)) queue.push(...item)
+      if (typeof item !== 'object') continue
+      const record = item as Record<string, unknown>
+      const raw =
+        record.balance ??
+        record.amount ??
+        record.availableBalance ??
+        record.available ??
+        record.value
+      if (typeof raw === 'number' || typeof raw === 'string') {
+        const value = String(raw)
+        if (/^\d+(\.\d+)?$/.test(value)) return value
+      }
+      queue.push(...Object.values(record))
+    }
+  } catch {
+    // CLI can return text tables depending on version; parse those below.
+  }
+  return output.match(/\b\d+(?:\.\d+)?\s+USDC\b/i)?.[0]?.replace(/\s+USDC/i, '')
+}
+
 async function runCircle(args: string[], key: string) {
   const sessionHome = resolve(process.cwd(), 'data', 'circle-web-sessions', safeSessionKey(key))
   await mkdir(sessionHome, { recursive: true })
@@ -127,12 +155,30 @@ export default async function handler(req: Request, res: Response) {
     if (!agentSlug) return res.status(400).json({ ok: false, error: 'Missing agent name.' })
     const store = await readStore()
     const record = store.agents?.[agentSlug]
+    let balance: string | undefined
+    let balanceError: string | undefined
+    if (record?.walletAddress && record.sessionId && req.query.balance === '1' && CIRCLE_CLI_ENABLED) {
+      try {
+        const key = `${agentSlug}_${record.sessionId}`
+        let output = ''
+        try {
+          output = await runCircle(['wallet', 'balance', '--address', record.walletAddress, '--chain', record.chain, '--output', 'json'], key)
+        } catch {
+          output = await runCircle(['wallet', 'balance', '--address', record.walletAddress, '--chain', record.chain], key)
+        }
+        balance = parseBalance(output)
+      } catch (err) {
+        balanceError = err instanceof Error ? err.message.slice(0, 240) : 'Balance lookup failed.'
+      }
+    }
     return res.json({
       ok: true,
       found: !!record,
       agentSlug,
       walletAddress: record?.walletAddress,
       chain: record?.chain,
+      balance,
+      balanceError,
       updatedAt: record?.updatedAt,
     })
   }
