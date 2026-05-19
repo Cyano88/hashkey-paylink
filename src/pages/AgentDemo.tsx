@@ -251,7 +251,7 @@ export default function AgentDemo() {
           agentSlug: agentSlug || 'hashpaylink-agent',
           email: walletEmail,
           otp: walletOtp,
-          testnet: true,
+          testnet: agentNetwork === 'arc',
         }),
       })
       const data = await res.json() as { ok?: boolean; error?: string; walletAddress?: string; chain?: string }
