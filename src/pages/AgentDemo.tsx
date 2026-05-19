@@ -355,12 +355,12 @@ export default function AgentDemo() {
           </div>
 
           {!currentAgentWallet && (
-            <div className="mt-5 rounded-xl border border-blue-100 bg-blue-50/60 p-4 dark:border-blue-900/30 dark:bg-blue-900/10">
+            <div className="mt-5 rounded-xl border border-gray-200 bg-gray-50/70 p-4 dark:border-white/10 dark:bg-white/[0.04]">
               <div className="flex items-center gap-2">
-                <Wallet className="h-4 w-4 text-blue-600" />
+                <Wallet className="h-4 w-4 text-gray-600 dark:text-gray-300" />
                 <p className="text-sm font-semibold text-gray-900 dark:text-white">Connect Circle Agent Wallet</p>
               </div>
-              <p className="mt-1 text-xs text-blue-700 dark:text-blue-300">
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                 Create a wallet, or login with the same Circle email to reconnect an existing one.
               </p>
               <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_120px_150px]">
@@ -370,13 +370,13 @@ export default function AgentDemo() {
                   onChange={e => setWalletEmail(e.target.value)}
                   placeholder="you@example.com"
                   disabled={walletBusy || walletStep === 'done'}
-                  className="min-w-0 rounded-lg border border-blue-100 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-blue-200 disabled:opacity-60 dark:border-white/10 dark:bg-white/[0.06] dark:text-white"
+                  className="min-w-0 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-gray-200 disabled:opacity-60 dark:border-white/10 dark:bg-white/[0.06] dark:text-white"
                 />
                 <button
                   type="button"
                   onClick={() => callAgentWallet('init', 'create')}
                   disabled={walletBusy || !walletEmail.trim() || walletStep === 'done'}
-                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white transition-all hover:bg-blue-700 disabled:opacity-50"
+                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-black px-3 py-2 text-sm font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
                 >
                   {walletBusy && walletStep === 'idle' && walletMode === 'create' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wallet className="h-4 w-4" />}
                   Create
@@ -385,7 +385,7 @@ export default function AgentDemo() {
                   type="button"
                   onClick={() => callAgentWallet('init', 'login')}
                   disabled={walletBusy || !walletEmail.trim() || walletStep === 'done'}
-                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm font-semibold text-blue-700 transition-all hover:bg-blue-50 disabled:opacity-50 dark:border-blue-900/40 dark:bg-white/[0.04] dark:text-blue-300"
+                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/[0.1]"
                 >
                   {walletBusy && walletStep === 'idle' && walletMode === 'login' ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
                   Login
@@ -415,7 +415,7 @@ export default function AgentDemo() {
 
               {walletError && <p className="mt-2 text-xs font-medium text-red-600">{walletError}</p>}
               {walletStep === 'otp' && !walletError && (
-                <p className="mt-2 text-xs text-blue-700 dark:text-blue-300">
+                <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
                   Circle sent an OTP to your email. Enter it here to {walletMode === 'login' ? 'reconnect and attach' : 'create and attach'} the agent wallet.
                 </p>
               )}
