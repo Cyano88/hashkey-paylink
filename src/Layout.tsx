@@ -165,7 +165,7 @@ export type LayoutOutletContext = {
 }
 
 // ─── Network Toolkit ─────────────────────────────────────────────────────────
-const ALL_NETWORKS = [CHAIN_META.base, CHAIN_META.arbitrum, CHAIN_META.arc, CHAIN_META.starknet, CHAIN_META.solana]
+const ALL_NETWORKS = [CHAIN_META.base, CHAIN_META.arbitrum, CHAIN_META.solana]
 
 function StarknetIcon({ className }: { className?: string }) {
   return (
@@ -315,7 +315,7 @@ export default function Layout() {
     !!searchParams.get('wallet') ||
     !!searchParams.get('e')
   )
-  const agentNetworks = [CHAIN_META.base, CHAIN_META.arbitrum, CHAIN_META.arc] as const
+  const agentNetworks = [CHAIN_META.base, CHAIN_META.arbitrum] as const
   // Both the pay page and the dashboard show a locked chain pill from the URL param
   const pageNetParam = (isPayPage || isDashPage) ? (getPaylinkParam(searchParams, 'net', 'n') as ChainKey | '') : ''
   const activeNet = (pageNetParam && pageNetParam in CHAIN_META) ? pageNetParam : null
@@ -352,7 +352,7 @@ export default function Layout() {
 
   const anyConnected = evmConnected || !!starkAddress || !!solanaAddress
   const evmNetKey    = evmConnected
-    ? ([CHAIN_META.base, CHAIN_META.hashkey, CHAIN_META.arc] as const).find(n => n.chainId === evmChainId)?.key ?? null
+    ? ([CHAIN_META.base, CHAIN_META.arbitrum, CHAIN_META.hashkey] as const).find(n => n.chainId === evmChainId)?.key ?? null
     : null
   const connectedNetKey: ChainKey | null = starkAddress ? 'starknet' : solanaAddress ? 'solana' : evmNetKey
   const displayAddress = starkAddress ?? solanaAddress ?? evmAddress ?? null
@@ -536,7 +536,7 @@ export default function Layout() {
               ? <NetworkToolkit activeKey={isPayPage ? (payChain ?? activeNet) : dashboardActiveNet} label={dashboardNetworkLabel} locked />
               : isAgentProfilePage
               ? <NetworkToolkit
-                  activeKey={selectedNet === 'base' || selectedNet === 'arbitrum' || selectedNet === 'arc' ? selectedNet : 'base'}
+                  activeKey={selectedNet === 'base' || selectedNet === 'arbitrum' ? selectedNet : 'base'}
                   networks={agentNetworks}
                   onSwitch={handleNetworkSelect}
                 />

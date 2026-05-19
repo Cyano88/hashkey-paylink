@@ -61,7 +61,8 @@ type CircleSolanaSession = Awaited<ReturnType<typeof connectCircleSolanaEmailWal
 type CircleEvmEmailSession = Awaited<ReturnType<typeof connectCircleEvmEmailWallet>>
 type ArgentStarknetSession = Awaited<ReturnType<typeof connectArgentStarknetEmailWallet>>
 
-const CHAINS: ChainKey[] = ['base', 'starknet', 'arc', 'solana', 'arbitrum']
+const CHAINS: ChainKey[] = ['base', 'solana', 'arbitrum']
+const POLYMARKET_SIGNUP_URL = 'https://polymarket.com/signup'
 
 const CHAIN_DISPLAY_NAMES: Record<number, string> = {
   1:       'Ethereum',
@@ -278,6 +279,7 @@ export default function PaymentPage() {
   const [receivedAmount,    setReceivedAmount]    = useState<bigint | null>(null)
   const [showCheckButton,   setShowCheckButton]   = useState(false)
   const [isManualChecking,  setIsManualChecking]  = useState(false)
+  const [polymarketFundingStep, setPolymarketFundingStep] = useState<'choose' | 'fund'>('choose')
 
   // ── Event mode ─────────────────────────────────────────────────────────────
   // Capture event params from the INITIAL URL at mount — before the direct-send
@@ -289,6 +291,7 @@ export default function PaymentPage() {
   const [attendeeName,   setAttendeeName]   = useState('')
   const [eventRegStatus, setEventRegStatus] = useState<'idle' | 'pending' | 'ok' | 'error'>('idle')
   const eventRegistered  = useRef(false)
+  const requiresAttendeeName = isEventMode && !isPolymarketFunding
 
   // ── FX display (event mode only — reads params baked into the URL at link creation) ──
   const fxCurrency  = isEventMode ? getPaylinkParam(initParams, 'fx', 'fx') : ''
@@ -520,6 +523,15 @@ export default function PaymentPage() {
   const showCircleEmailPay = showCircleEvmEmailPay || showCirclePasskeyPay
   const showCircleSolanaEmailPay = chain === 'solana' && canUseCircleSolanaEmailWallet()
   const showArgentStarknetEmailPay = chain === 'starknet' && canUseArgentStarknetEmailWallet()
+  const showPolymarketFundingChoice =
+    isPolymarketFunding &&
+    payMode === 'wallet' &&
+    (showCircleEmailPay || showCircleSolanaEmailPay) &&
+    chain !== 'starknet' &&
+    !manualPayDetected &&
+    !circleSmartAccount &&
+    !circleSolanaSession &&
+    polymarketFundingStep === 'choose'
   const circleRequiredUnits = (() => {
     try {
       return parseUnits(effectiveAmt || '0', meta.decimals)
@@ -569,7 +581,7 @@ export default function PaymentPage() {
 
   const missingStark   = chain === 'starknet' && !resolvedStark
   const missingSolana  = chain === 'solana'   && !resolvedSolana
-  const effectiveMemo  = isEventMode ? attendeeName : (isFlex ? (flexMemo || memo) : memo)
+  const effectiveMemo  = requiresAttendeeName ? attendeeName : (isFlex ? (flexMemo || memo) : memo)
 
   const isValidParams =
     (isFlex || (!isNaN(parseFloat(amt)) && parseFloat(amt) > 0)) &&
@@ -2287,7 +2299,7 @@ export default function PaymentPage() {
           </div>
 
           {/* ── Attendee name (event mode) ───────────────────────────────── */}
-          {isEventMode && (() => {
+          {requiresAttendeeName && (() => {
             const paid = isConfirmed
             return (
               <div className="space-y-1.5">
@@ -2381,19 +2393,19 @@ export default function PaymentPage() {
                   </p>
                   <div className={cn(
                     'flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3.5 transition-opacity duration-200',
-                    isEventMode && !attendeeName.trim() && 'opacity-40',
+                    requiresAttendeeName && !attendeeName.trim() && 'opacity-40',
                   )}>
                     <p className="min-w-0 flex-1 break-all font-mono text-xs text-gray-800">{directDisplayAddr}</p>
                     <button
                       onClick={() => {
-                        if (isEventMode && !attendeeName.trim()) return
+                        if (requiresAttendeeName && !attendeeName.trim()) return
                         navigator.clipboard.writeText(directDisplayAddr!)
                         setDirectAddrCopied(true)
                         setTimeout(() => setDirectAddrCopied(false), 2500)
                       }}
                       className={cn(
                         'ml-2 shrink-0 flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-600 transition-all',
-                        isEventMode && !attendeeName.trim()
+                        requiresAttendeeName && !attendeeName.trim()
                           ? 'cursor-not-allowed'
                           : 'hover:bg-gray-100 active:scale-90',
                       )}
@@ -2468,19 +2480,19 @@ export default function PaymentPage() {
                   <p className="text-center text-xs text-gray-500">Send USDC on Solana to this address</p>
                   <div className={cn(
                     'flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3.5 transition-opacity duration-200',
-                    isEventMode && !attendeeName.trim() && 'opacity-40',
+                    requiresAttendeeName && !attendeeName.trim() && 'opacity-40',
                   )}>
                     <p className="min-w-0 flex-1 break-all font-mono text-xs text-gray-800">{solanaVaultAddr}</p>
                     <button
                       onClick={() => {
-                        if (isEventMode && !attendeeName.trim()) return
+                        if (requiresAttendeeName && !attendeeName.trim()) return
                         navigator.clipboard.writeText(solanaVaultAddr!)
                         setSolanaAddrCopied(true)
                         setTimeout(() => setSolanaAddrCopied(false), 2500)
                       }}
                       className={cn(
                         'ml-2 shrink-0 flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-600 transition-all',
-                        isEventMode && !attendeeName.trim()
+                        requiresAttendeeName && !attendeeName.trim()
                           ? 'cursor-not-allowed'
                           : 'hover:bg-gray-100 active:scale-90',
                       )}
@@ -2603,7 +2615,34 @@ export default function PaymentPage() {
             </div>
           )}
 
-          {payMode === 'wallet' && showCircleEmailPay && chain !== 'starknet' && chain !== 'solana' && !manualPayDetected && (
+          {showPolymarketFundingChoice && (
+            <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
+              <button
+                type="button"
+                onClick={() => setPolymarketFundingStep('fund')}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-6 py-3.5 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+              >
+                <Wallet className="h-4 w-4" />
+                Fund account
+              </button>
+              <a
+                href={POLYMARKET_SIGNUP_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex w-full flex-col items-center justify-center gap-1 rounded-xl border border-gray-200 bg-white px-6 py-3 text-sm font-semibold text-gray-800 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-white dark:hover:bg-white/[0.1]"
+              >
+                <span className="inline-flex items-center gap-2">
+                  <ExternalLink className="h-4 w-4" />
+                  Not on Polymarket yet? Sign up
+                </span>
+                <span className="text-[11px] font-medium text-gray-400 dark:text-gray-500">
+                  For best experience, sign up with email
+                </span>
+              </a>
+            </div>
+          )}
+
+          {payMode === 'wallet' && showCircleEmailPay && chain !== 'starknet' && chain !== 'solana' && !manualPayDetected && (!isPolymarketFunding || polymarketFundingStep === 'fund' || !!circleSmartAccount) && (
             <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
               {!circleSmartAccount && (
                 <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.06]">
@@ -2612,7 +2651,7 @@ export default function PaymentPage() {
                     value={circleEmail}
                     onChange={(e) => setCircleEmail(e.target.value)}
                     placeholder="Email for gasless payment"
-                    disabled={circlePasskeyPending || circleEvmPaymentProcessing || (isEventMode && !attendeeName.trim())}
+                    disabled={circlePasskeyPending || circleEvmPaymentProcessing || (requiresAttendeeName && !attendeeName.trim())}
                     className="min-w-0 flex-1 bg-transparent text-sm text-gray-800 placeholder:text-gray-400 outline-none dark:text-white dark:placeholder:text-gray-500"
                   />
                   <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">Gas Sponsored</span>
@@ -2620,7 +2659,7 @@ export default function PaymentPage() {
               )}
               <button
                 onClick={handleCirclePasskeyPay}
-                disabled={circlePasskeyPending || circleEvmPaymentProcessing || (isEventMode && !attendeeName.trim())}
+                disabled={circlePasskeyPending || circleEvmPaymentProcessing || (requiresAttendeeName && !attendeeName.trim())}
                 className={cn(
                   'flex w-full items-center justify-center gap-2 rounded-xl px-6 py-3.5 text-sm font-semibold transition-all',
                   circlePasskeyPending || circleEvmPaymentProcessing
@@ -2679,7 +2718,7 @@ export default function PaymentPage() {
               {circlePasskeyError && (
                 <p className="text-center text-[11px] font-medium text-red-600 dark:text-red-300">{circlePasskeyError}</p>
               )}
-              {!isTelegramSource && (
+              {!isPolymarketFunding && !isTelegramSource && (
                 <div className="flex items-center gap-3">
                   <div className="h-px flex-1 bg-gray-200 dark:bg-white/10" />
                   <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">or</span>
@@ -2700,7 +2739,7 @@ export default function PaymentPage() {
               <AlertTriangle className="h-4 w-4" />
               No Solana Address Available
             </button>
-          ) : payMode === 'wallet' && chain === 'solana' ? (
+          ) : payMode === 'wallet' && chain === 'solana' && (!isPolymarketFunding || polymarketFundingStep === 'fund' || !!circleSolanaSession) ? (
               <div className="space-y-2">
                 {showCircleSolanaEmailPay && !manualPayDetected && (
                   <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50/70 p-3">
@@ -2711,7 +2750,7 @@ export default function PaymentPage() {
                           value={circleSolanaEmail}
                           onChange={(e) => setCircleSolanaEmail(e.target.value)}
                           placeholder="Email for gasless payment"
-                          disabled={circleSolanaPending || (isEventMode && !attendeeName.trim())}
+                          disabled={circleSolanaPending || (requiresAttendeeName && !attendeeName.trim())}
                           className="min-w-0 flex-1 bg-transparent text-sm text-gray-800 placeholder:text-gray-400 outline-none"
                         />
                         <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">Gas Sponsored</span>
@@ -2719,7 +2758,7 @@ export default function PaymentPage() {
                     )}
                     <button
                       onClick={handleCircleSolanaEmailPay}
-                      disabled={circleSolanaPending || isSolanaConfirming || (isEventMode && !attendeeName.trim())}
+                      disabled={circleSolanaPending || isSolanaConfirming || (requiresAttendeeName && !attendeeName.trim())}
                       className={cn(
                         'flex w-full items-center justify-center gap-2 rounded-xl px-6 py-3.5 text-sm font-semibold transition-all',
                         circleSolanaPending || isSolanaConfirming
@@ -2776,7 +2815,7 @@ export default function PaymentPage() {
                         {isSmartWalletBalanceError(circleSolanaError) ? circleSolanaError : `Transaction failed: ${circleSolanaError}`}
                       </p>
                     )}
-                    {!isTelegramSource && (
+                    {!isPolymarketFunding && !isTelegramSource && (
                       <div className="flex items-center gap-3">
                         <div className="h-px flex-1 bg-gray-200" />
                         <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">or</span>
@@ -2785,11 +2824,11 @@ export default function PaymentPage() {
                     )}
                   </div>
                 )}
-                {!isTelegramSource && !solanaWalletAddr ? (
+                {!isPolymarketFunding && !isTelegramSource && !solanaWalletAddr ? (
                   <>
                 <button
                   onClick={connectSolana}
-                  disabled={isSolanaConnecting || (isEventMode && !attendeeName.trim())}
+                  disabled={isSolanaConnecting || (requiresAttendeeName && !attendeeName.trim())}
                   className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#14F195] px-6 py-4 text-sm font-semibold text-gray-900 transition-all hover:bg-[#00E589] active:scale-[0.98] disabled:opacity-60"
                 >
                   {isSolanaConnecting
@@ -2798,10 +2837,10 @@ export default function PaymentPage() {
                 </button>
                 <p className="text-center text-xs text-gray-400">Phantom, Solflare & other Solana wallets</p>
                   </>
-                ) : !isTelegramSource ? (
+                ) : !isPolymarketFunding && !isTelegramSource ? (
               <button
                 onClick={handlePay}
-                disabled={isSolanaPending || isSolanaConfirming || (isEventMode && !attendeeName.trim()) || flexPayDisabled}
+                disabled={isSolanaPending || isSolanaConfirming || (requiresAttendeeName && !attendeeName.trim()) || flexPayDisabled}
                 className={cn(
                   'flex w-full items-center justify-center gap-2 rounded-xl px-6 py-4 text-sm font-semibold transition-all',
                   isSolanaPending || isSolanaConfirming
@@ -2822,7 +2861,7 @@ export default function PaymentPage() {
                   <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50/70 p-3">
                     <button
                       onClick={handleArgentStarknetEmailPay}
-                      disabled={argentStarkPending || isStarkPending || isStarkConfirming || (isEventMode && !attendeeName.trim()) || flexPayDisabled}
+                      disabled={argentStarkPending || isStarkPending || isStarkConfirming || (requiresAttendeeName && !attendeeName.trim()) || flexPayDisabled}
                       className={cn(
                         'flex w-full items-center justify-center gap-2 rounded-xl px-6 py-3.5 text-sm font-semibold transition-all',
                         argentStarkPending || isStarkPending || isStarkConfirming
@@ -2892,14 +2931,14 @@ export default function PaymentPage() {
                     )}
                   </div>
                 )}
-                <button onClick={connectStarknet} disabled={isStarkConnecting || !window.starknet || (isEventMode && !attendeeName.trim())}
+                <button onClick={connectStarknet} disabled={isStarkConnecting || !window.starknet || (requiresAttendeeName && !attendeeName.trim())}
                   className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#6236FF] px-6 py-4 text-sm font-semibold text-white transition-all hover:bg-[#5025EE] active:scale-[0.98] disabled:opacity-60">
                   {isStarkConnecting ? <><Loader2 className="h-4 w-4 animate-spin" /> Connecting…</> : <><Wallet className="h-4 w-4" /> {showArgentStarknetEmailPay ? 'Use ArgentX / Braavos' : 'Connect Starknet Wallet'}</>}
                 </button>
                 <p className="text-center text-xs text-gray-400">{showArgentStarknetEmailPay ? 'Browser wallet fallback' : 'ArgentX, Braavos & other Starknet wallets'}</p>
               </div>
             ) : (
-              <button onClick={handlePay} disabled={isStarkPending || isStarkConfirming || (isEventMode && !attendeeName.trim()) || flexPayDisabled}
+              <button onClick={handlePay} disabled={isStarkPending || isStarkConfirming || (requiresAttendeeName && !attendeeName.trim()) || flexPayDisabled}
                 className={cn(
                   'flex w-full items-center justify-center gap-2 rounded-xl px-6 py-4 text-sm font-semibold transition-all',
                   isStarkPending || isStarkConfirming ? 'cursor-not-allowed bg-gray-100 text-gray-500'
@@ -2910,10 +2949,10 @@ export default function PaymentPage() {
                 : <><Zap className="h-4 w-4" /> Pay {formatAmount(effectiveAmt, 6)} USDC on Starknet</>}
               </button>
             )
-          ) : payMode === 'wallet' && !isTelegramSource && !isConnected ? (
+          ) : payMode === 'wallet' && !isPolymarketFunding && !isTelegramSource && !isConnected ? (
             <div className={cn(
               'flex flex-col items-center gap-1.5',
-              isEventMode && !attendeeName.trim() && 'pointer-events-none opacity-50 select-none',
+              requiresAttendeeName && !attendeeName.trim() && 'pointer-events-none opacity-50 select-none',
             )}>
               <button
                 type="button"
@@ -2927,7 +2966,7 @@ export default function PaymentPage() {
                 <p className="text-center text-xs text-gray-400">Gas in ETH</p>
               )}
             </div>
-          ) : payMode === 'wallet' && !isTelegramSource && !isCorrectNetwork ? (
+          ) : payMode === 'wallet' && !isPolymarketFunding && !isTelegramSource && !isCorrectNetwork ? (
             <button onClick={() => switchChain({ chainId: targetChainId })} disabled={isSwitching}
               className="flex w-full items-center justify-center gap-2 rounded-xl px-6 py-4 text-sm font-semibold text-white transition-all active:scale-[0.98] disabled:opacity-70"
               style={{ backgroundColor: meta.accentColor }}>
@@ -2935,9 +2974,9 @@ export default function PaymentPage() {
                 ? <><Loader2 className="h-4 w-4 animate-spin" /> Switching…</>
                 : <><RefreshCw className="h-4 w-4" /> Switch to {meta.label}</>}
             </button>
-          ) : payMode === 'wallet' && !isTelegramSource ? (
+          ) : payMode === 'wallet' && !isPolymarketFunding && !isTelegramSource ? (
             <div className="space-y-2">
-              <button onClick={handlePay} disabled={isWalletPending || isConfirming || (isEventMode && !attendeeName.trim()) || flexPayDisabled}
+              <button onClick={handlePay} disabled={isWalletPending || isConfirming || (requiresAttendeeName && !attendeeName.trim()) || flexPayDisabled}
               className={cn(
                 'flex w-full items-center justify-center gap-2 rounded-xl px-6 py-4 text-sm font-semibold transition-all',
                 isWalletPending || isConfirming ? 'cursor-not-allowed bg-gray-100 text-gray-500'
