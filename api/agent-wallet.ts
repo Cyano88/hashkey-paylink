@@ -4,6 +4,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import crypto from 'node:crypto'
+import { appendAgentActivity, listAgentActivity } from './agent-activity.js'
 
 const execFileAsync = promisify(execFile)
 const CIRCLE_BIN = process.platform === 'win32' ? 'circle.cmd' : 'circle'
@@ -33,6 +34,7 @@ type PendingSession = {
 type StoreData = {
   pending: Record<string, PendingSession>
   agents?: Record<string, { walletAddress: string; chain: string; emailHash?: string; sessionId?: string; updatedAt: number }>
+  activity?: Record<string, unknown[]>
 }
 
 function normalizeEmail(value: unknown) {
@@ -295,6 +297,7 @@ export default async function handler(req: Request, res: Response) {
       gatewayBalanceChecked,
       gatewayBalanceError,
       gatewayBalanceChain: GATEWAY_BALANCE_CHAIN,
+      activity: await listAgentActivity(agentSlug),
       updatedAt: record?.updatedAt,
     })
   }
@@ -374,6 +377,15 @@ export default async function handler(req: Request, res: Response) {
         [agentSlug]: { walletAddress, chain, emailHash: pending.emailHash, sessionId: id, updatedAt: Date.now() },
       }
       await writeStore(store)
+      await appendAgentActivity({
+        agentSlug,
+        type: 'wallet_connected',
+        title: 'Circle Agent Wallet connected',
+        direction: 'system',
+        network: chain,
+        wallet: walletAddress,
+        detail: pending.testnet ? 'Testnet session connected' : 'Mainnet session connected',
+      })
       return res.json({ ok: true, walletAddress, chain, agentSlug })
     }
 
@@ -449,6 +461,17 @@ export default async function handler(req: Request, res: Response) {
         }
         throw err
       }
+      await appendAgentActivity({
+        agentSlug,
+        type: 'gateway_activated',
+        title: 'Activated x402 Gateway balance',
+        amount: String(amount),
+        asset: 'USDC',
+        direction: 'in',
+        network: GATEWAY_BALANCE_CHAIN,
+        wallet: record.walletAddress,
+        detail: `Deposited from ${GATEWAY_DEPOSIT_CHAIN}`,
+      })
 
       return res.json({
         ok: true,
@@ -505,6 +528,29 @@ export default async function handler(req: Request, res: Response) {
         }
         throw err
       }
+      const parsedResponse = extractJsonFromCliOutput(output)
+      await appendAgentActivity({
+        agentSlug,
+        type: 'x402_spent',
+        title: 'Bought LP Scout API',
+        amount: String(maxAmount),
+        asset: 'USDC',
+        direction: 'out',
+        network: 'Circle Gateway x402',
+        wallet: record.walletAddress,
+        serviceUrl,
+        detail: 'Agent paid a machine-to-machine service',
+      })
+      await appendAgentActivity({
+        agentSlug,
+        type: 'scout_returned',
+        title: 'Live Polymarket scout returned',
+        direction: 'result',
+        network: 'Polymarket CLOB',
+        wallet: record.walletAddress,
+        serviceUrl,
+        detail: 'API returned ranked LP opportunities',
+      })
 
       return res.json({
         ok: true,
@@ -512,7 +558,7 @@ export default async function handler(req: Request, res: Response) {
         walletAddress: record.walletAddress,
         serviceUrl,
         maxAmount: String(maxAmount),
-        response: extractJsonFromCliOutput(output),
+        response: parsedResponse,
         raw: output.slice(0, 3000),
       })
     }

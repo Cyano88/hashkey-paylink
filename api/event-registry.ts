@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express'
 import { archivePayment }          from './og-storage.js'
+import { appendAgentActivity, normalizeActivitySlug } from './agent-activity.js'
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs'
 import { dirname }                 from 'path'
 
@@ -71,6 +72,7 @@ export function registerEventPayment(req: Request, res: Response): void {
   let memo: string
   let chain: string
   let amount: string
+  let agentSlug = ''
 
   try {
     eventId = cleanString(req.body?.eventId, 'eventId', MAX_EVENT_ID_LENGTH)
@@ -79,6 +81,7 @@ export function registerEventPayment(req: Request, res: Response): void {
     memo = cleanString(req.body?.memo, 'memo', MAX_TEXT_LENGTH)
     chain = cleanOptionalString(req.body?.chain, MAX_TEXT_LENGTH)
     amount = cleanOptionalString(req.body?.amount, MAX_AMOUNT_LENGTH)
+    agentSlug = normalizeActivitySlug(req.body?.agentSlug)
   } catch (err) {
     res.status(400).json({ ok: false, error: err instanceof Error ? err.message : 'Invalid request' })
     return
@@ -98,6 +101,21 @@ export function registerEventPayment(req: Request, res: Response): void {
   registry.set(eventId, entries)
   persistRegistry()
   res.json({ ok: true })
+  if (agentSlug) {
+    void appendAgentActivity({
+      agentSlug,
+      type: 'funded',
+      title: 'Human funded agent wallet',
+      amount,
+      asset: 'USDC',
+      direction: 'in',
+      network: chain,
+      wallet: payer,
+      txHash,
+      detail: memo,
+      createdAt: entry.ts,
+    }).catch(() => {})
+  }
 
   // Fire-and-forget archive to 0G decentralized storage — non-blocking.
   // When complete, patch the entry in-place so the dashboard can show the badge.

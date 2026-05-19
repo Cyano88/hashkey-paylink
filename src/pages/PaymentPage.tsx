@@ -290,10 +290,12 @@ export default function PaymentPage() {
   const isEventMode      = hasPaylinkFlag(initParams, 'event', 'v')
   const eventId          = initParams.get('id') ?? ''
   const agentUrl         = getPaylinkParam(initParams, 'agent', 'g')
+  const agentFundingSlug = getPaylinkParam(initParams, 'agentSlug', 'agent')
+  const isAgentFunding   = getPaylinkParam(initParams, 'src', 'src') === 'agent' && !!agentFundingSlug
   const [attendeeName,   setAttendeeName]   = useState('')
   const [eventRegStatus, setEventRegStatus] = useState<'idle' | 'pending' | 'ok' | 'error'>('idle')
   const eventRegistered  = useRef(false)
-  const requiresAttendeeName = isEventMode && !isPolymarketFunding
+  const requiresAttendeeName = isEventMode && !isPolymarketFunding && !isAgentFunding
 
   // ── FX display (event mode only — reads params baked into the URL at link creation) ──
   const fxCurrency  = isEventMode ? getPaylinkParam(initParams, 'fx', 'fx') : ''
@@ -1777,7 +1779,7 @@ export default function PaymentPage() {
     const actualAmt = receivedAmount != null
       ? (Number(receivedAmount) / Math.pow(10, meta.decimals)).toFixed(meta.decimals <= 6 ? 6 : 8)
       : effectiveAmt
-    const payload = { eventId, txHash, chain, payer, memo: name, amount: actualAmt }
+    const payload = { eventId, txHash, chain, payer, memo: name || memo || 'Agent wallet funding', amount: actualAmt, agentSlug: agentFundingSlug || undefined }
     console.log('[EventReg] posting:', payload)
     setEventRegStatus('pending')
     try {
@@ -1797,7 +1799,7 @@ export default function PaymentPage() {
 
   useEffect(() => {
     if (!isConfirmed || !isEventMode || !eventId || eventRegistered.current) return
-    const name = attendeeName.trim()
+    const name = isAgentFunding ? (memo || 'Agent wallet funding') : attendeeName.trim()
     console.log('[EventReg] triggered — name:', name, 'eventId:', eventId)
     if (!name) return
     eventRegistered.current = true
@@ -1809,7 +1811,7 @@ export default function PaymentPage() {
   // in case the Transfer event watcher hasn't set manualPayDetected yet.
   useEffect(() => {
     if (directStatus !== 'success' || !isEventMode || !eventId || eventRegistered.current) return
-    const name = attendeeName.trim()
+    const name = isAgentFunding ? (memo || 'Agent wallet funding') : attendeeName.trim()
     if (!name) return
     eventRegistered.current = true
     void doRegister(name)
@@ -1819,7 +1821,7 @@ export default function PaymentPage() {
   // Fallback: register when Solana direct-send sweep succeeds.
   useEffect(() => {
     if (solanaDirectStatus !== 'success' || !isEventMode || !eventId || eventRegistered.current) return
-    const name = attendeeName.trim()
+    const name = isAgentFunding ? (memo || 'Agent wallet funding') : attendeeName.trim()
     if (!name) return
     eventRegistered.current = true
     void doRegister(name)

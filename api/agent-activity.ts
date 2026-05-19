@@ -1,0 +1,81 @@
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { dirname } from 'node:path'
+import crypto from 'node:crypto'
+
+const STORE_PATH = process.env.AGENT_WALLET_PROVISION_STORE ?? './data/agent-wallet-provisioning.json'
+
+export type AgentActivityType =
+  | 'wallet_connected'
+  | 'funded'
+  | 'gateway_activated'
+  | 'x402_spent'
+  | 'scout_returned'
+
+export type AgentActivity = {
+  id: string
+  agentSlug: string
+  type: AgentActivityType
+  title: string
+  amount?: string
+  asset?: string
+  direction?: 'in' | 'out' | 'result' | 'system'
+  network?: string
+  wallet?: string
+  txHash?: string
+  serviceUrl?: string
+  detail?: string
+  createdAt: number
+}
+
+type ActivityStore = {
+  pending?: Record<string, unknown>
+  agents?: Record<string, unknown>
+  activity?: Record<string, AgentActivity[]>
+}
+
+export function normalizeActivitySlug(value: unknown) {
+  return String(value ?? '').trim().toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').slice(0, 32)
+}
+
+async function readActivityStore(): Promise<ActivityStore> {
+  try {
+    return JSON.parse(await readFile(STORE_PATH, 'utf8')) as ActivityStore
+  } catch {
+    return { pending: {}, agents: {}, activity: {} }
+  }
+}
+
+async function writeActivityStore(data: ActivityStore) {
+  await mkdir(dirname(STORE_PATH), { recursive: true })
+  await writeFile(STORE_PATH, JSON.stringify(data, null, 2))
+}
+
+export async function listAgentActivity(agentSlug: string, limit = 12) {
+  const slug = normalizeActivitySlug(agentSlug)
+  if (!slug) return []
+  const store = await readActivityStore()
+  return [...(store.activity?.[slug] ?? [])]
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .slice(0, limit)
+}
+
+export async function appendAgentActivity(input: Omit<AgentActivity, 'id' | 'createdAt'> & { createdAt?: number }) {
+  const slug = normalizeActivitySlug(input.agentSlug)
+  if (!slug) return undefined
+  const store = await readActivityStore()
+  const next: AgentActivity = {
+    ...input,
+    agentSlug: slug,
+    id: crypto.randomUUID(),
+    createdAt: input.createdAt ?? Date.now(),
+  }
+  store.activity = store.activity ?? {}
+  const existing = store.activity[slug] ?? []
+  const isDuplicate = existing.some(item => (
+    input.txHash && item.txHash?.toLowerCase() === input.txHash.toLowerCase() && item.type === input.type
+  ))
+  if (isDuplicate) return existing.find(item => item.txHash?.toLowerCase() === input.txHash?.toLowerCase() && item.type === input.type)
+  store.activity[slug] = [next, ...existing].slice(0, 80)
+  await writeActivityStore(store)
+  return next
+}

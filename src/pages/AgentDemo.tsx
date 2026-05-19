@@ -37,6 +37,20 @@ type Message = {
   proof:    { ogTxHash: string; ogExplorer: string }
 }
 
+type AgentActivity = {
+  id: string
+  type: 'wallet_connected' | 'funded' | 'gateway_activated' | 'x402_spent' | 'scout_returned'
+  title: string
+  amount?: string
+  asset?: string
+  direction?: 'in' | 'out' | 'result' | 'system'
+  network?: string
+  wallet?: string
+  txHash?: string
+  detail?: string
+  createdAt: number
+}
+
 // ─── Demo credentials (pre-filled for judges) ─────────────────────────────────
 const DEMO_EVENT_ID = 'test-0g-1778114523394'
 const DEMO_PAYER    = 'HashPayLink 0G Test'
@@ -77,6 +91,7 @@ export default function AgentDemo() {
   const [x402Amount, setX402Amount] = useState('1')
   const [x402Busy, setX402Busy] = useState(false)
   const [x402Status, setX402Status] = useState('')
+  const [activity, setActivity] = useState<AgentActivity[]>([])
   const [copiedWallet, setCopiedWallet] = useState(false)
   const [walletEmail, setWalletEmail] = useState('')
   const [walletOtp, setWalletOtp] = useState('')
@@ -101,10 +116,11 @@ export default function AgentDemo() {
     const slug = agentSlug || 'hashpaylink-agent'
     const res = await fetch(`/api/agent-wallet?agent=${encodeURIComponent(slug)}`)
     if (!res.ok) return
-    const data = await res.json() as { walletAddress?: string; chain?: string; connected?: boolean }
+    const data = await res.json() as { walletAddress?: string; chain?: string; connected?: boolean; activity?: AgentActivity[] }
     if (data.walletAddress) setCurrentAgentWallet(data.walletAddress)
     setAgentWalletSessionConnected(Boolean(data.connected))
     if (data.chain) setAgentWalletChain(data.chain)
+    if (Array.isArray(data.activity)) setActivity(data.activity)
   }
 
   useEffect(() => {
@@ -258,7 +274,11 @@ export default function AgentDemo() {
     p.set('m', `Fund agent wallet: ${agentSlug || 'Hash PayLink Agent'}`)
     p.set('n', agentNetwork)
     p.set('f', '1')
+    p.set('v', '1')
+    p.set('x', '1')
     p.set('src', 'agent')
+    p.set('agent', agentSlug || 'hashpaylink-agent')
+    p.set('agentSlug', agentSlug || 'hashpaylink-agent')
     if (currentAgentWallet) p.set('e', currentAgentWallet)
     return `/pay?${p.toString()}`
   }
@@ -378,6 +398,7 @@ export default function AgentDemo() {
       if (!res.ok || !data.ok) throw new Error(data.error ?? 'x402 activation failed')
       setX402Status(`${data.amount ?? x402Amount} USDC activated for x402.`)
       await refreshX402Balance()
+      await loadAgentWallet()
     } catch (err) {
       setX402BalanceError(err instanceof Error ? err.message : 'x402 activation failed')
     } finally {
@@ -386,6 +407,11 @@ export default function AgentDemo() {
   }
 
   const agentStreamUrl = buildAgentStreamUrl()
+  const activityAmount = (item: AgentActivity) => {
+    if (!item.amount) return item.direction === 'result' ? 'Result' : item.direction === 'system' ? 'Setup' : ''
+    const prefix = item.direction === 'out' ? '-' : item.direction === 'in' ? '+' : ''
+    return `${prefix}${item.amount} ${item.asset ?? 'USDC'}`
+  }
 
   return (
     <div className="mx-auto max-w-2xl animate-slide-up space-y-6">
@@ -627,6 +653,49 @@ export default function AgentDemo() {
                     {x402BalanceError || x402Status}
                   </p>
                 )}
+              </div>
+
+              <div className="rounded-xl border border-gray-100 bg-white p-3 dark:border-white/10 dark:bg-white/[0.04]">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold text-gray-900 dark:text-white">Agent activity</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Funding, x402 activation, and agent-paid service receipts</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => loadAgentWallet()}
+                    className="rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-gray-600 transition-colors hover:bg-gray-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300"
+                  >
+                    Refresh
+                  </button>
+                </div>
+                <div className="mt-3 space-y-2">
+                  {activity.length ? activity.slice(0, 6).map(item => (
+                    <div key={item.id} className="grid grid-cols-[84px_1fr] gap-3 rounded-lg border border-gray-100 bg-gray-50/70 px-3 py-2 dark:border-white/10 dark:bg-black/10">
+                      <div className={cn(
+                        'text-xs font-semibold',
+                        item.direction === 'out' ? 'text-red-500' : item.direction === 'result' ? 'text-blue-500' : item.direction === 'system' ? 'text-gray-500' : 'text-emerald-600',
+                      )}>
+                        {activityAmount(item)}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex min-w-0 items-center justify-between gap-2">
+                          <p className="truncate text-xs font-semibold text-gray-800 dark:text-gray-100">{item.title}</p>
+                          <p className="shrink-0 text-[10px] text-gray-400">
+                            {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </p>
+                        </div>
+                        <p className="truncate text-[11px] text-gray-500 dark:text-gray-400">
+                          {[item.network, item.detail].filter(Boolean).join(' - ')}
+                        </p>
+                      </div>
+                    </div>
+                  )) : (
+                    <div className="rounded-lg border border-dashed border-gray-200 px-3 py-4 text-center text-xs text-gray-400 dark:border-white/10">
+                      No activity yet. Fund the wallet, activate x402, then run /lp x402.
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           )}
