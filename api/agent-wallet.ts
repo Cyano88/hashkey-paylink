@@ -98,20 +98,34 @@ function parseRequestId(output: string) {
 }
 
 function parseWalletAddress(output: string) {
+  return parseWalletAddresses(output)[0]
+}
+
+function parseWalletAddresses(output: string) {
+  const addresses = new Set<string>()
   try {
     const parsed = JSON.parse(output) as unknown
     const queue = [parsed]
     while (queue.length) {
       const item = queue.shift()
       if (!item) continue
-      if (typeof item === 'string' && /^0x[a-fA-F0-9]{40}$/.test(item)) return item
+      if (typeof item === 'string' && /^0x[a-fA-F0-9]{40}$/.test(item)) {
+        addresses.add(item)
+        continue
+      }
       if (Array.isArray(item)) queue.push(...item)
       if (typeof item === 'object') queue.push(...Object.values(item as Record<string, unknown>))
     }
   } catch {
     // CLI can return text tables depending on version; parse those below.
   }
-  return output.match(/0x[a-fA-F0-9]{40}/)?.[0]
+  for (const match of output.matchAll(/0x[a-fA-F0-9]{40}/g)) addresses.add(match[0])
+  return [...addresses]
+}
+
+function normalizeExpectedWallet(value: unknown) {
+  const wallet = String(value ?? '').trim()
+  return /^0x[a-fA-F0-9]{40}$/.test(wallet) ? wallet : ''
 }
 
 function parseBalance(output: string) {
@@ -298,10 +312,15 @@ export default async function handler(req: Request, res: Response) {
       } catch {
         listOutput = await runCircle(['wallet', 'list', '--type', 'agent', '--chain', chain], key)
       }
-      const walletAddress = parseWalletAddress(listOutput)
+      const wallets = parseWalletAddresses(listOutput)
+      const existing = store.agents?.[agentSlug]
+      const expectedWallet = normalizeExpectedWallet(req.body?.expectedWallet)
+      const walletAddress =
+        (expectedWallet && wallets.find(item => item.toLowerCase() === expectedWallet.toLowerCase()))
+        || (existing?.walletAddress && wallets.find(item => item.toLowerCase() === existing.walletAddress.toLowerCase()))
+        || wallets[0]
       if (!walletAddress) return res.status(502).json({ ok: false, error: 'Circle login completed, but no wallet address was found.' })
       delete store.pending[id]
-      const existing = store.agents?.[agentSlug]
       if (existing?.walletAddress && existing.walletAddress.toLowerCase() !== walletAddress.toLowerCase()) {
         return res.status(409).json({
           ok: false,

@@ -48,6 +48,7 @@ export default function AgentDemo() {
   const params = new URLSearchParams(window.location.search)
   const agentSlug = params.get('agent') ?? ''
   const agentWallet = params.get('wallet') ?? params.get('e') ?? ''
+  const intendedAgentWallet = params.get('wallet') ?? params.get('expectedWallet') ?? params.get('e') ?? ''
   const agentPrice = params.get('price') ?? '1'
   const agentStreamPrice = params.get('streamPrice') ?? ''
   const agentStreamDuration = params.get('streamDuration') ?? ''
@@ -254,6 +255,7 @@ export default function AgentDemo() {
           email: walletEmail,
           otp: walletOtp,
           testnet: agentNetwork === 'arc',
+          expectedWallet: intendedAgentWallet || currentAgentWallet || undefined,
         }),
       })
       const data = await res.json() as { ok?: boolean; error?: string; walletAddress?: string; chain?: string; code?: string; existingWallet?: string; newWallet?: string }
