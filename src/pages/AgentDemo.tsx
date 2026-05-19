@@ -96,7 +96,7 @@ export default function AgentDemo() {
   const [copiedWallet, setCopiedWallet] = useState(false)
   const [walletEmail, setWalletEmail] = useState('')
   const [walletOtp, setWalletOtp] = useState('')
-  const [walletMode, setWalletMode] = useState<'create' | 'login'>('create')
+  const [walletMode, setWalletMode] = useState<'choose' | 'create' | 'login'>('choose')
   const [walletStep, setWalletStep] = useState<'idle' | 'otp' | 'done'>('idle')
   const [walletBusy, setWalletBusy] = useState(false)
   const [walletError, setWalletError] = useState<string | null>(null)
@@ -301,8 +301,9 @@ export default function AgentDemo() {
     return `/?${p.toString()}`
   }
 
-  async function callAgentWallet(action: 'init' | 'complete', mode: 'create' | 'login' = walletMode) {
-    setWalletMode(mode)
+  async function callAgentWallet(action: 'init' | 'complete', mode?: 'create' | 'login') {
+    const selectedMode = mode ?? (walletMode === 'choose' ? 'login' : walletMode)
+    setWalletMode(selectedMode)
     setWalletBusy(true)
     setWalletError(null)
     try {
@@ -370,7 +371,7 @@ export default function AgentDemo() {
       setAgentWalletSessionConnected(false)
       setWalletStep('idle')
       setWalletOtp('')
-      setWalletMode('login')
+      setWalletMode('choose')
     } catch (err) {
       setWalletError(err instanceof Error ? err.message : 'Wallet disconnect failed')
     } finally {
@@ -529,54 +530,100 @@ export default function AgentDemo() {
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                 {currentAgentWallet
                   ? 'Login with the same Circle email to restore the secure spending session.'
-                  : 'Create a wallet, or login with the same Circle email to reconnect an existing one.'}
+                  : walletMode === 'choose'
+                  ? 'Create a new Circle Agent Wallet or login to reconnect an existing one.'
+                  : walletMode === 'create'
+                  ? 'Enter your email and Circle will send an OTP to create the agent wallet.'
+                  : 'Enter the same Circle email to reconnect the agent wallet.'}
               </p>
-              <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_120px_150px]">
-                <input
-                  type="email"
-                  value={walletEmail}
-                  onChange={e => setWalletEmail(e.target.value)}
-                  placeholder="you@example.com"
-                  disabled={walletBusy || walletStep === 'done'}
-                  className="min-w-0 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-gray-200 disabled:opacity-60 dark:border-white/10 dark:bg-white/[0.06] dark:text-white"
-                />
-                <button
-                  type="button"
-                  onClick={() => callAgentWallet('init', 'create')}
-                  disabled={walletBusy || !walletEmail.trim() || walletStep === 'done'}
-                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-black px-3 py-2 text-sm font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
-                >
-                  {walletBusy && walletStep === 'idle' && walletMode === 'create' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wallet className="h-4 w-4" />}
-                  Create
-                </button>
-                <button
-                  type="button"
-                  onClick={() => callAgentWallet('init', 'login')}
-                  disabled={walletBusy || !walletEmail.trim() || walletStep === 'done'}
-                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/[0.1]"
-                >
-                  {walletBusy && walletStep === 'idle' && walletMode === 'login' ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
-                  Login
-                </button>
-              </div>
-
-              {walletStep === 'otp' && (
-                <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_120px]">
-                  <input
-                    value={walletOtp}
-                    onChange={e => setWalletOtp(e.target.value.trim())}
-                    placeholder="OTP from Circle email"
-                    disabled={walletBusy}
-                    className="min-w-0 rounded-lg border border-blue-100 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-blue-200 disabled:opacity-60 dark:border-white/10 dark:bg-white/[0.06] dark:text-white"
-                  />
+              {walletMode === 'choose' ? (
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
                   <button
                     type="button"
-                    onClick={() => callAgentWallet('complete')}
-                    disabled={walletBusy || !walletOtp.trim()}
-                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-gray-900 px-3 py-2 text-sm font-semibold text-white transition-all hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-900"
+                    onClick={() => {
+                      setWalletMode('create')
+                      setWalletStep('idle')
+                      setWalletOtp('')
+                      setWalletError(null)
+                    }}
+                    disabled={walletBusy}
+                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-black px-3 py-3 text-sm font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
                   >
-                    {walletBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                    Verify
+                    <Wallet className="h-4 w-4" />
+                    Create wallet
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setWalletMode('login')
+                      setWalletStep('idle')
+                      setWalletOtp('')
+                      setWalletError(null)
+                    }}
+                    disabled={walletBusy}
+                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-3 text-sm font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/[0.1]"
+                  >
+                    <ShieldCheck className="h-4 w-4" />
+                    Login
+                  </button>
+                </div>
+              ) : (
+                <div className="mt-3 space-y-3">
+                  {walletStep !== 'otp' && (
+                    <div className="grid gap-2 sm:grid-cols-[1fr_132px]">
+                      <input
+                        type="email"
+                        value={walletEmail}
+                        onChange={e => setWalletEmail(e.target.value)}
+                        placeholder="you@example.com"
+                        disabled={walletBusy || walletStep === 'done'}
+                        className="min-w-0 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-gray-200 disabled:opacity-60 dark:border-white/10 dark:bg-white/[0.06] dark:text-white"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => callAgentWallet('init')}
+                        disabled={walletBusy || !walletEmail.trim() || walletStep === 'done'}
+                        className="inline-flex items-center justify-center gap-2 rounded-lg bg-black px-3 py-2 text-sm font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+                      >
+                        {walletBusy && walletStep === 'idle' ? <Loader2 className="h-4 w-4 animate-spin" /> : walletMode === 'create' ? <Wallet className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />}
+                        Send OTP
+                      </button>
+                    </div>
+                  )}
+
+                  {walletStep === 'otp' && (
+                    <div className="grid gap-2 sm:grid-cols-[1fr_120px]">
+                      <input
+                        value={walletOtp}
+                        onChange={e => setWalletOtp(e.target.value.trim())}
+                        placeholder="OTP from Circle email"
+                        disabled={walletBusy}
+                        className="min-w-0 rounded-lg border border-blue-100 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-blue-200 disabled:opacity-60 dark:border-white/10 dark:bg-white/[0.06] dark:text-white"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => callAgentWallet('complete')}
+                        disabled={walletBusy || !walletOtp.trim()}
+                        className="inline-flex items-center justify-center gap-2 rounded-lg bg-gray-900 px-3 py-2 text-sm font-semibold text-white transition-all hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-900"
+                      >
+                        {walletBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                        Verify
+                      </button>
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setWalletMode(walletMode === 'create' ? 'login' : 'create')
+                      setWalletStep('idle')
+                      setWalletOtp('')
+                      setWalletError(null)
+                    }}
+                    disabled={walletBusy}
+                    className="text-xs font-semibold text-gray-500 transition-colors hover:text-gray-900 disabled:opacity-50 dark:text-gray-400 dark:hover:text-white"
+                  >
+                    {walletMode === 'create' ? 'Already have a wallet? Login' : 'Need a new wallet? Create wallet'}
                   </button>
                 </div>
               )}
