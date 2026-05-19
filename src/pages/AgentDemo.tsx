@@ -417,6 +417,11 @@ export default function AgentDemo() {
     const prefix = item.direction === 'out' ? '-' : item.direction === 'in' ? '+' : ''
     return `${prefix}${item.amount} ${item.asset ?? 'USDC'}`
   }
+  const displayAgentWalletChain =
+    agentWalletChain === 'BASE' ? 'Base' :
+    agentWalletChain === 'ARBITRUM' ? 'Arbitrum' :
+    agentWalletChain === 'ARC-TESTNET' ? 'Arc Testnet' :
+    agentWalletChain
 
   return (
     <div className="mx-auto max-w-2xl animate-slide-up space-y-6">
@@ -511,9 +516,9 @@ export default function AgentDemo() {
                   {treasuryBalanceError}
                 </p>
               )}
-              {agentWalletChain && (
+              {displayAgentWalletChain && (
                 <p className="mt-0.5 text-[10px] font-semibold" style={{ color: agentMeta.accentColor }}>
-                  {agentWalletChain}
+                  {displayAgentWalletChain}
                 </p>
               )}
             </div>

@@ -292,6 +292,7 @@ export default function PaymentPage() {
   const agentUrl         = getPaylinkParam(initParams, 'agent', 'g')
   const agentFundingSlug = getPaylinkParam(initParams, 'agentSlug', 'agent')
   const isAgentFunding   = getPaylinkParam(initParams, 'src', 'src') === 'agent' && !!agentFundingSlug
+  const smartWalletOnlyFunding = isPolymarketFunding || isAgentFunding
   const [attendeeName,   setAttendeeName]   = useState('')
   const [eventRegStatus, setEventRegStatus] = useState<'idle' | 'pending' | 'ok' | 'error'>('idle')
   const eventRegistered  = useRef(false)
@@ -338,7 +339,7 @@ export default function PaymentPage() {
   const paymentAmountBlocked = flexPayDisabled || polymarketFundingTooSmall
 
   // ── Direct Send state (shared across Base, Arc, Starknet) ────────────────
-  const [payMode,          setPayMode]          = useState<'wallet' | 'direct'>(modeParam === 'direct' && chain !== 'starknet' ? 'direct' : 'wallet')
+  const [payMode,          setPayMode]          = useState<'wallet' | 'direct'>(modeParam === 'direct' && chain !== 'starknet' && !smartWalletOnlyFunding ? 'direct' : 'wallet')
   const [directLinkId,     setDirectLinkId]     = useState<string | null>(null)
   // EVM chains (Base / Arc): the CREATE2 ghost vault address
   const [directVault,      setDirectVault]      = useState<`0x${string}` | null>(null)
@@ -597,6 +598,7 @@ export default function PaymentPage() {
   // Whether Direct Send is available for the current chain
   const canDirectSend =
     !isTelegramSource &&
+    !smartWalletOnlyFunding &&
     (
       ((chain === 'base' || chain === 'arc' || chain === 'arbitrum') && isAddress(resolvedEvm) && !!FACTORY_V2_ADDRESSES[chain as 'base' | 'arc' | 'arbitrum']) ||
       (chain === 'solana' && !!resolvedSolana)
@@ -739,8 +741,8 @@ export default function PaymentPage() {
   // ── Auto-sweep keeper ─────────────────────────────────────────────────────
   // ── Reset payMode on chain switch: Smart Wallet is primary; direct is explicit ─
   useEffect(() => {
-    setPayMode(modeParam === 'direct' && chain !== 'starknet' ? 'direct' : 'wallet')
-  }, [chain, modeParam])
+    setPayMode(modeParam === 'direct' && chain !== 'starknet' && !smartWalletOnlyFunding ? 'direct' : 'wallet')
+  }, [chain, modeParam, smartWalletOnlyFunding])
 
   // ── V2 EVM: Generate linkId + compute ghost vault address ─────────────────
   useEffect(() => {
@@ -2755,7 +2757,7 @@ export default function PaymentPage() {
               {circlePasskeyError && (
                 <p className="text-center text-[11px] font-medium text-red-600 dark:text-red-300">{circlePasskeyError}</p>
               )}
-              {!isPolymarketFunding && !isTelegramSource && (
+              {!smartWalletOnlyFunding && !isTelegramSource && (
                 <div className="flex items-center gap-3">
                   <div className="h-px flex-1 bg-gray-200 dark:bg-white/10" />
                   <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">or</span>
@@ -2852,7 +2854,7 @@ export default function PaymentPage() {
                         {isSmartWalletBalanceError(circleSolanaError) ? circleSolanaError : `Transaction failed: ${circleSolanaError}`}
                       </p>
                     )}
-                    {!isPolymarketFunding && !isTelegramSource && (
+                    {!smartWalletOnlyFunding && !isTelegramSource && (
                       <div className="flex items-center gap-3">
                         <div className="h-px flex-1 bg-gray-200" />
                         <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">or</span>
@@ -2861,7 +2863,7 @@ export default function PaymentPage() {
                     )}
                   </div>
                 )}
-                {!isPolymarketFunding && !isTelegramSource && !solanaWalletAddr ? (
+                {!smartWalletOnlyFunding && !isTelegramSource && !solanaWalletAddr ? (
                   <>
                 <button
                   onClick={connectSolana}
@@ -2874,7 +2876,7 @@ export default function PaymentPage() {
                 </button>
                 <p className="text-center text-xs text-gray-400">Phantom, Solflare & other Solana wallets</p>
                   </>
-                ) : !isPolymarketFunding && !isTelegramSource ? (
+                ) : !smartWalletOnlyFunding && !isTelegramSource ? (
               <button
                 onClick={handlePay}
                 disabled={isSolanaPending || isSolanaConfirming || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
@@ -2959,7 +2961,7 @@ export default function PaymentPage() {
                         {isSmartWalletBalanceError(argentStarkError) ? argentStarkError : `Transaction failed: ${argentStarkError}`}
                       </p>
                     )}
-                    {!isTelegramSource && (
+                    {!smartWalletOnlyFunding && !isTelegramSource && (
                       <div className="flex items-center gap-3">
                         <div className="h-px flex-1 bg-gray-200" />
                         <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">or</span>
@@ -2986,7 +2988,7 @@ export default function PaymentPage() {
                 : <><Zap className="h-4 w-4" /> Pay {formatAmount(effectiveAmt, 6)} USDC on Starknet</>}
               </button>
             )
-          ) : payMode === 'wallet' && !isPolymarketFunding && !isTelegramSource && !isConnected ? (
+          ) : payMode === 'wallet' && !smartWalletOnlyFunding && !isTelegramSource && !isConnected ? (
             <div className={cn(
               'flex flex-col items-center gap-1.5',
               requiresAttendeeName && !attendeeName.trim() && 'pointer-events-none opacity-50 select-none',
@@ -3003,7 +3005,7 @@ export default function PaymentPage() {
                 <p className="text-center text-xs text-gray-400">Gas in ETH</p>
               )}
             </div>
-          ) : payMode === 'wallet' && !isPolymarketFunding && !isTelegramSource && !isCorrectNetwork ? (
+          ) : payMode === 'wallet' && !smartWalletOnlyFunding && !isTelegramSource && !isCorrectNetwork ? (
             <button onClick={() => switchChain({ chainId: targetChainId })} disabled={isSwitching}
               className="flex w-full items-center justify-center gap-2 rounded-xl px-6 py-4 text-sm font-semibold text-white transition-all active:scale-[0.98] disabled:opacity-70"
               style={{ backgroundColor: meta.accentColor }}>
@@ -3011,7 +3013,7 @@ export default function PaymentPage() {
                 ? <><Loader2 className="h-4 w-4 animate-spin" /> Switching…</>
                 : <><RefreshCw className="h-4 w-4" /> Switch to {meta.label}</>}
             </button>
-          ) : payMode === 'wallet' && !isPolymarketFunding && !isTelegramSource ? (
+          ) : payMode === 'wallet' && !smartWalletOnlyFunding && !isTelegramSource ? (
             <div className="space-y-2">
               <button onClick={handlePay} disabled={isWalletPending || isConfirming || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
               className={cn(
