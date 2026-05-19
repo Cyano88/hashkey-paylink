@@ -61,7 +61,6 @@ export default function AgentDemo() {
   const showAgentProfile = params.get('profile') === 'agent' || Boolean(agentSlug || agentWallet)
   const [eventId,    setEventId]    = useState(() => params.get('eventId') ?? '')
   const [payer,      setPayer]      = useState(() => params.get('payer')   ?? '')
-  const [fundAmount, setFundAmount] = useState(() => params.get('fund') ?? '10')
   const [currentAgentWallet, setCurrentAgentWallet] = useState(agentWallet)
   const [agentWalletChain, setAgentWalletChain] = useState('')
   const [treasuryBalance, setTreasuryBalance] = useState<string | null>(null)
@@ -212,7 +211,6 @@ export default function AgentDemo() {
   function buildAgentFundUrl() {
     const p = new URLSearchParams()
     p.set('id', `agent-${agentSlug || 'hashpaylink'}-fund-${Date.now().toString(36)}`)
-    p.set('a', fundAmount.trim() || '10')
     p.set('m', `Fund agent wallet: ${agentSlug || 'Hash PayLink Agent'}`)
     p.set('n', agentNetwork)
     p.set('x', '1')
@@ -286,14 +284,14 @@ export default function AgentDemo() {
       </Link>
 
       {showAgentProfile && (
-        <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm dark:bg-[#1c1c20] dark:border-white/10">
-          <div className="flex items-start gap-4">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 dark:bg-blue-900/20">
+        <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-[#1c1c20] sm:p-6">
+          <div className="flex items-start gap-3 sm:gap-4">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-blue-100 bg-blue-50 dark:border-blue-900/30 dark:bg-blue-900/20">
               <Wallet className="h-5 w-5 text-blue-600" />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">Agent treasury</p>
-              <h1 className="mt-1 truncate text-lg font-semibold text-gray-900 dark:text-white">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Agent treasury</p>
+              <h1 className="mt-1 truncate text-lg font-semibold tracking-tight text-gray-900 dark:text-white">
                 {agentSlug || 'Hash PayLink Agent'}
               </h1>
               <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2">
@@ -319,7 +317,7 @@ export default function AgentDemo() {
             </div>
           </div>
 
-          <div className="mt-5 grid gap-3 sm:grid-cols-4">
+          <div className="mt-5 grid gap-2.5 sm:grid-cols-4">
             <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
               <CreditCard className="h-4 w-4 text-gray-400" />
               <p className="mt-2 text-xs font-semibold text-gray-800 dark:text-gray-100">Ask</p>
@@ -424,46 +422,32 @@ export default function AgentDemo() {
             </div>
           )}
 
-          {walletStep === 'done' && currentAgentWallet && (
-            <div className="mt-5 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 dark:border-emerald-900/30 dark:bg-emerald-900/10">
-              <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">Circle Agent Wallet connected</p>
-              <p className="mt-1 truncate font-mono text-xs text-emerald-700/80 dark:text-emerald-300/80">{currentAgentWallet}</p>
-            </div>
-          )}
+          {currentAgentWallet && (
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              <Link
+                to={buildAgentFundUrl()}
+                onClick={handleFundAgent}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition-all hover:bg-blue-700 active:scale-[0.98]"
+              >
+                <Wallet className="h-4 w-4" /> Fund Agent Wallet
+              </Link>
 
-          <div className="mt-5 flex flex-col gap-3 sm:flex-row">
-            <div className="flex min-w-0 flex-1 items-center rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">
-              <input
-                value={fundAmount}
-                onChange={e => setFundAmount(e.target.value.replace(/[^\d.]/g, ''))}
-                inputMode="decimal"
-                className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-gray-900 outline-none dark:text-white"
-              />
-              <span className="text-xs font-semibold text-gray-400">USDC</span>
-            </div>
-            <Link
-              to={currentAgentWallet ? buildAgentFundUrl() : '#'}
-              onClick={currentAgentWallet ? handleFundAgent : undefined}
-              aria-disabled={!currentAgentWallet}
-              className={cn(
-                'inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition-all active:scale-[0.98]',
-                currentAgentWallet
-                  ? 'bg-blue-600 text-white hover:bg-blue-700'
-                  : 'pointer-events-none bg-gray-100 text-gray-400 dark:bg-white/[0.06]'
+              {agentStreamUrl && (
+                <a
+                  href={agentStreamUrl}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-800 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-100"
+                >
+                  <Radio className="h-4 w-4" /> Start StreamPay Retainer
+                </a>
               )}
-            >
-              <Wallet className="h-4 w-4" /> Fund Agent Wallet
-            </Link>
-          </div>
-
-          {agentStreamUrl && (
-            <a
-              href={agentStreamUrl}
-              className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-800 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-100"
-            >
-              <Radio className="h-4 w-4" /> Start StreamPay Retainer
-            </a>
+            </div>
           )}
+
+          <div className="mt-5 border-t border-gray-100 pt-3 text-right dark:border-white/10">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-300 dark:text-gray-600">
+              Powered by Circle
+            </span>
+          </div>
         </div>
       )}
 
