@@ -18,7 +18,7 @@ import { queryBalances }                from '../lib/unifiedBalance'
 import {
   CheckCircle2, AlertCircle, Loader2, Send,
   ExternalLink, ArrowLeft, ShieldCheck, Zap,
-  Wallet, CreditCard, Radio, Copy, Power,
+  Wallet, CreditCard, Radio, Copy, Power, X,
 } from 'lucide-react'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -91,6 +91,7 @@ export default function AgentDemo() {
   const [x402Amount, setX402Amount] = useState('1')
   const [x402Busy, setX402Busy] = useState(false)
   const [x402Status, setX402Status] = useState('')
+  const [x402ModalOpen, setX402ModalOpen] = useState(false)
   const [activity, setActivity] = useState<AgentActivity[]>([])
   const [copiedWallet, setCopiedWallet] = useState(false)
   const [walletEmail, setWalletEmail] = useState('')
@@ -383,6 +384,7 @@ export default function AgentDemo() {
     setX402Status('')
     setX402BalanceError('')
     try {
+      if (agentNetwork === 'arc') throw new Error('x402 Gateway activation supports Base or Arbitrum funding. Switch network to Base or Arbitrum.')
       const amount = Number(x402Amount)
       if (!Number.isFinite(amount) || amount <= 0) throw new Error('Enter a valid x402 amount.')
       const res = await fetch('/api/agent-wallet', {
@@ -392,11 +394,13 @@ export default function AgentDemo() {
           action: 'gateway-deposit',
           agentSlug: agentSlug || 'hashpaylink-agent',
           amount: String(amount),
+          chain: agentNetwork === 'arbitrum' ? 'ARBITRUM' : 'BASE',
         }),
       })
       const data = await res.json() as { ok?: boolean; error?: string; amount?: string }
       if (!res.ok || !data.ok) throw new Error(data.error ?? 'x402 activation failed')
       setX402Status(`${data.amount ?? x402Amount} USDC activated for x402.`)
+      setX402ModalOpen(false)
       await refreshX402Balance()
       await loadAgentWallet()
     } catch (err) {
@@ -422,7 +426,13 @@ export default function AgentDemo() {
       </Link>
 
       {showAgentProfile && (
-        <div className="relative rounded-2xl border border-gray-100 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-[#1c1c20] sm:p-6">
+        <div
+          className="relative rounded-2xl border bg-white p-5 shadow-sm transition-all dark:bg-[#1c1c20] sm:p-6"
+          style={{
+            borderColor: `${agentMeta.accentColor}24`,
+            boxShadow: `0 16px 44px -32px ${agentMeta.accentColor}, ${agentMeta.glowStyle}`,
+          }}
+        >
           {currentAgentWallet && (
             <button
               type="button"
@@ -500,18 +510,16 @@ export default function AgentDemo() {
                   {treasuryBalanceError}
                 </p>
               )}
-              {agentWalletChain && <p className="mt-0.5 text-[10px] font-medium text-gray-400">{agentWalletChain}</p>}
+              {agentWalletChain && (
+                <p className="mt-0.5 text-[10px] font-semibold" style={{ color: agentMeta.accentColor }}>
+                  {agentWalletChain}
+                </p>
+              )}
             </div>
           </div>
 
           {(!currentAgentWallet || !agentWalletSessionConnected) && (
-            <div
-              className="mt-5 rounded-xl border bg-gray-50/70 p-4 transition-all dark:bg-white/[0.04]"
-              style={{
-                borderColor: `${agentMeta.accentColor}26`,
-                boxShadow: `0 4px 24px -8px rgba(0,0,0,0.08), ${agentMeta.glowStyle}`,
-              }}
-            >
+            <div className="mt-5 rounded-xl border border-gray-100 bg-gray-50/70 p-4 transition-all dark:border-white/10 dark:bg-white/[0.04]">
               <div className="flex items-center gap-2">
                 <Wallet className="h-4 w-4 text-gray-600 dark:text-gray-300" />
                 <p className="text-sm font-semibold text-gray-900 dark:text-white">
@@ -588,11 +596,7 @@ export default function AgentDemo() {
                 <Link
                   to={buildAgentFundUrl()}
                   onClick={handleFundAgent}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold text-white shadow-button transition-all hover:opacity-90 active:scale-[0.98]"
-                  style={{
-                    backgroundColor: agentMeta.accentColor,
-                    boxShadow: `0 10px 24px -14px ${agentMeta.accentColor}, ${agentMeta.glowStyle}`,
-                  }}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-black px-4 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
                 >
                   <Wallet className="h-4 w-4" /> Fund Agent Wallet
                 </Link>
@@ -628,26 +632,15 @@ export default function AgentDemo() {
                     Refresh
                   </button>
                 </div>
-                <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_160px]">
-                  <div className="flex min-w-0 items-center overflow-hidden rounded-lg border border-gray-200 bg-white dark:border-white/10 dark:bg-white/[0.06]">
-                    <input
-                      value={x402Amount}
-                      onChange={event => setX402Amount(event.target.value.replace(/[^\d.]/g, ''))}
-                      inputMode="decimal"
-                      className="min-w-0 flex-1 bg-transparent px-3 py-2 text-sm text-gray-900 outline-none dark:text-white"
-                    />
-                    <span className="border-l border-gray-100 px-3 text-xs font-semibold text-gray-400 dark:border-white/10">USDC</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={activateX402Balance}
-                    disabled={x402Busy || !x402Amount || Number(x402Amount) <= 0}
-                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-gray-900 px-3 py-2 text-sm font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-50 dark:bg-white dark:text-gray-950"
-                  >
-                    {x402Busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
-                    Activate x402
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setX402ModalOpen(true)}
+                  disabled={x402Busy}
+                  className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-gray-900 px-3 py-2.5 text-sm font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-50 dark:bg-white dark:text-gray-950"
+                >
+                  {x402Busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+                  Activate x402
+                </button>
                 {(x402BalanceError || x402Status) && (
                   <p className={cn('mt-2 text-xs font-medium', x402BalanceError ? 'text-amber-600 dark:text-amber-300' : 'text-emerald-600 dark:text-emerald-300')}>
                     {x402BalanceError || x402Status}
@@ -965,6 +958,87 @@ export default function AgentDemo() {
       </div>
 
         </>
+      )}
+
+      {x402ModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 backdrop-blur-sm sm:items-center">
+          <div className="w-full max-w-sm rounded-2xl border border-gray-100 bg-white p-5 shadow-2xl dark:border-white/10 dark:bg-[#1c1c20]">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-gray-900 dark:text-white">Activate x402 Gateway</p>
+                <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                  Move USDC from the agent wallet into Circle Gateway so the agent can pay APIs.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setX402ModalOpen(false)}
+                disabled={x402Busy}
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-gray-200 text-gray-400 transition-colors hover:bg-gray-50 hover:text-gray-600 disabled:opacity-50 dark:border-white/10 dark:hover:bg-white/[0.06]"
+                aria-label="Close x402 activation"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="mt-4">
+              <label className="mb-1.5 block text-xs font-semibold text-gray-600 dark:text-gray-300">Amount</label>
+              <div className="flex min-w-0 items-center overflow-hidden rounded-xl border border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-white/[0.06]">
+                <input
+                  value={x402Amount}
+                  onChange={event => setX402Amount(event.target.value.replace(/[^\d.]/g, ''))}
+                  inputMode="decimal"
+                  className="min-w-0 flex-1 bg-transparent px-3 py-3 text-sm font-semibold text-gray-900 outline-none dark:text-white"
+                />
+                <span className="border-l border-gray-200 px-3 text-xs font-semibold text-gray-400 dark:border-white/10">USDC</span>
+              </div>
+              <div className="mt-2 grid grid-cols-3 gap-2">
+                {['0.25', '1', '5'].map(amount => (
+                  <button
+                    key={amount}
+                    type="button"
+                    onClick={() => setX402Amount(amount)}
+                    disabled={x402Busy}
+                    className={cn(
+                      'rounded-lg border px-3 py-2 text-xs font-semibold transition-all active:scale-[0.98] disabled:opacity-50',
+                      x402Amount === amount
+                        ? 'border-gray-900 bg-gray-900 text-white dark:border-white dark:bg-white dark:text-gray-950'
+                        : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300',
+                    )}
+                  >
+                    {amount}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {agentNetwork === 'arc' && (
+              <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-200">
+                x402 Gateway activation currently funds from Base or Arbitrum. Switch the network selector to Base or Arbitrum.
+              </p>
+            )}
+
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setX402ModalOpen(false)}
+                disabled={x402Busy}
+                className="rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={activateX402Balance}
+                disabled={x402Busy || agentNetwork === 'arc' || !x402Amount || Number(x402Amount) <= 0}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-gray-900 px-4 py-3 text-sm font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-50 dark:bg-white dark:text-gray-950"
+              >
+                {x402Busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+                Activate
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
     </div>

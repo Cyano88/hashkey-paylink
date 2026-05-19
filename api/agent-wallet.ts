@@ -79,6 +79,14 @@ function normalizeBalanceChain(value: unknown, fallback = 'BASE') {
   return fallback
 }
 
+function normalizeGatewayDepositChain(value: unknown) {
+  const key = String(value ?? '').trim().toLowerCase()
+  if (key === 'base') return 'BASE'
+  if (key === 'arbitrum' || key === 'arb') return 'ARBITRUM'
+  const fallback = GATEWAY_DEPOSIT_CHAIN.toUpperCase()
+  return fallback === 'ARBITRUM' ? 'ARBITRUM' : 'BASE'
+}
+
 function extractJsonFromCliOutput(output: string) {
   const start = output.indexOf('{')
   const end = output.lastIndexOf('}')
@@ -429,6 +437,7 @@ export default async function handler(req: Request, res: Response) {
     if (action === 'gateway-deposit') {
       const amount = clampAmount(req.body?.amount, MAX_GATEWAY_DEPOSIT_AMOUNT)
       if (!amount) return res.status(400).json({ ok: false, error: 'Invalid x402 activation amount.' })
+      const depositChain = normalizeGatewayDepositChain(req.body?.chain)
 
       const store = await readStore()
       const record = store.agents?.[agentSlug]
@@ -447,7 +456,7 @@ export default async function handler(req: Request, res: Response) {
           '--address',
           record.walletAddress,
           '--chain',
-          GATEWAY_DEPOSIT_CHAIN,
+          depositChain,
           '--method',
           'eco',
         ], serviceKey, 120_000)
@@ -470,7 +479,7 @@ export default async function handler(req: Request, res: Response) {
         direction: 'in',
         network: GATEWAY_BALANCE_CHAIN,
         wallet: record.walletAddress,
-        detail: `Deposited from ${GATEWAY_DEPOSIT_CHAIN}`,
+        detail: `Deposited from ${depositChain}`,
       })
 
       return res.json({
@@ -478,7 +487,7 @@ export default async function handler(req: Request, res: Response) {
         agentSlug,
         walletAddress: record.walletAddress,
         amount: String(amount),
-        depositChain: GATEWAY_DEPOSIT_CHAIN,
+        depositChain,
         gatewayBalanceChain: GATEWAY_BALANCE_CHAIN,
         response: extractJsonFromCliOutput(output),
         raw: output.slice(0, 3000),
