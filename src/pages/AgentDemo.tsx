@@ -215,8 +215,7 @@ export default function AgentDemo() {
     p.set('id', `agent-${agentSlug || 'hashpaylink'}-fund-${Date.now().toString(36)}`)
     p.set('m', `Fund agent wallet: ${agentSlug || 'Hash PayLink Agent'}`)
     p.set('n', agentNetwork)
-    p.set('x', '1')
-    p.set('v', '1')
+    p.set('f', '1')
     p.set('src', 'agent')
     if (currentAgentWallet) p.set('e', currentAgentWallet)
     return `/pay?${p.toString()}`
@@ -435,7 +434,11 @@ export default function AgentDemo() {
               <Link
                 to={buildAgentFundUrl()}
                 onClick={handleFundAgent}
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition-all hover:bg-blue-700 active:scale-[0.98]"
+                className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold text-white shadow-button transition-all hover:opacity-90 active:scale-[0.98]"
+                style={{
+                  backgroundColor: agentMeta.accentColor,
+                  boxShadow: `0 10px 24px -14px ${agentMeta.accentColor}, ${agentMeta.glowStyle}`,
+                }}
               >
                 <Wallet className="h-4 w-4" /> Fund Agent Wallet
               </Link>
