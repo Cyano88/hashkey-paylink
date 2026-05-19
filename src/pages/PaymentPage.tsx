@@ -208,6 +208,8 @@ function readableErrorMsg(err: unknown, fallback: string) {
 // ─── Component ───────────────────────────────────────────────────────────────
 const SMART_WALLET_FUNDING_ERROR = 'Add USDC to Smart wallet to continue.'
 const SMART_WALLET_AMOUNT_ERROR = 'Enter an amount to continue.'
+const POLYMARKET_MIN_FUNDING_USDC = 4
+const POLYMARKET_MIN_FUNDING_ERROR = `Minimum Polymarket funding is ${POLYMARKET_MIN_FUNDING_USDC} USDC.`
 
 function isSmartWalletBalanceError(msg: string | null) {
   if (!msg) return false
@@ -322,6 +324,8 @@ export default function PaymentPage() {
 
   // effectiveAmt: always USDC
   const effectiveAmt = isFlex ? flexAmtInUsdc : amt
+  const effectiveAmtNumber = parseFloat(effectiveAmt || '0') || 0
+  const polymarketFundingTooSmall = isPolymarketFunding && effectiveAmtNumber > 0 && effectiveAmtNumber < POLYMARKET_MIN_FUNDING_USDC
 
   // flexPayDisabled: accounts for USDC and local-currency input modes
   const flexPayDisabled = isFlex && (
@@ -329,6 +333,7 @@ export default function PaymentPage() {
       ? (!localAmt || parseFloat(localAmt) <= 0 || !fxRate)
       : (!flexAmt  || parseFloat(flexAmt)  <= 0)
   )
+  const paymentAmountBlocked = flexPayDisabled || polymarketFundingTooSmall
 
   // ── Direct Send state (shared across Base, Arc, Starknet) ────────────────
   const [payMode,          setPayMode]          = useState<'wallet' | 'direct'>(modeParam === 'direct' && chain !== 'starknet' ? 'direct' : 'wallet')
@@ -1183,8 +1188,13 @@ export default function PaymentPage() {
   }
 
   // ── Payment handlers ──────────────────────────────────────────────────────
+  function blockedAmountError() {
+    return polymarketFundingTooSmall ? POLYMARKET_MIN_FUNDING_ERROR : SMART_WALLET_AMOUNT_ERROR
+  }
+
   async function handlePay() {
     if (!activeRecipient) return
+    if (polymarketFundingTooSmall) return
     if (chain === 'arbitrum') await handleArbitrumPay()
     else if (chain === 'base' || chain === 'arc') await handleEvmPermitPay()
     else if (chain === 'starknet') handleStarknetPay()
@@ -1224,8 +1234,8 @@ export default function PaymentPage() {
 
   async function handleArgentStarknetEmailPay() {
     if (!resolvedStark || !showArgentStarknetEmailPay) return
-    if (flexPayDisabled || !effectiveAmt || parseFloat(effectiveAmt) <= 0) {
-      setArgentStarkError(SMART_WALLET_AMOUNT_ERROR)
+    if (paymentAmountBlocked || !effectiveAmt || parseFloat(effectiveAmt) <= 0) {
+      setArgentStarkError(blockedAmountError())
       return
     }
 
@@ -1287,8 +1297,8 @@ export default function PaymentPage() {
       setCircleSolanaError('Recipient Solana address is invalid. Ask the organizer for a new payment link.')
       return
     }
-    if (flexPayDisabled || !effectiveAmt || parseFloat(effectiveAmt) <= 0) {
-      setCircleSolanaError(SMART_WALLET_AMOUNT_ERROR)
+    if (paymentAmountBlocked || !effectiveAmt || parseFloat(effectiveAmt) <= 0) {
+      setCircleSolanaError(blockedAmountError())
       return
     }
     const email = circleSolanaEmail.trim()
@@ -1512,8 +1522,8 @@ export default function PaymentPage() {
 
   async function handleCirclePasskeyPay() {
     if (!activeRecipient || !showCircleEmailPay || !isAddress(activeRecipient)) return
-    if (flexPayDisabled || !effectiveAmt || parseFloat(effectiveAmt) <= 0) {
-      setCirclePasskeyError(SMART_WALLET_AMOUNT_ERROR)
+    if (paymentAmountBlocked || !effectiveAmt || parseFloat(effectiveAmt) <= 0) {
+      setCirclePasskeyError(blockedAmountError())
       return
     }
     const email = circleEmail.trim()
@@ -2304,6 +2314,14 @@ export default function PaymentPage() {
                 </span>
               </div>
             )}
+            {polymarketFundingTooSmall && (
+              <div className="flex items-center gap-2 border-t border-amber-200 bg-amber-50 dark:border-amber-400/20 dark:bg-amber-400/10 px-4 py-2.5">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500 dark:text-amber-400" />
+                <span className="text-[11px] text-amber-700 dark:text-amber-300">
+                  Minimum Polymarket funding is 4 USDC.
+                </span>
+              </div>
+            )}
             {memo && (
               <Row
                 label="Memo (on-chain)"
@@ -2676,7 +2694,7 @@ export default function PaymentPage() {
               )}
               <button
                 onClick={handleCirclePasskeyPay}
-                disabled={circlePasskeyPending || circleEvmPaymentProcessing || (requiresAttendeeName && !attendeeName.trim())}
+                disabled={circlePasskeyPending || circleEvmPaymentProcessing || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
                 className={cn(
                   'flex w-full items-center justify-center gap-2 rounded-xl px-6 py-3.5 text-sm font-semibold transition-all',
                   circlePasskeyPending || circleEvmPaymentProcessing
@@ -2775,7 +2793,7 @@ export default function PaymentPage() {
                     )}
                     <button
                       onClick={handleCircleSolanaEmailPay}
-                      disabled={circleSolanaPending || isSolanaConfirming || (requiresAttendeeName && !attendeeName.trim())}
+                      disabled={circleSolanaPending || isSolanaConfirming || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
                       className={cn(
                         'flex w-full items-center justify-center gap-2 rounded-xl px-6 py-3.5 text-sm font-semibold transition-all',
                         circleSolanaPending || isSolanaConfirming
@@ -2857,7 +2875,7 @@ export default function PaymentPage() {
                 ) : !isPolymarketFunding && !isTelegramSource ? (
               <button
                 onClick={handlePay}
-                disabled={isSolanaPending || isSolanaConfirming || (requiresAttendeeName && !attendeeName.trim()) || flexPayDisabled}
+                disabled={isSolanaPending || isSolanaConfirming || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
                 className={cn(
                   'flex w-full items-center justify-center gap-2 rounded-xl px-6 py-4 text-sm font-semibold transition-all',
                   isSolanaPending || isSolanaConfirming
@@ -2878,7 +2896,7 @@ export default function PaymentPage() {
                   <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50/70 p-3">
                     <button
                       onClick={handleArgentStarknetEmailPay}
-                      disabled={argentStarkPending || isStarkPending || isStarkConfirming || (requiresAttendeeName && !attendeeName.trim()) || flexPayDisabled}
+                      disabled={argentStarkPending || isStarkPending || isStarkConfirming || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
                       className={cn(
                         'flex w-full items-center justify-center gap-2 rounded-xl px-6 py-3.5 text-sm font-semibold transition-all',
                         argentStarkPending || isStarkPending || isStarkConfirming
@@ -2955,7 +2973,7 @@ export default function PaymentPage() {
                 <p className="text-center text-xs text-gray-400">{showArgentStarknetEmailPay ? 'Browser wallet fallback' : 'ArgentX, Braavos & other Starknet wallets'}</p>
               </div>
             ) : (
-              <button onClick={handlePay} disabled={isStarkPending || isStarkConfirming || (requiresAttendeeName && !attendeeName.trim()) || flexPayDisabled}
+              <button onClick={handlePay} disabled={isStarkPending || isStarkConfirming || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
                 className={cn(
                   'flex w-full items-center justify-center gap-2 rounded-xl px-6 py-4 text-sm font-semibold transition-all',
                   isStarkPending || isStarkConfirming ? 'cursor-not-allowed bg-gray-100 text-gray-500'
@@ -2993,7 +3011,7 @@ export default function PaymentPage() {
             </button>
           ) : payMode === 'wallet' && !isPolymarketFunding && !isTelegramSource ? (
             <div className="space-y-2">
-              <button onClick={handlePay} disabled={isWalletPending || isConfirming || (requiresAttendeeName && !attendeeName.trim()) || flexPayDisabled}
+              <button onClick={handlePay} disabled={isWalletPending || isConfirming || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
               className={cn(
                 'flex w-full items-center justify-center gap-2 rounded-xl px-6 py-4 text-sm font-semibold transition-all',
                 isWalletPending || isConfirming ? 'cursor-not-allowed bg-gray-100 text-gray-500'
