@@ -256,7 +256,10 @@ export default function AgentDemo() {
           testnet: agentNetwork === 'arc',
         }),
       })
-      const data = await res.json() as { ok?: boolean; error?: string; walletAddress?: string; chain?: string }
+      const data = await res.json() as { ok?: boolean; error?: string; walletAddress?: string; chain?: string; code?: string; existingWallet?: string; newWallet?: string }
+      if (data.code === 'wallet_mismatch') {
+        throw new Error(`Circle returned a different wallet. Existing: ${data.existingWallet ?? 'saved wallet'}. New: ${data.newWallet ?? 'new wallet'}. Login with the email for the existing funded wallet, or disconnect and replace intentionally.`)
+      }
       if (!res.ok || !data.ok) throw new Error(data.error ?? 'Circle Agent Wallet request failed')
       if (action === 'init') {
         setWalletStep('otp')

@@ -301,6 +301,16 @@ export default async function handler(req: Request, res: Response) {
       const walletAddress = parseWalletAddress(listOutput)
       if (!walletAddress) return res.status(502).json({ ok: false, error: 'Circle login completed, but no wallet address was found.' })
       delete store.pending[id]
+      const existing = store.agents?.[agentSlug]
+      if (existing?.walletAddress && existing.walletAddress.toLowerCase() !== walletAddress.toLowerCase()) {
+        return res.status(409).json({
+          ok: false,
+          code: 'wallet_mismatch',
+          error: 'This Circle login returned a different agent wallet. The existing wallet was not replaced.',
+          existingWallet: existing.walletAddress,
+          newWallet: walletAddress,
+        })
+      }
       store.agents = {
         ...(store.agents ?? {}),
         [agentSlug]: { walletAddress, chain, emailHash: pending.emailHash, sessionId: id, updatedAt: Date.now() },
