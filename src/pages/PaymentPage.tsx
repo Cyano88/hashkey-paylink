@@ -1902,6 +1902,7 @@ export default function PaymentPage() {
             <h2 className="text-xl font-bold text-gray-900">
               {isUnder && !isPartial ? 'Underpayment Detected'
                : isPartial           ? 'Partial Payment'
+               : isPolymarketFunding ? 'Funding Complete!'
                : 'Payment Sent!'}
             </h2>
             <p className="mt-1 text-sm text-gray-600">
@@ -1911,7 +1912,7 @@ export default function PaymentPage() {
                     {recipientAmt.toFixed(meta.decimals <= 6 ? 4 : 6)} {meta.asset}
                   </span>
                   {' '}
-                  {isUnder ? 'received — ' : 'received by recipient'}
+                  {isUnder ? 'received - ' : isPolymarketFunding ? 'delivered to funding wallet' : 'received by recipient'}
                   {isUnder && (
                     <span className={cn(
                       'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold',
@@ -1931,7 +1932,11 @@ export default function PaymentPage() {
                   <span className="font-semibold text-gray-900">
                     {formatAmount(effectiveAmt, meta.decimals)} {meta.asset}
                   </span>{' '}
-                  {manualPayDetected && directStatus !== 'success' ? 'received by recipient' : 'delivered successfully'}
+                  {isPolymarketFunding
+                    ? 'delivered to funding wallet'
+                    : manualPayDetected && directStatus !== 'success'
+                    ? 'received by recipient'
+                    : 'delivered successfully'}
                 </>
               )}
             </p>
