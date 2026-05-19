@@ -321,7 +321,8 @@ export default async function handler(req: Request, res: Response) {
         || wallets[0]
       if (!walletAddress) return res.status(502).json({ ok: false, error: 'Circle login completed, but no wallet address was found.' })
       delete store.pending[id]
-      if (existing?.walletAddress && existing.walletAddress.toLowerCase() !== walletAddress.toLowerCase()) {
+      const explicitExpectedMatch = expectedWallet && walletAddress.toLowerCase() === expectedWallet.toLowerCase()
+      if (existing?.walletAddress && existing.walletAddress.toLowerCase() !== walletAddress.toLowerCase() && !explicitExpectedMatch) {
         return res.status(409).json({
           ok: false,
           code: 'wallet_mismatch',
