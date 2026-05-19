@@ -1998,7 +1998,16 @@ export default function PaymentPage() {
               </div>
             )}
 
-            {telegramUrl ? (
+            {isPolymarketFunding ? (
+              <a
+                href={POLYMARKET_SIGNUP_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-2.5 text-sm font-medium text-white hover:bg-gray-800 transition-all active:scale-[0.98]"
+              >
+                Trade on Polymarket
+              </a>
+            ) : telegramUrl ? (
               <a href={telegramUrl} className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-2.5 text-sm font-medium text-white hover:bg-gray-800 transition-all active:scale-[0.98]">
                 Create with Telegram
               </a>
