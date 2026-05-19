@@ -177,6 +177,12 @@ function parseBalanceText(output: string) {
   return undefined
 }
 
+function isCircleLoginExpired(error: unknown) {
+  const err = error as Error & { stdout?: string; stderr?: string }
+  const detail = [err.stdout, err.stderr, err.message].filter(Boolean).join('\n')
+  return /not logged in|session expired|run [`']?circle wallet login/i.test(detail)
+}
+
 async function runCircle(args: string[], key: string, timeoutMs = 60_000) {
   const sessionHome = resolve(process.cwd(), 'data', 'circle-web-sessions', safeSessionKey(key))
   await mkdir(sessionHome, { recursive: true })
@@ -322,17 +328,29 @@ export default async function handler(req: Request, res: Response) {
       }
 
       const serviceKey = `${agentSlug}_${record.sessionId}`
-      const output = await runCircle([
-        'services',
-        'pay',
-        serviceUrl,
-        '--address',
-        record.walletAddress,
-        '--chain',
-        'BASE',
-        '--max-amount',
-        String(maxAmount),
-      ], serviceKey)
+      let output = ''
+      try {
+        output = await runCircle([
+          'services',
+          'pay',
+          serviceUrl,
+          '--address',
+          record.walletAddress,
+          '--chain',
+          'BASE',
+          '--max-amount',
+          String(maxAmount),
+        ], serviceKey)
+      } catch (err) {
+        if (isCircleLoginExpired(err)) {
+          return res.status(409).json({
+            ok: false,
+            code: 'circle_session_expired',
+            error: 'Circle Agent Wallet is connected, but the secure spending session expired. Reconnect the wallet on the agent dashboard, then retry /lp x402.',
+          })
+        }
+        throw err
+      }
 
       return res.json({
         ok: true,
