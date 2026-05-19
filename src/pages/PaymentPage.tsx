@@ -1900,8 +1900,8 @@ export default function PaymentPage() {
               }
             </div>
             <h2 className="text-xl font-bold text-gray-900">
-              {isUnder && !isPartial ? 'Underpayment Detected'
-               : isPartial           ? 'Partial Payment'
+              {isUnder && !isPartial ? (isPolymarketFunding ? 'Funding Shortfall' : 'Underpayment Detected')
+               : isPartial           ? (isPolymarketFunding ? 'Partial Funding' : 'Partial Payment')
                : isPolymarketFunding ? 'Funding Complete!'
                : 'Payment Sent!'}
             </h2>
@@ -1918,12 +1918,12 @@ export default function PaymentPage() {
                       'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold',
                       isPartial ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700',
                     )}>
-                      {shortfall} {meta.asset} short of requested {requested.toFixed(meta.decimals <= 6 ? 2 : 4)}
+                      {isPolymarketFunding ? `${shortfall} short` : `${shortfall} ${meta.asset} short of requested ${requested.toFixed(meta.decimals <= 6 ? 2 : 4)}`}
                     </span>
                   )}
                   {isOver && (
                     <span className="ml-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
-                      Overpayment processed
+                      {isPolymarketFunding ? 'Extra received' : 'Overpayment processed'}
                     </span>
                   )}
                 </>
