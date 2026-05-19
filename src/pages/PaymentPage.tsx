@@ -62,7 +62,7 @@ type CircleEvmEmailSession = Awaited<ReturnType<typeof connectCircleEvmEmailWall
 type ArgentStarknetSession = Awaited<ReturnType<typeof connectArgentStarknetEmailWallet>>
 
 const CHAINS: ChainKey[] = ['base', 'solana', 'arbitrum']
-const POLYMARKET_SIGNUP_URL = 'https://polymarket.com/signup'
+const POLYMARKET_SIGNUP_URL = 'https://polymarket.com'
 
 const CHAIN_DISPLAY_NAMES: Record<number, string> = {
   1:       'Ethereum',
