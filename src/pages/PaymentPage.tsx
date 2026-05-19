@@ -238,6 +238,7 @@ export default function PaymentPage() {
   const netParam    = (getPaylinkParam(searchParams, 'net', 'n') || null) as ChainKey | null
   const modeParam   = searchParams.get('mode')
   const isTelegramSource = isTelegramSourceParam(searchParams)
+  const isPolymarketFunding = searchParams.get('brand') === 'polymarket' || searchParams.get('pm') === '1'
   const telegramUrl = telegramReturnUrl(searchParams)
 
   const resolvedStark  = starkParam || (legacyChain === 'starknet' ? evmParam : '')
@@ -1929,7 +1930,7 @@ export default function PaymentPage() {
               <Row label="Amount"    value={`${formatAmount(effectiveAmt, meta.decimals)} ${meta.asset}`} mono={false} />
               <Row label="Recipient" value={truncateAddress(activeRecipient, 8)} mono />
               <Row label="Network"   value={meta.label} mono={false} />
-              {memo && <Row label="Memo" value={`"${memo}"`} mono={false} />}
+              {memo && <Row label="Memo" value={isPolymarketFunding ? <PolymarketMemoInline /> : `"${memo}"`} mono={false} />}
               {txHash && (
                 <div className="flex items-center justify-between px-4 py-3">
                   <span className="text-sm text-gray-500">Tx Hash</span>
@@ -2146,10 +2147,19 @@ export default function PaymentPage() {
               </div>
               {memo && (
                 <p className="mt-2.5 text-sm text-gray-500">
-                  <span className="rounded-full border border-gray-200 bg-white px-3 py-0.5 text-xs font-medium">"{memo}"</span>
+                  {isPolymarketFunding ? (
+                    <PolymarketMemoPill />
+                  ) : (
+                    <span className="rounded-full border border-gray-200 bg-white px-3 py-0.5 text-xs font-medium">"{memo}"</span>
+                  )}
                 </p>
               )}
             </>
+          )}
+          {isFlex && memo && isPolymarketFunding && (
+            <div className="mt-2.5 flex justify-center">
+              <PolymarketMemoPill />
+            </div>
           )}
 
           {/* ── FX indicator — event mode only ─────────────────────────── */}
@@ -2268,7 +2278,12 @@ export default function PaymentPage() {
                 </span>
               </div>
             )}
-            {memo && <Row label="Memo (on-chain)" value={memo.length > 28 ? memo.slice(0, 28) + '…' : memo} />}
+            {memo && (
+              <Row
+                label="Memo (on-chain)"
+                value={isPolymarketFunding ? <PolymarketMemoInline /> : memo.length > 28 ? memo.slice(0, 28) + '…' : memo}
+              />
+            )}
           </div>
 
           {/* ── Attendee name (event mode) ───────────────────────────────── */}
@@ -3027,15 +3042,19 @@ export default function PaymentPage() {
         </div>
 
         <p className="mt-6 text-center text-xs text-gray-400">
-          Built on{' '}
-          {[
+          {isPolymarketFunding ? 'Polymarket Funding on ' : 'Built on '}
+          {(isPolymarketFunding ? [
+            { label: 'Base',      href: 'https://basescan.org' },
+            { label: 'Solana',   href: 'https://solscan.io' },
+            { label: 'Arbitrum', href: 'https://arbiscan.io' },
+          ] : [
             { label: 'Base',      href: 'https://basescan.org' },
             { label: 'Arbitrum', href: 'https://arbiscan.io' },
             { label: 'Starknet', href: 'https://starkscan.co' },
             { label: 'Arc',      href: 'https://testnet.arcscan.app' },
             { label: 'Solana',   href: 'https://solscan.io' },
             { label: 'Circle',   href: 'https://www.circle.com' },
-          ].map((item, i, arr) => (
+          ]).map((item, i, arr) => (
             <span key={item.label}>
               <a
                 href={item.href}
@@ -3055,6 +3074,24 @@ export default function PaymentPage() {
 }
 
 // ─── Row helper ───────────────────────────────────────────────────────────────
+function PolymarketMemoInline() {
+  return (
+    <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-gray-900 dark:text-white">
+      <img src="/brand/polymarket-logo.png" alt="" className="h-4 w-4 invert dark:invert-0" />
+      Polymarket
+    </span>
+  )
+}
+
+function PolymarketMemoPill() {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-semibold text-gray-900 shadow-sm dark:border-white/10 dark:bg-white/[0.08] dark:text-white">
+      <img src="/brand/polymarket-logo.png" alt="" className="h-4 w-4 invert dark:invert-0" />
+      Polymarket
+    </span>
+  )
+}
+
 function Row({ label, value, mono = false }: { label: string; value: React.ReactNode; mono?: boolean }) {
   return (
     <div className="flex items-center justify-between bg-gray-50/60 px-4 py-3">
