@@ -13,7 +13,11 @@ type PaidRequest = Request & {
 
 const SELLER_ADDRESS = process.env.X402_SELLER_ADDRESS ?? process.env.TREASURY_ADDRESS
 const PRICE = process.env.X402_POLYMARKET_SCOUT_PRICE ?? '$0.01'
-const FACILITATOR_URL = process.env.X402_FACILITATOR_URL ?? 'https://gateway-api-testnet.circle.com'
+const FACILITATOR_URL = process.env.X402_FACILITATOR_URL?.trim()
+const ACCEPT_NETWORKS = process.env.X402_ACCEPT_NETWORKS
+  ?.split(',')
+  .map(network => network.trim())
+  .filter(Boolean)
 
 let gatewayMiddleware: ((req: Request, res: Response, next: NextFunction) => void) | undefined
 
@@ -23,7 +27,8 @@ async function getGatewayMiddleware() {
     const { createGatewayMiddleware } = await import('@circle-fin/x402-batching/server')
     const gateway = createGatewayMiddleware({
       sellerAddress: SELLER_ADDRESS,
-      facilitatorUrl: FACILITATOR_URL,
+      ...(FACILITATOR_URL ? { facilitatorUrl: FACILITATOR_URL } : {}),
+      ...(ACCEPT_NETWORKS?.length ? { networks: ACCEPT_NETWORKS } : {}),
       description: 'Hash PayLink Polymarket LP Scout x402 API',
     })
     gatewayMiddleware = gateway.require(PRICE)
