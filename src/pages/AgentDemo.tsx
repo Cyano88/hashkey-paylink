@@ -71,6 +71,12 @@ export default function AgentDemo() {
   const [treasuryBalance, setTreasuryBalance] = useState<string | null>(null)
   const [treasuryBalanceChecked, setTreasuryBalanceChecked] = useState(false)
   const [treasuryBalanceError, setTreasuryBalanceError] = useState('')
+  const [x402Balance, setX402Balance] = useState<string | null>(null)
+  const [x402BalanceChecked, setX402BalanceChecked] = useState(false)
+  const [x402BalanceError, setX402BalanceError] = useState('')
+  const [x402Amount, setX402Amount] = useState('1')
+  const [x402Busy, setX402Busy] = useState(false)
+  const [x402Status, setX402Status] = useState('')
   const [copiedWallet, setCopiedWallet] = useState(false)
   const [walletEmail, setWalletEmail] = useState('')
   const [walletOtp, setWalletOtp] = useState('')
@@ -142,6 +148,38 @@ export default function AgentDemo() {
 
     return () => { cancelled = true }
   }, [agentNetwork, currentAgentWallet, showAgentProfile])
+
+  async function refreshX402Balance() {
+    if (!showAgentProfile || !currentAgentWallet || !agentWalletSessionConnected) {
+      setX402Balance(null)
+      setX402BalanceChecked(true)
+      setX402BalanceError('')
+      return
+    }
+    setX402Balance(null)
+    setX402BalanceChecked(false)
+    setX402BalanceError('')
+    try {
+      const slug = agentSlug || 'hashpaylink-agent'
+      const res = await fetch(`/api/agent-wallet?agent=${encodeURIComponent(slug)}&x402=1`)
+      const data = await res.json() as {
+        ok?: boolean
+        gatewayBalance?: string
+        gatewayBalanceError?: string
+      }
+      if (!res.ok || !data.ok) throw new Error(data.gatewayBalanceError ?? 'x402 balance unavailable')
+      if (data.gatewayBalance !== undefined) setX402Balance(data.gatewayBalance)
+      if (data.gatewayBalanceError) setX402BalanceError(data.gatewayBalanceError)
+    } catch (err) {
+      setX402BalanceError(err instanceof Error ? err.message : 'x402 balance unavailable')
+    } finally {
+      setX402BalanceChecked(true)
+    }
+  }
+
+  useEffect(() => {
+    refreshX402Balance().catch(() => undefined)
+  }, [agentSlug, agentWalletSessionConnected, currentAgentWallet, showAgentProfile]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-verify when eventId + payer arrive via access link URL params
   useEffect(() => {
@@ -304,6 +342,10 @@ export default function AgentDemo() {
       setTreasuryBalance(null)
       setTreasuryBalanceChecked(true)
       setTreasuryBalanceError('')
+      setX402Balance(null)
+      setX402BalanceChecked(true)
+      setX402BalanceError('')
+      setX402Status('')
       setAgentWalletSessionConnected(false)
       setWalletStep('idle')
       setWalletOtp('')
@@ -312,6 +354,34 @@ export default function AgentDemo() {
       setWalletError(err instanceof Error ? err.message : 'Wallet disconnect failed')
     } finally {
       setWalletBusy(false)
+    }
+  }
+
+  async function activateX402Balance() {
+    if (!currentAgentWallet || x402Busy) return
+    setX402Busy(true)
+    setX402Status('')
+    setX402BalanceError('')
+    try {
+      const amount = Number(x402Amount)
+      if (!Number.isFinite(amount) || amount <= 0) throw new Error('Enter a valid x402 amount.')
+      const res = await fetch('/api/agent-wallet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'gateway-deposit',
+          agentSlug: agentSlug || 'hashpaylink-agent',
+          amount: String(amount),
+        }),
+      })
+      const data = await res.json() as { ok?: boolean; error?: string; amount?: string }
+      if (!res.ok || !data.ok) throw new Error(data.error ?? 'x402 activation failed')
+      setX402Status(`${data.amount ?? x402Amount} USDC activated for x402.`)
+      await refreshX402Balance()
+    } catch (err) {
+      setX402BalanceError(err instanceof Error ? err.message : 'x402 activation failed')
+    } finally {
+      setX402Busy(false)
     }
   }
 
@@ -487,27 +557,77 @@ export default function AgentDemo() {
           )}
 
           {currentAgentWallet && agentWalletSessionConnected && (
-            <div className="mt-5 grid gap-3 sm:grid-cols-2">
-              <Link
-                to={buildAgentFundUrl()}
-                onClick={handleFundAgent}
-                className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold text-white shadow-button transition-all hover:opacity-90 active:scale-[0.98]"
-                style={{
-                  backgroundColor: agentMeta.accentColor,
-                  boxShadow: `0 10px 24px -14px ${agentMeta.accentColor}, ${agentMeta.glowStyle}`,
-                }}
-              >
-                <Wallet className="h-4 w-4" /> Fund Agent Wallet
-              </Link>
-
-              {agentStreamUrl && (
-                <a
-                  href={agentStreamUrl}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-800 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-100"
+            <div className="mt-5 space-y-3">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Link
+                  to={buildAgentFundUrl()}
+                  onClick={handleFundAgent}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold text-white shadow-button transition-all hover:opacity-90 active:scale-[0.98]"
+                  style={{
+                    backgroundColor: agentMeta.accentColor,
+                    boxShadow: `0 10px 24px -14px ${agentMeta.accentColor}, ${agentMeta.glowStyle}`,
+                  }}
                 >
-                  <Radio className="h-4 w-4" /> Start StreamPay Retainer
-                </a>
-              )}
+                  <Wallet className="h-4 w-4" /> Fund Agent Wallet
+                </Link>
+
+                {agentStreamUrl && (
+                  <a
+                    href={agentStreamUrl}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-800 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-100"
+                  >
+                    <Radio className="h-4 w-4" /> Start StreamPay Retainer
+                  </a>
+                )}
+              </div>
+
+              <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="text-xs font-semibold text-gray-900 dark:text-white">x402 Gateway balance</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400" title={x402BalanceError || undefined}>
+                      {x402Balance !== null
+                        ? `${Number(x402Balance).toLocaleString(undefined, { maximumFractionDigits: 6 })} USDC ready`
+                        : x402BalanceError || x402BalanceChecked
+                        ? 'Unavailable'
+                        : 'Checking...'}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => refreshX402Balance()}
+                    disabled={x402Busy}
+                    className="rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300"
+                  >
+                    Refresh
+                  </button>
+                </div>
+                <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_160px]">
+                  <div className="flex min-w-0 items-center overflow-hidden rounded-lg border border-gray-200 bg-white dark:border-white/10 dark:bg-white/[0.06]">
+                    <input
+                      value={x402Amount}
+                      onChange={event => setX402Amount(event.target.value.replace(/[^\d.]/g, ''))}
+                      inputMode="decimal"
+                      className="min-w-0 flex-1 bg-transparent px-3 py-2 text-sm text-gray-900 outline-none dark:text-white"
+                    />
+                    <span className="border-l border-gray-100 px-3 text-xs font-semibold text-gray-400 dark:border-white/10">USDC</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={activateX402Balance}
+                    disabled={x402Busy || !x402Amount || Number(x402Amount) <= 0}
+                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-gray-900 px-3 py-2 text-sm font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-50 dark:bg-white dark:text-gray-950"
+                  >
+                    {x402Busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+                    Activate x402
+                  </button>
+                </div>
+                {(x402BalanceError || x402Status) && (
+                  <p className={cn('mt-2 text-xs font-medium', x402BalanceError ? 'text-amber-600 dark:text-amber-300' : 'text-emerald-600 dark:text-emerald-300')}>
+                    {x402BalanceError || x402Status}
+                  </p>
+                )}
+              </div>
             </div>
           )}
 

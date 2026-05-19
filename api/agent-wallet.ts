@@ -18,6 +18,9 @@ const ALLOWED_SERVICE_URLS = new Set(
     .filter(Boolean),
 )
 const MAX_SERVICE_AMOUNT = Number(process.env.AGENT_WALLET_MAX_SERVICE_AMOUNT ?? process.env.X402_POLYMARKET_SCOUT_MAX_AMOUNT ?? '0.01')
+const MAX_GATEWAY_DEPOSIT_AMOUNT = Number(process.env.AGENT_WALLET_MAX_GATEWAY_DEPOSIT_AMOUNT ?? '5')
+const GATEWAY_BALANCE_CHAIN = process.env.AGENT_WALLET_GATEWAY_BALANCE_CHAIN ?? 'MATIC'
+const GATEWAY_DEPOSIT_CHAIN = process.env.AGENT_WALLET_GATEWAY_DEPOSIT_CHAIN ?? 'BASE'
 
 type PendingSession = {
   agentSlug: string
@@ -56,6 +59,12 @@ function sessionId(agentSlug: string, email: string) {
 function cleanAmount(value: unknown) {
   const amount = Number(String(value ?? '').trim())
   return Number.isFinite(amount) && amount > 0 ? amount : undefined
+}
+
+function clampAmount(value: unknown, max: number) {
+  const amount = cleanAmount(value)
+  if (!amount || !Number.isFinite(max) || max <= 0) return undefined
+  return Math.min(amount, max)
 }
 
 function normalizeBalanceChain(value: unknown, fallback = 'BASE') {
@@ -224,6 +233,9 @@ export default async function handler(req: Request, res: Response) {
     let balance: string | undefined
     let balanceError: string | undefined
     let balanceChecked = false
+    let gatewayBalance: string | undefined
+    let gatewayBalanceError: string | undefined
+    let gatewayBalanceChecked = false
     if (record?.walletAddress && req.query.balance === '1' && !record.sessionId) {
       balanceChecked = true
       balanceError = 'Reconnect this agent wallet to enable balance lookup.'
@@ -246,6 +258,28 @@ export default async function handler(req: Request, res: Response) {
         balanceError = err instanceof Error ? err.message.slice(0, 240) : 'Balance lookup failed.'
       }
     }
+    if (record?.walletAddress && req.query.x402 === '1' && !record.sessionId) {
+      gatewayBalanceChecked = true
+      gatewayBalanceError = 'Reconnect this agent wallet to enable x402 balance lookup.'
+    } else if (record?.walletAddress && req.query.x402 === '1' && !CIRCLE_CLI_ENABLED) {
+      gatewayBalanceChecked = true
+      gatewayBalanceError = 'Circle CLI x402 balance lookup is not enabled on this server.'
+    } else if (record?.walletAddress && record.sessionId && req.query.x402 === '1' && CIRCLE_CLI_ENABLED) {
+      gatewayBalanceChecked = true
+      try {
+        const key = `${agentSlug}_${record.sessionId}`
+        let output = ''
+        try {
+          output = await runCircle(['gateway', 'balance', '--address', record.walletAddress, '--chain', GATEWAY_BALANCE_CHAIN, '--output', 'json'], key, 30_000)
+        } catch {
+          output = await runCircle(['gateway', 'balance', '--address', record.walletAddress, '--chain', GATEWAY_BALANCE_CHAIN], key, 30_000)
+        }
+        gatewayBalance = parseBalance(output)
+        if (gatewayBalance === undefined) gatewayBalanceError = 'Circle CLI returned no parseable x402 balance.'
+      } catch (err) {
+        gatewayBalanceError = err instanceof Error ? err.message.slice(0, 240) : 'x402 balance lookup failed.'
+      }
+    }
     return res.json({
       ok: true,
       found: !!record,
@@ -257,6 +291,10 @@ export default async function handler(req: Request, res: Response) {
       balance,
       balanceChecked,
       balanceError,
+      gatewayBalance,
+      gatewayBalanceChecked,
+      gatewayBalanceError,
+      gatewayBalanceChain: GATEWAY_BALANCE_CHAIN,
       updatedAt: record?.updatedAt,
     })
   }
@@ -349,6 +387,79 @@ export default async function handler(req: Request, res: Response) {
       delete store.agents[agentSlug]
       await writeStore(store)
       return res.json({ ok: true, disconnected: true, forgotten: true, agentSlug })
+    }
+
+    if (action === 'gateway-balance') {
+      const store = await readStore()
+      const record = store.agents?.[agentSlug]
+      if (!record?.walletAddress || !record.sessionId) {
+        return res.status(404).json({ ok: false, error: 'Agent wallet session not found. Login on the web dashboard first.' })
+      }
+
+      const serviceKey = `${agentSlug}_${record.sessionId}`
+      let output = ''
+      try {
+        output = await runCircle(['gateway', 'balance', '--address', record.walletAddress, '--chain', GATEWAY_BALANCE_CHAIN, '--output', 'json'], serviceKey, 30_000)
+      } catch {
+        output = await runCircle(['gateway', 'balance', '--address', record.walletAddress, '--chain', GATEWAY_BALANCE_CHAIN], serviceKey, 30_000)
+      }
+      const gatewayBalance = parseBalance(output)
+      return res.json({
+        ok: true,
+        agentSlug,
+        walletAddress: record.walletAddress,
+        gatewayBalance,
+        gatewayBalanceChain: GATEWAY_BALANCE_CHAIN,
+        raw: output.slice(0, 1200),
+      })
+    }
+
+    if (action === 'gateway-deposit') {
+      const amount = clampAmount(req.body?.amount, MAX_GATEWAY_DEPOSIT_AMOUNT)
+      if (!amount) return res.status(400).json({ ok: false, error: 'Invalid x402 activation amount.' })
+
+      const store = await readStore()
+      const record = store.agents?.[agentSlug]
+      if (!record?.walletAddress || !record.sessionId) {
+        return res.status(404).json({ ok: false, error: 'Agent wallet session not found. Login on the web dashboard first.' })
+      }
+
+      const serviceKey = `${agentSlug}_${record.sessionId}`
+      let output = ''
+      try {
+        output = await runCircle([
+          'gateway',
+          'deposit',
+          '--amount',
+          String(amount),
+          '--address',
+          record.walletAddress,
+          '--chain',
+          GATEWAY_DEPOSIT_CHAIN,
+          '--method',
+          'eco',
+        ], serviceKey, 120_000)
+      } catch (err) {
+        if (isCircleLoginExpired(err)) {
+          return res.status(409).json({
+            ok: false,
+            code: 'circle_session_expired',
+            error: 'Circle Agent Wallet is connected, but the secure session expired. Reconnect the wallet, then retry x402 activation.',
+          })
+        }
+        throw err
+      }
+
+      return res.json({
+        ok: true,
+        agentSlug,
+        walletAddress: record.walletAddress,
+        amount: String(amount),
+        depositChain: GATEWAY_DEPOSIT_CHAIN,
+        gatewayBalanceChain: GATEWAY_BALANCE_CHAIN,
+        response: extractJsonFromCliOutput(output),
+        raw: output.slice(0, 3000),
+      })
     }
 
     if (action === 'pay-service') {
