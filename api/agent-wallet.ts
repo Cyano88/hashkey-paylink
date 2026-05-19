@@ -58,6 +58,16 @@ function cleanAmount(value: unknown) {
   return Number.isFinite(amount) && amount > 0 ? amount : undefined
 }
 
+function normalizeBalanceChain(value: unknown, fallback = 'BASE') {
+  const key = String(value ?? '').trim().toLowerCase()
+  if (key === 'base') return 'BASE'
+  if (key === 'arbitrum' || key === 'arb') return 'ARBITRUM'
+  if (key === 'arc' || key === 'arc-testnet' || key === 'arc_testnet') return 'ARC-TESTNET'
+  const upper = key.toUpperCase()
+  if (upper === 'BASE' || upper === 'ARBITRUM' || upper === 'ARC-TESTNET') return upper
+  return fallback
+}
+
 function extractJsonFromCliOutput(output: string) {
   const start = output.indexOf('{')
   const end = output.lastIndexOf('}')
@@ -190,6 +200,7 @@ export default async function handler(req: Request, res: Response) {
     if (!agentSlug) return res.status(400).json({ ok: false, error: 'Missing agent name.' })
     const store = await readStore()
     const record = store.agents?.[agentSlug]
+    const balanceChain = normalizeBalanceChain(req.query.chain, record?.chain ?? 'BASE')
     let balance: string | undefined
     let balanceError: string | undefined
     let balanceChecked = false
@@ -205,9 +216,9 @@ export default async function handler(req: Request, res: Response) {
         const key = `${agentSlug}_${record.sessionId}`
         let output = ''
         try {
-          output = await runCircle(['wallet', 'balance', '--address', record.walletAddress, '--chain', record.chain, '--output', 'json'], key, 30_000)
+          output = await runCircle(['wallet', 'balance', '--address', record.walletAddress, '--chain', balanceChain, '--output', 'json'], key, 30_000)
         } catch {
-          output = await runCircle(['wallet', 'balance', '--address', record.walletAddress, '--chain', record.chain], key, 30_000)
+          output = await runCircle(['wallet', 'balance', '--address', record.walletAddress, '--chain', balanceChain], key, 30_000)
         }
         balance = parseBalance(output)
         if (balance === undefined) balanceError = 'Circle CLI returned no parseable USDC balance.'
@@ -220,7 +231,8 @@ export default async function handler(req: Request, res: Response) {
       found: !!record,
       agentSlug,
       walletAddress: record?.walletAddress,
-      chain: record?.chain,
+      chain: balanceChain,
+      storedChain: record?.chain,
       balance,
       balanceChecked,
       balanceError,

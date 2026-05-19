@@ -91,9 +91,10 @@ export default function AgentDemo() {
     const controller = new AbortController()
     const timeout = window.setTimeout(() => controller.abort(), 35000)
     setTreasuryBalanceChecked(false)
+    setTreasuryBalance(null)
     setTreasuryBalanceError('')
     try {
-      const res = await fetch(`/api/agent-wallet?agent=${encodeURIComponent(slug)}&balance=1`, {
+      const res = await fetch(`/api/agent-wallet?agent=${encodeURIComponent(slug)}&balance=1&chain=${encodeURIComponent(agentNetwork)}`, {
         signal: controller.signal,
       })
       const data = await res.json() as { walletAddress?: string; chain?: string; balance?: string; balanceChecked?: boolean; balanceError?: string }
@@ -121,7 +122,7 @@ export default function AgentDemo() {
     if (!showAgentProfile) return
     loadAgentWallet()
       .catch(() => undefined)
-  }, [agentSlug, showAgentProfile]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [agentSlug, agentNetwork, showAgentProfile]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-verify when eventId + payer arrive via access link URL params
   useEffect(() => {
