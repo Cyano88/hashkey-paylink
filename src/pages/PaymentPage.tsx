@@ -2625,6 +2625,9 @@ export default function PaymentPage() {
                 <Wallet className="h-4 w-4" />
                 Fund account
               </button>
+              <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
+                Not on Polymarket yet?
+              </p>
               <a
                 href={POLYMARKET_SIGNUP_URL}
                 target="_blank"
@@ -2633,7 +2636,7 @@ export default function PaymentPage() {
               >
                 <span className="inline-flex items-center gap-2">
                   <ExternalLink className="h-4 w-4" />
-                  Not on Polymarket yet? Sign up
+                  Sign up
                 </span>
                 <span className="text-[11px] font-medium text-gray-400 dark:text-gray-500">
                   For best experience, sign up with email
