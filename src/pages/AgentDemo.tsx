@@ -18,7 +18,7 @@ import { queryBalances }                from '../lib/unifiedBalance'
 import {
   CheckCircle2, AlertCircle, Loader2, Send,
   ExternalLink, ArrowLeft, ShieldCheck, Zap,
-  Wallet, CreditCard, Radio, Copy,
+  Wallet, CreditCard, Radio, Copy, Power,
 } from 'lucide-react'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -64,6 +64,7 @@ export default function AgentDemo() {
   const [eventId,    setEventId]    = useState(() => params.get('eventId') ?? '')
   const [payer,      setPayer]      = useState(() => params.get('payer')   ?? '')
   const [currentAgentWallet, setCurrentAgentWallet] = useState(agentWallet)
+  const [agentWalletSessionConnected, setAgentWalletSessionConnected] = useState(Boolean(agentWallet))
   const [agentWalletChain, setAgentWalletChain] = useState('')
   const [treasuryBalance, setTreasuryBalance] = useState<string | null>(null)
   const [treasuryBalanceChecked, setTreasuryBalanceChecked] = useState(false)
@@ -92,8 +93,9 @@ export default function AgentDemo() {
     const slug = agentSlug || 'hashpaylink-agent'
     const res = await fetch(`/api/agent-wallet?agent=${encodeURIComponent(slug)}`)
     if (!res.ok) return
-    const data = await res.json() as { walletAddress?: string; chain?: string }
+    const data = await res.json() as { walletAddress?: string; chain?: string; connected?: boolean }
     if (data.walletAddress) setCurrentAgentWallet(data.walletAddress)
+    setAgentWalletSessionConnected(Boolean(data.connected))
     if (data.chain) setAgentWalletChain(data.chain)
   }
 
@@ -265,10 +267,37 @@ export default function AgentDemo() {
         setTreasuryBalanceChecked(false)
         setTreasuryBalanceError('')
         setWalletStep('done')
+        setAgentWalletSessionConnected(true)
         void loadAgentWallet()
       }
     } catch (err) {
       setWalletError(err instanceof Error ? err.message : 'Circle Agent Wallet request failed')
+    } finally {
+      setWalletBusy(false)
+    }
+  }
+
+  async function disconnectAgentWallet() {
+    if (walletBusy) return
+    setWalletBusy(true)
+    setWalletError(null)
+    try {
+      const res = await fetch('/api/agent-wallet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'disconnect',
+          agentSlug: agentSlug || 'hashpaylink-agent',
+        }),
+      })
+      const data = await res.json() as { ok?: boolean; error?: string }
+      if (!res.ok || !data.ok) throw new Error(data.error ?? 'Wallet disconnect failed')
+      setAgentWalletSessionConnected(false)
+      setWalletStep('idle')
+      setWalletOtp('')
+      setWalletMode('login')
+    } catch (err) {
+      setWalletError(err instanceof Error ? err.message : 'Wallet disconnect failed')
     } finally {
       setWalletBusy(false)
     }
@@ -285,7 +314,19 @@ export default function AgentDemo() {
       </Link>
 
       {showAgentProfile && (
-        <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-[#1c1c20] sm:p-6">
+        <div className="relative rounded-2xl border border-gray-100 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-[#1c1c20] sm:p-6">
+          {currentAgentWallet && (
+            <button
+              type="button"
+              onClick={disconnectAgentWallet}
+              disabled={walletBusy}
+              aria-label="Disconnect agent wallet session"
+              title="Disconnect agent wallet session"
+              className="absolute right-4 top-4 inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-400 transition-all hover:border-red-200 hover:bg-red-50 hover:text-red-500 active:scale-95 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.06] dark:hover:border-red-400/30 dark:hover:bg-red-400/10 dark:hover:text-red-300"
+            >
+              {walletBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Power className="h-3.5 w-3.5" />}
+            </button>
+          )}
           <div className="flex items-start gap-3 sm:gap-4">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-blue-100 bg-blue-50 dark:border-blue-900/30 dark:bg-blue-900/20">
               <Wallet className="h-5 w-5 text-blue-600" />
@@ -355,7 +396,7 @@ export default function AgentDemo() {
             </div>
           </div>
 
-          {!currentAgentWallet && (
+          {(!currentAgentWallet || !agentWalletSessionConnected) && (
             <div
               className="mt-5 rounded-xl border bg-gray-50/70 p-4 transition-all dark:bg-white/[0.04]"
               style={{
@@ -365,10 +406,14 @@ export default function AgentDemo() {
             >
               <div className="flex items-center gap-2">
                 <Wallet className="h-4 w-4 text-gray-600 dark:text-gray-300" />
-                <p className="text-sm font-semibold text-gray-900 dark:text-white">Connect Circle Agent Wallet</p>
+                <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                  {currentAgentWallet ? 'Reconnect Circle Agent Wallet' : 'Connect Circle Agent Wallet'}
+                </p>
               </div>
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                Create a wallet, or login with the same Circle email to reconnect an existing one.
+                {currentAgentWallet
+                  ? 'Login with the same Circle email to restore the secure spending session.'
+                  : 'Create a wallet, or login with the same Circle email to reconnect an existing one.'}
               </p>
               <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_120px_150px]">
                 <input
@@ -429,7 +474,7 @@ export default function AgentDemo() {
             </div>
           )}
 
-          {currentAgentWallet && (
+          {currentAgentWallet && agentWalletSessionConnected && (
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
               <Link
                 to={buildAgentFundUrl()}

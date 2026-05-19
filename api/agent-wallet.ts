@@ -237,6 +237,7 @@ export default async function handler(req: Request, res: Response) {
       found: !!record,
       agentSlug,
       walletAddress: record?.walletAddress,
+      connected: !!record?.sessionId,
       chain: balanceChain,
       storedChain: record?.chain,
       balance,
@@ -306,6 +307,22 @@ export default async function handler(req: Request, res: Response) {
       }
       await writeStore(store)
       return res.json({ ok: true, walletAddress, chain, agentSlug })
+    }
+
+    if (action === 'disconnect') {
+      const store = await readStore()
+      const record = store.agents?.[agentSlug]
+      if (!record) return res.json({ ok: true, disconnected: true, agentSlug })
+      store.agents = {
+        ...(store.agents ?? {}),
+        [agentSlug]: {
+          walletAddress: record.walletAddress,
+          chain: record.chain,
+          updatedAt: Date.now(),
+        },
+      }
+      await writeStore(store)
+      return res.json({ ok: true, disconnected: true, agentSlug, walletAddress: record.walletAddress })
     }
 
     if (action === 'pay-service') {
