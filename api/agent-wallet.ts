@@ -344,15 +344,11 @@ export default async function handler(req: Request, res: Response) {
       const record = store.agents?.[agentSlug]
       if (!record) return res.json({ ok: true, disconnected: true, agentSlug })
       store.agents = {
-        ...(store.agents ?? {}),
-        [agentSlug]: {
-          walletAddress: record.walletAddress,
-          chain: record.chain,
-          updatedAt: Date.now(),
-        },
+        ...(store.agents ?? {})
       }
+      delete store.agents[agentSlug]
       await writeStore(store)
-      return res.json({ ok: true, disconnected: true, agentSlug, walletAddress: record.walletAddress })
+      return res.json({ ok: true, disconnected: true, forgotten: true, agentSlug })
     }
 
     if (action === 'pay-service') {

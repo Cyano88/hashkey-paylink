@@ -49,6 +49,7 @@ export default function AgentDemo() {
   const agentSlug = params.get('agent') ?? ''
   const agentWallet = params.get('wallet') ?? params.get('e') ?? ''
   const intendedAgentWallet = params.get('wallet') ?? params.get('expectedWallet') ?? params.get('e') ?? ''
+  const [ignoreUrlAgentWallet, setIgnoreUrlAgentWallet] = useState(false)
   const agentPrice = params.get('price') ?? '1'
   const agentStreamPrice = params.get('streamPrice') ?? ''
   const agentStreamDuration = params.get('streamDuration') ?? ''
@@ -255,7 +256,7 @@ export default function AgentDemo() {
           email: walletEmail,
           otp: walletOtp,
           testnet: agentNetwork === 'arc',
-          expectedWallet: intendedAgentWallet || currentAgentWallet || undefined,
+          expectedWallet: ignoreUrlAgentWallet ? currentAgentWallet || undefined : intendedAgentWallet || currentAgentWallet || undefined,
         }),
       })
       const data = await res.json() as { ok?: boolean; error?: string; walletAddress?: string; chain?: string; code?: string; existingWallet?: string; newWallet?: string }
@@ -297,6 +298,12 @@ export default function AgentDemo() {
       })
       const data = await res.json() as { ok?: boolean; error?: string }
       if (!res.ok || !data.ok) throw new Error(data.error ?? 'Wallet disconnect failed')
+      setIgnoreUrlAgentWallet(true)
+      setCurrentAgentWallet('')
+      setAgentWalletChain('')
+      setTreasuryBalance(null)
+      setTreasuryBalanceChecked(true)
+      setTreasuryBalanceError('')
       setAgentWalletSessionConnected(false)
       setWalletStep('idle')
       setWalletOtp('')
