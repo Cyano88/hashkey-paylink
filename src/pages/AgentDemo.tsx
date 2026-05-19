@@ -13,6 +13,7 @@ import { Link, useOutletContext }       from 'react-router-dom'
 import { cn }                           from '../lib/utils'
 import type { LayoutOutletContext }     from '../Layout'
 import type { ChainKey }                from '../lib/chains'
+import { queryBalances }                from '../lib/unifiedBalance'
 import {
   CheckCircle2, AlertCircle, Loader2, Send,
   ExternalLink, ArrowLeft, ShieldCheck, Zap,
@@ -88,41 +89,54 @@ export default function AgentDemo() {
 
   async function loadAgentWallet() {
     const slug = agentSlug || 'hashpaylink-agent'
-    const controller = new AbortController()
-    const timeout = window.setTimeout(() => controller.abort(), 35000)
-    setTreasuryBalanceChecked(false)
-    setTreasuryBalance(null)
-    setTreasuryBalanceError('')
-    try {
-      const res = await fetch(`/api/agent-wallet?agent=${encodeURIComponent(slug)}&balance=1&chain=${encodeURIComponent(agentNetwork)}`, {
-        signal: controller.signal,
-      })
-      const data = await res.json() as { walletAddress?: string; chain?: string; balance?: string; balanceChecked?: boolean; balanceError?: string }
-      if (!res.ok) throw new Error(data.balanceError || 'Balance unavailable')
-      if (data.walletAddress) setCurrentAgentWallet(data.walletAddress)
-      if (data.chain) setAgentWalletChain(data.chain)
-      if (data.balance !== undefined) setTreasuryBalance(data.balance)
-      if (data.balanceError) setTreasuryBalanceError(data.balanceError)
-      if (data.balance === undefined && !data.balanceError && !data.balanceChecked) {
-        setTreasuryBalanceError('Balance unavailable')
-      }
-    } catch (err) {
-      setTreasuryBalanceError(err instanceof DOMException && err.name === 'AbortError'
-        ? 'Balance lookup timed out.'
-        : err instanceof Error
-        ? err.message
-        : 'Balance unavailable')
-    } finally {
-      window.clearTimeout(timeout)
-      setTreasuryBalanceChecked(true)
-    }
+    const res = await fetch(`/api/agent-wallet?agent=${encodeURIComponent(slug)}`)
+    if (!res.ok) return
+    const data = await res.json() as { walletAddress?: string; chain?: string }
+    if (data.walletAddress) setCurrentAgentWallet(data.walletAddress)
+    if (data.chain) setAgentWalletChain(data.chain)
   }
 
   useEffect(() => {
     if (!showAgentProfile) return
     loadAgentWallet()
       .catch(() => undefined)
-  }, [agentSlug, agentNetwork, showAgentProfile]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [agentSlug, showAgentProfile]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    let cancelled = false
+    if (!showAgentProfile || !currentAgentWallet) {
+      setTreasuryBalance(null)
+      setTreasuryBalanceChecked(true)
+      setTreasuryBalanceError('')
+      return
+    }
+
+    setTreasuryBalance(null)
+    setTreasuryBalanceChecked(false)
+    setTreasuryBalanceError('')
+    queryBalances({
+      evmAddress: currentAgentWallet,
+      chains: [agentNetwork],
+    })
+      .then(result => {
+        if (cancelled) return
+        const row = result.rows.find(item => item.key === agentNetwork)
+        if (!row || row.status === 'error') {
+          setTreasuryBalanceError(row?.error || 'Balance unavailable')
+          return
+        }
+        setTreasuryBalance(String(row.balance))
+        setAgentWalletChain(row.label)
+      })
+      .catch(error => {
+        if (!cancelled) setTreasuryBalanceError(error instanceof Error ? error.message : 'Balance unavailable')
+      })
+      .finally(() => {
+        if (!cancelled) setTreasuryBalanceChecked(true)
+      })
+
+    return () => { cancelled = true }
+  }, [agentNetwork, currentAgentWallet, showAgentProfile])
 
   // Auto-verify when eventId + payer arrive via access link URL params
   useEffect(() => {
