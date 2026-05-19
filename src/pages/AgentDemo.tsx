@@ -12,6 +12,7 @@ import { useState, useRef, useEffect } from 'react'
 import { Link, useOutletContext }       from 'react-router-dom'
 import { cn }                           from '../lib/utils'
 import type { LayoutOutletContext }     from '../Layout'
+import { CHAIN_META }                   from '../lib/chains'
 import type { ChainKey }                from '../lib/chains'
 import { queryBalances }                from '../lib/unifiedBalance'
 import {
@@ -58,6 +59,7 @@ export default function AgentDemo() {
     : isAgentTreasuryNetwork(urlAgentNetwork)
     ? urlAgentNetwork
     : 'base'
+  const agentMeta = CHAIN_META[agentNetwork]
   const showAgentProfile = params.get('profile') === 'agent' || Boolean(agentSlug || agentWallet)
   const [eventId,    setEventId]    = useState(() => params.get('eventId') ?? '')
   const [payer,      setPayer]      = useState(() => params.get('payer')   ?? '')
@@ -355,7 +357,13 @@ export default function AgentDemo() {
           </div>
 
           {!currentAgentWallet && (
-            <div className="mt-5 rounded-xl border border-gray-200 bg-gray-50/70 p-4 dark:border-white/10 dark:bg-white/[0.04]">
+            <div
+              className="mt-5 rounded-xl border bg-gray-50/70 p-4 transition-all dark:bg-white/[0.04]"
+              style={{
+                borderColor: `${agentMeta.accentColor}26`,
+                boxShadow: `0 4px 24px -8px rgba(0,0,0,0.08), ${agentMeta.glowStyle}`,
+              }}
+            >
               <div className="flex items-center gap-2">
                 <Wallet className="h-4 w-4 text-gray-600 dark:text-gray-300" />
                 <p className="text-sm font-semibold text-gray-900 dark:text-white">Connect Circle Agent Wallet</p>
