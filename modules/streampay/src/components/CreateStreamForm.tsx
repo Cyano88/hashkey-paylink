@@ -67,6 +67,14 @@ function parseUsdc(val: string): bigint {
   return BigInt(Math.round(n * 1_000_000))
 }
 
+function cleanEmail(value: string) {
+  return value.trim().toLowerCase()
+}
+
+function isEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail(value))
+}
+
 function formatWalletUsdc(value: bigint) {
   if (value === 0n) return '0'
   const full = formatUsdcFull(value)
@@ -129,7 +137,15 @@ export function CreateStreamForm() {
   const [circleBalance,    setCircleBalance]    = useState<bigint | null>(null)
   const [circleBalanceRefreshing, setCircleBalanceRefreshing] = useState(false)
   const [circleCopied,     setCircleCopied]     = useState(false)
+  const [recipientInviteLink, setRecipientInviteLink] = useState<string | null>(null)
+  const [recipientInviteStatus, setRecipientInviteStatus] = useState('')
+  const [recipientInviteError, setRecipientInviteError] = useState<string | null>(null)
+  const [recipientInviteSending, setRecipientInviteSending] = useState(false)
+  const [recipientReadyChecking, setRecipientReadyChecking] = useState(false)
+  const [recipientInviteCopied, setRecipientInviteCopied] = useState(false)
 
+  const recipientEmail = cleanEmail(recipient)
+  const recipientEmailMode = !isAddress(recipient) && isEmail(recipient)
   const recipientValid = isAddress(recipient)
   const amountBn       = parseUsdc(amount)
   const amountValid    = amountBn > 0n
@@ -198,6 +214,13 @@ export function CreateStreamForm() {
       window.clearInterval(interval)
     }
   }, [circleSession?.wallet.address, publicClient, isWorking])
+
+  useEffect(() => {
+    setRecipientInviteLink(null)
+    setRecipientInviteStatus('')
+    setRecipientInviteError(null)
+    setRecipientInviteCopied(false)
+  }, [recipientEmail])
 
   async function handleDeploy() {
     if (!deployReady || !connectedAddr || !publicClient) return
@@ -337,6 +360,64 @@ export function CreateStreamForm() {
     setTimeout(() => setCircleCopied(false), 3000)
   }
 
+  async function handleSendRecipientInvite() {
+    if (!recipientEmailMode || !amountValid || !durationValid) return
+    setRecipientInviteSending(true)
+    setRecipientInviteError(null)
+    setRecipientInviteStatus('')
+    try {
+      const durationLabel = durationPreset
+        ? DURATIONS.find(item => item.secs === durationPreset)?.label ?? `${Number(durationSecs) / 86_400} days`
+        : `${customDays || Number(durationSecs) / 86_400} days`
+      const res = await fetch('/api/stream-recipient-invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: recipientEmail,
+          amount: `${formatUsdcFull(amountBn)} USDC`,
+          duration: durationLabel,
+          reason,
+        }),
+      })
+      const data = await res.json().catch(() => ({})) as { ok?: boolean; setupUrl?: string; error?: string }
+      if (!res.ok || !data.ok || !data.setupUrl) throw new Error(data.error ?? 'Could not send recipient invite.')
+      setRecipientInviteLink(data.setupUrl)
+      setRecipientInviteStatus(`Invite sent to ${recipientEmail}.`)
+    } catch (err) {
+      setRecipientInviteError(err instanceof Error ? err.message.slice(0, 180) : 'Could not send recipient invite.')
+    } finally {
+      setRecipientInviteSending(false)
+    }
+  }
+
+  async function handleCheckRecipientReady() {
+    if (!recipientEmailMode) return
+    setRecipientReadyChecking(true)
+    setRecipientInviteError(null)
+    try {
+      const res = await fetch(`/api/circle-recipient-wallet?email=${encodeURIComponent(recipientEmail)}`)
+      const data = await res.json().catch(() => ({})) as { ok?: boolean; found?: boolean; walletAddress?: string; error?: string }
+      if (!res.ok || !data.ok) throw new Error(data.error ?? 'Could not check recipient wallet.')
+      if (!data.found || !data.walletAddress) {
+        setRecipientInviteStatus('Recipient wallet is not ready yet.')
+        return
+      }
+      setRecipient(data.walletAddress)
+      setRecipientInviteStatus('Recipient wallet ready. StreamPay can now deploy to this wallet.')
+    } catch (err) {
+      setRecipientInviteError(err instanceof Error ? err.message.slice(0, 180) : 'Could not check recipient wallet.')
+    } finally {
+      setRecipientReadyChecking(false)
+    }
+  }
+
+  async function handleCopyRecipientInvite() {
+    if (!recipientInviteLink) return
+    await navigator.clipboard.writeText(recipientInviteLink)
+    setRecipientInviteCopied(true)
+    setTimeout(() => setRecipientInviteCopied(false), 2500)
+  }
+
   // ── Success screen ────────────────────────────────────────────────────────
   if (step === 'success' && streamLink) {
     return (
@@ -423,8 +504,9 @@ export function CreateStreamForm() {
     if (!isConnected) return 'Connect your wallet in the header above to continue'
     if (!isOnArc) return null
     if (insufficientFunds) return null
+    if (recipientEmailMode) return 'Send recipient invite, then check readiness before deploying'
     if (!recipientValid && recipient) return null
-    if (!recipientValid) return 'Enter a recipient address to continue'
+    if (!recipientValid) return 'Enter a recipient address or email to continue'
     if (!amountValid) return 'Enter an amount to continue'
     if (!durationValid) return 'Select a stream duration to continue'
     return '2 wallet signatures required — fund vault, then deploy'
@@ -458,7 +540,7 @@ export function CreateStreamForm() {
                       <span className="h-2 w-2 rounded-full bg-blue-500" />
                       <span className="h-2 w-2 rounded-full bg-amber-400" />
                     </span>
-                    <span className="text-[13px] font-semibold text-gray-700">Recipient Address</span>
+                    <span className="text-[13px] font-semibold text-gray-700">Recipient</span>
                   </div>
                   <span className="text-[11px] text-gray-400">Arc Network</span>
                 </div>
@@ -466,7 +548,7 @@ export function CreateStreamForm() {
                 <div className="relative">
                   <input
                     type="text"
-                    placeholder="0x... (40 hex chars)"
+                    placeholder="0x address or recipient@email.com"
                     value={recipient}
                     onChange={e => setRecipient(e.target.value.trim())}
                     spellCheck={false}
@@ -475,9 +557,9 @@ export function CreateStreamForm() {
                       'w-full rounded-xl border-2 px-4 py-3 text-[13px] font-mono min-h-[48px]',
                       'placeholder:text-gray-300 placeholder:font-sans focus:outline-none transition-colors',
                       'disabled:opacity-50 disabled:cursor-not-allowed',
-                      recipient && !recipientValid
+                      recipient && !recipientValid && !recipientEmailMode
                         ? 'border-red-200 bg-red-50/30'
-                        : recipientValid
+                        : recipientValid || recipientEmailMode
                         ? 'border-blue-200 bg-blue-50/20'
                         : 'border-gray-200 focus:border-gray-400',
                     ].join(' ')}
@@ -490,6 +572,14 @@ export function CreateStreamForm() {
                       </span>
                     </div>
                   )}
+                  {recipientEmailMode && (
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 border border-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-600">
+                        <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+                        Email
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 {recipientValid && (
@@ -498,8 +588,47 @@ export function CreateStreamForm() {
                     {recipient.slice(0, 10)}…{recipient.slice(-8)}
                   </p>
                 )}
-                {recipient && !recipientValid && (
-                  <p className="text-[11px] text-red-400">Enter a valid EVM address</p>
+                {recipientEmailMode && (
+                  <div className="rounded-2xl border border-blue-100 bg-blue-50/40 p-3.5 space-y-3">
+                    <div>
+                      <p className="text-[12px] font-bold text-gray-800">Recipient wallet setup needed</p>
+                      <p className="text-[11px] leading-relaxed text-gray-500">
+                        Send an invite so {recipientEmail} can prepare a Circle wallet. After they finish, check readiness and deploy the stream.
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={handleSendRecipientInvite}
+                        disabled={!amountValid || !durationValid || recipientInviteSending || isWorking}
+                        className="rounded-xl bg-gray-900 px-3 py-2.5 text-[12px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {recipientInviteSending ? 'Sending...' : 'Email invite'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleCheckRecipientReady}
+                        disabled={recipientReadyChecking || isWorking}
+                        className="rounded-xl border-2 border-gray-200 bg-white px-3 py-2.5 text-[12px] font-bold text-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {recipientReadyChecking ? 'Checking...' : 'Check ready'}
+                      </button>
+                    </div>
+                    {recipientInviteLink && (
+                      <button
+                        type="button"
+                        onClick={handleCopyRecipientInvite}
+                        className="w-full rounded-xl border border-blue-100 bg-white px-3 py-2 text-[11px] font-semibold text-blue-600"
+                      >
+                        {recipientInviteCopied ? 'Setup link copied' : 'Copy setup link'}
+                      </button>
+                    )}
+                    {recipientInviteStatus && <p className="text-[11px] font-semibold text-emerald-600">{recipientInviteStatus}</p>}
+                    {recipientInviteError && <p className="text-[11px] font-semibold text-red-500">{recipientInviteError}</p>}
+                  </div>
+                )}
+                {recipient && !recipientValid && !recipientEmailMode && (
+                  <p className="text-[11px] text-red-400">Enter a valid EVM address or recipient email</p>
                 )}
               </div>
 

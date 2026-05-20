@@ -42,7 +42,7 @@ export function RecipientWalletSetup() {
       if (!res.ok || !data.ok) throw new Error(data.error ?? 'Could not register Circle wallet.')
       setStatus(
         pendingId
-          ? `Circle wallet ready. Ask sender to run /streamready ${pendingId}.`
+          ? 'Circle wallet ready. Ask the sender to check readiness and deploy the stream.'
           : 'Circle wallet ready for StreamPay.',
       )
     } catch (err) {

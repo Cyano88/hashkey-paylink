@@ -34,6 +34,7 @@ import relayGhoHandler from './api/relay-gho.js'
 import basePaymasterHandler from './api/base-paymaster.js'
 import circleSolanaEmailHandler from './api/circle-solana-email.js'
 import circleRecipientWalletHandler from './api/circle-recipient-wallet.js'
+import streamRecipientInviteHandler from './api/stream-recipient-invite.js'
 import agentVerifyHandler   from './api/agent-verify.js'
 import agentAskHandler     from './api/agent-ask.js'
 import agentWalletHandler  from './api/agent-wallet.js'
@@ -80,6 +81,7 @@ app.all('/api/relay-gho',              relayGhoHandler)
 app.all('/api/base-paymaster',         basePaymasterHandler)
 app.post('/api/circle-solana-email',   circleSolanaEmailHandler)
 app.all('/api/circle-recipient-wallet', strictLimiter, circleRecipientWalletHandler)
+app.post('/api/stream-recipient-invite', strictLimiter, streamRecipientInviteHandler)
 // ── Agentic Economy — 0G payment verification primitives ─────────────────────
 app.all('/api/agent-verify',           strictLimiter, agentVerifyHandler)
 app.post('/api/agent-ask',             strictLimiter, agentAskHandler)
