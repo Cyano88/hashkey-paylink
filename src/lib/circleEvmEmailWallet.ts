@@ -190,6 +190,10 @@ function withTimeout<T>(promise: Promise<T>, ms: number, message: string) {
   })
 }
 
+function executeChallengeWithTimeout(sdk: W3SSdk, challengeId: string, message: string) {
+  return withTimeout(executeChallenge(sdk, challengeId), 120_000, message)
+}
+
 async function getWallet(userToken: string, chain: Extract<ChainKey, 'base' | 'arbitrum' | 'arc'>): Promise<CircleEvmWallet | null> {
   const data = await circleWalletApi<{ wallet?: CircleEvmWallet | null }>({
     action: 'listWallets',
@@ -405,7 +409,11 @@ export async function sendCircleArcStream(params: {
     predictedVault: params.predictedVault,
   })
   if (!challenge.challengeId) throw new Error('Circle did not return an Arc stream challenge.')
-  const result = await executeChallenge(sdk, challenge.challengeId)
+  const result = await executeChallengeWithTimeout(
+    sdk,
+    challenge.challengeId,
+    'Circle Smart Wallet confirmation did not finish. If you approved it, refresh this StreamPay link in a minute and check whether the stream deployed on Arc.',
+  )
   const txHash = findTxHash(result)
   if (txHash) return txHash
   const transactionId = findTransactionId(result)

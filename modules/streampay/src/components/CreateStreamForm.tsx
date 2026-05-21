@@ -156,6 +156,7 @@ export function CreateStreamForm() {
                          && isConnected && isOnArc && !!factoryAddr
   const circleConfigured = canUseCircleEvmEmailWallet('arc')
   const circleAvailable = prefill.preferCircle
+  const recipientLocked = circleAvailable && !!prefill.recipient
   const circleReady = recipientValid && amountValid && durationValid && !!factoryAddr
   const circleNeedsFunds = circleBalance !== null && amountValid && circleBalance < amountBn
 
@@ -548,15 +549,20 @@ export function CreateStreamForm() {
                 <div className="relative">
                   <input
                     type="text"
+                    name="streampay-recipient"
+                    autoComplete="off"
+                    data-lpignore="true"
+                    data-1p-ignore="true"
                     placeholder="0x address or recipient@email.com"
                     value={recipient}
                     onChange={e => setRecipient(e.target.value.trim())}
+                    readOnly={recipientLocked}
                     spellCheck={false}
                     disabled={isWorking}
                     className={[
                       'w-full rounded-xl border-2 px-4 py-3 text-[13px] font-mono min-h-[48px]',
                       'placeholder:text-gray-300 placeholder:font-sans focus:outline-none transition-colors',
-                      'disabled:opacity-50 disabled:cursor-not-allowed',
+                      'disabled:opacity-50 disabled:cursor-not-allowed read-only:cursor-default',
                       recipient && !recipientValid && !recipientEmailMode
                         ? 'border-red-200 bg-red-50/30'
                         : recipientValid || recipientEmailMode
@@ -738,6 +744,8 @@ export function CreateStreamForm() {
                     {!circleSession && (
                       <input
                         type="email"
+                        name="streampay-sender-email"
+                        autoComplete="email"
                         placeholder="email@example.com"
                         value={circleEmail}
                         onChange={e => setCircleEmail(e.target.value)}
