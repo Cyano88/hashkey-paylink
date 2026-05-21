@@ -1,9 +1,10 @@
 import type { Request, Response } from 'express'
 import { createPublicClient, defineChain, http, isAddress, parseAbi, type Address } from 'viem'
 
-const DEFAULT_LOG_CHUNK_SIZE = 2_000n
-const DEFAULT_LOOKBACK_BLOCKS = 100_000n
+const DEFAULT_LOG_CHUNK_SIZE = 10_000n
+const DEFAULT_LOOKBACK_BLOCKS = 50_000n
 const MAX_ROWS = 25
+const PUBLIC_ARC_RPC = 'https://rpc.testnet.arc.network'
 
 const arcChain = defineChain({
   id: 5042002,
@@ -87,7 +88,7 @@ export default async function handler(req: Request, res: Response) {
 
   const client = createPublicClient({
     chain: arcChain,
-    transport: http(process.env.PRIVATE_RPC_URL_ARC ?? 'https://rpc.testnet.arc.network'),
+    transport: http(process.env.STREAM_HISTORY_RPC_URL ?? PUBLIC_ARC_RPC),
   })
   const publicClient = client as any
 
@@ -146,6 +147,10 @@ export default async function handler(req: Request, res: Response) {
     return res.json({ ok: true, streams })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Could not load stream history'
-    return res.status(500).json({ ok: false, error: message.slice(0, 180) })
+    const lower = message.toLowerCase()
+    const error = lower.includes('429') || lower.includes('rate')
+      ? 'Arc history is rate limited right now. Try again in a moment.'
+      : message.slice(0, 180)
+    return res.status(500).json({ ok: false, error })
   }
 }
