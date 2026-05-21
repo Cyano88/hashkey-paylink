@@ -519,15 +519,22 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
   // ── Stream card ───────────────────────────────────────────────────────────
   return (
     <div className="w-full max-w-[480px] mx-auto mt-12">
+      {actionState === 'confirmed' && txHash && (
+        <button
+          type="button"
+          onClick={handleClaimAgain}
+          className="mb-2 inline-flex items-center gap-1 text-[11px] font-semibold text-gray-400 transition-colors hover:text-gray-700 dark:hover:text-gray-200"
+        >
+          <span aria-hidden="true">&lt;-</span>
+          Claim again
+        </button>
+      )}
       <div className="overflow-hidden rounded-2xl border border-gray-100 dark:border-white/10 bg-white dark:bg-[#111216] shadow-sm">
 
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-5 pb-2 sm:px-7 sm:pt-6 sm:pb-3">
           <div className="flex items-center gap-2">
-            <span className="flex gap-0.5">
-              <span className="h-2 w-2 rounded-full bg-blue-500" />
-              <span className="h-2 w-2 rounded-full bg-amber-400" />
-            </span>
+            <StreamPayActivityMark confirmed={actionState === 'confirmed' && !!txHash} />
             <span className="text-[12px] font-semibold uppercase tracking-[0.14em] text-gray-500 dark:text-gray-400">StreamPay</span>
           </div>
           {statusBadge}
@@ -601,23 +608,14 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
                         </svg>
                         <span className="text-[13px] font-semibold text-emerald-700 dark:text-emerald-300">Claim confirmed</span>
                       </div>
-                      <div className="grid grid-cols-[1fr_auto] gap-2">
-                        <button
-                          type="button"
-                          onClick={() => window.open(`${ARC_EXPLORER}/tx/${txHash}`, '_blank', 'noopener,noreferrer')}
-                          className="flex min-w-0 items-center justify-center gap-2 rounded-xl border-2 border-gray-200 dark:border-white/10 py-3 text-[13px] font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors cursor-pointer"
-                        >
-                          <ExtLinkIcon />
-                          View on Arcscan
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleClaimAgain}
-                          className="shrink-0 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#15151a] px-3 py-3 text-[11px] font-bold text-gray-500 dark:text-gray-300 transition-colors hover:bg-gray-50 dark:hover:bg-white/5"
-                        >
-                          Claim again
-                        </button>
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => window.open(`${ARC_EXPLORER}/tx/${txHash}`, '_blank', 'noopener,noreferrer')}
+                        className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-gray-200 dark:border-white/10 py-3 text-[13px] font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors cursor-pointer"
+                      >
+                        <ExtLinkIcon />
+                        View on Arcscan
+                      </button>
                     </div>
                   )
                 }
@@ -769,23 +767,14 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
                         </svg>
                         <span className="text-[13px] font-semibold text-emerald-700 dark:text-emerald-300">Withdrawal confirmed</span>
                       </div>
-                      <div className="grid grid-cols-[1fr_auto] gap-2">
-                        <button
-                          type="button"
-                          onClick={() => window.open(`${ARC_EXPLORER}/tx/${txHash}`, '_blank', 'noopener,noreferrer')}
-                          className="flex min-w-0 items-center justify-center gap-2 rounded-xl border-2 border-gray-200 dark:border-white/10 py-3 text-[13px] font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors cursor-pointer"
-                        >
-                          <ExtLinkIcon />
-                          View on Arcscan
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleClaimAgain}
-                          className="shrink-0 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#15151a] px-3 py-3 text-[11px] font-bold text-gray-500 dark:text-gray-300 transition-colors hover:bg-gray-50 dark:hover:bg-white/5"
-                        >
-                          Claim again
-                        </button>
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => window.open(`${ARC_EXPLORER}/tx/${txHash}`, '_blank', 'noopener,noreferrer')}
+                        className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-gray-200 dark:border-white/10 py-3 text-[13px] font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors cursor-pointer"
+                      >
+                        <ExtLinkIcon />
+                        View on Arcscan
+                      </button>
                     </div>
                   )
                 }
@@ -963,12 +952,40 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
           0%, 100% { opacity: 0.5; }
           50%       { opacity: 1;   }
         }
+        @keyframes spDrip {
+          0%   { transform: translateX(-100%); opacity: 0; }
+          12%  { opacity: 1; }
+          88%  { opacity: 1; }
+          100% { transform: translateX(100%); opacity: 0; }
+        }
       `}</style>
     </div>
   )
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
+
+function StreamPayActivityMark({ confirmed }: { confirmed: boolean }) {
+  if (confirmed) {
+    return (
+      <span className="relative inline-flex h-3 w-7 items-center justify-end" aria-label="Claim confirmed">
+        <span className="absolute left-0 right-1 top-1/2 h-px -translate-y-1/2 rounded-full bg-emerald-400" />
+        <svg className="relative h-3 w-3 rounded-full text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l5.25 5.25L19.5 7.5" />
+        </svg>
+      </span>
+    )
+  }
+
+  return (
+    <span className="relative inline-flex h-3 w-7 overflow-hidden rounded-full bg-emerald-100/80 dark:bg-emerald-950/40" aria-label="Stream active">
+      <span
+        className="absolute left-0 top-1/2 h-0.5 w-5 -translate-y-1/2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.45)]"
+        style={{ animation: 'spDrip 1.65s ease-in-out infinite' }}
+      />
+    </span>
+  )
+}
 
 function MetaCell({ label, value }: { label: string; value: string }) {
   return (
