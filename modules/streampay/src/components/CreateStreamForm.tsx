@@ -38,6 +38,8 @@ function readPrefill() {
   const rawDuration = (params.get('duration') ?? '').trim().toLowerCase()
   const amount = (params.get('amount') ?? '').trim()
   const recipient = (params.get('recipient') ?? '').trim()
+  const rawRecipientEmail = (params.get('recipientEmail') ?? params.get('email') ?? '').trim()
+  const recipientEmail = isEmail(rawRecipientEmail) ? cleanEmail(rawRecipientEmail) : ''
   const reason = (params.get('reason') ?? '').trim()
   const source = (params.get('src') ?? '').trim().toLowerCase()
   const wallet = (params.get('wallet') ?? params.get('mode') ?? '').trim().toLowerCase()
@@ -58,7 +60,7 @@ function readPrefill() {
     if (!durationPreset) customDays = (Number(seconds) / 86_400).toString()
   }
 
-  return { amount, recipient, reason, durationPreset, customDays, preferCircle }
+  return { amount, recipient, recipientEmail, reason, durationPreset, customDays, preferCircle }
 }
 
 function parseUsdc(val: string): bigint {
@@ -143,7 +145,7 @@ export function CreateStreamForm() {
   const [recipientInviteSending, setRecipientInviteSending] = useState(false)
   const [recipientReadyChecking, setRecipientReadyChecking] = useState(false)
   const [recipientInviteCopied, setRecipientInviteCopied] = useState(false)
-  const [streamRecipientEmail, setStreamRecipientEmail] = useState('')
+  const [streamRecipientEmail, setStreamRecipientEmail] = useState(prefill.recipientEmail)
   const [streamEmailSending, setStreamEmailSending] = useState(false)
   const [streamEmailStatus, setStreamEmailStatus] = useState('')
   const [streamEmailError, setStreamEmailError] = useState<string | null>(null)
