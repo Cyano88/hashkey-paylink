@@ -60,9 +60,15 @@ function readPrefill() {
   const recipient = (params.get('recipient') ?? '').trim()
   const rawRecipientEmail = (params.get('recipientEmail') ?? params.get('email') ?? '').trim()
   const recipientEmail = isEmail(rawRecipientEmail) ? cleanEmail(rawRecipientEmail) : ''
+  const rawReportEmail = (params.get('reportEmail') ?? '').trim()
+  const reportEmail = isEmail(rawReportEmail) ? cleanEmail(rawReportEmail) : ''
+  const mode = (params.get('mode') ?? '').trim().toLowerCase()
+  const service = (params.get('service') ?? '').trim().toLowerCase()
+  const agentSlug = (params.get('agent') ?? params.get('agentSlug') ?? 'hashpaylink-agent').trim().toLowerCase()
+  const amountPerDay = (params.get('amountPerDay') ?? '').trim()
   const reason = (params.get('reason') ?? '').trim()
   const source = (params.get('src') ?? '').trim().toLowerCase()
-  const wallet = (params.get('wallet') ?? params.get('mode') ?? '').trim().toLowerCase()
+  const wallet = (params.get('wallet') ?? '').trim().toLowerCase()
   const preferCircle = source === 'telegram' || wallet === 'circle' || wallet === 'smart'
   let durationPreset: bigint | null = null
   let customDays = ''
@@ -80,7 +86,7 @@ function readPrefill() {
     if (!durationPreset) customDays = (Number(seconds) / 86_400).toString()
   }
 
-  return { amount, recipient, recipientEmail, reason, durationPreset, customDays, preferCircle }
+  return { amount, recipient, recipientEmail, reportEmail, mode, service, agentSlug, amountPerDay, reason, duration: rawDuration, durationPreset, customDays, preferCircle }
 }
 
 function parseUsdc(val: string): bigint {
@@ -141,7 +147,13 @@ function saveRecentStream(stream: RecentStream) {
   }
 }
 
-function buildStreamLink(vault: `0x${string}`, reason: string, circleMode = false, recipientEmail = ''): string {
+function buildStreamLink(
+  vault: `0x${string}`,
+  reason: string,
+  circleMode = false,
+  recipientEmail = '',
+  agentic?: { mode: string; service: string; reportEmail: string; agentSlug: string; amountPerDay: string },
+): string {
   const { hostname, origin } = window.location
   const isDedicatedHost =
     hostname === 'streampay.xyz' ||
@@ -154,6 +166,11 @@ function buildStreamLink(vault: `0x${string}`, reason: string, circleMode = fals
     p.set('wallet', 'circle')
   }
   if (isEmail(recipientEmail)) p.set('recipientEmail', cleanEmail(recipientEmail))
+  if (agentic?.mode) p.set('mode', agentic.mode)
+  if (agentic?.service) p.set('service', agentic.service)
+  if (agentic?.reportEmail && isEmail(agentic.reportEmail)) p.set('reportEmail', cleanEmail(agentic.reportEmail))
+  if (agentic?.agentSlug) p.set('agent', agentic.agentSlug)
+  if (agentic?.amountPerDay) p.set('amountPerDay', agentic.amountPerDay)
   if (reason.trim())    p.set('reason', reason.trim())
   const qs = p.toString()
   return `${origin}/stream/${vault}${qs ? `?${qs}` : ''}`
@@ -178,7 +195,7 @@ export function CreateStreamForm() {
   const [salt] = useState<`0x${string}`>(genSalt)
 
   const [step,         setStep]         = useState<Step>('form')
-  const [activeTab,    setActiveTab]    = useState<StreamTab>(prefill.preferCircle ? 'running' : 'new')
+  const [activeTab,    setActiveTab]    = useState<StreamTab>(prefill.preferCircle && prefill.mode !== 'agentic-streaming' ? 'running' : 'new')
   const [statusMsg,    setStatusMsg]    = useState('')
   const [error,        setError]        = useState<string | null>(null)
   const [streamLink,   setStreamLink]   = useState<string | null>(null)
@@ -199,6 +216,9 @@ export function CreateStreamForm() {
   const [streamEmailSending, setStreamEmailSending] = useState(false)
   const [streamEmailStatus, setStreamEmailStatus] = useState('')
   const [streamEmailError, setStreamEmailError] = useState<string | null>(null)
+  const [reportEmail, setReportEmail] = useState(prefill.reportEmail)
+  const [agenticStatus, setAgenticStatus] = useState('')
+  const [agenticError, setAgenticError] = useState<string | null>(null)
   const [recentStreams, setRecentStreams] = useState<RecentStream[]>(() => loadRecentStreams(prefill.recipient))
   const [onchainStreams, setOnchainStreams] = useState<OnchainStream[]>([])
   const [onchainStreamsLoading, setOnchainStreamsLoading] = useState(false)
@@ -212,12 +232,15 @@ export function CreateStreamForm() {
   const durationSecs   = durationPreset
     ?? (customDays ? BigInt(Math.round(parseFloat(customDays) * 86400)) : 0n)
   const durationValid  = durationSecs > 0n
-  const isFormValid    = recipientValid && amountValid && durationValid
+  const isAgenticStreaming = prefill.mode === 'agentic-streaming'
+  const agenticService = prefill.service || 'polymarket-lp'
+  const agenticReportEmailValid = !isAgenticStreaming || isEmail(reportEmail)
+  const isFormValid    = recipientValid && amountValid && durationValid && agenticReportEmailValid
                          && isConnected && isOnArc && !!factoryAddr
   const circleConfigured = canUseCircleEvmEmailWallet('arc')
   const circleAvailable = prefill.preferCircle
   const recipientLocked = circleAvailable && !!prefill.recipient
-  const circleReady = recipientValid && amountValid && durationValid && !!factoryAddr
+  const circleReady = recipientValid && amountValid && durationValid && !!factoryAddr && agenticReportEmailValid
   const circleNeedsFunds = circleBalance !== null && amountValid && circleBalance < amountBn
 
   const { data: usdcBalance } = useReadContract({
@@ -232,6 +255,13 @@ export function CreateStreamForm() {
   const isWorking   = step === 'funding' || step === 'creating'
   const deployReady = isFormValid && !isWorking && !insufficientFunds
   const circleDeployReady = circleAvailable && circleConfigured && circleReady && !isWorking && !circleNeedsFunds
+  const agenticLinkParams = isAgenticStreaming ? {
+    mode: 'agentic-streaming',
+    service: agenticService,
+    reportEmail,
+    agentSlug: prefill.agentSlug || 'hashpaylink-agent',
+    amountPerDay: prefill.amountPerDay || '',
+  } : undefined
 
   function rememberStream(streamUrl: string) {
     const stream = {
@@ -271,6 +301,37 @@ export function CreateStreamForm() {
       await sleep(2_500)
     }
     return false
+  }
+
+  async function registerAgenticSubscription(vault: `0x${string}`, streamUrl: string, senderWallet?: `0x${string}`) {
+    if (!isAgenticStreaming) return
+    setAgenticStatus('')
+    setAgenticError(null)
+    try {
+      const res = await fetch('/api/agentic-streaming-subscription', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          service: agenticService,
+          vault,
+          streamUrl,
+          agentSlug: prefill.agentSlug || 'hashpaylink-agent',
+          agentWallet: recipient,
+          senderWallet,
+          reportEmail,
+          amountPerDay: prefill.amountPerDay || '',
+          totalAmount: amount,
+          duration: prefill.duration || `${Number(durationSecs) / 86_400}d`,
+          reason,
+          source: 'streampay-telegram',
+        }),
+      })
+      const data = await res.json().catch(() => ({})) as { ok?: boolean; error?: string }
+      if (!res.ok || !data.ok) throw new Error(data.error ?? 'Could not register Agentic Streaming.')
+      setAgenticStatus('Agentic Streaming registered for daily LP research.')
+    } catch (err) {
+      setAgenticError(err instanceof Error ? err.message.slice(0, 180) : 'Could not register Agentic Streaming.')
+    }
   }
 
   useEffect(() => {
@@ -362,9 +423,10 @@ export function CreateStreamForm() {
       const vault = (event?.args as { vault?: `0x${string}` })?.vault
       if (!vault) throw new Error('Could not extract vault address from receipt.')
 
-      const nextStreamLink = buildStreamLink(vault, reason)
+      const nextStreamLink = buildStreamLink(vault, reason, false, '', agenticLinkParams)
       setStreamLink(nextStreamLink)
       rememberStream(nextStreamLink)
+      await registerAgenticSubscription(vault, nextStreamLink, connectedAddr)
       setStep('success'); setStatusMsg('')
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
@@ -423,9 +485,10 @@ export function CreateStreamForm() {
         if (!deployed) {
           throw new Error('Circle submitted the stream, but Arc confirmation is still pending. Refresh this page in a minute and check the stream link again.')
         }
-        const nextStreamLink = buildStreamLink(predicted, reason, true, streamRecipientEmail)
+        const nextStreamLink = buildStreamLink(predicted, reason, true, streamRecipientEmail, agenticLinkParams)
         setStreamLink(nextStreamLink)
         rememberStream(nextStreamLink)
+        await registerAgenticSubscription(predicted, nextStreamLink, session.wallet.address)
         void refreshCircleBalance(session.wallet.address)
         setStep('success')
         setStatusMsg('')
@@ -440,9 +503,10 @@ export function CreateStreamForm() {
       const vault = (event?.args as { vault?: `0x${string}` })?.vault
       if (!vault) throw new Error('Could not extract vault address from receipt.')
 
-      const nextStreamLink = buildStreamLink(vault, reason, true, streamRecipientEmail)
+      const nextStreamLink = buildStreamLink(vault, reason, true, streamRecipientEmail, agenticLinkParams)
       setStreamLink(nextStreamLink)
       rememberStream(nextStreamLink)
+      await registerAgenticSubscription(vault, nextStreamLink, session.wallet.address)
       void refreshCircleBalance(session.wallet.address)
       setStep('success')
       setStatusMsg('')
@@ -568,9 +632,11 @@ export function CreateStreamForm() {
           {/* Page title */}
           <div className="text-center space-y-1.5">
             <h1 className="text-[26px] sm:text-[30px] font-bold tracking-tight text-gray-900 dark:text-gray-100">
-              Pay<span style={{ color: '#3b82f6' }}>roll</span>
+              {isAgenticStreaming ? <>Agentic<span style={{ color: '#3b82f6' }}> Streaming</span></> : <>Pay<span style={{ color: '#3b82f6' }}>roll</span></>}
             </h1>
-            <p className="text-[13px] text-gray-400">Stream payment in USDC to anyone on Arc</p>
+            <p className="text-[13px] text-gray-400">
+              {isAgenticStreaming ? 'Stream USDC to Hash PayLink Agent for daily Polymarket LP research' : 'Stream payment in USDC to anyone on Arc'}
+            </p>
           </div>
 
           {/* Success card */}
@@ -593,6 +659,11 @@ export function CreateStreamForm() {
                   {recipient.slice(0, 6)}…{recipient.slice(-4)}
                 </span>
               </p>
+              {isAgenticStreaming && (
+                <p className="text-[12px] text-gray-400">
+                  Report email saved as <span className="font-semibold text-gray-600 dark:text-gray-300">{reportEmail}</span>
+                </p>
+              )}
             </div>
 
             <div className="rounded-xl bg-gray-50 dark:bg-white/5 border-2 border-gray-200 dark:border-white/10 p-4 text-left space-y-3">
@@ -630,6 +701,8 @@ export function CreateStreamForm() {
               </div>
               {streamEmailStatus && <p className="text-center text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">{streamEmailStatus}</p>}
               {streamEmailError && <p className="text-center text-[11px] font-semibold text-red-500 dark:text-red-400">{streamEmailError}</p>}
+              {agenticStatus && <p className="text-center text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">{agenticStatus}</p>}
+              {agenticError && <p className="text-center text-[11px] font-semibold text-red-500 dark:text-red-400">{agenticError}</p>}
             </div>
 
             {deployTxHash && (
@@ -653,6 +726,8 @@ export function CreateStreamForm() {
   // ── Status hint ───────────────────────────────────────────────────────────
   const hint = (() => {
     if (isWorking) return step === 'funding' ? 'Step 1 of 2 — funding vault' : 'Step 2 of 2 — deploying stream'
+    if (isAgenticStreaming && !agenticReportEmailValid) return 'Enter the email that should receive daily LP research'
+    if (isAgenticStreaming) return 'Circle Smart Wallet streams Arc USDC to Hash PayLink Agent'
     if (circleAvailable) return 'Circle Smart Wallet signs and deploys the Arc stream from Telegram'
     if (!isConnected) return 'Connect your wallet in the header above to continue'
     if (!isOnArc) return null
@@ -673,9 +748,11 @@ export function CreateStreamForm() {
         {/* ── Page title (Rule 4: aligned to same 480px) ── */}
         <div className="text-center space-y-1.5">
           <h1 className="text-[26px] sm:text-[30px] font-bold tracking-tight text-gray-900 dark:text-gray-100">
-            Pay<span style={{ color: '#3b82f6' }}>roll</span>
+            {isAgenticStreaming ? <>Agentic<span style={{ color: '#3b82f6' }}> Streaming</span></> : <>Pay<span style={{ color: '#3b82f6' }}>roll</span></>}
           </h1>
-          <p className="text-[13px] text-gray-400">Stream payment in USDC to anyone on Arc</p>
+          <p className="text-[13px] text-gray-400">
+            {isAgenticStreaming ? 'Stream USDC to Hash PayLink Agent for daily Polymarket LP research' : 'Stream payment in USDC to anyone on Arc'}
+          </p>
         </div>
 
         {circleAvailable && (
@@ -732,7 +809,7 @@ export function CreateStreamForm() {
                   ) : onchainStreams.length > 0 ? (
                     <div className="space-y-2">
                       {onchainStreams.map(stream => {
-                        const streamUrl = buildStreamLink(stream.vault, reason, true, streamRecipientEmail)
+                        const streamUrl = buildStreamLink(stream.vault, reason, true, streamRecipientEmail, agenticLinkParams)
                         const endMs = Number(BigInt(stream.endTime)) * 1000
                         const status = stream.cancelled ? 'Cancelled' : stream.active ? 'Live' : 'Complete'
                         return (
@@ -785,6 +862,38 @@ export function CreateStreamForm() {
           {/* Vault Card */}
           <div className="bg-white dark:bg-[#111216] rounded-2xl border border-gray-100 dark:border-white/10 shadow-sm overflow-hidden">
             <div className="p-5 sm:p-7 space-y-6">
+
+              {isAgenticStreaming && (
+                <div className="rounded-2xl border border-emerald-100 dark:border-emerald-900/30 bg-emerald-50/40 dark:bg-emerald-950/20 p-3.5 space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-[12px] font-bold text-gray-800 dark:text-gray-100">Polymarket LP Research</p>
+                      <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                        {prefill.amountPerDay || '0.01'} USDC/day to Hash PayLink Agent on Arc
+                      </p>
+                    </div>
+                    <span className="shrink-0 rounded-full border border-emerald-200 dark:border-emerald-900/40 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-300">
+                      Agentic
+                    </span>
+                  </div>
+                  <div className="space-y-1.5">
+                    <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Report email</span>
+                    <input
+                      type="email"
+                      name="streampay-agentic-report-email"
+                      autoComplete="off"
+                      value={reportEmail}
+                      onChange={e => setReportEmail(e.target.value.trim())}
+                      disabled={isWorking}
+                      placeholder="you@example.com"
+                      className="w-full rounded-xl border-2 border-emerald-100 dark:border-emerald-900/40 bg-white dark:bg-[#15151a] px-4 py-3 text-[13px] text-gray-800 dark:text-gray-100 placeholder:text-gray-300 dark:placeholder:text-gray-600 focus:outline-none focus:border-emerald-300 transition-colors disabled:opacity-50 min-h-[46px]"
+                    />
+                    {!agenticReportEmailValid && (
+                      <p className="text-[11px] font-semibold text-red-500">Enter a valid email for daily LP research.</p>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* ── Recipient Address capsule ── */}
               <div className="space-y-1.5">
