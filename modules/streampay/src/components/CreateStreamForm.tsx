@@ -143,6 +143,10 @@ export function CreateStreamForm() {
   const [recipientInviteSending, setRecipientInviteSending] = useState(false)
   const [recipientReadyChecking, setRecipientReadyChecking] = useState(false)
   const [recipientInviteCopied, setRecipientInviteCopied] = useState(false)
+  const [streamRecipientEmail, setStreamRecipientEmail] = useState('')
+  const [streamEmailSending, setStreamEmailSending] = useState(false)
+  const [streamEmailStatus, setStreamEmailStatus] = useState('')
+  const [streamEmailError, setStreamEmailError] = useState<string | null>(null)
 
   const recipientEmail = cleanEmail(recipient)
   const recipientEmailMode = !isAddress(recipient) && isEmail(recipient)
@@ -221,6 +225,7 @@ export function CreateStreamForm() {
     setRecipientInviteStatus('')
     setRecipientInviteError(null)
     setRecipientInviteCopied(false)
+    if (recipientEmailMode) setStreamRecipientEmail(recipientEmail)
   }, [recipientEmail])
 
   async function handleDeploy() {
@@ -419,6 +424,36 @@ export function CreateStreamForm() {
     setTimeout(() => setRecipientInviteCopied(false), 2500)
   }
 
+  async function handleEmailStreamLink() {
+    if (!streamLink || !streamRecipientEmail) return
+    setStreamEmailSending(true)
+    setStreamEmailStatus('')
+    setStreamEmailError(null)
+    try {
+      const durationLabel = durationPreset
+        ? DURATIONS.find(item => item.secs === durationPreset)?.label ?? `${Number(durationSecs) / 86_400} days`
+        : `${customDays || Number(durationSecs) / 86_400} days`
+      const res = await fetch('/api/stream-recipient-invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: streamRecipientEmail,
+          amount: `${formatUsdcFull(amountBn)} USDC`,
+          duration: durationLabel,
+          reason,
+          streamUrl: streamLink,
+        }),
+      })
+      const data = await res.json().catch(() => ({})) as { ok?: boolean; error?: string }
+      if (!res.ok || !data.ok) throw new Error(data.error ?? 'Could not email stream link.')
+      setStreamEmailStatus(`Claim link emailed to ${streamRecipientEmail}.`)
+    } catch (err) {
+      setStreamEmailError(err instanceof Error ? err.message.slice(0, 180) : 'Could not email stream link.')
+    } finally {
+      setStreamEmailSending(false)
+    }
+  }
+
   // ── Success screen ────────────────────────────────────────────────────────
   if (step === 'success' && streamLink) {
     return (
@@ -427,14 +462,14 @@ export function CreateStreamForm() {
 
           {/* Page title */}
           <div className="text-center space-y-1.5">
-            <h1 className="text-[26px] sm:text-[30px] font-bold tracking-tight text-gray-900">
+            <h1 className="text-[26px] sm:text-[30px] font-bold tracking-tight text-gray-900 dark:text-gray-100">
               Pay<span style={{ color: '#3b82f6' }}>roll</span>
             </h1>
             <p className="text-[13px] text-gray-400">Stream payment in USDC to anyone on Arc</p>
           </div>
 
           {/* Success card */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-5 py-7 sm:px-7 sm:py-8 text-center space-y-6">
+          <div className="bg-white dark:bg-[#111216] rounded-2xl border border-gray-100 dark:border-white/10 shadow-sm px-5 py-7 sm:px-7 sm:py-8 text-center space-y-6">
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-gray-50 border border-gray-200">
               <svg className="h-6 w-6 text-gray-700" fill="none" viewBox="0 0 24 24"
                 stroke="currentColor" strokeWidth={2.5}>
@@ -443,21 +478,21 @@ export function CreateStreamForm() {
             </div>
 
             <div className="space-y-1.5">
-              <p className="text-[17px] font-bold text-gray-900">Stream Deployed</p>
+              <p className="text-[17px] font-bold text-gray-900 dark:text-gray-100">Stream Deployed</p>
               {reason && (
                 <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">{reason}</p>
               )}
-              <p className="text-[13px] text-gray-500">
+              <p className="text-[13px] text-gray-500 dark:text-gray-400">
                 {formatUsdcFull(amountBn)} USDC streaming to{' '}
-                <span className="font-mono font-semibold text-gray-700">
+                <span className="font-mono font-semibold text-gray-700 dark:text-gray-200">
                   {recipient.slice(0, 6)}…{recipient.slice(-4)}
                 </span>
               </p>
             </div>
 
-            <div className="rounded-xl bg-gray-50 border-2 border-gray-200 p-4 text-left space-y-3">
+            <div className="rounded-xl bg-gray-50 dark:bg-white/5 border-2 border-gray-200 dark:border-white/10 p-4 text-left space-y-3">
               <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Share Stream Link</p>
-              <p className="break-all font-mono text-[11px] leading-relaxed text-gray-500">{streamLink}</p>
+              <p className="break-all font-mono text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">{streamLink}</p>
               <div className="space-y-2">
                 <button
                   onClick={handleCopy}
@@ -472,12 +507,24 @@ export function CreateStreamForm() {
                 </button>
                 <a
                   href={streamLink}
-                  className="w-full flex items-center justify-center rounded-xl py-3 text-[13px] font-semibold text-gray-700 transition-colors hover:bg-gray-50 min-h-[48px]"
-                  style={{ border: '2px solid #e5e7eb' }}
+                  className="w-full flex items-center justify-center rounded-xl border-2 border-gray-200 dark:border-white/10 py-3 text-[13px] font-semibold text-gray-700 dark:text-gray-200 transition-colors hover:bg-gray-50 dark:hover:bg-white/5 min-h-[48px]"
                 >
                   View Stream
                 </a>
+                {streamRecipientEmail && (
+                  <button
+                    type="button"
+                    onClick={handleEmailStreamLink}
+                    disabled={streamEmailSending}
+                    className="w-full flex items-center justify-center gap-2 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#15151a] py-2.5 text-[12px] font-semibold text-gray-600 dark:text-gray-300 transition-colors hover:bg-gray-50 dark:hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <Mail className="h-3.5 w-3.5" />
+                    {streamEmailSending ? 'Sending...' : streamEmailStatus ? 'Email sent' : 'Email recipient'}
+                  </button>
+                )}
               </div>
+              {streamEmailStatus && <p className="text-center text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">{streamEmailStatus}</p>}
+              {streamEmailError && <p className="text-center text-[11px] font-semibold text-red-500 dark:text-red-400">{streamEmailError}</p>}
             </div>
 
             {deployTxHash && (
@@ -520,7 +567,7 @@ export function CreateStreamForm() {
 
         {/* ── Page title (Rule 4: aligned to same 480px) ── */}
         <div className="text-center space-y-1.5">
-          <h1 className="text-[26px] sm:text-[30px] font-bold tracking-tight text-gray-900">
+          <h1 className="text-[26px] sm:text-[30px] font-bold tracking-tight text-gray-900 dark:text-gray-100">
             Pay<span style={{ color: '#3b82f6' }}>roll</span>
           </h1>
           <p className="text-[13px] text-gray-400">Stream payment in USDC to anyone on Arc</p>
@@ -530,7 +577,7 @@ export function CreateStreamForm() {
         <div className="space-y-4">
 
           {/* Vault Card */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="bg-white dark:bg-[#111216] rounded-2xl border border-gray-100 dark:border-white/10 shadow-sm overflow-hidden">
             <div className="p-5 sm:p-7 space-y-6">
 
               {/* ── Recipient Address capsule ── */}
@@ -541,7 +588,7 @@ export function CreateStreamForm() {
                       <span className="h-2 w-2 rounded-full bg-blue-500" />
                       <span className="h-2 w-2 rounded-full bg-amber-400" />
                     </span>
-                    <span className="text-[13px] font-semibold text-gray-700">Recipient</span>
+                    <span className="text-[13px] font-semibold text-gray-700 dark:text-gray-200">Recipient</span>
                   </div>
                   <span className="text-[11px] text-gray-400">Arc Network</span>
                 </div>
@@ -561,13 +608,13 @@ export function CreateStreamForm() {
                     disabled={isWorking}
                     className={[
                       'w-full rounded-xl border-2 px-4 py-3 text-[13px] font-mono min-h-[48px]',
-                      'placeholder:text-gray-300 placeholder:font-sans focus:outline-none transition-colors',
+                      'placeholder:text-gray-300 dark:placeholder:text-gray-600 placeholder:font-sans focus:outline-none transition-colors text-gray-800 dark:text-gray-100',
                       'disabled:opacity-50 disabled:cursor-not-allowed read-only:cursor-default',
                       recipient && !recipientValid && !recipientEmailMode
                         ? 'border-red-200 bg-red-50/30'
                         : recipientValid || recipientEmailMode
                         ? 'border-blue-200 bg-blue-50/20'
-                        : 'border-gray-200 focus:border-gray-400',
+                        : 'border-gray-200 dark:border-white/10 dark:bg-[#15151a] focus:border-gray-400',
                     ].join(' ')}
                   />
                   {recipientValid && (
@@ -595,10 +642,10 @@ export function CreateStreamForm() {
                   </p>
                 )}
                 {recipientEmailMode && (
-                  <div className="rounded-2xl border border-blue-100 bg-blue-50/40 p-3.5 space-y-3">
+                  <div className="rounded-2xl border border-blue-100 dark:border-blue-900/30 bg-blue-50/40 dark:bg-blue-950/20 p-3.5 space-y-3">
                     <div>
-                      <p className="text-[12px] font-bold text-gray-800">Recipient wallet setup needed</p>
-                      <p className="text-[11px] leading-relaxed text-gray-500">
+                      <p className="text-[12px] font-bold text-gray-800 dark:text-gray-100">Recipient wallet setup needed</p>
+                      <p className="text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
                         Send an invite so {recipientEmail} can prepare a Circle wallet. After they finish, check readiness and deploy the stream.
                       </p>
                     </div>
@@ -615,7 +662,7 @@ export function CreateStreamForm() {
                         type="button"
                         onClick={handleCheckRecipientReady}
                         disabled={recipientReadyChecking || isWorking}
-                        className="rounded-xl border-2 border-gray-200 bg-white px-3 py-2.5 text-[12px] font-bold text-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="rounded-xl border-2 border-gray-200 dark:border-white/10 bg-white dark:bg-[#15151a] px-3 py-2.5 text-[12px] font-bold text-gray-700 dark:text-gray-200 disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         {recipientReadyChecking ? 'Checking...' : 'Check ready'}
                       </button>
@@ -624,7 +671,7 @@ export function CreateStreamForm() {
                       <button
                         type="button"
                         onClick={handleCopyRecipientInvite}
-                        className="w-full rounded-xl border border-blue-100 bg-white px-3 py-2 text-[11px] font-semibold text-blue-600"
+                        className="w-full rounded-xl border border-blue-100 dark:border-blue-900/40 bg-white dark:bg-[#15151a] px-3 py-2 text-[11px] font-semibold text-blue-600 dark:text-blue-300"
                       >
                         {recipientInviteCopied ? 'Setup link copied' : 'Copy setup link'}
                       </button>
@@ -642,9 +689,9 @@ export function CreateStreamForm() {
               <div className="space-y-1.5">
                 <div className="flex items-center gap-1.5">
                   <ChainIcon />
-                  <span className="text-[13px] font-semibold text-gray-700">Amount</span>
+                  <span className="text-[13px] font-semibold text-gray-700 dark:text-gray-200">Amount</span>
                 </div>
-                <div className="flex overflow-hidden rounded-xl border-2 border-gray-200 bg-white transition-colors focus-within:border-gray-400">
+                <div className="flex overflow-hidden rounded-xl border-2 border-gray-200 dark:border-white/10 bg-white dark:bg-[#15151a] transition-colors focus-within:border-gray-400">
                   <input
                     type="number"
                     placeholder="0.0"
@@ -652,9 +699,9 @@ export function CreateStreamForm() {
                     value={amount}
                     onChange={e => setAmount(e.target.value)}
                     disabled={isWorking}
-                    className="min-w-0 flex-1 bg-transparent px-4 py-3 text-[14px] font-semibold focus:outline-none disabled:opacity-50 placeholder:text-gray-300 placeholder:font-normal min-h-[48px]"
+                    className="min-w-0 flex-1 bg-transparent px-4 py-3 text-[14px] font-semibold text-gray-900 dark:text-gray-100 focus:outline-none disabled:opacity-50 placeholder:text-gray-300 dark:placeholder:text-gray-600 placeholder:font-normal min-h-[48px]"
                   />
-                  <div className="flex items-center px-4 border-l-2 border-gray-200 bg-gray-50 shrink-0">
+                  <div className="flex items-center px-4 border-l-2 border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5 shrink-0">
                     <span className="text-[12px] font-bold text-gray-500 select-none">USDC</span>
                   </div>
                 </div>
@@ -675,7 +722,7 @@ export function CreateStreamForm() {
               <div className="space-y-1.5">
                 <div className="flex items-center gap-1.5">
                   <ClockIcon />
-                  <span className="text-[13px] font-semibold text-gray-700">Duration</span>
+                  <span className="text-[13px] font-semibold text-gray-700 dark:text-gray-200">Duration</span>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {DURATIONS.map(d => {
@@ -696,7 +743,7 @@ export function CreateStreamForm() {
                     )
                   })}
                 </div>
-                <div className="flex overflow-hidden rounded-xl border-2 border-gray-200 bg-white transition-colors focus-within:border-gray-400">
+                <div className="flex overflow-hidden rounded-xl border-2 border-gray-200 dark:border-white/10 bg-white dark:bg-[#15151a] transition-colors focus-within:border-gray-400">
                   <input
                     type="number"
                     placeholder="Custom days"
@@ -704,9 +751,9 @@ export function CreateStreamForm() {
                     value={customDays}
                     disabled={isWorking}
                     onChange={e => { setCustomDays(e.target.value); setDurationPreset(null) }}
-                    className="min-w-0 flex-1 bg-transparent px-4 py-3 text-[13px] focus:outline-none disabled:opacity-50 placeholder:text-gray-300 min-h-[48px]"
+                    className="min-w-0 flex-1 bg-transparent px-4 py-3 text-[13px] text-gray-900 dark:text-gray-100 focus:outline-none disabled:opacity-50 placeholder:text-gray-300 dark:placeholder:text-gray-600 min-h-[48px]"
                   />
-                  <div className="flex items-center px-4 border-l-2 border-gray-200 bg-gray-50 shrink-0">
+                  <div className="flex items-center px-4 border-l-2 border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5 shrink-0">
                     <span className="text-[12px] font-bold text-gray-500 select-none">DAYS</span>
                   </div>
                 </div>
@@ -716,7 +763,7 @@ export function CreateStreamForm() {
               <div className="space-y-1.5">
                 <div className="flex items-center gap-1.5">
                   <TagIcon />
-                  <span className="text-[13px] font-semibold text-gray-700">Memo</span>
+                  <span className="text-[13px] font-semibold text-gray-700 dark:text-gray-200">Memo</span>
                   <span className="text-[11px] text-gray-400">optional · stored on-chain</span>
                 </div>
                 <input
@@ -726,7 +773,7 @@ export function CreateStreamForm() {
                   onChange={e => setReason(e.target.value)}
                   disabled={isWorking}
                   maxLength={80}
-                  className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-[13px] placeholder:text-gray-300 focus:outline-none focus:border-gray-400 transition-colors disabled:opacity-50 min-h-[48px]"
+                  className="w-full rounded-xl border-2 border-gray-200 dark:border-white/10 bg-white dark:bg-[#15151a] px-4 py-3 text-[13px] text-gray-900 dark:text-gray-100 placeholder:text-gray-300 dark:placeholder:text-gray-600 focus:outline-none focus:border-gray-400 transition-colors disabled:opacity-50 min-h-[48px]"
                 />
               </div>
 
@@ -867,21 +914,21 @@ export function CreateStreamForm() {
                 { n: '2', title: 'Stream begins', desc: 'Funds unlock linearly to the recipient' },
                 { n: '3', title: 'Claim anytime', desc: 'Recipient withdraws gaslessly on Arc' },
               ] as const).map(s => (
-                <div key={s.n} className="rounded-2xl border border-gray-100 bg-white p-3 sm:p-4 text-center shadow-sm space-y-1.5">
+                <div key={s.n} className="rounded-2xl border border-gray-100 dark:border-white/10 bg-white dark:bg-[#111216] p-3 sm:p-4 text-center shadow-sm space-y-1.5">
                   <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-gray-200 text-[11px] font-semibold text-gray-500">
                     {s.n}
                   </span>
-                  <p className="text-[11px] sm:text-[12px] font-bold text-gray-800">{s.title}</p>
+                  <p className="text-[11px] sm:text-[12px] font-bold text-gray-800 dark:text-gray-100">{s.title}</p>
                   <p className="text-[10px] sm:text-[11px] leading-snug text-gray-400">{s.desc}</p>
                 </div>
               ))}
             </div>
 
             {/* ── Footer links ── */}
-            <div className="border-t border-gray-100 pt-4 flex items-center justify-center gap-8">
+            <div className="border-t border-gray-100 dark:border-white/10 pt-4 flex items-center justify-center gap-8">
               <a
                 href="mailto:support@hashpaylink.com"
-                className="flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-gray-900 transition-colors"
+                className="flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
               >
                 <Mail className="h-3.5 w-3.5" />
                 support@hashpaylink.com
@@ -890,7 +937,7 @@ export function CreateStreamForm() {
                 href="https://x.com/Streampay_"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-gray-900 transition-colors"
+                className="flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
               >
                 <XIcon className="h-3.5 w-3.5" />
                 @Streampay_
@@ -908,7 +955,7 @@ export function CreateStreamForm() {
 export function HashPayLinkBadge() {
   return (
     <div className="flex justify-center">
-      <span className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 px-3 py-1">
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5 px-3 py-1">
         <img src="/hash-logo.png" alt="#" className="h-3 w-3 opacity-50" />
         <span className="text-[10px] font-semibold text-gray-400">Powered by Hash PayLink</span>
       </span>

@@ -106,14 +106,14 @@ class StreamErrorBoundary extends Component<
     if (this.state.error) {
       return (
         <div className="w-full max-w-[480px] mx-auto mt-12">
-          <div className="rounded-2xl border border-red-100 bg-white p-8 text-center space-y-4 shadow-sm">
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-red-50 border border-red-100">
+          <div className="rounded-2xl border border-red-100 dark:border-red-900/40 bg-white dark:bg-[#111216] p-8 text-center space-y-4 shadow-sm">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-red-50 dark:bg-red-950/20 border border-red-100 dark:border-red-900/40">
               <svg className="h-5 w-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
               </svg>
             </div>
             <div>
-              <p className="text-[15px] font-bold text-gray-900">Something went wrong</p>
+              <p className="text-[15px] font-bold text-gray-900 dark:text-gray-100">Something went wrong</p>
               <p className="mt-1 text-[12px] text-gray-400">{this.state.error.message}</p>
             </div>
             <button
@@ -421,6 +421,14 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
     setTimeout(() => setCircleCopied(null), 2500)
   }
 
+  function handleClaimAgain() {
+    setActionState('idle')
+    setActionError(null)
+    setTxHash(null)
+    refetchInfo()
+    refetchNonce()
+  }
+
   async function handleCancel() {
     if (!connectedAddr) return
     if (!window.confirm('Cancel this stream?\n\nThe unlocked portion goes to the recipient. The locked remainder is refunded to you.')) return
@@ -476,7 +484,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
   if (isLoading && !info) {
     return (
       <div className="w-full max-w-[480px] mx-auto mt-12">
-        <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+        <div className="overflow-hidden rounded-2xl border border-gray-100 dark:border-white/10 bg-white dark:bg-[#111216] shadow-sm">
           <div className="animate-pulse p-7 space-y-5">
             <div className="flex items-center justify-between">
               <div className="h-3 w-20 rounded bg-gray-100" />
@@ -503,7 +511,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
     ? <span className="inline-flex items-center rounded-full bg-red-50 border border-red-100 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-red-500">Cancelled</span>
     : isComplete
     ? <span className="inline-flex items-center rounded-full bg-emerald-50 border border-emerald-100 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-600">Complete</span>
-    : <span className="inline-flex items-center gap-1.5 rounded-full bg-gray-50 border border-gray-100 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-500">
+    : <span className="inline-flex items-center gap-1.5 rounded-full bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/10 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-300">
         <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" style={{ animation: 'spPulse 2s ease-in-out infinite' }} />
         Live
       </span>
@@ -511,7 +519,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
   // ── Stream card ───────────────────────────────────────────────────────────
   return (
     <div className="w-full max-w-[480px] mx-auto mt-12">
-      <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+      <div className="overflow-hidden rounded-2xl border border-gray-100 dark:border-white/10 bg-white dark:bg-[#111216] shadow-sm">
 
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-5 pb-2 sm:px-7 sm:pt-6 sm:pb-3">
@@ -520,7 +528,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
               <span className="h-2 w-2 rounded-full bg-blue-500" />
               <span className="h-2 w-2 rounded-full bg-amber-400" />
             </span>
-            <span className="text-[12px] font-semibold uppercase tracking-[0.14em] text-gray-500">StreamPay</span>
+            <span className="text-[12px] font-semibold uppercase tracking-[0.14em] text-gray-500 dark:text-gray-400">StreamPay</span>
           </div>
           {statusBadge}
         </div>
@@ -535,14 +543,14 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
                 {isRecipient ? 'Available for Withdrawal' : isSender ? 'Active Payroll Stream' : 'Stream Overview'}
               </p>
               {reason && (
-                <span className="max-w-[140px] truncate rounded-full border border-gray-200 bg-gray-50 px-2.5 py-0.5 text-[10px] font-semibold text-gray-500">
+                <span className="max-w-[140px] truncate rounded-full border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5 px-2.5 py-0.5 text-[10px] font-semibold text-gray-500 dark:text-gray-300">
                   {reason}
                 </span>
               )}
             </div>
             <div className="flex items-baseline gap-1">
               <span className="self-start mt-1.5 text-[12px] font-medium text-gray-400">$</span>
-              <span className="text-[2rem] sm:text-[3rem] font-bold leading-none tracking-tight tabular-nums text-gray-900">
+              <span className="text-[2rem] sm:text-[3rem] font-bold leading-none tracking-tight tabular-nums text-gray-900 dark:text-gray-100">
                 {stream ? formatUsdcFull(stream.totalUnlocked) : '0.000000'}
               </span>
               <span className="mb-0.5 self-end text-[12px] font-medium text-gray-400">USDC</span>
@@ -587,20 +595,29 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
                 if (actionState === 'confirmed' && txHash) {
                   return (
                     <div className="space-y-2">
-                      <div className="flex items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 py-3">
+                      <div className="flex items-center justify-center gap-2 rounded-xl border border-emerald-200 dark:border-emerald-900/40 bg-emerald-50 dark:bg-emerald-950/20 py-3">
                         <svg className="h-4 w-4 text-emerald-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
                         </svg>
-                        <span className="text-[13px] font-semibold text-emerald-700">Claim confirmed</span>
+                        <span className="text-[13px] font-semibold text-emerald-700 dark:text-emerald-300">Claim confirmed</span>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => window.open(`${ARC_EXPLORER}/tx/${txHash}`, '_blank', 'noopener,noreferrer')}
-                        className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-gray-200 py-3 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer"
-                      >
-                        <ExtLinkIcon />
-                        View on Arcscan
-                      </button>
+                      <div className="grid grid-cols-[1fr_auto] gap-2">
+                        <button
+                          type="button"
+                          onClick={() => window.open(`${ARC_EXPLORER}/tx/${txHash}`, '_blank', 'noopener,noreferrer')}
+                          className="flex min-w-0 items-center justify-center gap-2 rounded-xl border-2 border-gray-200 dark:border-white/10 py-3 text-[13px] font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors cursor-pointer"
+                        >
+                          <ExtLinkIcon />
+                          View on Arcscan
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleClaimAgain}
+                          className="shrink-0 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#15151a] px-3 py-3 text-[11px] font-bold text-gray-500 dark:text-gray-300 transition-colors hover:bg-gray-50 dark:hover:bg-white/5"
+                        >
+                          Claim again
+                        </button>
+                      </div>
                     </div>
                   )
                 }
@@ -651,7 +668,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
                               <button
                                 type="button"
                                 onClick={() => copyCircleAddress('recipient', info._recipient)}
-                                className="shrink-0 rounded-lg border border-red-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-red-500"
+                            className="shrink-0 rounded-lg border border-red-200 dark:border-red-900/40 bg-white dark:bg-[#15151a] px-2.5 py-1.5 text-[11px] font-semibold text-red-500 dark:text-red-300"
                               >
                                 {circleCopied === 'recipient' ? 'Copied' : 'Copy'}
                               </button>
@@ -695,11 +712,11 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
                     )}
 
                     {actionState === 'error' && actionError && (
-                      <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-center space-y-1">
-                        <p className="text-[12px] font-semibold text-red-600">{actionError}</p>
+                      <div className="rounded-xl border border-red-100 dark:border-red-900/40 bg-red-50 dark:bg-red-950/20 px-4 py-3 text-center space-y-1">
+                        <p className="text-[12px] font-semibold text-red-600 dark:text-red-300">{actionError}</p>
                         <button
                           onClick={() => { setActionState('idle'); setActionError(null) }}
-                          className="text-[11px] font-semibold text-red-500 underline underline-offset-2"
+                          className="text-[11px] font-semibold text-red-500 dark:text-red-300 underline underline-offset-2"
                         >
                           Try again
                         </button>
@@ -746,20 +763,29 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
                 if (actionState === 'confirmed' && txHash) {
                   return (
                     <div className="space-y-2">
-                      <div className="flex items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 py-3">
+                      <div className="flex items-center justify-center gap-2 rounded-xl border border-emerald-200 dark:border-emerald-900/40 bg-emerald-50 dark:bg-emerald-950/20 py-3">
                         <svg className="h-4 w-4 text-emerald-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
                         </svg>
-                        <span className="text-[13px] font-semibold text-emerald-700">Withdrawal confirmed</span>
+                        <span className="text-[13px] font-semibold text-emerald-700 dark:text-emerald-300">Withdrawal confirmed</span>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => window.open(`${ARC_EXPLORER}/tx/${txHash}`, '_blank', 'noopener,noreferrer')}
-                        className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-gray-200 py-3 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer"
-                      >
-                        <ExtLinkIcon />
-                        View on Arcscan
-                      </button>
+                      <div className="grid grid-cols-[1fr_auto] gap-2">
+                        <button
+                          type="button"
+                          onClick={() => window.open(`${ARC_EXPLORER}/tx/${txHash}`, '_blank', 'noopener,noreferrer')}
+                          className="flex min-w-0 items-center justify-center gap-2 rounded-xl border-2 border-gray-200 dark:border-white/10 py-3 text-[13px] font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors cursor-pointer"
+                        >
+                          <ExtLinkIcon />
+                          View on Arcscan
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleClaimAgain}
+                          className="shrink-0 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#15151a] px-3 py-3 text-[11px] font-bold text-gray-500 dark:text-gray-300 transition-colors hover:bg-gray-50 dark:hover:bg-white/5"
+                        >
+                          Claim again
+                        </button>
+                      </div>
                     </div>
                   )
                 }
@@ -911,23 +937,23 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
           )}
 
           {/* Address strip */}
-          <div className="flex items-center justify-between rounded-xl border border-gray-100 bg-gray-50/60 px-3 py-2.5 sm:px-4 sm:py-3">
+          <div className="flex items-center justify-between rounded-xl border border-gray-100 dark:border-white/10 bg-gray-50/60 dark:bg-white/5 px-3 py-2.5 sm:px-4 sm:py-3">
             <div className="space-y-0.5">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Sender</p>
-              <p className="font-mono text-[12px] text-gray-600">{shortAddr(info._sender)}</p>
+              <p className="font-mono text-[12px] text-gray-600 dark:text-gray-300">{shortAddr(info._sender)}</p>
             </div>
             <svg className="h-3.5 w-3.5 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
             </svg>
             <div className="space-y-0.5 text-right">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Recipient</p>
-              <p className="font-mono text-[12px] text-gray-600">{shortAddr(info._recipient)}</p>
+              <p className="font-mono text-[12px] text-gray-600 dark:text-gray-300">{shortAddr(info._recipient)}</p>
             </div>
           </div>
         </div>
 
         {/* Footer */}
-        <div className="border-t border-gray-50 bg-gray-50/40 py-3.5">
+        <div className="border-t border-gray-50 dark:border-white/10 bg-gray-50/40 dark:bg-white/[0.03] py-3.5">
           <HashPayLinkBadge />
         </div>
       </div>
@@ -946,9 +972,9 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
 
 function MetaCell({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-gray-100 bg-gray-50/60 px-2 py-2.5 sm:px-3 text-center">
+    <div className="rounded-xl border border-gray-100 dark:border-white/10 bg-gray-50/60 dark:bg-white/5 px-2 py-2.5 sm:px-3 text-center">
       <p className="text-[9px] sm:text-[10px] font-semibold uppercase tracking-wider text-gray-400 truncate">{label}</p>
-      <p className="mt-0.5 text-[12px] sm:text-[13px] font-semibold text-gray-700 tabular-nums">{value}</p>
+      <p className="mt-0.5 text-[12px] sm:text-[13px] font-semibold text-gray-700 dark:text-gray-200 tabular-nums">{value}</p>
     </div>
   )
 }

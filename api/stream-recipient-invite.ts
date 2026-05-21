@@ -14,6 +14,17 @@ function cleanText(value: unknown, fallback = '') {
   return String(value ?? fallback).trim().slice(0, 120)
 }
 
+function cleanUrl(value: unknown) {
+  const raw = String(value ?? '').trim()
+  if (!raw) return ''
+  try {
+    const url = new URL(raw)
+    return url.protocol === 'https:' || url.protocol === 'http:' ? url.toString() : ''
+  } catch {
+    return ''
+  }
+}
+
 function baseUrl(req: Request) {
   const configured = process.env.STREAMPAY_BASE_URL ?? process.env.HASH_PAYLINK_BASE_URL
   if (configured) return configured.replace(/\/+$/, '')
@@ -50,6 +61,44 @@ export default async function handler(req: Request, res: Response) {
     const amount = cleanText(req.body?.amount, 'USDC')
     const duration = cleanText(req.body?.duration, 'a StreamPay retainer')
     const reason = cleanText(req.body?.reason, 'StreamPay retainer')
+    const streamUrl = cleanUrl(req.body?.streamUrl)
+
+    if (streamUrl) {
+      const subject = `Your StreamPay claim link is ready`
+      const text = [
+        'Your StreamPay USDC stream is live.',
+        '',
+        `Amount: ${amount}`,
+        `Duration: ${duration}`,
+        `Memo: ${reason || 'StreamPay retainer'}`,
+        '',
+        'Open this link to view and claim with Circle Smart Wallet on Arc:',
+        streamUrl,
+      ].join('\n')
+
+      const html = `
+        <div style="font-family:Inter,Arial,sans-serif;line-height:1.5;color:#111827">
+          <h2 style="margin:0 0 12px">Your StreamPay claim link is ready</h2>
+          <p>Your StreamPay USDC stream is live.</p>
+          <p><strong>Amount:</strong> ${amount}<br/><strong>Duration:</strong> ${duration}<br/><strong>Memo:</strong> ${reason || 'StreamPay retainer'}</p>
+          <p><a href="${streamUrl}" style="display:inline-block;background:#111827;color:#fff;text-decoration:none;border-radius:12px;padding:12px 18px;font-weight:700">Open StreamPay Claim</a></p>
+          <p style="font-size:13px;color:#6b7280">Claims stay inside Circle Smart Wallet on Arc.</p>
+        </div>
+      `
+
+      await sendSendGridMail({
+        personalizations: [{ to: [{ email }] }],
+        from: { email: FROM_EMAIL, name: FROM_NAME },
+        subject,
+        content: [
+          { type: 'text/plain', value: text },
+          { type: 'text/html', value: html },
+        ],
+      })
+
+      return res.json({ ok: true, email, streamUrl })
+    }
+
     const pendingId = crypto.randomBytes(8).toString('hex')
     const setup = new URL('/recipient', baseUrl(req))
     const dedicatedStreamPay = setup.hostname === 'streampay.xyz' || setup.hostname.endsWith('.streampay.xyz') || setup.hostname.includes('streampay')
