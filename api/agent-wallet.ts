@@ -127,13 +127,26 @@ function extractJsonFromCliOutput(output: string) {
 
 function buildX402Proof(input: {
   response?: X402ServiceResponse
+  buyerAgent: string
+  sellerAgent: string
   buyerWallet: string
   serviceUrl: string
   maxAmount: string
+  circleOutput: string
 }) {
+  const receiptPayload = {
+    service: input.response?.service,
+    payment: input.response?.payment,
+    receipt: input.response?.receipt,
+  }
+  const receiptHash = crypto.createHash('sha256').update(JSON.stringify(receiptPayload)).digest('hex')
+  const circleOutputHash = crypto.createHash('sha256').update(input.circleOutput).digest('hex')
   const proof = {
     kind: 'circle_gateway_x402' as const,
     provider: input.response?.receipt?.provider ?? 'Circle Gateway x402',
+    service: input.response?.service ?? 'Hash PayLink x402 service',
+    buyerAgent: input.buyerAgent,
+    sellerAgent: input.sellerAgent,
     payer: input.response?.payment?.payer ?? input.buyerWallet,
     seller: input.response?.receipt?.seller,
     amount: input.response?.payment?.amount ?? input.response?.receipt?.price ?? `${input.maxAmount} USDC`,
@@ -141,6 +154,8 @@ function buildX402Proof(input: {
     transaction: input.response?.payment?.transaction,
     serviceUrl: input.serviceUrl,
     generatedAt: input.response?.receipt?.generatedAt ?? new Date().toISOString(),
+    receiptHash,
+    circleOutputHash,
   }
   const proofHash = crypto.createHash('sha256').update(JSON.stringify(proof)).digest('hex')
   return { ...proof, proofHash }
@@ -660,9 +675,12 @@ export default async function handler(req: Request, res: Response) {
       const parsedResponse = extractJsonFromCliOutput(output) as X402ServiceResponse | undefined
       const proof = buildX402Proof({
         response: parsedResponse,
+        buyerAgent: agentSlug,
+        sellerAgent: sellerAgentSlug,
         buyerWallet: record.walletAddress,
         serviceUrl,
         maxAmount: String(maxAmount),
+        circleOutput: output,
       })
       await appendAgentActivity({
         agentSlug,

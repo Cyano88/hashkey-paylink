@@ -51,6 +51,9 @@ type AgentActivity = {
   proof?: {
     kind: 'circle_gateway_x402'
     provider?: string
+    service?: string
+    buyerAgent?: string
+    sellerAgent?: string
     payer?: string
     seller?: string
     amount?: string
@@ -58,6 +61,8 @@ type AgentActivity = {
     transaction?: string
     serviceUrl?: string
     generatedAt?: string
+    receiptHash?: string
+    circleOutputHash?: string
     proofHash: string
   }
   createdAt: number
@@ -105,6 +110,7 @@ export default function AgentDemo() {
   const [x402Status, setX402Status] = useState('')
   const [x402ModalOpen, setX402ModalOpen] = useState(false)
   const [activity, setActivity] = useState<AgentActivity[]>([])
+  const [copiedProofId, setCopiedProofId] = useState('')
   const [copiedWallet, setCopiedWallet] = useState(false)
   const [walletEmail, setWalletEmail] = useState('')
   const [walletOtp, setWalletOtp] = useState('')
@@ -432,6 +438,19 @@ export default function AgentDemo() {
   const activityProofTitle = (item: AgentActivity) => {
     if (!item.proof) return ''
     return JSON.stringify(item.proof, null, 2)
+  }
+  const copyActivityProof = async (item: AgentActivity) => {
+    if (!item.proof) return
+    await navigator.clipboard.writeText(JSON.stringify({
+      type: 'circle_gateway_x402_receipt',
+      activityId: item.id,
+      title: item.title,
+      amount: item.amount ? `${item.direction === 'out' ? '-' : item.direction === 'in' ? '+' : ''}${item.amount} ${item.asset ?? 'USDC'}` : undefined,
+      detail: item.detail,
+      proof: item.proof,
+    }, null, 2))
+    setCopiedProofId(item.id)
+    window.setTimeout(() => setCopiedProofId(''), 1400)
   }
   const displayAgentWalletChain =
     agentWalletChain === 'BASE' ? 'Base' :
@@ -763,13 +782,22 @@ export default function AgentDemo() {
                           {[item.network, item.detail].filter(Boolean).join(' - ')}
                         </p>
                         {item.proof?.proofHash && (
-                          <p
-                            className="mt-0.5 truncate font-mono text-[10px] text-gray-400 dark:text-gray-500"
-                            title={activityProofTitle(item)}
-                          >
-                            Proof {item.proof.proofHash.slice(0, 12)}
-                            {item.proof.transaction ? ` - Tx ${item.proof.transaction.slice(0, 10)}` : ''}
-                          </p>
+                          <div className="mt-0.5 flex min-w-0 items-center gap-2">
+                            <p
+                              className="min-w-0 truncate font-mono text-[10px] text-gray-400 dark:text-gray-500"
+                              title={activityProofTitle(item)}
+                            >
+                              Proof {item.proof.proofHash.slice(0, 12)}
+                              {item.proof.transaction ? ` - Tx ${item.proof.transaction.slice(0, 10)}` : ''}
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => copyActivityProof(item)}
+                              className="shrink-0 text-[10px] font-semibold text-gray-400 transition-colors hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200"
+                            >
+                              {copiedProofId === item.id ? 'Copied' : 'Copy proof'}
+                            </button>
+                          </div>
                         )}
                       </div>
                     </div>

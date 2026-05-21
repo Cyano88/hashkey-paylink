@@ -15,6 +15,9 @@ export type AgentActivityType =
 export type AgentActivityProof = {
   kind: 'circle_gateway_x402'
   provider?: string
+  service?: string
+  buyerAgent?: string
+  sellerAgent?: string
   payer?: string
   seller?: string
   amount?: string
@@ -22,6 +25,8 @@ export type AgentActivityProof = {
   transaction?: string
   serviceUrl?: string
   generatedAt?: string
+  receiptHash?: string
+  circleOutputHash?: string
   proofHash: string
 }
 
