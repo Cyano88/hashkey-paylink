@@ -771,6 +771,16 @@ export function CreateStreamForm() {
 
         {/* ── Vault Card + How It Works ── */}
         <div className={circleAvailable && activeTab === 'running' ? 'hidden' : 'space-y-4'}>
+          {circleAvailable && activeTab === 'new' && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('running')}
+              className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-400 transition-colors hover:text-gray-700 dark:hover:text-gray-200"
+            >
+              <span aria-hidden="true">&lt;-</span>
+              Back
+            </button>
+          )}
 
           {/* Vault Card */}
           <div className="bg-white dark:bg-[#111216] rounded-2xl border border-gray-100 dark:border-white/10 shadow-sm overflow-hidden">

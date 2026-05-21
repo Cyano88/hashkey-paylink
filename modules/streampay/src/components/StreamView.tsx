@@ -429,6 +429,20 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
     refetchNonce()
   }
 
+  function handleBack() {
+    if (window.history.length > 1) {
+      window.history.back()
+      return
+    }
+    const fallback = new URLSearchParams()
+    fallback.set('app', 'streampay')
+    if (telegramMode) {
+      fallback.set('src', 'telegram')
+      fallback.set('wallet', 'circle')
+    }
+    window.location.href = `/?${fallback.toString()}`
+  }
+
   async function handleCancel() {
     if (!connectedAddr) return
     if (!window.confirm('Cancel this stream?\n\nThe unlocked portion goes to the recipient. The locked remainder is refunded to you.')) return
@@ -519,16 +533,26 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
   // ── Stream card ───────────────────────────────────────────────────────────
   return (
     <div className="w-full max-w-[480px] mx-auto mt-12">
-      {actionState === 'confirmed' && txHash && (
+      <div className="mb-2 flex items-center gap-3">
         <button
           type="button"
-          onClick={handleClaimAgain}
-          className="mb-2 inline-flex items-center gap-1 text-[11px] font-semibold text-gray-400 transition-colors hover:text-gray-700 dark:hover:text-gray-200"
+          onClick={handleBack}
+          className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-400 transition-colors hover:text-gray-700 dark:hover:text-gray-200"
         >
           <span aria-hidden="true">&lt;-</span>
-          Claim again
+          Back
         </button>
-      )}
+        {actionState === 'confirmed' && txHash && (
+          <button
+            type="button"
+            onClick={handleClaimAgain}
+            className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-400 transition-colors hover:text-gray-700 dark:hover:text-gray-200"
+          >
+            <span aria-hidden="true">&lt;-</span>
+            Claim again
+          </button>
+        )}
+      </div>
       <div className="overflow-hidden rounded-2xl border border-gray-100 dark:border-white/10 bg-white dark:bg-[#111216] shadow-sm">
 
         {/* Header */}
