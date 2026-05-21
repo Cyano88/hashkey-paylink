@@ -968,9 +968,8 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
 function StreamPayActivityMark({ confirmed }: { confirmed: boolean }) {
   if (confirmed) {
     return (
-      <span className="relative inline-flex h-3 w-7 items-center justify-end" aria-label="Claim confirmed">
-        <span className="absolute left-0 right-1 top-1/2 h-px -translate-y-1/2 rounded-full bg-emerald-400" />
-        <svg className="relative h-3 w-3 rounded-full text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+      <span className="inline-flex h-3 w-7 items-center justify-center" aria-label="Claim confirmed">
+        <svg className="h-3.5 w-3.5 rounded-full text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l5.25 5.25L19.5 7.5" />
         </svg>
       </span>
