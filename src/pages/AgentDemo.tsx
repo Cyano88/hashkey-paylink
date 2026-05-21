@@ -39,7 +39,7 @@ type Message = {
 
 type AgentActivity = {
   id: string
-  type: 'wallet_connected' | 'funded' | 'gateway_activated' | 'x402_spent' | 'scout_returned'
+  type: 'wallet_connected' | 'funded' | 'gateway_activated' | 'x402_spent' | 'x402_sold' | 'scout_returned'
   title: string
   amount?: string
   asset?: string
@@ -48,6 +48,18 @@ type AgentActivity = {
   wallet?: string
   txHash?: string
   detail?: string
+  proof?: {
+    kind: 'circle_gateway_x402'
+    provider?: string
+    payer?: string
+    seller?: string
+    amount?: string
+    network?: string
+    transaction?: string
+    serviceUrl?: string
+    generatedAt?: string
+    proofHash: string
+  }
   createdAt: number
 }
 
@@ -417,6 +429,10 @@ export default function AgentDemo() {
     const prefix = item.direction === 'out' ? '-' : item.direction === 'in' ? '+' : ''
     return `${prefix}${item.amount} ${item.asset ?? 'USDC'}`
   }
+  const activityProofTitle = (item: AgentActivity) => {
+    if (!item.proof) return ''
+    return JSON.stringify(item.proof, null, 2)
+  }
   const displayAgentWalletChain =
     agentWalletChain === 'BASE' ? 'Base' :
     agentWalletChain === 'ARBITRUM' ? 'Arbitrum' :
@@ -746,6 +762,15 @@ export default function AgentDemo() {
                         <p className="truncate text-[11px] text-gray-500 dark:text-gray-400">
                           {[item.network, item.detail].filter(Boolean).join(' - ')}
                         </p>
+                        {item.proof?.proofHash && (
+                          <p
+                            className="mt-0.5 truncate font-mono text-[10px] text-gray-400 dark:text-gray-500"
+                            title={activityProofTitle(item)}
+                          >
+                            Proof {item.proof.proofHash.slice(0, 12)}
+                            {item.proof.transaction ? ` - Tx ${item.proof.transaction.slice(0, 10)}` : ''}
+                          </p>
+                        )}
                       </div>
                     </div>
                   )) : (

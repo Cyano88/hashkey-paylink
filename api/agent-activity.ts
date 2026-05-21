@@ -9,7 +9,21 @@ export type AgentActivityType =
   | 'funded'
   | 'gateway_activated'
   | 'x402_spent'
+  | 'x402_sold'
   | 'scout_returned'
+
+export type AgentActivityProof = {
+  kind: 'circle_gateway_x402'
+  provider?: string
+  payer?: string
+  seller?: string
+  amount?: string
+  network?: string
+  transaction?: string
+  serviceUrl?: string
+  generatedAt?: string
+  proofHash: string
+}
 
 export type AgentActivity = {
   id: string
@@ -24,6 +38,7 @@ export type AgentActivity = {
   txHash?: string
   serviceUrl?: string
   detail?: string
+  proof?: AgentActivityProof
   createdAt: number
 }
 
@@ -72,9 +87,15 @@ export async function appendAgentActivity(input: Omit<AgentActivity, 'id' | 'cre
   store.activity = store.activity ?? {}
   const existing = store.activity[slug] ?? []
   const isDuplicate = existing.some(item => (
-    input.txHash && item.txHash?.toLowerCase() === input.txHash.toLowerCase() && item.type === input.type
+    (input.txHash && item.txHash?.toLowerCase() === input.txHash.toLowerCase() && item.type === input.type)
+    || (input.proof?.proofHash && item.proof?.proofHash === input.proof.proofHash && item.type === input.type)
   ))
-  if (isDuplicate) return existing.find(item => item.txHash?.toLowerCase() === input.txHash?.toLowerCase() && item.type === input.type)
+  if (isDuplicate) {
+    return existing.find(item => (
+      (input.txHash && item.txHash?.toLowerCase() === input.txHash.toLowerCase() && item.type === input.type)
+      || (input.proof?.proofHash && item.proof?.proofHash === input.proof.proofHash && item.type === input.type)
+    ))
+  }
   store.activity[slug] = [next, ...existing].slice(0, 80)
   await writeActivityStore(store)
   return next

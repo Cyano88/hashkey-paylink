@@ -48,6 +48,22 @@ type StoreData = {
   activity?: Record<string, unknown[]>
 }
 
+type X402ServiceResponse = {
+  service?: string
+  payment?: {
+    payer?: string
+    amount?: string
+    network?: string
+    transaction?: string
+  }
+  receipt?: {
+    provider?: string
+    price?: string
+    seller?: string
+    generatedAt?: string
+  }
+}
+
 function normalizeEmail(value: unknown) {
   const email = String(value ?? '').trim().toLowerCase()
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : ''
@@ -107,6 +123,27 @@ function extractJsonFromCliOutput(output: string) {
   } catch {
     return undefined
   }
+}
+
+function buildX402Proof(input: {
+  response?: X402ServiceResponse
+  buyerWallet: string
+  serviceUrl: string
+  maxAmount: string
+}) {
+  const proof = {
+    kind: 'circle_gateway_x402' as const,
+    provider: input.response?.receipt?.provider ?? 'Circle Gateway x402',
+    payer: input.response?.payment?.payer ?? input.buyerWallet,
+    seller: input.response?.receipt?.seller,
+    amount: input.response?.payment?.amount ?? input.response?.receipt?.price ?? `${input.maxAmount} USDC`,
+    network: input.response?.payment?.network,
+    transaction: input.response?.payment?.transaction,
+    serviceUrl: input.serviceUrl,
+    generatedAt: input.response?.receipt?.generatedAt ?? new Date().toISOString(),
+  }
+  const proofHash = crypto.createHash('sha256').update(JSON.stringify(proof)).digest('hex')
+  return { ...proof, proofHash }
 }
 
 async function readStore(): Promise<StoreData> {
@@ -620,7 +657,13 @@ export default async function handler(req: Request, res: Response) {
         }
         throw err
       }
-      const parsedResponse = extractJsonFromCliOutput(output) as { receipt?: { seller?: string } } | undefined
+      const parsedResponse = extractJsonFromCliOutput(output) as X402ServiceResponse | undefined
+      const proof = buildX402Proof({
+        response: parsedResponse,
+        buyerWallet: record.walletAddress,
+        serviceUrl,
+        maxAmount: String(maxAmount),
+      })
       await appendAgentActivity({
         agentSlug,
         type: 'x402_spent',
@@ -632,6 +675,7 @@ export default async function handler(req: Request, res: Response) {
         wallet: record.walletAddress,
         serviceUrl,
         detail: 'Agent paid a machine-to-machine service',
+        proof,
       })
       await appendAgentActivity({
         agentSlug,
@@ -655,6 +699,7 @@ export default async function handler(req: Request, res: Response) {
           wallet: parsedResponse?.receipt?.seller ?? '',
           serviceUrl,
           detail: `${agentSlug} bought live Polymarket scout data`,
+          proof,
         })
       }
 
