@@ -32,6 +32,26 @@ const DURATIONS = [
 ]
 
 type Step = 'form' | 'funding' | 'creating' | 'success'
+type StreamTab = 'running' | 'new'
+type RecentStream = {
+  url: string
+  recipient: string
+  amount: string
+  reason: string
+  createdAt: number
+}
+type OnchainStream = {
+  vault: `0x${string}`
+  sender: `0x${string}`
+  recipient: `0x${string}`
+  totalAmount: string
+  startTime: string
+  endTime: string
+  alreadyWithdrawn: string
+  claimable: string
+  cancelled: boolean
+  active: boolean
+}
 
 function readPrefill() {
   const params = new URLSearchParams(window.location.search)
@@ -77,6 +97,10 @@ function isEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail(value))
 }
 
+function shortAddress(value: string) {
+  return `${value.slice(0, 6)}...${value.slice(-4)}`
+}
+
 function formatWalletUsdc(value: bigint) {
   if (value === 0n) return '0'
   const full = formatUsdcFull(value)
@@ -91,6 +115,30 @@ function genSalt(): `0x${string}` {
 
 function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+const RECENT_STREAMS_KEY = 'streampay:recent-streams'
+
+function loadRecentStreams(recipient: string): RecentStream[] {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(RECENT_STREAMS_KEY) ?? '[]') as RecentStream[]
+    return parsed
+      .filter(item => item && item.url && item.recipient?.toLowerCase() === recipient.toLowerCase())
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, 5)
+  } catch {
+    return []
+  }
+}
+
+function saveRecentStream(stream: RecentStream) {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(RECENT_STREAMS_KEY) ?? '[]') as RecentStream[]
+    const next = [stream, ...parsed.filter(item => item.url !== stream.url)].slice(0, 12)
+    window.localStorage.setItem(RECENT_STREAMS_KEY, JSON.stringify(next))
+  } catch {
+    // Recent streams are a convenience only.
+  }
 }
 
 function buildStreamLink(vault: `0x${string}`, reason: string, circleMode = false, recipientEmail = ''): string {
@@ -130,6 +178,7 @@ export function CreateStreamForm() {
   const [salt] = useState<`0x${string}`>(genSalt)
 
   const [step,         setStep]         = useState<Step>('form')
+  const [activeTab,    setActiveTab]    = useState<StreamTab>(prefill.preferCircle ? 'running' : 'new')
   const [statusMsg,    setStatusMsg]    = useState('')
   const [error,        setError]        = useState<string | null>(null)
   const [streamLink,   setStreamLink]   = useState<string | null>(null)
@@ -150,6 +199,10 @@ export function CreateStreamForm() {
   const [streamEmailSending, setStreamEmailSending] = useState(false)
   const [streamEmailStatus, setStreamEmailStatus] = useState('')
   const [streamEmailError, setStreamEmailError] = useState<string | null>(null)
+  const [recentStreams, setRecentStreams] = useState<RecentStream[]>(() => loadRecentStreams(prefill.recipient))
+  const [onchainStreams, setOnchainStreams] = useState<OnchainStream[]>([])
+  const [onchainStreamsLoading, setOnchainStreamsLoading] = useState(false)
+  const [onchainStreamsError, setOnchainStreamsError] = useState<string | null>(null)
 
   const recipientEmail = cleanEmail(recipient)
   const recipientEmailMode = !isAddress(recipient) && isEmail(recipient)
@@ -179,6 +232,18 @@ export function CreateStreamForm() {
   const isWorking   = step === 'funding' || step === 'creating'
   const deployReady = isFormValid && !isWorking && !insufficientFunds
   const circleDeployReady = circleAvailable && circleConfigured && circleReady && !isWorking && !circleNeedsFunds
+
+  function rememberStream(streamUrl: string) {
+    const stream = {
+      url: streamUrl,
+      recipient,
+      amount: `${formatUsdcFull(amountBn)} USDC`,
+      reason,
+      createdAt: Date.now(),
+    }
+    saveRecentStream(stream)
+    setRecentStreams(loadRecentStreams(recipient))
+  }
 
   async function refreshCircleBalance(walletAddress = circleSession?.wallet.address) {
     if (!walletAddress || !publicClient) return null
@@ -231,6 +296,26 @@ export function CreateStreamForm() {
     if (recipientEmailMode) setStreamRecipientEmail(recipientEmail)
   }, [recipientEmail])
 
+  useEffect(() => {
+    if (!circleAvailable || activeTab !== 'running' || !recipientValid) return
+    const controller = new AbortController()
+    const query = new URLSearchParams({ recipient })
+    if (circleSession?.wallet.address) query.set('sender', circleSession.wallet.address)
+    setOnchainStreamsLoading(true)
+    setOnchainStreamsError(null)
+    fetch(`/api/stream-history?${query.toString()}`, { signal: controller.signal })
+      .then(async res => {
+        const data = await res.json().catch(() => ({})) as { ok?: boolean; streams?: OnchainStream[]; error?: string }
+        if (!res.ok || !data.ok) throw new Error(data.error ?? 'Could not load streams')
+        setOnchainStreams(data.streams ?? [])
+      })
+      .catch(err => {
+        if ((err as Error).name !== 'AbortError') setOnchainStreamsError(err instanceof Error ? err.message : 'Could not load streams')
+      })
+      .finally(() => setOnchainStreamsLoading(false))
+    return () => controller.abort()
+  }, [activeTab, circleAvailable, recipient, recipientValid, circleSession?.wallet.address])
+
   async function handleDeploy() {
     if (!deployReady || !connectedAddr || !publicClient) return
     setError(null)
@@ -266,7 +351,9 @@ export function CreateStreamForm() {
       const vault = (event?.args as { vault?: `0x${string}` })?.vault
       if (!vault) throw new Error('Could not extract vault address from receipt.')
 
-      setStreamLink(buildStreamLink(vault, reason))
+      const nextStreamLink = buildStreamLink(vault, reason)
+      setStreamLink(nextStreamLink)
+      rememberStream(nextStreamLink)
       setStep('success'); setStatusMsg('')
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
@@ -325,7 +412,9 @@ export function CreateStreamForm() {
         if (!deployed) {
           throw new Error('Circle submitted the stream, but Arc confirmation is still pending. Refresh this page in a minute and check the stream link again.')
         }
-        setStreamLink(buildStreamLink(predicted, reason, true, streamRecipientEmail))
+        const nextStreamLink = buildStreamLink(predicted, reason, true, streamRecipientEmail)
+        setStreamLink(nextStreamLink)
+        rememberStream(nextStreamLink)
         void refreshCircleBalance(session.wallet.address)
         setStep('success')
         setStatusMsg('')
@@ -340,7 +429,9 @@ export function CreateStreamForm() {
       const vault = (event?.args as { vault?: `0x${string}` })?.vault
       if (!vault) throw new Error('Could not extract vault address from receipt.')
 
-      setStreamLink(buildStreamLink(vault, reason, true, streamRecipientEmail))
+      const nextStreamLink = buildStreamLink(vault, reason, true, streamRecipientEmail)
+      setStreamLink(nextStreamLink)
+      rememberStream(nextStreamLink)
       void refreshCircleBalance(session.wallet.address)
       setStep('success')
       setStatusMsg('')
@@ -576,8 +667,99 @@ export function CreateStreamForm() {
           <p className="text-[13px] text-gray-400">Stream payment in USDC to anyone on Arc</p>
         </div>
 
+        {circleAvailable && (
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-1 rounded-xl border border-gray-100 dark:border-white/10 bg-gray-50 dark:bg-white/5 p-1">
+              {([
+                ['running', 'Running streams'],
+                ['new', 'New stream'],
+              ] as const).map(([key, label]) => {
+                const active = activeTab === key
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setActiveTab(key)}
+                    className={[
+                      'rounded-lg px-3 py-2 text-[12px] font-bold transition-colors',
+                      active
+                        ? 'bg-white dark:bg-[#15151a] text-gray-900 dark:text-gray-100 shadow-sm'
+                        : 'text-gray-400 hover:text-gray-700 dark:hover:text-gray-200',
+                    ].join(' ')}
+                  >
+                    {label}
+                  </button>
+                )
+              })}
+            </div>
+
+            {activeTab === 'running' && (
+              <div className="bg-white dark:bg-[#111216] rounded-2xl border border-gray-100 dark:border-white/10 shadow-sm overflow-hidden">
+                <div className="p-5 sm:p-7 space-y-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <StaticStreamMark />
+                      <div>
+                        <p className="text-[13px] font-bold text-gray-800 dark:text-gray-100">Running streams</p>
+                        <p className="text-[11px] text-gray-400">Loaded from StreamPay on-chain events</p>
+                      </div>
+                    </div>
+                    <span className="text-[11px] text-gray-400">Arc</span>
+                  </div>
+
+                  {onchainStreamsLoading ? (
+                    <div className="rounded-xl border border-gray-100 dark:border-white/10 bg-gray-50/70 dark:bg-white/5 px-4 py-5 text-center">
+                      <p className="text-[12px] font-semibold text-gray-500 dark:text-gray-300">Checking Arc streams...</p>
+                    </div>
+                  ) : onchainStreamsError ? (
+                    <div className="rounded-xl border border-red-100 dark:border-red-900/40 bg-red-50 dark:bg-red-950/20 px-4 py-4 text-center space-y-2">
+                      <p className="text-[12px] font-semibold text-red-500 dark:text-red-300">{onchainStreamsError}</p>
+                      {recentStreams.length > 0 && (
+                        <p className="text-[11px] text-gray-400">{recentStreams.length} browser-saved stream{recentStreams.length === 1 ? '' : 's'} available as fallback.</p>
+                      )}
+                    </div>
+                  ) : onchainStreams.length > 0 ? (
+                    <div className="space-y-2">
+                      {onchainStreams.map(stream => {
+                        const streamUrl = buildStreamLink(stream.vault, reason, true, streamRecipientEmail)
+                        const endMs = Number(BigInt(stream.endTime)) * 1000
+                        const status = stream.cancelled ? 'Cancelled' : stream.active ? 'Live' : 'Complete'
+                        return (
+                        <a
+                          key={stream.vault}
+                          href={streamUrl}
+                          className="flex items-center justify-between gap-3 rounded-xl border border-gray-100 dark:border-white/10 bg-gray-50/70 dark:bg-white/5 px-3 py-3 transition-colors hover:bg-gray-100 dark:hover:bg-white/10"
+                        >
+                          <span className="min-w-0">
+                            <span className="block truncate text-[12px] font-bold text-gray-700 dark:text-gray-200">{reason || 'Arc USDC stream'}</span>
+                            <span className="block text-[11px] text-gray-400">{formatUsdcFull(BigInt(stream.totalAmount))} USDC · {Number.isFinite(endMs) ? new Date(endMs).toLocaleDateString() : shortAddress(stream.vault)}</span>
+                          </span>
+                          <span className={`shrink-0 text-[11px] font-semibold ${stream.active ? 'text-emerald-500' : 'text-gray-400'}`}>{status}</span>
+                        </a>
+                      )})}
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-gray-100 dark:border-white/10 bg-gray-50/70 dark:bg-white/5 px-4 py-5 text-center space-y-2">
+                      <p className="text-[12px] font-semibold text-gray-500 dark:text-gray-300">No on-chain streams found for this recipient.</p>
+                      <p className="text-[11px] text-gray-400">Create a stream, then it can be found from any browser.</p>
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('new')}
+                    className="w-full rounded-xl bg-gray-900 py-3 text-[13px] font-bold text-white transition-transform active:scale-[0.98]"
+                  >
+                    New stream
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ── Vault Card + How It Works ── */}
-        <div className="space-y-4">
+        <div className={circleAvailable && activeTab === 'running' ? 'hidden' : 'space-y-4'}>
 
           {/* Vault Card */}
           <div className="bg-white dark:bg-[#111216] rounded-2xl border border-gray-100 dark:border-white/10 shadow-sm overflow-hidden">
@@ -587,10 +769,7 @@ export function CreateStreamForm() {
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
-                    <span className="flex gap-0.5">
-                      <span className="h-2 w-2 rounded-full bg-blue-500" />
-                      <span className="h-2 w-2 rounded-full bg-amber-400" />
-                    </span>
+                    <StaticStreamMark />
                     <span className="text-[13px] font-semibold text-gray-700 dark:text-gray-200">Recipient</span>
                   </div>
                   <span className="text-[11px] text-gray-400">Arc Network</span>
@@ -620,14 +799,6 @@ export function CreateStreamForm() {
                         : 'border-gray-200 dark:border-white/10 dark:bg-[#15151a] focus:border-gray-400',
                     ].join(' ')}
                   />
-                  {recipientValid && (
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                      <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 border border-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-600">
-                        <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
-                        Address Valid
-                      </span>
-                    </div>
-                  )}
                   {recipientEmailMode && (
                     <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
                       <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 border border-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-600">
@@ -641,7 +812,7 @@ export function CreateStreamForm() {
                 {recipientValid && (
                   <p className="text-[11px] text-blue-500 flex items-center gap-1">
                     <CheckIcon small />
-                    {recipient.slice(0, 10)}…{recipient.slice(-8)}
+                    Address valid
                   </p>
                 )}
                 {recipientEmailMode && (
@@ -967,6 +1138,14 @@ export function HashPayLinkBadge() {
 }
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
+
+function StaticStreamMark() {
+  return (
+    <span className="relative inline-flex h-3 w-7 overflow-hidden rounded-full bg-emerald-100/80 dark:bg-emerald-950/40" aria-label="Stream ready">
+      <span className="absolute left-1 top-1/2 h-0.5 w-5 -translate-y-1/2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.35)]" />
+    </span>
+  )
+}
 
 function CheckIcon({ small }: { small?: boolean }) {
   return (
