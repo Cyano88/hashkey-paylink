@@ -35,6 +35,7 @@ import basePaymasterHandler from './api/base-paymaster.js'
 import circleSolanaEmailHandler from './api/circle-solana-email.js'
 import circleRecipientWalletHandler from './api/circle-recipient-wallet.js'
 import streamRecipientInviteHandler from './api/stream-recipient-invite.js'
+import streamHistoryHandler from './api/stream-history.js'
 import agentVerifyHandler   from './api/agent-verify.js'
 import agentAskHandler     from './api/agent-ask.js'
 import agentWalletHandler  from './api/agent-wallet.js'
@@ -82,6 +83,7 @@ app.all('/api/base-paymaster',         basePaymasterHandler)
 app.post('/api/circle-solana-email',   circleSolanaEmailHandler)
 app.all('/api/circle-recipient-wallet', strictLimiter, circleRecipientWalletHandler)
 app.post('/api/stream-recipient-invite', strictLimiter, streamRecipientInviteHandler)
+app.get('/api/stream-history',         readLimiter, streamHistoryHandler)
 // ── Agentic Economy — 0G payment verification primitives ─────────────────────
 app.all('/api/agent-verify',           strictLimiter, agentVerifyHandler)
 app.post('/api/agent-ask',             strictLimiter, agentAskHandler)

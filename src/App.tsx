@@ -25,11 +25,16 @@ import EnvironmentDocs  from './pages/docs/EnvironmentDocs'
 // The same Render service hosts both apps. The active hostname determines
 // which React app is mounted. Add ?app=streampay to any localhost URL for
 // local Streampay development without changing DNS.
-const { hostname, search } = window.location
+const { hostname, pathname, search } = window.location
+const isStreamPayRoute =
+  pathname === '/stream' ||
+  pathname.startsWith('/stream/') ||
+  pathname === '/recipient'
 const IS_STREAMPAY =
   hostname === 'streampay.xyz'                           ||  // production domain
   hostname.endsWith('.streampay.xyz')                    ||  // subdomains
   hostname.includes('streampay')                         ||  // onrender.com service named streampay-*
+  isStreamPayRoute                                       ||  // StreamPay share links on hashpaylink.com
   new URLSearchParams(search).get('app') === 'streampay'    // localhost dev toggle
 
 export default function App() {
