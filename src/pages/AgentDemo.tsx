@@ -779,12 +779,12 @@ export default function AgentDemo() {
               { n: '2', title: 'Fund', body: 'Add USDC' },
               { n: '3', title: 'Use', body: 'Ask, stream, x402' },
             ].map(({ n, title, body }) => (
-              <div key={n} className="rounded-xl border border-gray-100 bg-white p-4 text-center shadow-sm">
-                <div className="mx-auto mb-2.5 flex h-7 w-7 items-center justify-center rounded-full bg-gray-100 text-xs font-bold text-gray-600">
+              <div key={n} className="rounded-xl border border-gray-100 bg-white p-4 text-center shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
+                <div className="mx-auto mb-2.5 flex h-7 w-7 items-center justify-center rounded-full bg-gray-100 text-xs font-bold text-gray-600 dark:bg-white/[0.08] dark:text-gray-300">
                   {n}
                 </div>
-                <p className="text-xs font-semibold text-gray-800">{title}</p>
-                <p className="mt-0.5 text-xs leading-relaxed text-gray-400">{body}</p>
+                <p className="text-xs font-semibold text-gray-800 dark:text-gray-100">{title}</p>
+                <p className="mt-0.5 text-xs leading-relaxed text-gray-400 dark:text-gray-500">{body}</p>
               </div>
             ))}
           </div>
