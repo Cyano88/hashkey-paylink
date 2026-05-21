@@ -2,7 +2,7 @@ import type { Request, Response } from 'express'
 import { createPublicClient, defineChain, http, isAddress, parseAbi, type Address } from 'viem'
 
 const DEFAULT_LOG_CHUNK_SIZE = 2_000n
-const DEFAULT_FROM_BLOCK = 0n
+const DEFAULT_LOOKBACK_BLOCKS = 100_000n
 const MAX_ROWS = 25
 
 const arcChain = defineChain({
@@ -91,11 +91,12 @@ export default async function handler(req: Request, res: Response) {
   })
   const publicClient = client as any
 
-  const envFromBlock = readBlock(process.env.STREAM_FACTORY_FROM_BLOCK, DEFAULT_FROM_BLOCK)
-  const fromBlock = readBlock(req.query.fromBlock, envFromBlock)
-
   try {
     const latestBlock = await publicClient.getBlockNumber() as bigint
+    const envFromBlock = typeof process.env.STREAM_FACTORY_FROM_BLOCK === 'string' && process.env.STREAM_FACTORY_FROM_BLOCK.trim()
+      ? readBlock(process.env.STREAM_FACTORY_FROM_BLOCK, latestBlock > DEFAULT_LOOKBACK_BLOCKS ? latestBlock - DEFAULT_LOOKBACK_BLOCKS : 0n)
+      : latestBlock > DEFAULT_LOOKBACK_BLOCKS ? latestBlock - DEFAULT_LOOKBACK_BLOCKS : 0n
+    const fromBlock = readBlock(req.query.fromBlock, envFromBlock)
     const logs = await getLogsChunked<StreamLog>(
       (start, end) => publicClient.getLogs({
         address: factory as Address,

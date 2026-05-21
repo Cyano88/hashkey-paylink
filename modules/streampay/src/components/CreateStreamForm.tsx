@@ -299,6 +299,7 @@ export function CreateStreamForm() {
   useEffect(() => {
     if (!circleAvailable || activeTab !== 'running' || !recipientValid) return
     const controller = new AbortController()
+    const timeout = window.setTimeout(() => controller.abort(), 30_000)
     const query = new URLSearchParams({ recipient })
     if (circleSession?.wallet.address) query.set('sender', circleSession.wallet.address)
     setOnchainStreamsLoading(true)
@@ -310,10 +311,20 @@ export function CreateStreamForm() {
         setOnchainStreams(data.streams ?? [])
       })
       .catch(err => {
-        if ((err as Error).name !== 'AbortError') setOnchainStreamsError(err instanceof Error ? err.message : 'Could not load streams')
+        if ((err as Error).name === 'AbortError') {
+          setOnchainStreamsError('Could not load streams from Arc. Try again in a moment.')
+          return
+        }
+        setOnchainStreamsError(err instanceof Error ? err.message : 'Could not load streams')
       })
-      .finally(() => setOnchainStreamsLoading(false))
-    return () => controller.abort()
+      .finally(() => {
+        window.clearTimeout(timeout)
+        setOnchainStreamsLoading(false)
+      })
+    return () => {
+      window.clearTimeout(timeout)
+      controller.abort()
+    }
   }, [activeTab, circleAvailable, recipient, recipientValid, circleSession?.wallet.address])
 
   async function handleDeploy() {
