@@ -93,7 +93,7 @@ function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
-function buildStreamLink(vault: `0x${string}`, reason: string, circleMode = false): string {
+function buildStreamLink(vault: `0x${string}`, reason: string, circleMode = false, recipientEmail = ''): string {
   const { hostname, origin } = window.location
   const isDedicatedHost =
     hostname === 'streampay.xyz' ||
@@ -105,6 +105,7 @@ function buildStreamLink(vault: `0x${string}`, reason: string, circleMode = fals
     p.set('src', 'telegram')
     p.set('wallet', 'circle')
   }
+  if (isEmail(recipientEmail)) p.set('recipientEmail', cleanEmail(recipientEmail))
   if (reason.trim())    p.set('reason', reason.trim())
   const qs = p.toString()
   return `${origin}/stream/${vault}${qs ? `?${qs}` : ''}`
@@ -324,7 +325,7 @@ export function CreateStreamForm() {
         if (!deployed) {
           throw new Error('Circle submitted the stream, but Arc confirmation is still pending. Refresh this page in a minute and check the stream link again.')
         }
-        setStreamLink(buildStreamLink(predicted, reason, true))
+        setStreamLink(buildStreamLink(predicted, reason, true, streamRecipientEmail))
         void refreshCircleBalance(session.wallet.address)
         setStep('success')
         setStatusMsg('')
@@ -339,7 +340,7 @@ export function CreateStreamForm() {
       const vault = (event?.args as { vault?: `0x${string}` })?.vault
       if (!vault) throw new Error('Could not extract vault address from receipt.')
 
-      setStreamLink(buildStreamLink(vault, reason, true))
+      setStreamLink(buildStreamLink(vault, reason, true, streamRecipientEmail))
       void refreshCircleBalance(session.wallet.address)
       setStep('success')
       setStatusMsg('')
