@@ -584,6 +584,7 @@ export default async function handler(req: Request, res: Response) {
       if (!authorized) return res.status(401).json({ ok: false, error: 'Unauthorized' })
 
       const serviceUrl = String(req.body?.serviceUrl ?? '').trim()
+      const sellerAgentSlug = normalizeSlug(req.body?.sellerAgentSlug) || DEFAULT_AGENT_SLUG
       const requested = cleanAmount(req.body?.maxAmount)
       const maxAmount = Math.min(requested ?? MAX_SERVICE_AMOUNT, MAX_SERVICE_AMOUNT)
       if (!ALLOWED_SERVICE_URLS.has(serviceUrl)) return res.status(403).json({ ok: false, error: 'Service URL is not allowlisted.' })
@@ -619,7 +620,7 @@ export default async function handler(req: Request, res: Response) {
         }
         throw err
       }
-      const parsedResponse = extractJsonFromCliOutput(output)
+      const parsedResponse = extractJsonFromCliOutput(output) as { receipt?: { seller?: string } } | undefined
       await appendAgentActivity({
         agentSlug,
         type: 'x402_spent',
@@ -642,6 +643,20 @@ export default async function handler(req: Request, res: Response) {
         serviceUrl,
         detail: 'API returned ranked LP opportunities',
       })
+      if (sellerAgentSlug && sellerAgentSlug !== agentSlug) {
+        await appendAgentActivity({
+          agentSlug: sellerAgentSlug,
+          type: 'x402_sold',
+          title: 'Sold LP Scout API',
+          amount: String(maxAmount),
+          asset: 'USDC',
+          direction: 'in',
+          network: 'Circle Gateway x402',
+          wallet: parsedResponse?.receipt?.seller ?? '',
+          serviceUrl,
+          detail: `${agentSlug} bought live Polymarket scout data`,
+        })
+      }
 
       return res.json({
         ok: true,
