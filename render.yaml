@@ -43,9 +43,9 @@ services:
       - key: VITE_CIRCLE_USER_WALLET_APP_ID_ARC_TESTNET
         sync: false                   # Circle test app id for Arc testnet StreamPay
       - key: STREAM_FACTORY_ADDRESS
-        value: "0x1C20e33B6d82E27234f417EeD613a88b9640638f"
+        value: "0xBAecf54084A0cB65b77a88cbDEf2b663Be71c61b"
       - key: VITE_STREAM_FACTORY_ADDRESS
-        value: "0x1C20e33B6d82E27234f417EeD613a88b9640638f"
+        value: "0xBAecf54084A0cB65b77a88cbDEf2b663Be71c61b"
       - key: BASE_GAS_RECOVERY_USDC
         value: "0.01"
       - key: ARBITRUM_GAS_RECOVERY_USDC
