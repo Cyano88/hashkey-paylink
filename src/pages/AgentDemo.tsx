@@ -508,7 +508,7 @@ export default function AgentDemo() {
             </div>
             <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
               <ShieldCheck className="h-4 w-4 text-gray-400" />
-              <p className="mt-2 text-xs font-semibold text-gray-800 dark:text-gray-100">Balance</p>
+              <p className="mt-2 text-xs font-semibold text-gray-800 dark:text-gray-100">Treasury</p>
               <p className="text-xs text-gray-500" title={treasuryBalanceError || undefined}>
                 {treasuryBalance !== null
                   ? `${Number(treasuryBalance).toLocaleString(undefined, { maximumFractionDigits: 6 })} USDC`
@@ -539,7 +539,7 @@ export default function AgentDemo() {
               </div>
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                 {currentAgentWallet
-                  ? 'Use the same Circle email to restore access.'
+                  ? 'Use the same Circle email. A different wallet will not replace this one.'
                   : walletMode === 'choose'
                   ? 'Create a new wallet or reconnect an existing one.'
                   : walletMode === 'create'
