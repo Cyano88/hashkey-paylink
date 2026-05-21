@@ -250,6 +250,16 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
     if (!connectedAddr || !stream || stream.claimable === 0n) return
     setActionState('signing'); setActionError(null); setTxHash(null)
     try {
+      const claimable = await arcClient.readContract({
+        address: vaultAddress, abi: STREAM_VAULT_ABI,
+        functionName: 'claimable',
+      }) as bigint
+      if (claimable === 0n) {
+        setActionError('No funds available to withdraw yet.')
+        setActionState('error')
+        return
+      }
+
       const deadline = BigInt(Math.floor(Date.now() / 1000) + 600)
       const nonce = await arcClient.readContract({
         address: vaultAddress, abi: STREAM_VAULT_ABI,
@@ -265,7 +275,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
           { name: 'deadline',  type: 'uint256' },
         ]},
         primaryType: 'Claim',
-        message: { recipient: connectedAddr, amount: stream.claimable, nonce, deadline },
+        message: { recipient: connectedAddr, amount: claimable, nonce, deadline },
       })
 
       setActionState('relaying')
@@ -274,7 +284,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
         body: JSON.stringify({
           action: 'claim', vaultAddress, sig,
           nonce: nonce.toString(), deadline: deadline.toString(),
-          amount: stream.claimable.toString(),
+          amount: claimable.toString(),
         }),
       })
       const data = await res.json() as { ok: boolean; txHash?: string; error?: string }
@@ -314,6 +324,16 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
         return
       }
 
+      const claimable = await arcClient.readContract({
+        address: vaultAddress, abi: STREAM_VAULT_ABI,
+        functionName: 'claimable',
+      }) as bigint
+      if (claimable === 0n) {
+        setActionError('No funds available to withdraw yet.')
+        setActionState('error')
+        return
+      }
+
       const deadline = BigInt(Math.floor(Date.now() / 1000) + 600)
       const nonce = await arcClient.readContract({
         address: vaultAddress, abi: STREAM_VAULT_ABI,
@@ -325,7 +345,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
         sig = await signCircleArcStreamClaim({
           session,
           vaultAddress,
-          amountUnits: stream.claimable.toString(),
+          amountUnits: claimable.toString(),
           nonce: nonce.toString(),
           deadline: deadline.toString(),
         })
@@ -337,7 +357,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
         sig = await signCircleArcStreamClaim({
           session,
           vaultAddress,
-          amountUnits: stream.claimable.toString(),
+          amountUnits: claimable.toString(),
           nonce: nonce.toString(),
           deadline: deadline.toString(),
         })
@@ -349,7 +369,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
         body: JSON.stringify({
           action: 'claim', vaultAddress, sig,
           nonce: nonce.toString(), deadline: deadline.toString(),
-          amount: stream.claimable.toString(),
+          amount: claimable.toString(),
         }),
       })
       const data = await res.json() as { ok: boolean; txHash?: string; error?: string }

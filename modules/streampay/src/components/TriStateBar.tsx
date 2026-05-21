@@ -95,6 +95,7 @@ export function TriStateBar({ claimed, unlocked, locked, total }: TriStateBarPro
 // ── Formatters ────────────────────────────────────────────────────────────────
 
 export function formatUsdc(raw: bigint, compact = true): string {
+  if (raw > 0n && raw < 10_000n) return '<$0.01'
   if (compact && raw >= 1_000_000_000n) {
     return `$${(Number(raw) / 1_000_000_000).toFixed(2)}K`
   }
