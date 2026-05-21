@@ -11,6 +11,8 @@ const CIRCLE_BIN = process.platform === 'win32' ? 'circle.cmd' : 'circle'
 const STORE_PATH = process.env.AGENT_WALLET_PROVISION_STORE ?? './data/agent-wallet-provisioning.json'
 const CIRCLE_CLI_ENABLED = ['1', 'true', 'yes', 'on'].includes(String(process.env.CIRCLE_CLI_ENABLED ?? '').toLowerCase())
 const SERVICE_SECRET = process.env.AGENT_WALLET_SERVICE_SECRET
+const DEFAULT_AGENT_SLUG = normalizeSlug(process.env.DEFAULT_AGENT_SLUG || 'hashpaylink-agent')
+const DEFAULT_AGENT_WALLET_ADDRESS = normalizeExpectedWallet(process.env.DEFAULT_AGENT_WALLET_ADDRESS)
 const DEFAULT_SCOUT_URL = `${(process.env.HASH_PAYLINK_BASE_URL ?? 'https://hashpaylink.com').replace(/\/+$/, '')}/api/x402/polymarket-scout`
 const ALLOWED_SERVICE_URLS = new Set(
   (process.env.AGENT_WALLET_ALLOWED_SERVICE_URLS ?? process.env.X402_POLYMARKET_SCOUT_URL ?? DEFAULT_SCOUT_URL)
@@ -31,9 +33,18 @@ type PendingSession = {
   createdAt: number
 }
 
+type AgentWalletRecord = {
+  walletAddress: string
+  chain: string
+  emailHash?: string
+  sessionId?: string
+  updatedAt: number
+  source?: 'env' | 'store'
+}
+
 type StoreData = {
   pending: Record<string, PendingSession>
-  agents?: Record<string, { walletAddress: string; chain: string; emailHash?: string; sessionId?: string; updatedAt: number }>
+  agents?: Record<string, AgentWalletRecord>
   activity?: Record<string, unknown[]>
 }
 
@@ -147,6 +158,59 @@ function normalizeExpectedWallet(value: unknown) {
   return /^0x[a-fA-F0-9]{40}$/.test(wallet) ? wallet : ''
 }
 
+function parseEnvRegistry(): Record<string, AgentWalletRecord> {
+  const registry: Record<string, AgentWalletRecord> = {}
+  if (DEFAULT_AGENT_SLUG && DEFAULT_AGENT_WALLET_ADDRESS) {
+    registry[DEFAULT_AGENT_SLUG] = {
+      walletAddress: DEFAULT_AGENT_WALLET_ADDRESS,
+      chain: 'ARC-TESTNET',
+      updatedAt: 0,
+      source: 'env',
+    }
+  }
+
+  const raw = String(process.env.AGENT_WALLET_REGISTRY ?? '').trim()
+  if (!raw) return registry
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>
+    for (const [rawSlug, value] of Object.entries(parsed)) {
+      const slug = normalizeSlug(rawSlug)
+      if (!slug) continue
+      const entry = typeof value === 'string' ? { walletAddress: value } : value as Record<string, unknown>
+      const walletAddress = normalizeExpectedWallet(entry.walletAddress)
+      if (!walletAddress) continue
+      registry[slug] = {
+        walletAddress,
+        chain: normalizeBalanceChain(entry.chain, 'ARC-TESTNET'),
+        updatedAt: Number(entry.updatedAt) || 0,
+        source: 'env',
+      }
+    }
+  } catch {
+    // Invalid env registry should not break the public wallet lookup endpoint.
+  }
+  return registry
+}
+
+function getEnvAgentRecord(agentSlug: string) {
+  return parseEnvRegistry()[agentSlug]
+}
+
+function resolveAgentRecord(store: StoreData, agentSlug: string): AgentWalletRecord | undefined {
+  const envRecord = getEnvAgentRecord(agentSlug)
+  const storedRecord = store.agents?.[agentSlug]
+  if (!envRecord) return storedRecord
+  if (storedRecord?.walletAddress && storedRecord.walletAddress.toLowerCase() === envRecord.walletAddress.toLowerCase()) {
+    return {
+      ...envRecord,
+      emailHash: storedRecord.emailHash,
+      sessionId: storedRecord.sessionId,
+      updatedAt: storedRecord.updatedAt || envRecord.updatedAt,
+    }
+  }
+  return envRecord
+}
+
 function parseBalance(output: string) {
   const cleanOutput = output.replace(/\u001b\[[0-9;]*m/g, '')
   try {
@@ -238,7 +302,7 @@ export default async function handler(req: Request, res: Response) {
     const agentSlug = normalizeSlug(req.query.agent)
     if (!agentSlug) return res.status(400).json({ ok: false, error: 'Missing agent name.' })
     const store = await readStore()
-    const record = store.agents?.[agentSlug]
+    const record = resolveAgentRecord(store, agentSlug)
     const balanceChain = normalizeBalanceChain(req.query.chain, record?.chain ?? 'BASE')
     let balance: string | undefined
     let balanceError: string | undefined
@@ -296,6 +360,7 @@ export default async function handler(req: Request, res: Response) {
       agentSlug,
       walletAddress: record?.walletAddress,
       connected: !!record?.sessionId,
+      source: record?.source ?? (record ? 'store' : undefined),
       chain: balanceChain,
       storedChain: record?.chain,
       balance,
@@ -362,7 +427,7 @@ export default async function handler(req: Request, res: Response) {
         listOutput = await runCircle(['wallet', 'list', '--type', 'agent', '--chain', chain], key)
       }
       const wallets = parseWalletAddresses(listOutput)
-      const existing = store.agents?.[agentSlug]
+      const existing = resolveAgentRecord(store, agentSlug)
       const expectedWallet = normalizeExpectedWallet(req.body?.expectedWallet)
       const walletAddress =
         (expectedWallet && wallets.find(item => item.toLowerCase() === expectedWallet.toLowerCase()))
@@ -370,6 +435,16 @@ export default async function handler(req: Request, res: Response) {
         || wallets[0]
       if (!walletAddress) return res.status(502).json({ ok: false, error: 'Circle login completed, but no wallet address was found.' })
       delete store.pending[id]
+      const envRecord = getEnvAgentRecord(agentSlug)
+      if (envRecord?.walletAddress && envRecord.walletAddress.toLowerCase() !== walletAddress.toLowerCase()) {
+        return res.status(409).json({
+          ok: false,
+          code: 'platform_agent_locked',
+          error: 'This agent wallet is pinned by Hash PayLink and cannot be replaced from this flow.',
+          existingWallet: envRecord.walletAddress,
+          newWallet: walletAddress,
+        })
+      }
       const explicitExpectedMatch = expectedWallet && walletAddress.toLowerCase() === expectedWallet.toLowerCase()
       if (existing?.walletAddress && existing.walletAddress.toLowerCase() !== walletAddress.toLowerCase() && !explicitExpectedMatch) {
         return res.status(409).json({
@@ -382,7 +457,7 @@ export default async function handler(req: Request, res: Response) {
       }
       store.agents = {
         ...(store.agents ?? {}),
-        [agentSlug]: { walletAddress, chain, emailHash: pending.emailHash, sessionId: id, updatedAt: Date.now() },
+        [agentSlug]: { walletAddress, chain, emailHash: pending.emailHash, sessionId: id, updatedAt: Date.now(), source: 'store' },
       }
       await writeStore(store)
       await appendAgentActivity({
@@ -398,6 +473,13 @@ export default async function handler(req: Request, res: Response) {
     }
 
     if (action === 'disconnect') {
+      if (getEnvAgentRecord(agentSlug)) {
+        return res.status(409).json({
+          ok: false,
+          code: 'platform_agent_locked',
+          error: 'This agent wallet is pinned by Hash PayLink env config and cannot be disconnected from this flow.',
+        })
+      }
       const store = await readStore()
       const record = store.agents?.[agentSlug]
       if (!record) return res.json({ ok: true, disconnected: true, agentSlug })
@@ -411,7 +493,7 @@ export default async function handler(req: Request, res: Response) {
 
     if (action === 'gateway-balance') {
       const store = await readStore()
-      const record = store.agents?.[agentSlug]
+      const record = resolveAgentRecord(store, agentSlug)
       if (!record?.walletAddress || !record.sessionId) {
         return res.status(404).json({ ok: false, error: 'Agent wallet session not found. Login on the web dashboard first.' })
       }
@@ -440,7 +522,7 @@ export default async function handler(req: Request, res: Response) {
       const depositChain = normalizeGatewayDepositChain(req.body?.chain)
 
       const store = await readStore()
-      const record = store.agents?.[agentSlug]
+      const record = resolveAgentRecord(store, agentSlug)
       if (!record?.walletAddress || !record.sessionId) {
         return res.status(404).json({ ok: false, error: 'Agent wallet session not found. Login on the web dashboard first.' })
       }
@@ -508,7 +590,7 @@ export default async function handler(req: Request, res: Response) {
       if (!maxAmount || maxAmount <= 0) return res.status(400).json({ ok: false, error: 'Invalid max amount.' })
 
       const store = await readStore()
-      const record = store.agents?.[agentSlug]
+      const record = resolveAgentRecord(store, agentSlug)
       if (!record?.walletAddress || !record.sessionId) {
         return res.status(404).json({ ok: false, error: 'Agent wallet session not found. Create the wallet on the web dashboard first.' })
       }
