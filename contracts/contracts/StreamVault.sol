@@ -8,6 +8,8 @@ interface IERC1271 {
     function isValidSignature(bytes32 hash, bytes memory signature) external view returns (bytes4 magicValue);
 }
 
+bytes4 constant ERC1271_MAGICVALUE = 0x1626ba7e;
+
 /**
  * @title  StreamVault
  * @notice One vault per payment stream. Deployed deterministically via CREATE2
@@ -321,8 +323,8 @@ contract StreamVault {
         bytes calldata sig
     ) internal view returns (bool) {
         (bool ok, bytes memory result) = signer.staticcall(
-            abi.encodeCall(IERC1271.isValidSignature, (digest, sig))
+            abi.encodeWithSelector(ERC1271_MAGICVALUE, digest, sig)
         );
-        return ok && result.length >= 32 && bytes4(result) == IERC1271.isValidSignature.selector;
+        return ok && result.length >= 32 && bytes4(result) == ERC1271_MAGICVALUE;
     }
 }

@@ -55,6 +55,7 @@ const ABI = parseAbi([
   'function claimable() view returns (uint256)',
   'function cancelled() view returns (bool)',
   'function nonces(address) view returns (uint256)',
+  'function relayer() view returns (address)',
 ])
 
 // ── Validation helpers ────────────────────────────────────────────────────────
@@ -141,6 +142,16 @@ export default async function handler(req: Request, res: Response) {
         return res.status(400).json({ ok: false, error: 'Nothing available to claim yet' })
       }
     }
+
+    const vaultRelayer = await publicClient.readContract({
+      address: vault, abi: ABI, functionName: 'relayer',
+    })
+    if (vaultRelayer.toLowerCase() !== account.address.toLowerCase()) {
+      return res.status(400).json({
+        ok: false,
+        error: `Relayer mismatch: vault expects ${vaultRelayer}, server is ${account.address}`,
+      })
+    }
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
     return res.status(400).json({ ok: false, error: `Pre-flight failed: ${msg.slice(0, 200)}` })
@@ -153,19 +164,35 @@ export default async function handler(req: Request, res: Response) {
     const nonceBn    = BigInt(nonce    as string | number)
 
     if (action === 'claim') {
+      const args = [BigInt(amount as string | number), nonceBn, deadlineBn, signature] as const
+      await publicClient.simulateContract({
+        account,
+        address:      vault,
+        abi:          ABI,
+        functionName: 'claim',
+        args,
+      })
       txHash = await walletClient.writeContract({
         address:      vault,
         abi:          ABI,
         functionName: 'claim',
-        args:         [BigInt(amount as string | number), nonceBn, deadlineBn, signature],
+        args,
         gas:          200_000n,   // generous ceiling; unused gas refunded
       })
     } else {
+      const args = [nonceBn, deadlineBn, signature] as const
+      await publicClient.simulateContract({
+        account,
+        address:      vault,
+        abi:          ABI,
+        functionName: 'cancel',
+        args,
+      })
       txHash = await walletClient.writeContract({
         address:      vault,
         abi:          ABI,
         functionName: 'cancel',
-        args:         [nonceBn, deadlineBn, signature],
+        args,
         gas:          150_000n,
       })
     }

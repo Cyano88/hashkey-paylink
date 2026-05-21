@@ -81,6 +81,16 @@ function cleanRelayError(msg: string): string {
   return msg.replace(/https?:\/\/[^\s]+/g, '').trim().slice(0, 120)
 }
 
+async function waitForArcContractCode(address: `0x${string}`, timeoutMs = 90_000) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    const code = await arcClient.getBytecode({ address }).catch(() => undefined)
+    if (code && code !== '0x') return true
+    await new Promise(resolve => setTimeout(resolve, 2_500))
+  }
+  return false
+}
+
 // ── Error boundary ────────────────────────────────────────────────────────────
 class StreamErrorBoundary extends Component<
   { children: ReactNode },
@@ -324,6 +334,17 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
         return
       }
 
+      const walletCode = await arcClient.getBytecode({ address: session.wallet.address }).catch(() => undefined)
+      if (!walletCode || walletCode === '0x') {
+        setActionError('Activating Circle wallet on Arc. Confirm once, then sign the claim.')
+        await deployCircleEvmEmailWallet({ session })
+        const deployed = await waitForArcContractCode(session.wallet.address)
+        if (!deployed) {
+          throw new Error('Circle wallet activation is still pending on Arc. Refresh this page in a minute and try again.')
+        }
+        setActionError(null)
+      }
+
       const claimable = await arcClient.readContract({
         address: vaultAddress, abi: STREAM_VAULT_ABI,
         functionName: 'claimable',
@@ -354,6 +375,11 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
         if (!msg.toLowerCase().includes('undeployed wallet')) throw err
         setActionError('Activating Circle wallet on Arc. Confirm once, then sign the claim.')
         await deployCircleEvmEmailWallet({ session })
+        const deployed = await waitForArcContractCode(session.wallet.address)
+        if (!deployed) {
+          throw new Error('Circle wallet activation is still pending on Arc. Refresh this page in a minute and try again.')
+        }
+        setActionError(null)
         sig = await signCircleArcStreamClaim({
           session,
           vaultAddress,
