@@ -89,7 +89,7 @@ export async function writeAgenticStreamingStore(store: AgenticStreamingStore) {
 export async function appendAgenticStreamingDelivery(delivery: AgenticStreamingDelivery) {
   const store = await readAgenticStreamingStore()
   const existing = store.subscriptions[delivery.subscriptionId]
-  if (existing) {
+  if (existing && delivery.status !== 'skipped') {
     store.subscriptions[delivery.subscriptionId] = {
       ...existing,
       lastReportAt: delivery.generatedAt,
