@@ -27,8 +27,9 @@
 14. [Dark Mode](#14-dark-mode)
 15. [SDK — Developer Integration Guide](#15-sdk--developer-integration-guide)
 16. [Security Architecture](#16-security-architecture)
-17. [Environment Variables Reference](#17-environment-variables-reference)
-18. [Support & Contact](#18-support--contact)
+17. [Agent Legal Wrapper Roadmap](#17-agent-legal-wrapper-roadmap)
+18. [Environment Variables Reference](#18-environment-variables-reference)
+19. [Support & Contact](#19-support--contact)
 
 ---
 
@@ -705,7 +706,32 @@ The complete payment and relay logic is publicly auditable:
 
 ---
 
-## 17. Environment Variables Reference
+## 17. Agent Legal Wrapper Roadmap
+
+Hash PayLink currently operates `hashpaylink-agent` as a software agent service. The agent can sell x402-gated API responses, record Circle Gateway x402 receipts, and attach governance metadata.
+
+Current status:
+
+| Layer | Status |
+|---|---|
+| Circle Gateway x402 receipts | Live |
+| Agent governance metadata | Live |
+| Legal wrapper | Planned |
+| Entity-backed counterparty | Pending formation |
+
+Planned legal wrapper: form an LLC or DAO LLC for `hashpaylink-agent`, then make that entity the named owner/operator in receipts, terms, Circle treasury records, and governance logs.
+
+Important boundary: the codebase does not create an LLC or DAO LLC by itself. Until the entity is actually formed, Hash PayLink should not describe `hashpaylink-agent` as an LLC, DAO LLC, independent legal person, or independently contracting party.
+
+Correct current wording:
+
+> Hash PayLink operates `hashpaylink-agent` as a software agent service with Circle Gateway x402 receipts and governance metadata.
+
+The `/agent-terms`, `/api/agent-legal-profile`, and `/api/agent-governance` surfaces are readiness infrastructure for future legal-entity metadata. They should receive official entity values only after formation and legal review.
+
+---
+
+## 18. Environment Variables Reference
 
 Required on the server (Render / Vercel environment settings):
 
@@ -728,13 +754,32 @@ SOLANA_TREASURY=                  # Solana treasury wallet address
 
 # ── FX Rate (optional — only needed for Live rate mode) ──────────────────
 FIXER_API_KEY=                    # Fixer.io access key (free plan: 100 req/month)
+
+# Agent legal/governance metadata, optional.
+# Leave legal entity fields unset until the legal wrapper exists.
+AGENT_LEGAL_ENTITY_NAME=
+AGENT_LEGAL_ENTITY_TYPE=
+AGENT_LEGAL_JURISDICTION=
+AGENT_LEGAL_ENTITY_ID=
+AGENT_LEGAL_EIN_LAST4=
+AGENT_REGISTERED_AGENT=
+AGENT_REGISTERED_AGENT_ADDRESS=
+AGENT_LEGAL_TERMS_URL=
+AGENT_OPERATOR_ROLE=
+AGENT_GOVERNANCE_VERSION=
+AGENT_MODEL_ID=
+AGENT_PROMPT_HASH=
+AGENT_CONFIG_HASH=
+AGENT_OPERATING_AGREEMENT_HASH=
+AGENT_GOVERNANCE_UPDATED_AT=
+AGENT_GOVERNANCE_SECRET=
 ```
 
 > **Custom rate mode** requires no `FIXER_API_KEY` — the rate is baked into the payment URL at link creation time.
 
 ---
 
-## 18. Support & Contact
+## 19. Support & Contact
 
 - **Email:** [support@hashpaylink.com](mailto:support@hashpaylink.com)
 - **X / Twitter:** [@Hash_PayLink](https://x.com/Hash_PayLink)

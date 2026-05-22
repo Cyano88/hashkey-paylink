@@ -969,6 +969,29 @@ Any AI service can call the Hash PayLink verification API and confirm a payment 
 
 ---
 
+### hashpaylink-agent Legal Status and Roadmap
+
+`hashpaylink-agent` is currently operated as a Hash PayLink software agent service. It can sell x402-gated API responses, record Circle Gateway x402 receipts, and attach governance metadata to those receipts.
+
+Current status:
+
+| Layer | Status |
+|---|---|
+| Circle Gateway x402 receipts | Live |
+| Agent governance metadata | Live |
+| Legal wrapper | Planned |
+| Entity-backed counterparty | Pending formation |
+
+Roadmap: form a legal wrapper for `hashpaylink-agent`, likely an LLC or DAO LLC, then make that entity the named operator/counterparty in receipts, terms, Circle treasury records, and governance logs.
+
+Until that entity is actually formed, docs, receipts, and product copy must not claim that `hashpaylink-agent` is an LLC, DAO LLC, independent legal person, or independently contracting party. The current correct wording is:
+
+> Hash PayLink operates `hashpaylink-agent` as a software agent service with Circle Gateway x402 receipts and governance metadata.
+
+The `/agent-terms`, `/api/agent-legal-profile`, and `/api/agent-governance` surfaces exist so the system can expose official entity metadata after formation. They do not create the legal entity by themselves.
+
+---
+
 ### `GET /api/agent-verify` — Trustless Payment Proof
 
 ```bash
@@ -1327,6 +1350,25 @@ hashkey-paylink/
 ```env
 OG_STORAGE_KEY=       # Private key of wallet holding OG tokens (gas for uploads)
 OG_ARCHIVE_ADDRESS=   # PayLinkArchive contract: 0x79a804C49e1E5EBC279A228Ab73a7570A0D0819a
+
+# Optional agent legal/governance metadata.
+# Keep legal entity fields unset until the entity is actually formed.
+AGENT_LEGAL_ENTITY_NAME=
+AGENT_LEGAL_ENTITY_TYPE=
+AGENT_LEGAL_JURISDICTION=
+AGENT_LEGAL_ENTITY_ID=
+AGENT_LEGAL_EIN_LAST4=
+AGENT_REGISTERED_AGENT=
+AGENT_REGISTERED_AGENT_ADDRESS=
+AGENT_LEGAL_TERMS_URL=
+AGENT_OPERATOR_ROLE=
+AGENT_GOVERNANCE_VERSION=
+AGENT_MODEL_ID=
+AGENT_PROMPT_HASH=
+AGENT_CONFIG_HASH=
+AGENT_OPERATING_AGREEMENT_HASH=
+AGENT_GOVERNANCE_UPDATED_AT=
+AGENT_GOVERNANCE_SECRET=
 ```
 
 ---
