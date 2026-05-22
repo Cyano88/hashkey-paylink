@@ -5,6 +5,7 @@ import { dirname, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import crypto from 'node:crypto'
 import { appendAgentActivity, listAgentActivity } from './agent-activity.js'
+import { getAgentGovernanceProfile, getAgentLegalProfile } from './agent-legal.js'
 
 const execFileAsync = promisify(execFile)
 const CIRCLE_BIN = process.platform === 'win32' ? 'circle.cmd' : 'circle'
@@ -156,6 +157,8 @@ function buildX402Proof(input: {
     generatedAt: input.response?.receipt?.generatedAt ?? new Date().toISOString(),
     receiptHash,
     circleOutputHash,
+    legal: getAgentLegalProfile(input.sellerAgent),
+    governance: getAgentGovernanceProfile(),
   }
   const proofHash = crypto.createHash('sha256').update(JSON.stringify(proof)).digest('hex')
   return { ...proof, proofHash }

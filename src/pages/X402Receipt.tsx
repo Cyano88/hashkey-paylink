@@ -13,6 +13,8 @@ type ReceiptResponse = {
     amount?: string
     detail?: string
     createdAt: number
+    legal?: Record<string, unknown>
+    governance?: Record<string, unknown>
     proof: Record<string, unknown>
   }
   circle?: {
@@ -49,6 +51,8 @@ export default function X402Receipt() {
 
   const receiptJson = JSON.stringify(data?.receipt ?? {}, null, 2)
   const proof = data?.receipt?.proof ?? {}
+  const legal = data?.receipt?.legal ?? {}
+  const governance = data?.receipt?.governance ?? {}
   const circleOk = data?.circle?.ok
 
   async function copyReceipt() {
@@ -84,8 +88,10 @@ export default function X402Receipt() {
             <div className="mt-5 grid gap-2 rounded-xl border border-gray-100 bg-gray-50/70 p-3 text-xs dark:border-white/10 dark:bg-white/[0.04]">
               <div className="flex justify-between gap-3"><span className="text-gray-400">Buyer</span><span className="truncate font-mono text-gray-700 dark:text-gray-200">{String(proof.buyerAgent ?? proof.payer ?? '')}</span></div>
               <div className="flex justify-between gap-3"><span className="text-gray-400">Seller</span><span className="truncate font-mono text-gray-700 dark:text-gray-200">{String(proof.sellerAgent ?? proof.seller ?? '')}</span></div>
+              <div className="flex justify-between gap-3"><span className="text-gray-400">Counterparty</span><span className="truncate font-mono text-gray-700 dark:text-gray-200">{String(legal.entityName ?? 'Not configured')}</span></div>
               <div className="flex justify-between gap-3"><span className="text-gray-400">Network</span><span className="font-mono text-gray-700 dark:text-gray-200">{String(proof.network ?? 'Circle Gateway')}</span></div>
               <div className="flex justify-between gap-3"><span className="text-gray-400">Tx ref</span><span className="truncate font-mono text-gray-700 dark:text-gray-200">{String(proof.transaction ?? '')}</span></div>
+              <div className="flex justify-between gap-3"><span className="text-gray-400">Gov version</span><span className="truncate font-mono text-gray-700 dark:text-gray-200">{String(governance.governanceVersion ?? 'unversioned')}</span></div>
               <div className="flex justify-between gap-3"><span className="text-gray-400">Proof</span><span className="truncate font-mono text-gray-700 dark:text-gray-200">{String(proof.proofHash ?? '').slice(0, 24)}</span></div>
             </div>
 

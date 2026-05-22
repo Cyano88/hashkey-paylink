@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express'
 import { findAgentActivity } from './agent-activity.js'
+import { getAgentGovernanceProfile, getAgentLegalProfile } from './agent-legal.js'
 
 const CIRCLE_GATEWAY_API_BASE = (process.env.CIRCLE_GATEWAY_API_BASE ?? 'https://api.circle.com').replace(/\/+$/, '')
 const CIRCLE_API_KEY = String(
@@ -53,6 +54,8 @@ export default async function handler(req: Request, res: Response) {
         amount: activity.amount ? `${activity.direction === 'out' ? '-' : activity.direction === 'in' ? '+' : ''}${activity.amount} ${activity.asset ?? 'USDC'}` : undefined,
         detail: activity.detail,
         createdAt: activity.createdAt,
+        legal: activity.proof.legal ?? getAgentLegalProfile(activity.proof.sellerAgent),
+        governance: activity.proof.governance ?? getAgentGovernanceProfile(),
         proof: activity.proof,
       },
       circle,

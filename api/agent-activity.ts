@@ -11,6 +11,7 @@ export type AgentActivityType =
   | 'x402_spent'
   | 'x402_sold'
   | 'scout_returned'
+  | 'governance'
 
 export type AgentActivityProof = {
   kind: 'circle_gateway_x402'
@@ -28,6 +29,8 @@ export type AgentActivityProof = {
   receiptHash?: string
   circleOutputHash?: string
   proofHash: string
+  legal?: Record<string, unknown>
+  governance?: Record<string, unknown>
 }
 
 export type AgentActivity = {

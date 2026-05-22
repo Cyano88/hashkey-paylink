@@ -40,6 +40,8 @@ import agenticStreamingSubscriptionHandler from './api/agentic-streaming-subscri
 import agentVerifyHandler   from './api/agent-verify.js'
 import agentAskHandler     from './api/agent-ask.js'
 import agentWalletHandler  from './api/agent-wallet.js'
+import agentGovernanceHandler from './api/agent-governance.js'
+import agentLegalProfileHandler from './api/agent-legal-profile.js'
 import x402PolymarketScoutHandler from './api/x402-polymarket-scout.js'
 import x402ReceiptHandler from './api/x402-receipt.js'
 import checkAgentUrlHandler from './api/check-agent-url.js'
@@ -91,6 +93,8 @@ app.all('/api/agentic-streaming-subscription', strictLimiter, agenticStreamingSu
 app.all('/api/agent-verify',           strictLimiter, agentVerifyHandler)
 app.post('/api/agent-ask',             strictLimiter, agentAskHandler)
 app.all('/api/agent-wallet',           strictLimiter, agentWalletHandler)
+app.post('/api/agent-governance',      strictLimiter, agentGovernanceHandler)
+app.get('/api/agent-legal-profile',    readLimiter, agentLegalProfileHandler)
 app.get('/api/x402/polymarket-scout',  strictLimiter, x402PolymarketScoutHandler)
 app.get('/api/x402/receipt',           readLimiter, x402ReceiptHandler)
 app.get('/api/check-agent-url',        strictLimiter, checkAgentUrlHandler)
