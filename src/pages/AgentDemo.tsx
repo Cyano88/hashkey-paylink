@@ -441,9 +441,11 @@ export default function AgentDemo() {
   }
   const copyActivityProof = async (item: AgentActivity) => {
     if (!item.proof) return
+    const receiptUrl = `${window.location.origin}/receipt/${encodeURIComponent(item.id)}`
     await navigator.clipboard.writeText(JSON.stringify({
       type: 'circle_gateway_x402_receipt',
       activityId: item.id,
+      receiptUrl,
       title: item.title,
       amount: item.amount ? `${item.direction === 'out' ? '-' : item.direction === 'in' ? '+' : ''}${item.amount} ${item.asset ?? 'USDC'}` : undefined,
       detail: item.detail,
@@ -797,6 +799,12 @@ export default function AgentDemo() {
                             >
                               {copiedProofId === item.id ? 'Copied' : 'Copy proof'}
                             </button>
+                            <Link
+                              to={`/receipt/${encodeURIComponent(item.id)}`}
+                              className="shrink-0 text-[10px] font-semibold text-gray-400 transition-colors hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200"
+                            >
+                              View
+                            </Link>
                           </div>
                         )}
                       </div>

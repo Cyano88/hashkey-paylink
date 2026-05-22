@@ -41,6 +41,7 @@ import agentVerifyHandler   from './api/agent-verify.js'
 import agentAskHandler     from './api/agent-ask.js'
 import agentWalletHandler  from './api/agent-wallet.js'
 import x402PolymarketScoutHandler from './api/x402-polymarket-scout.js'
+import x402ReceiptHandler from './api/x402-receipt.js'
 import checkAgentUrlHandler from './api/check-agent-url.js'
 import dashboardPaymentsHandler from './api/dashboard-payments.js'
 import { rateLimit } from './api/rate-limit.js'
@@ -91,6 +92,7 @@ app.all('/api/agent-verify',           strictLimiter, agentVerifyHandler)
 app.post('/api/agent-ask',             strictLimiter, agentAskHandler)
 app.all('/api/agent-wallet',           strictLimiter, agentWalletHandler)
 app.get('/api/x402/polymarket-scout',  strictLimiter, x402PolymarketScoutHandler)
+app.get('/api/x402/receipt',           readLimiter, x402ReceiptHandler)
 app.get('/api/check-agent-url',        strictLimiter, checkAgentUrlHandler)
 app.get('/api/dashboard-payments',     readLimiter, dashboardPaymentsHandler)
 app.get('/api/health',                 (_req, res) => res.json({ ok: true, ts: Date.now() }))

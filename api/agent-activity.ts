@@ -79,6 +79,17 @@ export async function listAgentActivity(agentSlug: string, limit = 12) {
     .slice(0, limit)
 }
 
+export async function findAgentActivity(activityId: string) {
+  const id = String(activityId ?? '').trim()
+  if (!id) return undefined
+  const store = await readActivityStore()
+  for (const [agentSlug, items] of Object.entries(store.activity ?? {})) {
+    const found = items.find(item => item.id === id)
+    if (found) return { ...found, agentSlug }
+  }
+  return undefined
+}
+
 export async function appendAgentActivity(input: Omit<AgentActivity, 'id' | 'createdAt'> & { createdAt?: number }) {
   const slug = normalizeActivitySlug(input.agentSlug)
   if (!slug) return undefined
