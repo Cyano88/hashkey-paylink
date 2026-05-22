@@ -2,7 +2,12 @@ import type { Request, Response } from 'express'
 import { findAgentActivity } from './agent-activity.js'
 
 const CIRCLE_GATEWAY_API_BASE = (process.env.CIRCLE_GATEWAY_API_BASE ?? 'https://api.circle.com').replace(/\/+$/, '')
-const CIRCLE_API_KEY = String(process.env.CIRCLE_API_KEY ?? process.env.CIRCLE_GATEWAY_API_KEY ?? '').trim()
+const CIRCLE_API_KEY = String(
+  process.env.CIRCLE_X402_RECEIPT_API_KEY
+  ?? process.env.CIRCLE_GATEWAY_API_KEY
+  ?? process.env.CIRCLE_API_KEY
+  ?? '',
+).trim()
 
 async function verifyCircleTransfer(transaction: string) {
   if (!transaction) return { ok: false, status: 'missing_transaction', error: 'No Circle transaction reference is stored on this receipt.' }
