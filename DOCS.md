@@ -773,6 +773,13 @@ AGENT_CONFIG_HASH=
 AGENT_OPERATING_AGREEMENT_HASH=
 AGENT_GOVERNANCE_UPDATED_AT=
 AGENT_GOVERNANCE_SECRET=
+
+# Agentic Streaming daily LP reports.
+AGENTIC_STREAMING_CRON_SECRET=          # Secret used by Render Cron or any scheduler
+AGENTIC_STREAMING_FROM_EMAIL=           # Optional; falls back to STREAM_INVITE_FROM_EMAIL or ALERT_FROM_EMAIL
+AGENTIC_STREAMING_FROM_NAME=            # Optional; defaults to Hash PayLink Agent
+AGENTIC_STREAMING_REPORT_INTERVAL_HOURS=23
+AGENTIC_STREAMING_STORE_KEY=hashpaylink:agentic-streaming
 ```
 
 > **Custom rate mode** requires no `FIXER_API_KEY` — the rate is baked into the payment URL at link creation time.

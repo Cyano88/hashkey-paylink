@@ -1,33 +1,12 @@
 import type { Request, Response } from 'express'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { dirname } from 'node:path'
 import { isAddress } from 'viem'
+import {
+  readAgenticStreamingStore,
+  writeAgenticStreamingStore,
+  type AgenticStreamingSubscription,
+} from './agentic-streaming-store.js'
 
-const STORE_PATH = process.env.AGENTIC_STREAMING_STORE ?? './data/agentic-streaming-subscriptions.json'
 const SERVICES = new Set(['polymarket-lp'])
-
-type Subscription = {
-  id: string
-  service: string
-  vault: string
-  streamUrl: string
-  agentSlug: string
-  agentWallet: string
-  senderWallet?: string
-  reportEmail: string
-  amountPerDay: string
-  totalAmount: string
-  duration: string
-  reason: string
-  source: string
-  createdAt: number
-  updatedAt: number
-  status: 'active'
-}
-
-type Store = {
-  subscriptions: Record<string, Subscription>
-}
 
 function normalizeEmail(value: unknown) {
   const email = String(value ?? '').trim().toLowerCase()
@@ -47,22 +26,9 @@ function cleanAmount(value: unknown) {
   return /^(?:\d+|\d*\.\d{1,6})$/.test(raw) && Number(raw) > 0 ? raw : ''
 }
 
-async function readStore(): Promise<Store> {
-  try {
-    return JSON.parse(await readFile(STORE_PATH, 'utf8')) as Store
-  } catch {
-    return { subscriptions: {} }
-  }
-}
-
-async function writeStore(store: Store) {
-  await mkdir(dirname(STORE_PATH), { recursive: true })
-  await writeFile(STORE_PATH, JSON.stringify(store, null, 2))
-}
-
 export default async function handler(req: Request, res: Response) {
   if (req.method === 'GET') {
-    const store = await readStore()
+    const store = await readAgenticStreamingStore()
     const service = cleanText(req.query.service)
     const rows = Object.values(store.subscriptions)
       .filter(item => !service || item.service === service)
@@ -93,9 +59,9 @@ export default async function handler(req: Request, res: Response) {
   if (!streamUrl) return res.status(400).json({ ok: false, error: 'Missing stream URL.' })
 
   const now = Date.now()
-  const store = await readStore()
+  const store = await readAgenticStreamingStore()
   const existing = store.subscriptions[vault.toLowerCase()]
-  const subscription: Subscription = {
+  const subscription: AgenticStreamingSubscription = {
     id: vault.toLowerCase(),
     service,
     vault,
@@ -114,6 +80,6 @@ export default async function handler(req: Request, res: Response) {
     status: 'active',
   }
   store.subscriptions[subscription.id] = subscription
-  await writeStore(store)
+  await writeAgenticStreamingStore(store)
   return res.json({ ok: true, subscription })
 }

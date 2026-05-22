@@ -323,7 +323,7 @@ function rounded(value: number | undefined, digits = 4) {
   return typeof value === 'number' && Number.isFinite(value) ? Number(value.toFixed(digits)) : undefined
 }
 
-async function buildLiveScout() {
+export async function buildLiveScout() {
   const markets = await fetchPolymarketRewardMarkets()
   if (!markets.length) {
     return {
