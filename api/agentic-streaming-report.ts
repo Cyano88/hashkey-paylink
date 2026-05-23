@@ -43,34 +43,54 @@ function topTitles(scout: Scout) {
 
 function emailBody(subscription: AgenticStreamingSubscription, scout: Scout) {
   const opportunities = scout.opportunities.slice(0, 3)
+  const reportDate = new Date().toISOString().slice(0, 10)
   const textLines = [
-    'Hash PayLink LP Research',
+    `LP research report - ${reportDate}`,
     '',
-    `Service: Polymarket LP Research`,
+    'Your agentic StreamPay report is ready.',
+    '',
     `Agent: ${subscription.agentSlug}`,
-    `Stream: ${compactAddress(subscription.vault)}`,
-    `Rate: ${subscription.amountPerDay} USDC/day`,
-    '',
-    scout.summary,
+    `Stream: ${compactAddress(subscription.vault)} (${subscription.amountPerDay} USDC/day)`,
     '',
     ...opportunities.flatMap((item, index) => [
       `${index + 1}. ${item.title}`,
       `Reward/day: ${formatUsdc(item.dailyReward)} USDC | Spread: ${formatCents(item.liveSpread)} | Risk: ${item.lpExecutionRisk}`,
-      item.marketUrl ? `Market: ${item.marketUrl}` : '',
       '',
     ]),
-    'Autopilot preview: monitor only. Execution stays locked until trading credentials and explicit risk limits are configured.',
+    'Mode: research only. No trades were executed.',
     '',
     `Stream: ${subscription.streamUrl}`,
     '',
-    scout.disclaimer,
+    'Hash PayLink',
   ].filter(Boolean)
 
+  {
+    const cards = opportunities.map((item, index) => `
+      <div style="border:1px solid #e5e7eb;border-radius:10px;padding:12px;margin:10px 0">
+        <div style="font-weight:700;color:#111827">${index + 1}. ${escapeHtml(String(item.title ?? 'Untitled market'))}</div>
+        <div style="font-size:13px;color:#4b5563;margin-top:6px">Reward/day: ${formatUsdc(item.dailyReward)} USDC &middot; Spread: ${formatCents(item.liveSpread)} &middot; Risk: ${escapeHtml(String(item.lpExecutionRisk ?? 'n/a'))}</div>
+      </div>
+    `).join('')
+
+    const html = `
+      <div style="font-family:Arial,sans-serif;line-height:1.5;color:#111827;max-width:620px">
+        <h2 style="margin:0 0 8px;font-size:20px">LP research report</h2>
+        <p style="margin:0 0 14px;color:#4b5563">Your agentic StreamPay report is ready.</p>
+        <p style="margin:0 0 14px;color:#4b5563;font-size:13px">Agent: ${escapeHtml(subscription.agentSlug)} &middot; Stream: ${compactAddress(subscription.vault)} &middot; Rate: ${subscription.amountPerDay} USDC/day</p>
+        ${cards || '<p>No live opportunities returned. The agent will retry on the next report.</p>'}
+        <p style="font-size:13px;color:#4b5563">Mode: research only. No trades were executed.</p>
+        <p><a href="${escapeHtml(subscription.streamUrl)}" style="display:inline-block;background:#111827;color:#fff;text-decoration:none;border-radius:8px;padding:10px 14px;font-weight:700">View stream</a></p>
+        <p style="font-size:12px;color:#6b7280;border-top:1px solid #e5e7eb;margin-top:18px;padding-top:12px">Hash PayLink</p>
+      </div>
+    `
+
+    return { text: textLines.join('\n'), html }
+  }
+
   const cards = opportunities.map((item, index) => `
-    <div style="border:1px solid #e5e7eb;border-radius:12px;padding:12px;margin:10px 0">
+    <div style="border:1px solid #e5e7eb;border-radius:10px;padding:12px;margin:10px 0">
       <div style="font-weight:700;color:#111827">${index + 1}. ${escapeHtml(String(item.title ?? 'Untitled market'))}</div>
       <div style="font-size:13px;color:#4b5563;margin-top:6px">Reward/day: ${formatUsdc(item.dailyReward)} USDC · Spread: ${formatCents(item.liveSpread)} · Risk: ${escapeHtml(String(item.lpExecutionRisk ?? 'n/a'))}</div>
-      ${item.marketUrl ? `<a href="${escapeHtml(item.marketUrl)}" style="font-size:13px;color:#2563eb;text-decoration:none">Open market</a>` : ''}
     </div>
   `).join('')
 
@@ -109,7 +129,7 @@ async function sendReportEmail(subscription: AgenticStreamingSubscription, scout
     body: JSON.stringify({
       personalizations: [{ to: [{ email: subscription.reportEmail }] }],
       from: { email: FROM_EMAIL, name: FROM_NAME },
-      subject: `Hash PayLink LP Research - ${new Date().toISOString().slice(0, 10)}`,
+      subject: `LP research report - ${new Date().toISOString().slice(0, 10)}`,
       content: [
         { type: 'text/plain', value: text },
         { type: 'text/html', value: html },
