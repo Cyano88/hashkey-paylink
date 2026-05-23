@@ -30,7 +30,6 @@ import {
   DollarSign,
   RefreshCw,
   Bot,
-  Lock,
   Trash2,
 } from 'lucide-react'
 import { QRCodeCanvas } from 'qrcode.react'
@@ -50,6 +49,7 @@ const isValidStarkAddr = (v: string) => /^0x[0-9a-fA-F]{64}$/.test(v)
 const isValidSolanaAddr = isValidSolanaAddress
 
 const CHAINS: ChainKey[] = ['base', 'starknet', 'arc', 'solana', 'arbitrum']
+const TELEGRAM_AGENT_URL = import.meta.env.VITE_TELEGRAM_AGENT_URL || 'https://t.me/hashpaylinkbot'
 
 type VaultStep = 'idle' | 'ready'
 
@@ -448,31 +448,61 @@ export default function CreateLink() {
               )}
             >
               <Bot className="h-4 w-4" />
-              Access
+              Agent
             </button>
           </div>
 
-          {/* ── Access mode developer notice ──────────────────────────── */}
-          {accessMode && (
-            <div className="rounded-xl border border-gray-200 bg-gray-50/60 px-4 py-3.5 space-y-1">
-              <div className="flex items-center gap-2">
-                <Lock className="h-3.5 w-3.5 text-gray-400 shrink-0" />
-                <p className="text-xs font-semibold text-gray-700">For Developers</p>
+          {accessMode ? (
+            <div className="space-y-5">
+              <div className="rounded-2xl border border-gray-100 bg-gray-50/70 p-5">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-white">
+                    <img src="/hash-logo.png" alt="" className="h-6 w-6 object-contain" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Agent</p>
+                    <h2 className="mt-1 text-lg font-bold tracking-tight text-gray-900">Hash PayLink Telegram Agent</h2>
+                    <p className="mt-1.5 text-sm leading-relaxed text-gray-500">
+                      Create payment links, stream USDC, fund Polymarket wallets, run LP Scout, and manage buyer or seller agents from Telegram.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-5 grid grid-cols-2 gap-2">
+                  {[
+                    'Payment links',
+                    'StreamPay',
+                    'LP Scout',
+                    'Agent wallets',
+                  ].map(item => (
+                    <div key={item} className="rounded-xl border border-gray-100 bg-white px-3 py-2.5 text-[12px] font-semibold text-gray-600">
+                      {item}
+                    </div>
+                  ))}
+                </div>
+
+                <a
+                  href={TELEGRAM_AGENT_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98]"
+                >
+                  Open Telegram Agent
+                  <ArrowRight className="h-4 w-4" />
+                </a>
               </div>
-              <p className="text-[11px] text-gray-500 leading-relaxed pl-5.5">
-                Gate your service behind a verified payment.{' '}
-                <Link to="/docs/access-mode" className="text-[#0071E3] hover:underline font-medium">
-                  Verification API guide →
+
+              <div className="flex items-center justify-center gap-5">
+                <Link to="/agent" className="text-xs font-medium text-gray-400 transition-colors hover:text-gray-700">
+                  Agent dashboard
                 </Link>
-              </p>
-              <p className="text-[11px] text-gray-400 leading-relaxed pl-5.5">
-                Want gasless payments in your own app instead?{' '}
-                <Link to="/docs/sdk" className="text-gray-500 hover:underline">
-                  SDK docs →
+                <Link to="/docs/access-mode" className="text-xs font-medium text-gray-400 transition-colors hover:text-gray-700">
+                  Developer access docs
                 </Link>
-              </p>
+              </div>
             </div>
-          )}
+          ) : (
+            <>
 
           {/* ── EVM Address — Base / HashKey / Arc ───────────────────── */}
           {(isEvmNet || multiChainMode) && <fieldset className="space-y-1.5">
@@ -981,6 +1011,8 @@ export default function CreateLink() {
                 : `Enter a ${selectedNet === 'solana' ? 'Solana' : isEvmNet ? 'wallet' : 'Starknet'} address to continue`}
             </p>
           )}
+            </>
+          )}
         </div>
 
         {/* ── Link ready panel ─────────────────────────────────────────── */}
@@ -1185,9 +1217,9 @@ export default function CreateLink() {
               { n: '2', title: 'Enter amount',    body: 'USDC' },
               { n: '3', title: 'Get paid',        body: 'Anyone pays from any wallet or exchange' },
             ] : [
-              { n: '1', title: 'Integrate API',   body: 'Add our verification layer to your service' },
-              { n: '2', title: 'Paste your URL',  body: 'We check compatibility automatically' },
-              { n: '3', title: 'Share & gate',    body: 'Users pay once, get a personal access link' },
+              { n: '1', title: 'Open bot',        body: 'Start from Telegram' },
+              { n: '2', title: 'Pick flow',       body: 'Pay, stream, agent, or Polymarket' },
+              { n: '3', title: 'Act on-chain',    body: 'Circle, Arc, 0G proofs' },
             ]).map(({ n, title, body }) => (
               <div key={n} className="rounded-xl border border-gray-100 bg-white p-4 text-center shadow-sm">
                 <div className="mx-auto mb-2.5 flex h-7 w-7 items-center justify-center rounded-full bg-gray-100 text-xs font-bold text-gray-600">
@@ -1199,14 +1231,14 @@ export default function CreateLink() {
             ))}
           </div>
 
-          {/* ── Access mode doc links ─────────────────────────────────── */}
+          {/* ── Agent links ───────────────────────────────────────────── */}
           {accessMode && (
             <div className="mt-4 flex items-center justify-center gap-6">
-              <Link to="/docs/access-mode" className="text-xs text-gray-400 hover:text-gray-700 transition-colors">
-                Verification API guide →
-              </Link>
-              <Link to="/docs/sdk" className="text-xs text-gray-400 hover:text-gray-700 transition-colors">
-                Add payments to your app (SDK) →
+              <a href={TELEGRAM_AGENT_URL} target="_blank" rel="noopener noreferrer" className="text-xs text-gray-400 hover:text-gray-700 transition-colors">
+                Telegram agent
+              </a>
+              <Link to="/agent" className="text-xs text-gray-400 hover:text-gray-700 transition-colors">
+                Agent dashboard
               </Link>
             </div>
           )}
