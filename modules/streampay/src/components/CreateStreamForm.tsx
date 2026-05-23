@@ -153,6 +153,7 @@ function buildStreamLink(
   circleMode = false,
   recipientEmail = '',
   agentic?: { mode: string; service: string; reportEmail: string; agentSlug: string; amountPerDay: string },
+  senderManage = false,
 ): string {
   const { hostname, origin } = window.location
   const isDedicatedHost =
@@ -171,6 +172,7 @@ function buildStreamLink(
   if (agentic?.reportEmail && isEmail(agentic.reportEmail)) p.set('reportEmail', cleanEmail(agentic.reportEmail))
   if (agentic?.agentSlug) p.set('agent', agentic.agentSlug)
   if (agentic?.amountPerDay) p.set('amountPerDay', agentic.amountPerDay)
+  if (senderManage) p.set('manage', 'sender')
   if (reason.trim())    p.set('reason', reason.trim())
   const qs = p.toString()
   return `${origin}/stream/${vault}${qs ? `?${qs}` : ''}`
@@ -328,7 +330,7 @@ export function CreateStreamForm() {
       })
       const data = await res.json().catch(() => ({})) as { ok?: boolean; error?: string }
       if (!res.ok || !data.ok) throw new Error(data.error ?? 'Could not register Agentic Streaming.')
-      setAgenticStatus('Agentic Streaming registered for daily LP research.')
+      setAgenticStatus('Registered. 0G proof appears in Agent activity after archive.')
     } catch (err) {
       setAgenticError(err instanceof Error ? err.message.slice(0, 180) : 'Could not register Agentic Streaming.')
     }
@@ -707,7 +709,7 @@ export function CreateStreamForm() {
                     : 'Copy Link'}
                 </button>
                 <a
-                  href={streamLink}
+                  href={`${streamLink}${streamLink.includes('?') ? '&' : '?'}manage=sender`}
                   className="w-full flex items-center justify-center rounded-xl border-2 border-gray-200 dark:border-white/10 py-3 text-[13px] font-semibold text-gray-700 dark:text-gray-200 transition-colors hover:bg-gray-50 dark:hover:bg-white/5 min-h-[48px]"
                 >
                   View Stream
@@ -862,7 +864,7 @@ export function CreateStreamForm() {
                   ) : onchainStreams.length > 0 ? (
                     <div className="space-y-2">
                       {onchainStreams.map(stream => {
-                        const streamUrl = buildStreamLink(stream.vault, reason, true, streamRecipientEmail, agenticLinkParams)
+                        const streamUrl = buildStreamLink(stream.vault, reason, true, streamRecipientEmail, agenticLinkParams, true)
                         const endMs = Number(BigInt(stream.endTime)) * 1000
                         const status = stream.cancelled ? 'Cancelled' : stream.active ? 'Live' : 'Complete'
                         return (

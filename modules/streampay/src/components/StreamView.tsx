@@ -149,6 +149,7 @@ export function StreamView({ vaultAddress }: { vaultAddress?: `0x${string}` }) {
 function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; reason?: string }) {
   const [params] = useSearchParams()
   const telegramMode = isTelegramStreamPay(params)
+  const senderManageMode = (params.get('manage') ?? params.get('view') ?? '').toLowerCase() === 'sender'
   const { address: connectedAddr, isConnected } = useAccount()
   const chainId = useChainId()
   const { switchChain } = useSwitchChain()
@@ -686,7 +687,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
           {/* ── Actions ─────────────────────────────────────────────────── */}
           {!isCancelled && (
             <div className="space-y-2.5">
-              {telegramMode && (() => {
+              {telegramMode && !senderManageMode && (() => {
                 const claimable = stream?.claimable ?? 0n
                 const hasBalance = claimable > 0n
                 const circleConfigured = canUseCircleEvmEmailWallet('arc')
@@ -847,7 +848,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
                 )
               })()}
 
-              {telegramMode && !isComplete && (params.get('mode') ?? '').toLowerCase() === 'agentic-streaming' && (() => {
+              {telegramMode && senderManageMode && !isComplete && (params.get('mode') ?? '').toLowerCase() === 'agentic-streaming' && (() => {
                 const circleConfigured = canUseCircleEvmEmailWallet('arc')
                 const senderWalletMatches = !!senderCircleSession && senderCircleSession.wallet.address.toLowerCase() === info._sender.toLowerCase()
 
