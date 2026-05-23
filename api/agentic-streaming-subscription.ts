@@ -5,6 +5,7 @@ import {
   writeAgenticStreamingStore,
   type AgenticStreamingSubscription,
 } from './agentic-streaming-store.js'
+import { appendAgentActivity } from './agent-activity.js'
 
 const SERVICES = new Set(['polymarket-lp'])
 
@@ -81,5 +82,19 @@ export default async function handler(req: Request, res: Response) {
   }
   store.subscriptions[subscription.id] = subscription
   await writeAgenticStreamingStore(store)
+  await appendAgentActivity({
+    agentSlug: subscription.agentSlug,
+    type: 'governance',
+    title: 'Agentic stream registered',
+    amount: subscription.totalAmount,
+    asset: 'USDC',
+    direction: 'in',
+    network: 'Arc StreamPay',
+    wallet: subscription.agentWallet,
+    txHash: subscription.vault,
+    serviceUrl: subscription.streamUrl,
+    detail: `${subscription.amountPerDay} USDC/day for ${subscription.reason}`,
+    createdAt: existing?.createdAt ?? now,
+  })
   return res.json({ ok: true, subscription })
 }

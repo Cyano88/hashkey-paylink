@@ -16,6 +16,12 @@ type ReceiptResponse = {
     legal?: Record<string, unknown>
     governance?: Record<string, unknown>
     proof: Record<string, unknown>
+    og?: {
+      rootHash: string
+      ogTxHash: string
+      ogExplorer: string
+      archivedAt: number
+    }
   }
   circle?: {
     ok?: boolean
@@ -51,6 +57,7 @@ export default function X402Receipt() {
 
   const receiptJson = JSON.stringify(data?.receipt ?? {}, null, 2)
   const proof = data?.receipt?.proof ?? {}
+  const og = data?.receipt?.og
   const legal = data?.receipt?.legal ?? {}
   const governance = data?.receipt?.governance ?? {}
   const circleOk = data?.circle?.ok
@@ -93,7 +100,22 @@ export default function X402Receipt() {
               <div className="flex justify-between gap-3"><span className="text-gray-400">Tx ref</span><span className="truncate font-mono text-gray-700 dark:text-gray-200">{String(proof.transaction ?? '')}</span></div>
               <div className="flex justify-between gap-3"><span className="text-gray-400">Gov version</span><span className="truncate font-mono text-gray-700 dark:text-gray-200">{String(governance.governanceVersion ?? 'unversioned')}</span></div>
               <div className="flex justify-between gap-3"><span className="text-gray-400">Proof</span><span className="truncate font-mono text-gray-700 dark:text-gray-200">{String(proof.proofHash ?? '').slice(0, 24)}</span></div>
+              {og?.rootHash && (
+                <div className="flex justify-between gap-3"><span className="text-gray-400">0G root</span><span className="truncate font-mono text-gray-700 dark:text-gray-200">{og.rootHash.slice(0, 24)}</span></div>
+              )}
             </div>
+
+            {og?.ogExplorer && (
+              <a
+                href={og.ogExplorer}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-3 flex items-center gap-2 rounded-xl border border-purple-100 bg-purple-50 px-3 py-2 text-xs font-semibold text-purple-700 transition-colors hover:bg-purple-100 dark:border-purple-400/20 dark:bg-purple-400/10 dark:text-purple-200"
+              >
+                <ShieldCheck className="h-4 w-4" />
+                0G proof archived
+              </a>
+            )}
 
             {data.circle && (
               <div className={`mt-3 flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold ${

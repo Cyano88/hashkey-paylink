@@ -57,6 +57,7 @@ export default async function handler(req: Request, res: Response) {
         legal: activity.proof.legal ?? getAgentLegalProfile(activity.proof.sellerAgent),
         governance: activity.proof.governance ?? getAgentGovernanceProfile(),
         proof: activity.proof,
+        og: activity.og,
       },
       circle,
     })

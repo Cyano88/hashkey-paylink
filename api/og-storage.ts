@@ -49,6 +49,7 @@ export type ArchiveRecord = {
   payer:   string
   amount:  string
   ts:      number
+  metadata?: Record<string, unknown>
 }
 
 export type ArchiveResult = {

@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import crypto from 'node:crypto'
+import { archivePayment } from './og-storage.js'
 
 const STORE_PATH = process.env.AGENT_WALLET_PROVISION_STORE ?? './data/agent-wallet-provisioning.json'
 
@@ -33,6 +34,13 @@ export type AgentActivityProof = {
   governance?: Record<string, unknown>
 }
 
+export type AgentActivityOgProof = {
+  rootHash: string
+  ogTxHash: string
+  ogExplorer: string
+  archivedAt: number
+}
+
 export type AgentActivity = {
   id: string
   agentSlug: string
@@ -47,6 +55,7 @@ export type AgentActivity = {
   serviceUrl?: string
   detail?: string
   proof?: AgentActivityProof
+  og?: AgentActivityOgProof
   createdAt: number
 }
 
@@ -71,6 +80,44 @@ async function readActivityStore(): Promise<ActivityStore> {
 async function writeActivityStore(data: ActivityStore) {
   await mkdir(dirname(STORE_PATH), { recursive: true })
   await writeFile(STORE_PATH, JSON.stringify(data, null, 2))
+}
+
+function shouldArchiveActivity(item: AgentActivity) {
+  return !!item.txHash || !!item.proof?.proofHash
+}
+
+async function patchActivityOgProof(agentSlug: string, activityId: string, og: AgentActivityOgProof) {
+  const store = await readActivityStore()
+  const slug = normalizeActivitySlug(agentSlug)
+  const items = store.activity?.[slug]
+  if (!items?.length) return
+  const index = items.findIndex(item => item.id === activityId)
+  if (index === -1) return
+  items[index] = { ...items[index], og }
+  await writeActivityStore(store)
+}
+
+async function archiveAgentActivity(item: AgentActivity) {
+  if (!shouldArchiveActivity(item) || item.og) return
+  const result = await archivePayment({
+    eventId: `agent:${item.agentSlug}:${item.id}`,
+    txHash: item.txHash || item.proof?.transaction || item.proof?.proofHash || item.id,
+    chain: item.network || item.proof?.network || 'agentic',
+    payer: item.wallet || item.proof?.payer || item.agentSlug,
+    amount: item.amount ? `${item.amount} ${item.asset ?? 'USDC'}` : item.title,
+    ts: item.createdAt,
+    metadata: {
+      type: 'hashpaylink_agent_activity',
+      activity: item,
+    },
+  })
+  if (!result) return
+  await patchActivityOgProof(item.agentSlug, item.id, {
+    rootHash: result.rootHash,
+    ogTxHash: result.ogTxHash,
+    ogExplorer: `https://chainscan.0g.ai/tx/${result.ogTxHash}`,
+    archivedAt: Date.now(),
+  })
 }
 
 export async function listAgentActivity(agentSlug: string, limit = 12) {
@@ -117,5 +164,6 @@ export async function appendAgentActivity(input: Omit<AgentActivity, 'id' | 'cre
   }
   store.activity[slug] = [next, ...existing].slice(0, 80)
   await writeActivityStore(store)
+  void archiveAgentActivity(next).catch(() => {})
   return next
 }

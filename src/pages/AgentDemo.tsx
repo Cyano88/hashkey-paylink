@@ -65,6 +65,12 @@ type AgentActivity = {
     circleOutputHash?: string
     proofHash: string
   }
+  og?: {
+    rootHash: string
+    ogTxHash: string
+    ogExplorer: string
+    archivedAt: number
+  }
   createdAt: number
 }
 
@@ -783,28 +789,45 @@ export default function AgentDemo() {
                         <p className="truncate text-[11px] text-gray-500 dark:text-gray-400">
                           {[item.network, item.detail].filter(Boolean).join(' - ')}
                         </p>
-                        {item.proof?.proofHash && (
+                        {(item.proof?.proofHash || item.og || item.txHash) && (
                           <div className="mt-0.5 flex min-w-0 items-center gap-2">
                             <p
                               className="min-w-0 truncate font-mono text-[10px] text-gray-400 dark:text-gray-500"
                               title={activityProofTitle(item)}
                             >
-                              Proof {item.proof.proofHash.slice(0, 12)}
-                              {item.proof.transaction ? ` - Tx ${item.proof.transaction.slice(0, 10)}` : ''}
+                              Proof
+                              {item.og ? ' 0G' : ''}
+                              {item.proof?.provider ? ' · Circle' : ''}
+                              {item.txHash || item.network?.toLowerCase().includes('arc') ? ' · Arc' : ''}
+                              {item.proof?.proofHash ? ` ${item.proof.proofHash.slice(0, 12)}` : ''}
                             </p>
-                            <button
-                              type="button"
-                              onClick={() => copyActivityProof(item)}
-                              className="shrink-0 text-[10px] font-semibold text-gray-400 transition-colors hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200"
-                            >
-                              {copiedProofId === item.id ? 'Copied' : 'Copy proof'}
-                            </button>
-                            <Link
-                              to={`/receipt/${encodeURIComponent(item.id)}`}
-                              className="shrink-0 text-[10px] font-semibold text-gray-400 transition-colors hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200"
-                            >
-                              View
-                            </Link>
+                            {item.proof?.proofHash && (
+                              <button
+                                type="button"
+                                onClick={() => copyActivityProof(item)}
+                                className="shrink-0 text-[10px] font-semibold text-gray-400 transition-colors hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200"
+                              >
+                                {copiedProofId === item.id ? 'Copied' : 'Copy proof'}
+                              </button>
+                            )}
+                            {item.og?.ogExplorer && (
+                              <a
+                                href={item.og.ogExplorer}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="shrink-0 text-[10px] font-semibold text-gray-400 transition-colors hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200"
+                              >
+                                0G
+                              </a>
+                            )}
+                            {item.proof?.proofHash && (
+                              <Link
+                                to={`/receipt/${encodeURIComponent(item.id)}`}
+                                className="shrink-0 text-[10px] font-semibold text-gray-400 transition-colors hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200"
+                              >
+                                View
+                              </Link>
+                            )}
                           </div>
                         )}
                       </div>
