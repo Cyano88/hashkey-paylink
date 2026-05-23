@@ -5,12 +5,13 @@ import {
 } from 'wagmi'
 import { isAddress, parseAbi, parseEventLogs } from 'viem'
 import { Mail, RefreshCw, X as XIcon } from 'lucide-react'
-import { STREAM_VAULT_FACTORY_ABI } from '../lib/streamVaultAbi'
+import { STREAM_VAULT_ABI, STREAM_VAULT_FACTORY_ABI } from '../lib/streamVaultAbi'
 import { formatUsdcFull } from './TriStateBar'
 import {
   canUseCircleEvmEmailWallet,
   connectCircleEvmEmailWallet,
   sendCircleArcStream,
+  signCircleArcStreamCancel,
   type CircleEvmEmailSession,
 } from '../../../../src/lib/circleEvmEmailWallet'
 
@@ -197,7 +198,7 @@ export function CreateStreamForm() {
   const [salt] = useState<`0x${string}`>(genSalt)
 
   const [step,         setStep]         = useState<Step>('form')
-  const [activeTab,    setActiveTab]    = useState<StreamTab>(prefill.preferCircle && prefill.mode !== 'agentic-streaming' ? 'running' : 'new')
+  const [activeTab,    setActiveTab]    = useState<StreamTab>('new')
   const [statusMsg,    setStatusMsg]    = useState('')
   const [error,        setError]        = useState<string | null>(null)
   const [streamLink,   setStreamLink]   = useState<string | null>(null)
@@ -225,6 +226,7 @@ export function CreateStreamForm() {
   const [onchainStreams, setOnchainStreams] = useState<OnchainStream[]>([])
   const [onchainStreamsLoading, setOnchainStreamsLoading] = useState(false)
   const [onchainStreamsError, setOnchainStreamsError] = useState<string | null>(null)
+  const [endingVault, setEndingVault] = useState('')
 
   const recipientEmail = cleanEmail(recipient)
   const recipientEmailMode = !isAddress(recipient) && isEmail(recipient)
@@ -546,7 +548,7 @@ export function CreateStreamForm() {
   async function handleCircleConnectOnly() {
     const email = circleEmail.trim()
     if (!email) {
-      setOnchainStreamsError('Enter the sender email to view running streams.')
+      setOnchainStreamsError('Enter the sender email.')
       return
     }
     setOnchainStreamsError(null)
@@ -559,6 +561,56 @@ export function CreateStreamForm() {
       setOnchainStreamsError(err instanceof Error ? err.message.slice(0, 180) : 'Could not connect Circle Smart Wallet.')
     } finally {
       setOnchainStreamsLoading(false)
+    }
+  }
+
+  async function handleEndRunningStream(stream: OnchainStream) {
+    if (!publicClient) return
+    setOnchainStreamsError(null)
+    setEndingVault(stream.vault)
+    try {
+      const email = circleEmail.trim()
+      const session = circleSession ?? await connectCircleEvmEmailWallet(email, 'arc')
+      setCircleSession(session)
+      if (session.wallet.address.toLowerCase() !== stream.sender.toLowerCase()) {
+        throw new Error('Use the sender email for this stream.')
+      }
+      const deadline = BigInt(Math.floor(Date.now() / 1000) + 600)
+      const nonce = await publicClient.readContract({
+        address: stream.vault,
+        abi: STREAM_VAULT_ABI,
+        functionName: 'nonces',
+        args: [session.wallet.address],
+      }) as bigint
+      const sig = await signCircleArcStreamCancel({
+        session,
+        vaultAddress: stream.vault,
+        nonce: nonce.toString(),
+        deadline: deadline.toString(),
+      })
+      const res = await fetch('/api/relay-stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'cancel',
+          vaultAddress: stream.vault,
+          sig,
+          nonce: nonce.toString(),
+          deadline: deadline.toString(),
+        }),
+      })
+      const data = await res.json() as { ok?: boolean; txHash?: `0x${string}`; error?: string }
+      if (!res.ok || !data.ok || !data.txHash) throw new Error(data.error ?? 'Could not end stream.')
+      await publicClient.waitForTransactionReceipt({ hash: data.txHash })
+      setOnchainStreams(current => current.map(item =>
+        item.vault.toLowerCase() === stream.vault.toLowerCase()
+          ? { ...item, active: false, cancelled: true }
+          : item
+      ))
+    } catch (err) {
+      setOnchainStreamsError(err instanceof Error ? err.message.slice(0, 180) : 'Could not end stream.')
+    } finally {
+      setEndingVault('')
     }
   }
 
@@ -709,7 +761,7 @@ export function CreateStreamForm() {
                     : 'Copy Link'}
                 </button>
                 <a
-                  href={`${streamLink}${streamLink.includes('?') ? '&' : '?'}manage=sender`}
+                  href={streamLink}
                   className="w-full flex items-center justify-center rounded-xl border-2 border-gray-200 dark:border-white/10 py-3 text-[13px] font-semibold text-gray-700 dark:text-gray-200 transition-colors hover:bg-gray-50 dark:hover:bg-white/5 min-h-[48px]"
                 >
                   View Stream
@@ -786,8 +838,8 @@ export function CreateStreamForm() {
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-1 rounded-xl border border-gray-100 dark:border-white/10 bg-gray-50 dark:bg-white/5 p-1">
               {([
-                ['running', 'Running streams'],
                 ['new', 'New stream'],
+                ['running', 'Running streams'],
               ] as const).map(([key, label]) => {
                 const active = activeTab === key
                 return (
@@ -825,8 +877,8 @@ export function CreateStreamForm() {
                   {!circleSession ? (
                     <div className="rounded-xl border border-blue-100 dark:border-blue-900/30 bg-blue-50/40 dark:bg-blue-950/20 p-3.5 space-y-3">
                       <div>
-                        <p className="text-[12px] font-bold text-gray-800 dark:text-gray-100">Connect sender wallet</p>
-                        <p className="text-[11px] text-gray-500 dark:text-gray-400">Running streams are shown only for the sender wallet.</p>
+                        <p className="text-[12px] font-bold text-gray-800 dark:text-gray-100">Continue with email</p>
+                        <p className="text-[11px] text-gray-500 dark:text-gray-400">Use the sender email to view and manage streams.</p>
                       </div>
                       <input
                         type="email"
@@ -844,7 +896,7 @@ export function CreateStreamForm() {
                         disabled={onchainStreamsLoading}
                         className="w-full rounded-xl bg-gray-900 py-3 text-[13px] font-bold text-white transition-transform active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
                       >
-                        {onchainStreamsLoading ? 'Connecting...' : 'View my streams'}
+                        {onchainStreamsLoading ? 'Connecting...' : 'Continue with email'}
                       </button>
                       {onchainStreamsError && (
                         <p className="text-center text-[11px] font-semibold text-red-500 dark:text-red-400">{onchainStreamsError}</p>
@@ -864,21 +916,31 @@ export function CreateStreamForm() {
                   ) : onchainStreams.length > 0 ? (
                     <div className="space-y-2">
                       {onchainStreams.map(stream => {
-                        const streamUrl = buildStreamLink(stream.vault, reason, true, streamRecipientEmail, agenticLinkParams, true)
+                        const streamUrl = buildStreamLink(stream.vault, reason, true, streamRecipientEmail, agenticLinkParams)
                         const endMs = Number(BigInt(stream.endTime)) * 1000
                         const status = stream.cancelled ? 'Cancelled' : stream.active ? 'Live' : 'Complete'
+                        const isEnding = endingVault.toLowerCase() === stream.vault.toLowerCase()
                         return (
-                        <a
+                        <div
                           key={stream.vault}
-                          href={streamUrl}
-                          className="flex items-center justify-between gap-3 rounded-xl border border-gray-100 dark:border-white/10 bg-gray-50/70 dark:bg-white/5 px-3 py-3 transition-colors hover:bg-gray-100 dark:hover:bg-white/10"
+                          className="flex items-center gap-2 rounded-xl border border-gray-100 dark:border-white/10 bg-gray-50/70 dark:bg-white/5 px-3 py-3"
                         >
-                          <span className="min-w-0">
+                          <a href={streamUrl} className="min-w-0 flex-1">
                             <span className="block truncate text-[12px] font-bold text-gray-700 dark:text-gray-200">{reason || 'Arc USDC stream'}</span>
                             <span className="block text-[11px] text-gray-400">{formatUsdcFull(BigInt(stream.totalAmount))} USDC · {Number.isFinite(endMs) ? new Date(endMs).toLocaleDateString() : shortAddress(stream.vault)}</span>
-                          </span>
+                          </a>
                           <span className={`shrink-0 text-[11px] font-semibold ${stream.active ? 'text-emerald-500' : 'text-gray-400'}`}>{status}</span>
-                        </a>
+                          {stream.active && (
+                            <button
+                              type="button"
+                              onClick={() => handleEndRunningStream(stream)}
+                              disabled={!!endingVault}
+                              className="shrink-0 rounded-lg border border-red-100 dark:border-red-900/40 bg-white dark:bg-[#15151a] px-2.5 py-1.5 text-[11px] font-semibold text-red-500 dark:text-red-300 transition-colors hover:bg-red-50 dark:hover:bg-red-950/20 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {isEnding ? 'Ending' : 'End'}
+                            </button>
+                          )}
+                        </div>
                       )})}
                     </div>
                   ) : (
@@ -903,17 +965,6 @@ export function CreateStreamForm() {
 
         {/* ── Vault Card + How It Works ── */}
         <div className={circleAvailable && activeTab === 'running' ? 'hidden' : 'space-y-4'}>
-          {circleAvailable && activeTab === 'new' && (
-            <button
-              type="button"
-              onClick={() => setActiveTab('running')}
-              className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-400 transition-colors hover:text-gray-700 dark:hover:text-gray-200"
-            >
-              <span aria-hidden="true">&lt;-</span>
-              Back
-            </button>
-          )}
-
           {/* Vault Card */}
           <div className="bg-white dark:bg-[#111216] rounded-2xl border border-gray-100 dark:border-white/10 shadow-sm overflow-hidden">
             <div className="p-5 sm:p-7 space-y-6">
