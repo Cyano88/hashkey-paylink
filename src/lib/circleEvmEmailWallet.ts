@@ -517,3 +517,63 @@ export async function signCircleArcStreamClaim(params: {
   }
   return signature
 }
+
+export async function signCircleArcStreamCancel(params: {
+  session: CircleEvmEmailSession
+  vaultAddress: Address
+  nonce: string
+  deadline: string
+}) {
+  if (params.session.chain !== 'arc') throw new Error('Arc StreamPay cancellation requires an Arc Circle smart wallet.')
+  const appId = params.session.appId ?? appIdForChain(params.session.chain)
+  if (!appId) throw new Error('Circle email wallet is not configured.')
+  const sdk = new W3SSdk({
+    appSettings: { appId },
+    authentication: {
+      userToken: params.session.userToken,
+      encryptionKey: params.session.encryptionKey,
+    },
+  })
+  const typedData = {
+    types: {
+      EIP712Domain: [
+        { name: 'name', type: 'string' },
+        { name: 'version', type: 'string' },
+        { name: 'chainId', type: 'uint256' },
+        { name: 'verifyingContract', type: 'address' },
+      ],
+      Cancel: [
+        { name: 'sender', type: 'address' },
+        { name: 'nonce', type: 'uint256' },
+        { name: 'deadline', type: 'uint256' },
+      ],
+    },
+    primaryType: 'Cancel',
+    domain: {
+      name: 'StreamVault',
+      version: '1',
+      chainId: 5042002,
+      verifyingContract: params.vaultAddress,
+    },
+    message: {
+      sender: params.session.wallet.address,
+      nonce: params.nonce,
+      deadline: params.deadline,
+    },
+  }
+  const challenge = await circleWalletApi<{ challengeId?: string }>({
+    action: 'signTypedData',
+    userToken: params.session.userToken,
+    walletId: params.session.wallet.id,
+    chain: params.session.chain,
+    data: JSON.stringify(typedData),
+    memo: 'End Arc StreamPay stream',
+  })
+  if (!challenge.challengeId) throw new Error('Circle did not return a typed-data signing challenge.')
+  const result = await executeChallenge(sdk, challenge.challengeId)
+  const signature = findSignature(result)
+  if (!signature) {
+    throw new Error('Circle did not return a usable EVM signature for this cancellation.')
+  }
+  return signature
+}

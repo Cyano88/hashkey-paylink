@@ -359,10 +359,16 @@ export function CreateStreamForm() {
 
   useEffect(() => {
     if (!circleAvailable || activeTab !== 'running' || !recipientValid) return
+    if (!circleSession?.wallet.address) {
+      setOnchainStreams([])
+      setOnchainStreamsLoading(false)
+      setOnchainStreamsError(null)
+      return
+    }
     const controller = new AbortController()
     const timeout = window.setTimeout(() => controller.abort(), 30_000)
     const query = new URLSearchParams({ recipient })
-    if (circleSession?.wallet.address) query.set('sender', circleSession.wallet.address)
+    query.set('sender', circleSession.wallet.address)
     setOnchainStreamsLoading(true)
     setOnchainStreamsError(null)
     fetch(`/api/stream-history?${query.toString()}`, { signal: controller.signal })
@@ -533,6 +539,25 @@ export function CreateStreamForm() {
     await navigator.clipboard.writeText(circleSession.wallet.address)
     setCircleCopied(true)
     setTimeout(() => setCircleCopied(false), 3000)
+  }
+
+  async function handleCircleConnectOnly() {
+    const email = circleEmail.trim()
+    if (!email) {
+      setOnchainStreamsError('Enter the sender email to view running streams.')
+      return
+    }
+    setOnchainStreamsError(null)
+    setOnchainStreamsLoading(true)
+    try {
+      const session = await connectCircleEvmEmailWallet(email, 'arc')
+      setCircleSession(session)
+      void refreshCircleBalance(session.wallet.address)
+    } catch (err) {
+      setOnchainStreamsError(err instanceof Error ? err.message.slice(0, 180) : 'Could not connect Circle Smart Wallet.')
+    } finally {
+      setOnchainStreamsLoading(false)
+    }
   }
 
   async function handleSendRecipientInvite() {
@@ -795,7 +820,35 @@ export function CreateStreamForm() {
                     <span className="text-[11px] text-gray-400">Arc</span>
                   </div>
 
-                  {onchainStreamsLoading ? (
+                  {!circleSession ? (
+                    <div className="rounded-xl border border-blue-100 dark:border-blue-900/30 bg-blue-50/40 dark:bg-blue-950/20 p-3.5 space-y-3">
+                      <div>
+                        <p className="text-[12px] font-bold text-gray-800 dark:text-gray-100">Connect sender wallet</p>
+                        <p className="text-[11px] text-gray-500 dark:text-gray-400">Running streams are shown only for the sender wallet.</p>
+                      </div>
+                      <input
+                        type="email"
+                        name="streampay-running-sender-email"
+                        autoComplete="email"
+                        placeholder="Sender wallet email"
+                        value={circleEmail}
+                        onChange={e => setCircleEmail(e.target.value)}
+                        disabled={onchainStreamsLoading}
+                        className="w-full rounded-xl border-2 border-blue-100 dark:border-blue-900/40 bg-white dark:bg-[#15151a] px-4 py-3 text-[13px] text-gray-800 dark:text-gray-100 placeholder:text-gray-300 dark:placeholder:text-gray-600 focus:outline-none focus:border-blue-300 transition-colors disabled:opacity-50 min-h-[46px]"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleCircleConnectOnly}
+                        disabled={onchainStreamsLoading}
+                        className="w-full rounded-xl bg-gray-900 py-3 text-[13px] font-bold text-white transition-transform active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {onchainStreamsLoading ? 'Connecting...' : 'View my streams'}
+                      </button>
+                      {onchainStreamsError && (
+                        <p className="text-center text-[11px] font-semibold text-red-500 dark:text-red-400">{onchainStreamsError}</p>
+                      )}
+                    </div>
+                  ) : onchainStreamsLoading ? (
                     <div className="rounded-xl border border-gray-100 dark:border-white/10 bg-gray-50/70 dark:bg-white/5 px-4 py-5 text-center">
                       <p className="text-[12px] font-semibold text-gray-500 dark:text-gray-300">Checking Arc streams...</p>
                     </div>
