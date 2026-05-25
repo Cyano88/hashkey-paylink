@@ -194,6 +194,14 @@ function executeChallengeWithTimeout(sdk: W3SSdk, challengeId: string, message: 
   return withTimeout(executeChallenge(sdk, challengeId), 120_000, message)
 }
 
+function authenticatedSdk(session: CircleEvmEmailSession) {
+  const appId = session.appId ?? appIdForChain(session.chain)
+  if (!appId) throw new Error('Circle email wallet is not configured.')
+  const sdk = new W3SSdk({ appSettings: { appId } })
+  sdk.setAuthentication({ userToken: session.userToken, encryptionKey: session.encryptionKey })
+  return sdk
+}
+
 async function getWallet(userToken: string, chain: Extract<ChainKey, 'base' | 'arbitrum' | 'arc'>): Promise<CircleEvmWallet | null> {
   const data = await circleWalletApi<{ wallet?: CircleEvmWallet | null }>({
     action: 'listWallets',
@@ -330,15 +338,7 @@ export async function sendCircleEvmEmailPayment(params: {
   recipient: Address
   amount: string
 }) {
-  const appId = params.session.appId ?? appIdForChain(params.session.chain)
-  if (!appId) throw new Error('Circle email wallet is not configured.')
-  const sdk = new W3SSdk({
-    appSettings: { appId },
-    authentication: {
-      userToken: params.session.userToken,
-      encryptionKey: params.session.encryptionKey,
-    },
-  })
+  const sdk = authenticatedSdk(params.session)
   const totalUnits = parseUnits(params.amount || '0', CHAIN_META[params.session.chain].decimals)
   const challenge = await circleWalletApi<{ challengeId?: string }>({
     action: 'executeEvmPayment',
@@ -386,15 +386,7 @@ export async function sendCircleArcStream(params: {
   predictedVault: Address
 }) {
   if (params.session.chain !== 'arc') throw new Error('Arc StreamPay requires an Arc Circle smart wallet.')
-  const appId = params.session.appId ?? appIdForChain(params.session.chain)
-  if (!appId) throw new Error('Circle email wallet is not configured.')
-  const sdk = new W3SSdk({
-    appSettings: { appId },
-    authentication: {
-      userToken: params.session.userToken,
-      encryptionKey: params.session.encryptionKey,
-    },
-  })
+  const sdk = authenticatedSdk(params.session)
   const challenge = await circleWalletApi<{ challengeId?: string }>({
     action: 'executeArcStream',
     userToken: params.session.userToken,
@@ -427,15 +419,7 @@ export async function sendCircleArcStream(params: {
 export async function deployCircleEvmEmailWallet(params: {
   session: CircleEvmEmailSession
 }) {
-  const appId = params.session.appId ?? appIdForChain(params.session.chain)
-  if (!appId) throw new Error('Circle email wallet is not configured.')
-  const sdk = new W3SSdk({
-    appSettings: { appId },
-    authentication: {
-      userToken: params.session.userToken,
-      encryptionKey: params.session.encryptionKey,
-    },
-  })
+  const sdk = authenticatedSdk(params.session)
   const challenge = await circleWalletApi<{ challengeId?: string }>({
     action: 'deployEvmWallet',
     userToken: params.session.userToken,
@@ -463,15 +447,7 @@ export async function signCircleArcStreamClaim(params: {
   deadline: string
 }) {
   if (params.session.chain !== 'arc') throw new Error('Arc StreamPay claim requires an Arc Circle smart wallet.')
-  const appId = params.session.appId ?? appIdForChain(params.session.chain)
-  if (!appId) throw new Error('Circle email wallet is not configured.')
-  const sdk = new W3SSdk({
-    appSettings: { appId },
-    authentication: {
-      userToken: params.session.userToken,
-      encryptionKey: params.session.encryptionKey,
-    },
-  })
+  const sdk = authenticatedSdk(params.session)
   const typedData = {
     types: {
       EIP712Domain: [
@@ -525,15 +501,7 @@ export async function signCircleArcStreamCancel(params: {
   deadline: string
 }) {
   if (params.session.chain !== 'arc') throw new Error('Arc StreamPay cancellation requires an Arc Circle smart wallet.')
-  const appId = params.session.appId ?? appIdForChain(params.session.chain)
-  if (!appId) throw new Error('Circle email wallet is not configured.')
-  const sdk = new W3SSdk({
-    appSettings: { appId },
-    authentication: {
-      userToken: params.session.userToken,
-      encryptionKey: params.session.encryptionKey,
-    },
-  })
+  const sdk = authenticatedSdk(params.session)
   const typedData = {
     types: {
       EIP712Domain: [
