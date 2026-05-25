@@ -11,6 +11,16 @@ function cleanEmail(value: string | null) {
   return (value ?? '').trim().toLowerCase()
 }
 
+function isPlaceholderEmail(value: string) {
+  return /@(example|test|invalid)\.(com|net|org)$/i.test(value)
+}
+
+function setupError(err: unknown) {
+  if (err instanceof Error && err.message) return err.message
+  if (typeof err === 'string' && err) return err
+  return 'Circle could not start wallet setup. Use a real email inbox and request a fresh code.'
+}
+
 export function RecipientWalletSetup() {
   const [params] = useSearchParams()
   const [email, setEmail] = useState(cleanEmail(params.get('email')))
@@ -24,6 +34,11 @@ export function RecipientWalletSetup() {
 
   async function prepareWallet() {
     if (!configured || !email) return
+    if (isPlaceholderEmail(email)) {
+      setError('Wrong email address. Enter the recipient email that should receive the Circle OTP.')
+      setStatus('')
+      return
+    }
     setWorking(true)
     setStatus('Opening Circle Smart Wallet...')
     setError(null)
@@ -46,7 +61,7 @@ export function RecipientWalletSetup() {
           : 'Circle wallet ready for StreamPay.',
       )
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Circle wallet setup failed.')
+      setError(setupError(err))
       setStatus('')
     } finally {
       setWorking(false)
