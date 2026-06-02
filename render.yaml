@@ -6,7 +6,7 @@ services:
     name: hashkey-paylink
     runtime: node
     plan: starter
-    buildCommand: npm install && npm run build
+    buildCommand: npm install && NODE_OPTIONS=--max-old-space-size=4096 npm run build
     startCommand: npm run start
     healthCheckPath: /api/health
     envVars:
