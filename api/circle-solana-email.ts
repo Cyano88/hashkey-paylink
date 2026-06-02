@@ -46,7 +46,8 @@ function isTestnetBlockchain(blockchain: string | undefined) {
 }
 
 function circleBaseUrl() {
-  return (process.env.CIRCLE_BASE_URL ?? 'https://api.circle.com').replace(/\/+$/, '')
+  const raw = (process.env.CIRCLE_BASE_URL ?? 'https://api.circle.com').replace(/\/+$/, '')
+  return raw.replace(/\/v1(?:\/w3s)?$/i, '')
 }
 
 function circleMainnetApiKey() {
