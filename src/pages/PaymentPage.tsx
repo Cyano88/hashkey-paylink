@@ -764,7 +764,8 @@ export default function PaymentPage() {
         }
       } catch (err) {
         if (cancelled) return
-        setPrivyCircleLinkError(readableErrorMsg(err, 'Privy Circle wallet link is not ready.'))
+        console.warn('[PayLink] Privy Circle wallet link restore failed', err)
+        setPrivyCircleLinkError(null)
       } finally {
         if (!cancelled) setPrivyCircleLinkLoading(false)
       }
@@ -1853,7 +1854,9 @@ export default function PaymentPage() {
         setCircleEvmEmailSession(null)
         setCircleSmartAccount(null)
       }
-      setCirclePasskeyError(message)
+      setCirclePasskeyError(message === 'Circle email wallet request failed.'
+        ? 'Smart wallet setup failed. Try again, or use Pay another way.'
+        : message)
     } finally {
       setCirclePasskeyPending(false)
       if (!manualPayDetected) setCircleEvmPaymentProcessing(false)
@@ -3132,7 +3135,7 @@ export default function PaymentPage() {
               <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
                 {circleSmartAccount ? 'Gasless smart wallet payment' : 'Smart wallet payment'}
               </p>
-              {privyCircleLinkError && (
+              {privyCircleLinkError && circleSmartAccount && (
                 <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-medium text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
                   {privyCircleLinkError}
                 </p>
