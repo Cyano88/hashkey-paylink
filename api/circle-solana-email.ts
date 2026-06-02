@@ -3,10 +3,6 @@ import crypto from 'crypto'
 import { PublicKey } from '@solana/web3.js'
 import { encodeFunctionData, isAddress, parseAbi } from 'viem'
 
-const CIRCLE_BASE_URL = (process.env.CIRCLE_BASE_URL ?? 'https://api.circle.com').replace(/\/+$/, '')
-const CIRCLE_API_KEY = process.env.CIRCLE_API_KEY
-const CIRCLE_TEST_API_KEY = process.env.CIRCLE_TEST_API_KEY ?? process.env.CIRCLE_API_KEY_TEST
-const SOLANA_BLOCKCHAIN = process.env.CIRCLE_SOLANA_BLOCKCHAIN ?? 'SOL'
 const EVM_TREASURY = '0xcE5dF9e1115F81a2Fc2F65941B20B820d508e753'
 const PLATFORM_FEE_BPS = 20n
 const BPS_DENOMINATOR = 10_000n
@@ -49,16 +45,34 @@ function isTestnetBlockchain(blockchain: string | undefined) {
   return !!blockchain && blockchain.toUpperCase().includes('TESTNET')
 }
 
+function circleBaseUrl() {
+  return (process.env.CIRCLE_BASE_URL ?? 'https://api.circle.com').replace(/\/+$/, '')
+}
+
+function circleMainnetApiKey() {
+  return process.env.CIRCLE_API_KEY
+}
+
+function circleTestnetApiKey() {
+  return process.env.CIRCLE_TEST_API_KEY ?? process.env.CIRCLE_API_KEY_TEST
+}
+
+function solanaBlockchain() {
+  return process.env.CIRCLE_SOLANA_BLOCKCHAIN ?? 'SOL'
+}
+
 function circleApiKey(input?: { chain?: string; blockchain?: string }) {
   const chain = input?.chain?.toLowerCase()
   const needsTestKey = chain === 'arc' || isTestnetBlockchain(input?.blockchain)
+  const mainnetKey = circleMainnetApiKey()
+  const testnetKey = circleTestnetApiKey()
   if (needsTestKey) {
-    if (CIRCLE_TEST_API_KEY) return CIRCLE_TEST_API_KEY
-    if (CIRCLE_API_KEY?.startsWith('TEST_API')) return CIRCLE_API_KEY
+    if (testnetKey) return testnetKey
+    if (mainnetKey?.startsWith('TEST_API')) return mainnetKey
     throw new Error('CIRCLE_TEST_API_KEY not configured for Arc testnet')
   }
-  if (CIRCLE_API_KEY) return CIRCLE_API_KEY
-  if (CIRCLE_TEST_API_KEY) return CIRCLE_TEST_API_KEY
+  if (mainnetKey) return mainnetKey
+  if (testnetKey) return testnetKey
   throw new Error('CIRCLE_API_KEY not configured')
 }
 
@@ -81,7 +95,7 @@ type CircleInit = {
 
 async function circleJson<T extends Record<string, unknown> = Record<string, unknown>>(path: string, init: CircleInit = {}) {
   const { apiKey, ...requestInit } = init
-  const res = await fetch(`${CIRCLE_BASE_URL}${path}`, {
+  const res = await fetch(`${circleBaseUrl()}${path}`, {
     ...requestInit,
     headers: {
       ...circleHeaders(init.userToken, apiKey),
@@ -136,7 +150,7 @@ function isSolanaAddress(address: string) {
 
 function solanaWallet(wallets: Array<{ id: string; address: string; blockchain: string }>) {
   return wallets.find((wallet) =>
-    (wallet.blockchain === SOLANA_BLOCKCHAIN || wallet.blockchain === 'SOL') &&
+    (wallet.blockchain === solanaBlockchain() || wallet.blockchain === 'SOL') &&
     isSolanaAddress(wallet.address),
   )
 }
@@ -198,7 +212,7 @@ export default async function handler(req: Request, res: Response) {
         body: JSON.stringify({
           idempotencyKey: crypto.randomUUID(),
           accountType: accountType || 'EOA',
-          blockchains: [blockchain || SOLANA_BLOCKCHAIN],
+          blockchains: [blockchain || solanaBlockchain()],
         }),
       })
       return res.json({ ok: true, ...data })
@@ -214,7 +228,7 @@ export default async function handler(req: Request, res: Response) {
         body: JSON.stringify({
           idempotencyKey: crypto.randomUUID(),
           accountType: accountType || 'EOA',
-          blockchains: [blockchain || SOLANA_BLOCKCHAIN],
+          blockchains: [blockchain || solanaBlockchain()],
           metadata: [{ name: name || 'Hash PayLink Solana' }],
         }),
       })

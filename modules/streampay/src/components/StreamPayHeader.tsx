@@ -3,6 +3,9 @@ import { useConnectModal }           from '@rainbow-me/rainbowkit'
 import { Link, useLocation }         from 'react-router-dom'
 import { Moon, Sun }                  from 'lucide-react'
 import { useTheme }                   from '../../../../src/lib/ThemeContext'
+import { PRIVY_AUTH_ENABLED }          from '../../../../src/lib/authMode'
+import { PrivyConnectButton }          from '../../../../src/lib/PrivyConnectButton'
+import { PrivyDisconnectButton }       from '../../../../src/lib/PrivyDisconnectButton'
 
 function fmtAddr(a: string) { return `${a.slice(0, 6)}…${a.slice(-4)}` }
 
@@ -82,26 +85,46 @@ export function StreamPayHeader() {
 
           {/* Connect Wallet — Deep Ash/Black, rounded-full h-9, matches reference shape */}
           {!telegramMode && !isConnected && (
-            <button
-              onClick={() => openConnectModal?.()}
-              className="inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-[13px] font-medium text-white transition-colors"
-              style={{ background: '#111827' }}
-            >
-              <span className="h-2 w-2 shrink-0 rounded-full bg-blue-400 animate-pulse" />
-              <span className="hidden sm:inline">Connect Wallet</span>
-              <span className="sm:hidden">Connect</span>
-            </button>
+            PRIVY_AUTH_ENABLED ? (
+              <PrivyConnectButton
+                className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[#111827] px-3 text-[13px] font-medium text-white transition-colors disabled:opacity-60"
+              >
+                <span className="h-2 w-2 shrink-0 rounded-full bg-blue-400 animate-pulse" />
+                <span className="hidden sm:inline">Sign in</span>
+                <span className="sm:hidden">Sign in</span>
+              </PrivyConnectButton>
+            ) : (
+              <button
+                onClick={() => openConnectModal?.()}
+                className="inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-[13px] font-medium text-white transition-colors"
+                style={{ background: '#111827' }}
+              >
+                <span className="h-2 w-2 shrink-0 rounded-full bg-blue-400 animate-pulse" />
+                <span className="hidden sm:inline">Connect Wallet</span>
+                <span className="sm:hidden">Connect</span>
+              </button>
+            )
           )}
 
           {/* Power / Disconnect — h-9 w-9 rounded-full, matches reference */}
           {!telegramMode && isConnected && (
-            <button
-              onClick={() => disconnect()}
-              title="Disconnect wallet"
-              className="flex h-9 w-9 items-center justify-center rounded-full text-gray-400 transition-colors hover:text-red-500 hover:bg-red-50"
-            >
-              <PowerIcon />
-            </button>
+            PRIVY_AUTH_ENABLED ? (
+              <PrivyDisconnectButton
+                onDisconnectWallets={() => disconnect()}
+                title="Disconnect wallet"
+                className="flex h-9 w-9 items-center justify-center rounded-full text-gray-400 transition-colors hover:text-red-500 hover:bg-red-50 disabled:opacity-60"
+              >
+                <PowerIcon />
+              </PrivyDisconnectButton>
+            ) : (
+              <button
+                onClick={() => disconnect()}
+                title="Disconnect wallet"
+                className="flex h-9 w-9 items-center justify-center rounded-full text-gray-400 transition-colors hover:text-red-500 hover:bg-red-50"
+              >
+                <PowerIcon />
+              </button>
+            )
           )}
 
           {telegramMode && (

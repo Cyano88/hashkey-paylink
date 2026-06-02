@@ -14,10 +14,12 @@ import {
   useReadContract,
   useWalletClient,
 } from 'wagmi'
-import { ConnectButton, useConnectModal } from '@rainbow-me/rainbowkit'
+import { usePrivy, useWallets } from '@privy-io/react-auth'
+import { useConnectModal } from '@rainbow-me/rainbowkit'
 import {
   parseEther,
   parseUnits,
+  formatUnits,
   isAddress,
   encodeFunctionData,
   parseSignature,
@@ -56,6 +58,9 @@ import { canUseArgentStarknetEmailWallet, connectArgentStarknetEmailWallet } fro
 import { getSponsoredGasRecoveryUnits } from '../lib/gasRecovery'
 import { isValidSolanaAddress } from '../lib/solanaAddress'
 import { getPaylinkParam, hasPaylinkFlag, isTelegramSourceParam } from '../lib/paylinkParams'
+import { PRIVY_AUTH_ENABLED } from '../lib/authMode'
+import { PrivyConnectButton } from '../lib/PrivyConnectButton'
+import { resolvePrivyCircleLink, savePrivyCircleLink } from '../lib/privyCircleLink'
 
 type CircleSolanaSession = Awaited<ReturnType<typeof connectCircleSolanaEmailWallet>>
 type CircleEvmEmailSession = Awaited<ReturnType<typeof connectCircleEvmEmailWallet>>
@@ -139,6 +144,11 @@ const NONCES_ABI = [{
   outputs: [{ name: '',      type: 'uint256' }],
 }] as const
 
+const ERC20_PERMIT_DOMAIN_ABI = [
+  { name: 'name',    type: 'function' as const, stateMutability: 'view' as const, inputs: [], outputs: [{ name: '', type: 'string' }] },
+  { name: 'version', type: 'function' as const, stateMutability: 'view' as const, inputs: [], outputs: [{ name: '', type: 'string' }] },
+] as const
+
 // ─── Starknet helpers ─────────────────────────────────────────────────────────
 async function pollStarknetReceipt(txHash: string, signal: AbortSignal): Promise<void> {
   const deadline = Date.now() + 3 * 60_000
@@ -180,17 +190,19 @@ async function starkUsdcBalance(tokenAddress: string, accountAddress: string): P
 // ─── Error message normaliser ─────────────────────────────────────────────────
 function friendlyErrorMsg(raw: string): string {
   const s = raw.toLowerCase()
-  if (s.includes('insufficient') || s.includes('exceeds balance') || s.includes('exceeds the balance') ||
-      s.includes('transfer amount exceeds') || s.includes('not enough'))
-    return 'Insufficient funds — check your balance and try again.'
+  if (s.startsWith('insufficient usdc on')) return raw.slice(0, 180)
   if (s.includes('user rejected') || s.includes('user denied') || s.includes('rejected the request') || s.includes('user cancelled'))
     return 'Transaction cancelled in wallet.'
+  if ((s.includes('gas') || s.includes('transaction cost') || s.includes('intrinsic')) && (s.includes('insufficient') || s.includes('exceeds')))
+    return 'Insufficient Base ETH for gas. Add a small amount of ETH on Base, or try another payment method.'
+  if (s.includes('transfer amount exceeds') || s.includes('exceeds balance') || s.includes('exceeds the balance') || s.includes('insufficient usdc'))
+    return 'Insufficient USDC on this wallet for the requested payment amount.'
+  if (s.includes('insufficient') || s.includes('not enough'))
+    return 'Insufficient funds. Check Base USDC for the payment amount and Base ETH if gas sponsorship is unavailable.'
   if (s.includes('reverted') || s.includes('execution reverted'))
-    return 'Transaction reverted — permit may have expired. Try again.'
+    return 'Transaction reverted. Check USDC balance, permit expiry, and whether the wallet changed networks before retrying.'
   if (s.includes('nonce') || s.includes('already known'))
     return 'Nonce conflict — please wait a moment and try again.'
-  if (s.includes('gas') && s.includes('insufficient'))
-    return 'Insufficient gas — add funds to cover network fees.'
   return raw.slice(0, 120)
 }
 
@@ -205,9 +217,31 @@ function readableErrorMsg(err: unknown, fallback: string) {
   }
 }
 
+function isInvalidRpcParams(err: unknown) {
+  const msg = readableErrorMsg(err, '').toLowerCase()
+  return msg.includes('invalid parameters') || msg.includes('invalid params') || msg.includes('code') && msg.includes('-32602')
+}
+
+function emailFromPrivyUser(user: unknown) {
+  if (!user || typeof user !== 'object') return ''
+  const directEmail = (user as { email?: { address?: unknown } }).email?.address
+  if (typeof directEmail === 'string') return directEmail
+  const linkedAccounts = (user as { linkedAccounts?: unknown }).linkedAccounts
+  if (!Array.isArray(linkedAccounts)) return ''
+  for (const account of linkedAccounts) {
+    if (!account || typeof account !== 'object') continue
+    const record = account as { type?: unknown; address?: unknown; email?: unknown }
+    if (record.type === 'email' && typeof record.address === 'string') return record.address
+    if (record.type === 'google_oauth' && typeof record.email === 'string') return record.email
+    if (typeof record.email === 'string') return record.email
+  }
+  return ''
+}
+
 // ─── Component ───────────────────────────────────────────────────────────────
 const SMART_WALLET_FUNDING_ERROR = 'Add USDC to Smart wallet to continue.'
 const SMART_WALLET_AMOUNT_ERROR = 'Enter an amount to continue.'
+const SMART_WALLET_CANCELLED_MESSAGE = 'Payment cancelled.'
 const POLYMARKET_MIN_FUNDING_USDC = 4
 const POLYMARKET_MIN_FUNDING_ERROR = `Minimum Polymarket funding is ${POLYMARKET_MIN_FUNDING_USDC} USDC.`
 
@@ -262,6 +296,12 @@ export default function PaymentPage() {
   // Normal multi-chain links can switch chains; Telegram links are intentionally
   // locked to the bot-selected network so a Base request stays Base-only.
   const netLocked = !!netParam && (!isMultiChain || isTelegramSource)
+  const availableChains = netLocked
+    ? [chain]
+    : CHAINS.filter(c =>
+        (c === 'solana' && !!resolvedSolana) ||
+        (c !== 'starknet' && c !== 'solana' && !!resolvedEvm),
+      )
 
   // Sync header pill with initial chain on mount
   useEffect(() => { onPayChainChange(chain) }, [])  // eslint-disable-line react-hooks/exhaustive-deps
@@ -281,6 +321,7 @@ export default function PaymentPage() {
   const [receivedAmount,    setReceivedAmount]    = useState<bigint | null>(null)
   const [showCheckButton,   setShowCheckButton]   = useState(false)
   const [isManualChecking,  setIsManualChecking]  = useState(false)
+  const [circleEvmAcceptedPending, setCircleEvmAcceptedPending] = useState(false)
   const [polymarketFundingStep, setPolymarketFundingStep] = useState<'choose' | 'fund'>('choose')
 
   // ── Event mode ─────────────────────────────────────────────────────────────
@@ -293,6 +334,7 @@ export default function PaymentPage() {
   const agentFundingSlug = getPaylinkParam(initParams, 'agentSlug', 'agent')
   const isAgentFunding   = getPaylinkParam(initParams, 'src', 'src') === 'agent' && !!agentFundingSlug
   const smartWalletOnlyFunding = isPolymarketFunding || isAgentFunding
+  const isMainHashPaylinkPayment = !isTelegramSource && !smartWalletOnlyFunding
   const [attendeeName,   setAttendeeName]   = useState('')
   const [eventRegStatus, setEventRegStatus] = useState<'idle' | 'pending' | 'ok' | 'error'>('idle')
   const eventRegistered  = useRef(false)
@@ -339,7 +381,7 @@ export default function PaymentPage() {
   const paymentAmountBlocked = flexPayDisabled || polymarketFundingTooSmall
 
   // ── Direct Send state (shared across Base, Arc, Starknet) ────────────────
-  const [payMode,          setPayMode]          = useState<'wallet' | 'direct'>(modeParam === 'direct' && chain !== 'starknet' && !smartWalletOnlyFunding ? 'direct' : 'wallet')
+  const [payMode,          setPayMode]          = useState<'wallet' | 'direct'>(modeParam === 'direct' && chain !== 'starknet' && isMainHashPaylinkPayment ? 'direct' : 'wallet')
   const [directLinkId,     setDirectLinkId]     = useState<string | null>(null)
   // EVM chains (Base / Arc): the CREATE2 ghost vault address
   const [directVault,      setDirectVault]      = useState<`0x${string}` | null>(null)
@@ -360,11 +402,20 @@ export default function PaymentPage() {
   useEffect(() => { detectedRef.current = manualPayDetected }, [manualPayDetected])
 
   // ── EVM wallet hooks ──────────────────────────────────────────────────────
-  const { isConnected, address } = useAccount()
+  const { isConnected, address, connector } = useAccount()
   const chainId                  = useChainId()
-  const { switchChain, isPending: isSwitching } = useSwitchChain()
+  const { switchChain, switchChainAsync, isPending: isSwitching } = useSwitchChain()
   const { disconnect: disconnectEvm } = useDisconnect()
   const { openConnectModal }     = useConnectModal()
+  const { authenticated: privyAuthenticated, user: privyUser, getAccessToken } = usePrivy()
+  const { wallets: privyWallets } = useWallets()
+  const privyEmail = emailFromPrivyUser(privyUser).toLowerCase()
+  const previousPrivySessionRef = useRef({ authenticated: privyAuthenticated, email: privyEmail })
+  const connectedPrivyWallet = PRIVY_AUTH_ENABLED && address
+    ? privyWallets.find(wallet => wallet.address?.toLowerCase() === address.toLowerCase())
+    : undefined
+  const hasExternalPrivyEvmWallet = !!connectedPrivyWallet && connectedPrivyWallet.walletClientType !== 'privy'
+  const isPrivyEmbeddedWalletConnected = connectedPrivyWallet?.walletClientType === 'privy'
   const { data: walletClient }   = useWalletClient({
     chainId: chain === 'base' ? CHAIN_META.base.chainId : chain === 'arc' ? CHAIN_META.arc.chainId : chain === 'arbitrum' ? CHAIN_META.arbitrum.chainId : CHAIN_META.hashkey.chainId,
   })
@@ -393,6 +444,8 @@ export default function PaymentPage() {
   const [circleEvmEmailSession, setCircleEvmEmailSession] = useState<CircleEvmEmailSession | null>(null)
   const [circleEvmPaymentProcessing, setCircleEvmPaymentProcessing] = useState(false)
   const [circleWalletCopied, setCircleWalletCopied] = useState(false)
+  const [privyCircleLinkError, setPrivyCircleLinkError] = useState<string | null>(null)
+  const [privyCircleLinkLoading, setPrivyCircleLinkLoading] = useState(false)
 
   const { isLoading: isEvmConfirming, isSuccess: isEvmConfirmed, isError: isEvmReverted } =
     useWaitForTransactionReceipt({ hash: evmTxHash })
@@ -452,6 +505,30 @@ export default function PaymentPage() {
       : chain === 'arbitrum'
       ? CHAIN_META.arbitrum.chainId
       : CHAIN_META.arc.chainId) as number,
+    query: { enabled: (chain === 'base' || chain === 'arc' || chain === 'arbitrum') && !!address },
+  })
+  const permitTokenAddress = chain === 'base'
+    ? CHAIN_META.base.tokenAddress
+    : chain === 'arbitrum'
+    ? CHAIN_META.arbitrum.tokenAddress
+    : CHAIN_META.arc.tokenAddress
+  const permitChainId = (chain === 'base'
+    ? CHAIN_META.base.chainId
+    : chain === 'arbitrum'
+    ? CHAIN_META.arbitrum.chainId
+    : CHAIN_META.arc.chainId) as number
+  const { data: permitTokenName } = useReadContract({
+    address: permitTokenAddress,
+    abi: ERC20_PERMIT_DOMAIN_ABI,
+    functionName: 'name',
+    chainId: permitChainId,
+    query: { enabled: (chain === 'base' || chain === 'arc' || chain === 'arbitrum') && !!address },
+  })
+  const { data: permitTokenVersion } = useReadContract({
+    address: permitTokenAddress,
+    abi: ERC20_PERMIT_DOMAIN_ABI,
+    functionName: 'version',
+    chainId: permitChainId,
     query: { enabled: (chain === 'base' || chain === 'arc' || chain === 'arbitrum') && !!address },
   })
   const {
@@ -524,17 +601,34 @@ export default function PaymentPage() {
     : chain === 'solana' ? resolvedSolana
     : resolvedEvm
   const displayAddress  = activeRecipient
+  const consumerNetworkName =
+    chain === 'base' ? 'Base' :
+    chain === 'arbitrum' ? 'Arbitrum' :
+    chain === 'solana' ? 'Solana' :
+    chain === 'starknet' ? 'Starknet' :
+    chain === 'arc' ? 'Arc' :
+    meta.label
   const circlePaymasterConfig = getCirclePaymasterConfig(chain)
   const showCirclePaymasterButton = !!circlePaymasterConfig && (chain === 'base' || chain === 'arbitrum')
   const showCircleEvmEmailPay = canUseCircleEvmEmailWallet(chain)
   const showCirclePasskeyPay = canUseCirclePasskeyPayments(chain)
   const showCircleEmailPay = showCircleEvmEmailPay || showCirclePasskeyPay
   const showCircleSolanaEmailPay = chain === 'solana' && canUseCircleSolanaEmailWallet()
+  const usePrivyCircleCheckout = PRIVY_AUTH_ENABLED && showCircleEvmEmailPay && (chain === 'base' || chain === 'arbitrum' || chain === 'arc')
+  const showLegacyCircleEmailPay = !PRIVY_AUTH_ENABLED && showCircleEmailPay
+  const showPrivyCircleEmailPay = usePrivyCircleCheckout && privyAuthenticated && !hasExternalPrivyEvmWallet
+  const showCircleEmailBridgePay = showLegacyCircleEmailPay || showPrivyCircleEmailPay
+  const showLegacyCircleSolanaEmailPay = !PRIVY_AUTH_ENABLED && showCircleSolanaEmailPay
+  const showCirclePoweredAttribution =
+    payMode === 'wallet' &&
+    !manualPayDetected &&
+    (showCircleEmailBridgePay || showLegacyCircleSolanaEmailPay || showCirclePaymasterButton)
   const showArgentStarknetEmailPay = chain === 'starknet' && canUseArgentStarknetEmailWallet()
+  const walletConnectBlocked = smartWalletOnlyFunding && !PRIVY_AUTH_ENABLED
   const showPolymarketFundingChoice =
     isPolymarketFunding &&
     payMode === 'wallet' &&
-    (showCircleEmailPay || showCircleSolanaEmailPay) &&
+    (showLegacyCircleEmailPay || showLegacyCircleSolanaEmailPay) &&
     chain !== 'starknet' &&
     !manualPayDetected &&
     !circleSmartAccount &&
@@ -595,14 +689,34 @@ export default function PaymentPage() {
     (isFlex || (!isNaN(parseFloat(amt)) && parseFloat(amt) > 0)) &&
     (isAddress(resolvedEvm) || !!resolvedStark || !!resolvedSolana)
 
-  // Whether Direct Send is available for the current chain
+  // Whether the secondary direct-pay option should be shown for normal Hash PayLink payments.
   const canDirectSend =
-    !isTelegramSource &&
-    !smartWalletOnlyFunding &&
+    isMainHashPaylinkPayment &&
     (
-      ((chain === 'base' || chain === 'arc' || chain === 'arbitrum') && isAddress(resolvedEvm) && !!FACTORY_V2_ADDRESSES[chain as 'base' | 'arc' | 'arbitrum']) ||
+      ((chain === 'base' || chain === 'arc' || chain === 'arbitrum') && isAddress(resolvedEvm)) ||
       (chain === 'solana' && !!resolvedSolana)
     )
+
+  useEffect(() => {
+    const previous = previousPrivySessionRef.current
+    const sessionChanged = previous.authenticated !== privyAuthenticated || previous.email !== privyEmail
+    previousPrivySessionRef.current = { authenticated: privyAuthenticated, email: privyEmail }
+    if (sessionChanged && circlePasskeyError === SMART_WALLET_CANCELLED_MESSAGE) {
+      setCirclePasskeyError(null)
+    }
+  }, [privyAuthenticated, privyEmail, circlePasskeyError])
+
+  useEffect(() => {
+    if (!hasExternalPrivyEvmWallet || (!circleSmartAccount && !circleEvmEmailSession)) return
+    setCircleSmartAccount(null)
+    setCircleEvmEmailSession(null)
+    setCirclePasskeyPending(false)
+    setCircleEvmPaymentProcessing(false)
+    setCircleEvmAcceptedPending(false)
+    setCircleWalletCopied(false)
+    setShowCheckButton(false)
+    setPrivyCircleLinkError(null)
+  }, [hasExternalPrivyEvmWallet, circleSmartAccount, circleEvmEmailSession])
 
   useEffect(() => {
     if (!circleSmartAccount || typeof circleWalletBalance !== 'bigint') return
@@ -626,6 +740,41 @@ export default function PaymentPage() {
     circleEvmPaymentProcessing,
     circlePasskeyError,
   ])
+
+  useEffect(() => {
+    if (!showPrivyCircleEmailPay) return
+    let cancelled = false
+    if (privyEmail) setCircleEmail(current => current || privyEmail)
+
+    async function resolveLinkedCircleWallet() {
+      setPrivyCircleLinkLoading(true)
+      setPrivyCircleLinkError(null)
+      try {
+        const token = await getAccessToken()
+        if (!token) throw new Error('Privy session is not ready yet. Sign in again and retry.')
+        const data = await resolvePrivyCircleLink({
+          accessToken: token,
+          chain: chain as 'base' | 'arbitrum' | 'arc',
+        })
+        if (cancelled) return
+        if (data.email) setCircleEmail(current => current || data.email || privyEmail)
+        if (data.link?.circleWalletAddress) {
+          if (isConnected) disconnectEvm()
+          setCircleSmartAccount(data.link.circleWalletAddress)
+        }
+      } catch (err) {
+        if (cancelled) return
+        setPrivyCircleLinkError(readableErrorMsg(err, 'Privy Circle wallet link is not ready.'))
+      } finally {
+        if (!cancelled) setPrivyCircleLinkLoading(false)
+      }
+    }
+
+    void resolveLinkedCircleWallet()
+    return () => {
+      cancelled = true
+    }
+  }, [showPrivyCircleEmailPay, chain, privyEmail, getAccessToken, isConnected, disconnectEvm])
 
   useEffect(() => {
     if (!circleSolanaSession || circleSolanaBalance === null) return
@@ -714,6 +863,7 @@ export default function PaymentPage() {
             setManualTxHash(log.transactionHash ?? null)
             setCirclePasskeyError(null)
             setCircleEvmPaymentProcessing(false)
+            setCircleEvmAcceptedPending(false)
             setManualPayDetected(true)
           }
         },
@@ -741,15 +891,20 @@ export default function PaymentPage() {
   // ── Auto-sweep keeper ─────────────────────────────────────────────────────
   // ── Reset payMode on chain switch: Smart Wallet is primary; direct is explicit ─
   useEffect(() => {
-    setPayMode(modeParam === 'direct' && chain !== 'starknet' && !smartWalletOnlyFunding ? 'direct' : 'wallet')
-  }, [chain, modeParam, smartWalletOnlyFunding])
+    setPayMode(modeParam === 'direct' && chain !== 'starknet' && isMainHashPaylinkPayment ? 'direct' : 'wallet')
+  }, [chain, modeParam, isMainHashPaylinkPayment])
 
   // ── V2 EVM: Generate linkId + compute ghost vault address ─────────────────
   useEffect(() => {
     if (payMode !== 'direct') return
     if (chain === 'starknet') return
     const factoryAddr = FACTORY_V2_ADDRESSES[chain as 'base' | 'arc' | 'hashkey' | 'arbitrum']
-    if (!factoryAddr || !resolvedEvm) return
+    if (!factoryAddr) {
+      setDirectError('Direct payment is not configured for this network.')
+      setDirectStatus('error')
+      return
+    }
+    if (!resolvedEvm) return
 
     const params  = new URLSearchParams(window.location.search)
     const idParam = params.get('id')
@@ -936,6 +1091,7 @@ export default function PaymentPage() {
       circleEvmPaymentProcessing ||
       circlePasskeyPending ||
       circlePaymasterPending ||
+      circleEvmAcceptedPending ||
       isEvmConfirming ||
       isCirclePaymasterConfirming ||
       isBasePaymasterConfirming ||
@@ -961,6 +1117,7 @@ export default function PaymentPage() {
     circleEvmPaymentProcessing,
     circlePasskeyPending,
     circlePaymasterPending,
+    circleEvmAcceptedPending,
     isEvmConfirming,
     isCirclePaymasterConfirming,
     isBasePaymasterConfirming,
@@ -969,6 +1126,19 @@ export default function PaymentPage() {
     basePaymasterTxHash,
     basePaymasterCallId,
   ])
+
+  useEffect(() => {
+    if ((!circlePasskeyPending && !circleEvmPaymentProcessing) || manualPayDetected) return
+    const timer = window.setTimeout(() => {
+      if (manualPayDetected || circlePaymasterTxHash) return
+      setCirclePasskeyPending(false)
+      setCircleEvmPaymentProcessing(false)
+      setCircleEvmAcceptedPending(false)
+      setShowCheckButton(false)
+      setCirclePasskeyError('Circle Smart Wallet confirmation did not finish. Please retry.')
+    }, 125_000)
+    return () => window.clearTimeout(timer)
+  }, [circlePasskeyPending, circleEvmPaymentProcessing, manualPayDetected, circlePaymasterTxHash])
 
   async function handleManualCheck() {
     if (!resolvedEvm || chain === 'starknet') return
@@ -985,6 +1155,7 @@ export default function PaymentPage() {
             setReceivedAmount(chain === 'hashkey' ? parseEther(effectiveAmt || '0') : expectedEvmRecipientUnits())
             setCircleEvmPaymentProcessing(false)
             setCirclePasskeyPending(false)
+            setCircleEvmAcceptedPending(false)
             setCirclePasskeyError(null)
             setManualPayDetected(true)
             setShowCheckButton(false)
@@ -996,7 +1167,7 @@ export default function PaymentPage() {
         const bal          = await client.getBalance({ address: resolvedEvm as `0x${string}` })
         const requestedWei = parseEther(effectiveAmt || '0')
         if (bal >= requestedWei * 99n / 100n) {
-          setReceivedAmount(bal); setManualTxHash(null); setManualPayDetected(true); setShowCheckButton(false)
+          setReceivedAmount(bal); setManualTxHash(null); setCircleEvmAcceptedPending(false); setManualPayDetected(true); setShowCheckButton(false)
         }
       } else {
         const tokenAddress   = CHAIN_META[evmChain as 'base' | 'arc' | 'arbitrum'].tokenAddress
@@ -1034,6 +1205,7 @@ export default function PaymentPage() {
           setManualTxHash(match.transactionHash ?? null)
           setCircleEvmPaymentProcessing(false)
           setCirclePasskeyPending(false)
+          setCircleEvmAcceptedPending(false)
           setCirclePasskeyError(null)
           setManualPayDetected(true)
           setShowCheckButton(false)
@@ -1042,6 +1214,15 @@ export default function PaymentPage() {
     } catch { /* ignore */ }
     setIsManualChecking(false)
   }
+
+  useEffect(() => {
+    if (!circleEvmAcceptedPending || manualPayDetected || chain === 'starknet' || chain === 'solana' || payMode !== 'wallet') return
+    const timer = setInterval(() => {
+      if (!isManualChecking) void handleManualCheck()
+    }, 5_000)
+    return () => clearInterval(timer)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [circleEvmAcceptedPending, manualPayDetected, chain, payMode, isManualChecking])
 
   // ── Auto-switch network when wallet connects ──────────────────────────────
   useEffect(() => {
@@ -1073,7 +1254,7 @@ export default function PaymentPage() {
     setCircleSolanaSession(null); setCircleSolanaCopied(false)
     setManualPayDetected(false); setManualTxHash(null); setReceivedAmount(null)
     setCirclePaymasterPending(false); setCirclePaymasterTxHash(null); setCirclePaymasterError(null)
-    setCirclePasskeyPending(false); setCirclePasskeyError(null); setCircleSmartAccount(null); setCircleEvmEmailSession(null); setCircleEvmPaymentProcessing(false); setCircleWalletCopied(false)
+    setCirclePasskeyPending(false); setCirclePasskeyError(null); setCircleSmartAccount(null); setCircleEvmEmailSession(null); setCircleEvmPaymentProcessing(false); setCircleEvmAcceptedPending(false); setCircleWalletCopied(false)
     setShowCheckButton(false)
     // Reset direct send state
     setDirectLinkId(null); setDirectVault(null); setStarkDirectAddr(null)
@@ -1423,6 +1604,25 @@ export default function PaymentPage() {
     return msg.includes('user rejected') || msg.includes('user denied') || msg.includes('rejected the request')
   }
 
+  function isCircleSmartWalletCancelled(message: string) {
+    const msg = message.toLowerCase()
+    return (
+      msg.includes('cancel') ||
+      msg.includes('user denied') ||
+      msg.includes('user rejected') ||
+      msg.includes('circle wallet action did not complete') ||
+      msg.includes('circle smart wallet confirmation did not finish') ||
+      msg.includes('email verification was cancelled or expired')
+    )
+  }
+
+  function resetCircleSmartWalletPending() {
+    setCirclePasskeyPending(false)
+    setCircleEvmPaymentProcessing(false)
+    setCircleEvmAcceptedPending(false)
+    setShowCheckButton(false)
+  }
+
   function isSendCallsUnavailable(err: unknown) {
     const msg = err instanceof Error ? err.message.toLowerCase() : String(err).toLowerCase()
     return msg.includes('wallet_sendcalls') && (
@@ -1455,7 +1655,9 @@ export default function PaymentPage() {
     } catch (err) {
       if (isSendCallsUnavailable(err)) return 'unavailable'
 
-      const fallbackMessage = 'Sponsored Base transaction was not accepted. Use Coinbase Smart Wallet/Base Account, or pay with Send via Address.'
+      const fallbackMessage = isMainHashPaylinkPayment
+        ? 'Sponsored Base transaction was not accepted. Use Coinbase Smart Wallet/Base Account, or pay from an exchange or another wallet.'
+        : 'Sponsored Base transaction was not accepted. Try again or use another available payment method.'
       if (isUserRejected(err)) {
         setBasePaymasterError('Sponsored transaction rejected in wallet.')
       } else {
@@ -1474,7 +1676,9 @@ export default function PaymentPage() {
     const config = getCirclePaymasterConfig(chain)
     if (!config || !address || !walletClient || !activeRecipient) {
       if (opts.surfaceUnavailable) {
-        setCirclePaymasterError('USDC gas is unavailable. Use Send via Address or continue with ETH gas.')
+        setCirclePaymasterError(isMainHashPaylinkPayment
+          ? 'USDC gas is unavailable. Pay from an exchange or another wallet, or continue with ETH gas.'
+          : 'USDC gas is unavailable. Try again or continue with ETH gas.')
       }
       return 'unavailable'
     }
@@ -1498,7 +1702,9 @@ export default function PaymentPage() {
       }
       if (result.status === 'unavailable') {
         if (opts.surfaceUnavailable) {
-          setCirclePaymasterError('USDC gas is unavailable for this wallet. Use Send via Address or continue with ETH gas.')
+          setCirclePaymasterError(isMainHashPaylinkPayment
+            ? 'USDC gas is unavailable for this wallet. Pay from an exchange or another wallet, or continue with ETH gas.'
+            : 'USDC gas is unavailable for this wallet. Try again or continue with ETH gas.')
         }
         return 'unavailable'
       }
@@ -1530,9 +1736,14 @@ export default function PaymentPage() {
       setCirclePasskeyError(blockedAmountError())
       return
     }
-    const email = circleEmail.trim()
+    if (circleWalletNeedsFunds || (circleSmartAccount && typeof circleWalletBalance === 'bigint' && !circleWalletHasEnough)) {
+      resetCircleSmartWalletPending()
+      setCirclePasskeyError(SMART_WALLET_FUNDING_ERROR)
+      return
+    }
+    const email = (showPrivyCircleEmailPay ? privyEmail : circleEmail).trim()
     if (!email) {
-      setCirclePasskeyError('Enter your email to continue with Smart wallet.')
+      setCirclePasskeyError(showPrivyCircleEmailPay ? 'Sign in with a Privy email account to use Circle Smart Wallet.' : 'Enter your email to continue with Smart wallet.')
       return
     }
 
@@ -1546,24 +1757,50 @@ export default function PaymentPage() {
         if (!session || session.chain !== chain) {
           wasConnecting = true
           session = await connectCircleEvmEmailWallet(email, chain)
+          if (isConnected) disconnectEvm()
           setCircleEvmEmailSession(session)
           setCircleSmartAccount(session.wallet.address)
+          if (PRIVY_AUTH_ENABLED && privyAuthenticated && (chain === 'base' || chain === 'arbitrum' || chain === 'arc')) {
+            try {
+              const token = await getAccessToken()
+              if (token) {
+                await savePrivyCircleLink({
+                  accessToken: token,
+                  chain,
+                  email,
+                  wallet: session.wallet,
+                })
+                setPrivyCircleLinkError(null)
+              }
+            } catch (err) {
+              console.warn('[PayLink] Privy Circle wallet link save failed', err)
+              setPrivyCircleLinkError(readableErrorMsg(err, 'Circle wallet connected, but Privy linking was not saved.'))
+            }
+          }
           await refetchCircleWalletBalance()
           return
         }
 
         if (circleWalletBalance !== undefined && circleWalletBalance !== null && !circleWalletHasEnough) {
+          resetCircleSmartWalletPending()
           setCirclePasskeyError(SMART_WALLET_FUNDING_ERROR)
           return
         }
 
         setCircleEvmPaymentProcessing(true)
+        setCircleEvmAcceptedPending(false)
         const txHash = await sendCircleEvmEmailPayment({
           session,
           recipient: activeRecipient as `0x${string}`,
           amount: effectiveAmt,
         })
-        if (txHash) setCirclePaymasterTxHash(txHash)
+        if (txHash) {
+          setCirclePaymasterTxHash(txHash)
+        } else {
+          setCircleEvmAcceptedPending(true)
+          setShowCheckButton(true)
+        }
+        setCircleEvmPaymentProcessing(false)
         void refetchCircleWalletBalance()
         return
       }
@@ -1571,6 +1808,7 @@ export default function PaymentPage() {
       if (!circleSmartAccount) {
         const wallet = await prepareCirclePasskeyWallet(chain, email)
         if (wallet.status === 'ready') {
+          if (isConnected) disconnectEvm()
           setCircleSmartAccount(wallet.smartAccount)
         } else {
           setCirclePasskeyError(wallet.reason)
@@ -1584,26 +1822,77 @@ export default function PaymentPage() {
         recipient: activeRecipient as `0x${string}`,
         amount: effectiveAmt,
       })
-      if (result.smartAccount) setCircleSmartAccount(result.smartAccount)
+      if (result.smartAccount) {
+        if (isConnected) disconnectEvm()
+        setCircleSmartAccount(result.smartAccount)
+      }
       if (result.status === 'sent') {
         setCirclePaymasterTxHash(result.txHash)
       } else {
         if (!circleWalletHasEnough) setCirclePasskeyError(result.reason)
       }
     } catch (err) {
-      setCircleEvmPaymentProcessing(false)
+      resetCircleSmartWalletPending()
+      const message = readableErrorMsg(err, 'Circle email wallet payment failed.').slice(0, 160)
+      if (isCircleSmartWalletCancelled(message)) {
+        if (wasConnecting) {
+          setCircleEvmEmailSession(null)
+          setCircleSmartAccount(null)
+        }
+        setCirclePasskeyError(SMART_WALLET_CANCELLED_MESSAGE)
+        return
+      }
+      if (message.toLowerCase().includes('transaction hash is not available yet')) {
+        setCirclePasskeyError(null)
+        setCircleEvmAcceptedPending(true)
+        setShowCheckButton(true)
+        void refetchCircleWalletBalance()
+        return
+      }
       if (wasConnecting) {
         setCircleEvmEmailSession(null)
         setCircleSmartAccount(null)
       }
-      setCirclePasskeyError(readableErrorMsg(err, 'Circle email wallet payment failed.').slice(0, 160))
+      setCirclePasskeyError(message)
     } finally {
       setCirclePasskeyPending(false)
+      if (!manualPayDetected) setCircleEvmPaymentProcessing(false)
     }
   }
 
   async function handleEvmPermitPay() {
-    if (!address) return
+    if (isPrivyEmbeddedWalletConnected) {
+      setBasePaymasterError('This Privy email wallet is not your Circle Smart Wallet. Use Continue with Circle Smart Wallet, or connect an external wallet.')
+      return
+    }
+    if (!address) {
+      setBasePaymasterError('Wallet is not connected. Sign in again and retry payment.')
+      return
+    }
+    if (chainId !== targetChainId) {
+      setBasePaymasterError(`Switch your wallet to ${meta.label}, then retry payment.`)
+      try {
+        await switchChainAsync({ chainId: targetChainId })
+      } catch (err) {
+        console.error('[PayLink] wallet chain switch failed', err)
+        setBasePaymasterError(readableErrorMsg(err, `Could not switch wallet to ${meta.label}.`))
+      }
+      return
+    }
+    let providerChainId: number | undefined
+    if (walletClient) {
+      providerChainId = Number(await walletClient.request({ method: 'eth_chainId' }))
+      if (providerChainId !== targetChainId) {
+        setBasePaymasterError(`Rabby is still on ${CHAIN_DISPLAY_NAMES[providerChainId] ?? `Chain ${providerChainId}`}. Switch to ${meta.label}, then retry payment.`)
+        try {
+          await switchChainAsync({ chainId: targetChainId })
+        } catch (err) {
+          console.error('[PayLink] provider chain switch failed', err)
+          setBasePaymasterError(readableErrorMsg(err, `Could not switch Rabby to ${meta.label}.`))
+        }
+        return
+      }
+    }
     const meta_       = chain === 'arc' ? CHAIN_META.arc : chain === 'arbitrum' ? CHAIN_META.arbitrum : CHAIN_META.base
     const tokenAddress = meta_.tokenAddress
     const deadline     = BigInt(Math.floor(Date.now() / 1000) + 3600)
@@ -1614,25 +1903,158 @@ export default function PaymentPage() {
     const sponsoredFeeUnits = feeUnits + gasRecoveryUnits
     const recipientUnits = totalUnits - feeUnits
     const sponsoredRecipientUnits = totalUnits - sponsoredFeeUnits
-    const nonce        = permitNonce ?? 0n
-    const permitDomain = chain === 'arc'
-      ? { name: 'USDC',      version: '2', chainId: targetChainId, verifyingContract: tokenAddress }
-      : { name: 'USD Coin',  version: '2', chainId: targetChainId, verifyingContract: tokenAddress }
     try {
-      const sig = await signTypedDataAsync({
-        domain: permitDomain,
-        types: {
-          Permit: [
-            { name: 'owner',    type: 'address' },
-            { name: 'spender',  type: 'address' },
-            { name: 'value',    type: 'uint256' },
-            { name: 'nonce',    type: 'uint256' },
-            { name: 'deadline', type: 'uint256' },
-          ],
-        },
-        primaryType: 'Permit',
-        message: { owner: address, spender: MULTICALL3_ADDRESS, value: totalUnits, nonce, deadline },
+      const tokenClient = EVM_CLIENTS[chain as 'base' | 'arc' | 'arbitrum']
+      const payerBalance = await tokenClient.readContract({
+        address: tokenAddress,
+        abi: ERC20_BALANCE_OF_ABI,
+        functionName: 'balanceOf',
+        args: [address],
       })
+      if (payerBalance < totalUnits) {
+        setBasePaymasterError(
+          `Insufficient USDC on ${meta.label}. Need ${formatUnits(totalUnits, meta_.decimals)} USDC; wallet has ${formatUnits(payerBalance, meta_.decimals)} USDC.`,
+        )
+        return
+      }
+    } catch (err) {
+      console.warn('[PayLink] payer USDC balance preflight failed', err)
+    }
+    let livePermitName = permitTokenName
+    let livePermitVersion = permitTokenVersion
+    let livePermitNonce = permitNonce
+    if (!livePermitName || !livePermitVersion || livePermitNonce == null) {
+      try {
+        const tokenClient = EVM_CLIENTS[chain as 'base' | 'arc' | 'arbitrum']
+        const [name, version, freshNonce] = await Promise.all([
+          tokenClient.readContract({
+            address: tokenAddress,
+            abi: ERC20_PERMIT_DOMAIN_ABI,
+            functionName: 'name',
+          }),
+          tokenClient.readContract({
+            address: tokenAddress,
+            abi: ERC20_PERMIT_DOMAIN_ABI,
+            functionName: 'version',
+          }),
+          tokenClient.readContract({
+            address: tokenAddress,
+            abi: NONCES_ABI,
+            functionName: 'nonces',
+            args: [address],
+          }),
+        ])
+        livePermitName = name
+        livePermitVersion = version
+        livePermitNonce = freshNonce
+      } catch (err) {
+        console.error('[PayLink] permit metadata read failed', err)
+        setBasePaymasterError(`USDC permit metadata could not be loaded: ${readableErrorMsg(err, 'Token read failed.')}`)
+        return
+      }
+    }
+    const nonce        = livePermitNonce
+    const permitDomain = { name: livePermitName, version: livePermitVersion, chainId: targetChainId, verifyingContract: tokenAddress }
+    const permitTypes = {
+      EIP712Domain: [
+        { name: 'name', type: 'string' },
+        { name: 'version', type: 'string' },
+        { name: 'chainId', type: 'uint256' },
+        { name: 'verifyingContract', type: 'address' },
+      ],
+      Permit: [
+        { name: 'owner',    type: 'address' },
+        { name: 'spender',  type: 'address' },
+        { name: 'value',    type: 'uint256' },
+        { name: 'nonce',    type: 'uint256' },
+        { name: 'deadline', type: 'uint256' },
+      ],
+    } as const
+    const permitMessage = { owner: address, spender: MULTICALL3_ADDRESS, value: totalUnits, nonce, deadline } as const
+    setBasePaymasterError(null)
+    setCirclePaymasterError(null)
+    resetEvmSend()
+    let phase = 'sign permit'
+    try {
+      const rawPermitTypedData = {
+        domain: permitDomain,
+        types: permitTypes,
+        primaryType: 'Permit',
+        message: {
+          owner: address,
+          spender: MULTICALL3_ADDRESS,
+          value: totalUnits.toString(),
+          nonce: nonce.toString(),
+          deadline: deadline.toString(),
+        },
+      }
+      console.info('[PayLink] signing permit', {
+        chain,
+        targetChainId,
+        providerChainId,
+        walletChainId: chainId,
+        tokenAddress,
+        tokenName: livePermitName,
+        tokenVersion: livePermitVersion,
+        owner: address,
+        spender: MULTICALL3_ADDRESS,
+      })
+      let sig: `0x${string}`
+      try {
+        const matchingPrivyWallet = PRIVY_AUTH_ENABLED
+          ? privyWallets.find(wallet => wallet.address?.toLowerCase() === address.toLowerCase())
+          : undefined
+        if (matchingPrivyWallet && matchingPrivyWallet.walletClientType !== 'privy') {
+          await matchingPrivyWallet.switchChain(targetChainId)
+          const privyProvider = await matchingPrivyWallet.getEthereumProvider()
+          sig = await privyProvider.request({
+            method: 'eth_signTypedData_v4',
+            params: [address, JSON.stringify(rawPermitTypedData)],
+          }) as `0x${string}`
+        } else if (walletClient) {
+          sig = await walletClient.signTypedData({
+              account: address,
+              domain: permitDomain,
+              types: permitTypes,
+              primaryType: 'Permit',
+              message: permitMessage,
+            } as never)
+        } else {
+          sig = await signTypedDataAsync({
+              account: address,
+              domain: permitDomain,
+              types: permitTypes,
+              primaryType: 'Permit',
+              message: permitMessage,
+            } as never)
+        }
+      } catch (err) {
+        if (!isInvalidRpcParams(err)) throw err
+        let connectorProvider: unknown = null
+        if (!walletClient && connector) {
+          try {
+            connectorProvider = await connector.getProvider()
+          } catch (providerErr) {
+            console.warn('[PayLink] connector provider unavailable for raw signTypedData retry', {
+              connectorName: connector.name,
+              providerErr,
+            })
+          }
+        }
+        const rawProvider = walletClient ?? connectorProvider
+        const request = (rawProvider as { request?: (args: { method: string; params?: unknown[] }) => Promise<unknown> } | null)?.request
+        if (!request) throw err
+        console.warn('[PayLink] viem signTypedData rejected by wallet, retrying raw eth_signTypedData_v4', {
+          hasWalletClient: !!walletClient,
+          hasConnector: !!connector,
+          connectorName: connector?.name,
+          err,
+        })
+        sig = await request({
+          method: 'eth_signTypedData_v4',
+          params: [address, JSON.stringify(rawPermitTypedData)],
+        }) as `0x${string}`
+      }
       const { v, r, s } = parseSignature(sig)
       const baseCallData = encodeFunctionData({
         abi: MULTICALL3_AGGREGATE3_ABI, functionName: 'aggregate3',
@@ -1669,24 +2091,38 @@ export default function PaymentPage() {
         ]],
       })
       if (chain === 'base') {
+        phase = 'sponsored transaction'
         const sponsored = await tryBasePaymasterCall(concat([sponsoredBaseCallData, BASE_BUILDER_CODE]))
         if (sponsored !== 'unavailable') return
       }
+      phase = 'submit transaction'
       sendTransaction({
-        to: MULTICALL3_ADDRESS, value: 0n, chainId: targetChainId,
+        to: MULTICALL3_ADDRESS, value: 0n,
         // Append Base Builder Code on Base Mainnet only (ERC-8021)
         data: chain === 'base' ? concat([baseCallData, BASE_BUILDER_CODE]) : baseCallData,
       })
-    } catch { /* user rejected */ }
+    } catch (err) {
+      if (isUserRejected(err)) {
+        setBasePaymasterError('Payment request rejected in wallet.')
+        return
+      }
+      console.error(`[PayLink] ${phase} failed`, err)
+      setBasePaymasterError(`${phase}: ${readableErrorMsg(err, 'Payment request failed before it reached the wallet.')}`)
+    }
   }
 
   function handleHashKeyPay() {
+    if (chainId !== CHAIN_META.hashkey.chainId) {
+      setBasePaymasterError(`Switch your wallet to ${CHAIN_META.hashkey.label}, then retry payment.`)
+      switchChain({ chainId: CHAIN_META.hashkey.chainId })
+      return
+    }
     const totalNative     = parseEther(effectiveAmt || '0')
     const feeBps          = BigInt(PLATFORM_FEE_BPS)
     const feeNative       = totalNative * feeBps / 10_000n
     const recipientNative = totalNative - feeNative
     sendTransaction({
-      to: MULTICALL3_ADDRESS, value: totalNative, chainId: CHAIN_META.hashkey.chainId,
+      to: MULTICALL3_ADDRESS, value: totalNative,
       data: encodeFunctionData({
         abi: MULTICALL3_AGGREGATE3VALUE_ABI, functionName: 'aggregate3Value',
         args: [[
@@ -2058,7 +2494,7 @@ export default function PaymentPage() {
         {/* ── Chain toggle ─────────────────────────────────────────────── */}
         <div className="flex justify-center pt-5 pb-0 px-4">
           <div className="flex items-center justify-center gap-0.5 sm:gap-1 rounded-xl border border-gray-200 bg-gray-100/80 p-1 overflow-x-auto w-full sm:w-auto">
-            {CHAINS.map((c) => {
+            {availableChains.map((c) => {
               const m          = CHAIN_META[c]
               const isActive   = chain === c
               const hskLocked  = isHskOnly && c !== 'hashkey'
@@ -2117,7 +2553,7 @@ export default function PaymentPage() {
                     : 'text-gray-500 hover:text-gray-700',
                 )}
               >
-                Send via Address
+                Pay another way
               </button>
             </div>
           </div>
@@ -2186,11 +2622,11 @@ export default function PaymentPage() {
                 <span className="text-xl font-semibold text-gray-400">{meta.asset}</span>
               </div>
               {memo && (
-                <p className="mt-2.5 text-sm text-gray-500">
+                <p className="mt-1 text-sm font-medium text-gray-500 dark:text-gray-300">
                   {isPolymarketFunding ? (
                     <PolymarketMemoPill />
                   ) : (
-                    <span className="rounded-full border border-gray-200 bg-white px-3 py-0.5 text-xs font-medium">"{memo}"</span>
+                    <>For {memo}</>
                   )}
                 </p>
               )}
@@ -2276,30 +2712,14 @@ export default function PaymentPage() {
         )}
 
         <div className="p-6 space-y-5">
-          {/* Transaction details */}
-          <div className="divide-y divide-gray-100 overflow-hidden rounded-xl border border-gray-100">
-            <Row
-              label="Network"
-              value={
-                <span className="flex items-center gap-1.5 text-sm font-medium text-gray-800">
-                  <span className={cn('h-2 w-2 rounded-full', meta.dotColor)} />
-                  {chain === 'base'     ? 'Base Mainnet'      :
-                   chain === 'starknet' ? 'Starknet Mainnet'  :
-                   chain === 'arc'      ? 'Arc Economic OS'   :
-                   chain === 'solana'   ? 'Solana Mainnet'    :
-                   chain === 'arbitrum' ? 'Arbitrum One'      :
-                                         'HashKey Chain'}
-                </span>
-              }
-            />
-            {chain !== 'starknet' && chain !== 'solana' && <Row label="Chain ID" value={String(targetChainId)} mono />}
-            <Row label="Engine" value={<span className={cn('text-xs font-medium', meta.badgeText)}>{meta.engineLabel}</span>} />
-            <div className="flex items-center justify-between bg-gray-50/60 px-4 py-2 border-t border-dashed border-gray-100">
-              <span className="text-[11px] font-normal text-slate-400 tracking-wide">Platform fee ({((PLATFORM_FEE_BPS / 10_000) * 100).toFixed(1)}%)</span>
-              <span className="font-mono text-[11px] text-slate-400">
-                {feeAmount > 0 && effectiveAmt ? `${feeAmount.toFixed(meta.decimals <= 6 ? 4 : 6)} ${meta.asset}` : '—'}
-              </span>
+          {/* Payment details */}
+          <div className="space-y-1.5 text-center">
+            <div className="flex items-center justify-center gap-1.5 text-sm font-semibold text-gray-800 dark:text-gray-100">
+              <span>Paying on {consumerNetworkName}</span>
             </div>
+            <p className="text-[11px] text-slate-400">
+              Platform fee: {feeAmount > 0 && effectiveAmt ? `${feeAmount.toFixed(meta.decimals <= 6 ? 4 : 6)} ${meta.asset}` : '—'}
+            </p>
             {chain === 'arbitrum' && payMode === 'wallet' && (
               <div className="flex items-center justify-between bg-gray-50/60 px-4 py-2 border-t border-dashed border-gray-100">
                 <span className="text-[11px] font-normal text-slate-400 tracking-wide">Gas reimb (relayer pays ETH)</span>
@@ -2325,12 +2745,6 @@ export default function PaymentPage() {
                   Minimum Polymarket funding is 4 USDC.
                 </span>
               </div>
-            )}
-            {memo && (
-              <Row
-                label="Memo (on-chain)"
-                value={isPolymarketFunding ? <PolymarketMemoInline /> : memo.length > 28 ? memo.slice(0, 28) + '…' : memo}
-              />
             )}
           </div>
 
@@ -2425,7 +2839,7 @@ export default function PaymentPage() {
                     <p className="text-[11px] font-medium text-emerald-700">Monitoring for {meta.asset} — detects in under 3 seconds</p>
                   </div>
                   <p className="text-center text-xs text-gray-500">
-                    Send {meta.asset} on {meta.label} to this address
+                    Pay from an exchange or another wallet by sending {meta.asset} on {meta.label} to this address
                   </p>
                   <div className={cn(
                     'flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3.5 transition-opacity duration-200',
@@ -2513,7 +2927,7 @@ export default function PaymentPage() {
                     </div>
                     <p className="text-[11px] font-medium text-emerald-700">Monitoring for {meta.asset} — detects in under 3 seconds</p>
                   </div>
-                  <p className="text-center text-xs text-gray-500">Send USDC on Solana to this address</p>
+                  <p className="text-center text-xs text-gray-500">Pay from an exchange or another wallet by sending USDC on Solana to this address</p>
                   <div className={cn(
                     'flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3.5 transition-opacity duration-200',
                     requiresAttendeeName && !attendeeName.trim() && 'opacity-40',
@@ -2645,7 +3059,7 @@ export default function PaymentPage() {
                 <p className="mt-0.5 text-xs text-red-600">
                   {friendlyErrorMsg(sendErrorMsg ?? 'An unknown error occurred')}
                 </p>
-                <button onClick={() => { resetEvmSend(); setStarkError(null) }}
+                <button onClick={() => { resetEvmSend(); setStarkError(null); setBasePaymasterError(null); setCirclePaymasterError(null) }}
                   className="mt-2 text-xs font-bold text-red-700 hover:text-red-900">Try again</button>
               </div>
             </div>
@@ -2681,39 +3095,48 @@ export default function PaymentPage() {
             </div>
           )}
 
-          {payMode === 'wallet' && showCircleEmailPay && chain !== 'starknet' && chain !== 'solana' && !manualPayDetected && (!isPolymarketFunding || polymarketFundingStep === 'fund' || !!circleSmartAccount) && (
+          {payMode === 'wallet' && showCircleEmailBridgePay && chain !== 'starknet' && chain !== 'solana' && !manualPayDetected && (!isPolymarketFunding || polymarketFundingStep === 'fund' || !!circleSmartAccount) && (
             <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
-              {!circleSmartAccount && (
+              {!circleSmartAccount && !showPrivyCircleEmailPay && (
                 <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.06]">
                   <input
                     type="email"
                     value={circleEmail}
                     onChange={(e) => setCircleEmail(e.target.value)}
-                    placeholder="Email for gasless payment"
+                    placeholder="Enter your email"
                     disabled={circlePasskeyPending || circleEvmPaymentProcessing || (requiresAttendeeName && !attendeeName.trim())}
                     className="min-w-0 flex-1 bg-transparent text-sm text-gray-800 placeholder:text-gray-400 outline-none dark:text-white dark:placeholder:text-gray-500"
                   />
-                  <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">Gas Sponsored</span>
                 </div>
               )}
               <button
                 onClick={handleCirclePasskeyPay}
-                disabled={circlePasskeyPending || circleEvmPaymentProcessing || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
+                disabled={circlePasskeyPending || circleEvmPaymentProcessing || circleEvmAcceptedPending || privyCircleLinkLoading || circleWalletNeedsFunds || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
                 className={cn(
                   'flex w-full items-center justify-center gap-2 rounded-xl px-6 py-3.5 text-sm font-semibold transition-all',
-                  circlePasskeyPending || circleEvmPaymentProcessing
+                  circlePasskeyPending || circleEvmPaymentProcessing || circleEvmAcceptedPending || privyCircleLinkLoading || circleWalletNeedsFunds
                     ? 'cursor-not-allowed bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400'
-                    : 'bg-black text-white shadow-button hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200',
+                    : 'bg-black text-white shadow-button hover:bg-gray-800 active:scale-[0.98] dark:bg-[#111113] dark:text-white dark:ring-1 dark:ring-white/10 dark:hover:bg-[#1c1c20]',
                 )}
               >
-                {circleEvmPaymentProcessing
+                {circleEvmPaymentProcessing || circleEvmAcceptedPending
                   ? <><Loader2 className="h-4 w-4 animate-spin" /> Payment processing</>
                   : circlePasskeyPending
                   ? <><Loader2 className="h-4 w-4 animate-spin" /> {circleSmartAccount ? 'Confirming payment' : 'Opening Smart wallet'}</>
+                  : privyCircleLinkLoading
+                  ? <><Loader2 className="h-4 w-4 animate-spin" /> Checking Smart wallet</>
                   : circleSmartAccount
-                    ? <><Zap className="h-4 w-4" /> Pay {formatAmount(effectiveAmt, meta.decimals)} {meta.asset}</>
-                    : <><Zap className="h-4 w-4" /> Continue with email</>}
+                    ? <><img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert mix-blend-screen" /> Pay {formatAmount(effectiveAmt, meta.decimals)} {meta.asset}</>
+                    : <><img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert mix-blend-screen" /> Continue</>}
               </button>
+              <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
+                {circleSmartAccount ? 'Gasless smart wallet payment' : 'Smart wallet payment'}
+              </p>
+              {privyCircleLinkError && (
+                <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-medium text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+                  {privyCircleLinkError}
+                </p>
+              )}
               {circleSmartAccount && (
                 <div className="rounded-lg border border-gray-200 bg-white/70 px-3 py-2 dark:border-white/10 dark:bg-white/[0.06]">
                   <div className="flex items-center justify-between gap-2">
@@ -2757,13 +3180,6 @@ export default function PaymentPage() {
               {circlePasskeyError && (
                 <p className="text-center text-[11px] font-medium text-red-600 dark:text-red-300">{circlePasskeyError}</p>
               )}
-              {!smartWalletOnlyFunding && !isTelegramSource && (
-                <div className="flex items-center gap-3">
-                  <div className="h-px flex-1 bg-gray-200 dark:bg-white/10" />
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">or</span>
-                  <div className="h-px flex-1 bg-gray-200 dark:bg-white/10" />
-                </div>
-              )}
             </div>
           )}
 
@@ -2780,7 +3196,7 @@ export default function PaymentPage() {
             </button>
           ) : payMode === 'wallet' && chain === 'solana' && (!isPolymarketFunding || polymarketFundingStep === 'fund' || !!circleSolanaSession) ? (
               <div className="space-y-2">
-                {showCircleSolanaEmailPay && !manualPayDetected && (
+                {showLegacyCircleSolanaEmailPay && !manualPayDetected && (
                   <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50/70 p-3">
                     {!circleSolanaSession && (
                       <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2.5">
@@ -2788,11 +3204,10 @@ export default function PaymentPage() {
                           type="email"
                           value={circleSolanaEmail}
                           onChange={(e) => setCircleSolanaEmail(e.target.value)}
-                          placeholder="Email for gasless payment"
+                          placeholder="Enter your email"
                           disabled={circleSolanaPending || (requiresAttendeeName && !attendeeName.trim())}
                           className="min-w-0 flex-1 bg-transparent text-sm text-gray-800 placeholder:text-gray-400 outline-none"
                         />
-                        <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">Gas Sponsored</span>
                       </div>
                     )}
                     <button
@@ -2863,7 +3278,7 @@ export default function PaymentPage() {
                     )}
                   </div>
                 )}
-                {!smartWalletOnlyFunding && !isTelegramSource && !solanaWalletAddr ? (
+                {!walletConnectBlocked && !isTelegramSource && !solanaWalletAddr ? (
                   <>
                 <button
                   onClick={connectSolana}
@@ -2876,7 +3291,7 @@ export default function PaymentPage() {
                 </button>
                 <p className="text-center text-xs text-gray-400">Phantom, Solflare & other Solana wallets</p>
                   </>
-                ) : !smartWalletOnlyFunding && !isTelegramSource ? (
+                ) : !walletConnectBlocked && !isTelegramSource ? (
               <button
                 onClick={handlePay}
                 disabled={isSolanaPending || isSolanaConfirming || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
@@ -2988,7 +3403,17 @@ export default function PaymentPage() {
                 : <><Zap className="h-4 w-4" /> Pay {formatAmount(effectiveAmt, 6)} USDC on Starknet</>}
               </button>
             )
-          ) : payMode === 'wallet' && !smartWalletOnlyFunding && !isTelegramSource && !isConnected ? (
+          ) : payMode === 'wallet' && usePrivyCircleCheckout && !privyAuthenticated && !manualPayDetected ? (
+            <div className={cn(
+              'flex flex-col items-center gap-1.5',
+              requiresAttendeeName && !attendeeName.trim() && 'pointer-events-none opacity-50 select-none',
+            )}>
+              <PrivyConnectButton className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-6 py-3.5 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-60 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200">
+                <Wallet className="h-4 w-4" />
+                Sign in to pay
+              </PrivyConnectButton>
+            </div>
+          ) : payMode === 'wallet' && (!usePrivyCircleCheckout || hasExternalPrivyEvmWallet) && !walletConnectBlocked && !isTelegramSource && !isConnected ? (
             <div className={cn(
               'flex flex-col items-center gap-1.5',
               requiresAttendeeName && !attendeeName.trim() && 'pointer-events-none opacity-50 select-none',
@@ -3001,11 +3426,11 @@ export default function PaymentPage() {
                 <Wallet className="h-4 w-4" />
                 {showCircleEmailPay ? 'Connect EOA Wallet' : 'Connect Wallet to Pay'}
               </button>
-              {showCircleEmailPay && (
+              {showLegacyCircleEmailPay && (
                 <p className="text-center text-xs text-gray-400">Gas in ETH</p>
               )}
             </div>
-          ) : payMode === 'wallet' && !smartWalletOnlyFunding && !isTelegramSource && !isCorrectNetwork ? (
+          ) : payMode === 'wallet' && (!usePrivyCircleCheckout || hasExternalPrivyEvmWallet) && !walletConnectBlocked && !isTelegramSource && isConnected && !isPrivyEmbeddedWalletConnected && !isCorrectNetwork ? (
             <button onClick={() => switchChain({ chainId: targetChainId })} disabled={isSwitching}
               className="flex w-full items-center justify-center gap-2 rounded-xl px-6 py-4 text-sm font-semibold text-white transition-all active:scale-[0.98] disabled:opacity-70"
               style={{ backgroundColor: meta.accentColor }}>
@@ -3013,7 +3438,7 @@ export default function PaymentPage() {
                 ? <><Loader2 className="h-4 w-4 animate-spin" /> Switching…</>
                 : <><RefreshCw className="h-4 w-4" /> Switch to {meta.label}</>}
             </button>
-          ) : payMode === 'wallet' && !smartWalletOnlyFunding && !isTelegramSource ? (
+          ) : payMode === 'wallet' && (!usePrivyCircleCheckout || hasExternalPrivyEvmWallet) && !walletConnectBlocked && !isTelegramSource && isConnected && !isPrivyEmbeddedWalletConnected ? (
             <div className="space-y-2">
               <button onClick={handlePay} disabled={isWalletPending || isConfirming || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
               className={cn(
@@ -3026,12 +3451,16 @@ export default function PaymentPage() {
               : isBasePaymasterPending ? <><Loader2 className="h-4 w-4 animate-spin" /> Requesting sponsored gas…</>
               : isEvmWalletPending  ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirm in Wallet…</>
               : isConfirming        ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirming on Chain…</>
-              : <><Zap className="h-4 w-4" /> Pay {formatAmount(effectiveAmt, meta.decimals)} {meta.asset} on {meta.label}</>}
+                : <><Zap className="h-4 w-4" /> Pay {formatAmount(effectiveAmt, meta.decimals)} {meta.asset} on {meta.label}</>}
               </button>
+            </div>
+          ) : payMode === 'wallet' && !walletConnectBlocked && !isTelegramSource && isPrivyEmbeddedWalletConnected && !showCircleEmailBridgePay ? (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-center text-xs font-medium text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+              Privy email is signed in, but its embedded wallet is not your Circle Smart Wallet. Add the Circle wallet app id to enable Circle Smart Wallet payments, or connect an external wallet.
             </div>
           ) : null /* direct mode — no CTA button, address panel above handles it */ }
 
-          {isTelegramSource && (showCircleEmailPay || showCircleSolanaEmailPay) && (
+          {showCirclePoweredAttribution && (
             <div className="flex items-center justify-center gap-2 pt-1 text-[11px] font-semibold text-gray-400 dark:text-gray-500">
               <img src="/brand/circle-logo.jpeg" alt="" className="h-4 w-4 rounded-full object-cover" />
               <span>Powered by Circle</span>
@@ -3040,13 +3469,13 @@ export default function PaymentPage() {
 
           <p className="flex items-center justify-center gap-1.5 text-xs text-gray-400">
             <ShieldCheck className="h-3.5 w-3.5" />
-            Trustless · Non-custodial · Open source
+            Secure · Non-custodial · Open source
           </p>
         </div>
       </div>
 
       {/* Pending tx banner */}
-      {txHash && !isConfirmed && (
+      {txHash && !isConfirmed && !isSendError && (
         <div className="mt-4 flex items-center gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4 animate-slide-up">
           <Loader2 className="h-4 w-4 flex-shrink-0 animate-spin text-blue-500" />
           <div className="min-w-0 flex-1">
@@ -3147,6 +3576,7 @@ export default function PaymentPage() {
           ))}
         </p>
       </div>
+
     </div>
   )
 }

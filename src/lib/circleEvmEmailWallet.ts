@@ -95,6 +95,9 @@ function readableError(err: unknown) {
 function emailVerificationError(err: unknown) {
   const message = readableError(err)
   const lower = message.toLowerCase()
+  if (lower.includes('deviceid') || lower.includes('device id')) {
+    return 'Smart wallet could not start. Refresh and try again.'
+  }
   if (
     lower.includes('failed to fetch') ||
     lower.includes('networkerror') ||
@@ -107,6 +110,12 @@ function emailVerificationError(err: unknown) {
     return 'Email verification code is invalid or expired. Request a new code and try again.'
   }
   return message
+}
+
+function deviceIdError(err: unknown) {
+  const message = readableError(err).toLowerCase()
+  if (message.includes('cancel')) return 'Payment cancelled.'
+  return 'Smart wallet could not start. Refresh and try again.'
 }
 
 function isHexHash(value: unknown): value is Hex {
@@ -160,7 +169,14 @@ async function circleWalletApi<T>(payload: Record<string, unknown>): Promise<T> 
 
 function executeChallenge(sdk: W3SSdk, challengeId: string) {
   return new Promise<CircleChallengeResult>((resolve, reject) => {
+    const handleClose = (event: MessageEvent) => {
+      if (!event.data?.onClose) return
+      window.removeEventListener('message', handleClose)
+      reject(new Error('Payment cancelled.'))
+    }
+    window.addEventListener('message', handleClose)
     sdk.execute(challengeId, (error, result) => {
+      window.removeEventListener('message', handleClose)
       if (error) {
         reject(new Error(sdkError(error)))
         return
@@ -198,8 +214,111 @@ function authenticatedSdk(session: CircleEvmEmailSession) {
   const appId = session.appId ?? appIdForChain(session.chain)
   if (!appId) throw new Error('Circle email wallet is not configured.')
   const sdk = new W3SSdk({ appSettings: { appId } })
+  applyHashPayLinkCircleUi(sdk)
   sdk.setAuthentication({ userToken: session.userToken, encryptionKey: session.encryptionKey })
   return sdk
+}
+
+function applyHashPayLinkCircleUi(sdk: W3SSdk, context?: {
+  amount?: string
+  asset?: string
+  recipient?: Address
+  chainLabel?: string
+}) {
+  const asset = context?.asset ?? 'USDC'
+  const amount = context?.amount
+  const chainLabel = context?.chainLabel ?? 'Base'
+  const shortRecipient = context?.recipient
+    ? `${context.recipient.slice(0, 6)}...${context.recipient.slice(-4)}`
+    : undefined
+
+  sdk.setThemeColor({
+    backdrop: '#020617',
+    backdropOpacity: 0.42,
+    divider: '#E5E7EB',
+    bg: '#FFFFFF',
+    success: '#059669',
+    error: '#DC2626',
+    textMain: '#111827',
+    textMain2: '#374151',
+    textAuxiliary: '#6B7280',
+    textAuxiliary2: '#9CA3AF',
+    titleGradients: ['#111827', '#0071E3'],
+  })
+
+  sdk.setResources({
+    dAppIcon: '/hash-logo.png',
+    transactionTokenIcon: '/brand/circle-logo.jpeg',
+    fontFamily: {
+      name: 'Inter',
+      url: 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap',
+    },
+  })
+
+  sdk.setCustomLinks({
+    learnMoreUrl: 'https://hashpaylink.com/docs',
+  })
+
+  sdk.setLocalizations({
+    common: {
+      continue: 'Continue',
+      confirm: 'Confirm',
+      sign: 'Approve',
+    },
+    socialEmailConfirm: {
+      title: 'Hash PayLink',
+      headline: 'Confirm your email to continue.',
+    },
+    transactionRequest: {
+      title: 'Confirm payment',
+      subtitle: amount
+        ? `Approve ${amount} ${asset} on ${chainLabel}.`
+        : `Approve this ${asset} payment on ${chainLabel}.`,
+      fromLabel: 'Paying from',
+      toLabel: 'Recipient',
+      to: shortRecipient ? [shortRecipient] : undefined,
+      totalLabel: 'Total',
+      rawTxDescription: 'Secure payment authorization',
+      rawTx: 'Circle protects this final approval before funds move.',
+    },
+    contractInteraction: {
+      title: 'Confirm payment',
+      subtitle: amount
+        ? `Approve ${amount} ${asset} on ${chainLabel}.`
+        : `Approve this ${asset} payment on ${chainLabel}.`,
+      fromLabel: 'Smart wallet',
+      contractAddressLabel: 'Payment contract',
+      contractInfo: ['Hash PayLink payment approval'],
+      totalLabel: 'Total',
+      dataDetails: {
+        dataDetailsLabel: 'Authorization details',
+        callData: {
+          callDataLabel: 'Secure call data',
+          data: 'Payment is prepared by Hash PayLink and approved through Circle.',
+        },
+        abiInfo: {
+          functionNameLabel: 'Action',
+          functionName: 'Send USDC payment',
+          parametersLabel: 'Payment details',
+          parameters: [
+            amount ? `Amount: ${amount} ${asset}` : `Asset: ${asset}`,
+            `Network: ${chainLabel}`,
+            ...(shortRecipient ? [`Recipient: ${shortRecipient}`] : []),
+          ],
+        },
+      },
+    },
+    signatureRequest: {
+      title: 'Approve payment',
+      contractName: 'Hash PayLink',
+      contractUrl: 'https://hashpaylink.com',
+      subtitle: amount
+        ? `Approve ${amount} ${asset} on ${chainLabel}.`
+        : `Approve this ${asset} payment on ${chainLabel}.`,
+      descriptionLabel: 'Request',
+      description: 'Final Circle security confirmation for your Hash PayLink payment.',
+    },
+  })
 }
 
 async function getWallet(userToken: string, chain: Extract<ChainKey, 'base' | 'arbitrum' | 'arc'>): Promise<CircleEvmWallet | null> {
@@ -260,7 +379,20 @@ export async function connectCircleEvmEmailWallet(
   const appId = appIdForChain(chain)
   if (!appId) throw new Error('Circle email wallet is not configured.')
   const sdk = new W3SSdk({ appSettings: { appId } })
-  const deviceId = await sdk.getDeviceId()
+  applyHashPayLinkCircleUi(sdk, {
+    asset: CHAIN_META[chain].asset,
+    chainLabel: CHAIN_META[chain].label,
+  })
+  let deviceId: string
+  try {
+    deviceId = await withTimeout(
+      sdk.getDeviceId(),
+      15_000,
+      'Smart wallet could not start. Refresh and try again.',
+    )
+  } catch (err) {
+    throw new Error(deviceIdError(err))
+  }
   const otp = await circleWalletApi<{
     deviceToken: string
     deviceEncryptionKey: string
@@ -273,6 +405,12 @@ export async function connectCircleEvmEmailWallet(
   })
 
   const login = await withTimeout(new Promise<CircleEmailLoginResult>((resolve, reject) => {
+    const handleClose = (event: MessageEvent) => {
+      if (!event.data?.onClose) return
+      window.removeEventListener('message', handleClose)
+      reject(new Error('Payment cancelled.'))
+    }
+    window.addEventListener('message', handleClose)
     sdk.updateConfigs({
       appSettings: { appId },
       loginConfigs: {
@@ -281,6 +419,7 @@ export async function connectCircleEvmEmailWallet(
         otpToken: otp.otpToken,
       },
     }, (error, result) => {
+      window.removeEventListener('message', handleClose)
       if (error) {
         reject(new Error(emailVerificationError(error)))
         return
@@ -339,8 +478,19 @@ export async function sendCircleEvmEmailPayment(params: {
   amount: string
 }) {
   const sdk = authenticatedSdk(params.session)
+  applyHashPayLinkCircleUi(sdk, {
+    amount: params.amount,
+    asset: CHAIN_META[params.session.chain].asset,
+    recipient: params.recipient,
+    chainLabel: CHAIN_META[params.session.chain].label,
+  })
   const totalUnits = parseUnits(params.amount || '0', CHAIN_META[params.session.chain].decimals)
-  const challenge = await circleWalletApi<{ challengeId?: string }>({
+  const challenge = await circleWalletApi<{
+    challengeId?: string
+    id?: string
+    transactionId?: string
+    transaction?: Record<string, unknown>
+  }>({
     action: 'executeEvmPayment',
     userToken: params.session.userToken,
     walletId: params.session.wallet.id,
@@ -350,15 +500,19 @@ export async function sendCircleEvmEmailPayment(params: {
     totalUnits: totalUnits.toString(),
   })
   if (!challenge.challengeId) throw new Error('Circle did not return an EVM payment challenge.')
-  const result = await executeChallenge(sdk, challenge.challengeId)
+  const result = await executeChallengeWithTimeout(
+    sdk,
+    challenge.challengeId,
+    'Circle Smart Wallet confirmation did not finish. If you approved it, use Check Payment Status in a moment.',
+  )
   const txHash = findTxHash(result)
   if (txHash) return txHash
-  const transactionId = findTransactionId(result)
+  const transactionId = findTransactionId(result) ?? findTransactionId(challenge)
   if (transactionId) {
-    const hash = await pollTransactionHash(params.session, transactionId).catch(() => null)
+    const hash = await pollTransactionHash(params.session, transactionId)
     if (hash) return hash
   }
-  return null
+  throw new Error('Circle accepted the payment, but the transaction hash is not available yet. Use Check Payment Status in a moment.')
 }
 
 function findSignature(value: unknown): Hex | null {
@@ -428,15 +582,19 @@ export async function deployCircleEvmEmailWallet(params: {
     chain: params.session.chain,
   })
   if (!challenge.challengeId) throw new Error('Circle did not return a wallet activation challenge.')
-  const result = await executeChallenge(sdk, challenge.challengeId)
+  const result = await executeChallengeWithTimeout(
+    sdk,
+    challenge.challengeId,
+    'Circle Smart Wallet confirmation did not finish. If you approved it, use Check Payment Status in a moment.',
+  )
   const txHash = findTxHash(result)
   if (txHash) return txHash
   const transactionId = findTransactionId(result)
   if (transactionId) {
-    const hash = await pollTransactionHash(params.session, transactionId).catch(() => null)
+    const hash = await pollTransactionHash(params.session, transactionId)
     if (hash) return hash
   }
-  return null
+  throw new Error('Circle accepted the payment, but the transaction hash is not available yet. Use Check Payment Status in a moment.')
 }
 
 export async function signCircleArcStreamClaim(params: {

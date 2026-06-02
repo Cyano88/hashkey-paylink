@@ -9,6 +9,7 @@
  */
 
 import express from 'express'
+import { config as loadEnv } from 'dotenv'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import relayV2Handler         from './api/relay-v2.js'
@@ -33,6 +34,7 @@ import fxRateHandler from './api/fx-rate.js'
 import relayGhoHandler from './api/relay-gho.js'
 import basePaymasterHandler from './api/base-paymaster.js'
 import circleSolanaEmailHandler from './api/circle-solana-email.js'
+import privyCircleLinkHandler from './api/privy-circle-link.js'
 import circleRecipientWalletHandler from './api/circle-recipient-wallet.js'
 import streamRecipientInviteHandler from './api/stream-recipient-invite.js'
 import streamHistoryHandler from './api/stream-history.js'
@@ -48,6 +50,9 @@ import x402ReceiptHandler from './api/x402-receipt.js'
 import checkAgentUrlHandler from './api/check-agent-url.js'
 import dashboardPaymentsHandler from './api/dashboard-payments.js'
 import { rateLimit } from './api/rate-limit.js'
+
+loadEnv({ path: '.env.local', override: false })
+loadEnv({ path: '.env', override: false })
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -86,6 +91,7 @@ app.get('/api/fx-rate',                fxRateHandler)
 app.all('/api/relay-gho',              relayGhoHandler)
 app.all('/api/base-paymaster',         basePaymasterHandler)
 app.post('/api/circle-solana-email',   circleSolanaEmailHandler)
+app.post('/api/privy-circle-link',     strictLimiter, privyCircleLinkHandler)
 app.all('/api/circle-recipient-wallet', strictLimiter, circleRecipientWalletHandler)
 app.post('/api/stream-recipient-invite', strictLimiter, streamRecipientInviteHandler)
 app.get('/api/stream-history',         readLimiter, streamHistoryHandler)

@@ -9,6 +9,9 @@ import { useTheme }    from './lib/ThemeContext'
 import { CHAIN_META } from './lib/chains'
 import type { ChainKey } from './lib/chains'
 import { getPaylinkParam, hasPaylinkFlag } from './lib/paylinkParams'
+import { PRIVY_AUTH_ENABLED } from './lib/authMode'
+import { PrivyConnectButton } from './lib/PrivyConnectButton'
+import { PrivyDisconnectButton } from './lib/PrivyDisconnectButton'
 
 // ─── Input detection ─────────────────────────────────────────────────────────
 const TX_HASH_RE = /^0x[0-9a-fA-F]{1,64}$/
@@ -550,13 +553,23 @@ export default function Layout() {
 
             {/* Power — pay page only, between network indicator and theme toggle */}
             {isPayPage && anyConnected && (
-              <button
-                onClick={disconnectAll}
-                title="Disconnect wallet"
-                className="flex h-9 w-9 items-center justify-center rounded-full text-gray-400 dark:text-gray-500 transition-colors hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10"
-              >
-                <Power className="h-4 w-4" />
-              </button>
+              PRIVY_AUTH_ENABLED ? (
+                <PrivyDisconnectButton
+                  onDisconnectWallets={disconnectAll}
+                  title="Disconnect wallet"
+                  className="flex h-9 w-9 items-center justify-center rounded-full text-gray-400 dark:text-gray-500 transition-colors hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 disabled:opacity-60"
+                >
+                  <Power className="h-4 w-4" />
+                </PrivyDisconnectButton>
+              ) : (
+                <button
+                  onClick={disconnectAll}
+                  title="Disconnect wallet"
+                  className="flex h-9 w-9 items-center justify-center rounded-full text-gray-400 dark:text-gray-500 transition-colors hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10"
+                >
+                  <Power className="h-4 w-4" />
+                </button>
+              )
             )}
 
             {/* Wallet controls — hidden on pay page and organizer dashboard (read-only pages) */}
@@ -571,24 +584,41 @@ export default function Layout() {
 
                 {/* Connect Wallet — when disconnected */}
                 {!anyConnected && (
-                  <button
-                    onClick={handleConnectWallet}
-                    className="inline-flex h-9 items-center gap-1.5 rounded-full border border-gray-200 dark:border-white/10 bg-white dark:bg-[#1c1c20] px-3 text-[13px] font-medium text-gray-700 dark:text-gray-200 shadow-sm hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
-                  >
-                    <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500 animate-pulse" />
-                    <span className="hidden sm:inline">Connect Wallet</span>
-                  </button>
+                  PRIVY_AUTH_ENABLED && selectedNet !== 'starknet' && selectedNet !== 'solana' ? (
+                    <PrivyConnectButton className="inline-flex h-9 items-center gap-1.5 rounded-full border border-gray-200 dark:border-white/10 bg-white dark:bg-[#1c1c20] px-3 text-[13px] font-medium text-gray-700 dark:text-gray-200 shadow-sm hover:bg-gray-50 dark:hover:bg-white/5 transition-colors disabled:opacity-60">
+                      <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500 animate-pulse" />
+                      <span className="hidden sm:inline">Sign in</span>
+                    </PrivyConnectButton>
+                  ) : (
+                    <button
+                      onClick={handleConnectWallet}
+                      className="inline-flex h-9 items-center gap-1.5 rounded-full border border-gray-200 dark:border-white/10 bg-white dark:bg-[#1c1c20] px-3 text-[13px] font-medium text-gray-700 dark:text-gray-200 shadow-sm hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
+                    >
+                      <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500 animate-pulse" />
+                      <span className="hidden sm:inline">Connect Wallet</span>
+                    </button>
+                  )
                 )}
 
                 {/* Power — disconnect all */}
                 {anyConnected && (
-                  <button
-                    onClick={disconnectAll}
-                    title="Disconnect all wallets"
-                    className="flex h-9 w-9 items-center justify-center rounded-full text-gray-400 dark:text-gray-500 transition-colors hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10"
-                  >
-                    <Power className="h-4 w-4" />
-                  </button>
+                  PRIVY_AUTH_ENABLED ? (
+                    <PrivyDisconnectButton
+                      onDisconnectWallets={disconnectAll}
+                      title="Disconnect all wallets"
+                      className="flex h-9 w-9 items-center justify-center rounded-full text-gray-400 dark:text-gray-500 transition-colors hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 disabled:opacity-60"
+                    >
+                      <Power className="h-4 w-4" />
+                    </PrivyDisconnectButton>
+                  ) : (
+                    <button
+                      onClick={disconnectAll}
+                      title="Disconnect all wallets"
+                      className="flex h-9 w-9 items-center justify-center rounded-full text-gray-400 dark:text-gray-500 transition-colors hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10"
+                    >
+                      <Power className="h-4 w-4" />
+                    </button>
+                  )
                 )}
               </>
             )}
