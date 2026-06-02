@@ -57,10 +57,15 @@ function appIdForChain(chain: ChainKey) {
   return chain === 'arc' ? (ARC_TESTNET_APP_ID ?? APP_ID) : APP_ID
 }
 
-function apiError(data: { error?: string; message?: string; code?: number }) {
-  const msg = data.error ?? data.message ?? 'Circle email wallet request failed.'
+function apiError(data: { error?: string; message?: string; code?: number; detail?: string }, status?: number, action?: unknown) {
+  const step = typeof action === 'string' ? action : 'request'
+  const msg = data.error ?? data.message ?? (status ? `Circle email wallet request failed with HTTP ${status}.` : 'Circle email wallet request failed.')
   if (data.code === 155106 || msg.toLowerCase().includes('already initialized')) return 'already_initialized'
-  return msg
+  const parts = [`${msg} (${step})`]
+  if (data.code) parts.push(`code ${data.code}`)
+  if (status && status >= 400) parts.push(`HTTP ${status}`)
+  if (data.detail && data.detail !== msg) parts.push(data.detail.slice(0, 120))
+  return parts.join(' · ').slice(0, 220)
 }
 
 function sdkError(error?: unknown) {
@@ -162,8 +167,8 @@ async function circleWalletApi<T>(payload: Record<string, unknown>): Promise<T> 
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   })
-  const data = await res.json().catch(() => ({})) as { ok?: boolean; error?: string; message?: string; code?: number }
-  if (!res.ok || data.ok === false) throw new Error(apiError(data))
+  const data = await res.json().catch(() => ({})) as { ok?: boolean; error?: string; message?: string; code?: number; detail?: string }
+  if (!res.ok || data.ok === false) throw new Error(apiError(data, res.status, payload.action))
   return data as T
 }
 
