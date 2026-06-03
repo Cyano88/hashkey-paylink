@@ -1532,8 +1532,8 @@ export default function PaymentPage() {
           mode: 'withdraw',
         }),
       })
-      const buildData = await buildRes.json() as { ok: boolean; tx?: string; error?: string }
-      if (!buildData.ok || !buildData.tx) throw new Error(buildData.error ?? 'Failed to build withdraw transaction')
+      const buildData = await buildRes.json() as { ok: boolean; tx?: string; lastValidBlockHeight?: number; error?: string }
+      if (!buildData.ok || !buildData.tx || !buildData.lastValidBlockHeight) throw new Error(buildData.error ?? 'Failed to build withdraw transaction')
 
       const signedB64 = await signCircleSolanaTransaction({
         session,
@@ -1544,7 +1544,7 @@ export default function PaymentPage() {
       const relayRes = await fetch('/api/solana-relay', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tx: signedB64 }),
+        body: JSON.stringify({ tx: signedB64, lastValidBlockHeight: buildData.lastValidBlockHeight }),
       })
       const relayData = await relayRes.json() as { ok: boolean; txHash?: string; error?: string }
       if (!relayData.ok || !relayData.txHash) throw new Error(relayData.error ?? 'Relay failed')
@@ -1802,8 +1802,8 @@ export default function PaymentPage() {
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ from: session.wallet.address, to: resolvedSolana, amount: effectiveAmt }),
       })
-      const buildData = await buildRes.json() as { ok: boolean; tx?: string; error?: string }
-      if (!buildData.ok || !buildData.tx) throw new Error(buildData.error ?? 'Failed to build transaction')
+      const buildData = await buildRes.json() as { ok: boolean; tx?: string; lastValidBlockHeight?: number; error?: string }
+      if (!buildData.ok || !buildData.tx || !buildData.lastValidBlockHeight) throw new Error(buildData.error ?? 'Failed to build transaction')
 
       const signedB64 = await signCircleSolanaTransaction({
         session,
@@ -1816,7 +1816,7 @@ export default function PaymentPage() {
       const relayRes = await fetch('/api/solana-relay', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ tx: signedB64 }),
+        body:    JSON.stringify({ tx: signedB64, lastValidBlockHeight: buildData.lastValidBlockHeight }),
       })
       const relayData = await relayRes.json() as { ok: boolean; txHash?: string; error?: string }
       if (!relayData.ok || !relayData.txHash) throw new Error(relayData.error ?? 'Relay failed')
@@ -1851,8 +1851,8 @@ export default function PaymentPage() {
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ from: solanaWalletAddr, to: resolvedSolana, amount: effectiveAmt }),
       })
-      const buildData = await buildRes.json() as { ok: boolean; tx?: string; error?: string }
-      if (!buildData.ok || !buildData.tx) throw new Error(buildData.error ?? 'Failed to build transaction')
+      const buildData = await buildRes.json() as { ok: boolean; tx?: string; lastValidBlockHeight?: number; error?: string }
+      if (!buildData.ok || !buildData.tx || !buildData.lastValidBlockHeight) throw new Error(buildData.error ?? 'Failed to build transaction')
 
       const { Transaction } = await import('@solana/web3.js')
       const txBytes = Uint8Array.from(atob(buildData.tx), c => c.charCodeAt(0))
@@ -1869,7 +1869,7 @@ export default function PaymentPage() {
       const relayRes = await fetch('/api/solana-relay', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ tx: signedB64 }),
+        body:    JSON.stringify({ tx: signedB64, lastValidBlockHeight: buildData.lastValidBlockHeight }),
       })
       const relayData = await relayRes.json() as { ok: boolean; txHash?: string; error?: string }
       if (!relayData.ok || !relayData.txHash) throw new Error(relayData.error ?? 'Relay failed')

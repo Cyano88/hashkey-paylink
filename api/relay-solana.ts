@@ -258,9 +258,13 @@ export async function buildSolanaTx(req: Request, res: Response): Promise<void> 
 
 // ── POST /api/solana-relay ────────────────────────────────────────────────────
 export async function relaySolanaTx(req: Request, res: Response): Promise<void> {
-  const { tx: txBase64 } = req.body as { tx?: string }
+  const { tx: txBase64, lastValidBlockHeight } = req.body as { tx?: string; lastValidBlockHeight?: number }
 
   if (!txBase64) { res.status(400).json({ ok: false, error: 'Missing tx' }); return }
+  if (!Number.isSafeInteger(lastValidBlockHeight)) {
+    res.status(400).json({ ok: false, error: 'Missing lastValidBlockHeight' })
+    return
+  }
 
   try { loadRelayer() }
   catch { res.status(503).json({ ok: false, error: 'Solana relay not configured' }); return }
@@ -269,15 +273,18 @@ export async function relaySolanaTx(req: Request, res: Response): Promise<void> 
     const connection = new Connection(getRpc(), 'confirmed')
     const txBytes    = decodeSignedTransaction(txBase64)
     const tx         = Transaction.from(txBytes)
+    if (!tx.recentBlockhash) throw new Error('Signed Solana transaction is missing a blockhash')
 
     const txHash = await connection.sendRawTransaction(tx.serialize(), {
       skipPreflight: false,
       preflightCommitment: 'confirmed',
     })
 
-    // Confirm with a 30s timeout
-    const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash()
-    await connection.confirmTransaction({ signature: txHash, blockhash, lastValidBlockHeight }, 'confirmed')
+    await connection.confirmTransaction({
+      signature: txHash,
+      blockhash: tx.recentBlockhash,
+      lastValidBlockHeight,
+    }, 'confirmed')
 
     res.json({ ok: true, txHash })
   } catch (err) {
