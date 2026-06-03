@@ -18,6 +18,8 @@ import { arcChain, hashkeyMainnet } from './lib/chains'
 import { baseMainnet, arbitrumMainnet } from './lib/wagmi'
 import { PRIVY_APP_ID, PRIVY_AUTH_ENABLED } from './lib/authMode'
 
+const BRAND_ORIGIN = 'https://hashpaylink.com'
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -86,7 +88,7 @@ function AppProviders() {
         appearance: {
           theme: theme === 'dark' ? 'dark' : 'light',
           accentColor: '#0071E3',
-          logo: theme === 'dark' ? '/hash-logo-modal-dark.png' : '/hash-logo-modal-light.png',
+          logo: `${BRAND_ORIGIN}${theme === 'dark' ? '/hash-logo-modal-dark.png' : '/hash-logo-modal-light.png'}`,
           landingHeader: 'Hash PayLink',
           loginMessage: 'Staff will never ask for this code.',
           emailDomain: 'Hash PayLink',
