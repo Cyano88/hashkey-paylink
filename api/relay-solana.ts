@@ -318,21 +318,21 @@ export async function relaySolanaTx(req: Request, res: Response): Promise<void> 
           blockhash: tx.recentBlockhash,
           lastValidBlockHeight,
         }, 'confirmed'),
-        25_000,
+        2_500,
       )
+      res.json({ ok: true, txHash, status: 'confirmed' })
+      return
     } catch (err) {
+      if (isBlockheightExceeded(err)) {
+        throw err
+      }
       if (await hasLanded(connection, txHash)) {
         res.json({ ok: true, txHash, status: 'processed' })
         return
       }
-      if (isBlockheightExceeded(err)) {
-        throw err
-      }
       res.json({ ok: true, txHash, status: 'submitted', warning: (err as Error).message })
       return
     }
-
-    res.json({ ok: true, txHash, status: 'confirmed' })
   } catch (err) {
     res.status(400).json({ ok: false, error: (err as Error).message })
   }
