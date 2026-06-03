@@ -121,6 +121,12 @@ app.get('/agent', (req, res, next) => {
 })
 
 // ── Static frontend (Vite build output) ──────────────────────────────────────
+// Keep API mistakes from falling through to the SPA shell. A wrong method,
+// stale frontend route, or missing API mount must return JSON to callers.
+app.use('/api', (req, res) => {
+  res.status(404).json({ ok: false, error: `API route not found: ${req.method} ${req.originalUrl}` })
+})
+
 app.use(express.static(join(__dirname, 'dist')))
 
 // ── SPA fallback — send index.html for all non-API routes ────────────────────
