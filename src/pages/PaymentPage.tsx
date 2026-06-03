@@ -251,7 +251,7 @@ function emailFromPrivyUser(user: unknown) {
 // ─── Component ───────────────────────────────────────────────────────────────
 const SMART_WALLET_FUNDING_ERROR = 'Add USDC to Smart wallet to continue.'
 const SMART_WALLET_AMOUNT_ERROR = 'Enter an amount to continue.'
-const SMART_WALLET_CANCELLED_MESSAGE = 'Payment cancelled.'
+const SMART_WALLET_CANCELLED_MESSAGE = 'Payment cancelled or expired.'
 const POLYMARKET_MIN_FUNDING_USDC = 4
 const POLYMARKET_MIN_FUNDING_ERROR = `Minimum Polymarket funding is ${POLYMARKET_MIN_FUNDING_USDC} USDC.`
 
@@ -2138,8 +2138,12 @@ export default function PaymentPage() {
       }
       if (message.toLowerCase().includes('transaction hash is not available yet')) {
         setCirclePasskeyError(null)
-        setCircleEvmAcceptedPending(true)
-        setShowCheckButton(true)
+        setCircleEvmAcceptedPending(false)
+        setCircleEvmPaymentProcessing(false)
+        setReceivedAmount(expectedEvmRecipientUnits())
+        setManualTxHash(null)
+        setManualPayDetected(true)
+        setShowCheckButton(false)
         void refetchCircleWalletBalance()
         return
       }

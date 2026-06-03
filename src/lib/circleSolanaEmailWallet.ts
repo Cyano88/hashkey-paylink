@@ -74,6 +74,17 @@ function emailVerificationError(err: unknown) {
   return message
 }
 
+function isCircleCloseMessage(data: unknown) {
+  if (!data || typeof data !== 'object') return false
+  const record = data as Record<string, unknown>
+  if (record.onClose === true) return true
+  return Object.values(record).some(value => {
+    if (typeof value !== 'string') return false
+    const lower = value.toLowerCase()
+    return lower.includes('close') || lower.includes('cancel')
+  })
+}
+
 async function circleSolanaApi<T>(payload: Record<string, unknown>): Promise<T> {
   const res = await fetch('/api/circle-solana-email', {
     method: 'POST',
@@ -188,6 +199,12 @@ export async function connectCircleSolanaEmailWallet(email: string): Promise<Sol
   })
 
   const login = await withTimeout(new Promise<CircleEmailLoginResult>((resolve, reject) => {
+    const handleClose = (event: MessageEvent) => {
+      if (!isCircleCloseMessage(event.data)) return
+      window.removeEventListener('message', handleClose)
+      reject(new Error('Payment cancelled or expired.'))
+    }
+    window.addEventListener('message', handleClose)
     sdk.updateConfigs({
       appSettings: { appId: APP_ID },
       loginConfigs: {
@@ -196,6 +213,7 @@ export async function connectCircleSolanaEmailWallet(email: string): Promise<Sol
         otpToken: otp.otpToken,
       },
     }, (error, result) => {
+      window.removeEventListener('message', handleClose)
       if (error) {
         reject(new Error(emailVerificationError(error)))
         return
@@ -209,9 +227,10 @@ export async function connectCircleSolanaEmailWallet(email: string): Promise<Sol
     try {
       sdk.verifyOtp()
     } catch (err) {
+      window.removeEventListener('message', handleClose)
       reject(new Error(emailVerificationError(err)))
     }
-  }), 90_000, 'Email verification was cancelled or expired. Request a new code and try again.')
+  }), 30_000, 'Email verification was cancelled or expired. Request a new code and try again.')
 
   const wallet = await ensureInitializedWallet(sdk, login.userToken, login.encryptionKey)
   if (!isSolanaAddress(wallet.address)) {

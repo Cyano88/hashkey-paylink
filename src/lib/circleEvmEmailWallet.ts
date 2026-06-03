@@ -117,6 +117,17 @@ function emailVerificationError(err: unknown) {
   return message
 }
 
+function isCircleCloseMessage(data: unknown) {
+  if (!data || typeof data !== 'object') return false
+  const record = data as Record<string, unknown>
+  if (record.onClose === true) return true
+  return Object.values(record).some(value => {
+    if (typeof value !== 'string') return false
+    const lower = value.toLowerCase()
+    return lower.includes('close') || lower.includes('cancel')
+  })
+}
+
 function deviceIdError(err: unknown) {
   const message = readableError(err).toLowerCase()
   if (message.includes('cancel')) return 'Payment cancelled.'
@@ -175,9 +186,9 @@ async function circleWalletApi<T>(payload: Record<string, unknown>): Promise<T> 
 function executeChallenge(sdk: W3SSdk, challengeId: string) {
   return new Promise<CircleChallengeResult>((resolve, reject) => {
     const handleClose = (event: MessageEvent) => {
-      if (!event.data?.onClose) return
+      if (!isCircleCloseMessage(event.data)) return
       window.removeEventListener('message', handleClose)
-      reject(new Error('Payment cancelled.'))
+      reject(new Error('Payment cancelled or expired.'))
     }
     window.addEventListener('message', handleClose)
     sdk.execute(challengeId, (error, result) => {
@@ -440,7 +451,7 @@ export async function connectCircleEvmEmailWallet(
     } catch (err) {
       reject(new Error(emailVerificationError(err)))
     }
-  }), 90_000, 'Email verification was cancelled or expired. Request a new code and try again.')
+  }), 30_000, 'Email verification was cancelled or expired. Request a new code and try again.')
 
   const wallet = await ensureEvmWallet(sdk, login.userToken, login.encryptionKey, chain)
   return {
@@ -452,8 +463,8 @@ export async function connectCircleEvmEmailWallet(
   }
 }
 
-async function pollTransactionHash(session: CircleEvmEmailSession, transactionId: string) {
-  const deadline = Date.now() + 180_000
+async function pollTransactionHash(session: CircleEvmEmailSession, transactionId: string, timeoutMs = 180_000) {
+  const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     const data = await circleWalletApi<{
       transaction?: {
@@ -514,7 +525,7 @@ export async function sendCircleEvmEmailPayment(params: {
   if (txHash) return txHash
   const transactionId = findTransactionId(result) ?? findTransactionId(challenge)
   if (transactionId) {
-    const hash = await pollTransactionHash(params.session, transactionId)
+    const hash = await pollTransactionHash(params.session, transactionId, 3_500)
     if (hash) return hash
   }
   throw new Error('Circle accepted the payment, but the transaction hash is not available yet. Use Check Payment Status in a moment.')

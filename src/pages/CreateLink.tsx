@@ -201,7 +201,8 @@ function CircleReceiveSelector({
       setCircleRecipientError(null)
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Circle smart wallet setup failed.'
-      setCircleRecipientError(message)
+      const receiveMessage = message === 'Payment cancelled.' ? 'Payment request cancelled.' : message
+      setCircleRecipientError(receiveMessage)
     } finally {
       if (circleRecipientRunKey.current === runKey) setCircleRecipientPending(false)
     }
