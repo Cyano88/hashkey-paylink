@@ -620,6 +620,13 @@ export default function PaymentPage() {
   const [circleSolanaBalanceError, setCircleSolanaBalanceError] = useState(false)
   const [circleSolanaFetching, setCircleSolanaFetching] = useState(false)
   const [circleSolanaCopied,   setCircleSolanaCopied]   = useState(false)
+  const [circleSolanaPanel, setCircleSolanaPanel] = useState<'fund' | 'withdraw'>('fund')
+  const [circleSolanaWithdrawAddress, setCircleSolanaWithdrawAddress] = useState('')
+  const [circleSolanaWithdrawAmount, setCircleSolanaWithdrawAmount] = useState('')
+  const [circleSolanaWithdrawPending, setCircleSolanaWithdrawPending] = useState(false)
+  const [circleSolanaWithdrawError, setCircleSolanaWithdrawError] = useState<string | null>(null)
+  const [circleSolanaWithdrawNotice, setCircleSolanaWithdrawNotice] = useState<string | null>(null)
+  const [circleSolanaWithdrawTxHash, setCircleSolanaWithdrawTxHash] = useState<string | null>(null)
 
   useEffect(() => {
     const connected = !!circleSmartAccount || !!circleEvmEmailSession || !!circleSolanaSession || !!circleSolanaAddress
@@ -819,7 +826,9 @@ export default function PaymentPage() {
         if (data.email) setCircleEmail(current => current || data.email || privyEmail)
         if (data.link?.circleWalletAddress) {
           if (isConnected) disconnectEvm()
-          setCircleSmartAccount(data.link.circleWalletAddress)
+          if (isAddress(data.link.circleWalletAddress)) {
+            setCircleSmartAccount(data.link.circleWalletAddress)
+          }
         }
       } catch (err) {
         if (cancelled) return
@@ -1464,6 +1473,92 @@ export default function PaymentPage() {
     await copyToClipboard(walletAddress)
     setCircleSolanaCopied(true)
     setTimeout(() => setCircleSolanaCopied(false), 2200)
+  }
+
+  function handleCircleSolanaWithdrawMax() {
+    if (circleSolanaBalance === null) return
+    setCircleSolanaWithdrawAmount(formatUnits(circleSolanaBalance, 6))
+  }
+
+  async function handleCircleSolanaWithdraw() {
+    setCircleSolanaWithdrawError(null)
+    setCircleSolanaWithdrawNotice(null)
+    setCircleSolanaWithdrawTxHash(null)
+
+    const recipient = circleSolanaWithdrawAddress.trim()
+    if (!isValidSolanaAddress(recipient)) {
+      setCircleSolanaWithdrawError('Enter a valid wallet or exchange address.')
+      return
+    }
+
+    let amountUnits: bigint
+    try {
+      amountUnits = parseUnits(circleSolanaWithdrawAmount || '0', 6)
+    } catch {
+      setCircleSolanaWithdrawError('Enter a valid amount.')
+      return
+    }
+    if (amountUnits <= 0n) {
+      setCircleSolanaWithdrawError('Enter an amount to withdraw.')
+      return
+    }
+    if (circleSolanaBalance !== null && amountUnits > circleSolanaBalance) {
+      setCircleSolanaWithdrawError('Amount is higher than your wallet balance.')
+      return
+    }
+
+    setCircleSolanaWithdrawPending(true)
+    try {
+      let session = circleSolanaSession
+      if (!session) {
+        const email = (showPrivyCircleSolanaEmailPay ? privyEmail : circleSolanaEmail).trim()
+        if (!email) {
+          setCircleSolanaWithdrawError(showPrivyCircleSolanaEmailPay ? 'Unlock your wallet to withdraw.' : 'Enter your email to unlock this wallet.')
+          return
+        }
+        session = await connectCircleSolanaEmailWallet(email)
+        setCircleSolanaSession(session)
+        setCircleSolanaAddress(session.wallet.address)
+        if (solanaWalletAddr) disconnectSolana()
+      }
+
+      const buildRes = await fetch('/api/solana-build-tx', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          from: session.wallet.address,
+          to: recipient,
+          amount: circleSolanaWithdrawAmount,
+          mode: 'withdraw',
+        }),
+      })
+      const buildData = await buildRes.json() as { ok: boolean; tx?: string; error?: string }
+      if (!buildData.ok || !buildData.tx) throw new Error(buildData.error ?? 'Failed to build withdraw transaction')
+
+      const signedB64 = await signCircleSolanaTransaction({
+        session,
+        rawTransaction: buildData.tx,
+        memo: `Hash PayLink withdraw ${formatAmount(circleSolanaWithdrawAmount, 6)} USDC`,
+      })
+
+      const relayRes = await fetch('/api/solana-relay', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tx: signedB64 }),
+      })
+      const relayData = await relayRes.json() as { ok: boolean; txHash?: string; error?: string }
+      if (!relayData.ok || !relayData.txHash) throw new Error(relayData.error ?? 'Relay failed')
+
+      setCircleSolanaWithdrawTxHash(relayData.txHash)
+      setCircleSolanaWithdrawNotice('Withdraw sent. Check the destination wallet in a moment.')
+      setCircleSolanaWithdrawAmount('')
+      setCircleSolanaWithdrawAddress('')
+      void refreshCircleSolanaBalance(session.wallet.address)
+    } catch (err) {
+      setCircleSolanaWithdrawError(readableErrorMsg(err, 'Withdraw failed.'))
+    } finally {
+      setCircleSolanaWithdrawPending(false)
+    }
   }
 
   // ── Fetch Arbitrum USDC gas estimate when Arbitrum chain is active ───────
@@ -3505,12 +3600,12 @@ export default function PaymentPage() {
                     )}
                     {(circleSolanaSession || circleSolanaAddress) && (
                       <details className="group rounded-lg border border-gray-200 bg-white/60 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">
-                        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[11px]">
-                          <span className="font-semibold text-gray-600 dark:text-gray-300">
+                        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[11px] font-medium text-gray-500 transition-colors hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 [&::-webkit-details-marker]:hidden">
+                          <span className="min-w-0 truncate">
                             {circleSolanaNeedsFunds ? 'Add Solana USDC to continue' : 'Circle Solana wallet'}
                           </span>
                           <span className="ml-auto flex shrink-0 items-center gap-2">
-                            <span className="font-mono font-semibold text-gray-700 dark:text-gray-200">
+                            <span className="font-mono font-semibold text-gray-600 dark:text-gray-200">
                               {circleSolanaBalanceError
                                 ? 'Unavailable'
                                 : circleSolanaBalance == null
@@ -3521,41 +3616,117 @@ export default function PaymentPage() {
                           </span>
                         </summary>
                         <div className="mt-2 border-t border-gray-100 pt-2 dark:border-white/10">
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Circle wallet</p>
-                            <p className="truncate text-[11px] text-gray-500 dark:text-gray-400">
-                              {circleSolanaNeedsFunds ? 'Fund with Solana USDC' : 'Solana USDC ready'}
-                            </p>
+                          <div className="mb-2 grid grid-cols-2 rounded-md bg-gray-100 p-0.5 text-[10px] font-semibold dark:bg-white/[0.06]">
+                            {(['fund', 'withdraw'] as const).map((mode) => (
+                              <button
+                                key={mode}
+                                type="button"
+                                onClick={() => setCircleSolanaPanel(mode)}
+                                className={cn(
+                                  'rounded px-2 py-1 capitalize transition-colors',
+                                  circleSolanaPanel === mode
+                                    ? 'bg-white text-gray-900 shadow-sm dark:bg-white/15 dark:text-white'
+                                    : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200',
+                                )}
+                              >
+                                {mode}
+                              </button>
+                            ))}
                           </div>
-                          <button
-                            type="button"
-                            onClick={handleCopyCircleSolanaWallet}
-                            className="shrink-0 rounded-md border border-gray-200 bg-white px-2 py-1 text-[10px] font-semibold text-gray-600 transition-all hover:bg-gray-50 active:scale-95 dark:border-white/10 dark:bg-white/10 dark:text-gray-200 dark:hover:bg-white/15"
-                          >
-                            {circleSolanaCopied ? 'Copied' : 'Copy to fund'}
-                          </button>
-                        </div>
-                        <div className="mt-2 flex items-center justify-between border-t border-gray-100 pt-2 text-[11px] dark:border-white/10">
-                          <span className="text-gray-400 dark:text-gray-500">Solana balance</span>
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono font-semibold text-gray-700 dark:text-gray-200">
-                              {circleSolanaBalanceError
-                                ? 'Unavailable'
-                                : circleSolanaBalance == null
-                                ? 'Checking...'
-                                : `${formatAmount((Number(circleSolanaBalance) / 1_000_000).toString(), 6)} USDC`}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => refreshCircleSolanaBalance()}
-                              className="rounded-md p-1 text-gray-400 transition-all hover:bg-gray-100 hover:text-gray-700 active:scale-95 dark:hover:bg-white/10 dark:hover:text-white"
-                              aria-label="Refresh smart wallet balance"
-                            >
-                              <RefreshCw className={cn('h-3 w-3', circleSolanaFetching && 'animate-spin')} />
-                            </button>
-                          </div>
-                        </div>
+
+                          {circleSolanaPanel === 'fund' ? (
+                            <>
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="min-w-0">
+                                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                                    Circle wallet
+                                  </p>
+                                  <p className="truncate text-[11px] text-gray-500 dark:text-gray-300">
+                                    {circleSolanaNeedsFunds ? 'Fund with Solana USDC' : 'Solana USDC ready'}
+                                  </p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={handleCopyCircleSolanaWallet}
+                                  className="shrink-0 rounded-md border border-gray-200 bg-white px-2 py-1 text-[10px] font-semibold text-gray-600 transition-all hover:bg-gray-50 active:scale-95 dark:border-white/10 dark:bg-white/[0.08] dark:text-gray-200 dark:hover:bg-white/[0.14]"
+                                >
+                                  {circleSolanaCopied ? 'Copied' : 'Copy address'}
+                                </button>
+                              </div>
+                              <div className="mt-2 flex items-center justify-between text-[11px]">
+                                <span className="text-gray-400 dark:text-gray-500">Solana balance</span>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-mono font-semibold text-gray-700 dark:text-gray-100">
+                                    {circleSolanaBalanceError
+                                      ? 'Unavailable'
+                                      : circleSolanaBalance == null
+                                      ? 'Checking...'
+                                      : `${formatAmount((Number(circleSolanaBalance) / 1_000_000).toString(), 6)} USDC`}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => refreshCircleSolanaBalance()}
+                                    className="rounded-md p-1 text-gray-400 transition-all hover:bg-gray-100 hover:text-gray-700 active:scale-95 dark:text-gray-500 dark:hover:bg-white/10 dark:hover:text-gray-200"
+                                    aria-label="Refresh smart wallet balance"
+                                    title="Refresh balance"
+                                  >
+                                    <RefreshCw className={cn('h-3 w-3', circleSolanaFetching && 'animate-spin')} />
+                                  </button>
+                                </div>
+                              </div>
+                            </>
+                          ) : (
+                            <div className="space-y-2">
+                              <div className="grid grid-cols-[1fr_72px] gap-2">
+                                <input
+                                  value={circleSolanaWithdrawAddress}
+                                  onChange={(event) => setCircleSolanaWithdrawAddress(event.target.value)}
+                                  placeholder="Wallet or exchange address"
+                                  className="h-8 min-w-0 rounded-md border border-gray-200 bg-white px-2 text-[11px] text-gray-900 outline-none transition-colors placeholder:text-gray-400 focus:border-gray-400 dark:border-white/10 dark:bg-white/[0.05] dark:text-white dark:placeholder:text-gray-500"
+                                />
+                                <div className="flex h-8 items-center rounded-md border border-gray-200 bg-white px-2 dark:border-white/10 dark:bg-white/[0.05]">
+                                  <input
+                                    value={circleSolanaWithdrawAmount}
+                                    onChange={(event) => setCircleSolanaWithdrawAmount(event.target.value)}
+                                    placeholder="0.00"
+                                    inputMode="decimal"
+                                    className="min-w-0 flex-1 bg-transparent text-right text-[11px] font-semibold text-gray-900 outline-none placeholder:text-gray-400 dark:text-white dark:placeholder:text-gray-500"
+                                  />
+                                </div>
+                              </div>
+                              <div className="flex items-center justify-between gap-2 text-[10px]">
+                                <button
+                                  type="button"
+                                  onClick={handleCircleSolanaWithdrawMax}
+                                  className="font-semibold text-gray-500 transition-colors hover:text-gray-800 dark:text-gray-400 dark:hover:text-white"
+                                >
+                                  Max {circleSolanaBalance === null ? '' : `${formatAmount((Number(circleSolanaBalance) / 1_000_000).toString(), 6)} USDC`}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={handleCircleSolanaWithdraw}
+                                  disabled={circleSolanaWithdrawPending}
+                                  className="rounded-md bg-gray-900 px-3 py-1.5 font-semibold text-white transition-all hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+                                >
+                                  {circleSolanaWithdrawPending ? 'Working...' : circleSolanaSession ? 'Withdraw' : 'Unlock'}
+                                </button>
+                              </div>
+                              {!circleSolanaSession && (
+                                <p className="text-[10px] font-medium text-amber-600 dark:text-amber-300">Unlock wallet to withdraw.</p>
+                              )}
+                              {circleSolanaWithdrawError && (
+                                <p className="text-[10px] font-medium text-red-600 dark:text-red-300">{circleSolanaWithdrawError}</p>
+                              )}
+                              {circleSolanaWithdrawNotice && (
+                                <p className="text-[10px] font-medium text-emerald-600 dark:text-emerald-300">{circleSolanaWithdrawNotice}</p>
+                              )}
+                              {circleSolanaWithdrawTxHash && (
+                                <p className="truncate text-[10px] font-medium text-emerald-600 dark:text-emerald-300">
+                                  Withdraw sent: {truncateAddress(circleSolanaWithdrawTxHash)}
+                                </p>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </details>
                     )}

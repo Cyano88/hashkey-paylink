@@ -228,6 +228,9 @@ function CircleReceiveSelector({
 
     let cancelled = false
     setCircleWalletBalance('Balance ...')
+    const evmBalanceNet = selectedNet === 'base' || selectedNet === 'arc' || selectedNet === 'arbitrum'
+      ? selectedNet
+      : 'base'
 
     const balancePromise = selectedNet === 'solana'
       ? fetch('/api/solana-balance', {
@@ -240,14 +243,14 @@ function CircleReceiveSelector({
             if (!response.ok || !data.ok) throw new Error('Balance unavailable')
             return Number(BigInt(data.balance ?? '0')) / 1_000_000
           })
-      : EVM_CLIENTS[selectedNet as 'base' | 'arc' | 'arbitrum']
+      : EVM_CLIENTS[evmBalanceNet]
           .readContract({
-            address: CHAIN_META[selectedNet].tokenAddress as `0x${string}`,
+            address: CHAIN_META[evmBalanceNet].tokenAddress,
             abi: ERC20_BALANCE_OF_ABI,
             functionName: 'balanceOf',
             args: [evmAddr as `0x${string}`],
           })
-          .then(raw => Number(raw) / 10 ** CHAIN_META[selectedNet].decimals)
+          .then(raw => Number(raw) / 10 ** CHAIN_META[evmBalanceNet].decimals)
 
     balancePromise
       .then(balance => {

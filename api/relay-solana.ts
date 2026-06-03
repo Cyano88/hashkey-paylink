@@ -171,7 +171,7 @@ async function ensureATA(
   owner: PublicKey,
   payer: PublicKey,
 ): Promise<{ ata: PublicKey; created: boolean }> {
-  const ata = await getAssociatedTokenAddress(mint, owner)
+  const ata = await getAssociatedTokenAddress(mint, owner, true)
   try {
     await getAccount(connection, ata)
   } catch (e) {
@@ -186,7 +186,7 @@ async function ensureATA(
 
 // ── POST /api/solana-build-tx ─────────────────────────────────────────────────
 export async function buildSolanaTx(req: Request, res: Response): Promise<void> {
-  const { from, to, amount } = req.body as { from?: string; to?: string; amount?: string }
+  const { from, to, amount, mode } = req.body as { from?: string; to?: string; amount?: string; mode?: string }
 
   if (!from || !to || !amount) {
     res.status(400).json({ ok: false, error: 'Missing from / to / amount' })
@@ -216,13 +216,14 @@ export async function buildSolanaTx(req: Request, res: Response): Promise<void> 
     // Ensure recipient ATA exists (relayer creates it if needed, covers rent)
     const { ata: toATA, created: createsRecipientAta } = await ensureATA(connection, tx, USDC_MINT, toPubkey, relayer.publicKey)
 
-    const feeRaw         = totalRaw * BigInt(PLATFORM_FEE_BPS) / 10_000n
-    const gasRecoveryRaw = getGasRecoveryRaw(totalRaw, feeRaw, createsRecipientAta)
+    const isWithdraw = mode === 'withdraw'
+    const feeRaw         = isWithdraw ? 0n : totalRaw * BigInt(PLATFORM_FEE_BPS) / 10_000n
+    const gasRecoveryRaw = isWithdraw ? 0n : getGasRecoveryRaw(totalRaw, feeRaw, createsRecipientAta)
     const treasuryRaw    = feeRaw + gasRecoveryRaw
     const recipientRaw   = totalRaw - treasuryRaw
     if (recipientRaw <= 0n) throw new Error('Payment amount is too small after fees')
 
-    // Transfer to recipient
+    // Transfer to recipient. Withdraw mode sends the full requested amount.
     tx.add(createTransferCheckedInstruction(
       fromATA, USDC_MINT, toATA, fromPubkey, recipientRaw, USDC_DECIMALS,
     ))

@@ -33,7 +33,7 @@ export default async function handler(req: Request, res: Response) {
     const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com'
 
     const owner = new PublicKey(accountAddress)
-    const ata = await getAssociatedTokenAddress(USDC_MINT, owner)
+    const ata = await getAssociatedTokenAddress(USDC_MINT, owner, true)
     const connection = new Connection(rpcUrl, 'confirmed')
     const account = await getAccount(connection, ata)
     return res.json({
@@ -45,6 +45,8 @@ export default async function handler(req: Request, res: Response) {
     if (error instanceof TokenAccountNotFoundError) {
       return res.json({ ok: true, balance: '0', ata: null })
     }
-    return res.status(500).json({ ok: false, error: 'Solana balance query failed' })
+    const message = error instanceof Error ? error.message : 'Solana balance query failed'
+    console.error('[solana-balance] balance query failed', { message })
+    return res.status(500).json({ ok: false, error: message || 'Solana balance query failed' })
   }
 }
