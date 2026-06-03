@@ -88,7 +88,7 @@ function AppProviders() {
         appearance: {
           theme: theme === 'dark' ? 'dark' : 'light',
           accentColor: '#0071E3',
-          logo: `${BRAND_ORIGIN}${theme === 'dark' ? '/hash-logo-modal-dark.png' : '/hash-logo-modal-light.png'}`,
+          logo: `${BRAND_ORIGIN}/privy-email-logo.png`,
           landingHeader: 'Hash PayLink',
           loginMessage: 'Staff will never ask for this code.',
           emailDomain: 'Hash PayLink',
