@@ -146,6 +146,37 @@ function decodeSignedTransaction(tx: string): Buffer {
   }
 }
 
+function isBlockheightExceeded(error: unknown): boolean {
+  const msg = error instanceof Error ? error.message : String(error ?? '')
+  return msg.toLowerCase().includes('block height exceeded') || msg.toLowerCase().includes('blockheight exceeded')
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('Solana confirmation timed out')), ms)
+    promise.then(
+      (value) => {
+        clearTimeout(timer)
+        resolve(value)
+      },
+      (error) => {
+        clearTimeout(timer)
+        reject(error)
+      },
+    )
+  })
+}
+
+async function hasLanded(connection: Connection, signature: string): Promise<boolean> {
+  const status = await connection.getSignatureStatus(signature, { searchTransactionHistory: true })
+  const value = status.value
+  if (!value) return false
+  if (value.err) throw new Error(`Solana transaction failed: ${JSON.stringify(value.err)}`)
+  return value.confirmationStatus === 'processed'
+    || value.confirmationStatus === 'confirmed'
+    || value.confirmationStatus === 'finalized'
+}
+
 /** Deterministically derive a vault keypair from a linkId + recipient pair. */
 function deriveVaultKeypair(linkId: string, recipient: string): Keypair {
   const seed = crypto.createHash('sha256')
@@ -280,13 +311,28 @@ export async function relaySolanaTx(req: Request, res: Response): Promise<void> 
       preflightCommitment: 'confirmed',
     })
 
-    await connection.confirmTransaction({
-      signature: txHash,
-      blockhash: tx.recentBlockhash,
-      lastValidBlockHeight,
-    }, 'confirmed')
+    try {
+      await withTimeout(
+        connection.confirmTransaction({
+          signature: txHash,
+          blockhash: tx.recentBlockhash,
+          lastValidBlockHeight,
+        }, 'confirmed'),
+        25_000,
+      )
+    } catch (err) {
+      if (await hasLanded(connection, txHash)) {
+        res.json({ ok: true, txHash, status: 'processed' })
+        return
+      }
+      if (isBlockheightExceeded(err)) {
+        throw err
+      }
+      res.json({ ok: true, txHash, status: 'submitted', warning: (err as Error).message })
+      return
+    }
 
-    res.json({ ok: true, txHash })
+    res.json({ ok: true, txHash, status: 'confirmed' })
   } catch (err) {
     res.status(400).json({ ok: false, error: (err as Error).message })
   }
