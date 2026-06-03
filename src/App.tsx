@@ -22,6 +22,8 @@ import StreamPayDocs    from './pages/docs/StreamPayDocs'
 import SecurityDocs     from './pages/docs/SecurityDocs'
 import WalletsDocs      from './pages/docs/WalletsDocs'
 import EnvironmentDocs  from './pages/docs/EnvironmentDocs'
+import TermsDocs        from './pages/docs/TermsDocs'
+import PrivacyDocs      from './pages/docs/PrivacyDocs'
 
 // ── Hostname-based app routing ────────────────────────────────────────────────
 // The same Render service hosts both apps. The active hostname determines
@@ -69,6 +71,8 @@ export default function App() {
           <Route path="security"           element={<SecurityDocs />} />
           <Route path="wallets"            element={<WalletsDocs />} />
           <Route path="environment"        element={<EnvironmentDocs />} />
+          <Route path="terms"              element={<TermsDocs />} />
+          <Route path="privacy"            element={<PrivacyDocs />} />
         </Route>
         <Route element={<Layout />}>
           <Route index element={<CreateLink />} />

@@ -68,6 +68,8 @@ const NAV = [
       { label: 'Environment Variables',  path: '/docs/environment' },
       { label: 'Security',               path: '/docs/security' },
       { label: 'Wallet Setup',           path: '/docs/wallets' },
+      { label: 'Terms',                  path: '/docs/terms' },
+      { label: 'Privacy',                path: '/docs/privacy' },
     ],
   },
 ]
