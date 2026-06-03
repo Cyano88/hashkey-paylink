@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Outlet, Link, useLocation, useSearchParams } from 'react-router-dom'
 import { useConnectModal } from '@rainbow-me/rainbowkit'
 import { useAccount, useDisconnect, useSwitchChain } from 'wagmi'
-import { ChevronDown, MessageCircle, Power, X, Send, ExternalLink, Search, Sun, Moon } from 'lucide-react'
+import { ChevronDown, MessageCircle, LogOut, X, Send, ExternalLink, Search, Sun, Moon } from 'lucide-react'
 import { useStarknet } from './lib/StarknetContext'
 import { useSolana }   from './lib/SolanaContext'
 import { useTheme }    from './lib/ThemeContext'
@@ -165,6 +165,7 @@ export type LayoutOutletContext = {
   selectedNet:      ChainKey
   onNetworkSelect:  (key: ChainKey) => void
   onPayChainChange: (key: ChainKey) => void  // payer page → mirror current chain in header pill
+  onPayWalletStateChange: (state: { connected: boolean; disconnect?: () => void }) => void
 }
 
 // ─── Network Toolkit ─────────────────────────────────────────────────────────
@@ -310,6 +311,7 @@ function DashboardRecipientDropdown({ recipients }: { recipients: DashboardRecip
 export default function Layout() {
   const { pathname } = useLocation()
   const [searchParams] = useSearchParams()
+  const isCreatePage = pathname === '/'
   const isPayPage  = pathname === '/pay'
   const isDashPage = pathname === '/event'
   const isAgentProfilePage = pathname === '/agent' && (
@@ -344,9 +346,14 @@ export default function Layout() {
   const dashboardNetworkLabel = isDashPage && dashMulti
     ? dashboardSingleNetwork ? CHAIN_META[dashboardSingleNetwork].label : 'All Networks'
     : undefined
+  const payRecipientNetworkCount =
+    (dashEvmValid ? 1 : 0) +
+    (dashSolValid ? 1 : 0) +
+    (dashStarkValid ? 1 : 0)
+  const showPayNetworkPill = isPayPage && dashMulti && payRecipientNetworkCount > 1
 
   // ── Wallet connections ───────────────────────────────────────────────────────
-  const { address: evmAddress, isConnected: evmConnected, chainId: evmChainId } = useAccount()
+  const { isConnected: evmConnected, chainId: evmChainId } = useAccount()
   const { disconnect: disconnectEvm } = useDisconnect()
   const { switchChain }               = useSwitchChain()
   const { openConnectModal }          = useConnectModal()
@@ -358,12 +365,14 @@ export default function Layout() {
     ? ([CHAIN_META.base, CHAIN_META.arbitrum, CHAIN_META.hashkey] as const).find(n => n.chainId === evmChainId)?.key ?? null
     : null
   const connectedNetKey: ChainKey | null = starkAddress ? 'starknet' : solanaAddress ? 'solana' : evmNetKey
-  const displayAddress = starkAddress ?? solanaAddress ?? evmAddress ?? null
 
   // selectedNet = user's intent (which network they want); may lead connectedNetKey during transition
   const [selectedNet, setSelectedNet] = useState<ChainKey | null>(null)
   // Tracks the active chain on the payer page so the header pill mirrors it
   const [payChain,    setPayChain]    = useState<ChainKey | null>(null)
+  const [payWalletConnected, setPayWalletConnected] = useState(false)
+  const [payWalletDisconnect, setPayWalletDisconnect] = useState<(() => void) | null>(null)
+  const headerWalletConnected = anyConnected || (isPayPage && payWalletConnected)
 
   // Sync selectedNet when a wallet actually connects / chain changes.
   // Guard: never override an explicit Solana selection — that would cause a
@@ -406,16 +415,24 @@ export default function Layout() {
     if (selectedNet === 'starknet') {
       connectStarknet()
     } else if (selectedNet === 'solana') {
-      connectSolana()
+      connectSolana({ includeEmail: true })
     } else {
       openConnectModal?.()
     }
   }
 
+  const handlePayWalletStateChange = useCallback((state: { connected: boolean; disconnect?: () => void }) => {
+    setPayWalletConnected(state.connected)
+    setPayWalletDisconnect(() => state.disconnect ?? null)
+  }, [])
+
   function disconnectAll() {
     if (evmConnected)  disconnectEvm()
     if (starkAddress)  disconnectStarknet()
     if (solanaAddress) disconnectSolana()
+    payWalletDisconnect?.()
+    setPayWalletConnected(false)
+    setPayWalletDisconnect(null)
     setSelectedNet(null)
   }
 
@@ -535,8 +552,14 @@ export default function Layout() {
           <div className="flex items-center gap-x-2">
 
             {/* 1. Network Toolkit — locked pill on pay/dashboard pages; interactive elsewhere */}
-            {(isPayPage || isDashPage)
-              ? <NetworkToolkit activeKey={isPayPage ? (payChain ?? activeNet) : dashboardActiveNet} label={dashboardNetworkLabel} locked />
+            {isCreatePage
+              ? null
+              : isPayPage
+              ? showPayNetworkPill
+                ? <NetworkToolkit activeKey={payChain ?? activeNet} locked />
+                : null
+              : isDashPage
+              ? <NetworkToolkit activeKey={dashboardActiveNet} label={dashboardNetworkLabel} locked />
               : isAgentProfilePage
               ? <NetworkToolkit
                   activeKey={selectedNet === 'base' || selectedNet === 'arbitrum' ? selectedNet : 'base'}
@@ -551,37 +574,28 @@ export default function Layout() {
               <DashboardRecipientDropdown recipients={dashboardRecipients} />
             )}
 
-            {/* Power — pay page only, between network indicator and theme toggle */}
-            {isPayPage && anyConnected && (
+            {/* Disconnect — pay page only, between network indicator and theme toggle */}
+            {isPayPage && headerWalletConnected && (
               PRIVY_AUTH_ENABLED ? (
                 <PrivyDisconnectButton
                   onDisconnectWallets={disconnectAll}
-                  title="Disconnect wallet"
-                  className="flex h-9 w-9 items-center justify-center rounded-full text-gray-400 dark:text-gray-500 transition-colors hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 disabled:opacity-60"
+                  className="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-100 text-zinc-900 transition-colors hover:bg-zinc-200 dark:bg-white/10 dark:text-zinc-100 dark:hover:bg-white/15 disabled:opacity-60"
                 >
-                  <Power className="h-4 w-4" />
+                  <LogOut className="h-4 w-4" />
                 </PrivyDisconnectButton>
               ) : (
                 <button
                   onClick={disconnectAll}
-                  title="Disconnect wallet"
-                  className="flex h-9 w-9 items-center justify-center rounded-full text-gray-400 dark:text-gray-500 transition-colors hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10"
+                  className="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-100 text-zinc-900 transition-colors hover:bg-zinc-200 dark:bg-white/10 dark:text-zinc-100 dark:hover:bg-white/15"
                 >
-                  <Power className="h-4 w-4" />
+                  <LogOut className="h-4 w-4" />
                 </button>
               )
             )}
 
             {/* Wallet controls — hidden on pay page and organizer dashboard (read-only pages) */}
-            {!isPayPage && !isDashPage && (
+            {!isCreatePage && !isPayPage && !isDashPage && (
               <>
-                {/* Identity — plain address text when connected */}
-                {anyConnected && displayAddress && (
-                  <span className="hidden sm:block select-none font-mono text-[13px] text-gray-500 dark:text-gray-400 pointer-events-none">
-                    {fmtAddr(displayAddress)}
-                  </span>
-                )}
-
                 {/* Connect Wallet — when disconnected */}
                 {!anyConnected && (
                   PRIVY_AUTH_ENABLED && selectedNet !== 'starknet' && selectedNet !== 'solana' ? (
@@ -595,28 +609,28 @@ export default function Layout() {
                       className="inline-flex h-9 items-center gap-1.5 rounded-full border border-gray-200 dark:border-white/10 bg-white dark:bg-[#1c1c20] px-3 text-[13px] font-medium text-gray-700 dark:text-gray-200 shadow-sm hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
                     >
                       <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500 animate-pulse" />
-                      <span className="hidden sm:inline">Connect Wallet</span>
+                      <span className="hidden sm:inline">
+                        {selectedNet === 'starknet' ? 'Connect Starknet' : 'Sign in'}
+                      </span>
                     </button>
                   )
                 )}
 
-                {/* Power — disconnect all */}
+                {/* Disconnect all */}
                 {anyConnected && (
                   PRIVY_AUTH_ENABLED ? (
                     <PrivyDisconnectButton
                       onDisconnectWallets={disconnectAll}
-                      title="Disconnect all wallets"
-                      className="flex h-9 w-9 items-center justify-center rounded-full text-gray-400 dark:text-gray-500 transition-colors hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 disabled:opacity-60"
+                      className="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-100 text-zinc-900 transition-colors hover:bg-zinc-200 dark:bg-white/10 dark:text-zinc-100 dark:hover:bg-white/15 disabled:opacity-60"
                     >
-                      <Power className="h-4 w-4" />
+                      <LogOut className="h-4 w-4" />
                     </PrivyDisconnectButton>
                   ) : (
                     <button
                       onClick={disconnectAll}
-                      title="Disconnect all wallets"
-                      className="flex h-9 w-9 items-center justify-center rounded-full text-gray-400 dark:text-gray-500 transition-colors hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10"
+                      className="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-100 text-zinc-900 transition-colors hover:bg-zinc-200 dark:bg-white/10 dark:text-zinc-100 dark:hover:bg-white/15"
                     >
-                      <Power className="h-4 w-4" />
+                      <LogOut className="h-4 w-4" />
                     </button>
                   )
                 )}
@@ -638,7 +652,12 @@ export default function Layout() {
 
       {/* ── Page content ─────────────────────────────────────────────────── */}
       <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-10 sm:px-6">
-        <Outlet context={{ selectedNet: selectedNet ?? 'base', onNetworkSelect: handleNetworkSelect, onPayChainChange: setPayChain } satisfies LayoutOutletContext} />
+        <Outlet context={{
+          selectedNet: selectedNet ?? 'base',
+          onNetworkSelect: handleNetworkSelect,
+          onPayChainChange: setPayChain,
+          onPayWalletStateChange: handlePayWalletStateChange,
+        } satisfies LayoutOutletContext} />
       </main>
 
       {/* ── Footer ───────────────────────────────────────────────────────── */}
@@ -646,14 +665,12 @@ export default function Layout() {
         <footer className="border-t border-gray-100 dark:border-white/5 bg-white/50 dark:bg-[#111113]/50 py-5">
           <div className="mx-auto max-w-5xl px-4 sm:px-6">
             <p className="text-center text-xs text-gray-400">
-              {isAgentProfilePage ? 'Agent payments on ' : 'Built on '}
+              {isAgentProfilePage ? 'Agent payments on ' : 'Built with Circle USDC on '}
               {(isAgentProfilePage ? agentNetworks : [
                 CHAIN_META.base,
                 CHAIN_META.arbitrum,
-                CHAIN_META.starknet,
-                CHAIN_META.arc,
+                { label: 'Arc Testnet', explorerUrl: CHAIN_META.arc.explorerUrl },
                 CHAIN_META.solana,
-                { label: 'Circle', explorerUrl: 'https://www.circle.com' },
               ]).map((item, i, arr) => (
                 <span key={item.label}>
                   <a href={item.explorerUrl} target="_blank" rel="noopener noreferrer"

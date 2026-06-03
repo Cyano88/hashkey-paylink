@@ -32,7 +32,7 @@ const BASE_BUILDER_CODE = '0x62635f3871746237746e79' as `0x${string}`
 const BASE_PAYMASTER_URL = import.meta.env.VITE_BASE_PAYMASTER_URL as string | undefined
 import {
   ArrowLeft, ArrowRight, CheckCircle2, ExternalLink, AlertCircle, Loader2, ArrowLeftRight,
-  RefreshCw, ShieldCheck, Zap, Copy, CheckCheck, Wallet,
+  RefreshCw, ShieldCheck, Zap, Copy, CheckCheck, Wallet, ChevronDown,
   AlertTriangle, Radio, Mail, X,
 } from 'lucide-react'
 import {
@@ -52,7 +52,7 @@ import { getFxMeta, formatLocalAmt, fetchFxRate } from '../lib/fx'
 import { getCirclePaymasterConfig } from '../lib/circlePaymaster'
 import { sendCirclePaymasterPayment } from '../lib/circlePaymasterPayment'
 import { canUseCirclePasskeyPayments, prepareCirclePasskeyWallet, sendCirclePasskeyPayment } from '../lib/circlePasskeyPayment'
-import { canUseCircleEvmEmailWallet, connectCircleEvmEmailWallet, sendCircleEvmEmailPayment } from '../lib/circleEvmEmailWallet'
+import { canUseCircleEvmEmailWallet, connectCircleEvmEmailWallet, sendCircleEvmEmailPayment, sendCircleEvmEmailWithdraw } from '../lib/circleEvmEmailWallet'
 import { canUseCircleSolanaEmailWallet, connectCircleSolanaEmailWallet, signCircleSolanaTransaction } from '../lib/circleSolanaEmailWallet'
 import { canUseArgentStarknetEmailWallet, connectArgentStarknetEmailWallet } from '../lib/argentStarknetWallet'
 import { getSponsoredGasRecoveryUnits } from '../lib/gasRecovery'
@@ -265,7 +265,7 @@ function telegramReturnUrl(params: URLSearchParams) {
 
 export default function PaymentPage() {
   const [searchParams] = useSearchParams()
-  const { onPayChainChange } = useOutletContext<LayoutOutletContext>()
+  const { onPayChainChange, onPayWalletStateChange } = useOutletContext<LayoutOutletContext>()
 
   const evmParam    = getPaylinkParam(searchParams, 'evm', 'e') || searchParams.get('to') || ''
   const starkParam  = getPaylinkParam(searchParams, 'stark', 'k')
@@ -444,8 +444,36 @@ export default function PaymentPage() {
   const [circleEvmEmailSession, setCircleEvmEmailSession] = useState<CircleEvmEmailSession | null>(null)
   const [circleEvmPaymentProcessing, setCircleEvmPaymentProcessing] = useState(false)
   const [circleWalletCopied, setCircleWalletCopied] = useState(false)
+  const [circleWalletPanel, setCircleWalletPanel] = useState<'fund' | 'withdraw'>('fund')
+  const [circleWithdrawAddress, setCircleWithdrawAddress] = useState('')
+  const [circleWithdrawAmount, setCircleWithdrawAmount] = useState('')
+  const [circleWithdrawPending, setCircleWithdrawPending] = useState(false)
+  const [circleWithdrawError, setCircleWithdrawError] = useState<string | null>(null)
+  const [circleWithdrawNotice, setCircleWithdrawNotice] = useState<string | null>(null)
+  const [circleWithdrawTxHash, setCircleWithdrawTxHash] = useState<`0x${string}` | null>(null)
   const [privyCircleLinkError, setPrivyCircleLinkError] = useState<string | null>(null)
   const [privyCircleLinkLoading, setPrivyCircleLinkLoading] = useState(false)
+
+  const disconnectCirclePayWallets = useCallback(() => {
+    setCircleSmartAccount(null)
+    setCircleEvmEmailSession(null)
+    setCirclePasskeyPending(false)
+    setCircleEvmPaymentProcessing(false)
+    setCircleEvmAcceptedPending(false)
+    setCircleWalletCopied(false)
+    setCirclePasskeyError(null)
+    setPrivyCircleLinkError(null)
+    setCircleWithdrawError(null)
+    setCircleWithdrawNotice(null)
+    setCircleWithdrawTxHash(null)
+    setCircleWithdrawPending(false)
+    setCircleSolanaSession(null)
+    setCircleSolanaAddress('')
+    setCircleSolanaBalance(null)
+    setCircleSolanaBalanceError(false)
+    setCircleSolanaCopied(false)
+    setCircleSolanaError(null)
+  }, [])
 
   const { isLoading: isEvmConfirming, isSuccess: isEvmConfirmed, isError: isEvmReverted } =
     useWaitForTransactionReceipt({ hash: evmTxHash })
@@ -563,7 +591,13 @@ export default function PaymentPage() {
   const starkPollAbort = useRef<AbortController | null>(null)
 
   // ── Solana ────────────────────────────────────────────────────────────────
-  const { address: solanaWalletAddr, isConnecting: isSolanaConnecting, connect: connectSolana, disconnect: disconnectSolana } = useSolana()
+  const {
+    address: solanaWalletAddr,
+    isConnecting: isSolanaConnecting,
+    connect: connectSolana,
+    disconnect: disconnectSolana,
+    signTransaction: signSolanaTransaction,
+  } = useSolana()
   const [solanaTxHash,         setSolanaTxHash]         = useState<string | null>(null)
   const [isSolanaPending,      setIsSolanaPending]      = useState(false)
   const [isSolanaConfirming,   setIsSolanaConfirming]   = useState(false)
@@ -579,11 +613,29 @@ export default function PaymentPage() {
   const [solanaDirHashCopied,  setSolanaDirHashCopied]  = useState(false)
   const [circleSolanaEmail,    setCircleSolanaEmail]    = useState('')
   const [circleSolanaSession,  setCircleSolanaSession]  = useState<CircleSolanaSession | null>(null)
+  const [circleSolanaAddress,  setCircleSolanaAddress]  = useState('')
   const [circleSolanaPending,  setCircleSolanaPending]  = useState(false)
   const [circleSolanaError,    setCircleSolanaError]    = useState<string | null>(null)
   const [circleSolanaBalance,  setCircleSolanaBalance]  = useState<bigint | null>(null)
+  const [circleSolanaBalanceError, setCircleSolanaBalanceError] = useState(false)
   const [circleSolanaFetching, setCircleSolanaFetching] = useState(false)
   const [circleSolanaCopied,   setCircleSolanaCopied]   = useState(false)
+
+  useEffect(() => {
+    const connected = !!circleSmartAccount || !!circleEvmEmailSession || !!circleSolanaSession || !!circleSolanaAddress
+    onPayWalletStateChange({
+      connected,
+      disconnect: connected ? disconnectCirclePayWallets : undefined,
+    })
+    return () => onPayWalletStateChange({ connected: false })
+  }, [
+    circleSmartAccount,
+    circleEvmEmailSession,
+    circleSolanaSession,
+    circleSolanaAddress,
+    disconnectCirclePayWallets,
+    onPayWalletStateChange,
+  ])
 
   // ── Derived ───────────────────────────────────────────────────────────────
   const isEvmChain    = chain !== 'starknet' && chain !== 'solana'
@@ -615,20 +667,27 @@ export default function PaymentPage() {
   const showCircleEmailPay = showCircleEvmEmailPay || showCirclePasskeyPay
   const showCircleSolanaEmailPay = chain === 'solana' && canUseCircleSolanaEmailWallet()
   const usePrivyCircleCheckout = PRIVY_AUTH_ENABLED && showCircleEvmEmailPay && (chain === 'base' || chain === 'arbitrum' || chain === 'arc')
+  const usePrivyCircleSolanaCheckout = PRIVY_AUTH_ENABLED && showCircleSolanaEmailPay && chain === 'solana'
   const showLegacyCircleEmailPay = !PRIVY_AUTH_ENABLED && showCircleEmailPay
   const showPrivyCircleEmailPay = usePrivyCircleCheckout && privyAuthenticated && !hasExternalPrivyEvmWallet
+  const showPrivyCircleSolanaEmailPay = usePrivyCircleSolanaCheckout && privyAuthenticated
   const showCircleEmailBridgePay = showLegacyCircleEmailPay || showPrivyCircleEmailPay
-  const showLegacyCircleSolanaEmailPay = !PRIVY_AUTH_ENABLED && showCircleSolanaEmailPay
+  const showCircleSolanaEmailBridgePay = (!PRIVY_AUTH_ENABLED && showCircleSolanaEmailPay) || showPrivyCircleSolanaEmailPay
   const showCirclePoweredAttribution =
     payMode === 'wallet' &&
     !manualPayDetected &&
-    (showCircleEmailBridgePay || showLegacyCircleSolanaEmailPay || showCirclePaymasterButton)
+    (showCircleEmailBridgePay || showCircleSolanaEmailBridgePay || showCirclePaymasterButton)
+  const showArbitrumRelayCost =
+    chain === 'arbitrum' &&
+    payMode === 'wallet' &&
+    !showCircleEmailBridgePay &&
+    !showCirclePaymasterButton
   const showArgentStarknetEmailPay = chain === 'starknet' && canUseArgentStarknetEmailWallet()
   const walletConnectBlocked = smartWalletOnlyFunding && !PRIVY_AUTH_ENABLED
   const showPolymarketFundingChoice =
     isPolymarketFunding &&
     payMode === 'wallet' &&
-    (showLegacyCircleEmailPay || showLegacyCircleSolanaEmailPay) &&
+    (showLegacyCircleEmailPay || showCircleSolanaEmailBridgePay) &&
     chain !== 'starknet' &&
     !manualPayDetected &&
     !circleSmartAccount &&
@@ -667,7 +726,7 @@ export default function PaymentPage() {
     circleRequiredUnits > 0n &&
     circleSolanaBalance >= circleRequiredUnits
   const circleSolanaNeedsFunds =
-    !!circleSolanaSession &&
+    (!!circleSolanaSession || !!circleSolanaAddress) &&
     circleSolanaBalance !== null &&
     circleRequiredUnits > 0n &&
     circleSolanaBalance < circleRequiredUnits
@@ -776,6 +835,42 @@ export default function PaymentPage() {
       cancelled = true
     }
   }, [showPrivyCircleEmailPay, chain, privyEmail, getAccessToken, isConnected, disconnectEvm])
+
+  useEffect(() => {
+    if (!showPrivyCircleSolanaEmailPay) return
+    let cancelled = false
+    if (privyEmail) setCircleSolanaEmail(current => current || privyEmail)
+
+    async function resolveLinkedCircleSolanaWallet() {
+      setPrivyCircleLinkLoading(true)
+      setPrivyCircleLinkError(null)
+      try {
+        const token = await getAccessToken()
+        if (!token) throw new Error('Privy session is not ready yet. Sign in again and retry.')
+        const data = await resolvePrivyCircleLink({
+          accessToken: token,
+          chain: 'solana',
+        })
+        if (cancelled) return
+        if (data.email) setCircleSolanaEmail(current => current || data.email || privyEmail)
+        if (data.link?.circleWalletAddress) {
+          if (solanaWalletAddr) disconnectSolana()
+          setCircleSolanaAddress(data.link.circleWalletAddress)
+        }
+      } catch (err) {
+        if (cancelled) return
+        console.warn('[PayLink] Privy Circle Solana wallet link restore failed', err)
+        setPrivyCircleLinkError(null)
+      } finally {
+        if (!cancelled) setPrivyCircleLinkLoading(false)
+      }
+    }
+
+    void resolveLinkedCircleSolanaWallet()
+    return () => {
+      cancelled = true
+    }
+  }, [showPrivyCircleSolanaEmailPay, privyEmail, getAccessToken, solanaWalletAddr, disconnectSolana])
 
   useEffect(() => {
     if (!circleSolanaSession || circleSolanaBalance === null) return
@@ -1251,8 +1346,8 @@ export default function PaymentPage() {
     setSolanaError(null); setSolanaTxHash(null)
     setSolanaLinkId(null); setSolanaVaultAddr(null)
     setSolanaDirectStatus('idle'); setSolanaDirectTxHash(null); setSolanaDirectError(null)
-    setCircleSolanaPending(false); setCircleSolanaError(null); setCircleSolanaBalance(null)
-    setCircleSolanaSession(null); setCircleSolanaCopied(false)
+    setCircleSolanaPending(false); setCircleSolanaError(null); setCircleSolanaBalance(null); setCircleSolanaBalanceError(false)
+    setCircleSolanaSession(null); setCircleSolanaAddress(''); setCircleSolanaCopied(false)
     setManualPayDetected(false); setManualTxHash(null); setReceivedAmount(null)
     setCirclePaymasterPending(false); setCirclePaymasterTxHash(null); setCirclePaymasterError(null)
     setCirclePasskeyPending(false); setCirclePasskeyError(null); setCircleSmartAccount(null); setCircleEvmEmailSession(null); setCircleEvmPaymentProcessing(false); setCircleEvmAcceptedPending(false); setCircleWalletCopied(false)
@@ -1295,9 +1390,78 @@ export default function PaymentPage() {
     setTimeout(() => setCircleWalletCopied(false), 2200)
   }
 
+  function handleCircleWithdrawMax() {
+    if (typeof circleWalletBalance !== 'bigint') return
+    setCircleWithdrawAmount(formatUnits(circleWalletBalance, meta.decimals))
+  }
+
+  async function handleCircleWithdraw() {
+    setCircleWithdrawError(null)
+    setCircleWithdrawNotice(null)
+    setCircleWithdrawTxHash(null)
+    if (chain !== 'base' && chain !== 'arbitrum') {
+      setCircleWithdrawError('Withdraw is available on Base and Arbitrum.')
+      return
+    }
+    const recipient = circleWithdrawAddress.trim()
+    if (!isAddress(recipient)) {
+      setCircleWithdrawError('Enter a valid wallet or exchange address.')
+      return
+    }
+    let amountUnits: bigint
+    try {
+      amountUnits = parseUnits(circleWithdrawAmount || '0', meta.decimals)
+    } catch {
+      setCircleWithdrawError('Enter a valid amount.')
+      return
+    }
+    if (amountUnits <= 0n) {
+      setCircleWithdrawError('Enter an amount to withdraw.')
+      return
+    }
+    if (typeof circleWalletBalance === 'bigint' && amountUnits > circleWalletBalance) {
+      setCircleWithdrawError('Amount is higher than your wallet balance.')
+      return
+    }
+
+    setCircleWithdrawPending(true)
+    try {
+      let session = circleEvmEmailSession
+      if (!session || session.chain !== chain) {
+        const email = (showPrivyCircleEmailPay ? privyEmail : circleEmail).trim()
+        if (!email) {
+          setCircleWithdrawError(showPrivyCircleEmailPay ? 'Unlock your wallet to withdraw.' : 'Enter your email to unlock this wallet.')
+          return
+        }
+        session = await connectCircleEvmEmailWallet(email, chain)
+        if (isConnected) disconnectEvm()
+        setCircleEvmEmailSession(session)
+        setCircleSmartAccount(session.wallet.address)
+      }
+      const txHash = await sendCircleEvmEmailWithdraw({
+        session,
+        recipient,
+        amount: circleWithdrawAmount,
+      })
+      if (txHash) {
+        setCircleWithdrawTxHash(txHash)
+      } else {
+        setCircleWithdrawNotice('Withdraw accepted. Check the destination wallet in a moment.')
+      }
+      setCircleWithdrawAmount('')
+      setCircleWithdrawAddress('')
+      void refetchCircleWalletBalance()
+    } catch (err) {
+      setCircleWithdrawError(readableErrorMsg(err, 'Withdraw failed.'))
+    } finally {
+      setCircleWithdrawPending(false)
+    }
+  }
+
   async function handleCopyCircleSolanaWallet() {
-    if (!circleSolanaSession?.wallet.address) return
-    await copyToClipboard(circleSolanaSession.wallet.address)
+    const walletAddress = circleSolanaSession?.wallet.address || circleSolanaAddress
+    if (!walletAddress) return
+    await copyToClipboard(walletAddress)
     setCircleSolanaCopied(true)
     setTimeout(() => setCircleSolanaCopied(false), 2200)
   }
@@ -1449,33 +1613,37 @@ export default function PaymentPage() {
     }
   }
 
-  async function refreshCircleSolanaBalance(walletAddress = circleSolanaSession?.wallet.address) {
+  async function refreshCircleSolanaBalance(walletAddress = circleSolanaSession?.wallet.address || circleSolanaAddress) {
     if (!walletAddress) return
     setCircleSolanaFetching(true)
+    setCircleSolanaBalanceError(false)
     try {
       const res = await fetch('/api/solana-balance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ accountAddress: walletAddress }),
       })
-      const data = await res.json() as { ok: boolean; balance?: string }
-      if (data.ok) setCircleSolanaBalance(BigInt(data.balance ?? '0'))
+      const data = await res.json() as { ok: boolean; balance?: string; error?: string }
+      if (!res.ok || !data.ok) throw new Error(data.error ?? 'Solana balance unavailable')
+      setCircleSolanaBalance(BigInt(data.balance ?? '0'))
     } catch {
-      // Balance polling is advisory; payment submit will still validate on-chain.
+      setCircleSolanaBalance(null)
+      setCircleSolanaBalanceError(true)
     } finally {
       setCircleSolanaFetching(false)
     }
   }
 
   useEffect(() => {
-    if (!circleSolanaSession?.wallet.address || chain !== 'solana') return
-    void refreshCircleSolanaBalance(circleSolanaSession.wallet.address)
+    const walletAddress = circleSolanaSession?.wallet.address || circleSolanaAddress
+    if (!walletAddress || chain !== 'solana') return
+    void refreshCircleSolanaBalance(walletAddress)
     const timer = setInterval(() => {
-      void refreshCircleSolanaBalance(circleSolanaSession.wallet.address)
+      void refreshCircleSolanaBalance(walletAddress)
     }, 4_000)
     return () => clearInterval(timer)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [circleSolanaSession?.wallet.address, chain])
+  }, [circleSolanaSession?.wallet.address, circleSolanaAddress, chain])
 
   async function handleCircleSolanaEmailPay() {
     if (!resolvedSolana || !showCircleSolanaEmailPay) return
@@ -1487,9 +1655,9 @@ export default function PaymentPage() {
       setCircleSolanaError(blockedAmountError())
       return
     }
-    const email = circleSolanaEmail.trim()
+    const email = (showPrivyCircleSolanaEmailPay ? privyEmail : circleSolanaEmail).trim()
     if (!email && !circleSolanaSession) {
-      setCircleSolanaError('Enter your email to continue with Smart wallet.')
+      setCircleSolanaError(showPrivyCircleSolanaEmailPay ? 'Sign in with a Privy email account to use Circle Smart Wallet.' : 'Enter your email to continue with Smart wallet.')
       return
     }
 
@@ -1502,6 +1670,29 @@ export default function PaymentPage() {
         wasConnecting = true
         session = await connectCircleSolanaEmailWallet(email)
         setCircleSolanaSession(session)
+        setCircleSolanaAddress(session.wallet.address)
+        if (solanaWalletAddr) disconnectSolana()
+        if (PRIVY_AUTH_ENABLED && privyAuthenticated) {
+          try {
+            const token = await getAccessToken()
+            if (token) {
+              await savePrivyCircleLink({
+                accessToken: token,
+                chain: 'solana',
+                email,
+                wallet: {
+                  id: session.wallet.id,
+                  address: session.wallet.address,
+                  blockchain: session.wallet.blockchain,
+                },
+              })
+              setPrivyCircleLinkError(null)
+            }
+          } catch (err) {
+            console.warn('[PayLink] Privy Circle Solana wallet link save failed', err)
+            setPrivyCircleLinkError(readableErrorMsg(err, 'Circle wallet connected, but Privy linking was not saved.'))
+          }
+        }
         await refreshCircleSolanaBalance(session.wallet.address)
         return
       }
@@ -1554,10 +1745,8 @@ export default function PaymentPage() {
       setSolanaError('Recipient Solana address is invalid. Ask the organizer for a new payment link.')
       return
     }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const provider = (window as any).phantom?.solana ?? (window as any).solana ?? (window as any).solflare
-    if (!provider || !solanaWalletAddr) {
-      setSolanaError('No Solana wallet found. Install Phantom or Solflare.')
+    if (!solanaWalletAddr) {
+      setSolanaError('Sign in with a Solana wallet to continue.')
       return
     }
     setIsSolanaPending(true); setSolanaError(null)
@@ -1573,8 +1762,7 @@ export default function PaymentPage() {
       const { Transaction } = await import('@solana/web3.js')
       const txBytes = Uint8Array.from(atob(buildData.tx), c => c.charCodeAt(0))
       const tx = Transaction.from(txBytes)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const signedTx = await (provider as any).signTransaction(tx)
+      const signedTx = await signSolanaTransaction(tx)
 
       const bytes = (signedTx as { serialize: () => Uint8Array }).serialize()
       let binary = ''
@@ -2400,7 +2588,7 @@ export default function PaymentPage() {
               <Row label="Amount"    value={`${formatAmount(effectiveAmt, meta.decimals)} ${meta.asset}`} mono={false} />
               <Row label="Recipient" value={truncateAddress(activeRecipient, 8)} mono />
               <Row label="Network"   value={meta.label} mono={false} />
-              {memo && <Row label="Memo" value={isPolymarketFunding ? <PolymarketMemoInline /> : `"${memo}"`} mono={false} />}
+              {memo && <Row label={isPolymarketFunding ? 'Memo' : 'For'} value={isPolymarketFunding ? <PolymarketMemoInline /> : memo} mono={false} />}
               {txHash && (
                 <div className="flex items-center justify-between px-4 py-3">
                   <span className="text-sm text-gray-500">Tx Hash</span>
@@ -2610,10 +2798,7 @@ export default function PaymentPage() {
             </div>
           ) : chain === 'arc' ? (
             <div className="mb-2 flex flex-wrap items-center justify-center gap-2">
-              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#008080] text-white text-xs font-bold shadow-sm">⬡</span>
-              <span className="text-xs font-bold tracking-wide text-teal-700">Arc Economic OS</span>
-              <span className="rounded-full border border-teal-200 bg-teal-50 px-2 py-0.5 text-[10px] font-semibold text-teal-700">Sub-second finality</span>
-              <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-600">Testnet</span>
+              <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-semibold text-amber-600 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">Testnet</span>
             </div>
           ) : (
             <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-widest text-gray-400">Payment Request</p>
@@ -2723,21 +2908,13 @@ export default function PaymentPage() {
             <p className="text-[11px] text-slate-400">
               Platform fee: {feeAmount > 0 && effectiveAmt ? `${feeAmount.toFixed(meta.decimals <= 6 ? 4 : 6)} ${meta.asset}` : '—'}
             </p>
-            {chain === 'arbitrum' && payMode === 'wallet' && (
+            {showArbitrumRelayCost && (
               <div className="flex items-center justify-between bg-gray-50/60 px-4 py-2 border-t border-dashed border-gray-100">
                 <span className="text-[11px] font-normal text-slate-400 tracking-wide">Gas reimb (relayer pays ETH)</span>
                 <span className="font-mono text-[11px] text-slate-400">
                   {ghoGasEstimate > 0n
                     ? `~${(Number(ghoGasEstimate) / 1e6).toFixed(4)} USDC`
                     : '…'}
-                </span>
-              </div>
-            )}
-            {chain === 'arbitrum' && parseFloat(effectiveAmt || '0') < 1 && parseFloat(effectiveAmt || '0') > 0 && (
-              <div className="flex items-center gap-2 border-t border-amber-200 bg-amber-50 dark:border-amber-400/20 dark:bg-amber-400/10 px-4 py-2.5">
-                <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500 dark:text-amber-400" />
-                <span className="text-[11px] text-amber-700 dark:text-amber-300">
-                  Minimum 1 USDC recommended to keep relay costs proportional.
                 </span>
               </div>
             )}
@@ -2805,7 +2982,7 @@ export default function PaymentPage() {
             <div className="space-y-3">
               {/* Loading ghost address */}
               {!directDisplayAddr && directStatus !== 'error' ? (
-                <div className="animate-pulse h-14 rounded-xl bg-gray-100" />
+                <div className="h-14 animate-pulse rounded-xl bg-gray-100 dark:bg-white/10" />
               ) : directStatus === 'relaying' ? (
                 <div className="flex items-center gap-3 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3.5">
                   <Loader2 className="h-4 w-4 shrink-0 animate-spin text-blue-500" />
@@ -2834,7 +3011,7 @@ export default function PaymentPage() {
               ) : (
                 /* Waiting for payment */
                 <div className="space-y-3">
-                  <div className="flex items-center gap-2.5 rounded-xl border border-emerald-100 bg-emerald-50/60 px-3 py-2.5">
+                  <div className="flex items-center gap-2.5 rounded-xl border border-emerald-100 bg-emerald-50/60 px-3 py-2.5 dark:border-emerald-500/30 dark:bg-emerald-500/10">
                     <div className="relative flex h-2.5 w-2.5 shrink-0">
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                       <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
@@ -2880,20 +3057,20 @@ export default function PaymentPage() {
                 <div className="animate-pulse h-14 rounded-xl bg-gray-100" />
               ) : solanaDirectStatus === 'success' ? (
                 <div className="space-y-3">
-                  <div className="flex items-center gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+                  <div className="flex items-center gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 dark:border-emerald-500/30 dark:bg-emerald-500/10">
                     <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
-                    <p className="text-sm font-semibold text-emerald-800">Payment Successful</p>
+                    <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-200">Payment Successful</p>
                   </div>
                   {solanaDirectTxHash && (
                     <div className="space-y-2">
-                      <div className="flex items-center gap-2 rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
-                        <p className="min-w-0 flex-1 truncate font-mono text-xs text-gray-600">{solanaDirectTxHash}</p>
+                      <div className="flex items-center gap-2 rounded-xl border border-gray-100 bg-gray-50 px-4 py-3 dark:border-white/10 dark:bg-white/[0.04]">
+                        <p className="min-w-0 flex-1 truncate font-mono text-xs text-gray-600 dark:text-gray-300">{solanaDirectTxHash}</p>
                         <button onClick={() => { navigator.clipboard.writeText(solanaDirectTxHash!); setSolanaDirHashCopied(true); setTimeout(() => setSolanaDirHashCopied(false), 2000) }}>
                           {solanaDirHashCopied ? <CheckCheck className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5 text-gray-400" />}
                         </button>
                       </div>
                       <a href={`${meta.explorerUrl}/tx/${solanaDirectTxHash}`} target="_blank" rel="noopener noreferrer"
-                        className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-all active:scale-[0.98]">
+                        className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/10">
                         <ExternalLink className="h-4 w-4" />
                         View on {meta.explorerName}
                       </a>
@@ -2901,22 +3078,22 @@ export default function PaymentPage() {
                   )}
                 </div>
               ) : solanaDirectStatus === 'relaying' ? (
-                <div className="flex items-center gap-3 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3.5">
+                <div className="flex items-center gap-3 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3.5 dark:border-blue-500/30 dark:bg-blue-500/10">
                   <Loader2 className="h-4 w-4 shrink-0 animate-spin text-blue-500" />
-                  <p className="text-sm font-medium text-blue-700">Sweeping payment to recipient…</p>
+                  <p className="text-sm font-medium text-blue-700 dark:text-blue-200">Relaying payment - broadcasting transaction...</p>
                 </div>
               ) : solanaDirectStatus === 'error' ? (
                 <div className="space-y-3">
-                  <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+                  <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 dark:border-red-500/30 dark:bg-red-500/10">
                     <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
                     <div>
-                      <p className="text-sm font-semibold text-red-800">Sweep Failed</p>
-                      <p className="mt-0.5 text-xs text-red-600">{solanaDirectError}</p>
+                      <p className="text-sm font-semibold text-red-800 dark:text-red-200">Relay Failed</p>
+                      <p className="mt-0.5 text-xs text-red-600 dark:text-red-300">{solanaDirectError}</p>
                     </div>
                   </div>
                   <button
                     onClick={() => { setSolanaDirectStatus('waiting'); setSolanaDirectError(null) }}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white hover:bg-gray-800 transition-all active:scale-[0.98]"
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
                   >
                     Retry
                   </button>
@@ -2928,14 +3105,16 @@ export default function PaymentPage() {
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                       <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
                     </div>
-                    <p className="text-[11px] font-medium text-emerald-700">Monitoring for {meta.asset} — detects in under 3 seconds</p>
+                    <p className="text-[11px] font-medium text-emerald-700 dark:text-emerald-200">Monitoring for {meta.asset} - detects in under 3 seconds</p>
                   </div>
-                  <p className="text-center text-xs text-gray-500">Pay from an exchange or another wallet by sending USDC on Solana to this address</p>
+                  <p className="text-center text-xs text-gray-500 dark:text-gray-400">
+                    Pay from an exchange or another wallet by sending {meta.asset} on {meta.label} to this address
+                  </p>
                   <div className={cn(
-                    'flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3.5 transition-opacity duration-200',
+                    'flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3.5 transition-opacity duration-200 dark:border-white/10 dark:bg-white/[0.04]',
                     requiresAttendeeName && !attendeeName.trim() && 'opacity-40',
                   )}>
-                    <p className="min-w-0 flex-1 break-all font-mono text-xs text-gray-800">{solanaVaultAddr}</p>
+                    <p className="min-w-0 flex-1 break-all font-mono text-xs text-gray-800 dark:text-gray-200">{solanaVaultAddr}</p>
                     <button
                       onClick={() => {
                         if (requiresAttendeeName && !attendeeName.trim()) return
@@ -2944,10 +3123,10 @@ export default function PaymentPage() {
                         setTimeout(() => setSolanaAddrCopied(false), 2500)
                       }}
                       className={cn(
-                        'ml-2 shrink-0 flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-600 transition-all',
+                        'ml-2 flex shrink-0 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-600 transition-all dark:border-white/10 dark:bg-white/10 dark:text-gray-200',
                         requiresAttendeeName && !attendeeName.trim()
                           ? 'cursor-not-allowed'
-                          : 'hover:bg-gray-100 active:scale-90',
+                          : 'hover:bg-gray-100 active:scale-90 dark:hover:bg-white/15',
                       )}
                     >
                       {solanaAddrCopied
@@ -3132,55 +3311,143 @@ export default function PaymentPage() {
                     ? <><img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert mix-blend-screen" /> Pay {formatAmount(effectiveAmt, meta.decimals)} {meta.asset}</>
                     : <><img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert mix-blend-screen" /> Continue</>}
               </button>
-              <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
-                {circleSmartAccount ? 'Gasless smart wallet payment' : 'Smart wallet payment'}
-              </p>
+              {!circleSmartAccount && (
+                <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
+                  Smart wallet payment
+                </p>
+              )}
               {privyCircleLinkError && circleSmartAccount && (
                 <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-medium text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
                   {privyCircleLinkError}
                 </p>
               )}
               {circleSmartAccount && (
-                <div className="rounded-lg border border-gray-200 bg-white/70 px-3 py-2 dark:border-white/10 dark:bg-white/[0.06]">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
-                        Smart wallet
-                      </p>
-                      <p className="truncate text-[11px] text-gray-500 dark:text-gray-300">
-                        {circleWalletNeedsFunds ? `Fund with ${meta.label} ${meta.asset}` : `${meta.label} ${meta.asset} ready`}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleCopyCircleWallet}
-                      className="shrink-0 rounded-md border border-gray-200 bg-white px-2 py-1 text-[10px] font-semibold text-gray-600 transition-all hover:bg-gray-50 active:scale-95 dark:border-white/10 dark:bg-white/[0.08] dark:text-gray-200 dark:hover:bg-white/[0.14]"
-                    >
-                      {circleWalletCopied ? 'Copied' : 'Copy to fund'}
-                    </button>
-                  </div>
-                  <div className="mt-2 flex items-center justify-between border-t border-gray-100 pt-2 text-[11px] dark:border-white/10">
-                    <span className="text-gray-400 dark:text-gray-500">{meta.label} balance</span>
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono font-semibold text-gray-700 dark:text-gray-100">
+                <details className="group rounded-lg border border-gray-200 bg-white/60 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[11px] font-medium text-gray-500 transition-colors hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 [&::-webkit-details-marker]:hidden">
+                    <span className="min-w-0 truncate">{circleWalletNeedsFunds ? `Add ${meta.label} ${meta.asset} to continue` : `${meta.label} ${meta.asset} wallet ready`}</span>
+                    <span className="ml-auto flex shrink-0 items-center gap-2">
+                      <span className="font-mono font-semibold text-gray-600 dark:text-gray-200">
                         {circleWalletBalance == null
                           ? 'Checking...'
                           : `${formatAmount((Number(circleWalletBalance) / Math.pow(10, meta.decimals)).toString(), meta.decimals)} ${meta.asset}`}
                       </span>
-                      <button
-                        type="button"
-                        onClick={() => refetchCircleWalletBalance()}
-                        className="rounded-md p-1 text-gray-400 transition-all hover:bg-gray-100 hover:text-gray-700 active:scale-95 dark:text-gray-500 dark:hover:bg-white/10 dark:hover:text-gray-200"
-                        aria-label="Refresh smart wallet balance"
-                        title="Refresh balance"
-                      >
-                        <RefreshCw className={cn('h-3 w-3', isCircleWalletBalanceFetching && 'animate-spin')} />
-                      </button>
+                      <ChevronDown className="h-3.5 w-3.5 text-gray-400 transition-transform group-open:rotate-180 dark:text-gray-500" />
+                    </span>
+                  </summary>
+                  <div className="mt-2 border-t border-gray-100 pt-2 dark:border-white/10">
+                    <div className="mb-2 grid grid-cols-2 rounded-md bg-gray-100 p-0.5 text-[10px] font-semibold dark:bg-white/[0.06]">
+                      {(['fund', 'withdraw'] as const).map((mode) => (
+                        <button
+                          key={mode}
+                          type="button"
+                          onClick={() => setCircleWalletPanel(mode)}
+                          className={cn(
+                            'rounded px-2 py-1 capitalize transition-colors',
+                            circleWalletPanel === mode
+                              ? 'bg-white text-gray-900 shadow-sm dark:bg-white/15 dark:text-white'
+                              : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200',
+                          )}
+                        >
+                          {mode}
+                        </button>
+                      ))}
                     </div>
+
+                    {circleWalletPanel === 'fund' ? (
+                      <>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                              Gasless wallet
+                            </p>
+                            <p className="truncate text-[11px] text-gray-500 dark:text-gray-300">
+                              {circleWalletNeedsFunds ? `Fund with ${meta.label} ${meta.asset}` : `${meta.label} ${meta.asset} ready`}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleCopyCircleWallet}
+                            className="shrink-0 rounded-md border border-gray-200 bg-white px-2 py-1 text-[10px] font-semibold text-gray-600 transition-all hover:bg-gray-50 active:scale-95 dark:border-white/10 dark:bg-white/[0.08] dark:text-gray-200 dark:hover:bg-white/[0.14]"
+                          >
+                            {circleWalletCopied ? 'Copied' : 'Copy address'}
+                          </button>
+                        </div>
+                        <div className="mt-2 flex items-center justify-between text-[11px]">
+                          <span className="text-gray-400 dark:text-gray-500">{meta.label} balance</span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono font-semibold text-gray-700 dark:text-gray-100">
+                              {circleWalletBalance == null
+                                ? 'Checking...'
+                                : `${formatAmount((Number(circleWalletBalance) / Math.pow(10, meta.decimals)).toString(), meta.decimals)} ${meta.asset}`}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => refetchCircleWalletBalance()}
+                              className="rounded-md p-1 text-gray-400 transition-all hover:bg-gray-100 hover:text-gray-700 active:scale-95 dark:text-gray-500 dark:hover:bg-white/10 dark:hover:text-gray-200"
+                              aria-label="Refresh smart wallet balance"
+                              title="Refresh balance"
+                            >
+                              <RefreshCw className={cn('h-3 w-3', isCircleWalletBalanceFetching && 'animate-spin')} />
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="grid grid-cols-[1fr_72px] gap-2">
+                          <input
+                            value={circleWithdrawAddress}
+                            onChange={(event) => setCircleWithdrawAddress(event.target.value)}
+                            placeholder="Wallet or exchange address"
+                            className="h-8 min-w-0 rounded-md border border-gray-200 bg-white px-2 text-[11px] text-gray-900 outline-none transition-colors placeholder:text-gray-400 focus:border-gray-400 dark:border-white/10 dark:bg-white/[0.05] dark:text-white dark:placeholder:text-gray-500"
+                          />
+                          <div className="flex h-8 items-center rounded-md border border-gray-200 bg-white px-2 dark:border-white/10 dark:bg-white/[0.05]">
+                            <input
+                              value={circleWithdrawAmount}
+                              onChange={(event) => setCircleWithdrawAmount(event.target.value)}
+                              placeholder="0.00"
+                              inputMode="decimal"
+                              className="min-w-0 flex-1 bg-transparent text-right text-[11px] font-semibold text-gray-900 outline-none placeholder:text-gray-400 dark:text-white dark:placeholder:text-gray-500"
+                            />
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between gap-2 text-[10px]">
+                          <button
+                            type="button"
+                            onClick={handleCircleWithdrawMax}
+                            className="font-semibold text-gray-500 transition-colors hover:text-gray-800 dark:text-gray-400 dark:hover:text-white"
+                          >
+                            Max {circleWalletBalance == null ? '' : `${formatAmount((Number(circleWalletBalance) / Math.pow(10, meta.decimals)).toString(), meta.decimals)} ${meta.asset}`}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleCircleWithdraw}
+                            disabled={circleWithdrawPending}
+                            className="rounded-md bg-gray-900 px-3 py-1.5 font-semibold text-white transition-all hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+                          >
+                            {circleWithdrawPending ? 'Working...' : circleEvmEmailSession ? 'Withdraw' : 'Unlock'}
+                          </button>
+                        </div>
+                        {!circleEvmEmailSession && (
+                          <p className="text-[10px] font-medium text-amber-600 dark:text-amber-300">Unlock wallet to withdraw.</p>
+                        )}
+                        {circleWithdrawError && (
+                          <p className="text-[10px] font-medium text-red-600 dark:text-red-300">{circleWithdrawError}</p>
+                        )}
+                        {circleWithdrawNotice && (
+                          <p className="text-[10px] font-medium text-emerald-600 dark:text-emerald-300">{circleWithdrawNotice}</p>
+                        )}
+                        {circleWithdrawTxHash && (
+                          <p className="truncate text-[10px] font-medium text-emerald-600 dark:text-emerald-300">
+                            Withdraw sent: {truncateAddress(circleWithdrawTxHash)}
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
-                </div>
+                </details>
               )}
-              {circlePasskeyError && (
+              {circlePasskeyError && circleWalletPanel !== 'withdraw' && (
                 <p className="text-center text-[11px] font-medium text-red-600 dark:text-red-300">{circlePasskeyError}</p>
               )}
             </div>
@@ -3197,104 +3464,136 @@ export default function PaymentPage() {
               <AlertTriangle className="h-4 w-4" />
               No Solana Address Available
             </button>
-          ) : payMode === 'wallet' && chain === 'solana' && (!isPolymarketFunding || polymarketFundingStep === 'fund' || !!circleSolanaSession) ? (
+          ) : payMode === 'wallet' && chain === 'solana' && (!usePrivyCircleSolanaCheckout || privyAuthenticated) && (!isPolymarketFunding || polymarketFundingStep === 'fund' || !!circleSolanaSession || !!circleSolanaAddress) ? (
               <div className="space-y-2">
-                {showLegacyCircleSolanaEmailPay && !manualPayDetected && (
-                  <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50/70 p-3">
-                    {!circleSolanaSession && (
-                      <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2.5">
+                {showCircleSolanaEmailBridgePay && !manualPayDetected && (
+                  <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
+                    {!circleSolanaSession && !showPrivyCircleSolanaEmailPay && (
+                      <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.06]">
                         <input
                           type="email"
                           value={circleSolanaEmail}
                           onChange={(e) => setCircleSolanaEmail(e.target.value)}
                           placeholder="Enter your email"
                           disabled={circleSolanaPending || (requiresAttendeeName && !attendeeName.trim())}
-                          className="min-w-0 flex-1 bg-transparent text-sm text-gray-800 placeholder:text-gray-400 outline-none"
+                          className="min-w-0 flex-1 bg-transparent text-sm text-gray-800 placeholder:text-gray-400 outline-none dark:text-white dark:placeholder:text-gray-500"
                         />
                       </div>
                     )}
                     <button
                       onClick={handleCircleSolanaEmailPay}
-                      disabled={circleSolanaPending || isSolanaConfirming || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
+                      disabled={circleSolanaPending || isSolanaConfirming || privyCircleLinkLoading || circleSolanaNeedsFunds || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
                       className={cn(
                         'flex w-full items-center justify-center gap-2 rounded-xl px-6 py-3.5 text-sm font-semibold transition-all',
-                        circleSolanaPending || isSolanaConfirming
-                          ? 'cursor-not-allowed bg-gray-100 text-gray-500'
-                          : 'bg-black text-white shadow-button hover:bg-gray-800 active:scale-[0.98]',
+                        circleSolanaPending || isSolanaConfirming || privyCircleLinkLoading || circleSolanaNeedsFunds
+                          ? 'cursor-not-allowed bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400'
+                          : 'bg-black text-white shadow-button hover:bg-gray-800 active:scale-[0.98] dark:bg-[#111113] dark:text-white dark:ring-1 dark:ring-white/10 dark:hover:bg-[#1c1c20]',
                       )}
                     >
                       {circleSolanaPending
-                        ? <><Loader2 className="h-4 w-4 animate-spin" /> {circleSolanaSession ? 'Paying with Smart wallet' : 'Opening Smart wallet'}</>
+                        ? <><Loader2 className="h-4 w-4 animate-spin" /> {circleSolanaSession ? 'Payment processing' : 'Opening Smart wallet'}</>
+                        : privyCircleLinkLoading
+                          ? <><Loader2 className="h-4 w-4 animate-spin" /> Checking Smart wallet</>
                         : circleSolanaSession
-                          ? <><Zap className="h-4 w-4" /> Pay {formatAmount(effectiveAmt, 6)} USDC</>
-                          : <><Zap className="h-4 w-4" /> Continue with email</>}
+                          ? <><img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert mix-blend-screen" /> Pay {formatAmount(effectiveAmt, 6)} USDC</>
+                          : <><img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert mix-blend-screen" /> Continue</>}
                     </button>
-                    {circleSolanaSession && (
-                      <div className="rounded-lg border border-gray-200 bg-white/70 px-3 py-2">
+                    {!circleSolanaSession && (
+                      <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
+                        Smart wallet payment
+                      </p>
+                    )}
+                    {(circleSolanaSession || circleSolanaAddress) && (
+                      <details className="group rounded-lg border border-gray-200 bg-white/60 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">
+                        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[11px]">
+                          <span className="font-semibold text-gray-600 dark:text-gray-300">
+                            {circleSolanaNeedsFunds ? 'Add Solana USDC to continue' : 'Circle Solana wallet'}
+                          </span>
+                          <span className="ml-auto flex shrink-0 items-center gap-2">
+                            <span className="font-mono font-semibold text-gray-700 dark:text-gray-200">
+                              {circleSolanaBalanceError
+                                ? 'Unavailable'
+                                : circleSolanaBalance == null
+                                ? 'Checking...'
+                                : `${formatAmount((Number(circleSolanaBalance) / 1_000_000).toString(), 6)} USDC`}
+                            </span>
+                            <ChevronDown className="h-3.5 w-3.5 text-gray-400 transition-transform group-open:rotate-180 dark:text-gray-500" />
+                          </span>
+                        </summary>
+                        <div className="mt-2 border-t border-gray-100 pt-2 dark:border-white/10">
                         <div className="flex items-center justify-between gap-2">
                           <div className="min-w-0">
-                            <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Smart wallet</p>
-                            <p className="truncate text-[11px] text-gray-500">
+                            <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Circle wallet</p>
+                            <p className="truncate text-[11px] text-gray-500 dark:text-gray-400">
                               {circleSolanaNeedsFunds ? 'Fund with Solana USDC' : 'Solana USDC ready'}
                             </p>
                           </div>
                           <button
                             type="button"
                             onClick={handleCopyCircleSolanaWallet}
-                            className="shrink-0 rounded-md border border-gray-200 bg-white px-2 py-1 text-[10px] font-semibold text-gray-600 transition-all hover:bg-gray-50 active:scale-95"
+                            className="shrink-0 rounded-md border border-gray-200 bg-white px-2 py-1 text-[10px] font-semibold text-gray-600 transition-all hover:bg-gray-50 active:scale-95 dark:border-white/10 dark:bg-white/10 dark:text-gray-200 dark:hover:bg-white/15"
                           >
                             {circleSolanaCopied ? 'Copied' : 'Copy to fund'}
                           </button>
                         </div>
-                        <div className="mt-2 flex items-center justify-between border-t border-gray-100 pt-2 text-[11px]">
-                          <span className="text-gray-400">Solana balance</span>
+                        <div className="mt-2 flex items-center justify-between border-t border-gray-100 pt-2 text-[11px] dark:border-white/10">
+                          <span className="text-gray-400 dark:text-gray-500">Solana balance</span>
                           <div className="flex items-center gap-2">
-                            <span className="font-mono font-semibold text-gray-700">
-                              {circleSolanaBalance == null
+                            <span className="font-mono font-semibold text-gray-700 dark:text-gray-200">
+                              {circleSolanaBalanceError
+                                ? 'Unavailable'
+                                : circleSolanaBalance == null
                                 ? 'Checking...'
                                 : `${formatAmount((Number(circleSolanaBalance) / 1_000_000).toString(), 6)} USDC`}
                             </span>
                             <button
                               type="button"
                               onClick={() => refreshCircleSolanaBalance()}
-                              className="rounded-md p-1 text-gray-400 transition-all hover:bg-gray-100 hover:text-gray-700 active:scale-95"
+                              className="rounded-md p-1 text-gray-400 transition-all hover:bg-gray-100 hover:text-gray-700 active:scale-95 dark:hover:bg-white/10 dark:hover:text-white"
                               aria-label="Refresh smart wallet balance"
-                              title="Refresh balance"
                             >
                               <RefreshCw className={cn('h-3 w-3', circleSolanaFetching && 'animate-spin')} />
                             </button>
                           </div>
                         </div>
-                      </div>
+                        </div>
+                      </details>
                     )}
                     {circleSolanaError && (
-                      <p className="text-center text-[11px] font-medium text-red-600">
+                      <p className="text-center text-[11px] font-medium text-red-600 dark:text-red-300">
                         {isSmartWalletBalanceError(circleSolanaError) ? circleSolanaError : `Transaction failed: ${circleSolanaError}`}
                       </p>
                     )}
-                    {!smartWalletOnlyFunding && !isTelegramSource && (
-                      <div className="flex items-center gap-3">
-                        <div className="h-px flex-1 bg-gray-200" />
-                        <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">or</span>
-                        <div className="h-px flex-1 bg-gray-200" />
-                      </div>
+                    {privyCircleLinkError && (circleSolanaSession || circleSolanaAddress) && (
+                      <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-medium text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+                        {privyCircleLinkError}
+                      </p>
                     )}
                   </div>
                 )}
-                {!walletConnectBlocked && !isTelegramSource && !solanaWalletAddr ? (
+                {!showCircleSolanaEmailBridgePay && !walletConnectBlocked && !isTelegramSource && !solanaWalletAddr ? (
                   <>
                 <button
-                  onClick={connectSolana}
+                  onClick={() => connectSolana()}
                   disabled={isSolanaConnecting || (requiresAttendeeName && !attendeeName.trim())}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#14F195] px-6 py-4 text-sm font-semibold text-gray-900 transition-all hover:bg-[#00E589] active:scale-[0.98] disabled:opacity-60"
+                  className={cn(
+                    'flex w-full items-center justify-center gap-2 rounded-xl px-6 py-3.5 text-sm font-semibold transition-all active:scale-[0.98] disabled:opacity-60',
+                    showCircleSolanaEmailBridgePay && !manualPayDetected
+                      ? 'border border-gray-200 bg-white text-gray-800 hover:bg-gray-50'
+                      : 'bg-[#14F195] text-gray-900 hover:bg-[#00E589]',
+                  )}
                 >
                   {isSolanaConnecting
-                    ? <><Loader2 className="h-4 w-4 animate-spin" /> Connecting…</>
-                    : <><Wallet className="h-4 w-4" /> Connect Solana Wallet</>}
+                    ? <><Loader2 className="h-4 w-4 animate-spin" /> Signing in...</>
+                    : <><Wallet className="h-4 w-4" /> {showCircleSolanaEmailBridgePay && !manualPayDetected ? 'Pay another way' : 'Sign in with Solana'}</>}
                 </button>
-                <p className="text-center text-xs text-gray-400">Phantom, Solflare & other Solana wallets</p>
+                <p className="text-center text-xs text-gray-400">
+                  {showCircleSolanaEmailBridgePay && !manualPayDetected
+                    ? 'Use Phantom, Solflare, Backpack, or WalletConnect'
+                    : 'Privy opens Phantom, Solflare, Backpack, or WalletConnect'}
+                </p>
                   </>
-                ) : !walletConnectBlocked && !isTelegramSource ? (
+                ) : !showCircleSolanaEmailBridgePay && !walletConnectBlocked && !isTelegramSource ? (
               <button
                 onClick={handlePay}
                 disabled={isSolanaPending || isSolanaConfirming || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
@@ -3406,7 +3705,7 @@ export default function PaymentPage() {
                 : <><Zap className="h-4 w-4" /> Pay {formatAmount(effectiveAmt, 6)} USDC on Starknet</>}
               </button>
             )
-          ) : payMode === 'wallet' && usePrivyCircleCheckout && !privyAuthenticated && !manualPayDetected ? (
+          ) : payMode === 'wallet' && (usePrivyCircleCheckout || usePrivyCircleSolanaCheckout) && !privyAuthenticated && !manualPayDetected ? (
             <div className={cn(
               'flex flex-col items-center gap-1.5',
               requiresAttendeeName && !attendeeName.trim() && 'pointer-events-none opacity-50 select-none',
@@ -3465,7 +3764,9 @@ export default function PaymentPage() {
 
           {showCirclePoweredAttribution && (
             <div className="flex items-center justify-center gap-2 pt-1 text-[11px] font-semibold text-gray-400 dark:text-gray-500">
-              <img src="/brand/circle-logo.jpeg" alt="" className="h-4 w-4 rounded-full object-cover" />
+              <span className="circle-premium-mark">
+                <img src="/brand/circle-logo.jpeg" alt="" className="h-4 w-4 rounded-full object-cover" />
+              </span>
               <span>Powered by Circle</span>
             </div>
           )}
@@ -3511,9 +3812,9 @@ export default function PaymentPage() {
         </p>
         <div className="grid grid-cols-3 gap-3">
           {[
-            { n: '1', title: 'Review request', body: 'Check amount, memo, and network' },
-            { n: '2', title: 'Choose payment', body: 'Send to address or connect wallet' },
-            { n: '3', title: 'Confirm payment', body: 'Wait for the success screen' },
+            { n: '1', title: 'Check the request', body: "Confirm the amount and who it's for" },
+            { n: '2', title: 'Choose how to pay', body: 'Use the gasless wallet, your wallet, or an exchange' },
+            { n: '3', title: 'Get confirmation', body: "We'll confirm when the payment is complete" },
           ].map(({ n, title, body }) => (
             <div key={n} className="rounded-xl border border-gray-100 bg-white p-4 text-center shadow-sm">
               <div className="mx-auto mb-2.5 flex h-7 w-7 items-center justify-center rounded-full bg-gray-100 text-xs font-bold text-gray-600">
@@ -3552,7 +3853,7 @@ export default function PaymentPage() {
         </div>
 
         <p className="mt-6 text-center text-xs text-gray-400">
-          {isPolymarketFunding ? 'Polymarket Funding on ' : 'Built on '}
+          {isPolymarketFunding ? 'Polymarket Funding on ' : 'Built with Circle USDC on '}
           {(isPolymarketFunding ? [
             { label: 'Base',      href: 'https://basescan.org' },
             { label: 'Solana',   href: 'https://solscan.io' },
@@ -3560,10 +3861,8 @@ export default function PaymentPage() {
           ] : [
             { label: 'Base',      href: 'https://basescan.org' },
             { label: 'Arbitrum', href: 'https://arbiscan.io' },
-            { label: 'Starknet', href: 'https://starkscan.co' },
-            { label: 'Arc',      href: 'https://testnet.arcscan.app' },
+            { label: 'Arc Testnet', href: 'https://testnet.arcscan.app' },
             { label: 'Solana',   href: 'https://solscan.io' },
-            { label: 'Circle',   href: 'https://www.circle.com' },
           ]).map((item, i, arr) => (
             <span key={item.label}>
               <a

@@ -70,7 +70,7 @@ function circleApiKey(input?: { chain?: string; blockchain?: string }) {
   if (needsTestKey) {
     if (testnetKey) return testnetKey
     if (mainnetKey?.startsWith('TEST_API')) return mainnetKey
-    throw new Error('CIRCLE_TEST_API_KEY not configured for Arc testnet')
+    throw new Error('Arc Testnet email wallet is not configured')
   }
   if (mainnetKey) return mainnetKey
   if (testnetKey) return testnetKey
@@ -122,7 +122,7 @@ async function circleJson<T extends Record<string, unknown> = Record<string, unk
 
 function circleError(res: Response, err: unknown) {
   const e = err as Error & { status?: number; code?: number; body?: CircleResponse }
-  if (e.message === 'CIRCLE_API_KEY not configured' || e.message === 'CIRCLE_TEST_API_KEY not configured for Arc testnet') {
+  if (e.message === 'CIRCLE_API_KEY not configured' || e.message === 'Arc Testnet email wallet is not configured') {
     return res.status(503).json({ ok: false, error: e.message })
   }
   const detail = (() => {
@@ -301,6 +301,53 @@ export default async function handler(req: Request, res: Response) {
           walletId,
           feeLevel: 'HIGH',
           refId: `hashpaylink-${chain}`,
+          contractAddress: walletAddress,
+          callData: batchCallData,
+        }),
+      })
+      return res.json({ ok: true, ...data })
+    }
+
+    if (action === 'executeEvmWithdraw') {
+      const { userToken, walletId, walletAddress, chain, recipient, totalUnits } = params
+      if (!userToken || !walletId || !walletAddress || !chain || !recipient || !totalUnits) {
+        return res.status(400).json({ ok: false, error: 'Missing userToken, walletId, walletAddress, chain, recipient, or totalUnits' })
+      }
+      if (chain !== 'base' && chain !== 'arbitrum') {
+        return res.status(400).json({ ok: false, error: 'Unsupported EVM withdraw chain' })
+      }
+      if (!isAddress(walletAddress) || !isAddress(recipient)) {
+        return res.status(400).json({ ok: false, error: 'Invalid EVM wallet or recipient address' })
+      }
+
+      const total = BigInt(totalUnits)
+      if (total <= 0n) {
+        return res.status(400).json({ ok: false, error: 'Invalid withdraw amount' })
+      }
+
+      const tokenAddress = EVM_CHAINS[chain].tokenAddress
+      const transferCallData = encodeFunctionData({
+        abi: ERC20_TRANSFER_ABI,
+        functionName: 'transfer',
+        args: [recipient as `0x${string}`, total],
+      })
+      const batchCallData = encodeFunctionData({
+        abi: SMART_WALLET_BATCH_ABI,
+        functionName: 'executeBatch',
+        args: [[
+          { target: tokenAddress as `0x${string}`, value: 0n, data: transferCallData },
+        ]],
+      })
+
+      const data = await circleJson('/v1/w3s/user/transactions/contractExecution', {
+        method: 'POST',
+        userToken,
+        apiKey: circleApiKey({ chain }),
+        body: JSON.stringify({
+          idempotencyKey: crypto.randomUUID(),
+          walletId,
+          feeLevel: 'HIGH',
+          refId: `hashpaylink-${chain}-withdraw`,
           contractAddress: walletAddress,
           callData: batchCallData,
         }),

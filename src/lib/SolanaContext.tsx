@@ -1,4 +1,12 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useConnectWallet, usePrivy } from '@privy-io/react-auth'
+import {
+  useSignTransaction as usePrivySolanaSignTransaction,
+  useWallets as usePrivySolanaWallets,
+  type ConnectedStandardSolanaWallet,
+} from '@privy-io/react-auth/solana'
+import { Transaction } from '@solana/web3.js'
+import { PRIVY_AUTH_ENABLED } from './authMode'
 
 // ── Injected provider type (Phantom / Solflare / Backpack) ───────────────────
 type SolanaProvider = {
@@ -22,20 +30,24 @@ declare global {
 type SolanaCtx = {
   address:     string | null
   isConnecting: boolean
-  connect:     () => Promise<void>
+  connect:     (opts?: { includeEmail?: boolean }) => Promise<void>
   disconnect:  () => void
+  signTransaction: (tx: Transaction) => Promise<Transaction>
 }
 
 const Ctx = createContext<SolanaCtx>({
-  address: null, isConnecting: false,
-  connect: async () => {}, disconnect: () => {},
+  address: null,
+  isConnecting: false,
+  connect: async () => {},
+  disconnect: () => {},
+  signTransaction: async (tx) => tx,
 })
 
 function getProvider(): SolanaProvider | null {
   return window.phantom?.solana ?? window.solana ?? window.solflare ?? null
 }
 
-export function SolanaProvider({ children }: { children: ReactNode }) {
+function LegacySolanaProvider({ children }: { children: ReactNode }) {
   const [address,      setAddress]      = useState<string | null>(null)
   const [isConnecting, setIsConnecting] = useState(false)
 
@@ -73,7 +85,77 @@ export function SolanaProvider({ children }: { children: ReactNode }) {
     setAddress(null)
   }
 
-  return <Ctx.Provider value={{ address, isConnecting, connect, disconnect }}>{children}</Ctx.Provider>
+  async function signTransaction(tx: Transaction) {
+    const p = getProvider()
+    if (!p) throw new Error('No Solana wallet found. Install Phantom or Solflare.')
+    return p.signTransaction(tx)
+  }
+
+  return <Ctx.Provider value={{ address, isConnecting, connect, disconnect, signTransaction }}>{children}</Ctx.Provider>
+}
+
+function PrivySolanaProvider({ children }: { children: ReactNode }) {
+  const { authenticated, login, logout } = usePrivy()
+  const { connectWallet } = useConnectWallet()
+  const { ready, wallets } = usePrivySolanaWallets()
+  const { signTransaction: signPrivyTransaction } = usePrivySolanaSignTransaction()
+  const [isConnecting, setIsConnecting] = useState(false)
+
+  const wallet = useMemo(
+    () => wallets.find((item) => item.address) ?? null,
+    [wallets],
+  )
+  const address = wallet?.address ?? null
+
+  async function connect(opts?: { includeEmail?: boolean }) {
+    setIsConnecting(true)
+    try {
+      if (!authenticated) {
+        login({
+          loginMethods: opts?.includeEmail ? ['email', 'wallet'] : ['wallet'],
+          walletChainType: 'solana-only',
+        })
+        return
+      }
+      connectWallet({
+        walletChainType: 'solana-only',
+        walletList: ['detected_solana_wallets', 'phantom', 'solflare', 'backpack', 'wallet_connect_qr_solana'],
+      })
+    } finally {
+      setIsConnecting(false)
+    }
+  }
+
+  function disconnect() {
+    const maybeWallet = wallet as (ConnectedStandardSolanaWallet & { disconnect?: () => Promise<void> }) | null
+    if (maybeWallet?.disconnect) {
+      void maybeWallet.disconnect()
+      return
+    }
+    void logout()
+  }
+
+  async function signTransaction(tx: Transaction) {
+    if (!wallet) throw new Error('Sign in with a Solana wallet to continue.')
+    const bytes = tx.serialize({ requireAllSignatures: false, verifySignatures: false })
+    const result = await signPrivyTransaction({
+      wallet,
+      transaction: bytes,
+      chain: 'solana:mainnet',
+    })
+    return Transaction.from(result.signedTransaction)
+  }
+
+  return (
+    <Ctx.Provider value={{ address, isConnecting: isConnecting || !ready, connect, disconnect, signTransaction }}>
+      {children}
+    </Ctx.Provider>
+  )
+}
+
+export function SolanaProvider({ children }: { children: ReactNode }) {
+  if (!PRIVY_AUTH_ENABLED) return <LegacySolanaProvider>{children}</LegacySolanaProvider>
+  return <PrivySolanaProvider>{children}</PrivySolanaProvider>
 }
 
 export function useSolana() { return useContext(Ctx) }

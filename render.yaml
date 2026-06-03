@@ -94,6 +94,10 @@ services:
         value: "45786000"             # Base block before the 0.2% router factory deployment
       - key: SOLANA_RPC_URL
         sync: false                   # Solana backend private RPC endpoint
+      - key: RELAYER_PRIVATE_KEY_SOLANA
+        sync: false                   # Solana relayer keypair; wallet needs SOL for sponsored payments
+      - key: SOLANA_TREASURY
+        sync: false                   # Solana treasury wallet address for fee collection
 
 # ── External cron (sweep-keeper) ──────────────────────────────────────────────
 # Render free tier does not include cron jobs.

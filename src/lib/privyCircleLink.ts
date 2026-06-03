@@ -1,12 +1,14 @@
 import type { Address } from 'viem'
 import type { ChainKey } from './chains'
 
+type CircleLinkChain = Extract<ChainKey, 'base' | 'arbitrum' | 'arc' | 'solana'>
+
 export type PrivyCircleLink = {
   privyUserId: string
   email?: string
-  chain: Extract<ChainKey, 'base' | 'arbitrum' | 'arc'>
+  chain: CircleLinkChain
   circleWalletId: string
-  circleWalletAddress: Address
+  circleWalletAddress: string
   circleBlockchain: string
   updatedAt: number
 }
@@ -21,9 +23,9 @@ type LinkResponse = {
 async function privyCircleLinkApi(params: {
   accessToken: string
   action: 'resolve' | 'link'
-  chain: Extract<ChainKey, 'base' | 'arbitrum' | 'arc'>
+  chain: CircleLinkChain
   email?: string
-  wallet?: { id: string; address: Address; blockchain: string }
+  wallet?: { id: string; address: string; blockchain: string }
 }) {
   const res = await fetch('/api/privy-circle-link', {
     method: 'POST',
@@ -45,16 +47,16 @@ async function privyCircleLinkApi(params: {
 
 export async function resolvePrivyCircleLink(params: {
   accessToken: string
-  chain: Extract<ChainKey, 'base' | 'arbitrum' | 'arc'>
+  chain: CircleLinkChain
 }) {
   return privyCircleLinkApi({ ...params, action: 'resolve' })
 }
 
 export async function savePrivyCircleLink(params: {
   accessToken: string
-  chain: Extract<ChainKey, 'base' | 'arbitrum' | 'arc'>
+  chain: CircleLinkChain
   email?: string
-  wallet: { id: string; address: Address; blockchain: string }
+  wallet: { id: string; address: string; blockchain: string }
 }) {
   return privyCircleLinkApi({ ...params, action: 'link' })
 }

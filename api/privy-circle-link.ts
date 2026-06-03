@@ -2,16 +2,17 @@ import type { Request, Response } from 'express'
 import { mkdir, readFile, writeFile } from 'fs/promises'
 import { dirname, resolve } from 'path'
 import { isAddress } from 'viem'
+import { PublicKey } from '@solana/web3.js'
 import { PrivyClient, type User } from '@privy-io/server-auth'
 
 const STORE_PATH = process.env.PRIVY_CIRCLE_LINK_STORE ?? './data/privy-circle-links.json'
 
-const SUPPORTED_CHAINS = new Set(['base', 'arbitrum', 'arc'])
+const SUPPORTED_CHAINS = new Set(['base', 'arbitrum', 'arc', 'solana'])
 
 type CircleLinkRecord = {
   privyUserId: string
   email?: string
-  chain: 'base' | 'arbitrum' | 'arc'
+  chain: 'base' | 'arbitrum' | 'arc' | 'solana'
   circleWalletId: string
   circleWalletAddress: string
   circleBlockchain: string
@@ -39,6 +40,15 @@ function linkedEmail(user: User) {
     }
   }
   return undefined
+}
+
+function isSolanaAddress(address: string) {
+  try {
+    const key = new PublicKey(address)
+    return key.toBase58() === address
+  } catch {
+    return false
+  }
 }
 
 async function readStore(): Promise<Store> {
@@ -106,7 +116,10 @@ export default async function handler(req: Request, res: Response) {
       if (!wallet?.id || !wallet.address || !wallet.blockchain) {
         return res.status(400).json({ ok: false, error: 'Missing Circle wallet metadata' })
       }
-      if (!isAddress(wallet.address)) {
+      const validWalletAddress = chain === 'solana'
+        ? isSolanaAddress(wallet.address)
+        : isAddress(wallet.address)
+      if (!validWalletAddress) {
         return res.status(400).json({ ok: false, error: 'Invalid Circle wallet address' })
       }
 

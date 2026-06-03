@@ -520,6 +520,49 @@ export async function sendCircleEvmEmailPayment(params: {
   throw new Error('Circle accepted the payment, but the transaction hash is not available yet. Use Check Payment Status in a moment.')
 }
 
+export async function sendCircleEvmEmailWithdraw(params: {
+  session: CircleEvmEmailSession
+  recipient: Address
+  amount: string
+}) {
+  const sdk = authenticatedSdk(params.session)
+  applyHashPayLinkCircleUi(sdk, {
+    amount: params.amount,
+    asset: CHAIN_META[params.session.chain].asset,
+    recipient: params.recipient,
+    chainLabel: CHAIN_META[params.session.chain].label,
+  })
+  const totalUnits = parseUnits(params.amount || '0', CHAIN_META[params.session.chain].decimals)
+  const challenge = await circleWalletApi<{
+    challengeId?: string
+    id?: string
+    transactionId?: string
+    transaction?: Record<string, unknown>
+  }>({
+    action: 'executeEvmWithdraw',
+    userToken: params.session.userToken,
+    walletId: params.session.wallet.id,
+    walletAddress: params.session.wallet.address,
+    chain: params.session.chain,
+    recipient: params.recipient,
+    totalUnits: totalUnits.toString(),
+  })
+  if (!challenge.challengeId) throw new Error('Circle did not return a withdraw challenge.')
+  const result = await executeChallengeWithTimeout(
+    sdk,
+    challenge.challengeId,
+    'Circle withdraw confirmation did not finish. If you approved it, check the destination wallet in a moment.',
+  )
+  const txHash = findTxHash(result)
+  if (txHash) return txHash
+  const transactionId = findTransactionId(result) ?? findTransactionId(challenge)
+  if (transactionId) {
+    const hash = await pollTransactionHash(params.session, transactionId)
+    if (hash) return hash
+  }
+  return null
+}
+
 function findSignature(value: unknown): Hex | null {
   if (!value || typeof value !== 'object') return null
   const record = value as Record<string, unknown>

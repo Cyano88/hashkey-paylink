@@ -30,10 +30,7 @@ export default async function handler(req: Request, res: Response) {
   }
 
   try {
-    const rpcUrl = process.env.SOLANA_RPC_URL
-    if (!rpcUrl) {
-      return res.status(500).json({ ok: false, error: 'SOLANA_RPC_URL not configured' })
-    }
+    const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com'
 
     const owner = new PublicKey(accountAddress)
     const ata = await getAssociatedTokenAddress(USDC_MINT, owner)

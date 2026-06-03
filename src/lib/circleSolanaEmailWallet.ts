@@ -31,10 +31,9 @@ type SolanaEmailSession = {
 }
 
 const APP_ID = import.meta.env.VITE_CIRCLE_USER_WALLET_APP_ID as string | undefined
-const ENABLED = import.meta.env.VITE_CIRCLE_SOLANA_EMAIL_ENABLED === 'true'
 
 export function canUseCircleSolanaEmailWallet() {
-  return ENABLED && !!APP_ID
+  return !!APP_ID
 }
 
 function isSolanaAddress(address: string) {

@@ -1,14 +1,19 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import { useOutletContext, Link } from 'react-router-dom'
+import { usePrivy } from '@privy-io/react-auth'
 import type { LayoutOutletContext } from '../Layout'
 import {
   useAccount,
+  useDisconnect,
 } from 'wagmi'
 import {
   Link2,
   Copy,
   CheckCheck,
+  Share2,
   ArrowRight,
+  MessageCircle,
+  Send,
   Tag,
   Coins,
   ExternalLink,
@@ -31,16 +36,22 @@ import {
   RefreshCw,
   Bot,
   Trash2,
+  LogOut,
 } from 'lucide-react'
 import { QRCodeCanvas } from 'qrcode.react'
 import { FX_CURRENCIES, getFxMeta, formatLocalAmt, fetchFxRate } from '../lib/fx'
-import { isAddress } from 'viem'
+import { isAddress, type Address } from 'viem'
 import { cn, truncateAddress, formatAmount, copyToClipboard } from '../lib/utils'
 import { useStarknet } from '../lib/StarknetContext'
 import { useSolana }   from '../lib/SolanaContext'
 import { CHAIN_META, type ChainKey } from '../lib/chains'
 import { isValidSolanaAddress } from '../lib/solanaAddress'
 import { setPaylinkParam } from '../lib/paylinkParams'
+import { PRIVY_AUTH_ENABLED } from '../lib/authMode'
+import { EVM_CLIENTS, ERC20_BALANCE_OF_ABI } from '../lib/router'
+import { canUseCircleEvmEmailWallet, connectCircleEvmEmailWallet } from '../lib/circleEvmEmailWallet'
+import { canUseCircleSolanaEmailWallet, connectCircleSolanaEmailWallet } from '../lib/circleSolanaEmailWallet'
+import { resolvePrivyCircleLink, savePrivyCircleLink } from '../lib/privyCircleLink'
 
 // ─── Starknet address: 0x followed by exactly 64 hex chars ──────────────────
 const isValidStarkAddr = (v: string) => /^0x[0-9a-fA-F]{64}$/.test(v)
@@ -48,10 +59,26 @@ const isValidStarkAddr = (v: string) => /^0x[0-9a-fA-F]{64}$/.test(v)
 // ─── Solana address: base58, 32–44 characters ────────────────────────────────
 const isValidSolanaAddr = isValidSolanaAddress
 
-const CHAINS: ChainKey[] = ['base', 'starknet', 'arc', 'solana', 'arbitrum']
+const VISIBLE_CREATE_CHAINS: ChainKey[] = ['base', 'arc', 'solana', 'arbitrum']
+const SHOW_STARKNET_CREATE_UI = false
 const TELEGRAM_AGENT_URL = import.meta.env.VITE_TELEGRAM_AGENT_URL || 'https://t.me/hashpaylinkbot'
 
 type VaultStep = 'idle' | 'ready'
+type ReceiveMode = 'email' | 'paste'
+
+function emailFromPrivyUser(user: unknown) {
+  const directEmail = (user as { email?: { address?: unknown } } | undefined)?.email?.address
+  if (typeof directEmail === 'string') return directEmail
+
+  const linkedAccounts = (user as { linkedAccounts?: unknown } | undefined)?.linkedAccounts
+  if (!Array.isArray(linkedAccounts)) return ''
+  for (const account of linkedAccounts) {
+    const record = account as { type?: unknown; address?: unknown; email?: unknown }
+    if (record.type === 'email' && typeof record.address === 'string') return record.address
+    if (typeof record.email === 'string') return record.email
+  }
+  return ''
+}
 
 function normalizeAmountInput(value: string) {
   const normalized = value.replace(',', '.').replace(/[^\d.]/g, '')
@@ -59,7 +86,288 @@ function normalizeAmountInput(value: string) {
   return fraction.length ? `${whole}.${fraction.join('')}` : whole
 }
 
+function CircleReceiveSelector({
+  selectedNet,
+  isEvmNet,
+  receiveMode,
+  setReceiveMode,
+  evmAddr,
+  solanaAddr,
+  evmValid,
+  solanaValid,
+  canReceiveWithEmail,
+  setEvmAddr,
+  setSolanaAddr,
+  setGeneratedLink,
+}: {
+  selectedNet: ChainKey
+  isEvmNet: boolean
+  receiveMode: ReceiveMode
+  setReceiveMode: Dispatch<SetStateAction<ReceiveMode>>
+  evmAddr: string
+  solanaAddr: string
+  evmValid: boolean
+  solanaValid: boolean
+  canReceiveWithEmail: boolean
+  setEvmAddr: Dispatch<SetStateAction<string>>
+  setSolanaAddr: Dispatch<SetStateAction<string>>
+  setGeneratedLink: Dispatch<SetStateAction<string>>
+}) {
+  const { authenticated: privyAuthenticated, user: privyUser, login: loginPrivy, logout: logoutPrivy, getAccessToken } = usePrivy()
+  const privyEmail = emailFromPrivyUser(privyUser).trim().toLowerCase()
+  const [circleRecipientPending, setCircleRecipientPending] = useState(false)
+  const [circleRecipientError, setCircleRecipientError] = useState<string | null>(null)
+  const [circleWalletBalance, setCircleWalletBalance] = useState('Balance --')
+  const circleRecipientRunKey = useRef('')
+
+  async function handleEmailRecipient() {
+    setReceiveMode('email')
+    setGeneratedLink('')
+    setCircleRecipientError(null)
+
+    if (!canReceiveWithEmail) {
+      setCircleRecipientError('Email receiving is not configured for this network. Paste a wallet address instead.')
+      return
+    }
+
+    if (!privyAuthenticated) {
+      loginPrivy({ loginMethods: ['email'] })
+      return
+    }
+
+    if (!privyEmail) {
+      setCircleRecipientError('Sign in with email to receive with the Circle wallet for this network.')
+      return
+    }
+
+    const runKey = `${selectedNet}:${privyEmail}`
+    circleRecipientRunKey.current = runKey
+    setCircleRecipientPending(true)
+    try {
+      if (selectedNet === 'solana') {
+        const token = await getAccessToken()
+        if (!token) throw new Error('Email session is not ready. Sign in again and retry.')
+
+        const existing = await resolvePrivyCircleLink({ accessToken: token, chain: 'solana' })
+        if (circleRecipientRunKey.current !== runKey) return
+        if (existing.link?.circleWalletAddress) {
+          setSolanaAddr(existing.link.circleWalletAddress)
+          setCircleRecipientError(null)
+          return
+        }
+
+        const session = await connectCircleSolanaEmailWallet(privyEmail)
+        if (circleRecipientRunKey.current !== runKey) return
+        setSolanaAddr(session.wallet.address)
+        await savePrivyCircleLink({
+          accessToken: token,
+          chain: 'solana',
+          email: privyEmail,
+          wallet: {
+            id: session.wallet.id,
+            address: session.wallet.address,
+            blockchain: session.wallet.blockchain,
+          },
+        })
+        setCircleRecipientError(null)
+        return
+      }
+
+      const chain = selectedNet as Extract<ChainKey, 'base' | 'arbitrum' | 'arc'>
+      const token = await getAccessToken()
+      if (!token) throw new Error('Email session is not ready. Sign in again and retry.')
+
+      const existing = await resolvePrivyCircleLink({ accessToken: token, chain })
+      if (circleRecipientRunKey.current !== runKey) return
+      if (existing.link?.circleWalletAddress) {
+        setEvmAddr(existing.link.circleWalletAddress)
+        setCircleRecipientError(null)
+        return
+      }
+
+      const session = await connectCircleEvmEmailWallet(privyEmail, chain)
+      if (circleRecipientRunKey.current !== runKey) return
+      setEvmAddr(session.wallet.address)
+      await savePrivyCircleLink({
+        accessToken: token,
+        chain,
+        email: privyEmail,
+        wallet: {
+          id: session.wallet.id,
+          address: session.wallet.address as Address,
+          blockchain: session.wallet.blockchain,
+        },
+      })
+      setCircleRecipientError(null)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Circle smart wallet setup failed.'
+      setCircleRecipientError(message)
+    } finally {
+      if (circleRecipientRunKey.current === runKey) setCircleRecipientPending(false)
+    }
+  }
+
+  useEffect(() => {
+    if (receiveMode !== 'email' || !privyAuthenticated || !privyEmail || circleRecipientPending) return
+    if (selectedNet === 'solana' ? solanaValid : evmValid) return
+    void handleEmailRecipient()
+  }, [receiveMode, privyAuthenticated, privyEmail, selectedNet]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (canReceiveWithEmail) return
+    setReceiveMode('paste')
+    setCircleRecipientError(null)
+  }, [canReceiveWithEmail, setReceiveMode])
+
+  useEffect(() => {
+    const hasCircleWallet = selectedNet === 'solana' ? solanaValid : isEvmNet && evmValid
+    if (receiveMode !== 'email' || !hasCircleWallet) {
+      setCircleWalletBalance('Balance --')
+      return
+    }
+
+    let cancelled = false
+    setCircleWalletBalance('Balance ...')
+
+    const balancePromise = selectedNet === 'solana'
+      ? fetch('/api/solana-balance', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ accountAddress: solanaAddr }),
+        })
+          .then(async response => {
+            const data = await response.json() as { ok?: boolean; balance?: string }
+            if (!response.ok || !data.ok) throw new Error('Balance unavailable')
+            return Number(BigInt(data.balance ?? '0')) / 1_000_000
+          })
+      : EVM_CLIENTS[selectedNet as 'base' | 'arc' | 'arbitrum']
+          .readContract({
+            address: CHAIN_META[selectedNet].tokenAddress as `0x${string}`,
+            abi: ERC20_BALANCE_OF_ABI,
+            functionName: 'balanceOf',
+            args: [evmAddr as `0x${string}`],
+          })
+          .then(raw => Number(raw) / 10 ** CHAIN_META[selectedNet].decimals)
+
+    balancePromise
+      .then(balance => {
+        if (!cancelled) setCircleWalletBalance(`Balance ${formatAmount(balance.toString(), 6)} USDC`)
+      })
+      .catch(() => {
+        if (!cancelled) setCircleWalletBalance('Balance --')
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [selectedNet, isEvmNet, receiveMode, evmValid, evmAddr, solanaValid, solanaAddr])
+
+  return (
+    <div className="space-y-2">
+      <label className="text-sm font-medium text-gray-700 dark:text-gray-200">
+        Receive to
+      </label>
+      <div className={cn('grid gap-2', canReceiveWithEmail ? 'grid-cols-2' : 'grid-cols-1')}>
+        <button
+          type="button"
+          onClick={() => {
+            setReceiveMode('paste')
+            setCircleRecipientError(null)
+            setGeneratedLink('')
+          }}
+          className={cn(
+            'rounded-xl border px-3 py-3 text-left transition-all active:scale-[0.99]',
+            receiveMode === 'paste'
+              ? 'border-gray-900 bg-gray-50 text-gray-900 dark:border-white/30 dark:bg-white/10 dark:text-gray-100'
+              : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:border-white/20 dark:hover:bg-white/[0.07]',
+          )}
+        >
+          <span className="flex items-center gap-2 text-sm font-semibold">
+            <Wallet className="h-4 w-4 text-gray-500" />
+            Paste wallet address
+          </span>
+          <span className="mt-1 block text-[11px] text-gray-400">Any wallet or exchange</span>
+        </button>
+        {canReceiveWithEmail && (
+          <button
+            type="button"
+            onClick={handleEmailRecipient}
+            disabled={circleRecipientPending}
+            className={cn(
+              'rounded-xl border px-3 py-3 text-left transition-all active:scale-[0.99]',
+              receiveMode === 'email'
+                ? 'border-gray-900 bg-gray-50 text-gray-900 dark:border-white/30 dark:bg-white/10 dark:text-gray-100'
+                : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:border-white/20 dark:hover:bg-white/[0.07]',
+              circleRecipientPending && 'cursor-not-allowed opacity-70',
+            )}
+          >
+            <span className="flex items-center gap-2 text-sm font-semibold">
+              {circleRecipientPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4 text-blue-500" />}
+              Receive with email
+            </span>
+            <span className="mt-1 block text-[11px] text-gray-400">
+              Single-network Circle wallet
+            </span>
+          </button>
+        )}
+      </div>
+
+      {canReceiveWithEmail && receiveMode === 'email' && (
+        <div className="rounded-xl border border-gray-100 bg-gray-50/70 px-3.5 py-3 dark:border-white/10 dark:bg-white/[0.04]">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-gray-800 dark:text-gray-100">
+                {selectedNet === 'solana' ? 'Circle Solana wallet' : `${CHAIN_META[selectedNet].label} Circle wallet`}
+              </p>
+              <p className="mt-0.5 truncate font-mono text-[11px] text-gray-500 dark:text-gray-400">
+                {circleRecipientPending
+                  ? 'Preparing wallet...'
+                  : selectedNet === 'solana' && solanaValid
+                  ? truncateAddress(solanaAddr, 8)
+                  : isEvmNet && evmValid
+                  ? truncateAddress(evmAddr, 8)
+                  : privyEmail || 'Sign in with email to continue'}
+              </p>
+              {(selectedNet === 'solana' ? solanaValid : isEvmNet && evmValid) && (
+                <p className="mt-1 text-[11px] font-medium text-gray-400 dark:text-gray-500">
+                  {circleWalletBalance}
+                </p>
+              )}
+            </div>
+            {!circleRecipientPending && (selectedNet === 'solana' ? solanaValid : evmValid) && (
+              <div className="flex shrink-0 items-center gap-1.5">
+                <CheckCheck className="h-4 w-4 text-emerald-500" />
+                <button
+                  type="button"
+                  onClick={() => {
+                    void logoutPrivy()
+                    setReceiveMode('paste')
+                    setGeneratedLink('')
+                    if (selectedNet === 'solana') setSolanaAddr('')
+                    else setEvmAddr('')
+                  }}
+                  className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/80 text-gray-500 transition-colors hover:bg-white hover:text-gray-900 dark:bg-white/10 dark:text-gray-300 dark:hover:bg-white/15 dark:hover:text-white"
+                  aria-label="Disconnect email wallet"
+                >
+                  <LogOut className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
+          </div>
+          {circleRecipientError && <p className="mt-2 text-xs text-red-500">{circleRecipientError}</p>}
+        </div>
+      )}
+      {!canReceiveWithEmail && selectedNet === 'solana' && (
+        <p className="text-xs text-gray-400 dark:text-gray-500">
+          Email receiving for Solana is not enabled here yet.
+        </p>
+      )}
+    </div>
+  )
+}
+
 export default function CreateLink() {
+  const { authenticated: privyAuthenticated, logout: logoutPrivy } = usePrivy()
   const [evmAddr,       setEvmAddr]       = useState('')
   const [starkAddr,     setStarkAddr]     = useState('')
   const [solanaAddr,    setSolanaAddr]    = useState('')
@@ -67,6 +375,7 @@ export default function CreateLink() {
   const [memo,          setMemo]          = useState('')
   const [generatedLink, setGeneratedLink] = useState('')
   const [copied,        setCopied]        = useState(false)
+  const [shareOpen,     setShareOpen]     = useState(false)
   const [savedLinkCopied, setSavedLinkCopied] = useState(false)
   const [eventMode,      setEventMode]      = useState(false)
   const [eventId,        setEventId]        = useState('')
@@ -75,6 +384,7 @@ export default function CreateLink() {
   const [accessMode,     setAccessMode]     = useState(false)
   const [agentUrl,       setAgentUrl]       = useState('')
   const [agentUrlStatus, setAgentUrlStatus] = useState<'idle' | 'checking' | 'ok' | 'incompatible'>('idle')
+  const [receiveMode,    setReceiveMode]    = useState<ReceiveMode>('paste')
   const chainSwitchMounted = useRef(false)
 
   // ── FX Display settings (event mode only) ────────────────────────────────
@@ -98,12 +408,33 @@ export default function CreateLink() {
   // Derived early so useEffect hooks below can reference it without TDZ error
   const isEvmNet = selectedNet !== 'starknet' && selectedNet !== 'solana'
   const [vaultStep,     setVaultStep]     = useState<VaultStep>('idle')
+
+  useEffect(() => {
+    if (!VISIBLE_CREATE_CHAINS.includes(selectedNet)) onNetworkSelect('base')
+  }, [selectedNet, onNetworkSelect])
+
+  useEffect(() => {
+    if (multiChainMode) setReceiveMode('paste')
+  }, [multiChainMode])
   // Background check — null=checking, true=deployed, false=not deployed
 
   // ── Wallet hooks ──────────────────────────────────────────────────────────
   const { address: connectedEvm } = useAccount()
+  const { disconnect: disconnectEvm } = useDisconnect()
   const { address: connectedStark }            = useStarknet()
   const { address: connectedSolana, disconnect: disconnectSolana } = useSolana()
+
+  function disconnectConnectedEvmRecipient() {
+    disconnectEvm()
+    setEvmAddr('')
+    setGeneratedLink('')
+  }
+
+  function disconnectConnectedSolanaRecipient() {
+    disconnectSolana()
+    setSolanaAddr('')
+    setGeneratedLink('')
+  }
 
   // ── Connected wallet auto-fill ─────────────────────────────────────────
   useEffect(() => {
@@ -111,7 +442,7 @@ export default function CreateLink() {
   }, [connectedEvm, isEvmNet, multiChainMode])  // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (connectedStark && starkAddr === '' && (selectedNet === 'starknet' || multiChainMode)) setStarkAddr(connectedStark)
+    if (SHOW_STARKNET_CREATE_UI && connectedStark && starkAddr === '' && (selectedNet === 'starknet' || multiChainMode)) setStarkAddr(connectedStark)
   }, [connectedStark, selectedNet, multiChainMode])  // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -174,10 +505,20 @@ export default function CreateLink() {
   const effectiveEventMode = accessMode || eventMode
 
   const hasAddress = multiChainMode
-    ? (evmValid || starkValid || solanaValid)
-    : (selectedNet === 'solana' ? solanaValid : isEvmNet ? evmValid : starkValid)
+    ? (evmValid || solanaValid || (SHOW_STARKNET_CREATE_UI && starkValid))
+    : (selectedNet === 'solana' ? solanaValid : isEvmNet ? evmValid : (SHOW_STARKNET_CREATE_UI && starkValid))
 
   const canGenerate = (flexAmount || isValidAmt) && hasAddress && (!accessMode || agentUrlStatus === 'ok')
+
+  const canReceiveWithEmail =
+    !multiChainMode &&
+    !accessMode &&
+    PRIVY_AUTH_ENABLED &&
+    (
+      selectedNet === 'solana'
+        ? canUseCircleSolanaEmailWallet()
+        : isEvmNet && canUseCircleEvmEmailWallet(selectedNet)
+    )
 
   // ── Flexible amount toggle ─────────────────────────────────────────────────
   function toggleFlexAmount(on: boolean) {
@@ -189,6 +530,14 @@ export default function CreateLink() {
 
   // ── Multi-chain mode toggle ────────────────────────────────────────────────
   function toggleMultiChainMode(on: boolean) {
+    if (on) {
+      setReceiveMode('paste')
+      if (receiveMode === 'email') {
+        if (selectedNet === 'solana') setSolanaAddr('')
+        else if (isEvmNet) setEvmAddr('')
+      }
+      if (privyAuthenticated) void logoutPrivy()
+    }
     setMultiChainMode(on)
     setGeneratedLink('')
     setVaultStep('idle')
@@ -264,7 +613,7 @@ export default function CreateLink() {
       const params = new URLSearchParams({ x: '1' })
       if (!flexAmount) params.set('a', amt); else params.set('f', '1')
       if (evmValid)    setPaylinkParam(params, 'e', evmAddr)
-      if (starkValid)  setPaylinkParam(params, 'k', starkAddr)
+      if (SHOW_STARKNET_CREATE_UI && starkValid) setPaylinkParam(params, 'k', starkAddr)
       if (solanaValid) setPaylinkParam(params, 's', solanaAddr)
       setPaylinkParam(params, 'm', memo)
       if (effectiveEventMode && eventId) {
@@ -283,7 +632,7 @@ export default function CreateLink() {
     if (!flexAmount) params.set('a', amt); else params.set('f', '1')
     if (selectedNet === 'solana')  setPaylinkParam(params, 's', solanaAddr)
     else if (isEvmNet)             setPaylinkParam(params, 'e', evmAddr)
-    else                           setPaylinkParam(params, 'k', starkAddr)
+    else if (SHOW_STARKNET_CREATE_UI) setPaylinkParam(params, 'k', starkAddr)
     setPaylinkParam(params, 'm', memo)
     if (effectiveEventMode && eventId) {
       params.set('v', '1'); params.set('id', eventId)
@@ -305,7 +654,7 @@ export default function CreateLink() {
     if (multiChainMode) {
       params.set('x', '1')
       if (evmValid)    setPaylinkParam(params, 'e', evmAddr)
-      if (starkValid)  setPaylinkParam(params, 'k', starkAddr)
+      if (SHOW_STARKNET_CREATE_UI && starkValid) setPaylinkParam(params, 'k', starkAddr)
       if (solanaValid) setPaylinkParam(params, 's', solanaAddr)
     } else {
       params.set('n', selectedNet)
@@ -349,6 +698,35 @@ export default function CreateLink() {
     setTimeout(() => setCopied(false), 2500)
   }
 
+  async function handleShare() {
+    if (!generatedLink) return
+
+    const cleanedMemo = memo.trim()
+    const shareText = cleanedMemo
+      ? `Pay ${formatAmount(amt, 6)} USDC for ${cleanedMemo}`
+      : `Pay ${formatAmount(amt, 6)} USDC with Hash PayLink`
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'Hash PayLink',
+          text: shareText,
+          url: generatedLink,
+        })
+        return
+      } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') return
+      }
+    }
+
+    setShareOpen(true)
+  }
+
+  const shareMessage = `${memo.trim() ? `Pay ${formatAmount(amt, 6)} USDC for ${memo.trim()}` : `Pay ${formatAmount(amt, 6)} USDC with Hash PayLink`}\n${generatedLink}`
+  const encodedShareText = encodeURIComponent(memo.trim() ? `Pay ${formatAmount(amt, 6)} USDC for ${memo.trim()}` : `Pay ${formatAmount(amt, 6)} USDC with Hash PayLink`)
+  const encodedShareUrl = encodeURIComponent(generatedLink)
+  const encodedShareMessage = encodeURIComponent(shareMessage)
+
   function handleReset() {
     setEvmAddr(''); setStarkAddr(''); setSolanaAddr(''); setAmt(''); setMemo('')
     setGeneratedLink(''); setCopied(false); setMultiChainMode(false); setFlexAmount(false)
@@ -376,7 +754,7 @@ export default function CreateLink() {
         {/* ── Chain preview toggle — hidden in multi-chain mode (all chains active) */}
         {!multiChainMode && <div className="mt-5 flex flex-col items-center gap-2.5">
           <div className="flex items-center justify-center gap-0.5 sm:gap-1 rounded-xl border border-gray-200 bg-gray-100/80 p-1 overflow-x-auto w-full sm:w-auto sm:inline-flex">
-            {CHAINS.map((c) => {
+            {VISIBLE_CREATE_CHAINS.map((c) => {
               const m = CHAIN_META[c]
               const isActive = selectedNet === c
               return (
@@ -392,7 +770,15 @@ export default function CreateLink() {
                     'h-1.5 w-1.5 rounded-full transition-colors',
                     isActive ? 'bg-white/80' : m.dotColor,
                   )} />
-                  {m.label}
+                  <span>{m.label}</span>
+                  {c === 'arc' && (
+                    <span className={cn(
+                      'rounded-full px-1.5 py-0.5 text-[8px] font-bold uppercase leading-none',
+                      isActive ? 'bg-white/20 text-white' : 'bg-cyan-100 text-cyan-700',
+                    )}>
+                      Testnet
+                    </span>
+                  )}
                 </button>
               )
             })}
@@ -426,6 +812,11 @@ export default function CreateLink() {
       <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-card">
         <div className="space-y-5 p-6 sm:p-8">
 
+          <div className="flex items-center justify-center gap-2 text-[11px] font-semibold text-gray-400">
+            <img src="/brand/circle-logo.jpeg" alt="" className="h-4 w-4 rounded-full object-cover" />
+            <span>Powered by Circle USDC</span>
+          </div>
+
           {/* ── Payment / Access toggle ───────────────────────────────── */}
           <div className="flex rounded-xl border border-gray-200 bg-gray-50 p-1">
             <button
@@ -454,15 +845,15 @@ export default function CreateLink() {
 
           {accessMode ? (
             <div className="space-y-5">
-              <div className="rounded-2xl border border-gray-100 bg-gray-50/70 p-5">
+              <div className="rounded-2xl border border-gray-100 bg-gray-50/70 p-5 dark:border-white/10 dark:bg-white/[0.04]">
                 <div className="flex items-start gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-white">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-white dark:border-white/10 dark:bg-white/10">
                     <img src="/hash-logo.png" alt="" className="h-6 w-6 object-contain" />
                   </div>
                   <div className="min-w-0">
                     <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Agent</p>
-                    <h2 className="mt-1 text-lg font-bold tracking-tight text-gray-900">Hash PayLink Telegram Agent</h2>
-                    <p className="mt-1.5 text-sm leading-relaxed text-gray-500">
+                    <h2 className="mt-1 text-lg font-bold tracking-tight text-gray-900 dark:text-gray-100">Hash PayLink Telegram Agent</h2>
+                    <p className="mt-1.5 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
                       Create payment links, stream USDC, fund Polymarket wallets, run LP Scout, and manage buyer or seller agents from Telegram.
                     </p>
                   </div>
@@ -475,7 +866,7 @@ export default function CreateLink() {
                     'LP Scout',
                     'Agent wallets',
                   ].map(item => (
-                    <div key={item} className="rounded-xl border border-gray-100 bg-white px-3 py-2.5 text-[12px] font-semibold text-gray-600">
+                    <div key={item} className="rounded-xl border border-gray-100 bg-white px-3 py-2.5 text-[12px] font-semibold text-gray-600 dark:border-white/10 dark:bg-white/[0.05] dark:text-gray-300">
                       {item}
                     </div>
                   ))}
@@ -485,7 +876,7 @@ export default function CreateLink() {
                   href={TELEGRAM_AGENT_URL}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98]"
+                  className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
                 >
                   Open Telegram Agent
                   <ArrowRight className="h-4 w-4" />
@@ -493,10 +884,10 @@ export default function CreateLink() {
               </div>
 
               <div className="flex items-center justify-center gap-5">
-                <Link to="/agent" className="text-xs font-medium text-gray-400 transition-colors hover:text-gray-700">
+                <Link to="/agent" className="text-xs font-medium text-gray-400 transition-colors hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200">
                   Agent dashboard
                 </Link>
-                <Link to="/docs/access-mode" className="text-xs font-medium text-gray-400 transition-colors hover:text-gray-700">
+                <Link to="/docs/access-mode" className="text-xs font-medium text-gray-400 transition-colors hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200">
                   Developer access docs
                 </Link>
               </div>
@@ -504,22 +895,44 @@ export default function CreateLink() {
           ) : (
             <>
 
+          {!accessMode && !multiChainMode && PRIVY_AUTH_ENABLED && (
+            <CircleReceiveSelector
+              selectedNet={selectedNet}
+              isEvmNet={isEvmNet}
+              receiveMode={receiveMode}
+              setReceiveMode={setReceiveMode}
+              evmAddr={evmAddr}
+              solanaAddr={solanaAddr}
+              evmValid={evmValid}
+              solanaValid={solanaValid}
+              canReceiveWithEmail={canReceiveWithEmail}
+              setEvmAddr={setEvmAddr}
+              setSolanaAddr={setSolanaAddr}
+              setGeneratedLink={setGeneratedLink}
+            />
+          )}
+
           {/* ── EVM Address — Base / HashKey / Arc ───────────────────── */}
-          {(isEvmNet || multiChainMode) && <fieldset className="space-y-1.5">
+          {!accessMode && multiChainMode && (
+            <div className="rounded-xl border border-gray-100 bg-gray-50/70 px-3.5 py-3 dark:border-white/10 dark:bg-white/[0.04]">
+              <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">Paste wallet addresses</p>
+              <p className="mt-0.5 text-xs text-gray-400 dark:text-gray-500">One address per network. Email receive is for single-network links.</p>
+            </div>
+          )}
+
+          {(isEvmNet || multiChainMode) && (multiChainMode || receiveMode === 'paste') && <fieldset className="space-y-1.5">
             <label className="flex items-center justify-between">
               <span className="flex items-center gap-2 text-sm font-medium text-gray-700">
-                <span className="flex items-center gap-0.5">
-                  <span className="h-2 w-2 rounded-full bg-[#0052FF]" />
-                  <span className="h-2 w-2 rounded-full bg-[#C9A227]" />
-                </span>
-                EVM Address
+                {multiChainMode ? 'EVM wallet address' : 'Wallet address'}
               </span>
-              <span className="text-[11px] font-medium text-gray-400">Base · Arc · Arbitrum</span>
+              <span className="text-[11px] font-medium text-gray-400">
+                {multiChainMode ? 'Base · Arc Testnet · Arbitrum' : 'Starts with 0x'}
+              </span>
             </label>
             <div className="relative">
               <input
                 type="text"
-                placeholder="0x… (40 hex chars)"
+                placeholder="0x... wallet address"
                 value={evmAddr}
                 onChange={(e) => setEvmAddr(e.target.value.trim())}
                 spellCheck={false}
@@ -540,24 +953,40 @@ export default function CreateLink() {
             </div>
             {evmDirty && !evmValid && (
               <p className="flex items-center gap-1 text-xs text-red-500">
-                <Info className="h-3 w-3" /> Must be a valid EVM address (0x + 40 hex chars)
+                <Info className="h-3 w-3" /> Enter a valid wallet address that starts with 0x
               </p>
             )}
             {evmValid && (
-              <p className="flex items-center gap-1.5 text-xs text-emerald-600">
-                <CheckCheck className="h-3 w-3" />
-                {connectedEvm && evmAddr.toLowerCase() === connectedEvm.toLowerCase()
-                  ? `Auto-filled · ${truncateAddress(evmAddr, 8)}`
-                  : truncateAddress(evmAddr, 8)}
-              </p>
+              <div className="flex items-center justify-between gap-3">
+                <p className="flex min-w-0 items-center gap-1.5 text-xs text-emerald-600">
+                  <CheckCheck className="h-3 w-3 shrink-0" />
+                  <span className="truncate">
+                    {connectedEvm && evmAddr.toLowerCase() === connectedEvm.toLowerCase()
+                      ? `Connected wallet · ${truncateAddress(evmAddr, 8)}`
+                      : truncateAddress(evmAddr, 8)}
+                  </span>
+                </p>
+                {connectedEvm && evmAddr.toLowerCase() === connectedEvm.toLowerCase() && (
+                  <button
+                    type="button"
+                    onClick={disconnectConnectedEvmRecipient}
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-zinc-100 text-zinc-700 transition-colors hover:bg-zinc-200 hover:text-zinc-950 dark:bg-white/10 dark:text-gray-300 dark:hover:bg-white/15 dark:hover:text-white"
+                    aria-label="Disconnect connected wallet"
+                  >
+                    <LogOut className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
             )}
+            <p className="text-xs text-gray-400 dark:text-gray-500">
+              {multiChainMode ? 'EVM address for Base, Arc, or Arbitrum.' : 'Paste EVM address.'}
+            </p>
           </fieldset>}
 
           {/* ── Starknet Address — Starknet only ─────────────────────── */}
-          {(selectedNet === 'starknet' || multiChainMode) && <fieldset className="space-y-1.5">
+          {SHOW_STARKNET_CREATE_UI && (selectedNet === 'starknet' || multiChainMode) && <fieldset className="space-y-1.5">
             <label className="flex items-center justify-between">
               <span className="flex items-center gap-2 text-sm font-medium text-gray-700">
-                <span className="h-2 w-2 rounded-full bg-[#8B5CF6]" />
                 Starknet Address
               </span>
               <span className="text-[11px] font-medium text-gray-400">Starknet Mainnet · WalletConnect</span>
@@ -593,25 +1022,24 @@ export default function CreateLink() {
               <p className="flex items-center gap-1 text-xs text-purple-600">
                 <CheckCheck className="h-3 w-3" />
                 {connectedStark && starkAddr.toLowerCase() === connectedStark.toLowerCase()
-                  ? `Auto-filled · ${truncateAddress(starkAddr, 8)}`
+                  ? `Connected wallet · ${truncateAddress(starkAddr, 8)}`
                   : truncateAddress(starkAddr, 8)}
               </p>
             )}
           </fieldset>}
 
           {/* ── Solana Address — Solana only ──────────────────────────── */}
-          {(selectedNet === 'solana' || multiChainMode) && <fieldset className="space-y-1.5">
+          {(selectedNet === 'solana' || multiChainMode) && (multiChainMode || receiveMode === 'paste') && <fieldset className="space-y-1.5">
             <label className="flex items-center justify-between">
               <span className="flex items-center gap-2 text-sm font-medium text-gray-700">
-                <span className="h-2 w-2 rounded-full bg-[#14F195]" />
-                Solana Address
+                Solana wallet address
               </span>
-              <span className="text-[11px] font-medium text-gray-400">Solana Mainnet · USDC</span>
+              <span className="text-[11px] font-medium text-gray-400">No 0x · usually 32-44 chars</span>
             </label>
             <div className="relative">
               <input
                 type="text"
-                placeholder="Base58 Solana address (32–44 chars)"
+                placeholder="Solana wallet address"
                 value={solanaAddr}
                 onChange={(e) => { setSolanaAddr(e.target.value.trim()); setGeneratedLink('') }}
                 spellCheck={false}
@@ -632,15 +1060,36 @@ export default function CreateLink() {
             </div>
             {solanaDirty && !solanaValid && (
               <p className="flex items-center gap-1 text-xs text-red-500">
-                <Info className="h-3 w-3" /> Must be a valid Solana base58 address.
+                <Info className="h-3 w-3" /> Enter a valid Solana wallet address
               </p>
             )}
             {solanaValid && (
-              <p className="flex items-center gap-1 text-xs text-emerald-600">
-                <CheckCheck className="h-3 w-3" />
-                {connectedSolana && solanaAddr === connectedSolana
-                  ? `Auto-filled · ${truncateAddress(solanaAddr, 8)}`
-                  : truncateAddress(solanaAddr, 8)}
+              <div className="flex items-center justify-between gap-3">
+                <p className="flex min-w-0 items-center gap-1 text-xs text-emerald-600">
+                  <CheckCheck className="h-3 w-3 shrink-0" />
+                  <span className="truncate">
+                    {receiveMode === 'email' && solanaValid
+                      ? `Circle Solana wallet · ${truncateAddress(solanaAddr, 8)}`
+                      : connectedSolana && solanaAddr === connectedSolana
+                      ? `Connected wallet · ${truncateAddress(solanaAddr, 8)}`
+                      : truncateAddress(solanaAddr, 8)}
+                  </span>
+                </p>
+                {connectedSolana && solanaAddr === connectedSolana && (
+                  <button
+                    type="button"
+                    onClick={disconnectConnectedSolanaRecipient}
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-zinc-100 text-zinc-700 transition-colors hover:bg-zinc-200 hover:text-zinc-950 dark:bg-white/10 dark:text-gray-300 dark:hover:bg-white/15 dark:hover:text-white"
+                    aria-label="Disconnect connected wallet"
+                  >
+                    <LogOut className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+            )}
+            {selectedNet === 'solana' && (
+              <p className="text-xs text-gray-400 dark:text-gray-500">
+                {receiveMode === 'email' && solanaValid ? 'Circle Solana wallet.' : 'Paste Solana address.'}
               </p>
             )}
           </fieldset>}
@@ -687,21 +1136,23 @@ export default function CreateLink() {
             )}
             {!amtDirty && (
               <p className="text-[11px] text-gray-400">
-                USDC on Base/Starknet/Arc/Solana/Arbitrum — payer chooses the chain
+                {multiChainMode
+                  ? 'USDC on Base, Arc Testnet, Solana, or Arbitrum — payer chooses the chain'
+                  : `USDC on ${selectedNet === 'arc' ? 'Arc Testnet' : CHAIN_META[selectedNet].label}`}
               </p>
             )}
           </fieldset>}
 
-          {/* ── Memo ─────────────────────────────────────────────────── */}
+          {/* ── Payment note ──────────────────────────────────────────── */}
           <fieldset className="space-y-1.5">
             <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
               <Tag className="h-3.5 w-3.5 text-gray-400" />
-              Memo
-              <span className="text-xs font-normal text-gray-400">(optional · stored on-chain)</span>
+              Payment note
+              <span className="text-xs font-normal text-gray-400">(optional)</span>
             </label>
             <input
               type="text"
-              placeholder="Coffee, Invoice #042, Split dinner…"
+              placeholder="Coffee, Invoice #042, Split dinner..."
               value={memo}
               maxLength={100}
               onChange={(e) => { setMemo(e.target.value); setGeneratedLink('') }}
@@ -765,7 +1216,7 @@ export default function CreateLink() {
             type="button"
             onClick={() => toggleEventMode(!eventMode)}
             className={cn(
-              'w-full rounded-xl border-2 p-4 text-left transition-all',
+              'w-full rounded-xl border-2 p-3.5 text-left transition-all',
               eventMode
                 ? 'border-blue-400 bg-blue-50/60'
                 : 'border-gray-200 bg-white hover:border-gray-300',
@@ -786,10 +1237,10 @@ export default function CreateLink() {
               </div>
             </div>
             <p className="mt-1.5 text-xs text-gray-500 leading-relaxed">
-              Each payer enters their name before paying. Tracked in a live dashboard with Export CSV.
+              Collect payer names and track payments in a live dashboard.
             </p>
             <p className="mt-1 text-[11px] text-gray-400">
-              Suitable for: <span className="font-medium text-gray-500">online donations · group splits · classroom fees · dues · registrations · and more</span>
+              Suitable for: <span className="font-medium text-gray-500">donations · group splits · fees · dues · registrations</span>
             </p>
           </button>}
 
@@ -922,12 +1373,12 @@ export default function CreateLink() {
             </div>
           )}
 
-          {/* ── Multi-Chain Payment toggle ───────────────────────────── */}
+          {/* ── Payer network toggle ──────────────────────────────────── */}
           <button
             type="button"
             onClick={() => toggleMultiChainMode(!multiChainMode)}
             className={cn(
-              'w-full rounded-xl border-2 p-4 text-left transition-all',
+              'w-full rounded-xl border-2 p-3.5 text-left transition-all',
               multiChainMode
                 ? 'border-violet-400 bg-violet-50/60'
                 : 'border-gray-200 bg-white hover:border-gray-300',
@@ -936,7 +1387,7 @@ export default function CreateLink() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Globe className={cn('h-4 w-4', multiChainMode ? 'text-violet-500' : 'text-gray-400')} />
-                <span className="text-sm font-semibold text-gray-800">Multi-Chain Payment</span>
+                <span className="text-sm font-semibold text-gray-800">Let payer choose network</span>
                 <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold text-violet-700">New</span>
               </div>
               <div className={cn('relative h-5 w-9 rounded-full transition-colors', multiChainMode ? 'bg-violet-500' : 'bg-gray-300')}>
@@ -947,16 +1398,16 @@ export default function CreateLink() {
               </div>
             </div>
             <p className="mt-1.5 text-xs text-gray-500 leading-relaxed">
-              Fill addresses for multiple chains. Payer chooses which chain to pay from — one payment, any chain.
+              Add multiple wallet addresses so the payer can choose a network.
             </p>
           </button>
 
-          {/* ── Flexible Amount toggle ───────────────────────────────── */}
+          {/* ── Flexible amount toggle ────────────────────────────────── */}
           <button
             type="button"
             onClick={() => toggleFlexAmount(!flexAmount)}
             className={cn(
-              'w-full rounded-xl border-2 p-4 text-left transition-all',
+              'w-full rounded-xl border-2 p-3.5 text-left transition-all',
               flexAmount
                 ? 'border-violet-400 bg-violet-50/60'
                 : 'border-gray-200 bg-white hover:border-gray-300',
@@ -965,7 +1416,7 @@ export default function CreateLink() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Sliders className={cn('h-4 w-4', flexAmount ? 'text-violet-500' : 'text-gray-400')} />
-                <span className="text-sm font-semibold text-gray-800">Flexible Amount</span>
+                <span className="text-sm font-semibold text-gray-800">Let payer enter amount</span>
               </div>
               <div className={cn('relative h-5 w-9 rounded-full transition-colors', flexAmount ? 'bg-violet-500' : 'bg-gray-300')}>
                 <div className={cn(
@@ -975,10 +1426,7 @@ export default function CreateLink() {
               </div>
             </div>
             <p className="mt-1.5 text-xs text-gray-500 leading-relaxed">
-              No fixed price — payer enters the amount and what they're paying for at checkout.
-            </p>
-            <p className="mt-1 text-[11px] text-gray-400">
-              Suitable for: <span className="font-medium text-gray-500">restaurants · shops · invoices · tips · donations</span>
+              No fixed price. The payer enters the amount at checkout.
             </p>
           </button>
 
@@ -1002,13 +1450,13 @@ export default function CreateLink() {
 
           {!canGenerate && vaultStep === 'idle' && (
             multiChainMode
-              ? (!evmDirty && !starkDirty && !solanaDirty)
+              ? (!evmDirty && !solanaDirty && !(SHOW_STARKNET_CREATE_UI && starkDirty))
               : (selectedNet === 'solana' ? !solanaDirty : isEvmNet ? !evmDirty : !starkDirty)
           ) && (
             <p className="text-center text-xs text-gray-400">
               {multiChainMode
                 ? 'Enter at least one wallet address to continue'
-                : `Enter a ${selectedNet === 'solana' ? 'Solana' : isEvmNet ? 'wallet' : 'Starknet'} address to continue`}
+                : `Enter a ${selectedNet === 'solana' ? 'Solana' : 'wallet'} address to continue`}
             </p>
           )}
             </>
@@ -1043,32 +1491,25 @@ export default function CreateLink() {
                   <div className="space-y-1">
                     {evmValid && (
                       <div className="flex items-center gap-2 text-xs text-gray-500">
-                        <span className="flex gap-0.5">
-                          <span className="h-1.5 w-1.5 rounded-full bg-[#0052FF]" />
-                          <span className="h-1.5 w-1.5 rounded-full bg-[#C9A227]" />
-                        </span>
-                        <span>{multiChainMode ? 'Base · Arc · Ethereum' : CHAIN_META[selectedNet].label}:</span>
+                        <span>{multiChainMode ? 'Base · Arc Testnet · Arbitrum' : CHAIN_META[selectedNet].label}:</span>
                         <span className="font-mono text-gray-700">{truncateAddress(evmAddr, 8)}</span>
                       </div>
                     )}
-                    {starkValid && (
+                    {SHOW_STARKNET_CREATE_UI && starkValid && (
                       <div className="flex items-center gap-2 text-xs text-gray-500">
-                        <span className="h-1.5 w-1.5 rounded-full bg-[#8B5CF6]" />
                         <span>Starknet:</span>
                         <span className="font-mono text-gray-700">{truncateAddress(starkAddr, 8)}</span>
                       </div>
                     )}
                     {solanaValid && (
                       <div className="flex items-center gap-2 text-xs text-gray-500">
-                        <span className="h-1.5 w-1.5 rounded-full bg-[#14F195]" />
                         <span>Solana:</span>
                         <span className="font-mono text-gray-700">{truncateAddress(solanaAddr, 8)}</span>
                       </div>
                     )}
                     {memo && (
                       <div className="flex items-center gap-2 text-xs text-gray-500">
-                        <span className="h-1.5 w-1.5 rounded-full bg-gray-300" />
-                        <span>Memo: <span className="font-medium text-gray-700">"{memo}"</span></span>
+                        <span>Payment note: <span className="font-medium text-gray-700">"{memo}"</span></span>
                       </div>
                     )}
                   </div>
@@ -1095,10 +1536,10 @@ export default function CreateLink() {
                 )}
               </div>
 
-              {/* Copy + Test buttons */}
+              {/* Share + Test buttons */}
               <div className="flex gap-2.5">
                 <button
-                  onClick={handleCopy}
+                  onClick={handleShare}
                   className={cn(
                     'flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all active:scale-[0.98]',
                     copied
@@ -1106,7 +1547,7 @@ export default function CreateLink() {
                       : 'bg-black text-white hover:bg-gray-800',
                   )}
                 >
-                  {copied ? <><CheckCheck className="h-4 w-4" /> Copied!</> : <><Copy className="h-4 w-4" /> Copy Link</>}
+                  {copied ? <><CheckCheck className="h-4 w-4" /> Copied!</> : <><Share2 className="h-4 w-4" /> Share</>}
                 </button>
                 <a
                   href={generatedLink}
@@ -1213,7 +1654,7 @@ export default function CreateLink() {
           </p>
           <div className="grid grid-cols-3 gap-3">
             {(!accessMode ? [
-              { n: '1', title: 'Enter details',   body: 'Your EVM or Starknet wallet address' },
+              { n: '1', title: 'Enter details',   body: 'Your wallet address' },
               { n: '2', title: 'Enter amount',    body: 'USDC' },
               { n: '3', title: 'Get paid',        body: 'Anyone pays from any wallet or exchange' },
             ] : [
@@ -1232,17 +1673,6 @@ export default function CreateLink() {
           </div>
 
           {/* ── Agent links ───────────────────────────────────────────── */}
-          {accessMode && (
-            <div className="mt-4 flex items-center justify-center gap-6">
-              <a href={TELEGRAM_AGENT_URL} target="_blank" rel="noopener noreferrer" className="text-xs text-gray-400 hover:text-gray-700 transition-colors">
-                Telegram agent
-              </a>
-              <Link to="/agent" className="text-xs text-gray-400 hover:text-gray-700 transition-colors">
-                Agent dashboard
-              </Link>
-            </div>
-          )}
-
           {/* ── Footer links ─────────────────────────────────────────── */}
           <div className="mt-6 border-t border-gray-100 pt-5 flex items-center justify-center gap-8">
             <a
@@ -1268,6 +1698,83 @@ export default function CreateLink() {
               <ExternalLink className="h-3.5 w-3.5" />
               Docs
             </Link>
+          </div>
+        </div>
+      )}
+
+      {shareOpen && generatedLink && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/35 px-4 pb-5 sm:items-center sm:pb-0"
+          onClick={() => setShareOpen(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl border border-gray-100 bg-white p-4 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-gray-900">Share payment link</p>
+                <p className="text-xs text-gray-400">Copy it or send it directly.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShareOpen(false)}
+                className="flex h-8 w-8 items-center justify-center rounded-xl bg-gray-50 text-gray-500 hover:bg-gray-100 hover:text-gray-900"
+                aria-label="Close share options"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleCopy}
+              className={cn(
+                'mb-2 flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all active:scale-[0.98]',
+                copied
+                  ? 'border border-emerald-200 bg-emerald-50 text-emerald-700'
+                  : 'bg-black text-white hover:bg-gray-800',
+              )}
+            >
+              {copied ? <><CheckCheck className="h-4 w-4" /> Copied!</> : <><Copy className="h-4 w-4" /> Copy link</>}
+            </button>
+
+            <div className="grid grid-cols-2 gap-2">
+              <a
+                href={`https://wa.me/?text=${encodedShareMessage}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-medium text-gray-700 hover:border-gray-300 hover:bg-gray-50"
+              >
+                <MessageCircle className="h-4 w-4" />
+                WhatsApp
+              </a>
+              <a
+                href={`https://t.me/share/url?url=${encodedShareUrl}&text=${encodedShareText}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-medium text-gray-700 hover:border-gray-300 hover:bg-gray-50"
+              >
+                <Send className="h-4 w-4" />
+                Telegram
+              </a>
+              <a
+                href={`https://twitter.com/intent/tweet?url=${encodedShareUrl}&text=${encodedShareText}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-medium text-gray-700 hover:border-gray-300 hover:bg-gray-50"
+              >
+                <X className="h-4 w-4" />
+                X
+              </a>
+              <a
+                href={`mailto:?subject=${encodeURIComponent('Hash PayLink payment request')}&body=${encodedShareMessage}`}
+                className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-medium text-gray-700 hover:border-gray-300 hover:bg-gray-50"
+              >
+                <Mail className="h-4 w-4" />
+                Email
+              </a>
+            </div>
           </div>
         </div>
       )}
