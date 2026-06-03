@@ -51,15 +51,13 @@ const PLATFORM_FEE_BPS = 20 // 0.2%
 const DEFAULT_GAS_RECOVERY_RAW = 10_000n // 0.01 USDC
 const DEFAULT_ATA_RECOVERY_RAW = 400_000n // 0.40 USDC
 const DEFAULT_MIN_RECIPIENT_RAW = 100_000n // 0.10 USDC
-const PUBLIC_SOLANA_RPC_URL = 'https://api.mainnet-beta.solana.com'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function getRpc(): string {
-  // Render is currently failing to fetch from the configured Solana RPC while
-  // public mainnet reads succeed through the balance fallback. Use public RPC
-  // for transaction blockhash/send paths until the private RPC route is stable.
-  return PUBLIC_SOLANA_RPC_URL
+  const rpcUrl = process.env.SOLANA_RPC_URL?.trim()
+  if (!rpcUrl) throw new Error('SOLANA_RPC_URL not configured')
+  return rpcUrl
 }
 
 function loadRelayer(): Keypair {
