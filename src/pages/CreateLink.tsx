@@ -888,7 +888,7 @@ export default function CreateLink() {
               </div>
 
               <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
-                <Link to="/agent" className="text-xs font-medium text-gray-400 transition-colors hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200">
+                <Link to="/agent?profile=agent" className="text-xs font-medium text-gray-400 transition-colors hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200">
                   Agent dashboard
                 </Link>
                 <Link to="/docs/access-mode" className="text-xs font-medium text-gray-400 transition-colors hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200">
