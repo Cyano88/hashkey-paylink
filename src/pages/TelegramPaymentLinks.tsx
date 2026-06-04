@@ -391,9 +391,24 @@ function SavedRequestCard({
   onEdit: () => void
 }) {
   const payLink = buildRequestPayLink(request)
+  const amountLine = request.amount ? `${request.amount} USDC` : 'Flexible amount'
   const message = request.mode === 'group'
-    ? `${request.label} is collecting USDC. Verify and open the payment link below to contribute.`
-    : `${request.label} requested USDC. Verify and open the payment link below to pay.`
+    ? [
+        `${request.label} opened a Hash PayLink collection.`,
+        '',
+        `Amount: ${amountLine}`,
+        `For: ${request.target}`,
+        '',
+        'Review and contribute securely:',
+      ].join('\n')
+    : [
+        `${request.label} sent you a Hash PayLink request.`,
+        '',
+        `Amount: ${amountLine}`,
+        `To: ${request.target}`,
+        '',
+        'Review and pay securely:',
+      ].join('\n')
   const telegramShareUrl = `https://t.me/share/url?url=${encodeURIComponent(payLink)}&text=${encodeURIComponent(message)}`
 
   return (
@@ -430,7 +445,8 @@ function SavedRequestCard({
 
       <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
         <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Telegram message</p>
-        <p className="mt-1 text-sm leading-relaxed text-gray-700 dark:text-gray-200">{message}</p>
+        <div className="mt-1 whitespace-pre-line text-sm leading-relaxed text-gray-700 dark:text-gray-200">{message}</div>
+        <p className="mt-2 truncate text-xs text-gray-400 dark:text-gray-500">{payLink}</p>
       </div>
 
       <a
@@ -440,7 +456,7 @@ function SavedRequestCard({
         className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
       >
         <Send className="h-4 w-4" />
-        {request.mode === 'group' ? 'Share to group' : 'Share request'}
+        {request.mode === 'group' ? 'Share collection' : 'Share payment request'}
       </a>
     </div>
   )
@@ -454,6 +470,7 @@ function buildRequestPayLink(request: SavedRequest) {
   if (amount) params.set('a', amount)
   else params.set('f', '1')
 
+  params.set('src', 't')
   if (wallet.toLowerCase().startsWith('0x')) {
     params.set('n', 'base')
     params.set('e', wallet)
