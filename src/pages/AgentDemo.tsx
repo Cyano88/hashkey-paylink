@@ -10,16 +10,28 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { Link, useOutletContext }       from 'react-router-dom'
+import { usePrivy }                     from '@privy-io/react-auth'
 import { cn }                           from '../lib/utils'
 import type { LayoutOutletContext }     from '../Layout'
 import { CHAIN_META }                   from '../lib/chains'
 import type { ChainKey }                from '../lib/chains'
 import { queryBalances }                from '../lib/unifiedBalance'
+import { PRIVY_AUTH_ENABLED }           from '../lib/authMode'
+import { resolvePrivyCircleLink, savePrivyCircleLink } from '../lib/privyCircleLink'
 import {
   CheckCircle2, AlertCircle, Loader2, Send,
   ExternalLink, ArrowLeft, ShieldCheck, Zap,
-  Wallet, CreditCard, Radio, Copy, LogOut, X,
+  Wallet, Radio, Copy, LogOut, X, Bot,
 } from 'lucide-react'
+
+function emailFromPrivyUser(user: unknown) {
+  const linkedAccounts = (user as { linkedAccounts?: Array<Record<string, unknown>> } | null)?.linkedAccounts ?? []
+  for (const account of linkedAccounts) {
+    if (account?.type === 'email' && typeof account.address === 'string') return account.address
+  }
+  const email = (user as { email?: { address?: string } } | null)?.email?.address
+  return typeof email === 'string' ? email : ''
+}
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -77,17 +89,19 @@ type AgentActivity = {
 // ─── Demo credentials (pre-filled for judges) ─────────────────────────────────
 const DEMO_EVENT_ID = 'test-0g-1778114523394'
 const DEMO_PAYER    = 'HashPayLink 0G Test'
+const AGENT_WALLET_CHAINS: Extract<ChainKey, 'base' | 'arbitrum' | 'arc'>[] = ['base', 'arbitrum', 'arc']
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function AgentDemo() {
   const { selectedNet, onNetworkSelect } = useOutletContext<LayoutOutletContext>()
+  const { authenticated: privyAuthenticated, user: privyUser, login: loginPrivy, getAccessToken } = usePrivy()
+  const privyEmail = emailFromPrivyUser(privyUser).trim().toLowerCase()
   const params = new URLSearchParams(window.location.search)
   const agentSlug = params.get('agent') ?? ''
   const agentWallet = params.get('wallet') ?? params.get('e') ?? ''
   const intendedAgentWallet = params.get('wallet') ?? params.get('expectedWallet') ?? params.get('e') ?? ''
   const [ignoreUrlAgentWallet, setIgnoreUrlAgentWallet] = useState(false)
-  const agentPrice = params.get('price') ?? '1'
   const agentStreamPrice = params.get('streamPrice') ?? ''
   const agentStreamDuration = params.get('streamDuration') ?? ''
   const urlAgentNetwork = params.get('n') ?? 'base'
@@ -132,6 +146,7 @@ export default function AgentDemo() {
   const [askError,   setAskError]   = useState<string | null>(null)
   const bottomRef    = useRef<HTMLDivElement>(null)
   const autoRan      = useRef(false)
+  const agentPrivyRestoreKey = useRef('')
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -153,6 +168,35 @@ export default function AgentDemo() {
     loadAgentWallet()
       .catch(() => undefined)
   }, [agentSlug, showAgentProfile]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    let cancelled = false
+    if (!showAgentProfile || !PRIVY_AUTH_ENABLED || !privyAuthenticated || !privyEmail) return
+    const runKey = `${agentNetwork}:${privyEmail}`
+    agentPrivyRestoreKey.current = runKey
+    setWalletEmail(current => current || privyEmail)
+    ;(async () => {
+      try {
+        const token = await getAccessToken()
+        if (!token || cancelled || agentPrivyRestoreKey.current !== runKey) return
+        const existing = await resolvePrivyCircleLink({
+          accessToken: token,
+          chain: agentNetwork,
+          purpose: 'agent',
+        })
+        if (cancelled || agentPrivyRestoreKey.current !== runKey) return
+        if (existing.link?.circleWalletAddress) {
+          setCurrentAgentWallet(existing.link.circleWalletAddress)
+          setAgentWalletChain(existing.link.circleBlockchain)
+          setWalletStep('done')
+          setWalletError(null)
+        }
+      } catch (err) {
+        console.warn('[Agent] Privy Circle agent wallet restore failed', err)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [showAgentProfile, privyAuthenticated, privyEmail, agentNetwork, getAccessToken])
 
   useEffect(() => {
     let cancelled = false
@@ -328,6 +372,17 @@ export default function AgentDemo() {
   async function callAgentWallet(action: 'init' | 'complete', mode?: 'create' | 'login') {
     const selectedMode = mode ?? (walletMode === 'choose' ? 'login' : walletMode)
     setWalletMode(selectedMode)
+    if (PRIVY_AUTH_ENABLED && !privyAuthenticated) {
+      setWalletError(null)
+      loginPrivy({ loginMethods: ['email'] })
+      return
+    }
+    if (PRIVY_AUTH_ENABLED && !privyEmail) {
+      setWalletError('Sign in with email to manage your Circle CLI agent wallet.')
+      return
+    }
+    const email = (PRIVY_AUTH_ENABLED ? privyEmail : walletEmail).trim().toLowerCase()
+    if (email) setWalletEmail(email)
     setWalletBusy(true)
     setWalletError(null)
     try {
@@ -337,7 +392,7 @@ export default function AgentDemo() {
         body: JSON.stringify({
           action,
           agentSlug: agentSlug || 'hashpaylink-agent',
-          email: walletEmail,
+          email,
           otp: walletOtp,
           testnet: agentNetwork === 'arc',
           expectedWallet: ignoreUrlAgentWallet ? currentAgentWallet || undefined : intendedAgentWallet || currentAgentWallet || undefined,
@@ -358,6 +413,22 @@ export default function AgentDemo() {
         setTreasuryBalanceError('')
         setWalletStep('done')
         setAgentWalletSessionConnected(true)
+        if (PRIVY_AUTH_ENABLED && privyAuthenticated) {
+          const token = await getAccessToken()
+          if (token) {
+            await savePrivyCircleLink({
+              accessToken: token,
+              chain: agentNetwork,
+              purpose: 'agent',
+              email,
+              wallet: {
+                id: `agent:${agentSlug || 'hashpaylink-agent'}:${data.walletAddress.toLowerCase()}`,
+                address: data.walletAddress as `0x${string}`,
+                blockchain: data.chain ?? (agentNetwork === 'arc' ? 'ARC-TESTNET' : agentNetwork.toUpperCase()),
+              },
+            })
+          }
+        }
         void loadAgentWallet()
       }
     } catch (err) {
@@ -472,7 +543,7 @@ export default function AgentDemo() {
     : ''
 
   return (
-    <div className="mx-auto max-w-2xl animate-slide-up space-y-6">
+    <div className={cn('mx-auto animate-slide-up space-y-6', showAgentProfile ? 'max-w-md' : 'max-w-2xl')}>
 
       {/* ── Back ──────────────────────────────────────────────────────────── */}
       <Link to="/" className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors">
@@ -481,12 +552,39 @@ export default function AgentDemo() {
 
       {showAgentProfile && (
         <div
-          className="relative rounded-2xl border bg-white p-5 shadow-sm transition-all dark:bg-[#1c1c20] sm:p-6"
-          style={{
-            borderColor: `${agentMeta.accentColor}24`,
-            boxShadow: `0 16px 44px -32px ${agentMeta.accentColor}, ${agentMeta.glowStyle}`,
-          }}
+          className="relative rounded-xl border border-gray-100 bg-white p-4 shadow-card transition-all dark:border-white/10 dark:bg-[#111114]"
         >
+          <div className="mb-4 flex justify-center">
+            <div className="flex w-full items-center justify-center gap-0.5 overflow-x-auto rounded-xl border border-gray-200 bg-gray-100/80 p-1 dark:border-white/10 dark:bg-white/[0.06] sm:w-auto sm:gap-1">
+              {AGENT_WALLET_CHAINS.map((chainKey) => {
+                const chainMeta = CHAIN_META[chainKey]
+                const isActive = agentNetwork === chainKey
+                return (
+                  <button
+                    key={chainKey}
+                    type="button"
+                    onClick={() => onNetworkSelect(chainKey)}
+                    className={cn(
+                      'flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-[10px] font-semibold transition-all duration-150 sm:gap-1.5 sm:px-3 sm:py-1.5 sm:text-xs',
+                      isActive ? chainMeta.toggleActive : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200',
+                    )}
+                  >
+                    <span className={cn('h-1.5 w-1.5 rounded-full transition-colors', isActive ? 'bg-white/80' : chainMeta.dotColor)} />
+                    <span>{chainMeta.label}</span>
+                    {chainKey === 'arc' && (
+                      <span className={cn(
+                        'rounded-full px-1.5 py-0.5 text-[8px] font-bold uppercase leading-none',
+                        isActive ? 'bg-white/20 text-white' : 'bg-cyan-100 text-cyan-700 dark:bg-cyan-400/10 dark:text-cyan-200',
+                      )}>
+                        Testnet
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
           {currentAgentWallet && (
             <button
               type="button"
@@ -494,23 +592,26 @@ export default function AgentDemo() {
               disabled={walletBusy}
               aria-label="Disconnect agent wallet session"
               title="Disconnect agent wallet session"
-              className="absolute right-4 top-4 inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-400 transition-all hover:border-red-200 hover:bg-red-50 hover:text-red-500 active:scale-95 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.06] dark:hover:border-red-400/30 dark:hover:bg-red-400/10 dark:hover:text-red-300"
+              className="absolute right-4 top-[72px] inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-400 transition-all hover:border-red-200 hover:bg-red-50 hover:text-red-500 active:scale-95 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.06] dark:hover:border-red-400/30 dark:hover:bg-red-400/10 dark:hover:text-red-300"
             >
               {walletBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <LogOut className="h-3.5 w-3.5" />}
             </button>
           )}
-          <div className="flex items-start gap-3 sm:gap-4">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-blue-100 bg-blue-50 dark:border-blue-900/30 dark:bg-blue-900/20">
-              <Wallet className="h-5 w-5 text-blue-600" />
+          <div className="flex items-start gap-3 pr-9 sm:gap-4">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-white/[0.06]">
+              <Bot className="h-[18px] w-[18px] text-gray-700 dark:text-gray-200" />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Agent treasury</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Agent wallet</p>
               <h1 className="mt-1 truncate text-lg font-semibold tracking-tight text-gray-900 dark:text-white">
-                {agentSlug || 'Hash PayLink Agent'}
+                {agentSlug || 'Your agent wallet'}
               </h1>
               <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2">
-                <p className="max-w-full truncate font-mono text-xs text-gray-500 dark:text-gray-400">
-                  {currentAgentWallet || 'Circle agent wallet not connected'}
+                <p className={cn(
+                  'max-w-full truncate text-xs text-gray-500 dark:text-gray-400',
+                  currentAgentWallet && 'font-mono',
+                )}>
+                  {currentAgentWallet || 'Not connected'}
                 </p>
                 {currentAgentWallet && (
                   <button
@@ -531,80 +632,55 @@ export default function AgentDemo() {
             </div>
           </div>
 
-          <div className="mt-5 grid gap-2.5 sm:grid-cols-4">
-            <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
-              <CreditCard className="h-4 w-4 text-gray-400" />
-              <p className="mt-2 text-xs font-semibold text-gray-800 dark:text-gray-100">Ask</p>
-              <p className="text-xs text-gray-500">{agentPrice} USDC once</p>
-            </div>
-            <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
-              <Radio className="h-4 w-4 text-gray-400" />
-              <p className="mt-2 text-xs font-semibold text-gray-800 dark:text-gray-100">Stream</p>
-              <p className="text-xs text-gray-500" title={treasuryBalanceError || undefined}>
-                {agentStreamPrice && agentStreamDuration ? `${agentStreamPrice} USDC / ${agentStreamDuration}` : 'Not set'}
-              </p>
-            </div>
-            <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
-              <Wallet className="h-4 w-4 text-gray-400" />
-              <p className="mt-2 text-xs font-semibold text-gray-800 dark:text-gray-100">Fund</p>
-              <p className="text-xs text-gray-500">On {agentMeta.label}</p>
-            </div>
-            <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
-              <ShieldCheck className="h-4 w-4 text-gray-400" />
-              <p className="mt-2 text-xs font-semibold text-gray-800 dark:text-gray-100">Treasury</p>
-              <p className="text-xs text-gray-500" title={treasuryBalanceError || undefined}>
-                {treasuryBalance !== null
-                  ? `${Number(treasuryBalance).toLocaleString(undefined, { maximumFractionDigits: 6 })} USDC`
-                  : currentAgentWallet
-                  ? treasuryBalanceError || treasuryBalanceChecked ? 'Unavailable' : 'Checking...'
-                  : 'No wallet'}
-              </p>
-              {treasuryBalanceError && (
-                <p className="mt-1 line-clamp-2 text-[10px] leading-tight text-amber-600 dark:text-amber-300">
-                  {treasuryBalanceError}
+          <div className="mt-4 rounded-lg border border-gray-100 bg-gray-50/70 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">
+            <div className="divide-y divide-gray-100 dark:divide-white/10">
+              <div className="flex items-center justify-between gap-4 py-1.5 first:pt-0">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Balance</p>
+                <div className="text-right">
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white" title={treasuryBalanceError || undefined}>
+                    {treasuryBalance !== null
+                      ? `${Number(treasuryBalance).toLocaleString(undefined, { maximumFractionDigits: 6 })} USDC`
+                      : currentAgentWallet
+                      ? treasuryBalanceError || treasuryBalanceChecked ? 'Unavailable' : 'Checking...'
+                      : 'No wallet'}
+                  </p>
+                  {displayAgentWalletChain && (
+                    <p className="mt-0.5 text-[10px] font-semibold text-gray-400">{displayAgentWalletChain}</p>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center justify-between gap-4 py-1.5 last:pb-0">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">x402</p>
+                <p className="text-sm font-semibold text-gray-900 dark:text-white" title={x402BalanceError || undefined}>
+                  {x402Balance !== null
+                    ? `${Number(x402Balance).toLocaleString(undefined, { maximumFractionDigits: 6 })} USDC`
+                    : currentAgentWallet && agentWalletSessionConnected
+                    ? x402BalanceError || x402BalanceChecked ? 'Unavailable' : 'Checking...'
+                    : 'Not connected'}
                 </p>
-              )}
-              {displayAgentWalletChain && (
-                <p className="mt-0.5 text-[10px] font-semibold" style={{ color: agentMeta.accentColor }}>
-                  {displayAgentWalletChain}
-                </p>
-              )}
+              </div>
             </div>
+            {treasuryBalanceError && (
+              <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-200">
+                {treasuryBalanceError}
+              </p>
+            )}
+            {agentStreamPrice && agentStreamDuration && (
+              <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+                StreamPay retainer: {agentStreamPrice} USDC / {agentStreamDuration}
+              </p>
+            )}
           </div>
 
           {(!currentAgentWallet || !agentWalletSessionConnected) && (
-            <div className="mt-5 rounded-xl border border-gray-100 bg-gray-50/70 p-4 transition-all dark:border-white/10 dark:bg-white/[0.04]">
-              <div className="flex items-center gap-2">
-                <Wallet className="h-4 w-4 text-gray-600 dark:text-gray-300" />
-                <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                  {currentAgentWallet ? 'Reconnect Circle wallet' : 'Connect Circle wallet'}
-                </p>
+            <div className="mt-4 space-y-2 rounded-xl border border-gray-200 bg-gray-50/70 p-3 transition-all dark:border-white/10 dark:bg-white/[0.04]">
+              <div>
+                <p className="text-sm font-semibold text-gray-900 dark:text-white">Sign in</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Privy email + Circle wallet access.</p>
               </div>
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                {currentAgentWallet
-                  ? 'Use the same Circle email. A different wallet will not replace this one.'
-                  : walletMode === 'choose'
-                  ? 'Create a new wallet or connect an existing one.'
-                  : walletMode === 'create'
-                  ? 'Enter email. Circle sends an OTP.'
-                  : 'Enter the wallet email. Circle sends an OTP.'}
-              </p>
-              {walletMode === 'choose' ? (
-                <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setWalletMode('create')
-                      setWalletStep('idle')
-                      setWalletOtp('')
-                      setWalletError(null)
-                    }}
-                    disabled={walletBusy}
-                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-black px-3 py-3 text-sm font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
-                  >
-                    <Wallet className="h-4 w-4" />
-                    Create new wallet
-                  </button>
+
+              {PRIVY_AUTH_ENABLED && !privyAuthenticated ? (
+                <>
                   <button
                     type="button"
                     onClick={() => {
@@ -612,52 +688,115 @@ export default function AgentDemo() {
                       setWalletStep('idle')
                       setWalletOtp('')
                       setWalletError(null)
+                      loginPrivy({ loginMethods: ['email'] })
                     }}
                     disabled={walletBusy}
-                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-3 text-sm font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/[0.1]"
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-6 py-3.5 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-60 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
                   >
-                    <ShieldCheck className="h-4 w-4" />
-                    Connect existing
+                    <img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert mix-blend-screen" />
+                    Continue with email
                   </button>
-                </div>
+                  <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
+                    Privy email
+                  </p>
+                </>
+              ) : walletMode === 'choose' ? (
+                <>
+                  <div className="rounded-lg border border-gray-200 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.06]">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Signed in</p>
+                    <p className="mt-0.5 truncate text-sm font-medium text-gray-800 dark:text-gray-100">
+                      {PRIVY_AUTH_ENABLED ? privyEmail || 'Email session active' : 'Choose how to continue'}
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setWalletMode('create')
+                        setWalletStep('idle')
+                        setWalletOtp('')
+                        setWalletError(null)
+                      }}
+                      disabled={walletBusy}
+                      className="rounded-lg bg-black px-3 py-2.5 text-sm font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+                    >
+                      Create wallet
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setWalletMode('login')
+                        setWalletStep('idle')
+                        setWalletOtp('')
+                        setWalletError(null)
+                      }}
+                      disabled={walletBusy}
+                      className="rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/[0.1]"
+                    >
+                      Existing wallet
+                    </button>
+                  </div>
+                  <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
+                    Circle wallet
+                  </p>
+                </>
               ) : (
-                <div className="mt-3 space-y-3">
+                <div className="space-y-2">
                   {walletStep !== 'otp' && (
-                    <div className="grid gap-2 sm:grid-cols-[1fr_132px]">
-                      <input
-                        type="email"
-                        value={walletEmail}
-                        onChange={e => setWalletEmail(e.target.value)}
-                        placeholder="you@example.com"
-                        disabled={walletBusy || walletStep === 'done'}
-                        className="min-w-0 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-gray-200 disabled:opacity-60 dark:border-white/10 dark:bg-white/[0.06] dark:text-white"
-                      />
+                    <>
+                      {PRIVY_AUTH_ENABLED && privyAuthenticated ? (
+                        <div className="rounded-lg border border-gray-200 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.06]">
+                          <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+                            {walletMode === 'create' ? 'New agent wallet' : 'Existing agent wallet'}
+                          </p>
+                          <p className="mt-0.5 truncate text-sm font-medium text-gray-800 dark:text-gray-100">
+                            {privyEmail || 'Email session active'}
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.06]">
+                          <input
+                            type="email"
+                            value={walletEmail}
+                            onChange={e => setWalletEmail(e.target.value)}
+                            placeholder="Enter your email"
+                            disabled={walletBusy || walletStep === 'done'}
+                            className="min-w-0 flex-1 bg-transparent text-sm text-gray-800 placeholder:text-gray-400 outline-none disabled:opacity-60 dark:text-white dark:placeholder:text-gray-500"
+                          />
+                        </div>
+                      )}
                       <button
                         type="button"
                         onClick={() => callAgentWallet('init')}
-                        disabled={walletBusy || !walletEmail.trim() || walletStep === 'done'}
-                        className="inline-flex items-center justify-center gap-2 rounded-lg bg-black px-3 py-2 text-sm font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+                        disabled={walletBusy || (!PRIVY_AUTH_ENABLED && !walletEmail.trim()) || walletStep === 'done'}
+                        className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-6 py-3.5 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-60 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
                       >
-                        {walletBusy && walletStep === 'idle' ? <Loader2 className="h-4 w-4 animate-spin" /> : walletMode === 'create' ? <Wallet className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />}
-                        Send OTP
+                        {walletBusy && walletStep === 'idle'
+                          ? <><Loader2 className="h-4 w-4 animate-spin" /> Opening Circle wallet</>
+                          : <><img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert mix-blend-screen" /> Continue</>}
                       </button>
-                    </div>
+                      <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
+                        Circle OTP required
+                      </p>
+                    </>
                   )}
 
                   {walletStep === 'otp' && (
-                    <div className="grid gap-2 sm:grid-cols-[1fr_104px_108px]">
-                      <input
-                        value={walletOtp}
-                        onChange={e => setWalletOtp(e.target.value.trim())}
-                        placeholder="6-digit OTP"
-                        disabled={walletBusy}
-                        className="min-w-0 rounded-lg border border-blue-100 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-blue-200 disabled:opacity-60 dark:border-white/10 dark:bg-white/[0.06] dark:text-white"
-                      />
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.06]">
+                        <input
+                          value={walletOtp}
+                          onChange={e => setWalletOtp(e.target.value.trim())}
+                          placeholder="Enter Circle OTP"
+                          disabled={walletBusy}
+                          className="min-w-0 flex-1 bg-transparent text-sm text-gray-800 placeholder:text-gray-400 outline-none disabled:opacity-60 dark:text-white dark:placeholder:text-gray-500"
+                        />
+                      </div>
                       <button
                         type="button"
                         onClick={() => callAgentWallet('complete')}
                         disabled={walletBusy || !walletOtp.trim()}
-                        className="inline-flex items-center justify-center gap-2 rounded-lg bg-gray-900 px-3 py-2 text-sm font-semibold text-white transition-all hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-900"
+                        className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-6 py-3.5 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-60 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
                       >
                         {walletBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
                         Verify
@@ -665,8 +804,8 @@ export default function AgentDemo() {
                       <button
                         type="button"
                         onClick={() => callAgentWallet('init', walletMode)}
-                        disabled={walletBusy || !walletEmail.trim()}
-                        className="inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 transition-all hover:bg-gray-50 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200"
+                        disabled={walletBusy || (!PRIVY_AUTH_ENABLED && !walletEmail.trim())}
+                        className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 transition-all hover:bg-gray-50 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200"
                       >
                         Resend OTP
                       </button>
@@ -692,37 +831,41 @@ export default function AgentDemo() {
               {walletErrorMessage && <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-600 dark:bg-red-950/20 dark:text-red-300">{walletErrorMessage}</p>}
               {walletStep === 'otp' && !walletError && (
                 <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                  Check your email for the latest Circle OTP.
+                  Check your email for the latest OTP.
                 </p>
               )}
             </div>
           )}
 
           {currentAgentWallet && agentWalletSessionConnected && (
-            <div className="mt-5 space-y-3">
+            <div className="mt-4 space-y-3">
+              <div>
+                <p className="text-sm font-semibold text-gray-900 dark:text-white">Wallet actions</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Fund wallet or activate x402.</p>
+              </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <Link
                   to={buildAgentFundUrl()}
                   onClick={handleFundAgent}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-black px-4 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
                 >
-                  <Wallet className="h-4 w-4" /> Fund Agent Wallet
+                  <Wallet className="h-4 w-4" /> Fund wallet
                 </Link>
 
                 {agentStreamUrl && (
                   <a
                     href={agentStreamUrl}
-                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-800 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-100"
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-800 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-100"
                   >
-                    <Radio className="h-4 w-4" /> Start StreamPay Retainer
+                    <Radio className="h-4 w-4" /> StreamPay
                   </a>
                 )}
               </div>
 
-              <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
+              <div className="rounded-lg border border-gray-100 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <p className="text-xs font-semibold text-gray-900 dark:text-white">x402 Gateway balance</p>
+                    <p className="text-xs font-semibold text-gray-900 dark:text-white">x402 balance</p>
                     <p className="text-xs text-gray-500 dark:text-gray-400" title={x402BalanceError || undefined}>
                       {x402Balance !== null
                         ? `${Number(x402Balance).toLocaleString(undefined, { maximumFractionDigits: 6 })} USDC ready`
@@ -747,7 +890,7 @@ export default function AgentDemo() {
                   className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-gray-900 px-3 py-2.5 text-sm font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-50 dark:bg-white dark:text-gray-950"
                 >
                   {x402Busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
-                  Activate x402
+                  Activate
                 </button>
                 {(x402BalanceError || x402Status) && (
                   <p className={cn('mt-2 text-xs font-medium', x402BalanceError ? 'text-amber-600 dark:text-amber-300' : 'text-emerald-600 dark:text-emerald-300')}>
@@ -756,11 +899,11 @@ export default function AgentDemo() {
                 )}
               </div>
 
-              <div className="rounded-xl border border-gray-100 bg-white p-3 dark:border-white/10 dark:bg-white/[0.04]">
+              <div className="rounded-lg border border-gray-100 bg-white p-3 dark:border-white/10 dark:bg-white/[0.04]">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-xs font-semibold text-gray-900 dark:text-white">Agent activity</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">Funding, x402 activation, and agent-paid service receipts</p>
+                    <p className="text-xs font-semibold text-gray-900 dark:text-white">Activity</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Funding and x402 receipts</p>
                   </div>
                   <button
                     type="button"
@@ -852,29 +995,6 @@ export default function AgentDemo() {
       )}
 
       {/* ── Hero ──────────────────────────────────────────────────────────── */}
-      {showAgentProfile && (
-        <div className="animate-fade-in">
-          <p className="mb-4 text-center text-[11px] font-semibold uppercase tracking-widest text-gray-400">
-            How it works
-          </p>
-          <div className="grid gap-3 sm:grid-cols-3">
-            {[
-              { n: '1', title: 'Connect', body: 'Circle email wallet' },
-              { n: '2', title: 'Fund', body: 'Add USDC' },
-              { n: '3', title: 'Use', body: 'Ask, stream, x402' },
-            ].map(({ n, title, body }) => (
-              <div key={n} className="rounded-xl border border-gray-100 bg-white p-4 text-center shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
-                <div className="mx-auto mb-2.5 flex h-7 w-7 items-center justify-center rounded-full bg-gray-100 text-xs font-bold text-gray-600 dark:bg-white/[0.08] dark:text-gray-300">
-                  {n}
-                </div>
-                <p className="text-xs font-semibold text-gray-800 dark:text-gray-100">{title}</p>
-                <p className="mt-0.5 text-xs leading-relaxed text-gray-400 dark:text-gray-500">{body}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
       {!showAgentProfile && (
         <>
       <div className="rounded-2xl border border-purple-100 bg-white p-6 shadow-sm dark:bg-[#1c1c20] dark:border-purple-900/30">

@@ -7,6 +7,7 @@ export type PrivyCircleLink = {
   privyUserId: string
   email?: string
   chain: CircleLinkChain
+  purpose?: 'payment' | 'agent'
   circleWalletId: string
   circleWalletAddress: string
   circleBlockchain: string
@@ -24,6 +25,7 @@ async function privyCircleLinkApi(params: {
   accessToken: string
   action: 'resolve' | 'link'
   chain: CircleLinkChain
+  purpose?: 'payment' | 'agent'
   email?: string
   wallet?: { id: string; address: string; blockchain: string }
 }) {
@@ -36,6 +38,7 @@ async function privyCircleLinkApi(params: {
     body: JSON.stringify({
       action: params.action,
       chain: params.chain,
+      purpose: params.purpose,
       email: params.email,
       wallet: params.wallet,
     }),
@@ -48,6 +51,7 @@ async function privyCircleLinkApi(params: {
 export async function resolvePrivyCircleLink(params: {
   accessToken: string
   chain: CircleLinkChain
+  purpose?: 'payment' | 'agent'
 }) {
   return privyCircleLinkApi({ ...params, action: 'resolve' })
 }
@@ -55,6 +59,7 @@ export async function resolvePrivyCircleLink(params: {
 export async function savePrivyCircleLink(params: {
   accessToken: string
   chain: CircleLinkChain
+  purpose?: 'payment' | 'agent'
   email?: string
   wallet: { id: string; address: string; blockchain: string }
 }) {

@@ -13,6 +13,7 @@ type CircleLinkRecord = {
   privyUserId: string
   email?: string
   chain: 'base' | 'arbitrum' | 'arc' | 'solana'
+  purpose?: 'payment' | 'agent'
   circleWalletId: string
   circleWalletAddress: string
   circleBlockchain: string
@@ -23,8 +24,8 @@ type Store = {
   links: Record<string, CircleLinkRecord>
 }
 
-function linkKey(privyUserId: string, chain: string) {
-  return `${privyUserId}:${chain}`
+function linkKey(privyUserId: string, chain: string, purpose = 'payment') {
+  return purpose === 'payment' ? `${privyUserId}:${chain}` : `${privyUserId}:${purpose}:${chain}`
 }
 
 function getBearerToken(req: Request) {
@@ -93,9 +94,10 @@ export default async function handler(req: Request, res: Response) {
   }
 
   try {
-    const { action, chain, email, wallet } = (req.body ?? {}) as {
+    const { action, chain, purpose: rawPurpose, email, wallet } = (req.body ?? {}) as {
       action?: string
       chain?: string
+      purpose?: string
       email?: string
       wallet?: { id?: string; address?: string; blockchain?: string }
     }
@@ -105,8 +107,9 @@ export default async function handler(req: Request, res: Response) {
     }
 
     const { claims, email: verifiedEmail } = await verifiedPrivyUser(req)
+    const purpose = rawPurpose === 'agent' ? 'agent' : 'payment'
     const store = await readStore()
-    const key = linkKey(claims.userId, chain)
+    const key = linkKey(claims.userId, chain, purpose)
 
     if (action === 'resolve') {
       return res.json({ ok: true, email: verifiedEmail, link: store.links[key] ?? null })
@@ -135,6 +138,7 @@ export default async function handler(req: Request, res: Response) {
         privyUserId: claims.userId,
         email: verifiedEmail ?? normalizedEmail,
         chain: chain as CircleLinkRecord['chain'],
+        purpose,
         circleWalletId: wallet.id,
         circleWalletAddress: wallet.address,
         circleBlockchain: wallet.blockchain,

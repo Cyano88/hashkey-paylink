@@ -561,11 +561,7 @@ export default function Layout() {
               : isDashPage
               ? <NetworkToolkit activeKey={dashboardActiveNet} label={dashboardNetworkLabel} locked />
               : isAgentProfilePage
-              ? <NetworkToolkit
-                  activeKey={selectedNet === 'base' || selectedNet === 'arbitrum' ? selectedNet : 'base'}
-                  networks={agentNetworks}
-                  onSwitch={handleNetworkSelect}
-                />
+              ? null
               : <NetworkToolkit activeKey={selectedNet ?? 'base'} onSwitch={handleNetworkSelect} />
             }
 
