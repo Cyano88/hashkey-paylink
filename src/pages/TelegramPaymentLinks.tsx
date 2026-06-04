@@ -16,9 +16,10 @@ import {
 } from 'lucide-react'
 import { cn } from '../lib/utils'
 
-function displayTelegramName(rawName: string | null) {
+function displayTelegramName(rawName: string | null, fallback = 'there') {
   const clean = (rawName ?? '').replace(/^@+/, '').trim()
-  if (!clean) return 'there'
+  if (!clean) return fallback
+  if (/\s/.test(clean)) return clean
   return `@${clean}`
 }
 
@@ -58,28 +59,24 @@ type SavedRequest = {
 
 export default function TelegramPaymentLinks() {
   const [searchParams] = useSearchParams()
+  const initialMode: RequestMode | '' = searchParams.get('mode') === 'group' ? 'group' : searchParams.get('mode') === 'person' ? 'person' : ''
+  const initialPersonTarget = displayTelegramName(searchParams.get('target') ?? searchParams.get('payer') ?? searchParams.get('p'), '')
+  const initialGroupTarget = displayTelegramName(searchParams.get('target') ?? searchParams.get('group') ?? searchParams.get('g') ?? searchParams.get('chat'), '')
   const [opened, setOpened] = useState(searchParams.get('open') === '1')
   const [activeService, setActiveService] = useState('')
-  const [requestMode, setRequestMode] = useState<RequestMode | ''>('')
+  const [requestMode, setRequestMode] = useState<RequestMode | ''>(initialMode)
   const [savedRequest, setSavedRequest] = useState<SavedRequest | null>(null)
   const [wallet, setWallet] = useState('')
   const [label, setLabel] = useState('')
   const [amount, setAmount] = useState('')
+  const [target, setTarget] = useState(initialMode === 'group' ? initialGroupTarget : initialPersonTarget)
   const telegramName = useMemo(
-    () => displayTelegramName(searchParams.get('u') ?? searchParams.get('username')),
-    [searchParams],
-  )
-  const payerName = useMemo(
-    () => displayTelegramName(searchParams.get('payer') ?? searchParams.get('p')),
-    [searchParams],
-  )
-  const groupName = useMemo(
-    () => displayTelegramName(searchParams.get('group') ?? searchParams.get('g') ?? searchParams.get('chat') ?? searchParams.get('u') ?? searchParams.get('username')),
+    () => displayTelegramName(searchParams.get('u') ?? searchParams.get('username'), 'there'),
     [searchParams],
   )
 
-  const requestFormTarget = requestMode === 'group' ? groupName : payerName
-  const canSaveRequest = wallet.trim().length > 5 && label.trim().length > 1 && !!requestMode
+  const requestFormTarget = target.trim()
+  const canSaveRequest = wallet.trim().length > 5 && label.trim().length > 1 && requestFormTarget.length > 1 && !!requestMode
 
   function openRequestService() {
     setActiveService('request-usdc')
@@ -88,6 +85,7 @@ export default function TelegramPaymentLinks() {
       setWallet(savedRequest.wallet)
       setLabel(savedRequest.label)
       setAmount(savedRequest.amount)
+      setTarget(savedRequest.target)
     }
   }
 
@@ -97,6 +95,9 @@ export default function TelegramPaymentLinks() {
       setWallet('')
       setLabel('')
       setAmount('')
+      setTarget(mode === 'group' ? initialGroupTarget : initialPersonTarget)
+    } else {
+      setTarget(savedRequest.target)
     }
   }
 
@@ -220,6 +221,7 @@ export default function TelegramPaymentLinks() {
                   setWallet(savedRequest.wallet)
                   setLabel(savedRequest.label)
                   setAmount(savedRequest.amount)
+                  setTarget(savedRequest.target)
                 }}
                 className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 text-gray-500 transition-colors hover:bg-gray-50 dark:border-white/10 dark:text-gray-300 dark:hover:bg-white/[0.06]"
                 aria-label="Edit request"
@@ -261,11 +263,17 @@ export default function TelegramPaymentLinks() {
                     </p>
                     <p className="mt-0.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
                       {requestMode === 'group'
-                        ? `${requestFormTarget === 'there' ? 'Telegram group' : requestFormTarget} can open the same collection link.`
+                        ? `${requestFormTarget || 'Telegram group'} can open the same collection link.`
                         : 'Share the link with one payer after saving the request.'}
                     </p>
                   </div>
 
+                  <InputBlock
+                    label={requestMode === 'group' ? 'Group or chat name' : 'Receiver handle or name'}
+                    value={target}
+                    onChange={setTarget}
+                    placeholder={requestMode === 'group' ? '@group or group name' : '@username or name'}
+                  />
                   <InputBlock
                     label="Receive wallet"
                     value={wallet}
@@ -287,12 +295,12 @@ export default function TelegramPaymentLinks() {
 
                   <div className="rounded-xl border border-gray-100 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.05]">
                     <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">
-                      {requestMode === 'group' ? 'Share target' : 'Share method'}
+                      {requestMode === 'group' ? 'Share target' : 'Receiver'}
                     </p>
                     <p className="mt-0.5 truncate text-sm font-semibold text-gray-900 dark:text-white">
                       {requestMode === 'group'
-                        ? (requestFormTarget === 'there' ? 'Telegram group' : requestFormTarget)
-                        : 'Share in Telegram after saving'}
+                        ? (requestFormTarget || 'Telegram group')
+                        : requestFormTarget}
                     </p>
                   </div>
 
