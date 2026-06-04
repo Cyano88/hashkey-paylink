@@ -813,7 +813,7 @@ export default function CreateLink() {
       </div>
 
       {/* ── Form card ─────────────────────────────────────────────────── */}
-      <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-card">
+      <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-card dark:border-white/10 dark:bg-[#111114]">
         <div className="space-y-5 p-6 sm:p-8">
 
           <div className="flex items-center justify-center gap-2 text-[11px] font-semibold text-gray-400">
@@ -822,13 +822,13 @@ export default function CreateLink() {
           </div>
 
           {/* ── Payment / Access toggle ───────────────────────────────── */}
-          <div className="flex rounded-xl border border-gray-200 bg-gray-50 p-1">
+          <div className="flex rounded-xl border border-gray-200 bg-gray-50 p-1 dark:border-white/10 dark:bg-white/[0.04]">
             <button
               type="button"
               onClick={() => toggleAccessMode(false)}
               className={cn(
                 'flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold transition-all',
-                !accessMode ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400 hover:text-gray-600',
+                !accessMode ? 'bg-white text-gray-900 shadow-sm dark:bg-white/10 dark:text-white' : 'text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300',
               )}
             >
               <Coins className="h-4 w-4" />
@@ -839,7 +839,7 @@ export default function CreateLink() {
               onClick={() => toggleAccessMode(true)}
               className={cn(
                 'flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold transition-all',
-                accessMode ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400 hover:text-gray-600',
+                accessMode ? 'bg-white text-gray-900 shadow-sm dark:bg-white/10 dark:text-white' : 'text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300',
               )}
             >
               <Bot className="h-4 w-4" />
@@ -849,7 +849,7 @@ export default function CreateLink() {
 
           {accessMode ? (
             <div className="space-y-5">
-              <div className="rounded-2xl border border-gray-100 bg-gray-50/70 p-5 dark:border-white/10 dark:bg-white/[0.04]">
+              <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-4 sm:p-5 dark:border-white/10 dark:bg-white/[0.04]">
                 <div className="flex items-start gap-3">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-white dark:border-white/10 dark:bg-white/10">
                     <img src="/hash-logo.png" alt="" className="h-6 w-6 object-contain" />
@@ -870,7 +870,7 @@ export default function CreateLink() {
                     'LP Scout',
                     'Agent wallets',
                   ].map(item => (
-                    <div key={item} className="rounded-xl border border-gray-100 bg-white px-3 py-2.5 text-[12px] font-semibold text-gray-600 dark:border-white/10 dark:bg-white/[0.05] dark:text-gray-300">
+                    <div key={item} className="rounded-lg border border-gray-100 bg-white px-3 py-2 text-[12px] font-semibold text-gray-600 dark:border-white/10 dark:bg-white/[0.05] dark:text-gray-300">
                       {item}
                     </div>
                   ))}
@@ -887,7 +887,7 @@ export default function CreateLink() {
                 </a>
               </div>
 
-              <div className="flex items-center justify-center gap-5">
+              <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
                 <Link to="/agent" className="text-xs font-medium text-gray-400 transition-colors hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200">
                   Agent dashboard
                 </Link>
