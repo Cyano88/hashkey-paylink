@@ -37,6 +37,7 @@ import {
   Bot,
   Trash2,
   LogOut,
+  Radio,
 } from 'lucide-react'
 import { QRCodeCanvas } from 'qrcode.react'
 import { FX_CURRENCIES, getFxMeta, formatLocalAmt, fetchFxRate } from '../lib/fx'
@@ -849,47 +850,63 @@ export default function CreateLink() {
 
           {accessMode ? (
             <div className="space-y-5">
-              <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-4 sm:p-5 dark:border-white/10 dark:bg-white/[0.04]">
+              <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-4 dark:border-white/10 dark:bg-white/[0.04]">
                 <div className="flex items-start gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-white dark:border-white/10 dark:bg-white/10">
-                    <img src="/hash-logo.png" alt="" className="h-6 w-6 object-contain" />
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white dark:border-white/10 dark:bg-white/[0.06]">
+                    <Bot className="h-[18px] w-[18px] text-gray-700 dark:text-gray-200" />
                   </div>
                   <div className="min-w-0">
                     <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Agent</p>
-                    <h2 className="mt-1 text-lg font-bold tracking-tight text-gray-900 dark:text-gray-100">Hash PayLink Telegram Agent</h2>
-                    <p className="mt-1.5 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-                      Create payment links, stream USDC, fund Polymarket wallets, run LP Scout, and manage buyer or seller agents from Telegram.
+                    <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">Hash PayLink Agent</h2>
+                    <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
+                      Create payment links, manage agent wallets, run market tools, and open StreamPay services from Telegram.
                     </p>
                   </div>
                 </div>
 
-                <div className="mt-5 grid grid-cols-2 gap-2">
+                <div className="mt-4 divide-y divide-gray-100 rounded-lg border border-gray-100 bg-white px-3 dark:divide-white/10 dark:border-white/10 dark:bg-white/[0.05]">
                   {[
-                    'Payment links',
-                    'StreamPay',
-                    'LP Scout',
-                    'Agent wallets',
-                  ].map(item => (
-                    <div key={item} className="rounded-lg border border-gray-100 bg-white px-3 py-2 text-[12px] font-semibold text-gray-600 dark:border-white/10 dark:bg-white/[0.05] dark:text-gray-300">
-                      {item}
-                    </div>
-                  ))}
+                    { icon: Link2, title: '/Payment Links', body: 'Request USDC, fund Polymarket, or fund a Circle CLI agent.', href: '/telegram/payment-links' },
+                    { icon: Wallet, title: 'Agent wallets', body: 'Create or sign in to manage Circle CLI agent wallets.' },
+                    { icon: Radio, title: 'Market tools', body: 'Run LP Scout and other market actions.' },
+                    { icon: Zap, title: 'StreamPay services', body: 'Create and manage USDC streaming flows.' },
+                  ].map(({ icon: Icon, title, body, href }) => {
+                    const row = (
+                      <>
+                        <Icon className="h-4 w-4 shrink-0 text-gray-400" />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">{title}</p>
+                          <p className="mt-0.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">{body}</p>
+                        </div>
+                        {href && <ArrowRight className="h-4 w-4 text-gray-400" />}
+                      </>
+                    )
+                    return href ? (
+                      <Link key={title} to={href} className="flex items-center gap-3 py-3 transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.03]">
+                        {row}
+                      </Link>
+                    ) : (
+                      <div key={title} className="flex items-center gap-3 py-3">
+                        {row}
+                      </div>
+                    )
+                  })}
                 </div>
 
                 <a
                   href={TELEGRAM_AGENT_URL}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+                  className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
                 >
-                  Open Telegram Agent
+                  Open Telegram
                   <ArrowRight className="h-4 w-4" />
                 </a>
               </div>
 
               <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
                 <Link to="/agent?profile=agent" className="text-xs font-medium text-gray-400 transition-colors hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200">
-                  Agent dashboard
+                  Agent wallet dashboard
                 </Link>
                 <Link to="/docs/access-mode" className="text-xs font-medium text-gray-400 transition-colors hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200">
                   Developer access docs
@@ -1662,16 +1679,16 @@ export default function CreateLink() {
               { n: '2', title: 'Enter amount',    body: 'USDC' },
               { n: '3', title: 'Get paid',        body: 'Anyone pays from any wallet or exchange' },
             ] : [
-              { n: '1', title: 'Open bot',        body: 'Start from Telegram' },
-              { n: '2', title: 'Pick flow',       body: 'Pay, stream, agent, or Polymarket' },
-              { n: '3', title: 'Act on-chain',    body: 'Circle, Arc, 0G proofs' },
+              { n: '1', title: 'Open Telegram',   body: 'Start the Hash PayLink bot' },
+              { n: '2', title: 'Choose a flow',   body: 'Payment link, wallet, or market tool' },
+              { n: '3', title: 'Confirm action',  body: 'Track funds from the dashboard' },
             ]).map(({ n, title, body }) => (
-              <div key={n} className="rounded-xl border border-gray-100 bg-white p-4 text-center shadow-sm">
-                <div className="mx-auto mb-2.5 flex h-7 w-7 items-center justify-center rounded-full bg-gray-100 text-xs font-bold text-gray-600">
+              <div key={n} className="rounded-xl border border-gray-100 bg-white p-4 text-center shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
+                <div className="mx-auto mb-2.5 flex h-7 w-7 items-center justify-center rounded-full bg-gray-100 text-xs font-bold text-gray-600 dark:bg-white/[0.08] dark:text-gray-300">
                   {n}
                 </div>
-                <p className="text-xs font-semibold text-gray-800">{title}</p>
-                <p className="mt-0.5 text-xs text-gray-400 leading-relaxed">{body}</p>
+                <p className="text-xs font-semibold text-gray-800 dark:text-gray-100">{title}</p>
+                <p className="mt-0.5 text-xs text-gray-400 leading-relaxed dark:text-gray-500">{body}</p>
               </div>
             ))}
           </div>

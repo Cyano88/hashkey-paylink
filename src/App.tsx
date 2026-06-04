@@ -5,6 +5,7 @@ import PaymentPage from './pages/PaymentPage'
 import Dashboard from './pages/Dashboard'
 import EventDashboard from './pages/EventDashboard'
 import AgentDemo     from './pages/AgentDemo'
+import TelegramPaymentLinks from './pages/TelegramPaymentLinks'
 import X402Receipt   from './pages/X402Receipt'
 import AgentTerms    from './pages/AgentTerms'
 import { SolanaProvider } from './lib/SolanaContext'
@@ -80,6 +81,7 @@ export default function App() {
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="event" element={<EventDashboard />} />
           <Route path="agent" element={<AgentDemo />} />
+          <Route path="telegram/payment-links" element={<TelegramPaymentLinks />} />
           <Route path="agent-terms" element={<AgentTerms />} />
           <Route path="receipt/:activityId" element={<X402Receipt />} />
           <Route path="*" element={<Navigate to="/" replace />} />
