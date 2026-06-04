@@ -18,7 +18,7 @@ import { queryBalances }                from '../lib/unifiedBalance'
 import {
   CheckCircle2, AlertCircle, Loader2, Send,
   ExternalLink, ArrowLeft, ShieldCheck, Zap,
-  Wallet, CreditCard, Radio, Copy, Power, X,
+  Wallet, CreditCard, Radio, Copy, LogOut, X,
 } from 'lucide-react'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -39,7 +39,7 @@ type Message = {
 
 type AgentActivity = {
   id: string
-  type: 'wallet_connected' | 'funded' | 'gateway_activated' | 'x402_spent' | 'x402_sold' | 'scout_returned'
+  type: 'wallet_connected' | 'funded' | 'gateway_activated' | 'x402_spent' | 'x402_sold' | 'scout_returned' | 'governance'
   title: string
   amount?: string
   asset?: string
@@ -496,7 +496,7 @@ export default function AgentDemo() {
               title="Disconnect agent wallet session"
               className="absolute right-4 top-4 inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-400 transition-all hover:border-red-200 hover:bg-red-50 hover:text-red-500 active:scale-95 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.06] dark:hover:border-red-400/30 dark:hover:bg-red-400/10 dark:hover:text-red-300"
             >
-              {walletBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Power className="h-3.5 w-3.5" />}
+              {walletBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <LogOut className="h-3.5 w-3.5" />}
             </button>
           )}
           <div className="flex items-start gap-3 sm:gap-4">
@@ -510,7 +510,7 @@ export default function AgentDemo() {
               </h1>
               <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2">
                 <p className="max-w-full truncate font-mono text-xs text-gray-500 dark:text-gray-400">
-                  {currentAgentWallet || 'Circle Agent Wallet not configured'}
+                  {currentAgentWallet || 'Circle agent wallet not connected'}
                 </p>
                 {currentAgentWallet && (
                   <button
@@ -547,7 +547,7 @@ export default function AgentDemo() {
             <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
               <Wallet className="h-4 w-4 text-gray-400" />
               <p className="mt-2 text-xs font-semibold text-gray-800 dark:text-gray-100">Fund</p>
-              <p className="text-xs text-gray-500">Treasury on {agentNetwork}</p>
+              <p className="text-xs text-gray-500">On {agentMeta.label}</p>
             </div>
             <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
               <ShieldCheck className="h-4 w-4 text-gray-400" />
@@ -577,14 +577,14 @@ export default function AgentDemo() {
               <div className="flex items-center gap-2">
                 <Wallet className="h-4 w-4 text-gray-600 dark:text-gray-300" />
                 <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                  {currentAgentWallet ? 'Reconnect wallet' : 'Connect wallet'}
+                  {currentAgentWallet ? 'Reconnect Circle wallet' : 'Connect Circle wallet'}
                 </p>
               </div>
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                 {currentAgentWallet
                   ? 'Use the same Circle email. A different wallet will not replace this one.'
                   : walletMode === 'choose'
-                  ? 'Create a new wallet or reconnect an existing one.'
+                  ? 'Create a new wallet or connect an existing one.'
                   : walletMode === 'create'
                   ? 'Enter email. Circle sends an OTP.'
                   : 'Enter the wallet email. Circle sends an OTP.'}
@@ -603,7 +603,7 @@ export default function AgentDemo() {
                     className="inline-flex items-center justify-center gap-2 rounded-lg bg-black px-3 py-3 text-sm font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
                   >
                     <Wallet className="h-4 w-4" />
-                    Create wallet
+                    Create new wallet
                   </button>
                   <button
                     type="button"
@@ -617,7 +617,7 @@ export default function AgentDemo() {
                     className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-3 text-sm font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/[0.1]"
                   >
                     <ShieldCheck className="h-4 w-4" />
-                    Login
+                    Connect existing
                   </button>
                 </div>
               ) : (
@@ -684,7 +684,7 @@ export default function AgentDemo() {
                     disabled={walletBusy}
                     className="text-xs font-semibold text-gray-500 transition-colors hover:text-gray-900 disabled:opacity-50 dark:text-gray-400 dark:hover:text-white"
                   >
-                    {walletMode === 'create' ? 'Already have a wallet? Login' : 'Need a new wallet? Create wallet'}
+                    {walletMode === 'create' ? 'Already have a wallet? Connect existing' : 'Need a new wallet? Create one'}
                   </button>
                 </div>
               )}
@@ -834,7 +834,7 @@ export default function AgentDemo() {
                     </div>
                   )) : (
                     <div className="rounded-lg border border-dashed border-gray-200 px-3 py-4 text-center text-xs text-gray-400 dark:border-white/10">
-                      No activity yet. Fund the wallet, activate x402, then run /lp x402.
+                      No activity yet. Fund the wallet, activate x402, then run LP Scout.
                     </div>
                   )}
                 </div>
@@ -857,7 +857,7 @@ export default function AgentDemo() {
           <p className="mb-4 text-center text-[11px] font-semibold uppercase tracking-widest text-gray-400">
             How it works
           </p>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid gap-3 sm:grid-cols-3">
             {[
               { n: '1', title: 'Connect', body: 'Circle email wallet' },
               { n: '2', title: 'Fund', body: 'Add USDC' },
@@ -1116,7 +1116,7 @@ export default function AgentDemo() {
               <div>
                 <p className="text-sm font-semibold text-gray-900 dark:text-white">Activate x402 Gateway</p>
                 <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                  Move USDC from the agent wallet into Circle Gateway so the agent can pay APIs.
+                  Move USDC from the agent wallet into Circle Gateway so the agent can pay API services.
                 </p>
               </div>
               <button
