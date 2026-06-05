@@ -2558,6 +2558,19 @@ export default function PaymentPage() {
     }
   }
 
+  function amountCoversRequest(actual: string, requested: string) {
+    const actualNum = Number.parseFloat(actual)
+    const requestedNum = Number.parseFloat(requested)
+    if (!Number.isFinite(actualNum) || !Number.isFinite(requestedNum) || requestedNum <= 0) return true
+    const smallestUnit = 1 / Math.pow(10, meta.decimals)
+    return actualNum + smallestUnit / 2 >= requestedNum
+  }
+
+  function formatPaymentAmountDisplay(value: number, decimals: number) {
+    if (value > 0 && value < 0.0001) return '<0.0001'
+    return value.toFixed(decimals <= 6 ? 4 : 6)
+  }
+
   async function doRegisterNgPos() {
     if (!ngPosEventId || !ngPosMerchantId) return
     const payer  = chain === 'starknet' ? (argentStarkSession?.address ?? starkAccount ?? '')
@@ -2571,6 +2584,10 @@ export default function PaymentPage() {
     const actualAmt = receivedAmount != null
       ? (Number(receivedAmount) / Math.pow(10, meta.decimals)).toFixed(meta.decimals <= 6 ? 6 : 8)
       : effectiveAmt
+    if (!amountCoversRequest(actualAmt, effectiveAmt)) {
+      console.warn('[NgPosReg] skipped underpaid POS payment:', { actualAmt, requestedAmount: effectiveAmt })
+      return
+    }
     const payload = {
       eventId: ngPosEventId,
       txHash: txH ?? `manual_${Date.now()}`,
@@ -2582,6 +2599,7 @@ export default function PaymentPage() {
       merchantId: ngPosMerchantId,
       settlementType: ngPosSettlement,
       amountNgn: ngPosAmountNgn,
+      requestedAmount: effectiveAmt,
     }
     try {
       await fetch('/api/event-register', {
@@ -2725,7 +2743,7 @@ export default function PaymentPage() {
               {recipientAmt != null ? (
                 <>
                   <span className={cn('font-semibold', isUnder ? 'text-amber-700' : 'text-gray-900')}>
-                    {recipientAmt.toFixed(meta.decimals <= 6 ? 4 : 6)} {meta.asset}
+                    {formatPaymentAmountDisplay(recipientAmt, meta.decimals)} {meta.asset}
                   </span>
                   {' '}
                   {isUnder ? 'received - ' : isPolymarketFunding ? 'delivered to funding wallet' : 'received by recipient'}

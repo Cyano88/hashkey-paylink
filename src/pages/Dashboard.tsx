@@ -780,14 +780,13 @@ export default function Dashboard() {
                           href={ogHref}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex h-7 items-center gap-1 rounded-full border border-purple-200 bg-purple-50 px-2.5 text-[10px] font-bold text-purple-700 transition-all hover:bg-purple-100 dark:border-purple-800 dark:bg-purple-950/50 dark:text-purple-300"
+                          title="Permanently archived on 0G Storage"
+                          className="inline-flex items-center rounded border border-purple-100 bg-purple-50 px-1 py-0.5 text-[8px] font-bold leading-none text-purple-500 transition-colors hover:border-purple-200 hover:bg-purple-100 dark:border-purple-900/60 dark:bg-purple-950/50 dark:text-purple-300"
                         >
-                          <CheckCircle2 className="h-3 w-3" />
                           0G
                         </a>
                       ) : (
-                        <span className="inline-flex h-7 items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-2.5 text-[10px] font-bold text-gray-400 dark:border-white/10 dark:bg-white/[0.04]">
-                          <span className="h-1.5 w-1.5 rounded-full bg-gray-300 dark:bg-gray-600" />
+                        <span className="inline-flex items-center rounded border border-gray-100 bg-gray-50 px-1 py-0.5 text-[8px] font-bold leading-none text-gray-300 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-500">
                           0G
                         </span>
                       )}
@@ -881,9 +880,8 @@ export default function Dashboard() {
       </div>
 
       {/* CTA at bottom */}
-      {!isNgPosDashboard && (
       <div className="flex justify-center pb-4">
-        {telegramUrl ? (
+        {isNgPosDashboard || telegramUrl ? (
           <OgArchiveLink />
         ) : (
           <Link
@@ -895,7 +893,6 @@ export default function Dashboard() {
           </Link>
         )}
       </div>
-      )}
     </div>
   )
 }

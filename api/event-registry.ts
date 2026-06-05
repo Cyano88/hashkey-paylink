@@ -11,6 +11,7 @@ type PaymentEntry = {
   payer:       string
   memo:        string
   amount:      string
+  requestedAmount?: string
   ts:          number
   source?:     string
   merchantId?: string
@@ -76,6 +77,7 @@ export function registerEventPayment(req: Request, res: Response): void {
   let memo: string
   let chain: string
   let amount: string
+  let requestedAmount = ''
   let agentSlug = ''
   let source = ''
   let merchantId = ''
@@ -89,6 +91,7 @@ export function registerEventPayment(req: Request, res: Response): void {
     memo = cleanString(req.body?.memo, 'memo', MAX_TEXT_LENGTH)
     chain = cleanOptionalString(req.body?.chain, MAX_TEXT_LENGTH)
     amount = cleanOptionalString(req.body?.amount, MAX_AMOUNT_LENGTH)
+    requestedAmount = cleanOptionalString(req.body?.requestedAmount, MAX_AMOUNT_LENGTH)
     agentSlug = normalizeActivitySlug(req.body?.agentSlug)
     source = cleanOptionalString(req.body?.source, MAX_TEXT_LENGTH)
     merchantId = cleanOptionalString(req.body?.merchantId, MAX_TEXT_LENGTH)
@@ -97,6 +100,19 @@ export function registerEventPayment(req: Request, res: Response): void {
   } catch (err) {
     res.status(400).json({ ok: false, error: err instanceof Error ? err.message : 'Invalid request' })
     return
+  }
+
+  if (source === 'ngpos') {
+    const amountNum = Number.parseFloat(amount)
+    const requestedNum = Number.parseFloat(requestedAmount)
+    if (!Number.isFinite(amountNum) || amountNum <= 0) {
+      res.status(400).json({ ok: false, error: 'Invalid POS amount.' })
+      return
+    }
+    if (Number.isFinite(requestedNum) && requestedNum > 0 && amountNum + 0.0000005 < requestedNum) {
+      res.status(409).json({ ok: false, error: 'POS payment is below requested amount.' })
+      return
+    }
   }
 
   const entries = registry.get(eventId) ?? []
@@ -109,6 +125,7 @@ export function registerEventPayment(req: Request, res: Response): void {
     return
   }
   const entry: PaymentEntry = { eventId, txHash, chain, payer, memo, amount, ts: Date.now() }
+  if (requestedAmount) entry.requestedAmount = requestedAmount
   if (source) entry.source = source
   if (merchantId) entry.merchantId = merchantId
   if (settlementType) entry.settlementType = settlementType
