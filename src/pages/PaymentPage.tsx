@@ -365,7 +365,7 @@ export default function PaymentPage() {
   const [eventRegStatus, setEventRegStatus] = useState<'idle' | 'pending' | 'ok' | 'error'>('idle')
   const eventRegistered  = useRef(false)
   const ngPosRegistered  = useRef(false)
-  const requiresAttendeeName = isEventMode && !isPolymarketFunding && !isAgentFunding
+  const requiresAttendeeName = (isEventMode || isNgPosPayment) && !isPolymarketFunding && !isAgentFunding
 
   // ── FX display (event mode only — reads params baked into the URL at link creation) ──
   const fxCurrency  = isEventMode ? getPaylinkParam(initParams, 'fx', 'fx') : ''
@@ -2573,6 +2573,8 @@ export default function PaymentPage() {
 
   async function doRegisterNgPos() {
     if (!ngPosEventId || !ngPosMerchantId) return
+    const customerName = attendeeName.trim()
+    if (!customerName) return
     const payer  = chain === 'starknet' ? (argentStarkSession?.address ?? starkAccount ?? '')
       : chain === 'solana' ? (circleSolanaSession?.wallet.address ?? solanaWalletAddr ?? solanaVaultAddr ?? '')
       : (address ?? circleEvmEmailSession?.wallet.address ?? circleSmartAccount ?? directVault ?? '')
@@ -2593,7 +2595,7 @@ export default function PaymentPage() {
       txHash: txH ?? `manual_${Date.now()}`,
       chain,
       payer: payer || 'POS payer',
-      memo: memo || 'POS payment',
+      memo: customerName,
       amount: actualAmt,
       source: 'ngpos',
       merchantId: ngPosMerchantId,
@@ -2624,10 +2626,11 @@ export default function PaymentPage() {
 
   useEffect(() => {
     if (!isConfirmed || !isNgPosPayment || !ngPosEventId || ngPosRegistered.current) return
+    if (!attendeeName.trim()) return
     ngPosRegistered.current = true
     void doRegisterNgPos()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isConfirmed])
+  }, [isConfirmed, attendeeName])
 
   // Fallback: also register when Send-via-Address relay succeeds (directStatus='success')
   // in case the Transfer event watcher hasn't set manualPayDetected yet.
@@ -3142,7 +3145,7 @@ export default function PaymentPage() {
                     'h-2 w-2 rounded-full transition-colors duration-300',
                     paid ? 'bg-emerald-500' : attendeeName.trim() ? 'bg-emerald-400' : 'bg-gray-300',
                   )} />
-                  Your Name or Handle
+                  {isNgPosPayment ? 'Customer name' : 'Your Name or Handle'}
                   {paid ? (
                     <span className="ml-auto text-[10px] font-semibold text-emerald-600">✓ Saved</span>
                   ) : attendeeName.trim() ? (
@@ -3159,7 +3162,7 @@ export default function PaymentPage() {
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. @Clinton or Jane Doe"
+                  placeholder={isNgPosPayment ? 'e.g. Chinedu or Table 4' : 'e.g. @Clinton or Jane Doe'}
                   value={attendeeName}
                   onChange={e => setAttendeeName(e.target.value)}
                   disabled={paid}
@@ -3173,8 +3176,8 @@ export default function PaymentPage() {
                 {!paid && (
                   <p className="text-[11px] text-gray-400 transition-opacity duration-300" style={{ opacity: attendeeName.trim() ? 0.5 : 1 }}>
                     {attendeeName.trim()
-                      ? 'Logged with your payment on the organizer dashboard.'
-                      : 'Enter your name to unlock payment — it\'s logged with your payment.'}
+                      ? isNgPosPayment ? 'Shown on the merchant receipt.' : 'Logged with your payment on the organizer dashboard.'
+                      : isNgPosPayment ? 'Enter your name to continue.' : 'Enter your name to unlock payment — it\'s logged with your payment.'}
                   </p>
                 )}
               </div>

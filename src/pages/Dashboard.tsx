@@ -146,25 +146,29 @@ function telegramReturnUrl(params: URLSearchParams) {
   }
 }
 
-function OgArchiveLink({ className }: { className?: string }) {
+function OgArchiveLink({ className, compact = false }: { className?: string; compact?: boolean }) {
   return (
     <a
       href={OG_GLOBAL_ARCHIVE_URL}
       target="_blank"
       rel="noopener noreferrer"
       className={cn(
-        'inline-flex items-center gap-2 rounded-xl border border-purple-100 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 shadow-sm transition-all hover:border-purple-200 hover:bg-purple-50/40 active:scale-[0.98] dark:border-purple-900/50 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:bg-purple-950/30',
+        'inline-flex items-center gap-2 border border-purple-100 bg-white font-medium text-gray-700 shadow-sm transition-all hover:border-purple-200 hover:bg-purple-50/40 active:scale-[0.98] dark:border-purple-900/50 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:bg-purple-950/30',
+        compact ? 'rounded-lg px-3 py-1.5 text-xs' : 'rounded-xl px-5 py-2.5 text-sm',
         className,
       )}
     >
-      <span className="relative flex h-5 w-5 items-center justify-center">
+      <span className={cn('relative flex items-center justify-center', compact ? 'h-4 w-4' : 'h-5 w-5')}>
         <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-purple-300 opacity-40" />
-        <span className="relative inline-flex h-5 w-5 items-center justify-center rounded-full border border-purple-200 bg-purple-50 text-[8px] font-bold text-purple-600 dark:border-purple-800 dark:bg-purple-950/60 dark:text-purple-300">
+        <span className={cn(
+          'relative inline-flex items-center justify-center rounded-full border border-purple-200 bg-purple-50 font-bold text-purple-600 dark:border-purple-800 dark:bg-purple-950/60 dark:text-purple-300',
+          compact ? 'h-4 w-4 text-[7px]' : 'h-5 w-5 text-[8px]',
+        )}>
           0G
         </span>
       </span>
       View 0G Global Archive
-      <ExternalLink className="h-3.5 w-3.5 text-gray-400 dark:text-gray-500" />
+      <ExternalLink className={cn('text-gray-400 dark:text-gray-500', compact ? 'h-3 w-3' : 'h-3.5 w-3.5')} />
     </a>
   )
 }
@@ -739,12 +743,13 @@ export default function Dashboard() {
               </div>
               {selectedPayments.map(row => {
                 const chainMeta = rowMeta(row)
-                const explorerHref = row.txHash ? `${chainMeta.explorerUrl}/tx/${row.txHash}` : ''
+                const explorerHref = row.txHash && !row.txHash.startsWith('manual_') ? `${chainMeta.explorerUrl}/tx/${row.txHash}` : ''
                 const ogHref = row.ogTxHash ? `https://chainscan.0g.ai/tx/${row.ogTxHash}` : ''
-                const customer = row.sender
-                  ? /^0x[0-9a-fA-F]{10,}$/.test(row.sender) || row.sender.length > 36
-                    ? truncateAddress(row.sender, 6)
-                    : row.sender
+                const customerSource = row.source === 'ngpos' ? (row.label || row.sender) : row.sender
+                const customer = customerSource
+                  ? /^0x[0-9a-fA-F]{10,}$/.test(customerSource) || customerSource.length > 36
+                    ? truncateAddress(customerSource, 6)
+                    : customerSource
                   : 'Customer'
                 return (
                   <div
@@ -795,9 +800,10 @@ export default function Dashboard() {
                           href={explorerHref}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex h-7 items-center gap-1 rounded-lg border border-gray-200 px-2 font-mono text-[11px] font-semibold text-gray-500 transition-all hover:bg-gray-50 hover:text-blue-600 dark:border-white/10 dark:text-gray-400 dark:hover:bg-white/10 dark:hover:text-blue-300"
+                          title="View transaction"
+                          className="inline-flex h-7 items-center gap-1 rounded-lg border border-gray-200 px-2 text-[11px] font-semibold text-gray-500 transition-all hover:bg-gray-50 hover:text-blue-600 dark:border-white/10 dark:text-gray-400 dark:hover:bg-white/10 dark:hover:text-blue-300"
                         >
-                          {truncateAddress(row.txHash, 4)}
+                          Tx
                           <ExternalLink className="h-3 w-3" />
                         </a>
                       )}
@@ -882,7 +888,7 @@ export default function Dashboard() {
       {/* CTA at bottom */}
       <div className="flex justify-center pb-4">
         {isNgPosDashboard || telegramUrl ? (
-          <OgArchiveLink />
+          <OgArchiveLink compact={isNgPosDashboard} />
         ) : (
           <Link
             to="/"
