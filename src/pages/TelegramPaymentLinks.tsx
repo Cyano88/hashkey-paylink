@@ -1,20 +1,26 @@
 import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
+  ArrowLeft,
   ArrowRight,
   Bot,
   Building2,
   CheckCircle2,
   Coins,
   ExternalLink,
+  LineChart,
   MessageCircle,
   Pencil,
+  Radio,
   Send,
+  Sparkles,
   UserRound,
   UsersRound,
   Wallet,
 } from 'lucide-react'
 import { cn } from '../lib/utils'
+
+const TELEGRAM_BOT_URL = import.meta.env.VITE_TELEGRAM_AGENT_URL || 'https://t.me/HashPayLinkBot'
 
 function displayTelegramName(rawName: string | null, fallback = 'there') {
   const clean = (rawName ?? '').replace(/^@+/, '').trim()
@@ -25,26 +31,33 @@ function displayTelegramName(rawName: string | null, fallback = 'there') {
 
 const paymentLinkServices = [
   {
-    title: 'Request USDC payments',
-    body: 'Create a request link for one person or a group collection.',
+    title: 'Request USDC',
+    body: 'Request one payer or collect from a group.',
     icon: Coins,
     status: 'Open',
     active: true,
   },
   {
-    title: 'Fund Your Polymarket account',
-    body: 'Create a link that sends USDC to your Polymarket funding wallet.',
+    title: 'Fund Polymarket',
+    body: 'Send USDC to a Polymarket funding wallet.',
     icon: Building2,
     status: 'Soon',
     active: false,
   },
   {
-    title: 'Fund Circle CLI Agent',
-    body: 'Create a link that funds your Hash PayLink agent wallet.',
+    title: 'Fund Agent Wallet',
+    body: 'Fund a Circle CLI agent wallet.',
     icon: Wallet,
     status: 'Soon',
     active: false,
   },
+]
+
+const telegramSections = [
+  { id: 'payment-links', title: 'Payment Links', icon: Coins, active: true },
+  { id: 'agent-wallets', title: 'Agent Wallets', icon: Bot, active: false },
+  { id: 'market-tools', title: 'Market Tools', icon: LineChart, active: false },
+  { id: 'streampay', title: 'StreamPay', icon: Radio, active: false },
 ]
 
 type RequestMode = 'person' | 'group'
@@ -63,7 +76,8 @@ export default function TelegramPaymentLinks() {
   const initialPersonTarget = displayTelegramName(searchParams.get('target') ?? searchParams.get('payer') ?? searchParams.get('p'), '')
   const initialGroupTarget = displayTelegramName(searchParams.get('target') ?? searchParams.get('group') ?? searchParams.get('g') ?? searchParams.get('chat'), '')
   const [opened, setOpened] = useState(searchParams.get('open') === '1')
-  const [activeService, setActiveService] = useState('')
+  const [activeSection] = useState('payment-links')
+  const [activeService, setActiveService] = useState(initialMode ? 'request-usdc' : '')
   const [requestMode, setRequestMode] = useState<RequestMode | ''>(initialMode)
   const [savedRequest, setSavedRequest] = useState<SavedRequest | null>(null)
   const [wallet, setWallet] = useState('')
@@ -116,7 +130,7 @@ export default function TelegramPaymentLinks() {
   return (
     <div className="mx-auto max-w-md animate-slide-up space-y-5">
       <Link to="/" className="inline-flex items-center gap-1.5 text-sm text-gray-500 transition-colors hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
-        <ArrowRight className="h-3.5 w-3.5 rotate-180" />
+        <ArrowLeft className="h-3.5 w-3.5" />
         Back
       </Link>
 
@@ -146,7 +160,7 @@ export default function TelegramPaymentLinks() {
                 onClick={() => setOpened(true)}
                 className="mt-1 flex w-full items-center justify-between rounded-b-xl rounded-tr-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-900 shadow-sm transition-all hover:bg-gray-50 active:scale-[0.99] dark:border-white/10 dark:bg-white/[0.05] dark:text-white dark:hover:bg-white/[0.08]"
               >
-                <span>Open Hash Pay to continue</span>
+                <span>Open Hash PayLink</span>
                 <ExternalLink className="h-4 w-4 text-gray-400" />
               </button>
             )}
@@ -159,172 +173,257 @@ export default function TelegramPaymentLinks() {
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Hash PayLink</p>
-              <h1 className="mt-1 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Payment Links</h1>
+              <h1 className="mt-1 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Telegram Dashboard</h1>
               <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-                Choose the Telegram payment flow you want to create.
+                Create payment actions and share them back into Telegram.
               </p>
             </div>
             <img src="/hash-logo-transparent.png" alt="" className="h-9 w-9 rounded-lg border border-gray-100 bg-white object-contain p-1 dark:border-white/10 dark:bg-white/[0.06]" />
           </div>
 
-          <div className="mt-4 space-y-2">
-            {paymentLinkServices.map(({ title, body, icon: Icon, status, active }) => (
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            {telegramSections.map(({ id, title, icon: Icon, active }) => (
               <button
-                key={title}
+                key={id}
                 type="button"
-                onClick={active ? openRequestService : undefined}
                 disabled={!active}
                 className={cn(
-                  'flex w-full items-center gap-3 rounded-xl border px-3 py-3 text-left transition-all',
-                  active
-                    ? 'border-gray-200 bg-gray-50 hover:border-gray-300 hover:bg-white active:scale-[0.99] dark:border-white/10 dark:bg-white/[0.05] dark:hover:bg-white/[0.08]'
-                    : 'cursor-not-allowed border-gray-100 bg-gray-50/60 opacity-70 dark:border-white/10 dark:bg-white/[0.03]',
+                  'flex min-h-[44px] items-center gap-2 rounded-xl border px-3 text-left text-xs font-semibold transition-all',
+                  id === activeSection
+                    ? 'border-gray-900 bg-gray-900 text-white dark:border-white dark:bg-white dark:text-gray-950'
+                    : 'border-gray-100 bg-gray-50 text-gray-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-400',
+                  !active && 'cursor-not-allowed opacity-70',
                 )}
               >
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-gray-700 shadow-sm dark:bg-white/[0.08] dark:text-gray-200">
-                  <Icon className="h-4 w-4" />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="flex items-center gap-2">
-                    <span className="text-sm font-semibold text-gray-900 dark:text-white">{title}</span>
-                    <span className={cn(
-                      'rounded-full px-2 py-0.5 text-[10px] font-bold uppercase',
-                      active ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-400/10 dark:text-emerald-300' : 'bg-gray-100 text-gray-400 dark:bg-white/[0.06]',
-                    )}>
-                      {status}
-                    </span>
-                  </span>
-                  <span className="mt-0.5 block text-xs leading-relaxed text-gray-500 dark:text-gray-400">{body}</span>
-                </span>
-                {active ? <ArrowRight className="h-4 w-4 text-gray-400" /> : <CheckCircle2 className="h-4 w-4 text-gray-300" />}
+                <Icon className="h-4 w-4 shrink-0" />
+                <span className="truncate">{title}</span>
               </button>
             ))}
           </div>
-        </div>
-      )}
 
-      {opened && activeService === 'request-usdc' && (
-        <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card dark:border-white/10 dark:bg-[#111114]">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Request USDC</p>
-              <h2 className="mt-1 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Who are you requesting from?</h2>
-              <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-                Create a clean request, then share it back into Telegram.
-              </p>
-            </div>
-            {savedRequest && (
-              <button
-                type="button"
-                onClick={() => {
-                  setRequestMode(savedRequest.mode)
-                  setWallet(savedRequest.wallet)
-                  setLabel(savedRequest.label)
-                  setAmount(savedRequest.amount)
-                  setTarget(savedRequest.target)
-                }}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 text-gray-500 transition-colors hover:bg-gray-50 dark:border-white/10 dark:text-gray-300 dark:hover:bg-white/[0.06]"
-                aria-label="Edit request"
-              >
-                <Pencil className="h-4 w-4" />
-              </button>
-            )}
-          </div>
-
-          {savedRequest && !requestMode ? (
-            <SavedRequestCard request={savedRequest} onEdit={() => resetRequestForm(savedRequest.mode)} />
+          {activeService === 'request-usdc' ? (
+            <RequestUsdcPanel
+              requestMode={requestMode}
+              savedRequest={savedRequest}
+              requestFormTarget={requestFormTarget}
+              canSaveRequest={canSaveRequest}
+              wallet={wallet}
+              label={label}
+              amount={amount}
+              target={target}
+              setWallet={setWallet}
+              setLabel={setLabel}
+              setAmount={setAmount}
+              setTarget={setTarget}
+              resetRequestForm={resetRequestForm}
+              saveRequest={saveRequest}
+              onBack={() => {
+                setActiveService('')
+                setRequestMode('')
+              }}
+              onBackToModes={() => setRequestMode('')}
+              onEditSaved={() => {
+                if (!savedRequest) return
+                setRequestMode(savedRequest.mode)
+                setWallet(savedRequest.wallet)
+                setLabel(savedRequest.label)
+                setAmount(savedRequest.amount)
+                setTarget(savedRequest.target)
+              }}
+            />
           ) : (
-            <>
-              {!requestMode && (
-                <div className="mt-4 space-y-2">
-                  <RequestModeButton
-                    icon={UserRound}
-                    title="Request from someone"
-                    body="Create one request link and share it in any chat."
-                    onClick={() => resetRequestForm('person')}
-                  />
-                  <RequestModeButton
-                    icon={UsersRound}
-                    title="Collect from a group"
-                    body="Create a group collection for donations, dues, splits, or registrations."
-                    onClick={() => resetRequestForm('group')}
-                  />
-                </div>
-              )}
-
-              {requestMode && (
-                <div className="mt-4 space-y-3">
-                  <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
-                    <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">
-                      {requestMode === 'group' ? 'Group collection' : 'Direct request'}
-                    </p>
-                    <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-white">
-                      {requestMode === 'group' ? 'Group collection' : 'Single request'}
-                    </p>
-                    <p className="mt-0.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                      {requestMode === 'group'
-                        ? `${requestFormTarget || 'Telegram group'} can open the same collection link.`
-                        : 'Share the link with one payer after saving the request.'}
-                    </p>
-                  </div>
-
-                  <InputBlock
-                    label={requestMode === 'group' ? 'Group or chat name' : 'Receiver handle or name'}
-                    value={target}
-                    onChange={setTarget}
-                    placeholder={requestMode === 'group' ? '@group or group name' : '@username or name'}
-                  />
-                  <InputBlock
-                    label="Receive wallet"
-                    value={wallet}
-                    onChange={setWallet}
-                    placeholder="0x... or Solana address"
-                  />
-                  <InputBlock
-                    label={requestMode === 'group' ? 'Collection name' : 'Your name or reason'}
-                    value={label}
-                    onChange={setLabel}
-                    placeholder={requestMode === 'group' ? 'Pizza DAO, donations, dues...' : 'Shy, invoice, dinner...'}
-                  />
-                  <InputBlock
-                    label="Amount"
-                    value={amount}
-                    onChange={setAmount}
-                    placeholder="Optional"
-                  />
-
-                  <div className="rounded-xl border border-gray-100 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.05]">
-                    <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">
-                      {requestMode === 'group' ? 'Share target' : 'Receiver'}
-                    </p>
-                    <p className="mt-0.5 truncate text-sm font-semibold text-gray-900 dark:text-white">
-                      {requestMode === 'group'
-                        ? (requestFormTarget || 'Telegram group')
-                        : requestFormTarget}
-                    </p>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={saveRequest}
-                    disabled={!canSaveRequest}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
-                  >
-                    <Send className="h-4 w-4" />
-                    {requestMode === 'group' ? 'Create group request' : 'Save request'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setRequestMode('')}
-                    className="w-full rounded-xl border border-gray-200 bg-white px-5 py-2.5 text-sm font-semibold text-gray-600 transition-colors hover:bg-gray-50 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-300 dark:hover:bg-white/[0.08]"
-                  >
-                    Back
-                  </button>
-                </div>
-              )}
-            </>
+            <div className="mt-4 space-y-2">
+              {paymentLinkServices.map(({ title, body, icon: Icon, status, active }) => (
+                <button
+                  key={title}
+                  type="button"
+                  onClick={active ? openRequestService : undefined}
+                  disabled={!active}
+                  className={cn(
+                    'flex w-full items-center gap-3 rounded-xl border px-3 py-3 text-left transition-all',
+                    active
+                      ? 'border-gray-200 bg-gray-50 hover:border-gray-300 hover:bg-white active:scale-[0.99] dark:border-white/10 dark:bg-white/[0.05] dark:hover:bg-white/[0.08]'
+                      : 'cursor-not-allowed border-gray-100 bg-gray-50/60 opacity-70 dark:border-white/10 dark:bg-white/[0.03]',
+                  )}
+                >
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-gray-700 shadow-sm dark:bg-white/[0.08] dark:text-gray-200">
+                    <Icon className="h-4 w-4" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-gray-900 dark:text-white">{title}</span>
+                      <span className={cn(
+                        'rounded-full px-2 py-0.5 text-[10px] font-bold uppercase',
+                        active ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-400/10 dark:text-emerald-300' : 'bg-gray-100 text-gray-400 dark:bg-white/[0.06]',
+                      )}>
+                        {status}
+                      </span>
+                    </span>
+                    <span className="mt-0.5 block text-xs leading-relaxed text-gray-500 dark:text-gray-400">{body}</span>
+                  </span>
+                  {active ? <ArrowRight className="h-4 w-4 text-gray-400" /> : <CheckCircle2 className="h-4 w-4 text-gray-300" />}
+                </button>
+              ))}
+            </div>
           )}
         </div>
+      )}
+    </div>
+  )
+}
+
+function RequestUsdcPanel({
+  requestMode,
+  savedRequest,
+  requestFormTarget,
+  canSaveRequest,
+  wallet,
+  label,
+  amount,
+  target,
+  setWallet,
+  setLabel,
+  setAmount,
+  setTarget,
+  resetRequestForm,
+  saveRequest,
+  onBack,
+  onBackToModes,
+  onEditSaved,
+}: {
+  requestMode: RequestMode | ''
+  savedRequest: SavedRequest | null
+  requestFormTarget: string
+  canSaveRequest: boolean
+  wallet: string
+  label: string
+  amount: string
+  target: string
+  setWallet: (value: string) => void
+  setLabel: (value: string) => void
+  setAmount: (value: string) => void
+  setTarget: (value: string) => void
+  resetRequestForm: (mode: RequestMode) => void
+  saveRequest: () => void
+  onBack: () => void
+  onBackToModes: () => void
+  onEditSaved: () => void
+}) {
+  return (
+    <div className="mt-4">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <button
+            type="button"
+            onClick={requestMode ? onBackToModes : onBack}
+            className="mb-2 inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 transition-colors hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Back
+          </button>
+          <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Request USDC</p>
+          <h2 className="mt-1 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Create a Telegram request</h2>
+          <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
+            Save the request, then choose where to share it in Telegram.
+          </p>
+        </div>
+        {savedRequest && (
+          <button
+            type="button"
+            onClick={onEditSaved}
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-200 text-gray-500 transition-colors hover:bg-gray-50 dark:border-white/10 dark:text-gray-300 dark:hover:bg-white/[0.06]"
+            aria-label="Edit request"
+          >
+            <Pencil className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+
+      {savedRequest && !requestMode ? (
+        <SavedRequestCard request={savedRequest} onEdit={() => resetRequestForm(savedRequest.mode)} />
+      ) : (
+        <>
+          {!requestMode && (
+            <div className="mt-4 space-y-2">
+              <RequestModeButton
+                icon={UserRound}
+                title="Share to one chat"
+                body="For one payer. Telegram will ask where to send it."
+                onClick={() => resetRequestForm('person')}
+              />
+              <RequestModeButton
+                icon={UsersRound}
+                title="Share to a group"
+                body="For donations, dues, splits, or registrations."
+                onClick={() => resetRequestForm('group')}
+              />
+            </div>
+          )}
+
+          {requestMode && (
+            <div className="mt-4 space-y-3">
+              <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
+                <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">
+                  {requestMode === 'group' ? 'Group collection' : 'Single request'}
+                </p>
+                <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-white">
+                  {requestMode === 'group' ? 'Group collection' : 'One payer'}
+                </p>
+                <p className="mt-0.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                  {requestMode === 'group'
+                    ? 'Everyone opens the same collection link.'
+                    : 'Create one payment request and share it in Telegram.'}
+                </p>
+              </div>
+
+              <InputBlock
+                label={requestMode === 'group' ? 'Group name' : 'Payer name'}
+                value={target}
+                onChange={setTarget}
+                placeholder={requestMode === 'group' ? 'Pizza DAO, class dues...' : 'Drea, Alex, customer name...'}
+              />
+              <InputBlock
+                label="Receive wallet"
+                value={wallet}
+                onChange={setWallet}
+                placeholder="0x... or Solana address"
+              />
+              <InputBlock
+                label={requestMode === 'group' ? 'Collection name' : 'Payment note'}
+                value={label}
+                onChange={setLabel}
+                placeholder={requestMode === 'group' ? 'Pizza DAO, donations, dues...' : 'Dinner, invoice, Shy...'}
+              />
+              <InputBlock
+                label="Amount"
+                value={amount}
+                onChange={setAmount}
+                placeholder="Optional"
+              />
+
+              <div className="rounded-xl border border-gray-100 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.05]">
+                <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">
+                  {requestMode === 'group' ? 'Group' : 'Payer'}
+                </p>
+                <p className="mt-0.5 truncate text-sm font-semibold text-gray-900 dark:text-white">
+                  {requestMode === 'group'
+                    ? (requestFormTarget || 'Telegram group')
+                    : requestFormTarget}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={saveRequest}
+                disabled={!canSaveRequest}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+              >
+                <Send className="h-4 w-4" />
+                {requestMode === 'group' ? 'Save collection' : 'Save request'}
+              </button>
+            </div>
+          )}
+        </>
       )}
     </div>
   )
@@ -390,26 +489,42 @@ function SavedRequestCard({
   request: SavedRequest
   onEdit: () => void
 }) {
-  const payLink = buildRequestPayLink(request)
+  const [sharing, setSharing] = useState(false)
+  const [shareError, setShareError] = useState('')
   const amountLine = request.amount ? `${request.amount} USDC` : 'Flexible amount'
-  const message = request.mode === 'group'
-    ? [
-        `${request.label} opened a Hash PayLink collection.`,
-        '',
-        `Amount: ${amountLine}`,
-        `For: ${request.target}`,
-        '',
-        'Review and contribute securely:',
-      ].join('\n')
-    : [
-        `${request.label} sent you a Hash PayLink request.`,
-        '',
-        `Amount: ${amountLine}`,
-        `To: ${request.target}`,
-        '',
-        'Review and pay securely:',
-      ].join('\n')
-  const telegramShareUrl = `https://t.me/share/url?url=${encodeURIComponent(payLink)}&text=${encodeURIComponent(message)}`
+
+  async function shareInTelegram() {
+    if (sharing) return
+    setSharing(true)
+    setShareError('')
+
+    try {
+      const res = await fetch('/api/telegram-request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(request),
+      })
+      const data = await res.json() as { ok?: boolean; botPayload?: string; error?: string }
+      if (!res.ok || !data.ok || !data.botPayload) {
+        throw new Error(data.error || 'Could not prepare Telegram request.')
+      }
+
+      const botUrl = buildTelegramBotStartUrl(data.botPayload)
+      const telegramWebApp = (window as Window & {
+        Telegram?: { WebApp?: { openTelegramLink?: (url: string) => void } }
+      }).Telegram?.WebApp
+
+      if (telegramWebApp?.openTelegramLink) {
+        telegramWebApp.openTelegramLink(botUrl)
+      } else {
+        window.location.href = botUrl
+      }
+    } catch (err) {
+      setShareError(err instanceof Error ? err.message : 'Could not open Telegram.')
+    } finally {
+      setSharing(false)
+    }
+  }
 
   return (
     <div className="mt-4 space-y-3">
@@ -419,7 +534,7 @@ function SavedRequestCard({
           <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-200">Request saved</p>
         </div>
         <p className="mt-1 text-xs leading-relaxed text-emerald-700/80 dark:text-emerald-200/80">
-          {request.mode === 'group' ? 'Ready to share with the group.' : 'Ready to share in Telegram.'}
+          Ready to share in Telegram.
         </p>
       </div>
 
@@ -429,7 +544,7 @@ function SavedRequestCard({
             <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Current request</p>
             <p className="mt-1 truncate text-sm font-semibold text-gray-900 dark:text-white">{request.label}</p>
             <p className="mt-0.5 truncate text-xs text-gray-500 dark:text-gray-400">
-              {request.target} {request.amount ? `· ${request.amount} USDC` : '· flexible amount'}
+              {request.target} {request.amount ? `- ${request.amount} USDC` : '- flexible amount'}
             </p>
           </div>
           <button
@@ -443,21 +558,16 @@ function SavedRequestCard({
         </div>
       </div>
 
-      <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
-        <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Telegram message</p>
-        <div className="mt-1 whitespace-pre-line text-sm leading-relaxed text-gray-700 dark:text-gray-200">{message}</div>
-        <p className="mt-2 truncate text-xs text-gray-400 dark:text-gray-500">{payLink}</p>
-      </div>
-
-      <a
-        href={telegramShareUrl}
-        target="_blank"
-        rel="noopener noreferrer"
+      <button
+        type="button"
+        onClick={shareInTelegram}
+        disabled={sharing}
         className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
       >
         <Send className="h-4 w-4" />
-        {request.mode === 'group' ? 'Share collection' : 'Share payment request'}
-      </a>
+        {sharing ? 'Preparing request...' : 'Share in Telegram'}
+      </button>
+      {shareError && <p className="text-center text-xs text-red-500 dark:text-red-300">{shareError}</p>}
     </div>
   )
 }
@@ -486,4 +596,25 @@ function buildRequestPayLink(request: SavedRequest) {
   }
 
   return `${window.location.origin}/pay?${params.toString()}`
+}
+
+function buildShortRequestPayLink(request: SavedRequest) {
+  const wallet = request.wallet.trim()
+  const amount = request.amount.trim() || '-'
+  const memo = request.label.trim() || '-'
+  const network = wallet.startsWith('0x') ? 'base' : 'solana'
+  const params = new URLSearchParams()
+  if (request.mode === 'group') {
+    params.set('v', '1')
+    params.set('id', request.label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'telegram-request')
+  }
+  const suffix = params.toString() ? `?${params.toString()}` : ''
+  return `${window.location.origin}/p/${encodeURIComponent(network)}/${encodeURIComponent(amount)}/${encodeURIComponent(wallet)}/${encodeURIComponent(memo)}${suffix}`
+}
+
+function buildTelegramBotStartUrl(payload: string) {
+  const base = TELEGRAM_BOT_URL.trim().replace(/\/+$/, '') || 'https://t.me/HashPayLinkBot'
+  const cleanPayload = payload.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64)
+  if (base.includes('?')) return `${base}&start=${encodeURIComponent(cleanPayload)}`
+  return `${base}?start=${encodeURIComponent(cleanPayload)}`
 }

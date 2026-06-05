@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom'
 import Layout from './Layout'
 import CreateLink from './pages/CreateLink'
 import PaymentPage from './pages/PaymentPage'
@@ -78,6 +78,7 @@ export default function App() {
         <Route element={<Layout />}>
           <Route index element={<CreateLink />} />
           <Route path="pay" element={<PaymentPage />} />
+          <Route path="p/:network/:amount/:recipient/:memo" element={<ShortPayRedirect />} />
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="event" element={<EventDashboard />} />
           <Route path="agent" element={<AgentDemo />} />
@@ -90,4 +91,28 @@ export default function App() {
     </BrowserRouter>
     </SolanaProvider>
   )
+}
+
+function ShortPayRedirect() {
+  const { network = 'base', amount = '', recipient = '', memo = '' } = useParams()
+  const params = new URLSearchParams()
+  if (amount && amount !== '-') {
+    params.set('a', amount)
+  } else {
+    params.set('f', '1')
+  }
+  params.set('src', 't')
+  params.set('n', network)
+  if (recipient.startsWith('0x')) {
+    params.set('e', recipient)
+  } else {
+    params.set('s', recipient)
+  }
+  if (memo && memo !== '-') params.set('m', memo)
+  const sourceParams = new URLSearchParams(window.location.search)
+  for (const key of ['v', 'id']) {
+    const value = sourceParams.get(key)
+    if (value) params.set(key, value)
+  }
+  return <Navigate to={`/pay?${params.toString()}`} replace />
 }
