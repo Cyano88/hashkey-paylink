@@ -51,6 +51,27 @@ async function fetchRate(currency: string): Promise<number> {
   return eurToTarget / eurToUsd
 }
 
+export async function getFxRate(currency: string): Promise<{ rate: number; source: string; cachedAt: number; stale: boolean }> {
+  if (!(currency in FX_META)) throw new Error(`Unsupported currency: ${currency}`)
+
+  const cached = cache.get(currency)
+  if (cached && isFresh(cached)) {
+    return { rate: cached.rate, source: 'fixer', cachedAt: cached.fetchedAt, stale: false }
+  }
+
+  try {
+    const rate = await fetchRate(currency)
+    const fetchedAt = Date.now()
+    cache.set(currency, { rate, fetchedAt })
+    return { rate, source: 'fixer', cachedAt: fetchedAt, stale: false }
+  } catch (err) {
+    if (cached) {
+      return { rate: cached.rate, source: 'fixer', cachedAt: cached.fetchedAt, stale: true }
+    }
+    throw err
+  }
+}
+
 // ── Handler ───────────────────────────────────────────────────────────────────
 export default async function handler(req: Request, res: Response) {
   const { currency } = req.query as { currency?: string }
@@ -63,25 +84,12 @@ export default async function handler(req: Request, res: Response) {
   }
 
   const meta   = FX_META[currency]
-  const cached = cache.get(currency)
-
-  // Return fresh cache immediately
-  if (cached && isFresh(cached)) {
-    return res.json({ ok: true, rate: cached.rate, currency, ...meta, cachedAt: cached.fetchedAt, stale: false })
-  }
-
   try {
-    const rate = await fetchRate(currency)
-    cache.set(currency, { rate, fetchedAt: Date.now() })
-    return res.json({ ok: true, rate, currency, ...meta, cachedAt: Date.now(), stale: false })
+    const quote = await getFxRate(currency)
+    return res.json({ ok: true, rate: quote.rate, currency, ...meta, cachedAt: quote.cachedAt, stale: quote.stale })
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error('[fx-rate]', msg)
-
-    // Serve stale cache rather than hard-failing
-    if (cached) {
-      return res.json({ ok: true, rate: cached.rate, currency, ...meta, cachedAt: cached.fetchedAt, stale: true })
-    }
     return res.status(503).json({ ok: false, error: msg.slice(0, 200) })
   }
 }

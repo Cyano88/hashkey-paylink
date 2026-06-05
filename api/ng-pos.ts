@@ -3,10 +3,10 @@ import { randomBytes, createCipheriv, createHash } from 'crypto'
 import { mkdir, readFile, writeFile } from 'fs/promises'
 import { dirname, resolve } from 'path'
 import { isAddress } from 'viem'
+import { getFxRate } from './fx-rate'
 
 const STORE_PATH = process.env.NG_POS_STORE ?? './data/ng-pos-merchants.json'
 const MAX_TEXT = 90
-const DEFAULT_USDC_NGN_RATE = 1500
 
 type PayoutPreference = 'INSTANT_FIAT' | 'KEEP_CRYPTO'
 type SettlementType = 'INSTANT_FIAT' | 'KEEP_CRYPTO'
@@ -125,8 +125,8 @@ async function writeStore(store: Store) {
   await writeFile(path, `${JSON.stringify(store, null, 2)}\n`, 'utf8')
 }
 
-function publicMerchant(merchant: MerchantProfile) {
-  const { rate, source } = getRate()
+async function publicMerchant(merchant: MerchantProfile) {
+  const { rate, source } = await getNgnRate()
   return {
     merchant_id: merchant.merchant_id,
     display_name: merchant.display_name,
@@ -145,12 +145,21 @@ function publicMerchant(merchant: MerchantProfile) {
   }
 }
 
-function getRate() {
-  const configured = Number(process.env.NG_POS_USDC_NGN_RATE)
-  const rate = Number.isFinite(configured) && configured > 0 ? configured : DEFAULT_USDC_NGN_RATE
-  return {
-    rate,
-    source: process.env.NG_POS_USDC_NGN_RATE ? 'configured' : 'demo',
+async function getNgnRate() {
+  try {
+    return await getFxRate('NGN')
+  } catch (err) {
+    const configured = Number(process.env.NG_POS_USDC_NGN_RATE)
+    if (Number.isFinite(configured) && configured > 0) {
+      return {
+        rate: configured,
+        source: 'configured',
+        cachedAt: Date.now(),
+        stale: true,
+      }
+    }
+
+    throw err
   }
 }
 
@@ -208,7 +217,7 @@ export default async function handler(req: Request, res: Response) {
       const store = await readStore()
       const merchant = store.merchants[merchantId]
       if (!merchant) return res.status(404).json({ ok: false, error: 'Merchant not found' })
-      return res.json({ ok: true, merchant: publicMerchant(merchant) })
+      return res.json({ ok: true, merchant: await publicMerchant(merchant) })
     }
 
     if (req.method !== 'POST') {
@@ -263,7 +272,7 @@ export default async function handler(req: Request, res: Response) {
       const store = await readStore()
       store.merchants[merchant.merchant_id] = merchant
       await writeStore(store)
-      return res.json({ ok: true, merchant: publicMerchant(merchant) })
+      return res.json({ ok: true, merchant: await publicMerchant(merchant) })
     }
 
     if (action === 'quote') {
@@ -287,7 +296,7 @@ export default async function handler(req: Request, res: Response) {
         return res.status(400).json({ ok: false, error: 'EVM payment is not configured for this merchant.' })
       }
 
-      const { rate, source } = getRate()
+      const { rate, source } = await getNgnRate()
       const amountNgn = amountCurrency === 'NGN' ? amount : amount * rate
       const amountUsdc = amountCurrency === 'USDC' ? amount : amount / rate
       const amountUsdcText = amountUsdc.toFixed(6).replace(/\.?0+$/, '')
