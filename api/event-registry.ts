@@ -12,6 +12,10 @@ type PaymentEntry = {
   memo:        string
   amount:      string
   ts:          number
+  source?:     string
+  merchantId?: string
+  settlementType?: string
+  amountNgn?:  string
   ogRootHash?: string
   ogTxHash?:   string
 }
@@ -73,6 +77,10 @@ export function registerEventPayment(req: Request, res: Response): void {
   let chain: string
   let amount: string
   let agentSlug = ''
+  let source = ''
+  let merchantId = ''
+  let settlementType = ''
+  let amountNgn = ''
 
   try {
     eventId = cleanString(req.body?.eventId, 'eventId', MAX_EVENT_ID_LENGTH)
@@ -82,6 +90,10 @@ export function registerEventPayment(req: Request, res: Response): void {
     chain = cleanOptionalString(req.body?.chain, MAX_TEXT_LENGTH)
     amount = cleanOptionalString(req.body?.amount, MAX_AMOUNT_LENGTH)
     agentSlug = normalizeActivitySlug(req.body?.agentSlug)
+    source = cleanOptionalString(req.body?.source, MAX_TEXT_LENGTH)
+    merchantId = cleanOptionalString(req.body?.merchantId, MAX_TEXT_LENGTH)
+    settlementType = cleanOptionalString(req.body?.settlementType, MAX_TEXT_LENGTH)
+    amountNgn = cleanOptionalString(req.body?.amountNgn, MAX_AMOUNT_LENGTH)
   } catch (err) {
     res.status(400).json({ ok: false, error: err instanceof Error ? err.message : 'Invalid request' })
     return
@@ -97,6 +109,10 @@ export function registerEventPayment(req: Request, res: Response): void {
     return
   }
   const entry: PaymentEntry = { eventId, txHash, chain, payer, memo, amount, ts: Date.now() }
+  if (source) entry.source = source
+  if (merchantId) entry.merchantId = merchantId
+  if (settlementType) entry.settlementType = settlementType
+  if (amountNgn) entry.amountNgn = amountNgn
   entries.push(entry)
   registry.set(eventId, entries)
   persistRegistry()
@@ -121,7 +137,28 @@ export function registerEventPayment(req: Request, res: Response): void {
   // When complete, patch the entry in-place so the dashboard can show the badge.
   // Use the human-readable name (memo) as payer in the 0G archive so
   // agent-verify can match by name, not wallet address.
-  archivePayment({ eventId, txHash, chain: entry.chain, payer: entry.memo || payer, amount: entry.amount, ts: entry.ts })
+  archivePayment({
+    eventId,
+    txHash,
+    chain: entry.chain,
+    payer: entry.memo || payer,
+    amount: entry.amount,
+    ts: entry.ts,
+    source: entry.source,
+    merchantId: entry.merchantId,
+    settlementType: entry.settlementType,
+    amountNgn: entry.amountNgn,
+    metadata: entry.source === 'ngpos'
+      ? {
+          type: 'nigerian_retail_pos_payment',
+          merchantId: entry.merchantId,
+          amountNgn: entry.amountNgn,
+          amountUsdc: entry.amount,
+          settlementType: entry.settlementType,
+          customerWallet: payer,
+        }
+      : undefined,
+  })
     .then(result => {
       if (!result) return
       const list = registry.get(eventId)

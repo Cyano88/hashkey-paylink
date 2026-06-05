@@ -9,10 +9,12 @@ const STORE_PATH = process.env.TELEGRAM_REQUEST_STORE ?? './data/telegram-reques
 const MAX_TEXT = 80
 
 type TelegramRequestMode = 'person' | 'group'
+type TelegramRequestKind = 'payment-request' | 'polymarket-funding'
 
 type TelegramRequestRecord = {
   id: string
   mode: TelegramRequestMode
+  kind?: TelegramRequestKind
   wallet: string
   network: 'base' | 'solana'
   label: string
@@ -78,7 +80,11 @@ function buildPayUrl(req: Request, record: Omit<TelegramRequestRecord, 'id' | 'p
   params.set('n', record.network)
   if (record.network === 'base') params.set('e', record.wallet)
   else params.set('s', record.wallet)
-  params.set('m', record.label)
+  params.set('m', record.kind === 'polymarket-funding' ? 'Polymarket' : record.label)
+  if (record.kind === 'polymarket-funding') {
+    params.set('brand', 'polymarket')
+    params.set('pm', '1')
+  }
   if (record.mode === 'group') {
     params.set('v', '1')
     params.set('id', record.label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'telegram-request')
@@ -105,6 +111,7 @@ export default async function handler(req: Request, res: Response) {
     const wallet = cleanText(body.wallet, '').slice(0, 96)
     const mode = body.mode === 'group' ? 'group' : 'person'
     const amount = cleanAmount(body.amount)
+    const kind: TelegramRequestKind = body.kind === 'polymarket-funding' ? 'polymarket-funding' : 'payment-request'
     const label = cleanText(body.label, mode === 'group' ? 'Telegram collection' : 'Payment request')
     const target = cleanText(body.target, mode === 'group' ? 'Telegram group' : 'Payer')
     const network = wallet.startsWith('0x') ? 'base' : 'solana'
@@ -116,7 +123,7 @@ export default async function handler(req: Request, res: Response) {
     if (!label) return res.status(400).json({ ok: false, error: 'Missing request label' })
 
     const id = randomBytes(9).toString('base64url')
-    const draft = { mode, wallet, network, label, amount, target }
+    const draft = { mode, kind, wallet, network, label, amount, target }
     const record: TelegramRequestRecord = {
       id,
       ...draft,

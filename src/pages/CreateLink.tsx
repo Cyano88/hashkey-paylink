@@ -11,6 +11,7 @@ import {
   Copy,
   CheckCheck,
   Share2,
+  ArrowLeft,
   ArrowRight,
   MessageCircle,
   Send,
@@ -38,6 +39,7 @@ import {
   Trash2,
   LogOut,
   Radio,
+  Store,
 } from 'lucide-react'
 import { QRCodeCanvas } from 'qrcode.react'
 import { FX_CURRENCIES, getFxMeta, formatLocalAmt, fetchFxRate } from '../lib/fx'
@@ -66,6 +68,21 @@ const TELEGRAM_AGENT_URL = import.meta.env.VITE_TELEGRAM_AGENT_URL || 'https://t
 
 type VaultStep = 'idle' | 'ready'
 type ReceiveMode = 'email' | 'paste'
+type PosNetwork = 'base' | 'arbitrum' | 'arc' | 'solana'
+type PosMerchant = {
+  merchant_id: string
+  display_name: string
+  circle_smart_wallet_address: string
+  solana_wallet_address?: string
+  supported_networks?: PosNetwork[]
+}
+
+const POS_NETWORK_OPTIONS: Array<{ key: PosNetwork; label: string; badge?: string }> = [
+  { key: 'base', label: 'Base' },
+  { key: 'arbitrum', label: 'Arbitrum' },
+  { key: 'arc', label: 'Arc', badge: 'Testnet' },
+  { key: 'solana', label: 'Solana' },
+]
 
 function emailFromPrivyUser(user: unknown) {
   const directEmail = (user as { email?: { address?: unknown } } | undefined)?.email?.address
@@ -390,6 +407,15 @@ export default function CreateLink() {
   const [agentUrl,       setAgentUrl]       = useState('')
   const [agentUrlStatus, setAgentUrlStatus] = useState<'idle' | 'checking' | 'ok' | 'incompatible'>('idle')
   const [receiveMode,    setReceiveMode]    = useState<ReceiveMode>('paste')
+  const [posMode,        setPosMode]        = useState(false)
+  const [posMerchantName, setPosMerchantName] = useState('')
+  const [posNetworks,    setPosNetworks]    = useState<PosNetwork[]>(['base'])
+  const [posWallet,      setPosWallet]      = useState('')
+  const [posSolanaWallet, setPosSolanaWallet] = useState('')
+  const [posMerchant,    setPosMerchant]    = useState<PosMerchant | null>(null)
+  const [posBusy,        setPosBusy]        = useState(false)
+  const [posError,       setPosError]       = useState('')
+  const [posCopied,      setPosCopied]      = useState(false)
   const chainSwitchMounted = useRef(false)
 
   // ── FX Display settings (event mode only) ────────────────────────────────
@@ -561,6 +587,7 @@ export default function CreateLink() {
 
   // ── Access mode toggle ─────────────────────────────────────────────────────
   function toggleAccessMode(on: boolean) {
+    setPosMode(false)
     setAccessMode(on)
     setAgentUrl('')
     setAgentUrlStatus('idle')
@@ -570,6 +597,77 @@ export default function CreateLink() {
     }
     setGeneratedLink('')
     setVaultStep('idle')
+  }
+
+  function openPosMode() {
+    setPosMode(true)
+    setAccessMode(false)
+    setGeneratedLink('')
+    setCopied(false)
+    setVaultStep('idle')
+    setPosError('')
+  }
+
+  function closePosMode() {
+    setPosMode(false)
+    setPosError('')
+  }
+
+  const posCustomerUrl = posMerchant
+    ? `${window.location.origin}/pos/ng?merchant_id=${encodeURIComponent(posMerchant.merchant_id)}`
+    : ''
+
+  const posNeedsEvmWallet = posNetworks.some((network) => network !== 'solana')
+  const posNeedsSolanaWallet = posNetworks.includes('solana')
+  const posMerchantNetworks = posMerchant?.supported_networks?.length ? posMerchant.supported_networks : ['base']
+  const posDashboardNetwork = posMerchantNetworks.find((network) => network !== 'solana') ?? 'solana'
+  const posDashboardAddressParam = posDashboardNetwork === 'solana' ? 's' : 'e'
+  const posDashboardAddress = posDashboardNetwork === 'solana' ? posMerchant?.solana_wallet_address : posMerchant?.circle_smart_wallet_address
+  const posDashboardUrl = posMerchant
+    ? `${window.location.origin}/dashboard?${posDashboardAddressParam}=${encodeURIComponent(posDashboardAddress ?? '')}&n=${encodeURIComponent(posDashboardNetwork)}&id=${encodeURIComponent(`ngpos-${posMerchant.merchant_id}`)}&src=ngpos`
+    : ''
+
+  function togglePosNetwork(network: PosNetwork) {
+    setPosNetworks((current) => {
+      if (current.includes(network)) {
+        return current.length === 1 ? current : current.filter((item) => item !== network)
+      }
+      return [...current, network]
+    })
+    setPosError('')
+  }
+
+  async function createPosMerchant() {
+    setPosBusy(true)
+    setPosError('')
+    try {
+      const response = await fetch('/api/ng-pos', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          action: 'createMerchant',
+          payout_preference: 'KEEP_CRYPTO',
+          display_name: posMerchantName.trim(),
+          supported_networks: posNetworks,
+          circle_smart_wallet_address: posWallet.trim(),
+          solana_wallet_address: posSolanaWallet.trim(),
+        }),
+      })
+      const data = await response.json()
+      if (!response.ok || !data.ok) throw new Error(data.error ?? 'POS setup failed')
+      setPosMerchant(data.merchant)
+    } catch (error) {
+      setPosError(error instanceof Error ? error.message : 'POS setup failed')
+    } finally {
+      setPosBusy(false)
+    }
+  }
+
+  async function copyPosCustomerLink() {
+    if (!posCustomerUrl) return
+    await copyToClipboard(posCustomerUrl)
+    setPosCopied(true)
+    setTimeout(() => setPosCopied(false), 1800)
   }
 
   // ── Agent URL compatibility check ──────────────────────────────────────────
@@ -750,14 +848,14 @@ export default function CreateLink() {
           Multi-Chain PayFi
         </span>
         <h1 className="text-3xl font-bold tracking-tight text-gray-900 sm:text-[2.25rem]">
-          Create a Hash PayLink
+          {posMode ? 'Create POS QR' : 'Create a Hash PayLink'}
         </h1>
         <p className="mt-2 text-[15px] text-gray-500 text-balance">
-          Request USDC from anyone — no app, no signup, just a link.
+          {posMode ? 'Set up one static QR for local in-person payments.' : 'Request USDC from anyone — no app, no signup, just a link.'}
         </p>
 
         {/* ── Chain preview toggle — hidden in multi-chain mode (all chains active) */}
-        {!multiChainMode && <div className="mt-5 flex flex-col items-center gap-2.5">
+        {!multiChainMode && !posMode && <div className="mt-5 flex flex-col items-center gap-2.5">
           <div className="flex items-center justify-center gap-0.5 sm:gap-1 rounded-xl border border-gray-200 bg-gray-100/80 p-1 overflow-x-auto w-full sm:w-auto sm:inline-flex">
             {VISIBLE_CREATE_CHAINS.map((c) => {
               const m = CHAIN_META[c]
@@ -803,7 +901,7 @@ export default function CreateLink() {
         </div>}
 
         {/* Multi-chain mode active badge */}
-        {multiChainMode && (
+        {multiChainMode && !posMode && (
           <div className="mt-5 flex justify-center">
             <span className="inline-flex items-center gap-1.5 rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-[11px] font-semibold text-violet-700">
               <Globe className="h-3 w-3" />
@@ -829,7 +927,7 @@ export default function CreateLink() {
               onClick={() => toggleAccessMode(false)}
               className={cn(
                 'flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold transition-all',
-                !accessMode ? 'bg-white text-gray-900 shadow-sm dark:bg-white/10 dark:text-white' : 'text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300',
+                !accessMode && !posMode ? 'bg-white text-gray-900 shadow-sm dark:bg-white/10 dark:text-white' : 'text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300',
               )}
             >
               <Coins className="h-4 w-4" />
@@ -846,9 +944,190 @@ export default function CreateLink() {
               <Bot className="h-4 w-4" />
               Agent
             </button>
+            <button
+              type="button"
+              onClick={openPosMode}
+              className={cn(
+                'flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold transition-all',
+                posMode ? 'bg-white text-gray-900 shadow-sm dark:bg-white/10 dark:text-white' : 'text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300',
+              )}
+            >
+              <Store className="h-4 w-4" />
+              POS
+            </button>
           </div>
 
-          {accessMode ? (
+          {posMode ? (
+            <div className="space-y-5">
+              <button
+                type="button"
+                onClick={closePosMode}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/[0.1]"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" />
+                Back
+              </button>
+
+              {!posMerchant ? (
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Nigerian Retail Mode</p>
+                    <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">Create POS QR</h2>
+                    <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
+                      One static QR for local in-person payments.
+                    </p>
+                  </div>
+
+                  <div className="grid gap-3">
+                    <label className="block">
+                      <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">Merchant name</span>
+                      <input
+                        value={posMerchantName}
+                        onChange={(event) => {
+                          setPosMerchantName(event.target.value)
+                          setPosError('')
+                        }}
+                        placeholder="Shy Stores"
+                        className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm font-medium text-gray-950 outline-none placeholder:text-gray-300 focus:border-gray-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-gray-600 dark:focus:border-white/25"
+                      />
+                    </label>
+                    <div>
+                      <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">Supported networks</span>
+                      <div className="mt-1.5 grid grid-cols-2 gap-2">
+                        {POS_NETWORK_OPTIONS.map((network) => {
+                          const active = posNetworks.includes(network.key)
+                          return (
+                            <button
+                              key={network.key}
+                              type="button"
+                              onClick={() => togglePosNetwork(network.key)}
+                              className={cn(
+                                'flex min-h-[42px] items-center justify-between rounded-xl border px-3 py-2 text-left text-sm font-semibold transition-all',
+                                active
+                                  ? 'border-gray-900 bg-gray-900 text-white shadow-sm dark:border-white dark:bg-white dark:text-gray-950'
+                                  : 'border-gray-200 bg-gray-50 text-gray-500 hover:border-gray-300 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-400 dark:hover:border-white/20',
+                              )}
+                            >
+                              <span>{network.label}</span>
+                              {network.badge && <span className={cn('text-[10px] font-bold uppercase tracking-wide', active ? 'text-white/70 dark:text-gray-500' : 'text-gray-400')}>{network.badge}</span>}
+                            </button>
+                          )
+                        })}
+                      </div>
+                      <p className="mt-1.5 text-xs text-gray-400 dark:text-gray-500">Payers will only see selected networks.</p>
+                    </div>
+                    {posNeedsEvmWallet && (
+                      <label className="block">
+                        <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">EVM Circle wallet</span>
+                        <input
+                          value={posWallet}
+                          onChange={(event) => {
+                            setPosWallet(event.target.value.trim())
+                            setPosError('')
+                          }}
+                          placeholder="0x..."
+                          className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 font-mono text-sm font-medium text-gray-950 outline-none placeholder:text-gray-300 focus:border-gray-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-gray-600 dark:focus:border-white/25"
+                        />
+                      </label>
+                    )}
+                    {posNeedsSolanaWallet && (
+                      <label className="block">
+                        <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">Solana Circle wallet</span>
+                        <input
+                          value={posSolanaWallet}
+                          onChange={(event) => {
+                            setPosSolanaWallet(event.target.value.trim())
+                            setPosError('')
+                          }}
+                          placeholder="Solana wallet address"
+                          className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 font-mono text-sm font-medium text-gray-950 outline-none placeholder:text-gray-300 focus:border-gray-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-gray-600 dark:focus:border-white/25"
+                        />
+                      </label>
+                    )}
+                  </div>
+
+                  <div className="rounded-xl border border-gray-200 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-gray-900 dark:text-white">Naira bank settlement</p>
+                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Coming soon after licensed payout partner setup.</p>
+                      </div>
+                      <span className="shrink-0 rounded-full border border-gray-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-gray-400 dark:border-white/10 dark:bg-white/[0.06]">
+                        Soon
+                      </span>
+                    </div>
+                  </div>
+
+                  {posError && (
+                    <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-300">
+                      {posError}
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={createPosMerchant}
+                    disabled={posBusy || !posMerchantName.trim() || (posNeedsEvmWallet && !posWallet.trim()) || (posNeedsSolanaWallet && !posSolanaWallet.trim())}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+                  >
+                    {posBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Store className="h-4 w-4" />}
+                    Generate POS QR
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Nigerian Retail Mode</p>
+                    <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">POS QR ready</h2>
+                    <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
+                      Customers scan once and enter their amount.
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl border border-gray-200 bg-gray-50/70 p-4 dark:border-white/10 dark:bg-white/[0.04]">
+                    <div className="flex items-center gap-4">
+                      <div className="rounded-xl bg-white p-2 shadow-sm">
+                        <QRCodeCanvas value={posCustomerUrl} size={112} level="H" includeMargin />
+                      </div>
+                      <div className="min-w-0">
+                        <span className="inline-flex rounded-full border border-gray-200 bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:border-white/10 dark:bg-white/[0.06]">
+                          Static POS QR
+                        </span>
+                        <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{posMerchant.display_name}</p>
+                        <p className="mt-1 truncate font-mono text-[11px] text-gray-500 dark:text-gray-400">
+                          {truncateAddress(posMerchant.circle_smart_wallet_address, 8)}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={copyPosCustomerLink}
+                          className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/[0.1]"
+                        >
+                          <Copy className="h-3.5 w-3.5" />
+                          {posCopied ? 'Copied' : 'Copy customer link'}
+                        </button>
+                      </div>
+                    </div>
+                    <p className="mt-3 text-[11px] font-medium text-gray-400 dark:text-gray-500">Customer link ready</p>
+                  </div>
+
+                  <div className="grid gap-2">
+                    <a
+                      href={posDashboardUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+                    >
+                      <LayoutDashboard className="h-4 w-4" />
+                      Open receipts
+                    </a>
+                    <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
+                      Customers open payment by scanning the QR or using the copied link.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : accessMode ? (
             <div className="space-y-5">
               <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-4 dark:border-white/10 dark:bg-white/[0.04]">
                 <div className="flex items-start gap-3">
@@ -1613,7 +1892,7 @@ export default function CreateLink() {
       </div>
 
       {/* ── Last event dashboard recovery ────────────────────────────── */}
-      {!generatedLink && savedEvent && (
+      {!generatedLink && !posMode && savedEvent && (
         <div className="mt-6 animate-fade-in">
           <div className="flex items-center justify-between gap-3">
             {/* Left — label + event info */}
@@ -1668,7 +1947,7 @@ export default function CreateLink() {
 
 
       {/* ── How it works ─────────────────────────────────────────────── */}
-      {!generatedLink && (
+      {!generatedLink && !posMode && (
         <div className="mt-10 animate-fade-in">
           <p className="mb-4 text-center text-[11px] font-semibold uppercase tracking-widest text-gray-400">
             How it works

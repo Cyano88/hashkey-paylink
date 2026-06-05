@@ -313,7 +313,9 @@ export default function Layout() {
   const [searchParams] = useSearchParams()
   const isCreatePage = pathname === '/'
   const isPayPage  = pathname === '/pay'
-  const isDashPage = pathname === '/event'
+  const isNgPosPage = pathname === '/pos/ng'
+  const isDashPage = pathname === '/event' || pathname === '/dashboard'
+  const isNgPosDashboard = pathname === '/dashboard' && (searchParams.get('src') === 'ngpos' || (searchParams.get('id') ?? '').startsWith('ngpos-'))
   const isAgentProfilePage = pathname === '/agent' && (
     searchParams.get('profile') === 'agent' ||
     !!searchParams.get('agent') ||
@@ -559,14 +561,16 @@ export default function Layout() {
                 ? <NetworkToolkit activeKey={payChain ?? activeNet} locked />
                 : null
               : isDashPage
-              ? <NetworkToolkit activeKey={dashboardActiveNet} label={dashboardNetworkLabel} locked />
+              ? null
               : isAgentProfilePage
+              ? null
+              : isNgPosPage
               ? null
               : <NetworkToolkit activeKey={selectedNet ?? 'base'} onSwitch={handleNetworkSelect} />
             }
 
             {/* Recipient address — dashboard only, truncated, muted */}
-            {isDashPage && dashboardRecipients.length > 0 && (
+            {isDashPage && !isNgPosDashboard && dashboardRecipients.length > 0 && (
               <DashboardRecipientDropdown recipients={dashboardRecipients} />
             )}
 
@@ -590,7 +594,7 @@ export default function Layout() {
             )}
 
             {/* Wallet controls — hidden on pay page and organizer dashboard (read-only pages) */}
-            {!isCreatePage && !isPayPage && !isDashPage && (
+            {!isCreatePage && !isPayPage && !isDashPage && !isNgPosPage && (
               <>
                 {/* Connect Wallet — when disconnected */}
                 {!anyConnected && (

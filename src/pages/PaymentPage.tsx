@@ -285,6 +285,9 @@ export default function PaymentPage() {
   const netParam    = (getPaylinkParam(searchParams, 'net', 'n') || null) as ChainKey | null
   const modeParam   = searchParams.get('mode')
   const isTelegramSource = isTelegramSourceParam(searchParams)
+  const isNgPosSource = searchParams.get('src') === 'ngpos'
+  const ngPosBackMerchantId = searchParams.get('merchant') ?? ''
+  const ngPosBackUrl = ngPosBackMerchantId ? `/pos/ng?merchant_id=${encodeURIComponent(ngPosBackMerchantId)}` : '/'
   const isPolymarketFunding = searchParams.get('brand') === 'polymarket' || searchParams.get('pm') === '1'
   const telegramUrl = telegramReturnUrl(searchParams)
 
@@ -293,6 +296,14 @@ export default function PaymentPage() {
   const resolvedSolana = getPaylinkParam(searchParams, 'sol', 's').trim()
   const isMultiChain   = hasPaylinkFlag(searchParams, 'multi', 'x')
   const isFlex         = hasPaylinkFlag(searchParams, 'flex', 'f')
+
+  function goBackFromCheckout() {
+    if (window.history.length > 1) {
+      window.history.back()
+      return
+    }
+    window.location.assign(ngPosBackUrl)
+  }
 
   // netParam (from new link format) takes priority; legacy chain param as fallback
   const [chain, setChain] = useState<ChainKey>(() => {
@@ -343,11 +354,17 @@ export default function PaymentPage() {
   const agentUrl         = getPaylinkParam(initParams, 'agent', 'g')
   const agentFundingSlug = getPaylinkParam(initParams, 'agentSlug', 'agent')
   const isAgentFunding   = getPaylinkParam(initParams, 'src', 'src') === 'agent' && !!agentFundingSlug
+  const isNgPosPayment   = getPaylinkParam(initParams, 'src', 'src') === 'ngpos'
+  const ngPosMerchantId  = (initParams.get('merchant') ?? '').trim().replace(/[^a-zA-Z0-9_-]/g, '')
+  const ngPosEventId     = ngPosMerchantId ? `ngpos-${ngPosMerchantId}` : ''
+  const ngPosSettlement  = (initParams.get('settlement') ?? '').trim()
+  const ngPosAmountNgn   = (initParams.get('ngn') ?? '').trim()
   const smartWalletOnlyFunding = isPolymarketFunding || isAgentFunding
   const isMainHashPaylinkPayment = !isTelegramSource && !smartWalletOnlyFunding
   const [attendeeName,   setAttendeeName]   = useState('')
   const [eventRegStatus, setEventRegStatus] = useState<'idle' | 'pending' | 'ok' | 'error'>('idle')
   const eventRegistered  = useRef(false)
+  const ngPosRegistered  = useRef(false)
   const requiresAttendeeName = isEventMode && !isPolymarketFunding && !isAgentFunding
 
   // ── FX display (event mode only — reads params baked into the URL at link creation) ──
@@ -701,10 +718,16 @@ export default function PaymentPage() {
     !showCirclePaymasterButton
   const showArgentStarknetEmailPay = chain === 'starknet' && canUseArgentStarknetEmailWallet()
   const walletConnectBlocked = smartWalletOnlyFunding && !PRIVY_AUTH_ENABLED
+  const canStartPolymarketCircleFunding =
+    showCircleEvmEmailPay ||
+    showCircleSolanaEmailPay ||
+    showLegacyCircleEmailPay ||
+    showCircleEmailBridgePay ||
+    showCircleSolanaEmailBridgePay
   const showPolymarketFundingChoice =
     isPolymarketFunding &&
     payMode === 'wallet' &&
-    (showLegacyCircleEmailPay || showCircleSolanaEmailBridgePay) &&
+    canStartPolymarketCircleFunding &&
     chain !== 'starknet' &&
     !manualPayDetected &&
     !circleSmartAccount &&
@@ -2535,6 +2558,42 @@ export default function PaymentPage() {
     }
   }
 
+  async function doRegisterNgPos() {
+    if (!ngPosEventId || !ngPosMerchantId) return
+    const payer  = chain === 'starknet' ? (argentStarkSession?.address ?? starkAccount ?? '')
+      : chain === 'solana' ? (circleSolanaSession?.wallet.address ?? solanaWalletAddr ?? solanaVaultAddr ?? '')
+      : (address ?? circleEvmEmailSession?.wallet.address ?? circleSmartAccount ?? directVault ?? '')
+    const txH    = manualPayDetected ? manualTxHash
+                 : chain === 'starknet' ? starkTxHash
+                 : chain === 'solana'   ? (solanaTxHash ?? solanaDirectTxHash)
+                 : chain === 'arbitrum' ? (circlePaymasterTxHash ?? ghoRelayHash ?? directTxHash ?? null)
+                 : (circlePaymasterTxHash ?? basePaymasterTxHash ?? evmTxHash ?? directTxHash ?? null)
+    const actualAmt = receivedAmount != null
+      ? (Number(receivedAmount) / Math.pow(10, meta.decimals)).toFixed(meta.decimals <= 6 ? 6 : 8)
+      : effectiveAmt
+    const payload = {
+      eventId: ngPosEventId,
+      txHash: txH ?? `manual_${Date.now()}`,
+      chain,
+      payer: payer || 'POS payer',
+      memo: memo || 'POS payment',
+      amount: actualAmt,
+      source: 'ngpos',
+      merchantId: ngPosMerchantId,
+      settlementType: ngPosSettlement,
+      amountNgn: ngPosAmountNgn,
+    }
+    try {
+      await fetch('/api/event-register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+    } catch (err) {
+      console.error('[NgPosReg] fetch failed:', err)
+    }
+  }
+
   useEffect(() => {
     if (!isConfirmed || !isEventMode || !eventId || eventRegistered.current) return
     const name = isAgentFunding ? (memo || 'Agent wallet funding') : attendeeName.trim()
@@ -2544,6 +2603,13 @@ export default function PaymentPage() {
     void doRegister(name)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isConfirmed, attendeeName])
+
+  useEffect(() => {
+    if (!isConfirmed || !isNgPosPayment || !ngPosEventId || ngPosRegistered.current) return
+    ngPosRegistered.current = true
+    void doRegisterNgPos()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isConfirmed])
 
   // Fallback: also register when Send-via-Address relay succeeds (directStatus='success')
   // in case the Transfer event watcher hasn't set manualPayDetected yet.
@@ -2782,10 +2848,21 @@ export default function PaymentPage() {
   // ────────────────────────────────────────────────────────────────────────────
   return (
     <div className="mx-auto max-w-md animate-slide-up">
-      <Link to="/" className="mb-5 inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors">
-        <ArrowLeft className="h-3.5 w-3.5" />
-        Create a link
-      </Link>
+      {isNgPosSource ? (
+        <button
+          type="button"
+          onClick={goBackFromCheckout}
+          className="mb-5 inline-flex items-center gap-1.5 text-sm text-gray-500 transition-colors hover:text-gray-700"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Back
+        </button>
+      ) : (
+        <Link to="/" className="mb-5 inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors">
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Create a link
+        </Link>
+      )}
 
       <div
         className="overflow-hidden rounded-2xl border bg-white transition-all duration-300"

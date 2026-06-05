@@ -6,7 +6,7 @@
  * The frontend remains read-only and polls the backend for new settlement rows.
  */
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
 import { isAddress } from 'viem'
 import {
@@ -37,6 +37,12 @@ interface PaymentRow {
   flow:             'direct' | 'v2' | 'registry'
   chain:            keyof typeof CHAIN_META
   label?:           string
+  source?:          string
+  merchantId?:      string
+  settlementType?:  string
+  amountNgn?:       string
+  ogRootHash?:      string
+  ogTxHash?:        string
 }
 
 interface ApiPaymentRow {
@@ -61,6 +67,12 @@ interface EventPaymentRow {
   memo: string
   amount: string
   ts: number
+  source?: string
+  merchantId?: string
+  settlementType?: string
+  amountNgn?: string
+  ogRootHash?: string
+  ogTxHash?: string
 }
 
 function chainKey(value: string | undefined): keyof typeof CHAIN_META {
@@ -99,7 +111,27 @@ function eventPaymentToRow(row: EventPaymentRow, index: number): PaymentRow {
     flow: 'registry',
     chain,
     label: row.memo || row.payer || 'Payment',
+    source: row.source,
+    merchantId: row.merchantId,
+    settlementType: row.settlementType,
+    amountNgn: row.amountNgn,
+    ogRootHash: row.ogRootHash,
+    ogTxHash: row.ogTxHash,
   }
+}
+
+type DateFilter = 'today' | 'yesterday' | 'last7' | 'custom' | 'all'
+type PosNetwork = 'base' | 'arbitrum' | 'arc' | 'solana'
+
+const POS_NETWORK_LABELS: Record<PosNetwork, string> = {
+  base: 'Base',
+  arbitrum: 'Arbitrum',
+  arc: 'Arc Testnet',
+  solana: 'Solana',
+}
+
+function isPosNetwork(value: string): value is PosNetwork {
+  return value === 'base' || value === 'arbitrum' || value === 'arc' || value === 'solana'
 }
 
 function telegramReturnUrl(params: URLSearchParams) {
@@ -147,6 +179,7 @@ export default function Dashboard() {
   const eventId = (searchParams.get('id') ?? '').trim()
   const netParam = getPaylinkParam(searchParams, 'net', 'n').trim() as UnifiedBalanceChainKey | ''
   const isMultiChain = hasPaylinkFlag(searchParams, 'multi', 'x')
+  const isNgPosDashboard = searchParams.get('src') === 'ngpos' || eventId.startsWith('ngpos-')
   const telegramUrl = telegramReturnUrl(searchParams)
 
   const [routerChecked, setRouterChecked] = useState(false)
@@ -159,12 +192,34 @@ export default function Dashboard() {
   const [balanceLoading,setBalanceLoading]= useState(false)
   const [balanceError,  setBalanceError]  = useState<string | null>(null)
   const [balanceOpen,   setBalanceOpen]   = useState(false)
+  const [receiptFlash,  setReceiptFlash]  = useState(false)
+  const [dateFilter,    setDateFilter]    = useState<DateFilter>('today')
+  const [customDate,    setCustomDate]    = useState(() => new Date().toISOString().slice(0, 10))
+  const [posNetworks,   setPosNetworks]   = useState<PosNetwork[]>([])
+  const lastReceiptCount = useRef<number | null>(null)
 
   const meta   = CHAIN_META.base
   const evmValid = isAddress(evmAddr)
   const solanaValid = isValidSolanaAddress(solanaAddr)
   const starkValid = /^0x[0-9a-fA-F]{64}$/.test(starkAddr)
   const hasDashboardAddress = evmValid || solanaValid || starkValid
+  const posMerchantId = eventId.startsWith('ngpos-') ? eventId.slice(6) : ''
+  const receiptAddress = evmValid ? evmAddr : solanaValid ? solanaAddr : starkAddr
+  const shortReceiptAddress = receiptAddress
+    ? receiptAddress.startsWith('0x')
+      ? `0x..${receiptAddress.slice(-4)}`
+      : `${receiptAddress.slice(0, 4)}..${receiptAddress.slice(-4)}`
+    : ''
+  const receiptNetworks = posNetworks.length
+    ? posNetworks
+    : isPosNetwork(netParam)
+      ? [netParam]
+      : evmValid
+        ? ['base']
+        : solanaValid
+          ? ['solana']
+          : []
+  const receiptNetworkLabel = receiptNetworks.map(network => POS_NETWORK_LABELS[network]).join(' · ')
   const balanceChains: UnifiedBalanceChainKey[] = (() => {
     const isPortfolioBalanceView = isMultiChain || Boolean(eventId)
     if (isPortfolioBalanceView) {
@@ -179,6 +234,27 @@ export default function Dashboard() {
     if (netParam === 'arc' || netParam === 'arbitrum' || netParam === 'base') return evmValid ? [netParam] : []
     return evmValid ? ['base'] : []
   })()
+
+  useEffect(() => {
+    if (!isNgPosDashboard || !posMerchantId) {
+      setPosNetworks([])
+      return
+    }
+    let cancelled = false
+    fetch(`/api/ng-pos?merchant_id=${encodeURIComponent(posMerchantId)}`)
+      .then(async response => {
+        const data = await response.json() as { ok?: boolean; merchant?: { supported_networks?: unknown } }
+        if (!response.ok || !data.ok || !Array.isArray(data.merchant?.supported_networks)) return []
+        return data.merchant.supported_networks.filter((network): network is PosNetwork => typeof network === 'string' && isPosNetwork(network))
+      })
+      .then(networks => {
+        if (!cancelled) setPosNetworks(networks)
+      })
+      .catch(() => {
+        if (!cancelled) setPosNetworks([])
+      })
+    return () => { cancelled = true }
+  }, [isNgPosDashboard, posMerchantId])
 
   // Load unified balances for selected dashboard chains.
   useEffect(() => {
@@ -290,6 +366,19 @@ export default function Dashboard() {
     loadPayments()
   }, [loadPayments])
 
+  useEffect(() => {
+    if (!isNgPosDashboard) return
+    if (lastReceiptCount.current == null) {
+      lastReceiptCount.current = payments.length
+      return
+    }
+    if (payments.length > lastReceiptCount.current) {
+      setReceiptFlash(true)
+      window.setTimeout(() => setReceiptFlash(false), 1800)
+    }
+    lastReceiptCount.current = payments.length
+  }, [isNgPosDashboard, payments.length])
+
   // Lightweight live poll from the latest scanned block.
   useEffect(() => {
     if (eventId) {
@@ -311,6 +400,39 @@ export default function Dashboard() {
     return Math.max(0, Number(row.recipientAmount) / 1e6)
   }
   const totalReceived = payments.reduce((s, p) => s + receivedUsdc(p), 0)
+  const dayStart = useCallback((date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime(), [])
+  const selectedPayments = useMemo(() => {
+    if (!isNgPosDashboard || dateFilter === 'all') return payments
+    const now = new Date()
+    let from = 0
+    let to = Number.POSITIVE_INFINITY
+    if (dateFilter === 'today') {
+      from = dayStart(now)
+      to = from + 86_400_000
+    } else if (dateFilter === 'yesterday') {
+      from = dayStart(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1))
+      to = from + 86_400_000
+    } else if (dateFilter === 'last7') {
+      from = dayStart(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6))
+    } else if (dateFilter === 'custom') {
+      const parsed = customDate ? new Date(`${customDate}T00:00:00`) : null
+      if (!parsed || Number.isNaN(parsed.getTime())) return payments
+      from = dayStart(parsed)
+      to = from + 86_400_000
+    }
+    return payments.filter(row => row.timestamp != null && row.timestamp >= from && row.timestamp < to)
+  }, [customDate, dateFilter, dayStart, isNgPosDashboard, payments])
+  const todayStart = dayStart(new Date())
+  const todayReceived = payments
+    .filter(row => row.timestamp != null && row.timestamp >= todayStart && row.timestamp < todayStart + 86_400_000)
+    .reduce((s, p) => s + receivedUsdc(p), 0)
+  const lastPayment = payments[0] ?? null
+  const archivedCount = payments.filter(row => Boolean(row.ogTxHash)).length
+  const archiveStatus = payments.length === 0
+    ? 'No receipts yet'
+    : archivedCount === payments.length
+      ? 'All archived'
+      : `${archivedCount}/${payments.length} archived`
 
   function fmt(n: number) {
     if (!Number.isFinite(n) || Math.abs(n) < 0.0000005) return '0'
@@ -320,10 +442,28 @@ export default function Dashboard() {
     })
   }
   function fmtUsdc(n: number) { return `${fmt(n)} USDC` }
+  function fmtNgn(value?: string) {
+    const n = Number.parseFloat(value || '')
+    if (!Number.isFinite(n)) return 'NGN not captured'
+    return `₦${n.toLocaleString('en-NG', { maximumFractionDigits: 2 })}`
+  }
   function fmtTs(ts: number | null) {
     if (!ts) return '-'
     const d = new Date(ts)
     return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  }
+  function fmtNgnSafe(value?: string) {
+    const n = Number.parseFloat(value || '')
+    if (!Number.isFinite(n)) return 'NGN not captured'
+    return `NGN ${n.toLocaleString('en-NG', { maximumFractionDigits: 2 })}`
+  }
+  function fmtTime(ts: number | null) {
+    if (!ts) return '-'
+    return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  }
+  function settlementCopy(row?: PaymentRow | null) {
+    if (!row) return 'USDC wallet'
+    return row.settlementType === 'instant_fiat' ? 'Naira bank' : 'USDC wallet'
   }
   function rowMeta(row: PaymentRow) { return CHAIN_META[row.chain] ?? meta }
 
@@ -351,14 +491,24 @@ export default function Dashboard() {
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-gray-50">Payments Received</h1>
-          <p className="mt-0.5 font-mono text-xs text-gray-400 dark:text-gray-500">
-            {evmValid
-              ? truncateAddress(evmAddr, 12)
-              : solanaValid
-                ? truncateAddress(solanaAddr, 12)
-                : truncateAddress(starkAddr, 12)}
-          </p>
+          <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-gray-50">
+            {isNgPosDashboard ? 'POS Payments' : 'Payments Received'}
+          </h1>
+          {isNgPosDashboard ? (
+            <p className="mt-1 flex max-w-full flex-wrap items-center gap-1.5 text-xs font-medium text-gray-400 dark:text-gray-500">
+              {receiptNetworkLabel && <span>{receiptNetworkLabel}</span>}
+              {receiptNetworkLabel && shortReceiptAddress && <span className="text-gray-300 dark:text-gray-700">·</span>}
+              {shortReceiptAddress && <span className="font-mono">{shortReceiptAddress}</span>}
+            </p>
+          ) : (
+            <p className="mt-0.5 font-mono text-xs text-gray-400 dark:text-gray-500">
+              {evmValid
+                ? truncateAddress(evmAddr, 12)
+                : solanaValid
+                  ? truncateAddress(solanaAddr, 12)
+                  : truncateAddress(starkAddr, 12)}
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -369,7 +519,15 @@ export default function Dashboard() {
             <RefreshCw className={cn('h-3.5 w-3.5', isLoading && 'animate-spin')} />
             Refresh
           </button>
-          {telegramUrl ? (
+          {isNgPosDashboard ? (
+            <Link
+              to={eventId.startsWith('ngpos-') ? `/pos/ng?merchant_id=${encodeURIComponent(eventId.slice(6))}&manage=1` : '/pos/ng'}
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-black px-3 text-xs font-semibold text-white transition-all hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+            >
+              <Link2 className="h-3.5 w-3.5" />
+              Open POS QR
+            </Link>
+          ) : telegramUrl ? (
             <a
               href={telegramUrl}
               className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-black px-3 text-xs font-semibold text-white hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200 transition-all"
@@ -391,8 +549,9 @@ export default function Dashboard() {
 
       {/* Summary cards */}
       <div className={cn(
-        'rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition-all dark:border-white/10 dark:bg-[#17181c]',
+        'rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition-all duration-500 dark:border-white/10 dark:bg-[#17181c]',
         balanceLoading && 'animate-pulse',
+        receiptFlash && 'border-emerald-200 bg-emerald-50/60 shadow-emerald-100/70 dark:border-emerald-400/30 dark:bg-emerald-950/20 dark:shadow-none',
       )}>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
@@ -403,7 +562,7 @@ export default function Dashboard() {
                 balanceError ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300' : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
               )}>
                 {balanceError ? <><AlertCircle className="h-3 w-3" /> Partial</> : <><Info className="h-3 w-3" /> Read-only</>}
-                <span className="text-gray-300">/</span>
+                <span className="text-emerald-300/80 dark:text-emerald-500/50">·</span>
                 <img src="/brand/circle-logo.jpeg" alt="" className="h-3 w-3 rounded-full object-cover" />
                 <span>Powered by Circle</span>
               </span>
@@ -445,8 +604,39 @@ export default function Dashboard() {
         )}
       </div>
 
+      {isNgPosDashboard && (
+        <div className={cn(
+          'overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm transition-all duration-500 dark:border-white/10 dark:bg-[#17181c]',
+          receiptFlash && 'border-emerald-200 bg-emerald-50/50 shadow-emerald-100/70 dark:border-emerald-400/30 dark:bg-emerald-950/15 dark:shadow-none',
+        )}>
+          <div className="grid divide-y divide-gray-100 dark:divide-white/10 sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-5">
+          {[
+            { label: 'Today', value: fmtUsdc(todayReceived), tone: 'emerald' },
+            { label: 'Total', value: fmtUsdc(totalReceived), tone: 'gray' },
+            { label: 'Last payment', value: lastPayment ? fmtTime(lastPayment.timestamp) : 'None yet', tone: 'gray' },
+            { label: 'Settlement', value: settlementCopy(lastPayment), tone: 'blue' },
+            { label: '0G proof', value: archiveStatus, tone: 'purple' },
+          ].map(item => (
+            <div
+              key={item.label}
+              className="min-w-0 px-4 py-3"
+            >
+              <div className="flex items-center gap-2">
+                <span className={cn(
+                  'h-1.5 w-1.5 shrink-0 rounded-full',
+                  item.tone === 'emerald' ? 'bg-emerald-500' : item.tone === 'blue' ? 'bg-blue-500' : item.tone === 'purple' ? 'bg-purple-500' : 'bg-gray-300 dark:bg-gray-600',
+                )} />
+                <p className="truncate text-xs font-medium text-gray-400 dark:text-gray-500">{item.label}</p>
+              </div>
+              <p className="mt-1.5 truncate text-[15px] font-semibold leading-tight text-gray-900 dark:text-gray-50">{item.value}</p>
+            </div>
+          ))}
+          </div>
+        </div>
+      )}
+
       {payments.length > 0 && (
-        <div className="grid grid-cols-2 gap-3">
+        <div className={cn('grid grid-cols-2 gap-3', isNgPosDashboard && 'hidden')}>
           {[
             { label: 'Paid',      value: String(payments.length), color: 'text-gray-900 dark:text-gray-50', border: 'border-gray-100 dark:border-white/10' },
             { label: 'Collected', value: fmtUsdc(totalReceived),  color: 'text-emerald-700 dark:text-emerald-300', border: 'border-emerald-100 dark:border-emerald-900/50', bg: 'bg-emerald-50/60 dark:bg-emerald-950/20' },
@@ -463,13 +653,40 @@ export default function Dashboard() {
       <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-[#17181c]">
         {/* Live indicator */}
         <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3 dark:border-white/10">
-          <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">Settlement History</p>
-          <div className="flex items-center gap-1.5 text-[11px] text-emerald-600 font-medium">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
-            </span>
-            Live
+          <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">
+            {isNgPosDashboard ? 'Receipts' : 'Settlement History'}
+          </p>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {isNgPosDashboard && (
+              <>
+                <select
+                  value={dateFilter}
+                  onChange={event => setDateFilter(event.target.value as DateFilter)}
+                  className="h-8 rounded-lg border border-gray-200 bg-white px-2 text-xs font-semibold text-gray-600 outline-none transition-all hover:bg-gray-50 focus:border-gray-300 dark:border-white/10 dark:bg-white/5 dark:text-gray-300 dark:hover:bg-white/10"
+                >
+                  <option value="today">Today</option>
+                  <option value="yesterday">Yesterday</option>
+                  <option value="last7">Last 7 days</option>
+                  <option value="custom">Custom date</option>
+                  <option value="all">All</option>
+                </select>
+                {dateFilter === 'custom' && (
+                  <input
+                    type="date"
+                    value={customDate}
+                    onChange={event => setCustomDate(event.target.value)}
+                    className="h-8 rounded-lg border border-gray-200 bg-white px-2 text-xs font-semibold text-gray-600 outline-none transition-all focus:border-gray-300 dark:border-white/10 dark:bg-white/5 dark:text-gray-300"
+                  />
+                )}
+              </>
+            )}
+            <div className="flex items-center gap-1.5 text-[11px] font-medium text-emerald-600">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+              </span>
+              Live
+            </div>
           </div>
         </div>
 
@@ -490,8 +707,10 @@ export default function Dashboard() {
           <div className="py-16 text-center">
             <TrendingUp className="mx-auto mb-4 h-10 w-10 text-gray-200 dark:text-gray-700" />
             <p className="text-sm font-medium text-gray-500 dark:text-gray-300">No payments received yet</p>
-            <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">Share your PayLink to get started</p>
-            {telegramUrl ? (
+            <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+              {isNgPosDashboard ? 'Customer payments from this POS QR will appear here.' : 'Share your PayLink to get started'}
+            </p>
+            {isNgPosDashboard ? null : telegramUrl ? (
               <OgArchiveLink className="mt-6" />
             ) : (
               <Link
@@ -503,6 +722,92 @@ export default function Dashboard() {
               </Link>
             )}
           </div>
+        ) : isNgPosDashboard ? (
+          selectedPayments.length === 0 ? (
+            <div className="py-14 text-center">
+              <TrendingUp className="mx-auto mb-4 h-10 w-10 text-gray-200 dark:text-gray-700" />
+              <p className="text-sm font-medium text-gray-500 dark:text-gray-300">No receipts for this date</p>
+              <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">Try another day or select all receipts.</p>
+            </div>
+          ) : (
+            <div className="space-y-2 p-3">
+              <div className="hidden grid-cols-[1.15fr_1fr_1fr_auto] gap-3 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 sm:grid">
+                <span>Customer</span>
+                <span>Amount</span>
+                <span>Route</span>
+                <span className="text-right">Proof</span>
+              </div>
+              {selectedPayments.map(row => {
+                const chainMeta = rowMeta(row)
+                const explorerHref = row.txHash ? `${chainMeta.explorerUrl}/tx/${row.txHash}` : ''
+                const ogHref = row.ogTxHash ? `https://chainscan.0g.ai/tx/${row.ogTxHash}` : ''
+                const customer = row.sender
+                  ? /^0x[0-9a-fA-F]{10,}$/.test(row.sender) || row.sender.length > 36
+                    ? truncateAddress(row.sender, 6)
+                    : row.sender
+                  : 'Customer'
+                return (
+                  <div
+                    key={row.id}
+                    className="grid gap-3 rounded-xl border border-gray-100 bg-white px-4 py-3 shadow-sm transition-all hover:border-gray-200 hover:bg-gray-50/50 dark:border-white/10 dark:bg-white/[0.03] dark:hover:border-white/15 dark:hover:bg-white/[0.05] sm:grid-cols-[1.15fr_1fr_1fr_auto] sm:items-center"
+                  >
+                    <div className="min-w-0">
+                      <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400 sm:hidden">Customer</p>
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500" />
+                        <p className="truncate text-sm font-semibold text-gray-900 dark:text-gray-50">{customer}</p>
+                      </div>
+                      <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">{fmtTs(row.timestamp)}</p>
+                    </div>
+
+                    <div className="min-w-0">
+                      <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400 sm:hidden">Amount</p>
+                      <p className="font-mono text-sm font-bold text-emerald-700 dark:text-emerald-300">{fmtUsdc(receivedUsdc(row))}</p>
+                      <p className="mt-1 truncate text-xs font-medium text-gray-500 dark:text-gray-400">{fmtNgnSafe(row.amountNgn)}</p>
+                    </div>
+
+                    <div className="min-w-0">
+                      <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400 sm:hidden">Route</p>
+                      <p className="truncate text-xs font-semibold text-gray-700 dark:text-gray-200">{settlementCopy(row)}</p>
+                      <p className="mt-1 inline-flex items-center rounded-full border border-gray-100 bg-gray-50 px-2 py-0.5 text-[10px] font-semibold text-gray-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-400">
+                        {chainMeta.label}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2 sm:justify-end">
+                      {ogHref ? (
+                        <a
+                          href={ogHref}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex h-7 items-center gap-1 rounded-full border border-purple-200 bg-purple-50 px-2.5 text-[10px] font-bold text-purple-700 transition-all hover:bg-purple-100 dark:border-purple-800 dark:bg-purple-950/50 dark:text-purple-300"
+                        >
+                          <CheckCircle2 className="h-3 w-3" />
+                          0G
+                        </a>
+                      ) : (
+                        <span className="inline-flex h-7 items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-2.5 text-[10px] font-bold text-gray-400 dark:border-white/10 dark:bg-white/[0.04]">
+                          <span className="h-1.5 w-1.5 rounded-full bg-gray-300 dark:bg-gray-600" />
+                          0G
+                        </span>
+                      )}
+                      {explorerHref && (
+                        <a
+                          href={explorerHref}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex h-7 items-center gap-1 rounded-lg border border-gray-200 px-2 font-mono text-[11px] font-semibold text-gray-500 transition-all hover:bg-gray-50 hover:text-blue-600 dark:border-white/10 dark:text-gray-400 dark:hover:bg-white/10 dark:hover:text-blue-300"
+                        >
+                          {truncateAddress(row.txHash, 4)}
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -576,6 +881,7 @@ export default function Dashboard() {
       </div>
 
       {/* CTA at bottom */}
+      {!isNgPosDashboard && (
       <div className="flex justify-center pb-4">
         {telegramUrl ? (
           <OgArchiveLink />
@@ -589,6 +895,7 @@ export default function Dashboard() {
           </Link>
         )}
       </div>
+      )}
     </div>
   )
 }

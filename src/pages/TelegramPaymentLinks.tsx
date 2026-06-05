@@ -21,12 +21,18 @@ import {
 import { cn } from '../lib/utils'
 
 const TELEGRAM_BOT_URL = import.meta.env.VITE_TELEGRAM_AGENT_URL || 'https://t.me/HashPayLinkBot'
+const POLYMARKET_MIN_FUNDING_USDC = 4
+const POLYMARKET_LOGO = '/brand/polymarket-logo.png'
 
 function displayTelegramName(rawName: string | null, fallback = 'there') {
   const clean = (rawName ?? '').replace(/^@+/, '').trim()
   if (!clean) return fallback
   if (/\s/.test(clean)) return clean
   return `@${clean}`
+}
+
+function shortAddress(value: string) {
+  return value.length > 14 ? `${value.slice(0, 6)}...${value.slice(-4)}` : value
 }
 
 const paymentLinkServices = [
@@ -41,8 +47,8 @@ const paymentLinkServices = [
     title: 'Fund Polymarket',
     body: 'Send USDC to a Polymarket funding wallet.',
     icon: Building2,
-    status: 'Soon',
-    active: false,
+    status: 'Open',
+    active: true,
   },
   {
     title: 'Fund Agent Wallet',
@@ -63,12 +69,15 @@ const telegramSections = [
 type RequestMode = 'person' | 'group'
 
 type SavedRequest = {
+  kind?: 'payment-request' | 'polymarket-funding'
   mode: RequestMode
   wallet: string
   label: string
   target: string
   amount: string
 }
+
+type PolymarketMode = 'self' | 'friends' | ''
 
 export default function TelegramPaymentLinks() {
   const [searchParams] = useSearchParams()
@@ -80,10 +89,14 @@ export default function TelegramPaymentLinks() {
   const [activeService, setActiveService] = useState(initialMode ? 'request-usdc' : '')
   const [requestMode, setRequestMode] = useState<RequestMode | ''>(initialMode)
   const [savedRequest, setSavedRequest] = useState<SavedRequest | null>(null)
+  const [polymarketMode, setPolymarketMode] = useState<PolymarketMode>('')
+  const [savedPolymarketRequest, setSavedPolymarketRequest] = useState<SavedRequest | null>(null)
   const [wallet, setWallet] = useState('')
   const [label, setLabel] = useState('')
   const [amount, setAmount] = useState('')
   const [target, setTarget] = useState(initialMode === 'group' ? initialGroupTarget : initialPersonTarget)
+  const [polymarketWallet, setPolymarketWallet] = useState('')
+  const [polymarketAmount, setPolymarketAmount] = useState('')
   const telegramName = useMemo(
     () => displayTelegramName(searchParams.get('u') ?? searchParams.get('username'), 'there'),
     [searchParams],
@@ -91,6 +104,10 @@ export default function TelegramPaymentLinks() {
 
   const requestFormTarget = target.trim()
   const canSaveRequest = wallet.trim().length > 5 && label.trim().length > 1 && requestFormTarget.length > 1 && !!requestMode
+  const polymarketAmountNumber = Number(polymarketAmount)
+  const polymarketWalletReady = /^0x[a-fA-F0-9]{40}$/.test(polymarketWallet.trim())
+  const polymarketAmountReady = Number.isFinite(polymarketAmountNumber) && polymarketAmountNumber >= POLYMARKET_MIN_FUNDING_USDC
+  const canUsePolymarketFunding = polymarketWalletReady && polymarketAmountReady
 
   function openRequestService() {
     setActiveService('request-usdc')
@@ -125,6 +142,32 @@ export default function TelegramPaymentLinks() {
       amount: amount.trim(),
     })
     setRequestMode('')
+  }
+
+  function openPolymarketService() {
+    setActiveService('fund-polymarket')
+    setPolymarketMode('')
+  }
+
+  function openPolymarketCheckout() {
+    if (!canUsePolymarketFunding) return
+    window.location.href = buildPolymarketPayLink({
+      wallet: polymarketWallet.trim(),
+      amount: polymarketAmount.trim(),
+    })
+  }
+
+  function savePolymarketRequest() {
+    if (!canUsePolymarketFunding) return
+    setSavedPolymarketRequest({
+      kind: 'polymarket-funding',
+      mode: 'person',
+      wallet: polymarketWallet.trim(),
+      label: 'Polymarket',
+      target: 'Friends',
+      amount: polymarketAmount.trim(),
+    })
+    setPolymarketMode('')
   }
 
   return (
@@ -231,13 +274,39 @@ export default function TelegramPaymentLinks() {
                 setTarget(savedRequest.target)
               }}
             />
+          ) : activeService === 'fund-polymarket' ? (
+            <PolymarketFundingPanel
+              mode={polymarketMode}
+              wallet={polymarketWallet}
+              amount={polymarketAmount}
+              savedRequest={savedPolymarketRequest}
+              canContinue={canUsePolymarketFunding}
+              amountReady={polymarketAmountReady}
+              walletReady={polymarketWalletReady}
+              setMode={setPolymarketMode}
+              setWallet={setPolymarketWallet}
+              setAmount={setPolymarketAmount}
+              onBack={() => {
+                setActiveService('')
+                setPolymarketMode('')
+              }}
+              onBackToOptions={() => setPolymarketMode('')}
+              onFundSelf={openPolymarketCheckout}
+              onSaveRequest={savePolymarketRequest}
+              onEditSaved={() => {
+                if (!savedPolymarketRequest) return
+                setPolymarketWallet(savedPolymarketRequest.wallet)
+                setPolymarketAmount(savedPolymarketRequest.amount)
+                setPolymarketMode('friends')
+              }}
+            />
           ) : (
             <div className="mt-4 space-y-2">
               {paymentLinkServices.map(({ title, body, icon: Icon, status, active }) => (
                 <button
                   key={title}
                   type="button"
-                  onClick={active ? openRequestService : undefined}
+                  onClick={active ? (title === 'Fund Polymarket' ? openPolymarketService : openRequestService) : undefined}
                   disabled={!active}
                   className={cn(
                     'flex w-full items-center gap-3 rounded-xl border px-3 py-3 text-left transition-all',
@@ -247,7 +316,9 @@ export default function TelegramPaymentLinks() {
                   )}
                 >
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-gray-700 shadow-sm dark:bg-white/[0.08] dark:text-gray-200">
-                    <Icon className="h-4 w-4" />
+                    {title === 'Fund Polymarket'
+                      ? <img src={POLYMARKET_LOGO} alt="" className="h-4 w-4 invert dark:invert-0" />
+                      : <Icon className="h-4 w-4" />}
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-2">
@@ -267,6 +338,148 @@ export default function TelegramPaymentLinks() {
             </div>
           )}
         </div>
+      )}
+    </div>
+  )
+}
+
+function PolymarketFundingPanel({
+  mode,
+  wallet,
+  amount,
+  savedRequest,
+  canContinue,
+  amountReady,
+  walletReady,
+  setMode,
+  setWallet,
+  setAmount,
+  onBack,
+  onBackToOptions,
+  onFundSelf,
+  onSaveRequest,
+  onEditSaved,
+}: {
+  mode: PolymarketMode
+  wallet: string
+  amount: string
+  savedRequest: SavedRequest | null
+  canContinue: boolean
+  amountReady: boolean
+  walletReady: boolean
+  setMode: (mode: PolymarketMode) => void
+  setWallet: (value: string) => void
+  setAmount: (value: string) => void
+  onBack: () => void
+  onBackToOptions: () => void
+  onFundSelf: () => void
+  onSaveRequest: () => void
+  onEditSaved: () => void
+}) {
+  return (
+    <div className="mt-4">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <button
+            type="button"
+            onClick={mode ? onBackToOptions : onBack}
+            className="mb-2 inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 transition-colors hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Back
+          </button>
+          <div className="flex items-center gap-2">
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.06]">
+              <img src={POLYMARKET_LOGO} alt="" className="h-4 w-4 invert dark:invert-0" />
+            </span>
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Polymarket</p>
+          </div>
+          <h2 className="mt-2 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Fund Polymarket</h2>
+          <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
+            Add Base USDC to a Polymarket funding wallet.
+          </p>
+        </div>
+        {savedRequest && (
+          <button
+            type="button"
+            onClick={onEditSaved}
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-200 text-gray-500 transition-colors hover:bg-gray-50 dark:border-white/10 dark:text-gray-300 dark:hover:bg-white/[0.06]"
+            aria-label="Edit Polymarket funding request"
+          >
+            <Pencil className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+
+      {savedRequest && !mode ? (
+        <SavedRequestCard request={savedRequest} onEdit={onEditSaved} />
+      ) : (
+        <>
+          {!mode && (
+            <div className="mt-4 space-y-2">
+              <RequestModeButton
+                icon={Wallet}
+                title="Fund myself"
+                body="Open the branded checkout and add USDC now."
+                onClick={() => setMode('self')}
+              />
+              <RequestModeButton
+                icon={UsersRound}
+                title="Ask friends"
+                body="Share a Polymarket funding card in Telegram."
+                onClick={() => setMode('friends')}
+              />
+            </div>
+          )}
+
+          {mode && (
+            <div className="mt-4 space-y-3">
+              <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
+                <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">
+                  {mode === 'self' ? 'Direct funding' : 'Telegram funding request'}
+                </p>
+                <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-white">
+                  {mode === 'self' ? 'Fund your Polymarket wallet' : 'Ask someone to fund it'}
+                </p>
+                <p className="mt-0.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                  {mode === 'self'
+                    ? 'Checkout opens with the Polymarket logo and funding memo.'
+                    : 'Telegram will ask which DM, chat, or group should receive the funding card.'}
+                </p>
+              </div>
+
+              <InputBlock
+                label="Polymarket funding wallet"
+                value={wallet}
+                onChange={setWallet}
+                placeholder="0x... funding wallet"
+              />
+              <InputBlock
+                label="Amount"
+                value={amount}
+                onChange={setAmount}
+                placeholder={`Minimum ${POLYMARKET_MIN_FUNDING_USDC} USDC`}
+              />
+
+              {wallet && !walletReady && (
+                <p className="px-1 text-xs text-red-500 dark:text-red-300">Enter a valid 0x funding wallet.</p>
+              )}
+              {amount && !amountReady && (
+                <p className="px-1 text-xs text-red-500 dark:text-red-300">Minimum Polymarket funding is {POLYMARKET_MIN_FUNDING_USDC} USDC.</p>
+              )}
+
+              <button
+                type="button"
+                onClick={mode === 'self' ? onFundSelf : onSaveRequest}
+                disabled={!canContinue}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+              >
+                <Send className="h-4 w-4" />
+                {mode === 'self' ? 'Continue to fund' : 'Save funding request'}
+              </button>
+            </div>
+          )}
+        </>
       )}
     </div>
   )
@@ -492,6 +705,7 @@ function SavedRequestCard({
   const [sharing, setSharing] = useState(false)
   const [shareError, setShareError] = useState('')
   const amountLine = request.amount ? `${request.amount} USDC` : 'Flexible amount'
+  const isPolymarket = request.kind === 'polymarket-funding'
 
   async function shareInTelegram() {
     if (sharing) return
@@ -531,20 +745,29 @@ function SavedRequestCard({
       <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 p-3 dark:border-emerald-400/20 dark:bg-emerald-400/10">
         <div className="flex items-center gap-2">
           <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-300" />
-          <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-200">Request saved</p>
+          <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-200">
+            {isPolymarket ? 'Funding request saved' : 'Request saved'}
+          </p>
         </div>
         <p className="mt-1 text-xs leading-relaxed text-emerald-700/80 dark:text-emerald-200/80">
-          Ready to share in Telegram.
+          {isPolymarket ? 'Ready to share as a Polymarket funding card.' : 'Ready to share in Telegram.'}
         </p>
       </div>
 
       <div className="rounded-xl border border-gray-100 bg-white p-3 dark:border-white/10 dark:bg-white/[0.05]">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Current request</p>
-            <p className="mt-1 truncate text-sm font-semibold text-gray-900 dark:text-white">{request.label}</p>
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">
+              {isPolymarket ? 'Polymarket funding' : 'Current request'}
+            </p>
+            <p className="mt-1 flex items-center gap-1.5 truncate text-sm font-semibold text-gray-900 dark:text-white">
+              {isPolymarket && <img src={POLYMARKET_LOGO} alt="" className="h-4 w-4 shrink-0 invert dark:invert-0" />}
+              <span className="truncate">{isPolymarket ? 'Funding wallet' : request.label}</span>
+            </p>
             <p className="mt-0.5 truncate text-xs text-gray-500 dark:text-gray-400">
-              {request.target} {request.amount ? `- ${request.amount} USDC` : '- flexible amount'}
+              {isPolymarket
+                ? `${shortAddress(request.wallet)} - ${amountLine}`
+                : `${request.target} ${request.amount ? `- ${request.amount} USDC` : '- flexible amount'}`}
             </p>
           </div>
           <button
@@ -565,11 +788,23 @@ function SavedRequestCard({
         className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
       >
         <Send className="h-4 w-4" />
-        {sharing ? 'Preparing request...' : 'Share in Telegram'}
+        {sharing ? 'Preparing request...' : isPolymarket ? 'Share funding card' : 'Share in Telegram'}
       </button>
       {shareError && <p className="text-center text-xs text-red-500 dark:text-red-300">{shareError}</p>}
     </div>
   )
+}
+
+function buildPolymarketPayLink({ wallet, amount }: { wallet: string; amount: string }) {
+  const params = new URLSearchParams()
+  params.set('a', amount)
+  params.set('src', 't')
+  params.set('n', 'base')
+  params.set('e', wallet)
+  params.set('m', 'Polymarket')
+  params.set('brand', 'polymarket')
+  params.set('pm', '1')
+  return `${window.location.origin}/pay?${params.toString()}`
 }
 
 function buildRequestPayLink(request: SavedRequest) {

@@ -37,6 +37,7 @@ import circleSolanaEmailHandler from './api/circle-solana-email.js'
 import privyCircleLinkHandler from './api/privy-circle-link.js'
 import circleRecipientWalletHandler from './api/circle-recipient-wallet.js'
 import telegramRequestHandler from './api/telegram-request.js'
+import ngPosHandler from './api/ng-pos.js'
 import streamRecipientInviteHandler from './api/stream-recipient-invite.js'
 import streamHistoryHandler from './api/stream-history.js'
 import agenticStreamingSubscriptionHandler from './api/agentic-streaming-subscription.js'
@@ -95,6 +96,7 @@ app.post('/api/circle-solana-email',   circleSolanaEmailHandler)
 app.post('/api/privy-circle-link',     strictLimiter, privyCircleLinkHandler)
 app.all('/api/circle-recipient-wallet', strictLimiter, circleRecipientWalletHandler)
 app.all('/api/telegram-request',        strictLimiter, telegramRequestHandler)
+app.all('/api/ng-pos',                  strictLimiter, ngPosHandler)
 app.post('/api/stream-recipient-invite', strictLimiter, streamRecipientInviteHandler)
 app.get('/api/stream-history',         readLimiter, streamHistoryHandler)
 app.all('/api/agentic-streaming-subscription', strictLimiter, agenticStreamingSubscriptionHandler)
