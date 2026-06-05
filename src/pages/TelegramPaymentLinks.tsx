@@ -322,9 +322,9 @@ function RequestUsdcPanel({
             Back
           </button>
           <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Request USDC</p>
-          <h2 className="mt-1 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Create a Telegram request</h2>
+          <h2 className="mt-1 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Create a payment request</h2>
           <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-            Save the request, then choose where to share it in Telegram.
+            Save it, then share a clean payment card in Telegram.
           </p>
         </div>
         {savedRequest && (
@@ -348,13 +348,13 @@ function RequestUsdcPanel({
               <RequestModeButton
                 icon={UserRound}
                 title="Share to one chat"
-                body="For one payer. Telegram will ask where to send it."
+                body="One payer. Share to any DM or chat."
                 onClick={() => resetRequestForm('person')}
               />
               <RequestModeButton
                 icon={UsersRound}
                 title="Share to a group"
-                body="For donations, dues, splits, or registrations."
+                body="One collection link for donations, dues, splits, or registrations."
                 onClick={() => resetRequestForm('group')}
               />
             </div>
@@ -364,7 +364,7 @@ function RequestUsdcPanel({
             <div className="mt-4 space-y-3">
               <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
                 <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">
-                  {requestMode === 'group' ? 'Group collection' : 'Single request'}
+                  {requestMode === 'group' ? 'Group collection' : 'One-chat request'}
                 </p>
                 <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-white">
                   {requestMode === 'group' ? 'Group collection' : 'One payer'}
@@ -377,7 +377,7 @@ function RequestUsdcPanel({
               </div>
 
               <InputBlock
-                label={requestMode === 'group' ? 'Group name' : 'Payer name'}
+                label={requestMode === 'group' ? 'Group name' : 'Payer'}
                 value={target}
                 onChange={setTarget}
                 placeholder={requestMode === 'group' ? 'Pizza DAO, class dues...' : 'Drea, Alex, customer name...'}
@@ -389,7 +389,7 @@ function RequestUsdcPanel({
                 placeholder="0x... or Solana address"
               />
               <InputBlock
-                label={requestMode === 'group' ? 'Collection name' : 'Payment note'}
+                label={requestMode === 'group' ? 'Collection name' : 'For'}
                 value={label}
                 onChange={setLabel}
                 placeholder={requestMode === 'group' ? 'Pizza DAO, donations, dues...' : 'Dinner, invoice, Shy...'}
