@@ -126,6 +126,7 @@ async function writeStore(store: Store) {
 }
 
 function publicMerchant(merchant: MerchantProfile) {
+  const { rate, source } = getRate()
   return {
     merchant_id: merchant.merchant_id,
     display_name: merchant.display_name,
@@ -139,6 +140,8 @@ function publicMerchant(merchant: MerchantProfile) {
     bank_configured: Boolean(merchant.encrypted_bank_details),
     bank_name: merchant.bank_name,
     bank_last4: merchant.bank_last4,
+    fx_rate_ngn_per_usdc: rate.toFixed(2),
+    fx_source: source,
   }
 }
 

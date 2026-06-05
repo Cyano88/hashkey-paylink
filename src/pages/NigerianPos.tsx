@@ -20,6 +20,16 @@ function supportedMerchantNetworks(value: unknown): PosNetwork[] {
   return selected.length ? Array.from(new Set(selected)) : ['base']
 }
 
+function formatNgn(value: number) {
+  if (!Number.isFinite(value)) return 'NGN 0'
+  return `NGN ${value.toLocaleString('en-NG', { maximumFractionDigits: 2 })}`
+}
+
+function formatUsdc(value: number) {
+  if (!Number.isFinite(value)) return '0 USDC'
+  return `${value.toLocaleString('en-US', { maximumFractionDigits: 6 })} USDC`
+}
+
 type PublicMerchant = {
   merchant_id: string
   display_name: string
@@ -33,6 +43,8 @@ type PublicMerchant = {
   bank_configured: boolean
   bank_name?: string
   bank_last4?: string
+  fx_rate_ngn_per_usdc?: string
+  fx_source?: string
 }
 
 type Quote = {
@@ -100,6 +112,15 @@ export default function NigerianPos() {
     () => supportedMerchantNetworks(merchant?.supported_networks),
     [merchant?.supported_networks],
   )
+  const posRate = Number(merchant?.fx_rate_ngn_per_usdc)
+  const amountValue = Number(String(amount).replace(/,/g, '').trim())
+  const hasAmountValue = Number.isFinite(amountValue) && amountValue > 0
+  const convertedNgn = hasAmountValue && Number.isFinite(posRate) && posRate > 0
+    ? amountCurrency === 'USDC' ? amountValue * posRate : amountValue
+    : null
+  const convertedUsdc = hasAmountValue && Number.isFinite(posRate) && posRate > 0
+    ? amountCurrency === 'USDC' ? amountValue : amountValue / posRate
+    : null
 
   useEffect(() => {
     if (!merchantId) return
@@ -407,6 +428,16 @@ export default function NigerianPos() {
               placeholder={amountCurrency === 'NGN' ? '5000' : '5'}
               className="w-full bg-transparent text-lg font-semibold text-gray-950 outline-none placeholder:text-gray-300 dark:text-white dark:placeholder:text-gray-600"
             />
+          </div>
+          <div className="mt-2 flex items-center justify-between gap-3 text-[11px] font-medium text-gray-400 dark:text-gray-500">
+            {convertedNgn !== null && convertedUsdc !== null ? (
+              <>
+                <span>{amountCurrency === 'USDC' ? `≈ ${formatNgn(convertedNgn)}` : `≈ ${formatUsdc(convertedUsdc)}`}</span>
+                <span>1 USDC = {formatNgn(posRate)}</span>
+              </>
+            ) : (
+              <span>NGN conversion appears as you type.</span>
+            )}
           </div>
         </div>
 
