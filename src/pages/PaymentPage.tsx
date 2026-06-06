@@ -1309,11 +1309,12 @@ export default function PaymentPage() {
           setReceivedAmount(bal); setManualTxHash(null); setCircleEvmAcceptedPending(false); setManualPayDetected(true); setShowCheckButton(false)
         }
       } else {
-        const tokenAddress   = CHAIN_META[evmChain as 'base' | 'arc' | 'arbitrum'].tokenAddress
-        const target         = resolvedEvm as `0x${string}`
-        const requestedUnits = expectedEvmRecipientUnits()
+        const tokenAddress = CHAIN_META[evmChain as 'base' | 'arc' | 'arbitrum'].tokenAddress
+        const target = resolvedEvm as `0x${string}`
+        const expectedUnits = expectedEvmRecipientUnits()
+        const scanUnits = receivedAmount != null && receivedAmount > 0n ? receivedAmount : expectedUnits
         const latestBlock = await client.getBlockNumber()
-        const fromBlock = latestBlock > 5_000n ? latestBlock - 5_000n : 0n
+        const fromBlock = latestBlock > 20_000n ? latestBlock - 20_000n : 0n
         type TransferLog = {
           args: { value?: bigint }
           transactionHash?: `0x${string}` | null
@@ -1336,11 +1337,11 @@ export default function PaymentPage() {
         })
         const match = [...logs].reverse().find(log => {
           const value = (log.args as { value?: bigint }).value ?? 0n
-          return value >= requestedUnits * 99n / 100n
+          return value >= scanUnits * 98n / 100n
         })
         if (match) {
-          const value = (match.args as { value?: bigint }).value ?? requestedUnits
-          setReceivedAmount(circleEvmEmailSession ? circleRequiredUnits : value)
+          const value = (match.args as { value?: bigint }).value ?? scanUnits
+          setReceivedAmount(value)
           setManualTxHash(match.transactionHash ?? null)
           setCircleEvmPaymentProcessing(false)
           setCirclePasskeyPending(false)
