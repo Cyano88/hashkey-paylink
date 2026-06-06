@@ -613,6 +613,16 @@ export default function CreateLink() {
     setPosError('')
   }
 
+  function handlePosBack() {
+    if (posMerchant) {
+      setPosMerchant(null)
+      setPosCopied(false)
+      setPosError('')
+      return
+    }
+    closePosMode()
+  }
+
   const posCustomerUrl = posMerchant
     ? `${window.location.origin}/pos/ng?merchant_id=${encodeURIComponent(posMerchant.merchant_id)}`
     : ''
@@ -961,7 +971,7 @@ export default function CreateLink() {
             <div className="space-y-5">
               <button
                 type="button"
-                onClick={closePosMode}
+                onClick={handlePosBack}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/[0.1]"
               >
                 <ArrowLeft className="h-3.5 w-3.5" />
