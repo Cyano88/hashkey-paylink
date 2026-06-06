@@ -11,7 +11,7 @@ import { useSearchParams, Link } from 'react-router-dom'
 import { isAddress } from 'viem'
 import {
   CheckCircle2, ExternalLink, Loader2, Link2,
-  RefreshCw, TrendingUp, Wallet, Info, AlertCircle, ChevronDown, ChevronUp,
+  RefreshCw, TrendingUp, Wallet, Info, AlertCircle, ChevronDown, ChevronUp, X,
 } from 'lucide-react'
 import { CHAIN_META } from '../lib/chains'
 import { cn, truncateAddress } from '../lib/utils'
@@ -235,6 +235,7 @@ export default function Dashboard() {
   const [dateFilter,    setDateFilter]    = useState<DateFilter>('today')
   const [customDate,    setCustomDate]    = useState(() => new Date().toISOString().slice(0, 10))
   const [posNetworks,   setPosNetworks]   = useState<PosNetwork[]>([])
+  const [activeReceipt, setActiveReceipt] = useState<PaymentRow | null>(null)
   const lastReceiptCount = useRef<number | null>(null)
 
   const meta   = CHAIN_META.base
@@ -505,6 +506,21 @@ export default function Dashboard() {
     return row.settlementType === 'instant_fiat' ? 'Naira bank' : 'USDC wallet'
   }
   function rowMeta(row: PaymentRow) { return CHAIN_META[row.chain] ?? meta }
+  function customerLabel(row: PaymentRow) {
+    const customerSource = row.source === 'ngpos' ? (row.label || row.sender) : row.sender
+    return customerSource
+      ? /^0x[0-9a-fA-F]{10,}$/.test(customerSource) || customerSource.length > 36
+        ? truncateAddress(customerSource, 6)
+        : customerSource
+      : 'Customer'
+  }
+  function txExplorerHref(row: PaymentRow) {
+    if (!row.txHash || row.txHash.startsWith('manual_')) return ''
+    return `${rowMeta(row).explorerUrl}/tx/${row.txHash}`
+  }
+  function ogExplorerHref(row: PaymentRow) {
+    return row.ogTxHash ? `https://chainscan.0g.ai/tx/${row.ogTxHash}` : ''
+  }
 
   // No address
   if (!hasDashboardAddress) {
@@ -778,18 +794,28 @@ export default function Dashboard() {
               </div>
               {selectedPayments.map((row, index) => {
                 const chainMeta = rowMeta(row)
-                const explorerHref = row.txHash && !row.txHash.startsWith('manual_') ? `${chainMeta.explorerUrl}/tx/${row.txHash}` : ''
-                const ogHref = row.ogTxHash ? `https://chainscan.0g.ai/tx/${row.ogTxHash}` : ''
-                const customerSource = row.source === 'ngpos' ? (row.label || row.sender) : row.sender
-                const customer = customerSource
-                  ? /^0x[0-9a-fA-F]{10,}$/.test(customerSource) || customerSource.length > 36
-                    ? truncateAddress(customerSource, 6)
-                    : customerSource
-                  : 'Customer'
+                const explorerHref = txExplorerHref(row)
+                const ogHref = ogExplorerHref(row)
+                const customer = customerLabel(row)
                 return (
                   <div
                     key={row.id}
-                    className="grid gap-3 rounded-xl border border-gray-100 bg-white px-4 py-3 shadow-sm transition-all hover:border-gray-200 hover:bg-gray-50/50 dark:border-white/10 dark:bg-white/[0.03] dark:hover:border-white/15 dark:hover:bg-white/[0.05] sm:grid-cols-[1.15fr_1fr_1fr_auto] sm:items-center"
+                    role={isNgPosDashboard ? 'button' : undefined}
+                    tabIndex={isNgPosDashboard ? 0 : undefined}
+                    onClick={() => {
+                      if (isNgPosDashboard) setActiveReceipt(row)
+                    }}
+                    onKeyDown={event => {
+                      if (!isNgPosDashboard) return
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        setActiveReceipt(row)
+                      }
+                    }}
+                    className={cn(
+                      'grid gap-3 rounded-xl border border-gray-100 bg-white px-4 py-3 shadow-sm transition-all hover:border-gray-200 hover:bg-gray-50/50 dark:border-white/10 dark:bg-white/[0.03] dark:hover:border-white/15 dark:hover:bg-white/[0.05] sm:grid-cols-[1.15fr_1fr_1fr_auto] sm:items-center',
+                      isNgPosDashboard && 'cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-950',
+                    )}
                   >
                     <div className="min-w-0">
                       <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400 sm:hidden">Customer</p>
@@ -821,6 +847,7 @@ export default function Dashboard() {
                           target="_blank"
                           rel="noopener noreferrer"
                           title="Permanently archived on 0G Storage"
+                          onClick={event => event.stopPropagation()}
                           className="inline-flex items-center rounded border border-purple-100 bg-purple-50 px-1 py-0.5 text-[8px] font-bold leading-none text-purple-500 transition-colors hover:border-purple-200 hover:bg-purple-100 dark:border-purple-900/60 dark:bg-purple-950/50 dark:text-purple-300"
                         >
                           0G
@@ -836,6 +863,7 @@ export default function Dashboard() {
                           target="_blank"
                           rel="noopener noreferrer"
                           title="View transaction"
+                          onClick={event => event.stopPropagation()}
                           className="inline-flex h-7 items-center gap-1 rounded-lg border border-gray-200 px-2 text-[11px] font-semibold text-gray-500 transition-all hover:bg-gray-50 hover:text-blue-600 dark:border-white/10 dark:text-gray-400 dark:hover:bg-white/10 dark:hover:text-blue-300"
                         >
                           Tx
@@ -936,6 +964,96 @@ export default function Dashboard() {
           </Link>
         )}
       </div>
+
+      {isNgPosDashboard && activeReceipt && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/35 px-3 py-4 backdrop-blur-sm sm:items-center"
+          onClick={() => setActiveReceipt(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-gray-100 bg-white p-4 shadow-2xl dark:border-white/10 dark:bg-gray-950"
+            onClick={event => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">POS receipt</p>
+                <h3 className="mt-1 text-base font-semibold text-gray-950 dark:text-white">{customerLabel(activeReceipt)}</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveReceipt(null)}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-100 text-gray-400 transition-colors hover:bg-gray-50 hover:text-gray-700 dark:border-white/10 dark:text-gray-500 dark:hover:bg-white/10 dark:hover:text-gray-200"
+                aria-label="Close receipt"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="mt-4 rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.03]">
+              <div className="flex items-end justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-medium text-gray-400 dark:text-gray-500">Amount received</p>
+                  <p className="mt-1 font-mono text-lg font-bold text-emerald-700 dark:text-emerald-300">
+                    {fmtUsdc(receivedUsdc(activeReceipt))}
+                  </p>
+                </div>
+                <p className="text-right text-xs font-semibold text-gray-500 dark:text-gray-400">
+                  {fmtNgnSafe(activeReceipt.amountNgn)}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 space-y-3 text-sm">
+              {[
+                ['Settlement', settlementCopy(activeReceipt)],
+                ['Network', rowMeta(activeReceipt).label],
+                ['Time', fmtTs(activeReceipt.timestamp)],
+              ].map(([label, value]) => (
+                <div key={label} className="flex items-center justify-between gap-4">
+                  <span className="text-xs text-gray-400 dark:text-gray-500">{label}</span>
+                  <span className="text-right text-xs font-semibold text-gray-800 dark:text-gray-200">{value}</span>
+                </div>
+              ))}
+
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-xs text-gray-400 dark:text-gray-500">Transaction</span>
+                {txExplorerHref(activeReceipt) ? (
+                  <a
+                    href={txExplorerHref(activeReceipt)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 rounded-lg border border-gray-100 px-2 py-1 font-mono text-[11px] font-semibold text-blue-500 transition-colors hover:bg-blue-50 dark:border-white/10 dark:hover:bg-blue-950/30"
+                  >
+                    {truncateAddress(activeReceipt.txHash, 5)}
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                ) : (
+                  <span className="font-mono text-[11px] text-gray-400">Pending</span>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-xs text-gray-400 dark:text-gray-500">0G proof</span>
+                {ogExplorerHref(activeReceipt) ? (
+                  <a
+                    href={ogExplorerHref(activeReceipt)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 rounded-lg border border-purple-100 bg-purple-50 px-2 py-1 text-[11px] font-bold text-purple-600 transition-colors hover:bg-purple-100 dark:border-purple-900/60 dark:bg-purple-950/50 dark:text-purple-300"
+                  >
+                    Archived
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                ) : (
+                  <span className="rounded border border-gray-100 bg-gray-50 px-2 py-1 text-[11px] font-semibold text-gray-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-500">
+                    Archiving
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
