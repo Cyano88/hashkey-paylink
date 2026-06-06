@@ -129,6 +129,7 @@ const POS_NETWORK_LABELS: Record<PosNetwork, string> = {
   arc: 'Arc Testnet',
   solana: 'Solana',
 }
+const POS_RECEIPT_PAGE_SIZE = 5
 
 function isPosNetwork(value: string): value is PosNetwork {
   return value === 'base' || value === 'arbitrum' || value === 'arc' || value === 'solana'
@@ -237,6 +238,7 @@ export default function Dashboard() {
   const [posNetworks,   setPosNetworks]   = useState<PosNetwork[]>([])
   const [posMerchantName, setPosMerchantName] = useState('')
   const [activeReceipt, setActiveReceipt] = useState<PaymentRow | null>(null)
+  const [visibleReceiptCount, setVisibleReceiptCount] = useState(POS_RECEIPT_PAGE_SIZE)
   const lastReceiptCount = useRef<number | null>(null)
 
   const meta   = CHAIN_META.base
@@ -474,6 +476,15 @@ export default function Dashboard() {
     }
     return payments.filter(row => row.timestamp != null && row.timestamp >= from && row.timestamp < to)
   }, [customDate, dateFilter, dayStart, isNgPosDashboard, payments])
+  const visibleSelectedPayments = isNgPosDashboard
+    ? selectedPayments.slice(0, visibleReceiptCount)
+    : selectedPayments
+  const hiddenReceiptCount = Math.max(0, selectedPayments.length - visibleSelectedPayments.length)
+
+  useEffect(() => {
+    setVisibleReceiptCount(POS_RECEIPT_PAGE_SIZE)
+  }, [dateFilter, customDate, isNgPosDashboard])
+
   const todayStart = dayStart(new Date())
   const todayReceived = payments
     .filter(row => row.timestamp != null && row.timestamp >= todayStart && row.timestamp < todayStart + 86_400_000)
@@ -809,7 +820,7 @@ export default function Dashboard() {
                 <span>Route</span>
                 <span className="text-right">Proof</span>
               </div>
-              {selectedPayments.map((row, index) => {
+              {visibleSelectedPayments.map((row, index) => {
                 const chainMeta = rowMeta(row)
                 const explorerHref = txExplorerHref(row)
                 const ogHref = ogExplorerHref(row)
@@ -899,6 +910,18 @@ export default function Dashboard() {
                   </div>
                 )
               })}
+              {hiddenReceiptCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setVisibleReceiptCount(count => count + POS_RECEIPT_PAGE_SIZE)}
+                  className="mt-1 flex w-full items-center justify-center rounded-xl border border-gray-100 bg-gray-50/70 px-4 py-2.5 text-xs font-semibold text-gray-500 transition-all hover:border-gray-200 hover:bg-gray-100 hover:text-gray-700 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-400 dark:hover:border-white/15 dark:hover:bg-white/[0.07] dark:hover:text-gray-200"
+                >
+                  View more receipts
+                  <span className="ml-2 rounded-full bg-white px-2 py-0.5 text-[10px] text-gray-400 dark:bg-white/[0.06] dark:text-gray-500">
+                    {hiddenReceiptCount}
+                  </span>
+                </button>
+              )}
             </div>
           )
         ) : (
