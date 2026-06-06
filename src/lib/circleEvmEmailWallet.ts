@@ -42,6 +42,7 @@ export type CircleEvmEmailSession = {
 const APP_ID = import.meta.env.VITE_CIRCLE_USER_WALLET_APP_ID as string | undefined
 const ARC_TESTNET_APP_ID = import.meta.env.VITE_CIRCLE_USER_WALLET_APP_ID_ARC_TESTNET as string | undefined
 const ENABLED = import.meta.env.VITE_CIRCLE_EVM_EMAIL_ENABLED !== 'false'
+const CIRCLE_EMAIL_VERIFICATION_TIMEOUT_MS = 10 * 60 * 1000
 
 const CHAIN_CONFIG = {
   base: { blockchain: 'BASE', label: 'Base' },
@@ -188,7 +189,7 @@ function executeChallenge(sdk: W3SSdk, challengeId: string) {
     const handleClose = (event: MessageEvent) => {
       if (!isCircleCloseMessage(event.data)) return
       window.removeEventListener('message', handleClose)
-      reject(new Error('Payment cancelled or expired.'))
+      reject(new Error('Payment cancelled. Try again.'))
     }
     window.addEventListener('message', handleClose)
     sdk.execute(challengeId, (error, result) => {
@@ -451,7 +452,7 @@ export async function connectCircleEvmEmailWallet(
     } catch (err) {
       reject(new Error(emailVerificationError(err)))
     }
-  }), 30_000, 'Email verification was cancelled or expired. Request a new code and try again.')
+  }), CIRCLE_EMAIL_VERIFICATION_TIMEOUT_MS, 'Code expired. Request a new code.')
 
   const wallet = await ensureEvmWallet(sdk, login.userToken, login.encryptionKey, chain)
   return {

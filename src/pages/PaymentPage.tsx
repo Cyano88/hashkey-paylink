@@ -2919,7 +2919,7 @@ export default function PaymentPage() {
               <Row label="Amount"    value={`${formatAmount(effectiveAmt, meta.decimals)} ${meta.asset}`} mono={false} />
               <Row label="Recipient" value={truncateAddress(activeRecipient, 8)} mono />
               <Row label="Network"   value={meta.label} mono={false} />
-              {memo && <Row label={isPolymarketFunding ? 'Memo' : 'For'} value={isPolymarketFunding ? <PolymarketMemoInline /> : memo} mono={false} />}
+              {memo && <Row label={isPolymarketFunding ? 'Funding' : 'For'} value={isPolymarketFunding ? <PolymarketMemoInline /> : memo} mono={false} />}
               {txHash && (
                 <div className="flex items-center justify-between px-4 py-3">
                   <span className="text-sm text-gray-500">Tx Hash</span>
@@ -4117,7 +4117,7 @@ export default function PaymentPage() {
                 : <><Zap className="h-4 w-4" /> Pay {formatAmount(effectiveAmt, 6)} USDC on Starknet</>}
               </button>
             )
-          ) : payMode === 'wallet' && (usePrivyCircleCheckout || usePrivyCircleSolanaCheckout) && !privyAuthenticated && !manualPayDetected ? (
+          ) : payMode === 'wallet' && (usePrivyCircleCheckout || usePrivyCircleSolanaCheckout) && !privyAuthenticated && !manualPayDetected && !showPolymarketFundingChoice ? (
             <div className={cn(
               'flex flex-col items-center gap-1.5',
               requiresAttendeeName && !attendeeName.trim() && 'pointer-events-none opacity-50 select-none',

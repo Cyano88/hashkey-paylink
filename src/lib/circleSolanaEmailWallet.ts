@@ -31,6 +31,7 @@ type SolanaEmailSession = {
 }
 
 const APP_ID = import.meta.env.VITE_CIRCLE_USER_WALLET_APP_ID as string | undefined
+const CIRCLE_EMAIL_VERIFICATION_TIMEOUT_MS = 10 * 60 * 1000
 
 export function canUseCircleSolanaEmailWallet() {
   return !!APP_ID
@@ -202,7 +203,7 @@ export async function connectCircleSolanaEmailWallet(email: string): Promise<Sol
     const handleClose = (event: MessageEvent) => {
       if (!isCircleCloseMessage(event.data)) return
       window.removeEventListener('message', handleClose)
-      reject(new Error('Payment cancelled or expired.'))
+      reject(new Error('Payment cancelled. Try again.'))
     }
     window.addEventListener('message', handleClose)
     sdk.updateConfigs({
@@ -230,7 +231,7 @@ export async function connectCircleSolanaEmailWallet(email: string): Promise<Sol
       window.removeEventListener('message', handleClose)
       reject(new Error(emailVerificationError(err)))
     }
-  }), 30_000, 'Email verification was cancelled or expired. Request a new code and try again.')
+  }), CIRCLE_EMAIL_VERIFICATION_TIMEOUT_MS, 'Code expired. Request a new code.')
 
   const wallet = await ensureInitializedWallet(sdk, login.userToken, login.encryptionKey)
   if (!isSolanaAddress(wallet.address)) {
