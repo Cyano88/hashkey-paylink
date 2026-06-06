@@ -2566,6 +2566,17 @@ export default function PaymentPage() {
     return actualNum + smallestUnit / 2 >= requestedNum
   }
 
+  function expectedNgPosSettlementAmount() {
+    if (!isNgPosPayment || !isEvmChain) return effectiveAmt
+    try {
+      const units = expectedEvmRecipientUnits()
+      if (units <= 0n) return effectiveAmt
+      return (Number(units) / Math.pow(10, meta.decimals)).toFixed(meta.decimals <= 6 ? 6 : 8)
+    } catch {
+      return effectiveAmt
+    }
+  }
+
   function formatPaymentAmountDisplay(value: number, decimals: number) {
     if (value > 0 && value < 0.0001) return '<0.0001'
     return value.toFixed(decimals <= 6 ? 4 : 6)
@@ -2586,8 +2597,9 @@ export default function PaymentPage() {
     const actualAmt = receivedAmount != null
       ? (Number(receivedAmount) / Math.pow(10, meta.decimals)).toFixed(meta.decimals <= 6 ? 6 : 8)
       : effectiveAmt
-    if (!amountCoversRequest(actualAmt, effectiveAmt)) {
-      console.warn('[NgPosReg] skipped underpaid POS payment:', { actualAmt, requestedAmount: effectiveAmt })
+    const expectedSettlementAmt = expectedNgPosSettlementAmount()
+    if (!amountCoversRequest(actualAmt, expectedSettlementAmt)) {
+      console.warn('[NgPosReg] skipped underpaid POS payment:', { actualAmt, requestedAmount: effectiveAmt, expectedSettlementAmount: expectedSettlementAmt })
       return
     }
     const payload = {
@@ -2698,11 +2710,17 @@ export default function PaymentPage() {
       ? Number(receivedAmount) / Math.pow(10, meta.decimals)
       : null
     const requested = parseFloat(effectiveAmt)
-    const isOver    = recipientAmt != null && !isFlex && recipientAmt > requested * 1.001
-    const isUnder   = recipientAmt != null && !isFlex && recipientAmt < requested * 0.99
-    const isPartial = isUnder && (recipientAmt ?? 0) >= requested * 0.50
+    const expectedSettlement = isNgPosPayment
+      ? Number.parseFloat(expectedNgPosSettlementAmount())
+      : requested
+    const comparisonAmount = Number.isFinite(expectedSettlement) && expectedSettlement > 0
+      ? expectedSettlement
+      : requested
+    const isOver    = recipientAmt != null && !isFlex && recipientAmt > comparisonAmount * 1.001
+    const isUnder   = recipientAmt != null && !isFlex && recipientAmt < comparisonAmount * 0.99
+    const isPartial = isUnder && (recipientAmt ?? 0) >= comparisonAmount * 0.50
     const shortfall = isUnder
-      ? (requested - (recipientAmt ?? 0)).toFixed(meta.decimals <= 6 ? 4 : 6)
+      ? (comparisonAmount - (recipientAmt ?? 0)).toFixed(meta.decimals <= 6 ? 4 : 6)
       : null
 
     const primaryExplorerUrl = chain === 'hashkey'
@@ -2755,7 +2773,11 @@ export default function PaymentPage() {
                       'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold',
                       isPartial ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700',
                     )}>
-                      {isPolymarketFunding ? `${shortfall} short` : `${shortfall} ${meta.asset} short of requested ${requested.toFixed(meta.decimals <= 6 ? 2 : 4)}`}
+                      {isPolymarketFunding
+                        ? `${shortfall} short`
+                        : isNgPosPayment
+                          ? `${shortfall} ${meta.asset} short of expected settlement`
+                          : `${shortfall} ${meta.asset} short of requested ${requested.toFixed(meta.decimals <= 6 ? 2 : 4)}`}
                     </span>
                   )}
                   {isOver && (
@@ -3141,21 +3163,15 @@ export default function PaymentPage() {
             return (
               <div className="space-y-1.5">
                 <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
-                  <span className={cn(
-                    'h-2 w-2 rounded-full transition-colors duration-300',
-                    paid ? 'bg-emerald-500' : attendeeName.trim() ? 'bg-emerald-400' : 'bg-gray-300',
-                  )} />
                   {isNgPosPayment ? 'Customer name' : 'Your Name or Handle'}
                   {paid ? (
                     <span className="ml-auto text-[10px] font-semibold text-emerald-600">✓ Saved</span>
                   ) : attendeeName.trim() ? (
-                    <span className="ml-auto flex items-center gap-1 text-[10px] font-semibold text-emerald-600">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                    <span className="ml-auto text-[10px] font-semibold text-emerald-600">
                       Ready
                     </span>
                   ) : (
-                    <span className="ml-auto flex items-center gap-1 text-[10px] font-medium text-gray-400">
-                      <span className="h-1.5 w-1.5 rounded-full bg-gray-300" />
+                    <span className="ml-auto text-[10px] font-medium text-gray-400">
                       Required
                     </span>
                   )}
