@@ -10,6 +10,8 @@ const UPSTASH_REST_URL = (process.env.UPSTASH_REDIS_REST_URL ?? '').trim().repla
 const UPSTASH_REST_TOKEN = (process.env.UPSTASH_REDIS_REST_TOKEN ?? '').trim()
 const UPSTASH_STORE_KEY = (process.env.NG_POS_STORE_KEY ?? 'hashpaylink:ng-pos-merchants').trim()
 const MAX_TEXT = 90
+const IS_RENDER = Boolean(process.env.RENDER || process.env.RENDER_SERVICE_ID || process.env.RENDER_EXTERNAL_URL)
+const HAS_DURABLE_STORE = Boolean(UPSTASH_REST_URL && UPSTASH_REST_TOKEN)
 
 type PayoutPreference = 'INSTANT_FIAT' | 'KEEP_CRYPTO'
 type SettlementType = 'INSTANT_FIAT' | 'KEEP_CRYPTO'
@@ -152,9 +154,17 @@ async function writeStore(store: Store) {
   const path = resolve(STORE_PATH)
   await mkdir(dirname(path), { recursive: true })
   await writeFile(path, `${JSON.stringify(normalized, null, 2)}\n`, 'utf8')
+
+  if (IS_RENDER && !HAS_DURABLE_STORE) {
+    throw new Error('Durable POS storage is not configured. Add UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN on Render before creating POS QR links.')
+  }
+
   try {
     await upstashCommand(['SET', UPSTASH_STORE_KEY, JSON.stringify(normalized)])
   } catch (error) {
+    if (IS_RENDER) {
+      throw new Error('Durable POS storage failed. Check the Upstash Redis REST envs on Render before creating POS QR links.')
+    }
     console.warn('[ng-pos] Upstash save failed; file fallback was saved.', error instanceof Error ? error.message : String(error))
   }
 }
