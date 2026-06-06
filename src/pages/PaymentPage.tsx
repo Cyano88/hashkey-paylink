@@ -4171,11 +4171,15 @@ export default function PaymentPage() {
           How it works
         </p>
         <div className="grid grid-cols-3 gap-3">
-          {[
+          {(isPolymarketFunding ? [
+            { n: '1', title: 'Review wallet', body: 'Confirm the funding wallet and amount' },
+            { n: '2', title: 'Fund with USDC', body: 'Pay from your gasless wallet or another wallet' },
+            { n: '3', title: 'Continue trading', body: 'Use the success screen to return to Polymarket' },
+          ] : [
             { n: '1', title: 'Check the request', body: "Confirm the amount and who it's for" },
             { n: '2', title: 'Choose how to pay', body: 'Use the gasless wallet, your wallet, or an exchange' },
             { n: '3', title: 'Get confirmation', body: "We'll confirm when the payment is complete" },
-          ].map(({ n, title, body }) => (
+          ]).map(({ n, title, body }) => (
             <div key={n} className="rounded-xl border border-gray-100 bg-white p-4 text-center shadow-sm">
               <div className="mx-auto mb-2.5 flex h-7 w-7 items-center justify-center rounded-full bg-gray-100 text-xs font-bold text-gray-600">
                 {n}
