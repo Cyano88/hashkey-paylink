@@ -173,6 +173,41 @@ function OgArchiveLink({ className, compact = false }: { className?: string; com
   )
 }
 
+function OgArchiveNotice({
+  archivedCount,
+  totalCount,
+  className,
+}: {
+  archivedCount: number
+  totalCount: number
+  className?: string
+}) {
+  const archiveLabel = totalCount > 0 ? `${archivedCount}/${totalCount} archived` : 'No receipts archived yet'
+
+  return (
+    <div className={cn(
+      'flex items-center justify-center gap-2 px-3 py-2 text-center',
+      className,
+    )}>
+      <span className="shrink-0 rounded border border-purple-100 bg-purple-50 px-1 py-0.5 text-[8px] font-bold leading-none text-purple-500 dark:border-purple-900/60 dark:bg-purple-950/50 dark:text-purple-300">
+        0G
+      </span>
+      <p className="text-[10px] text-gray-400 dark:text-gray-500">
+        Payment records archived on{' '}
+        <a
+          href={OG_GLOBAL_ARCHIVE_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="font-medium text-gray-500 underline-offset-2 transition-colors hover:text-purple-600 hover:underline dark:text-gray-400 dark:hover:text-purple-300"
+        >
+          0G decentralized storage
+        </a>
+        {' '}— {archiveLabel}
+      </p>
+    </div>
+  )
+}
+
 // Component
 
 export default function Dashboard() {
@@ -887,8 +922,10 @@ export default function Dashboard() {
 
       {/* CTA at bottom */}
       <div className="flex justify-center pb-4">
-        {isNgPosDashboard || telegramUrl ? (
-          <OgArchiveLink compact={isNgPosDashboard} />
+        {isNgPosDashboard ? (
+          <OgArchiveNotice archivedCount={archivedCount} totalCount={payments.length} />
+        ) : telegramUrl ? (
+          <OgArchiveLink />
         ) : (
           <Link
             to="/"
