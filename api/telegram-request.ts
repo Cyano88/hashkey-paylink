@@ -7,6 +7,7 @@ import { PublicKey } from '@solana/web3.js'
 
 const STORE_PATH = process.env.TELEGRAM_REQUEST_STORE ?? './data/telegram-requests.json'
 const MAX_TEXT = 80
+const POLYMARKET_MIN_FUNDING_USDC = 4
 
 type TelegramRequestMode = 'person' | 'group'
 type TelegramRequestKind = 'payment-request' | 'polymarket-funding'
@@ -121,6 +122,15 @@ export default async function handler(req: Request, res: Response) {
       return res.status(400).json({ ok: false, error: 'Enter a valid EVM or Solana receive wallet.' })
     }
     if (!label) return res.status(400).json({ ok: false, error: 'Missing request label' })
+    if (kind === 'polymarket-funding') {
+      const amountValue = Number(amount)
+      if (network !== 'base') {
+        return res.status(400).json({ ok: false, error: 'Polymarket funding requires a Base EVM funding wallet.' })
+      }
+      if (!Number.isFinite(amountValue) || amountValue < POLYMARKET_MIN_FUNDING_USDC) {
+        return res.status(400).json({ ok: false, error: `Minimum Polymarket funding is ${POLYMARKET_MIN_FUNDING_USDC} USDC.` })
+      }
+    }
 
     const id = randomBytes(9).toString('base64url')
     const draft = { mode, kind, wallet, network, label, amount, target }

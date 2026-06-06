@@ -45,7 +45,7 @@ const paymentLinkServices = [
   },
   {
     title: 'Fund Polymarket',
-    body: 'Send USDC to a Polymarket funding wallet.',
+    body: 'Fund your account or share a funding request.',
     icon: Building2,
     status: 'Open',
     active: true,
@@ -164,7 +164,7 @@ export default function TelegramPaymentLinks() {
       mode: 'person',
       wallet: polymarketWallet.trim(),
       label: 'Polymarket',
-      target: 'Friends',
+      target: 'Telegram',
       amount: polymarketAmount.trim(),
     })
     setPolymarketMode('')
@@ -394,7 +394,7 @@ function PolymarketFundingPanel({
             </span>
             <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Polymarket</p>
           </div>
-          <h2 className="mt-2 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Fund Polymarket</h2>
+          <h2 className="mt-2 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Polymarket Funding</h2>
           <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
             Add Base USDC to a Polymarket funding wallet.
           </p>
@@ -420,13 +420,13 @@ function PolymarketFundingPanel({
               <RequestModeButton
                 icon={Wallet}
                 title="Fund myself"
-                body="Open the branded checkout and add USDC now."
+                body="Open checkout and fund your Polymarket account."
                 onClick={() => setMode('self')}
               />
               <RequestModeButton
                 icon={UsersRound}
                 title="Ask friends"
-                body="Share a Polymarket funding card in Telegram."
+                body="Share a funding card in Telegram."
                 onClick={() => setMode('friends')}
               />
             </div>
@@ -443,19 +443,19 @@ function PolymarketFundingPanel({
                 </p>
                 <p className="mt-0.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
                   {mode === 'self'
-                    ? 'Checkout opens with the Polymarket logo and funding memo.'
-                    : 'Telegram will ask which DM, chat, or group should receive the funding card.'}
+                    ? 'A Polymarket checkout opens with the funding wallet prefilled.'
+                    : 'Telegram will ask where to share the Polymarket funding card.'}
                 </p>
               </div>
 
               <InputBlock
-                label="Polymarket funding wallet"
+                label="Funding wallet"
                 value={wallet}
                 onChange={setWallet}
                 placeholder="0x... funding wallet"
               />
               <InputBlock
-                label="Amount"
+                label="Amount USDC"
                 value={amount}
                 onChange={setAmount}
                 placeholder={`Minimum ${POLYMARKET_MIN_FUNDING_USDC} USDC`}
@@ -475,7 +475,7 @@ function PolymarketFundingPanel({
                 className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
               >
                 <Send className="h-4 w-4" />
-                {mode === 'self' ? 'Continue to fund' : 'Save funding request'}
+                {mode === 'self' ? 'Open funding checkout' : 'Save funding card'}
               </button>
             </div>
           )}
