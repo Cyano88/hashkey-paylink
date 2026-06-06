@@ -6,6 +6,9 @@ import { isAddress } from 'viem'
 import { getFxRate } from './fx-rate'
 
 const STORE_PATH = process.env.NG_POS_STORE ?? './data/ng-pos-merchants.json'
+const UPSTASH_REST_URL = (process.env.UPSTASH_REDIS_REST_URL ?? '').trim().replace(/\/+$/, '')
+const UPSTASH_REST_TOKEN = (process.env.UPSTASH_REDIS_REST_TOKEN ?? '').trim()
+const UPSTASH_STORE_KEY = (process.env.NG_POS_STORE_KEY ?? 'hashpaylink:ng-pos-merchants').trim()
 const MAX_TEXT = 90
 
 type PayoutPreference = 'INSTANT_FIAT' | 'KEEP_CRYPTO'
@@ -41,6 +44,21 @@ type MerchantProfile = {
 
 type Store = {
   merchants: Record<string, MerchantProfile>
+}
+
+async function upstashCommand<T>(command: unknown[]): Promise<T | undefined> {
+  if (!UPSTASH_REST_URL || !UPSTASH_REST_TOKEN) return undefined
+  const response = await fetch(UPSTASH_REST_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${UPSTASH_REST_TOKEN}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(command),
+  })
+  if (!response.ok) throw new Error(`Upstash request failed: ${response.status}`)
+  const data = await response.json() as { result?: T }
+  return data.result
 }
 
 function cleanText(value: unknown, fallback = '') {
@@ -111,6 +129,16 @@ function originFromRequest(req: Request, explicitOrigin?: unknown) {
 
 async function readStore(): Promise<Store> {
   try {
+    const remote = await upstashCommand<string>(['GET', UPSTASH_STORE_KEY])
+    if (remote) {
+      const parsed = JSON.parse(remote) as Partial<Store>
+      return { merchants: parsed.merchants ?? {} }
+    }
+  } catch (error) {
+    console.warn('[ng-pos] Upstash load failed; using file fallback.', error instanceof Error ? error.message : String(error))
+  }
+
+  try {
     const raw = await readFile(resolve(STORE_PATH), 'utf8')
     const parsed = JSON.parse(raw) as Partial<Store>
     return { merchants: parsed.merchants ?? {} }
@@ -120,9 +148,15 @@ async function readStore(): Promise<Store> {
 }
 
 async function writeStore(store: Store) {
+  const normalized = { merchants: store.merchants ?? {} }
   const path = resolve(STORE_PATH)
   await mkdir(dirname(path), { recursive: true })
-  await writeFile(path, `${JSON.stringify(store, null, 2)}\n`, 'utf8')
+  await writeFile(path, `${JSON.stringify(normalized, null, 2)}\n`, 'utf8')
+  try {
+    await upstashCommand(['SET', UPSTASH_STORE_KEY, JSON.stringify(normalized)])
+  } catch (error) {
+    console.warn('[ng-pos] Upstash save failed; file fallback was saved.', error instanceof Error ? error.message : String(error))
+  }
 }
 
 async function publicMerchant(merchant: MerchantProfile) {
