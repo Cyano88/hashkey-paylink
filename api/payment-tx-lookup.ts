@@ -1,17 +1,7 @@
 import type { Request, Response } from 'express'
-import { createPublicClient, defineChain, http, isAddress, parseAbi, type Address } from 'viem'
-import { base, arbitrum } from 'viem/chains'
+import { isAddress, pad, type Address } from 'viem'
 
-const ERC20_TRANSFER_ABI = parseAbi([
-  'event Transfer(address indexed from, address indexed to, uint256 value)',
-])
-
-const arcChain = defineChain({
-  id: 5042002,
-  name: 'Arc Testnet',
-  nativeCurrency: { decimals: 18, name: 'USD Coin', symbol: 'USDC' },
-  rpcUrls: { default: { http: ['http://render-rpc-env-required.invalid'] } },
-})
+const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'
 
 const TOKENS = {
   base: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
@@ -25,14 +15,10 @@ const DEFAULT_CHUNK_SIZE = 2_000n
 type ChainKey = keyof typeof TOKENS
 
 type TransferLog = {
-  transactionHash: `0x${string}` | null
-  blockNumber: bigint | null
-  logIndex: number
-  args: {
-    from?: Address
-    to?: Address
-    value?: bigint
-  }
+  transactionHash?: `0x${string}`
+  blockNumber?: `0x${string}`
+  logIndex?: `0x${string}`
+  data?: `0x${string}`
 }
 
 function readChain(value: unknown): ChainKey {
@@ -56,30 +42,48 @@ function rpcFor(chain: ChainKey) {
   return process.env.PRIVATE_RPC_URL
 }
 
-function viemChainFor(chain: ChainKey) {
-  if (chain === 'arc') return arcChain
-  if (chain === 'arbitrum') return arbitrum
-  return base
+async function rpcCall<T>(rpcUrl: string, method: string, params: unknown[]): Promise<T> {
+  const response = await fetch(rpcUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method,
+      params,
+    }),
+  })
+  if (!response.ok) {
+    throw new Error(`RPC HTTP ${response.status}`)
+  }
+  const data = await response.json() as { result?: T; error?: { code?: number; message?: string } }
+  if (data.error) {
+    throw new Error(`RPC ${data.error.code ?? 'error'}: ${data.error.message ?? method}`)
+  }
+  if (data.result == null) {
+    throw new Error(`RPC returned no result for ${method}`)
+  }
+  return data.result
 }
 
 async function getLogsChunked(
-  publicClient: any,
-  tokenAddress: Address,
-  recipient: Address,
+  rpcUrl: string,
+  tokenAddress: string,
+  recipient: string,
   fromBlock: bigint,
   toBlock: bigint,
 ) {
   const logs: TransferLog[] = []
   const chunkSize = readPositiveBigInt(process.env.PAYMENT_TX_LOOKUP_CHUNK_SIZE, DEFAULT_CHUNK_SIZE)
+  const recipientTopic = pad(recipient as Address, { size: 32 })
   for (let from = fromBlock; from <= toBlock; from += chunkSize) {
     const end = from + chunkSize - 1n > toBlock ? toBlock : from + chunkSize - 1n
-    logs.push(...await publicClient.getLogs({
+    logs.push(...await rpcCall<TransferLog[]>(rpcUrl, 'eth_getLogs', [{
       address: tokenAddress,
-      event: ERC20_TRANSFER_ABI[0],
-      args: { to: recipient },
-      fromBlock: from,
-      toBlock: end,
-    }))
+      fromBlock: `0x${from.toString(16)}`,
+      toBlock: `0x${end.toString(16)}`,
+      topics: [TRANSFER_TOPIC, null, recipientTopic],
+    }]))
   }
   return logs
 }
@@ -107,24 +111,20 @@ export default async function handler(req: Request, res: Response) {
     return res.status(500).json({ ok: false, error: `PRIVATE_RPC_URL is not configured for ${chain}` })
   }
 
-  const publicClient = createPublicClient({
-    chain: viemChainFor(chain),
-    transport: http(rpcUrl),
-  }) as any
-
   try {
-    const latestBlock = await publicClient.getBlockNumber() as bigint
+    const latestBlockHex = await rpcCall<`0x${string}`>(rpcUrl, 'eth_blockNumber', [])
+    const latestBlock = BigInt(latestBlockHex)
     const lookback = readPositiveBigInt(process.env.PAYMENT_TX_LOOKUP_BLOCKS, DEFAULT_LOOKBACK_BLOCKS)
     const fromBlock = latestBlock > lookback ? latestBlock - lookback : 0n
     const logs = await getLogsChunked(
-      publicClient,
-      TOKENS[chain] as Address,
-      recipient as Address,
+      rpcUrl,
+      TOKENS[chain],
+      recipient,
       fromBlock,
       latestBlock,
     )
     const match = [...logs].reverse().find(log => {
-      const value = log.args.value ?? 0n
+      const value = log.data ? BigInt(log.data) : 0n
       return !!log.transactionHash && value >= minUnits
     })
 
@@ -136,12 +136,12 @@ export default async function handler(req: Request, res: Response) {
       ok: true,
       found: true,
       txHash: match.transactionHash,
-      amountUnits: ((match.args.value ?? 0n) as bigint).toString(),
-      blockNumber: match.blockNumber?.toString() ?? null,
-      logIndex: match.logIndex,
+      amountUnits: (match.data ? BigInt(match.data) : 0n).toString(),
+      blockNumber: match.blockNumber ? BigInt(match.blockNumber).toString() : null,
+      logIndex: match.logIndex ? Number(BigInt(match.logIndex)) : null,
     })
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Payment transaction lookup failed'
-    return res.status(502).json({ ok: false, error: message.slice(0, 180) })
+    console.error('[payment-tx-lookup] failed:', err instanceof Error ? err.message : err)
+    return res.status(502).json({ ok: false, error: 'Payment transaction lookup failed' })
   }
 }
