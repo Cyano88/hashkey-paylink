@@ -235,6 +235,7 @@ export default function Dashboard() {
   const [dateFilter,    setDateFilter]    = useState<DateFilter>('today')
   const [customDate,    setCustomDate]    = useState(() => new Date().toISOString().slice(0, 10))
   const [posNetworks,   setPosNetworks]   = useState<PosNetwork[]>([])
+  const [posMerchantName, setPosMerchantName] = useState('')
   const [activeReceipt, setActiveReceipt] = useState<PaymentRow | null>(null)
   const lastReceiptCount = useRef<number | null>(null)
 
@@ -278,20 +279,31 @@ export default function Dashboard() {
   useEffect(() => {
     if (!isNgPosDashboard || !posMerchantId) {
       setPosNetworks([])
+      setPosMerchantName('')
       return
     }
     let cancelled = false
     fetch(`/api/ng-pos?merchant_id=${encodeURIComponent(posMerchantId)}`)
       .then(async response => {
-        const data = await response.json() as { ok?: boolean; merchant?: { supported_networks?: unknown } }
-        if (!response.ok || !data.ok || !Array.isArray(data.merchant?.supported_networks)) return []
-        return data.merchant.supported_networks.filter((network): network is PosNetwork => typeof network === 'string' && isPosNetwork(network))
+        const data = await response.json() as { ok?: boolean; merchant?: { display_name?: unknown; supported_networks?: unknown } }
+        if (!response.ok || !data.ok) return { name: '', networks: [] as PosNetwork[] }
+        const networks = Array.isArray(data.merchant?.supported_networks)
+          ? data.merchant.supported_networks.filter((network): network is PosNetwork => typeof network === 'string' && isPosNetwork(network))
+          : []
+        const name = typeof data.merchant?.display_name === 'string' ? data.merchant.display_name.trim() : ''
+        return { name, networks }
       })
-      .then(networks => {
-        if (!cancelled) setPosNetworks(networks)
+      .then(({ name, networks }) => {
+        if (!cancelled) {
+          setPosMerchantName(name)
+          setPosNetworks(networks)
+        }
       })
       .catch(() => {
-        if (!cancelled) setPosNetworks([])
+        if (!cancelled) {
+          setPosMerchantName('')
+          setPosNetworks([])
+        }
       })
     return () => { cancelled = true }
   }, [isNgPosDashboard, posMerchantId])
@@ -550,11 +562,16 @@ export default function Dashboard() {
             {isNgPosDashboard ? 'POS Payments' : 'Payments Received'}
           </h1>
           {isNgPosDashboard ? (
-            <p className="mt-1 flex max-w-full flex-wrap items-center gap-1.5 text-xs font-medium text-gray-400 dark:text-gray-500">
-              {receiptNetworkLabel && <span>{receiptNetworkLabel}</span>}
-              {receiptNetworkLabel && shortReceiptAddress && <span className="text-gray-300 dark:text-gray-700">·</span>}
-              {shortReceiptAddress && <span className="font-mono">{shortReceiptAddress}</span>}
-            </p>
+            <>
+              {posMerchantName && (
+                <p className="mt-1 text-sm font-semibold text-gray-700 dark:text-gray-200">{posMerchantName}</p>
+              )}
+              <p className="mt-0.5 flex max-w-full flex-wrap items-center gap-1.5 text-xs font-medium text-gray-400 dark:text-gray-500">
+                {receiptNetworkLabel && <span>{receiptNetworkLabel}</span>}
+                {receiptNetworkLabel && shortReceiptAddress && <span className="text-gray-300 dark:text-gray-700">·</span>}
+                {shortReceiptAddress && <span className="font-mono">{shortReceiptAddress}</span>}
+              </p>
+            </>
           ) : (
             <p className="mt-0.5 font-mono text-xs text-gray-400 dark:text-gray-500">
               {evmValid
