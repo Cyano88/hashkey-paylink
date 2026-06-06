@@ -150,6 +150,33 @@ export async function registerEventPayment(req: Request, res: Response): Promise
 
   await hydrateRegistry()
   const entries = registry.get(eventId) ?? []
+  if (!txHash.startsWith('manual_')) {
+    const manualIndex = entries.findIndex(e =>
+      e.txHash.startsWith('manual_') &&
+      e.payer.toLowerCase() === payer.toLowerCase() &&
+      (!source || e.source === source)
+    )
+    if (manualIndex >= 0) {
+      entries[manualIndex] = {
+        ...entries[manualIndex],
+        txHash,
+        chain,
+        payer,
+        memo,
+        amount,
+        ts: Date.now(),
+        requestedAmount: requestedAmount || entries[manualIndex].requestedAmount,
+        source: source || entries[manualIndex].source,
+        merchantId: merchantId || entries[manualIndex].merchantId,
+        settlementType: settlementType || entries[manualIndex].settlementType,
+        amountNgn: amountNgn || entries[manualIndex].amountNgn,
+      }
+      registry.set(eventId, entries)
+      await persistRegistry()
+      res.json({ ok: true, upgraded: true })
+      return
+    }
+  }
   // Deduplicate by txHash (for real on-chain txs) OR by payer+eventId for manual detections
   const isDupe = txHash.startsWith('manual_')
     ? entries.some(e => e.payer.toLowerCase() === payer.toLowerCase())

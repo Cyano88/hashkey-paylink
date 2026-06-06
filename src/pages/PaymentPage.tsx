@@ -2703,10 +2703,11 @@ export default function PaymentPage() {
   useEffect(() => {
     if (!isConfirmed || !isNgPosPayment || !ngPosEventId || ngPosRegistered.current) return
     if (!attendeeName.trim()) return
+    if (manualPayDetected && isEvmChain && !manualTxHash) return
     ngPosRegistered.current = true
     void doRegisterNgPos()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isConfirmed, attendeeName])
+  }, [isConfirmed, attendeeName, manualPayDetected, manualTxHash, chain])
 
   // Fallback: also register when Send-via-Address relay succeeds (directStatus='success')
   // in case the Transfer event watcher hasn't set manualPayDetected yet.
