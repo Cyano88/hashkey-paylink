@@ -342,6 +342,7 @@ export default function PaymentPage() {
   const [receivedAmount,    setReceivedAmount]    = useState<bigint | null>(null)
   const [showCheckButton,   setShowCheckButton]   = useState(false)
   const [isManualChecking,  setIsManualChecking]  = useState(false)
+  const [txSyncTick,        setTxSyncTick]        = useState(0)
   const [circleEvmAcceptedPending, setCircleEvmAcceptedPending] = useState(false)
   const [polymarketFundingStep, setPolymarketFundingStep] = useState<'choose' | 'fund'>('choose')
 
@@ -1357,6 +1358,44 @@ export default function PaymentPage() {
     }
   }
 
+  async function lookupPaymentTxHash() {
+    if (!resolvedEvm || manualTxHash || chain === 'starknet' || chain === 'solana' || chain === 'hashkey') return
+    const amountUnits = receivedAmount != null && receivedAmount > 0n
+      ? receivedAmount
+      : expectedEvmRecipientUnits()
+    if (amountUnits <= 0n) return
+    try {
+      const res = await fetch('/api/payment-tx-lookup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chain,
+          recipient: resolvedEvm,
+          amountUnits: amountUnits.toString(),
+        }),
+      })
+      const data = await res.json() as {
+        ok?: boolean
+        found?: boolean
+        txHash?: `0x${string}`
+        amountUnits?: string
+      }
+      if (data.ok && data.found && data.txHash) {
+        setManualTxHash(data.txHash)
+        if (data.amountUnits) {
+          try {
+            setReceivedAmount(BigInt(data.amountUnits))
+          } catch { /* keep existing detected amount */ }
+        }
+        setCircleEvmPaymentProcessing(false)
+        setCirclePasskeyPending(false)
+        setCircleEvmAcceptedPending(false)
+        setCirclePasskeyError(null)
+        setShowCheckButton(false)
+      }
+    } catch { /* retry on next poll */ }
+  }
+
   useEffect(() => {
     if (!circleEvmAcceptedPending || manualPayDetected || chain === 'starknet' || chain === 'solana' || payMode !== 'wallet') return
     const timer = setInterval(() => {
@@ -1369,17 +1408,23 @@ export default function PaymentPage() {
   useEffect(() => {
     if (!manualPayDetected || manualTxHash || chain === 'starknet' || chain === 'solana' || chain === 'hashkey' || !resolvedEvm) return
     const first = setTimeout(() => {
-      if (!isManualChecking) void handleManualCheck()
+      void lookupPaymentTxHash()
     }, 2_000)
     const timer = setInterval(() => {
-      if (!isManualChecking) void handleManualCheck()
+      void lookupPaymentTxHash()
     }, 5_000)
     return () => {
       clearTimeout(first)
       clearInterval(timer)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [manualPayDetected, manualTxHash, chain, resolvedEvm, effectiveAmt, isManualChecking])
+  }, [manualPayDetected, manualTxHash, chain, resolvedEvm, effectiveAmt, receivedAmount?.toString()])
+
+  useEffect(() => {
+    if (manualTxHash || !manualPayDetected || chain === 'starknet' || chain === 'solana') return
+    const timer = setInterval(() => setTxSyncTick(tick => tick + 1), 1_000)
+    return () => clearInterval(timer)
+  }, [manualTxHash, manualPayDetected, chain])
 
   // ── Auto-switch network when wallet connects ──────────────────────────────
   useEffect(() => {
@@ -2840,7 +2885,9 @@ export default function PaymentPage() {
               {!txHash && manualPayDetected && chain !== 'starknet' && chain !== 'solana' && (
                 <div className="flex items-center justify-between px-4 py-3">
                   <span className="text-sm text-gray-500">Tx Hash</span>
-                  <span className="text-xs font-medium text-gray-400">Syncing...</span>
+                  <span className="text-xs font-medium text-gray-400">
+                    Syncing{'.'.repeat((txSyncTick % 3) + 1)}
+                  </span>
                 </div>
               )}
             </div>

@@ -51,6 +51,7 @@ import x402PolymarketScoutHandler from './api/x402-polymarket-scout.js'
 import x402ReceiptHandler from './api/x402-receipt.js'
 import checkAgentUrlHandler from './api/check-agent-url.js'
 import dashboardPaymentsHandler from './api/dashboard-payments.js'
+import paymentTxLookupHandler from './api/payment-tx-lookup.js'
 import { rateLimit } from './api/rate-limit.js'
 
 loadEnv({ path: '.env.local', override: false })
@@ -111,6 +112,7 @@ app.get('/api/x402/polymarket-scout',  strictLimiter, x402PolymarketScoutHandler
 app.get('/api/x402/receipt',           readLimiter, x402ReceiptHandler)
 app.get('/api/check-agent-url',        strictLimiter, checkAgentUrlHandler)
 app.get('/api/dashboard-payments',     readLimiter, dashboardPaymentsHandler)
+app.post('/api/payment-tx-lookup',     readLimiter, paymentTxLookupHandler)
 app.get('/api/health',                 (_req, res) => res.json({ ok: true, ts: Date.now() }))
 // OG tag injection — must be before the SPA catch-all
 app.get('/stream/:vaultAddress',       streamOgHandler)
