@@ -9,8 +9,8 @@ const TOKENS = {
   arbitrum: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',
 } as const
 
-const DEFAULT_LOOKBACK_BLOCKS = 30_000n
-const DEFAULT_CHUNK_SIZE = 250n
+const DEFAULT_LOOKBACK_BLOCKS = 120n
+const DEFAULT_CHUNK_SIZE = 10n
 
 type ChainKey = keyof typeof TOKENS
 
