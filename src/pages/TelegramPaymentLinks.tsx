@@ -21,7 +21,6 @@ import {
 import { cn } from '../lib/utils'
 
 const TELEGRAM_BOT_URL = import.meta.env.VITE_TELEGRAM_AGENT_URL || 'https://t.me/HashPayLinkBot'
-const POLYMARKET_MIN_FUNDING_USDC = 4
 const POLYMARKET_LOGO = '/brand/polymarket-logo.png'
 
 function displayTelegramName(rawName: string | null, fallback = 'there') {
@@ -106,7 +105,7 @@ export default function TelegramPaymentLinks() {
   const canSaveRequest = wallet.trim().length > 5 && label.trim().length > 1 && requestFormTarget.length > 1 && !!requestMode
   const polymarketAmountNumber = Number(polymarketAmount)
   const polymarketWalletReady = /^0x[a-fA-F0-9]{40}$/.test(polymarketWallet.trim())
-  const polymarketAmountReady = Number.isFinite(polymarketAmountNumber) && polymarketAmountNumber >= POLYMARKET_MIN_FUNDING_USDC
+  const polymarketAmountReady = Number.isFinite(polymarketAmountNumber) && polymarketAmountNumber > 0
   const canUsePolymarketFunding = polymarketWalletReady && polymarketAmountReady
 
   function openRequestService() {
@@ -458,14 +457,14 @@ function PolymarketFundingPanel({
                 label="Amount USDC"
                 value={amount}
                 onChange={setAmount}
-                placeholder={`Minimum ${POLYMARKET_MIN_FUNDING_USDC} USDC`}
+                placeholder="0.00"
               />
 
               {wallet && !walletReady && (
                 <p className="px-1 text-xs text-red-500 dark:text-red-300">Enter a valid 0x funding wallet.</p>
               )}
               {amount && !amountReady && (
-                <p className="px-1 text-xs text-red-500 dark:text-red-300">Minimum Polymarket funding is {POLYMARKET_MIN_FUNDING_USDC} USDC.</p>
+                <p className="px-1 text-xs text-red-500 dark:text-red-300">Enter an amount above 0 USDC.</p>
               )}
 
               <button

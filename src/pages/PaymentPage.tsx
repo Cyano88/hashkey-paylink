@@ -252,8 +252,6 @@ function emailFromPrivyUser(user: unknown) {
 const SMART_WALLET_FUNDING_ERROR = 'Add USDC to Smart wallet to continue.'
 const SMART_WALLET_AMOUNT_ERROR = 'Enter an amount to continue.'
 const SMART_WALLET_CANCELLED_MESSAGE = 'Payment cancelled or expired.'
-const POLYMARKET_MIN_FUNDING_USDC = 4
-const POLYMARKET_MIN_FUNDING_ERROR = `Minimum Polymarket funding is ${POLYMARKET_MIN_FUNDING_USDC} USDC.`
 
 function isSmartWalletBalanceError(msg: string | null) {
   if (!msg) return false
@@ -398,7 +396,6 @@ export default function PaymentPage() {
   // effectiveAmt: always USDC
   const effectiveAmt = isFlex ? flexAmtInUsdc : amt
   const effectiveAmtNumber = parseFloat(effectiveAmt || '0') || 0
-  const polymarketFundingTooSmall = isPolymarketFunding && effectiveAmtNumber > 0 && effectiveAmtNumber < POLYMARKET_MIN_FUNDING_USDC
 
   // flexPayDisabled: accounts for USDC and local-currency input modes
   const flexPayDisabled = isFlex && (
@@ -406,7 +403,7 @@ export default function PaymentPage() {
       ? (!localAmt || parseFloat(localAmt) <= 0 || !fxRate)
       : (!flexAmt  || parseFloat(flexAmt)  <= 0)
   )
-  const paymentAmountBlocked = flexPayDisabled || polymarketFundingTooSmall
+  const paymentAmountBlocked = flexPayDisabled
 
   // ── Direct Send state (shared across Base, Arc, Starknet) ────────────────
   const [payMode,          setPayMode]          = useState<'wallet' | 'direct'>(modeParam === 'direct' && chain !== 'starknet' && isMainHashPaylinkPayment ? 'direct' : 'wallet')
@@ -1731,12 +1728,11 @@ export default function PaymentPage() {
 
   // ── Payment handlers ──────────────────────────────────────────────────────
   function blockedAmountError() {
-    return polymarketFundingTooSmall ? POLYMARKET_MIN_FUNDING_ERROR : SMART_WALLET_AMOUNT_ERROR
+    return SMART_WALLET_AMOUNT_ERROR
   }
 
   async function handlePay() {
     if (!activeRecipient) return
-    if (polymarketFundingTooSmall) return
     if (chain === 'arbitrum') await handleArbitrumPay()
     else if (chain === 'base' || chain === 'arc') await handleEvmPermitPay()
     else if (chain === 'starknet') handleStarknetPay()
@@ -3217,14 +3213,6 @@ export default function PaymentPage() {
                   {ghoGasEstimate > 0n
                     ? `~${(Number(ghoGasEstimate) / 1e6).toFixed(4)} USDC`
                     : '…'}
-                </span>
-              </div>
-            )}
-            {polymarketFundingTooSmall && (
-              <div className="flex items-center gap-2 border-t border-amber-200 bg-amber-50 dark:border-amber-400/20 dark:bg-amber-400/10 px-4 py-2.5">
-                <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500 dark:text-amber-400" />
-                <span className="text-[11px] text-amber-700 dark:text-amber-300">
-                  Minimum Polymarket funding is 4 USDC.
                 </span>
               </div>
             )}
