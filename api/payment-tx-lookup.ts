@@ -10,7 +10,7 @@ const TOKENS = {
 } as const
 
 const DEFAULT_LOOKBACK_BLOCKS = 30_000n
-const DEFAULT_CHUNK_SIZE = 2_000n
+const DEFAULT_CHUNK_SIZE = 250n
 
 type ChainKey = keyof typeof TOKENS
 
@@ -53,10 +53,15 @@ async function rpcCall<T>(rpcUrl: string, method: string, params: unknown[]): Pr
       params,
     }),
   })
+  const rawText = await response.text()
   if (!response.ok) {
-    throw new Error(`RPC HTTP ${response.status}`)
+    const safeText = rawText
+      .replace(/https?:\/\/[^\s"',)]+/gi, '[rpc-url]')
+      .replace(/\/v2\/[A-Za-z0-9_-]+/g, '/v2/[redacted]')
+      .slice(0, 240)
+    throw new Error(`RPC HTTP ${response.status}: ${safeText || response.statusText}`)
   }
-  const data = await response.json() as { result?: T; error?: { code?: number; message?: string } }
+  const data = JSON.parse(rawText) as { result?: T; error?: { code?: number; message?: string } }
   if (data.error) {
     throw new Error(`RPC ${data.error.code ?? 'error'}: ${data.error.message ?? method}`)
   }
