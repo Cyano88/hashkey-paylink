@@ -1028,7 +1028,7 @@ export default function Dashboard() {
                     <ExternalLink className="h-3 w-3" />
                   </a>
                 ) : (
-                  <span className="font-mono text-[11px] text-gray-400">Pending</span>
+                  <span className="font-mono text-[11px] text-gray-400">Not captured</span>
                 )}
               </div>
 
