@@ -150,7 +150,9 @@ export default async function handler(req: Request, res: Response) {
     const gasUnits       = await calcGasReimbUsdc(publicClient)
     const totalUnits     = BigInt(amount)
     const feeUnits       = totalUnits * PLATFORM_FEE_BPS / 10_000n
-    const recipientUnits = totalUnits - feeUnits - gasUnits
+    const grossFees      = req.body?.feeMode === 'gross'
+    const permitUnits    = grossFees ? totalUnits + feeUnits + gasUnits : totalUnits
+    const recipientUnits = grossFees ? totalUnits : totalUnits - feeUnits - gasUnits
 
     if (recipientUnits <= 0n) {
       const gasUsdc = (Number(gasUnits) / 1e6).toFixed(4)
@@ -167,7 +169,7 @@ export default async function handler(req: Request, res: Response) {
           target: ARBITRUM_USDC_ADDRESS, allowFailure: false,
           callData: encodeFunctionData({
             abi: PERMIT_ABI, functionName: 'permit',
-            args: [owner as `0x${string}`, MULTICALL3, totalUnits, BigInt(deadline), Number(v), r as `0x${string}`, s as `0x${string}`],
+            args: [owner as `0x${string}`, MULTICALL3, permitUnits, BigInt(deadline), Number(v), r as `0x${string}`, s as `0x${string}`],
           }),
         },
         {

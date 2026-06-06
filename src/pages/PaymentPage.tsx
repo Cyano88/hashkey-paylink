@@ -731,9 +731,51 @@ export default function PaymentPage() {
     !circleSmartAccount &&
     !circleSolanaSession &&
     polymarketFundingStep === 'choose'
+  const grossUpPlatformCharges = true
+  const grossUpEvmPlatformCharges = grossUpPlatformCharges && (chain === 'base' || chain === 'arc' || chain === 'arbitrum')
+  const grossUpSolanaPlatformCharges = grossUpPlatformCharges && chain === 'solana'
+
+  function evmPaymentBreakdown(totalUnits: bigint, decimals = meta.decimals) {
+    const feeUnits = totalUnits * BigInt(PLATFORM_FEE_BPS) / 10_000n
+    const gasRecoveryUnits = getSponsoredGasRecoveryUnits(chain, totalUnits, feeUnits, decimals)
+    const sponsoredTreasuryUnits = feeUnits + gasRecoveryUnits
+    if (grossUpEvmPlatformCharges) {
+      return {
+        feeUnits,
+        gasRecoveryUnits,
+        treasuryUnits: feeUnits,
+        sponsoredTreasuryUnits,
+        recipientUnits: totalUnits,
+        sponsoredRecipientUnits: totalUnits,
+        requiredUnits: totalUnits + sponsoredTreasuryUnits,
+      }
+    }
+    return {
+      feeUnits,
+      gasRecoveryUnits,
+      treasuryUnits: feeUnits,
+      sponsoredTreasuryUnits,
+      recipientUnits: totalUnits - feeUnits,
+      sponsoredRecipientUnits: totalUnits - sponsoredTreasuryUnits,
+      requiredUnits: totalUnits,
+    }
+  }
+
+  function solanaPaymentRequiredUnits(totalUnits: bigint) {
+    const feeUnits = totalUnits * BigInt(PLATFORM_FEE_BPS) / 10_000n
+    const gasRecoveryUnits = getSponsoredGasRecoveryUnits('solana', totalUnits, feeUnits, CHAIN_META.solana.decimals)
+    return totalUnits + feeUnits + gasRecoveryUnits
+  }
+
   const circleRequiredUnits = (() => {
     try {
-      return parseUnits(effectiveAmt || '0', meta.decimals)
+      const totalUnits = parseUnits(effectiveAmt || '0', meta.decimals)
+      if (grossUpSolanaPlatformCharges) return solanaPaymentRequiredUnits(totalUnits)
+      if (chain === 'starknet' && grossUpPlatformCharges) {
+        const feeUnits = totalUnits * BigInt(PLATFORM_FEE_BPS) / 10_000n
+        return totalUnits + feeUnits
+      }
+      return grossUpEvmPlatformCharges ? evmPaymentBreakdown(totalUnits).requiredUnits : totalUnits
     } catch {
       return 0n
     }
@@ -754,9 +796,8 @@ export default function PaymentPage() {
     circleWalletBalance < circleRequiredUnits
   const circleEvmEmailMerchantUnits = (() => {
     if (!showCircleEvmEmailPay || circleRequiredUnits <= 0n || (chain !== 'base' && chain !== 'arbitrum')) return null
-    const feeUnits = circleRequiredUnits * BigInt(PLATFORM_FEE_BPS) / 10_000n
-    const gasRecoveryUnits = getSponsoredGasRecoveryUnits(chain, circleRequiredUnits, feeUnits, meta.decimals)
-    const merchantUnits = circleRequiredUnits - feeUnits - gasRecoveryUnits
+    const totalUnits = parseUnits(effectiveAmt || '0', meta.decimals)
+    const merchantUnits = evmPaymentBreakdown(totalUnits).sponsoredRecipientUnits
     return merchantUnits > 0n ? merchantUnits : null
   })()
   const circleSolanaHasEnough =
@@ -772,10 +813,9 @@ export default function PaymentPage() {
   function expectedEvmRecipientUnits() {
     const totalUnits = parseUnits(effectiveAmt || '0', meta.decimals)
     if (totalUnits <= 0n) return 0n
-    const feeUnits = totalUnits * BigInt(PLATFORM_FEE_BPS) / 10_000n
-    const gasRecoveryUnits = getSponsoredGasRecoveryUnits(chain, totalUnits, feeUnits, meta.decimals)
+    const { feeUnits, gasRecoveryUnits, sponsoredRecipientUnits } = evmPaymentBreakdown(totalUnits)
     const conservativeUnits = totalUnits - feeUnits - gasRecoveryUnits
-    return conservativeUnits > 0n ? conservativeUnits : totalUnits - feeUnits
+    return grossUpEvmPlatformCharges ? totalUnits : (sponsoredRecipientUnits > 0n ? sponsoredRecipientUnits : totalUnits - feeUnits)
   }
 
   const missingStark   = chain === 'starknet' && !resolvedStark
@@ -1677,13 +1717,21 @@ export default function PaymentPage() {
     const totalUnits   = parseUnits(effectiveAmt || '0', CHAIN_META.arbitrum.decimals)
     const deadline     = BigInt(Math.floor(Date.now() / 1000) + 3600)
     const nonce        = permitNonce ?? 0n
+    let gasReimbUnitsForPermit = ghoGasEstimate ?? 0n
 
     // Refresh gas estimate just before signing so it's accurate
     try {
       const est = await fetch('/api/relay-gho').then(r => r.json()) as { ok: boolean; gasReimbUsdc?: string; gasReimbGho?: string }
       const reimb = est.gasReimbUsdc ?? est.gasReimbGho
-      if (reimb) setGhoGasEstimate(BigInt(reimb))
+      if (reimb) {
+        gasReimbUnitsForPermit = BigInt(reimb)
+        setGhoGasEstimate(gasReimbUnitsForPermit)
+      }
     } catch { /* use cached */ }
+    const feeUnitsForPermit = totalUnits * BigInt(PLATFORM_FEE_BPS) / 10_000n
+    const permitUnits = grossUpEvmPlatformCharges
+      ? totalUnits + feeUnitsForPermit + gasReimbUnitsForPermit
+      : totalUnits
 
     try {
       const sig = await signTypedDataAsync({
@@ -1698,7 +1746,7 @@ export default function PaymentPage() {
           ],
         },
         primaryType: 'Permit',
-        message: { owner: address, spender: MULTICALL3_ADDRESS, value: totalUnits, nonce, deadline },
+        message: { owner: address, spender: MULTICALL3_ADDRESS, value: permitUnits, nonce, deadline },
       })
 
       const { v, r, s } = parseSignature(sig)
@@ -1710,6 +1758,7 @@ export default function PaymentPage() {
           owner:     address,
           recipient: activeRecipient,
           amount:    totalUnits.toString(),
+          feeMode:   grossUpEvmPlatformCharges ? 'gross' : 'net',
           deadline:  deadline.toString(),
           v:         Number(v),
           r,
@@ -1893,7 +1942,12 @@ export default function PaymentPage() {
       const buildRes = await fetch('/api/solana-build-tx', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ from: session.wallet.address, to: resolvedSolana, amount: effectiveAmt }),
+        body:    JSON.stringify({
+          from: session.wallet.address,
+          to: resolvedSolana,
+          amount: effectiveAmt,
+          feeMode: grossUpSolanaPlatformCharges ? 'gross' : 'net',
+        }),
       })
       const buildData = await readApiJson<{ ok: boolean; tx?: string; lastValidBlockHeight?: number; error?: string }>(buildRes, 'Solana build')
       if (!buildData.ok || !buildData.tx || !buildData.lastValidBlockHeight) throw new Error(buildData.error ?? 'Failed to build transaction')
@@ -1942,7 +1996,12 @@ export default function PaymentPage() {
       const buildRes = await fetch('/api/solana-build-tx', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ from: solanaWalletAddr, to: resolvedSolana, amount: effectiveAmt }),
+        body:    JSON.stringify({
+          from: solanaWalletAddr,
+          to: resolvedSolana,
+          amount: effectiveAmt,
+          feeMode: grossUpSolanaPlatformCharges ? 'gross' : 'net',
+        }),
       })
       const buildData = await readApiJson<{ ok: boolean; tx?: string; lastValidBlockHeight?: number; error?: string }>(buildRes, 'Solana build')
       if (!buildData.ok || !buildData.tx || !buildData.lastValidBlockHeight) throw new Error(buildData.error ?? 'Failed to build transaction')
@@ -2100,11 +2159,8 @@ export default function PaymentPage() {
     if (!address || !activeRecipient || !showCirclePaymasterButton) return
     const decimals = chain === 'arbitrum' ? CHAIN_META.arbitrum.decimals : CHAIN_META.base.decimals
     const totalUnits = parseUnits(effectiveAmt || '0', decimals)
-    const feeUnits = totalUnits * BigInt(PLATFORM_FEE_BPS) / 10_000n
-    const gasRecoveryUnits = getSponsoredGasRecoveryUnits(chain, totalUnits, feeUnits, decimals)
-    const treasuryUnits = feeUnits + gasRecoveryUnits
-    const recipientUnits = totalUnits - treasuryUnits
-    await tryCirclePaymasterTransfer(recipientUnits, treasuryUnits, { surfaceUnavailable: true })
+    const { sponsoredRecipientUnits, sponsoredTreasuryUnits } = evmPaymentBreakdown(totalUnits, decimals)
+    await tryCirclePaymasterTransfer(sponsoredRecipientUnits, sponsoredTreasuryUnits, { surfaceUnavailable: true })
   }
 
   async function handleCirclePasskeyPay() {
@@ -2170,6 +2226,7 @@ export default function PaymentPage() {
           session,
           recipient: activeRecipient as `0x${string}`,
           amount: effectiveAmt,
+          feeMode: grossUpEvmPlatformCharges ? 'gross' : 'net',
         })
         if (txHash) {
           setCirclePaymasterTxHash(txHash)
@@ -2198,6 +2255,7 @@ export default function PaymentPage() {
         email,
         recipient: activeRecipient as `0x${string}`,
         amount: effectiveAmt,
+        feeMode: grossUpEvmPlatformCharges ? 'gross' : 'net',
       })
       if (result.smartAccount) {
         if (isConnected) disconnectEvm()
@@ -2280,12 +2338,14 @@ export default function PaymentPage() {
     const tokenAddress = meta_.tokenAddress
     const deadline     = BigInt(Math.floor(Date.now() / 1000) + 3600)
     const totalUnits   = parseUnits(effectiveAmt || '0', meta_.decimals)
-    const feeBps       = BigInt(PLATFORM_FEE_BPS)
-    const feeUnits     = totalUnits * feeBps / 10_000n
-    const gasRecoveryUnits = getSponsoredGasRecoveryUnits(chain, totalUnits, feeUnits, meta_.decimals)
-    const sponsoredFeeUnits = feeUnits + gasRecoveryUnits
-    const recipientUnits = totalUnits - feeUnits
-    const sponsoredRecipientUnits = totalUnits - sponsoredFeeUnits
+    const {
+      feeUnits,
+      treasuryUnits,
+      sponsoredTreasuryUnits,
+      recipientUnits,
+      sponsoredRecipientUnits,
+      requiredUnits,
+    } = evmPaymentBreakdown(totalUnits, meta_.decimals)
     try {
       const tokenClient = EVM_CLIENTS[chain as 'base' | 'arc' | 'arbitrum']
       const payerBalance = await tokenClient.readContract({
@@ -2294,9 +2354,9 @@ export default function PaymentPage() {
         functionName: 'balanceOf',
         args: [address],
       })
-      if (payerBalance < totalUnits) {
+      if (payerBalance < requiredUnits) {
         setBasePaymasterError(
-          `Insufficient USDC on ${meta.label}. Need ${formatUnits(totalUnits, meta_.decimals)} USDC; wallet has ${formatUnits(payerBalance, meta_.decimals)} USDC.`,
+          `Insufficient USDC on ${meta.label}. Need ${formatUnits(requiredUnits, meta_.decimals)} USDC; wallet has ${formatUnits(payerBalance, meta_.decimals)} USDC.`,
         )
         return
       }
@@ -2353,7 +2413,7 @@ export default function PaymentPage() {
         { name: 'deadline', type: 'uint256' },
       ],
     } as const
-    const permitMessage = { owner: address, spender: MULTICALL3_ADDRESS, value: totalUnits, nonce, deadline } as const
+    const permitMessage = { owner: address, spender: MULTICALL3_ADDRESS, value: requiredUnits, nonce, deadline } as const
     setBasePaymasterError(null)
     setCirclePaymasterError(null)
     resetEvmSend()
@@ -2366,7 +2426,7 @@ export default function PaymentPage() {
         message: {
           owner: address,
           spender: MULTICALL3_ADDRESS,
-          value: totalUnits.toString(),
+          value: requiredUnits.toString(),
           nonce: nonce.toString(),
           deadline: deadline.toString(),
         },
@@ -2444,7 +2504,7 @@ export default function PaymentPage() {
         args: [[
           { target: tokenAddress, allowFailure: false, callData: encodeFunctionData({
               abi: ERC20_PERMIT_ABI, functionName: 'permit',
-              args: [address, MULTICALL3_ADDRESS, totalUnits, deadline, Number(v), r, s],
+              args: [address, MULTICALL3_ADDRESS, requiredUnits, deadline, Number(v), r, s],
           })},
           { target: tokenAddress, allowFailure: false, callData: encodeFunctionData({
               abi: ERC20_TRANSFER_FROM_ABI, functionName: 'transferFrom',
@@ -2452,7 +2512,7 @@ export default function PaymentPage() {
           })},
           { target: tokenAddress, allowFailure: false, callData: encodeFunctionData({
               abi: ERC20_TRANSFER_FROM_ABI, functionName: 'transferFrom',
-              args: [address, EVM_TREASURY, feeUnits],
+              args: [address, EVM_TREASURY, treasuryUnits],
           })},
         ]],
       })
@@ -2461,7 +2521,7 @@ export default function PaymentPage() {
         args: [[
           { target: tokenAddress, allowFailure: false, callData: encodeFunctionData({
               abi: ERC20_PERMIT_ABI, functionName: 'permit',
-              args: [address, MULTICALL3_ADDRESS, totalUnits, deadline, Number(v), r, s],
+              args: [address, MULTICALL3_ADDRESS, requiredUnits, deadline, Number(v), r, s],
           })},
           { target: tokenAddress, allowFailure: false, callData: encodeFunctionData({
               abi: ERC20_TRANSFER_FROM_ABI, functionName: 'transferFrom',
@@ -2469,7 +2529,7 @@ export default function PaymentPage() {
           })},
           { target: tokenAddress, allowFailure: false, callData: encodeFunctionData({
               abi: ERC20_TRANSFER_FROM_ABI, functionName: 'transferFrom',
-              args: [address, EVM_TREASURY, sponsoredFeeUnits],
+              args: [address, EVM_TREASURY, sponsoredTreasuryUnits],
           })},
         ]],
       })
@@ -2500,10 +2560,11 @@ export default function PaymentPage() {
       switchChain({ chainId: CHAIN_META.hashkey.chainId })
       return
     }
-    const totalNative     = parseEther(effectiveAmt || '0')
+    const requestedNative = parseEther(effectiveAmt || '0')
     const feeBps          = BigInt(PLATFORM_FEE_BPS)
-    const feeNative       = totalNative * feeBps / 10_000n
-    const recipientNative = totalNative - feeNative
+    const feeNative       = requestedNative * feeBps / 10_000n
+    const recipientNative = grossUpPlatformCharges ? requestedNative : requestedNative - feeNative
+    const totalNative     = grossUpPlatformCharges ? requestedNative + feeNative : requestedNative
     sendTransaction({
       to: MULTICALL3_ADDRESS, value: totalNative,
       data: encodeFunctionData({
@@ -2524,7 +2585,7 @@ export default function PaymentPage() {
     try {
       const totalUnits = BigInt(Math.round(parseFloat(effectiveAmt || '0') * 1e6))
       const feeUnits   = totalUnits * BigInt(PLATFORM_FEE_BPS) / 10_000n
-      const recipUnits = totalUnits - feeUnits
+      const recipUnits = grossUpPlatformCharges ? totalUnits : totalUnits - feeUnits
       const toU256 = (n: bigint) => ({
         low:  '0x' + (n & BigInt('0xffffffffffffffffffffffffffffffff')).toString(16),
         high: '0x0',
@@ -2777,9 +2838,9 @@ export default function PaymentPage() {
     const comparisonAmount = Number.isFinite(expectedSettlement) && expectedSettlement > 0
       ? expectedSettlement
       : requested
-    const isOver    = recipientAmt != null && !isFlex && recipientAmt > comparisonAmount * 1.001
-    const isUnder   = recipientAmt != null && !isFlex && recipientAmt < comparisonAmount * 0.99
-    const isPartial = isUnder && (recipientAmt ?? 0) >= comparisonAmount * 0.50
+    const shouldCompareFixedAmount = !isFlex && !isPolymarketFunding
+    const isOver    = recipientAmt != null && shouldCompareFixedAmount && recipientAmt > comparisonAmount * 1.001
+    const isUnder   = recipientAmt != null && shouldCompareFixedAmount && recipientAmt < comparisonAmount * 0.99
     const shortfall = isUnder
       ? (comparisonAmount - (recipientAmt ?? 0)).toFixed(meta.decimals <= 6 ? 4 : 6)
       : null
@@ -2793,31 +2854,24 @@ export default function PaymentPage() {
         <div
           className={cn(
             'overflow-hidden rounded-2xl border bg-white shadow-card',
-            isUnder && !isPartial ? 'border-red-200'
-            : isPartial           ? 'border-amber-200'
-            : 'border-emerald-100',
+            isUnder ? 'border-red-200' : 'border-emerald-100',
           )}
           style={{ boxShadow: isUnder ? '0 4px 32px -4px rgba(239,68,68,0.15)' : `0 4px 32px -4px rgba(16,185,129,0.18), ${meta.glowStyle}` }}
         >
           <div className={cn(
             'bg-gradient-to-br p-8 text-center',
-            isUnder && !isPartial ? 'from-red-50 to-orange-50'
-            : isPartial           ? 'from-amber-50 to-yellow-50'
-            : 'from-emerald-50 to-green-50',
+            isUnder ? 'from-red-50 to-orange-50' : 'from-emerald-50 to-green-50',
           )}>
             <div className={cn(
               'mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-white shadow-sm animate-bounce-in',
             )}>
-              {isUnder && !isPartial
+              {isUnder
                 ? <AlertCircle  className="h-8 w-8 text-red-500" />
-                : isPartial
-                ? <AlertTriangle className="h-8 w-8 text-amber-500" />
                 : <CheckCircle2  className="h-8 w-8 text-emerald-500" />
               }
             </div>
             <h2 className="text-xl font-bold text-gray-900">
-              {isUnder && !isPartial ? (isPolymarketFunding ? 'Funding Shortfall' : 'Underpayment Detected')
-               : isPartial           ? (isPolymarketFunding ? 'Partial Funding' : 'Partial Payment')
+              {isUnder ? 'Underpayment Detected'
                : isPolymarketFunding ? 'Funding Complete!'
                : 'Payment Sent!'}
             </h2>
@@ -2832,18 +2886,16 @@ export default function PaymentPage() {
                   {isUnder && (
                     <span className={cn(
                       'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold',
-                      isPartial ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700',
+                      'bg-red-100 text-red-700',
                     )}>
-                      {isPolymarketFunding
-                        ? `${shortfall} short`
-                        : isNgPosPayment
+                      {isNgPosPayment
                           ? `${shortfall} ${meta.asset} short of expected settlement`
                           : `${shortfall} ${meta.asset} short of requested ${requested.toFixed(meta.decimals <= 6 ? 2 : 4)}`}
                     </span>
                   )}
                   {isOver && (
                     <span className="ml-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
-                      {isPolymarketFunding ? 'Extra received' : 'Overpayment processed'}
+                      Overpayment processed
                     </span>
                   )}
                 </>

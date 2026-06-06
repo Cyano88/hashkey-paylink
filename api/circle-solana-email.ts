@@ -265,9 +265,12 @@ export default async function handler(req: Request, res: Response) {
 
       const total = BigInt(totalUnits)
       const fee = total * PLATFORM_FEE_BPS / BPS_DENOMINATOR
-      const recovery = gasRecoveryUnits(chain, total, fee)
+      const grossFees = params.feeMode === 'gross'
+      const recovery = grossFees
+        ? parseUsdcUnits(process.env[EVM_CHAINS[chain].gasRecoveryEnv], EVM_CHAINS[chain].defaultGasRecoveryUnits)
+        : gasRecoveryUnits(chain, total, fee)
       const treasuryAmount = fee + recovery
-      const recipientAmount = total - treasuryAmount
+      const recipientAmount = grossFees ? total : total - treasuryAmount
       if (total <= 0n || recipientAmount <= 0n) {
         return res.status(400).json({ ok: false, error: 'Invalid payment amount' })
       }

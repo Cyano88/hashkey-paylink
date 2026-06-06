@@ -20,6 +20,7 @@ type SendCirclePasskeyPaymentParams = {
   email: string
   recipient: Address
   amount: string
+  feeMode?: 'net' | 'gross'
 }
 
 type CirclePasskeyPaymentResult =
@@ -228,6 +229,7 @@ export async function sendCirclePasskeyPayment({
   email,
   recipient,
   amount,
+  feeMode,
 }: SendCirclePasskeyPaymentParams): Promise<CirclePasskeyPaymentResult> {
   const config = getCircleClientConfig(chain)
   if (!config) return { status: 'failed', reason: 'Smart wallet is not configured for this chain.' }
@@ -238,7 +240,9 @@ export async function sendCirclePasskeyPayment({
     const feeUnits = totalUnits * BigInt(PLATFORM_FEE_BPS) / 10_000n
     const gasRecoveryUnits = getSponsoredGasRecoveryUnits(config.chain, totalUnits, feeUnits, meta.decimals)
     const treasuryUnits = feeUnits + gasRecoveryUnits
-    const recipientUnits = totalUnits - treasuryUnits
+    const grossFees = feeMode === 'gross'
+    const recipientUnits = grossFees ? totalUnits : totalUnits - treasuryUnits
+    const requiredUnits = grossFees ? totalUnits + treasuryUnits : totalUnits
     if (totalUnits <= 0n || recipientUnits <= 0n) return { status: 'failed', reason: 'Enter a valid amount.' }
 
     const { account, smartAccount, transport } = await getCircleSmartAccount(chain, email)
@@ -252,7 +256,7 @@ export async function sendCirclePasskeyPayment({
       functionName: 'balanceOf',
       args: [smartAccount],
     })
-    if (balance < totalUnits) {
+    if (balance < requiredUnits) {
       return {
         status: 'failed',
         reason: 'Add USDC to Smart wallet to continue.',

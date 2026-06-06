@@ -253,7 +253,7 @@ export default function Dashboard() {
       ? `0x..${receiptAddress.slice(-4)}`
       : `${receiptAddress.slice(0, 4)}..${receiptAddress.slice(-4)}`
     : ''
-  const receiptNetworks = posNetworks.length
+  const receiptNetworks: PosNetwork[] = posNetworks.length
     ? posNetworks
     : isPosNetwork(netParam)
       ? [netParam]

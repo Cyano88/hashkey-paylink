@@ -448,16 +448,16 @@ export default function NigerianPos() {
               <div>
                 <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">Payment ready</p>
                 <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-300">
-                  ₦{quote.amount_ngn} · {quote.amount_usdc} USDC
+                  ₦{quote!.amount_ngn} · {quote!.amount_usdc} USDC
                 </p>
-                {quote.settlement_type === 'INSTANT_FIAT' && !quote.fiat_execution_ready && (
+                {quote!.settlement_type === 'INSTANT_FIAT' && !quote!.fiat_execution_ready && (
                   <p className="mt-2 text-[11px] text-amber-700 dark:text-amber-300">Fiat payout provider is not live yet. Use for controlled testing only.</p>
                 )}
               </div>
               <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-300" />
             </div>
             <a
-              href={quote.pay_url}
+              href={quote!.pay_url}
               target="_blank"
               rel="noopener noreferrer"
               className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-gray-950 px-4 py-3 text-sm font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"

@@ -492,6 +492,7 @@ export async function sendCircleEvmEmailPayment(params: {
   session: CircleEvmEmailSession
   recipient: Address
   amount: string
+  feeMode?: 'net' | 'gross'
 }) {
   const sdk = authenticatedSdk(params.session)
   applyHashPayLinkCircleUi(sdk, {
@@ -514,6 +515,7 @@ export async function sendCircleEvmEmailPayment(params: {
     chain: params.session.chain,
     recipient: params.recipient,
     totalUnits: totalUnits.toString(),
+    feeMode: params.feeMode ?? 'net',
   })
   if (!challenge.challengeId) throw new Error('Circle did not return an EVM payment challenge.')
   const result = await executeChallengeWithTimeout(

@@ -96,13 +96,14 @@ function parseOptionalUsdcAmount(value: string | undefined, fallback: bigint): b
   }
 }
 
-function getGasRecoveryRaw(totalRaw: bigint, feeRaw: bigint, createsRecipientAta: boolean): bigint {
+function getGasRecoveryRaw(totalRaw: bigint, feeRaw: bigint, createsRecipientAta: boolean, grossFees = false): bigint {
   const baseRecovery = parseOptionalUsdcAmount(process.env.SOLANA_GAS_RECOVERY_USDC, DEFAULT_GAS_RECOVERY_RAW)
   const ataRecovery = createsRecipientAta
     ? parseOptionalUsdcAmount(process.env.SOLANA_ATA_RECOVERY_USDC, DEFAULT_ATA_RECOVERY_RAW)
     : 0n
   const configured = baseRecovery + ataRecovery
   if (configured <= 0n) return 0n
+  if (grossFees) return configured
 
   const minRecipient = parseOptionalUsdcAmount(process.env.SOLANA_MIN_RECIPIENT_USDC, DEFAULT_MIN_RECIPIENT_RAW)
   const maxRecoverable = totalRaw - feeRaw - minRecipient
@@ -219,7 +220,7 @@ async function ensureATA(
 
 // ── POST /api/solana-build-tx ─────────────────────────────────────────────────
 export async function buildSolanaTx(req: Request, res: Response): Promise<void> {
-  const { from, to, amount, mode } = req.body as { from?: string; to?: string; amount?: string; mode?: string }
+  const { from, to, amount, mode, feeMode } = req.body as { from?: string; to?: string; amount?: string; mode?: string; feeMode?: string }
 
   if (!from || !to || !amount) {
     res.status(400).json({ ok: false, error: 'Missing from / to / amount' })
@@ -250,11 +251,16 @@ export async function buildSolanaTx(req: Request, res: Response): Promise<void> 
     const { ata: toATA, created: createsRecipientAta } = await ensureATA(connection, tx, USDC_MINT, toPubkey, relayer.publicKey)
 
     const isWithdraw = mode === 'withdraw'
+    const grossFees = feeMode === 'gross'
     const feeRaw         = isWithdraw ? 0n : totalRaw * BigInt(PLATFORM_FEE_BPS) / 10_000n
-    const gasRecoveryRaw = isWithdraw ? 0n : getGasRecoveryRaw(totalRaw, feeRaw, createsRecipientAta)
+    const gasRecoveryRaw = isWithdraw ? 0n : getGasRecoveryRaw(totalRaw, feeRaw, createsRecipientAta, grossFees)
     const treasuryRaw    = feeRaw + gasRecoveryRaw
-    const recipientRaw   = totalRaw - treasuryRaw
+    const requiredRaw    = grossFees ? totalRaw + treasuryRaw : totalRaw
+    const recipientRaw   = grossFees ? totalRaw : totalRaw - treasuryRaw
     if (recipientRaw <= 0n) throw new Error('Payment amount is too small after fees')
+    if (BigInt(fromAccount.amount.toString()) < requiredRaw) {
+      throw new Error('Sender has insufficient Solana USDC for this payment')
+    }
 
     // Transfer to recipient. Withdraw mode sends the full requested amount.
     tx.add(createTransferCheckedInstruction(
