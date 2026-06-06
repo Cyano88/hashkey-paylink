@@ -68,6 +68,7 @@ type ArgentStarknetSession = Awaited<ReturnType<typeof connectArgentStarknetEmai
 
 const CHAINS: ChainKey[] = ['base', 'solana', 'arbitrum']
 const POLYMARKET_SIGNUP_URL = 'https://polymarket.com'
+const POLYMARKET_LOGO = '/brand/polymarket-logo.png'
 
 const CHAIN_DISPLAY_NAMES: Record<number, string> = {
   1:       'Ethereum',
@@ -251,7 +252,7 @@ function emailFromPrivyUser(user: unknown) {
 // ─── Component ───────────────────────────────────────────────────────────────
 const SMART_WALLET_FUNDING_ERROR = 'Add USDC to Smart wallet to continue.'
 const SMART_WALLET_AMOUNT_ERROR = 'Enter an amount to continue.'
-const SMART_WALLET_CANCELLED_MESSAGE = 'Payment cancelled or expired.'
+const SMART_WALLET_CANCELLED_MESSAGE = 'Payment cancelled. Try again.'
 
 function isSmartWalletBalanceError(msg: string | null) {
   if (!msg) return false
@@ -3012,7 +3013,7 @@ export default function PaymentPage() {
   // ────────────────────────────────────────────────────────────────────────────
   return (
     <div className="mx-auto max-w-md animate-slide-up">
-      {isNgPosSource ? (
+      {isNgPosSource || isPolymarketFunding ? (
         <button
           type="button"
           onClick={goBackFromCheckout}
@@ -3149,6 +3150,13 @@ export default function PaymentPage() {
           ) : chain === 'arc' ? (
             <div className="mb-2 flex flex-wrap items-center justify-center gap-2">
               <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-semibold text-amber-600 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">Testnet</span>
+            </div>
+          ) : isPolymarketFunding ? (
+            <div className="mb-2 flex items-center justify-center gap-2">
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.06]">
+                <img src={POLYMARKET_LOGO} alt="" className="h-4 w-4 invert dark:invert-0" />
+              </span>
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Polymarket Funding</p>
             </div>
           ) : (
             <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-widest text-gray-400">Payment Request</p>
@@ -3585,13 +3593,17 @@ export default function PaymentPage() {
 
           {showPolymarketFundingChoice && (
             <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
+              <div className="px-1 text-center">
+                <p className="text-sm font-semibold text-gray-900 dark:text-white">Add USDC to your Polymarket funding wallet</p>
+                <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Review the wallet, then continue with Circle USDC checkout.</p>
+              </div>
               <button
                 type="button"
                 onClick={() => setPolymarketFundingStep('fund')}
                 className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-6 py-3.5 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
               >
                 <Wallet className="h-4 w-4" />
-                Fund account
+                Continue to funding
               </button>
               <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
                 Not on Polymarket yet?
@@ -3604,7 +3616,7 @@ export default function PaymentPage() {
               >
                 <span className="inline-flex items-center gap-2">
                   <ExternalLink className="h-4 w-4" />
-                  Sign up
+                  Create Polymarket account
                 </span>
                 <span className="text-[11px] font-medium text-gray-400 dark:text-gray-500">
                   For best experience, sign up with email

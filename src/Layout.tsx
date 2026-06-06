@@ -314,6 +314,7 @@ export default function Layout() {
   const isCreatePage = pathname === '/'
   const isPayPage  = pathname === '/pay'
   const isNgPosPage = pathname === '/pos/ng'
+  const isTelegramPaymentLinksPage = pathname === '/telegram/payment-links'
   const isDashPage = pathname === '/event' || pathname === '/dashboard'
   const isNgPosDashboard = pathname === '/dashboard' && (searchParams.get('src') === 'ngpos' || (searchParams.get('id') ?? '').startsWith('ngpos-'))
   const isAgentProfilePage = pathname === '/agent' && (
@@ -566,6 +567,8 @@ export default function Layout() {
               ? null
               : isNgPosPage
               ? null
+              : isTelegramPaymentLinksPage
+              ? null
               : <NetworkToolkit activeKey={selectedNet ?? 'base'} onSwitch={handleNetworkSelect} />
             }
 
@@ -594,7 +597,7 @@ export default function Layout() {
             )}
 
             {/* Wallet controls — hidden on pay page and organizer dashboard (read-only pages) */}
-            {!isCreatePage && !isPayPage && !isDashPage && !isNgPosPage && (
+            {!isCreatePage && !isPayPage && !isDashPage && !isNgPosPage && !isTelegramPaymentLinksPage && (
               <>
                 {/* Connect Wallet — when disconnected */}
                 {!anyConnected && (

@@ -21,6 +21,7 @@ import {
 import { cn } from '../lib/utils'
 
 const TELEGRAM_BOT_URL = import.meta.env.VITE_TELEGRAM_AGENT_URL || 'https://t.me/HashPayLinkBot'
+const PUBLIC_PAYLINK_ORIGIN = (import.meta.env.VITE_PUBLIC_PAYLINK_ORIGIN || 'https://hashpaylink.com').replace(/\/+$/, '')
 const POLYMARKET_LOGO = '/brand/polymarket-logo.png'
 
 function displayTelegramName(rawName: string | null, fallback = 'there') {
@@ -66,11 +67,31 @@ const telegramSections = [
 ]
 
 type RequestMode = 'person' | 'group'
+type RequestNetwork = 'base' | 'arc' | 'solana' | 'arbitrum' | 'all'
+
+const requestNetworks: Array<{ key: RequestNetwork; label: string; badge?: string }> = [
+  { key: 'base', label: 'Base' },
+  { key: 'arc', label: 'Arc', badge: 'Testnet' },
+  { key: 'solana', label: 'Solana' },
+  { key: 'arbitrum', label: 'Arbitrum' },
+  { key: 'all', label: 'All' },
+]
+
+const requestNetworkLabels: Record<RequestNetwork, string> = {
+  base: 'Base',
+  arc: 'Arc',
+  solana: 'Solana',
+  arbitrum: 'Arbitrum',
+  all: 'All networks',
+}
 
 type SavedRequest = {
   kind?: 'payment-request' | 'polymarket-funding'
   mode: RequestMode
   wallet: string
+  network?: RequestNetwork
+  evmWallet?: string
+  solanaWallet?: string
   label: string
   target: string
   amount: string
@@ -90,7 +111,10 @@ export default function TelegramPaymentLinks() {
   const [savedRequest, setSavedRequest] = useState<SavedRequest | null>(null)
   const [polymarketMode, setPolymarketMode] = useState<PolymarketMode>('')
   const [savedPolymarketRequest, setSavedPolymarketRequest] = useState<SavedRequest | null>(null)
+  const [requestNetwork, setRequestNetwork] = useState<RequestNetwork>('base')
   const [wallet, setWallet] = useState('')
+  const [evmWallet, setEvmWallet] = useState('')
+  const [solanaWallet, setSolanaWallet] = useState('')
   const [label, setLabel] = useState('')
   const [amount, setAmount] = useState('')
   const [target, setTarget] = useState(initialMode === 'group' ? initialGroupTarget : initialPersonTarget)
@@ -102,7 +126,10 @@ export default function TelegramPaymentLinks() {
   )
 
   const requestFormTarget = target.trim()
-  const canSaveRequest = wallet.trim().length > 5 && label.trim().length > 1 && requestFormTarget.length > 1 && !!requestMode
+  const requestWalletReady = requestNetwork === 'all'
+    ? evmWallet.trim().length > 5 && solanaWallet.trim().length > 5
+    : wallet.trim().length > 5
+  const canSaveRequest = requestWalletReady && label.trim().length > 1 && requestFormTarget.length > 1 && !!requestMode
   const polymarketAmountNumber = Number(polymarketAmount)
   const polymarketWalletReady = /^0x[a-fA-F0-9]{40}$/.test(polymarketWallet.trim())
   const polymarketAmountReady = Number.isFinite(polymarketAmountNumber) && polymarketAmountNumber > 0
@@ -111,31 +138,48 @@ export default function TelegramPaymentLinks() {
   function openRequestService() {
     setActiveService('request-usdc')
     if (savedRequest) {
-      setRequestMode(savedRequest.mode)
-      setWallet(savedRequest.wallet)
-      setLabel(savedRequest.label)
-      setAmount(savedRequest.amount)
-      setTarget(savedRequest.target)
+      restoreRequestDraft(savedRequest)
     }
+  }
+
+  function restoreRequestDraft(request: SavedRequest) {
+    const network = request.network ?? inferRequestNetwork(request)
+    setRequestMode(request.mode)
+    setRequestNetwork(network)
+    setWallet(request.wallet)
+    setEvmWallet(request.evmWallet ?? (request.wallet.startsWith('0x') ? request.wallet : ''))
+    setSolanaWallet(request.solanaWallet ?? (!request.wallet.startsWith('0x') ? request.wallet : ''))
+    setLabel(request.label)
+    setAmount(request.amount)
+    setTarget(request.target)
   }
 
   function resetRequestForm(mode: RequestMode) {
     setRequestMode(mode)
     if (!savedRequest || savedRequest.mode !== mode) {
+      setRequestNetwork('base')
       setWallet('')
+      setEvmWallet('')
+      setSolanaWallet('')
       setLabel('')
       setAmount('')
       setTarget(mode === 'group' ? initialGroupTarget : initialPersonTarget)
     } else {
-      setTarget(savedRequest.target)
+      restoreRequestDraft(savedRequest)
     }
   }
 
   function saveRequest() {
     if (!requestMode || !canSaveRequest) return
+    const primaryWallet = requestNetwork === 'all'
+      ? evmWallet.trim()
+      : wallet.trim()
     setSavedRequest({
       mode: requestMode,
-      wallet: wallet.trim(),
+      network: requestNetwork,
+      wallet: primaryWallet,
+      evmWallet: requestNetwork === 'all' ? evmWallet.trim() : requestNetwork === 'solana' ? '' : wallet.trim(),
+      solanaWallet: requestNetwork === 'all' ? solanaWallet.trim() : requestNetwork === 'solana' ? wallet.trim() : '',
       label: label.trim(),
       target: requestFormTarget,
       amount: amount.trim(),
@@ -249,11 +293,17 @@ export default function TelegramPaymentLinks() {
               savedRequest={savedRequest}
               requestFormTarget={requestFormTarget}
               canSaveRequest={canSaveRequest}
+              requestNetwork={requestNetwork}
               wallet={wallet}
+              evmWallet={evmWallet}
+              solanaWallet={solanaWallet}
               label={label}
               amount={amount}
               target={target}
+              setRequestNetwork={setRequestNetwork}
               setWallet={setWallet}
+              setEvmWallet={setEvmWallet}
+              setSolanaWallet={setSolanaWallet}
               setLabel={setLabel}
               setAmount={setAmount}
               setTarget={setTarget}
@@ -266,11 +316,7 @@ export default function TelegramPaymentLinks() {
               onBackToModes={() => setRequestMode('')}
               onEditSaved={() => {
                 if (!savedRequest) return
-                setRequestMode(savedRequest.mode)
-                setWallet(savedRequest.wallet)
-                setLabel(savedRequest.label)
-                setAmount(savedRequest.amount)
-                setTarget(savedRequest.target)
+                restoreRequestDraft(savedRequest)
               }}
             />
           ) : activeService === 'fund-polymarket' ? (
@@ -395,7 +441,7 @@ function PolymarketFundingPanel({
           </div>
           <h2 className="mt-2 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Polymarket Funding</h2>
           <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-            Add Base USDC to a Polymarket funding wallet.
+            Add USDC to a Polymarket funding wallet through Hash PayLink checkout.
           </p>
         </div>
         {savedRequest && (
@@ -419,13 +465,13 @@ function PolymarketFundingPanel({
               <RequestModeButton
                 icon={Wallet}
                 title="Fund myself"
-                body="Open checkout and fund your Polymarket account."
+                body="Open Circle USDC checkout for your funding wallet."
                 onClick={() => setMode('self')}
               />
               <RequestModeButton
                 icon={UsersRound}
                 title="Ask friends"
-                body="Share a funding card in Telegram."
+                body="Share a clean Polymarket funding card in Telegram."
                 onClick={() => setMode('friends')}
               />
             </div>
@@ -442,8 +488,8 @@ function PolymarketFundingPanel({
                 </p>
                 <p className="mt-0.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
                   {mode === 'self'
-                    ? 'A Polymarket checkout opens with the funding wallet prefilled.'
-                    : 'Telegram will ask where to share the Polymarket funding card.'}
+                    ? 'Hash PayLink opens with the funding wallet and amount prefilled.'
+                    : 'Telegram will ask where to share the funding card.'}
                 </p>
               </div>
 
@@ -489,11 +535,17 @@ function RequestUsdcPanel({
   savedRequest,
   requestFormTarget,
   canSaveRequest,
+  requestNetwork,
   wallet,
+  evmWallet,
+  solanaWallet,
   label,
   amount,
   target,
+  setRequestNetwork,
   setWallet,
+  setEvmWallet,
+  setSolanaWallet,
   setLabel,
   setAmount,
   setTarget,
@@ -507,11 +559,17 @@ function RequestUsdcPanel({
   savedRequest: SavedRequest | null
   requestFormTarget: string
   canSaveRequest: boolean
+  requestNetwork: RequestNetwork
   wallet: string
+  evmWallet: string
+  solanaWallet: string
   label: string
   amount: string
   target: string
+  setRequestNetwork: (value: RequestNetwork) => void
   setWallet: (value: string) => void
+  setEvmWallet: (value: string) => void
+  setSolanaWallet: (value: string) => void
   setLabel: (value: string) => void
   setAmount: (value: string) => void
   setTarget: (value: string) => void
@@ -521,6 +579,25 @@ function RequestUsdcPanel({
   onBackToModes: () => void
   onEditSaved: () => void
 }) {
+  function updateRequestNetwork(network: RequestNetwork) {
+    setRequestNetwork(network)
+    if (network === 'all') return
+    if (network === 'solana') {
+      setWallet(solanaWallet)
+      return
+    }
+    setWallet(evmWallet)
+  }
+
+  function updateSingleWallet(value: string) {
+    setWallet(value)
+    if (requestNetwork === 'solana') {
+      setSolanaWallet(value)
+    } else {
+      setEvmWallet(value)
+    }
+  }
+
   return (
     <div className="mt-4">
       <div className="flex items-start justify-between gap-4">
@@ -594,12 +671,30 @@ function RequestUsdcPanel({
                 onChange={setTarget}
                 placeholder={requestMode === 'group' ? 'Pizza DAO, class dues...' : 'Drea, Alex, customer name...'}
               />
-              <InputBlock
-                label="Receive wallet"
-                value={wallet}
-                onChange={setWallet}
-                placeholder="0x... or Solana address"
-              />
+              <NetworkChipGroup value={requestNetwork} onChange={updateRequestNetwork} />
+              {requestNetwork === 'all' ? (
+                <div className="grid gap-2">
+                  <InputBlock
+                    label="EVM wallet"
+                    value={evmWallet}
+                    onChange={setEvmWallet}
+                    placeholder="0x... wallet address"
+                  />
+                  <InputBlock
+                    label="Solana wallet"
+                    value={solanaWallet}
+                    onChange={setSolanaWallet}
+                    placeholder="Solana wallet address"
+                  />
+                </div>
+              ) : (
+                <InputBlock
+                  label="Receive wallet"
+                  value={wallet}
+                  onChange={updateSingleWallet}
+                  placeholder={requestNetwork === 'solana' ? 'Solana wallet address' : '0x... wallet address'}
+                />
+              )}
               <InputBlock
                 label={requestMode === 'group' ? 'Collection name' : 'For'}
                 value={label}
@@ -670,6 +765,47 @@ function RequestModeButton({
   )
 }
 
+function NetworkChipGroup({
+  value,
+  onChange,
+}: {
+  value: RequestNetwork
+  onChange: (value: RequestNetwork) => void
+}) {
+  return (
+    <div className="rounded-xl border border-gray-100 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.05]">
+      <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Network</p>
+      <div className="mt-2 flex gap-1.5 overflow-x-auto pb-0.5">
+        {requestNetworks.map(network => (
+          <button
+            key={network.key}
+            type="button"
+            onClick={() => onChange(network.key)}
+            className={cn(
+              'shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors',
+              value === network.key
+                ? 'bg-gray-950 text-white dark:bg-white dark:text-gray-950'
+                : 'bg-gray-100 text-gray-500 hover:bg-gray-200 dark:bg-white/[0.07] dark:text-gray-300 dark:hover:bg-white/[0.12]',
+            )}
+          >
+            <span>{network.label}</span>
+            {network.badge && (
+              <span className={cn(
+                'ml-1 rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase',
+                value === network.key
+                  ? 'bg-white/15 text-white dark:bg-gray-950/10 dark:text-gray-700'
+                  : 'bg-gray-200 text-gray-500 dark:bg-white/[0.08] dark:text-gray-400',
+              )}>
+                {network.badge}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function InputBlock({
   label,
   value,
@@ -705,6 +841,8 @@ function SavedRequestCard({
   const [shareError, setShareError] = useState('')
   const amountLine = request.amount ? `${request.amount} USDC` : 'Flexible amount'
   const isPolymarket = request.kind === 'polymarket-funding'
+  const network = request.network ?? inferRequestNetwork(request)
+  const networkLabel = requestNetworkLabels[network]
 
   async function shareInTelegram() {
     if (sharing) return
@@ -712,6 +850,11 @@ function SavedRequestCard({
     setShareError('')
 
     try {
+      if (isLocalhost()) {
+        window.location.href = buildTelegramShareUrl(request)
+        return
+      }
+
       const res = await fetch('/api/telegram-request', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -766,7 +909,7 @@ function SavedRequestCard({
             <p className="mt-0.5 truncate text-xs text-gray-500 dark:text-gray-400">
               {isPolymarket
                 ? `${shortAddress(request.wallet)} - ${amountLine}`
-                : `${request.target} ${request.amount ? `- ${request.amount} USDC` : '- flexible amount'}`}
+                : `${networkLabel} - ${request.target} ${request.amount ? `- ${request.amount} USDC` : '- flexible amount'}`}
             </p>
           </div>
           <button
@@ -810,17 +953,22 @@ function buildRequestPayLink(request: SavedRequest) {
   const params = new URLSearchParams()
   const wallet = request.wallet.trim()
   const amount = request.amount.trim()
+  const network = request.network ?? inferRequestNetwork(request)
 
   if (amount) params.set('a', amount)
   else params.set('f', '1')
 
   params.set('src', 't')
-  if (wallet.toLowerCase().startsWith('0x')) {
-    params.set('n', 'base')
-    params.set('e', wallet)
-  } else {
+  if (network === 'all') {
+    params.set('x', '1')
+    if (request.evmWallet?.trim()) params.set('e', request.evmWallet.trim())
+    if (request.solanaWallet?.trim()) params.set('s', request.solanaWallet.trim())
+  } else if (network === 'solana') {
     params.set('n', 'solana')
-    params.set('s', wallet)
+    params.set('s', request.solanaWallet?.trim() || wallet)
+  } else {
+    params.set('n', network)
+    params.set('e', request.evmWallet?.trim() || wallet)
   }
 
   params.set('m', request.label)
@@ -829,21 +977,49 @@ function buildRequestPayLink(request: SavedRequest) {
     params.set('id', request.label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'telegram-request')
   }
 
-  return `${window.location.origin}/pay?${params.toString()}`
+  return `${shareOrigin()}/pay?${params.toString()}`
 }
 
 function buildShortRequestPayLink(request: SavedRequest) {
   const wallet = request.wallet.trim()
   const amount = request.amount.trim() || '-'
   const memo = request.label.trim() || '-'
-  const network = wallet.startsWith('0x') ? 'base' : 'solana'
+  const network = request.network ?? inferRequestNetwork(request)
+  if (network === 'all') return buildRequestPayLink(request)
   const params = new URLSearchParams()
   if (request.mode === 'group') {
     params.set('v', '1')
     params.set('id', request.label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'telegram-request')
   }
   const suffix = params.toString() ? `?${params.toString()}` : ''
-  return `${window.location.origin}/p/${encodeURIComponent(network)}/${encodeURIComponent(amount)}/${encodeURIComponent(wallet)}/${encodeURIComponent(memo)}${suffix}`
+  return `${shareOrigin()}/p/${encodeURIComponent(network)}/${encodeURIComponent(amount)}/${encodeURIComponent(wallet)}/${encodeURIComponent(memo)}${suffix}`
+}
+
+function inferRequestNetwork(request: Pick<SavedRequest, 'wallet'>): RequestNetwork {
+  return request.wallet.trim().startsWith('0x') ? 'base' : 'solana'
+}
+
+function isLocalhost() {
+  return ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname)
+}
+
+function shareOrigin() {
+  return isLocalhost() ? PUBLIC_PAYLINK_ORIGIN : window.location.origin
+}
+
+function buildTelegramShareUrl(request: SavedRequest) {
+  const amountLine = request.amount ? `${request.amount} USDC` : 'USDC'
+  const targetLine = request.mode === 'group' ? `Group: ${request.target}` : `Payer: ${request.target}`
+  const text = [
+    request.mode === 'group' ? 'Hash PayLink collection' : 'Hash PayLink payment request',
+    '',
+    `${request.label} requested ${amountLine}.`,
+    targetLine,
+    '',
+    'Tap to pay securely:',
+  ].join('\n')
+  const url = buildShortRequestPayLink(request)
+  return `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`
 }
 
 function buildTelegramBotStartUrl(payload: string) {

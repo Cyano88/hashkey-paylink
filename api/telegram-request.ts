@@ -10,13 +10,16 @@ const MAX_TEXT = 80
 
 type TelegramRequestMode = 'person' | 'group'
 type TelegramRequestKind = 'payment-request' | 'polymarket-funding'
+type TelegramRequestNetwork = 'base' | 'arc' | 'solana' | 'arbitrum' | 'all'
 
 type TelegramRequestRecord = {
   id: string
   mode: TelegramRequestMode
   kind?: TelegramRequestKind
   wallet: string
-  network: 'base' | 'solana'
+  network: TelegramRequestNetwork
+  evmWallet?: string
+  solanaWallet?: string
   label: string
   amount: string
   target: string
@@ -48,6 +51,16 @@ function isSolanaAddress(address: string) {
   }
 }
 
+function cleanNetwork(value: unknown, fallback: TelegramRequestNetwork): TelegramRequestNetwork {
+  if (value === 'arc' || value === 'solana' || value === 'arbitrum' || value === 'all') return value
+  if (value === 'base') return 'base'
+  return fallback
+}
+
+function isEvmNetwork(network: TelegramRequestNetwork) {
+  return network === 'base' || network === 'arc' || network === 'arbitrum'
+}
+
 function originFromRequest(req: Request) {
   const configured = process.env.PUBLIC_PAYLINK_ORIGIN ?? process.env.HASH_PAYLINK_BASE_URL
   if (configured) return configured.trim().replace(/\/+$/, '')
@@ -77,9 +90,15 @@ function buildPayUrl(req: Request, record: Omit<TelegramRequestRecord, 'id' | 'p
   if (record.amount) params.set('a', record.amount)
   else params.set('f', '1')
   params.set('src', 't')
-  params.set('n', record.network)
-  if (record.network === 'base') params.set('e', record.wallet)
-  else params.set('s', record.wallet)
+  if (record.network === 'all') {
+    params.set('x', '1')
+    if (record.evmWallet) params.set('e', record.evmWallet)
+    if (record.solanaWallet) params.set('s', record.solanaWallet)
+  } else {
+    params.set('n', record.network)
+    if (record.network === 'solana') params.set('s', record.solanaWallet || record.wallet)
+    else params.set('e', record.evmWallet || record.wallet)
+  }
   params.set('m', record.kind === 'polymarket-funding' ? 'Polymarket' : record.label)
   if (record.kind === 'polymarket-funding') {
     params.set('brand', 'polymarket')
@@ -109,16 +128,28 @@ export default async function handler(req: Request, res: Response) {
 
     const body = req.body ?? {}
     const wallet = cleanText(body.wallet, '').slice(0, 96)
+    const evmWallet = cleanText(body.evmWallet, '').slice(0, 96)
+    const solanaWallet = cleanText(body.solanaWallet, '').slice(0, 96)
     const mode = body.mode === 'group' ? 'group' : 'person'
     const amount = cleanAmount(body.amount)
     const kind: TelegramRequestKind = body.kind === 'polymarket-funding' ? 'polymarket-funding' : 'payment-request'
     const label = cleanText(body.label, mode === 'group' ? 'Telegram collection' : 'Payment request')
     const target = cleanText(body.target, mode === 'group' ? 'Telegram group' : 'Payer')
-    const network = wallet.startsWith('0x') ? 'base' : 'solana'
-    const validWallet = network === 'base' ? isAddress(wallet) : isSolanaAddress(wallet)
+    const inferredNetwork: TelegramRequestNetwork = wallet.startsWith('0x') ? 'base' : 'solana'
+    const network = cleanNetwork(body.network, inferredNetwork)
+    const primaryWallet = network === 'all'
+      ? evmWallet
+      : network === 'solana'
+        ? solanaWallet || wallet
+        : evmWallet || wallet
+    const validWallet = network === 'all'
+      ? isAddress(evmWallet) && isSolanaAddress(solanaWallet)
+      : network === 'solana'
+        ? isSolanaAddress(primaryWallet)
+        : isEvmNetwork(network) && isAddress(primaryWallet)
 
     if (!validWallet) {
-      return res.status(400).json({ ok: false, error: 'Enter a valid EVM or Solana receive wallet.' })
+      return res.status(400).json({ ok: false, error: network === 'all' ? 'Enter valid EVM and Solana receive wallets.' : 'Enter a valid receive wallet.' })
     }
     if (!label) return res.status(400).json({ ok: false, error: 'Missing request label' })
     if (kind === 'polymarket-funding') {
@@ -128,7 +159,17 @@ export default async function handler(req: Request, res: Response) {
     }
 
     const id = randomBytes(9).toString('base64url')
-    const draft = { mode, kind, wallet, network, label, amount, target }
+    const draft = {
+      mode,
+      kind,
+      wallet: primaryWallet,
+      network,
+      evmWallet: network === 'all' || isEvmNetwork(network) ? evmWallet || primaryWallet : '',
+      solanaWallet: network === 'all' || network === 'solana' ? solanaWallet || primaryWallet : '',
+      label,
+      amount,
+      target,
+    }
     const record: TelegramRequestRecord = {
       id,
       ...draft,
