@@ -741,7 +741,7 @@ export default function Dashboard() {
                 <span>Route</span>
                 <span className="text-right">Proof</span>
               </div>
-              {selectedPayments.map(row => {
+              {selectedPayments.map((row, index) => {
                 const chainMeta = rowMeta(row)
                 const explorerHref = row.txHash && !row.txHash.startsWith('manual_') ? `${chainMeta.explorerUrl}/tx/${row.txHash}` : ''
                 const ogHref = row.ogTxHash ? `https://chainscan.0g.ai/tx/${row.ogTxHash}` : ''
@@ -759,7 +759,7 @@ export default function Dashboard() {
                     <div className="min-w-0">
                       <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400 sm:hidden">Customer</p>
                       <div className="flex min-w-0 items-center gap-2">
-                        <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500" />
+                        <span className="w-6 shrink-0 text-[11px] font-semibold text-gray-400 dark:text-gray-500">#{index + 1}</span>
                         <p className="truncate text-sm font-semibold text-gray-900 dark:text-gray-50">{customer}</p>
                       </div>
                       <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">{fmtTs(row.timestamp)}</p>
