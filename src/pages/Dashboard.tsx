@@ -857,18 +857,26 @@ export default function Dashboard() {
                           0G
                         </span>
                       )}
-                      {explorerHref && (
+                      {explorerHref ? (
                         <a
                           href={explorerHref}
                           target="_blank"
                           rel="noopener noreferrer"
                           title="View transaction"
                           onClick={event => event.stopPropagation()}
-                          className="inline-flex h-7 items-center gap-1 rounded-lg border border-gray-200 px-2 text-[11px] font-semibold text-gray-500 transition-all hover:bg-gray-50 hover:text-blue-600 dark:border-white/10 dark:text-gray-400 dark:hover:bg-white/10 dark:hover:text-blue-300"
+                          className="inline-flex items-center gap-1 rounded border border-gray-100 bg-white px-1.5 py-0.5 text-[9px] font-semibold leading-none text-gray-500 transition-colors hover:border-blue-100 hover:bg-blue-50 hover:text-blue-600 dark:border-white/10 dark:bg-white/[0.03] dark:text-gray-400 dark:hover:border-blue-900/50 dark:hover:bg-blue-950/30 dark:hover:text-blue-300"
                         >
                           Tx
-                          <ExternalLink className="h-3 w-3" />
+                          <ExternalLink className="h-2.5 w-2.5" />
                         </a>
+                      ) : (
+                        <span
+                          title="Transaction hash was not captured for this receipt"
+                          className="inline-flex items-center gap-1 rounded border border-gray-100 bg-gray-50 px-1.5 py-0.5 text-[9px] font-semibold leading-none text-gray-300 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-500"
+                        >
+                          Tx
+                          <ExternalLink className="h-2.5 w-2.5" />
+                        </span>
                       )}
                     </div>
                   </div>

@@ -1280,6 +1280,7 @@ export default function PaymentPage() {
 
   async function handleManualCheck() {
     if (!resolvedEvm || chain === 'starknet') return
+    if (isManualChecking) return
     setIsManualChecking(true)
     try {
       const evmChain = chain as 'base' | 'hashkey' | 'arc' | 'arbitrum'
@@ -1350,7 +1351,9 @@ export default function PaymentPage() {
         }
       }
     } catch { /* ignore */ }
-    setIsManualChecking(false)
+    finally {
+      setIsManualChecking(false)
+    }
   }
 
   useEffect(() => {
@@ -1361,6 +1364,21 @@ export default function PaymentPage() {
     return () => clearInterval(timer)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [circleEvmAcceptedPending, manualPayDetected, chain, payMode, isManualChecking])
+
+  useEffect(() => {
+    if (!manualPayDetected || manualTxHash || chain === 'starknet' || chain === 'solana' || chain === 'hashkey' || !resolvedEvm) return
+    const first = setTimeout(() => {
+      if (!isManualChecking) void handleManualCheck()
+    }, 2_000)
+    const timer = setInterval(() => {
+      if (!isManualChecking) void handleManualCheck()
+    }, 5_000)
+    return () => {
+      clearTimeout(first)
+      clearInterval(timer)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [manualPayDetected, manualTxHash, chain, resolvedEvm, effectiveAmt, isManualChecking])
 
   // ── Auto-switch network when wallet connects ──────────────────────────────
   useEffect(() => {
@@ -2816,6 +2834,12 @@ export default function PaymentPage() {
                       {hashCopied ? <CheckCheck className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
                     </button>
                   </div>
+                </div>
+              )}
+              {!txHash && manualPayDetected && chain !== 'starknet' && chain !== 'solana' && (
+                <div className="flex items-center justify-between px-4 py-3">
+                  <span className="text-sm text-gray-500">Tx Hash</span>
+                  <span className="text-xs font-medium text-gray-400">Syncing...</span>
                 </div>
               )}
             </div>
