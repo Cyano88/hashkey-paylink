@@ -44,6 +44,24 @@ function cleanOptionalString(value: unknown, maxLength: number): string {
 const DATA_FILE = process.env.DATA_PATH
   ? `${process.env.DATA_PATH}/event-registry.json`
   : null
+const UPSTASH_REST_URL = (process.env.UPSTASH_REDIS_REST_URL ?? '').trim().replace(/\/+$/, '')
+const UPSTASH_REST_TOKEN = (process.env.UPSTASH_REDIS_REST_TOKEN ?? '').trim()
+const UPSTASH_STORE_KEY = (process.env.EVENT_REGISTRY_STORE_KEY ?? 'hashpaylink:event-registry').trim()
+
+async function upstashCommand<T>(command: unknown[]): Promise<T | undefined> {
+  if (!UPSTASH_REST_URL || !UPSTASH_REST_TOKEN) return undefined
+  const response = await fetch(UPSTASH_REST_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${UPSTASH_REST_TOKEN}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(command),
+  })
+  if (!response.ok) throw new Error(`Upstash request failed: ${response.status}`)
+  const data = await response.json() as { result?: T }
+  return data.result
+}
 
 function loadRegistry(): Map<string, PaymentEntry[]> {
   if (!DATA_FILE || !existsSync(DATA_FILE)) return new Map()
@@ -57,20 +75,35 @@ function loadRegistry(): Map<string, PaymentEntry[]> {
   }
 }
 
-function persistRegistry(): void {
-  if (!DATA_FILE) return
+async function hydrateRegistry(): Promise<void> {
   try {
-    const dir = dirname(DATA_FILE)
-    if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
-    writeFileSync(DATA_FILE, JSON.stringify(Object.fromEntries(registry)), 'utf8')
+    const remote = await upstashCommand<string>(['GET', UPSTASH_STORE_KEY])
+    if (!remote) return
+    const raw = JSON.parse(remote) as Record<string, PaymentEntry[]>
+    registry.clear()
+    for (const [eventId, entries] of Object.entries(raw)) registry.set(eventId, entries)
   } catch (e) {
-    console.warn('[registry] failed to persist to disk:', e)
+    console.warn('[registry] Upstash load failed; using local registry.', e instanceof Error ? e.message : String(e))
+  }
+}
+
+async function persistRegistry(): Promise<void> {
+  try {
+    const serialized = JSON.stringify(Object.fromEntries(registry))
+    if (DATA_FILE) {
+      const dir = dirname(DATA_FILE)
+      if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+      writeFileSync(DATA_FILE, serialized, 'utf8')
+    }
+    await upstashCommand(['SET', UPSTASH_STORE_KEY, serialized])
+  } catch (e) {
+    console.warn('[registry] failed to persist:', e)
   }
 }
 
 const registry = loadRegistry()
 
-export function registerEventPayment(req: Request, res: Response): void {
+export async function registerEventPayment(req: Request, res: Response): Promise<void> {
   let eventId: string
   let txHash: string
   let payer: string
@@ -115,6 +148,7 @@ export function registerEventPayment(req: Request, res: Response): void {
     }
   }
 
+  await hydrateRegistry()
   const entries = registry.get(eventId) ?? []
   // Deduplicate by txHash (for real on-chain txs) OR by payer+eventId for manual detections
   const isDupe = txHash.startsWith('manual_')
@@ -132,7 +166,7 @@ export function registerEventPayment(req: Request, res: Response): void {
   if (amountNgn) entry.amountNgn = amountNgn
   entries.push(entry)
   registry.set(eventId, entries)
-  persistRegistry()
+  await persistRegistry()
   res.json({ ok: true })
   if (agentSlug) {
     void appendAgentActivity({
@@ -184,13 +218,13 @@ export function registerEventPayment(req: Request, res: Response): void {
       if (idx !== -1) {
         list[idx].ogRootHash = result.rootHash
         list[idx].ogTxHash   = result.ogTxHash
-        persistRegistry()
+        void persistRegistry()
       }
     })
     .catch(() => {})
 }
 
-export function listEventPayments(req: Request, res: Response): void {
+export async function listEventPayments(req: Request, res: Response): Promise<void> {
   let id: string
   try {
     id = cleanString(req.query.id, 'id', MAX_EVENT_ID_LENGTH)
@@ -198,6 +232,7 @@ export function listEventPayments(req: Request, res: Response): void {
     res.status(400).json({ ok: false, error: err instanceof Error ? err.message : 'Invalid request' })
     return
   }
+  await hydrateRegistry()
   const entries = registry.get(id) ?? []
   res.json({ ok: true, payments: [...entries].sort((a, b) => b.ts - a.ts) })
 }

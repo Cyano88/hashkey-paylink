@@ -2613,7 +2613,7 @@ export default function PaymentPage() {
       merchantId: ngPosMerchantId,
       settlementType: ngPosSettlement,
       amountNgn: ngPosAmountNgn,
-      requestedAmount: effectiveAmt,
+      requestedAmount: expectedSettlementAmt,
     }
     try {
       await fetch('/api/event-register', {
