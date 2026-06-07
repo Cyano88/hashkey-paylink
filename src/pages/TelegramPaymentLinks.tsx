@@ -708,17 +708,6 @@ function RequestUsdcPanel({
                 placeholder="Optional"
               />
 
-              <div className="rounded-xl border border-gray-100 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.05]">
-                <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">
-                  {requestMode === 'group' ? 'Group' : 'Payer'}
-                </p>
-                <p className="mt-0.5 truncate text-sm font-semibold text-gray-900 dark:text-white">
-                  {requestMode === 'group'
-                    ? (requestFormTarget || 'Telegram group')
-                    : requestFormTarget}
-                </p>
-              </div>
-
               <button
                 type="button"
                 onClick={saveRequest}

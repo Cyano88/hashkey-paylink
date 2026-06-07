@@ -554,24 +554,6 @@ export default function Layout() {
           {/* Right side — single horizontal baseline */}
           <div className="flex items-center gap-x-2">
 
-            {/* 1. Network Toolkit — locked pill on pay/dashboard pages; interactive elsewhere */}
-            {isCreatePage
-              ? null
-              : isPayPage
-              ? showPayNetworkPill
-                ? <NetworkToolkit activeKey={payChain ?? activeNet} locked />
-                : null
-              : isDashPage
-              ? null
-              : isAgentProfilePage
-              ? null
-              : isNgPosPage
-              ? null
-              : isTelegramPaymentLinksPage
-              ? null
-              : <NetworkToolkit activeKey={selectedNet ?? 'base'} onSwitch={handleNetworkSelect} />
-            }
-
             {/* Recipient address — dashboard only, truncated, muted */}
             {isDashPage && !isNgPosDashboard && dashboardRecipients.length > 0 && (
               <DashboardRecipientDropdown recipients={dashboardRecipients} />
