@@ -1259,6 +1259,8 @@ function CreateAgentPanel({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [savedAgent, setSavedAgent] = useState<AgentProfile | null>(null)
+  const [editingAgent, setEditingAgent] = useState<AgentProfile | null>(null)
+  const [showProfileForm, setShowProfileForm] = useState(true)
 
   async function saveAgent() {
     if (busy) return
@@ -1268,7 +1270,7 @@ function CreateAgentPanel({
       const res = await fetch('/api/agent-profile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ owner, name, purpose }),
+        body: JSON.stringify({ owner, slug: editingAgent?.slug, name, purpose }),
       })
       const data = await res.json() as { ok?: boolean; agent?: AgentProfile; agents?: AgentProfile[]; error?: string }
       if (!res.ok || !data.ok || !data.agent) throw new Error(data.error || 'Could not save agent.')
@@ -1276,11 +1278,22 @@ function CreateAgentPanel({
       setAgents(data.agents ?? [data.agent])
       setName('')
       setPurpose('')
+      setEditingAgent(null)
+      setShowProfileForm(false)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save agent.')
     } finally {
       setBusy(false)
     }
+  }
+
+  function editAgent(agent: AgentProfile) {
+    setSavedAgent(null)
+    setEditingAgent(agent)
+    setName(agent.name)
+    setPurpose(agent.purpose)
+    setError('')
+    setShowProfileForm(true)
   }
 
   const canSave = name.trim().length >= 2 && purpose.trim().length >= 6 && !busy
@@ -1310,36 +1323,59 @@ function CreateAgentPanel({
         </div>
       </div>
 
-      <div className="space-y-3 rounded-xl border border-gray-100 bg-white p-3 dark:border-white/10 dark:bg-white/[0.03]">
-        <label className="block">
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Agent name</span>
-          <input
-            value={name}
-            onChange={event => setName(event.target.value)}
-            placeholder="e.g. PayLink Scout"
-            className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:ring-2 focus:ring-gray-200 dark:border-white/10 dark:bg-white/[0.05] dark:text-white"
-          />
-        </label>
-        <label className="block">
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Purpose</span>
-          <textarea
-            value={purpose}
-            onChange={event => setPurpose(event.target.value.slice(0, 260))}
-            placeholder="What should this agent do for you?"
-            className="mt-1 min-h-[82px] w-full resize-none rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm leading-relaxed text-gray-900 outline-none placeholder:text-gray-400 focus:ring-2 focus:ring-gray-200 dark:border-white/10 dark:bg-white/[0.05] dark:text-white"
-          />
-        </label>
-        <button
-          type="button"
-          onClick={saveAgent}
-          disabled={!canSave}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
-        >
-          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-          Save profile
-        </button>
-        {error && <p className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs font-medium text-red-600 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200">{error}</p>}
-        {savedAgent && (
+      {(showProfileForm || savedAgent) && (
+        <div className="space-y-3 rounded-xl border border-gray-100 bg-white p-3 dark:border-white/10 dark:bg-white/[0.03]">
+          {showProfileForm ? (
+            <>
+              {editingAgent && (
+                <div className="flex items-center justify-between gap-3 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">
+                  <p className="min-w-0 truncate text-xs font-semibold text-gray-700 dark:text-gray-200">
+                    Editing {editingAgent.name}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingAgent(null)
+                      setName('')
+                      setPurpose('')
+                      setShowProfileForm(false)
+                    }}
+                    className="text-xs font-semibold text-gray-400 transition-colors hover:text-gray-700 dark:hover:text-gray-200"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
+              <label className="block">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Agent name</span>
+                <input
+                  value={name}
+                  onChange={event => setName(event.target.value)}
+                  placeholder="e.g. PayLink Scout"
+                  className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:ring-2 focus:ring-gray-200 dark:border-white/10 dark:bg-white/[0.05] dark:text-white"
+                />
+              </label>
+              <label className="block">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Purpose</span>
+                <textarea
+                  value={purpose}
+                  onChange={event => setPurpose(event.target.value.slice(0, 260))}
+                  placeholder="What should this agent do for you?"
+                  className="mt-1 min-h-[82px] w-full resize-none rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm leading-relaxed text-gray-900 outline-none placeholder:text-gray-400 focus:ring-2 focus:ring-gray-200 dark:border-white/10 dark:bg-white/[0.05] dark:text-white"
+                />
+              </label>
+              <button
+                type="button"
+                onClick={saveAgent}
+                disabled={!canSave}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+              >
+                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                {editingAgent ? 'Save changes' : 'Save profile'}
+              </button>
+              {error && <p className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs font-medium text-red-600 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200">{error}</p>}
+            </>
+          ) : savedAgent ? (
           <div className="rounded-xl border border-emerald-100 bg-emerald-50/80 p-3 dark:border-emerald-400/20 dark:bg-emerald-400/10">
             <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-200">{savedAgent.name} saved</p>
             <p className="mt-1 text-xs leading-relaxed text-emerald-700/80 dark:text-emerald-200/80">
@@ -1353,17 +1389,19 @@ function CreateAgentPanel({
               Connect wallet
             </a>
           </div>
-        )}
-      </div>
+          ) : null}
+        </div>
+      )}
 
       <div className="space-y-2">
         <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Saved agents</p>
         {agents.length ? agents.map(agent => {
           const status = agentWalletStatus(agent)
           return (
-            <a
+            <button
               key={agent.slug}
-              href={`/agent?profile=agent&agent=${encodeURIComponent(agent.slug)}&src=telegram`}
+              type="button"
+              onClick={() => editAgent(agent)}
               className="flex w-full items-center gap-3 rounded-xl border border-gray-100 bg-white px-3 py-3 text-left transition-all hover:border-gray-200 hover:bg-gray-50 active:scale-[0.99] dark:border-white/10 dark:bg-white/[0.03] dark:hover:bg-white/[0.06]"
             >
               <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-700 dark:bg-white/[0.08] dark:text-gray-200">
@@ -1380,13 +1418,12 @@ function CreateAgentPanel({
               </span>
               {agent.walletAddress ? (
                 <span className="hidden shrink-0 items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-gray-700 transition-colors dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 sm:inline-flex">
-                  Dashboard
-                  <ExternalLink className="h-3 w-3" />
+                  Edit
                 </span>
               ) : (
                 <ArrowRight className="h-4 w-4 shrink-0 text-gray-400" />
               )}
-            </a>
+            </button>
           )
         }) : (
           <p className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-3 text-xs text-gray-500 dark:border-white/10 dark:bg-white/[0.03] dark:text-gray-400">
