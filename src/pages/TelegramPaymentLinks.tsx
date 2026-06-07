@@ -120,6 +120,7 @@ export default function TelegramPaymentLinks() {
   const [target, setTarget] = useState(initialMode === 'group' ? initialGroupTarget : initialPersonTarget)
   const [polymarketWallet, setPolymarketWallet] = useState('')
   const [polymarketAmount, setPolymarketAmount] = useState('')
+  const [polymarketFunder, setPolymarketFunder] = useState('')
   const telegramName = useMemo(
     () => displayTelegramName(searchParams.get('u') ?? searchParams.get('username'), 'there'),
     [searchParams],
@@ -133,7 +134,8 @@ export default function TelegramPaymentLinks() {
   const polymarketAmountNumber = Number(polymarketAmount)
   const polymarketWalletReady = /^0x[a-fA-F0-9]{40}$/.test(polymarketWallet.trim())
   const polymarketAmountReady = Number.isFinite(polymarketAmountNumber) && polymarketAmountNumber > 0
-  const canUsePolymarketFunding = polymarketWalletReady && polymarketAmountReady
+  const polymarketFunderReady = polymarketMode !== 'friends' || polymarketFunder.trim().length > 1
+  const canUsePolymarketFunding = polymarketWalletReady && polymarketAmountReady && polymarketFunderReady
 
   function openRequestService() {
     setActiveService('request-usdc')
@@ -197,6 +199,7 @@ export default function TelegramPaymentLinks() {
     window.location.href = buildPolymarketPayLink({
       wallet: polymarketWallet.trim(),
       amount: polymarketAmount.trim(),
+      funding: 'Self funding',
     })
   }
 
@@ -207,7 +210,7 @@ export default function TelegramPaymentLinks() {
       mode: 'person',
       wallet: polymarketWallet.trim(),
       label: 'Polymarket',
-      target: 'Telegram',
+      target: polymarketFunder.trim(),
       amount: polymarketAmount.trim(),
     })
     setPolymarketMode('')
@@ -324,13 +327,16 @@ export default function TelegramPaymentLinks() {
               mode={polymarketMode}
               wallet={polymarketWallet}
               amount={polymarketAmount}
+              funder={polymarketFunder}
               savedRequest={savedPolymarketRequest}
               canContinue={canUsePolymarketFunding}
               amountReady={polymarketAmountReady}
               walletReady={polymarketWalletReady}
+              funderReady={polymarketFunderReady}
               setMode={setPolymarketMode}
               setWallet={setPolymarketWallet}
               setAmount={setPolymarketAmount}
+              setFunder={setPolymarketFunder}
               onBack={() => {
                 setActiveService('')
                 setPolymarketMode('')
@@ -342,6 +348,7 @@ export default function TelegramPaymentLinks() {
                 if (!savedPolymarketRequest) return
                 setPolymarketWallet(savedPolymarketRequest.wallet)
                 setPolymarketAmount(savedPolymarketRequest.amount)
+                setPolymarketFunder(savedPolymarketRequest.target)
                 setPolymarketMode('friends')
               }}
             />
@@ -392,13 +399,16 @@ function PolymarketFundingPanel({
   mode,
   wallet,
   amount,
+  funder,
   savedRequest,
   canContinue,
   amountReady,
   walletReady,
+  funderReady,
   setMode,
   setWallet,
   setAmount,
+  setFunder,
   onBack,
   onBackToOptions,
   onFundSelf,
@@ -408,13 +418,16 @@ function PolymarketFundingPanel({
   mode: PolymarketMode
   wallet: string
   amount: string
+  funder: string
   savedRequest: SavedRequest | null
   canContinue: boolean
   amountReady: boolean
   walletReady: boolean
+  funderReady: boolean
   setMode: (mode: PolymarketMode) => void
   setWallet: (value: string) => void
   setAmount: (value: string) => void
+  setFunder: (value: string) => void
   onBack: () => void
   onBackToOptions: () => void
   onFundSelf: () => void
@@ -494,6 +507,14 @@ function PolymarketFundingPanel({
                 onChange={setWallet}
                 placeholder="0x... funding wallet"
               />
+              {mode === 'friends' && (
+                <InputBlock
+                  label="Payer"
+                  value={funder}
+                  onChange={setFunder}
+                  placeholder="Drea, Alex, sponsor name..."
+                />
+              )}
               <InputBlock
                 label="Amount USDC"
                 value={amount}
@@ -503,6 +524,9 @@ function PolymarketFundingPanel({
 
               {wallet && !walletReady && (
                 <p className="px-1 text-xs text-red-500 dark:text-red-300">Enter a valid 0x funding wallet.</p>
+              )}
+              {mode === 'friends' && funder && !funderReady && (
+                <p className="px-1 text-xs text-red-500 dark:text-red-300">Enter the payer name.</p>
               )}
               {amount && !amountReady && (
                 <p className="px-1 text-xs text-red-500 dark:text-red-300">Enter an amount above 0 USDC.</p>
@@ -921,7 +945,7 @@ function SavedRequestCard({
   )
 }
 
-function buildPolymarketPayLink({ wallet, amount }: { wallet: string; amount: string }) {
+function buildPolymarketPayLink({ wallet, amount, funding }: { wallet: string; amount: string; funding?: string }) {
   const params = new URLSearchParams()
   params.set('a', amount)
   params.set('src', 't')
@@ -930,6 +954,7 @@ function buildPolymarketPayLink({ wallet, amount }: { wallet: string; amount: st
   params.set('m', 'Polymarket')
   params.set('brand', 'polymarket')
   params.set('pm', '1')
+  if (funding) params.set('funding', funding)
   return `${window.location.origin}/pay?${params.toString()}`
 }
 

@@ -103,6 +103,7 @@ function buildPayUrl(req: Request, record: Omit<TelegramRequestRecord, 'id' | 'p
   if (record.kind === 'polymarket-funding') {
     params.set('brand', 'polymarket')
     params.set('pm', '1')
+    params.set('funding', record.target)
   }
   if (record.mode === 'group') {
     params.set('v', '1')

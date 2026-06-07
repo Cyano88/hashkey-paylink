@@ -288,6 +288,7 @@ export default function PaymentPage() {
   const ngPosBackMerchantId = searchParams.get('merchant') ?? ''
   const ngPosBackUrl = ngPosBackMerchantId ? `/pos/ng?merchant_id=${encodeURIComponent(ngPosBackMerchantId)}` : '/'
   const isPolymarketFunding = searchParams.get('brand') === 'polymarket' || searchParams.get('pm') === '1'
+  const polymarketFundingLabel = (searchParams.get('funding') || searchParams.get('payer') || '').trim() || 'Self funding'
   const telegramUrl = telegramReturnUrl(searchParams)
 
   const resolvedStark  = starkParam || (legacyChain === 'starknet' ? evmParam : '')
@@ -2920,7 +2921,7 @@ export default function PaymentPage() {
               <Row label="Amount"    value={`${formatAmount(effectiveAmt, meta.decimals)} ${meta.asset}`} mono={false} />
               <Row label="Recipient" value={truncateAddress(activeRecipient, 8)} mono />
               <Row label="Network"   value={meta.label} mono={false} />
-              {memo && <Row label={isPolymarketFunding ? 'Funding' : 'For'} value={isPolymarketFunding ? <PolymarketMemoInline /> : memo} mono={false} />}
+              {memo && <Row label={isPolymarketFunding ? 'Funding' : 'For'} value={isPolymarketFunding ? polymarketFundingLabel : memo} mono={false} />}
               {txHash && (
                 <div className="flex items-center justify-between px-4 py-3">
                   <span className="text-sm text-gray-500">Tx Hash</span>
@@ -3170,7 +3171,7 @@ export default function PaymentPage() {
               {memo && (
                 <p className="mt-1 text-sm font-medium text-gray-500 dark:text-gray-300">
                   {isPolymarketFunding ? (
-                    <PolymarketMemoPill />
+                    polymarketFundingLabel
                   ) : (
                     <>For {memo}</>
                   )}
@@ -3180,7 +3181,7 @@ export default function PaymentPage() {
           )}
           {isFlex && memo && isPolymarketFunding && (
             <div className="mt-2.5 flex justify-center">
-              <PolymarketMemoPill />
+              <span className="text-sm font-medium text-gray-500 dark:text-gray-300">{polymarketFundingLabel}</span>
             </div>
           )}
 
