@@ -398,18 +398,6 @@ export default function AgentDemo() {
     window.setTimeout(() => setCopiedWallet(false), 1600)
   }
 
-  async function switchWalletEmail() {
-    setWalletMode('choose')
-    setWalletStep('idle')
-    setWalletOtp('')
-    setWalletError(null)
-    setWalletEmail('')
-    setWalletExpectedAddress('')
-    if (PRIVY_AUTH_ENABLED) {
-      await logoutPrivy()
-    }
-  }
-
   function buildAgentFundUrl() {
     const displayName = agentProfile?.name || agentSlug || 'Hash PayLink Agent'
     const fundingId = `agent-${agentSlug || 'hashpaylink'}-fund-${Date.now().toString(36)}`
@@ -535,16 +523,21 @@ export default function AgentDemo() {
     setWalletBusy(true)
     setWalletError(null)
     try {
-      const res = await fetch('/api/agent-wallet', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'disconnect',
-          agentSlug: agentSlug || 'hashpaylink-agent',
-        }),
-      })
-      const data = await res.json() as { ok?: boolean; error?: string }
-      if (!res.ok || !data.ok) throw new Error(data.error ?? 'Wallet disconnect failed')
+      if (currentAgentWallet || agentWalletSessionConnected) {
+        const res = await fetch('/api/agent-wallet', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'disconnect',
+            agentSlug: agentSlug || 'hashpaylink-agent',
+          }),
+        })
+        const data = await res.json() as { ok?: boolean; error?: string }
+        if (!res.ok || !data.ok) throw new Error(data.error ?? 'Wallet disconnect failed')
+      }
+      if (PRIVY_AUTH_ENABLED && privyAuthenticated) {
+        await logoutPrivy()
+      }
       setIgnoreUrlAgentWallet(true)
       setCurrentAgentWallet('')
       setAgentWalletChain('')
@@ -559,6 +552,8 @@ export default function AgentDemo() {
       setWalletStep('idle')
       setWalletOtp('')
       setWalletMode('choose')
+      setWalletEmail('')
+      setWalletExpectedAddress('')
     } catch (err) {
       setWalletError(err instanceof Error ? err.message : 'Wallet disconnect failed')
     } finally {
@@ -637,6 +632,7 @@ export default function AgentDemo() {
   const displayAgentProfile = agentProfile ?? (agentSlug === PLATFORM_AGENT_SLUG || !agentSlug ? PLATFORM_AGENT_PROFILE : null)
   const displayAgentName = displayAgentProfile?.name || agentSlug || 'Your agent wallet'
   const displayAgentPurpose = displayAgentProfile?.purpose || 'Connect a Circle agent wallet, fund treasury, and activate x402 from the dashboard.'
+  const showAgentDisconnect = Boolean(currentAgentWallet || agentWalletSessionConnected || (PRIVY_AUTH_ENABLED && privyAuthenticated))
   const walletErrorMessage = walletError
     ? /invalid or expired request id/i.test(walletError)
       ? 'OTP expired. Resend OTP and use the newest code.'
@@ -655,14 +651,14 @@ export default function AgentDemo() {
         <div
           className="relative rounded-xl border border-gray-100 bg-white p-4 shadow-card transition-all dark:border-white/10 dark:bg-[#111114]"
         >
-          {currentAgentWallet && (
+          {showAgentDisconnect && (
             <button
               type="button"
               onClick={disconnectAgentWallet}
               disabled={walletBusy}
-              aria-label="Disconnect agent wallet session"
-              title="Disconnect agent wallet session"
-              className="absolute right-4 top-[72px] inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-400 transition-all hover:border-red-200 hover:bg-red-50 hover:text-red-500 active:scale-95 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.06] dark:hover:border-red-400/30 dark:hover:bg-red-400/10 dark:hover:text-red-300"
+              aria-label="Disconnect agent wallet access"
+              title="Disconnect agent wallet access"
+              className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-100 text-zinc-900 transition-colors hover:bg-zinc-200 active:scale-95 disabled:opacity-60 dark:bg-white/10 dark:text-zinc-100 dark:hover:bg-white/15"
             >
               {walletBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <LogOut className="h-3.5 w-3.5" />}
             </button>
@@ -820,16 +816,6 @@ export default function AgentDemo() {
                         {PRIVY_AUTH_ENABLED ? privyEmail || 'Email session active' : 'Choose how to continue'}
                       </p>
                     </div>
-                    {PRIVY_AUTH_ENABLED && (
-                      <button
-                        type="button"
-                        onClick={switchWalletEmail}
-                        disabled={walletBusy}
-                        className="shrink-0 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300 dark:hover:bg-white/[0.1]"
-                      >
-                        Switch
-                      </button>
-                    )}
                   </div>
                   <div className="space-y-2">
                     <button
@@ -882,14 +868,6 @@ export default function AgentDemo() {
                               {privyEmail || 'Email session active'}
                             </p>
                           </div>
-                          <button
-                            type="button"
-                            onClick={switchWalletEmail}
-                            disabled={walletBusy}
-                            className="shrink-0 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300 dark:hover:bg-white/[0.1]"
-                          >
-                            Switch
-                          </button>
                         </div>
                       ) : (
                         <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.06]">
