@@ -143,7 +143,7 @@ export default function TelegramPaymentLinks() {
   const canSaveRequest = requestWalletReady && label.trim().length > 1 && requestFormTarget.length > 1 && !!requestMode
   const polymarketAmountNumber = Number(polymarketAmount)
   const polymarketWalletReady = /^0x[a-fA-F0-9]{40}$/.test(polymarketWallet.trim())
-  const polymarketBridgeMinimum = 2
+  const polymarketBridgeMinimum = 3
   const polymarketAmountReady = Number.isFinite(polymarketAmountNumber) && polymarketAmountNumber >= polymarketBridgeMinimum
   const polymarketFunderReady = polymarketMode !== 'friends' || polymarketFunder.trim().length > 1
   const canUsePolymarketFunding = polymarketWalletReady && polymarketAmountReady && polymarketFunderReady && !polymarketBridgeBusy
@@ -526,7 +526,7 @@ function PolymarketFundingPanel({
           </div>
           <h2 className="mt-2 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Fund Polymarket</h2>
           <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-            Add USDC to a Polymarket funding wallet, or share a funding request in Telegram.
+            Fund a Polymarket profile through the official bridge, or share a funding request in Telegram.
           </p>
         </div>
         {savedRequest && (
@@ -550,7 +550,7 @@ function PolymarketFundingPanel({
               <RequestModeButton
                 icon={Wallet}
                 title="Fund my account"
-                body="Pay directly into your Polymarket funding wallet."
+                body="Pay into your Polymarket profile through Bridge."
                 onClick={() => setMode('self')}
               />
               <RequestModeButton
@@ -576,11 +576,14 @@ function PolymarketFundingPanel({
               <NetworkChipGroup value={network} onChange={setNetwork} options={polymarketBridgeNetworks} />
 
               <InputBlock
-                label="Polymarket wallet"
+                label="Profile address"
                 value={wallet}
                 onChange={setWallet}
-                placeholder="0x... funding wallet"
+                placeholder="0x... profile address"
               />
+              <p className="px-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                Paste the 0x address from the profile/account panel. Do not paste a manual deposit address.
+              </p>
               {mode === 'friends' && (
                 <InputBlock
                   label="Payer"
@@ -597,7 +600,7 @@ function PolymarketFundingPanel({
               />
 
               {wallet && !walletReady && (
-                <p className="px-1 text-xs text-red-500 dark:text-red-300">Enter a valid 0x funding wallet.</p>
+                <p className="px-1 text-xs text-red-500 dark:text-red-300">Enter a valid 0x profile address.</p>
               )}
               {mode === 'friends' && funder && !funderReady && (
                 <p className="px-1 text-xs text-red-500 dark:text-red-300">Enter the payer name.</p>
@@ -989,7 +992,7 @@ function SavedRequestCard({
             </p>
             <p className="mt-1 flex items-center gap-1.5 truncate text-sm font-semibold text-gray-900 dark:text-white">
               {isPolymarket && <img src={POLYMARKET_LOGO} alt="" className="h-4 w-4 shrink-0 invert dark:invert-0" />}
-              <span className="truncate">{isPolymarket ? 'Funding wallet' : request.label}</span>
+              <span className="truncate">{isPolymarket ? 'Profile address' : request.label}</span>
             </p>
             <p className="mt-0.5 truncate text-xs text-gray-500 dark:text-gray-400">
               {isPolymarket

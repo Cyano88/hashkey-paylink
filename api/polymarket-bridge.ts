@@ -44,8 +44,8 @@ function addressTypeFor(network: BridgeNetwork): BridgeAddressType {
 }
 
 function minimumUsdcFor(network: BridgeNetwork) {
-  // Polymarket lists Base, Arbitrum, and Solana bridge minimums at $2.
-  return network === 'base' || network === 'arbitrum' || network === 'solana' ? 2 : 2
+  // Polymarket's live deposit UI currently shows a $3 minimum for USDC deposits.
+  return network === 'base' || network === 'arbitrum' || network === 'solana' ? 3 : 3
 }
 
 function isSolanaAddress(address: string) {
