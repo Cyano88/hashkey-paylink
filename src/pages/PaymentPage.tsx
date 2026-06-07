@@ -347,6 +347,9 @@ export default function PaymentPage() {
   const [txSyncTick,        setTxSyncTick]        = useState(0)
   const [circleEvmAcceptedPending, setCircleEvmAcceptedPending] = useState(false)
   const [polymarketFundingStep, setPolymarketFundingStep] = useState<'choose' | 'fund'>('choose')
+  const [polymarketBridgeStatus, setPolymarketBridgeStatus] = useState<'idle' | 'checking' | 'pending' | 'complete' | 'error'>('idle')
+  const [polymarketBridgeStatusText, setPolymarketBridgeStatusText] = useState('')
+  const [polymarketBridgeLatestTx, setPolymarketBridgeLatestTx] = useState('')
 
   // ── Event mode ─────────────────────────────────────────────────────────────
   // Capture event params from the INITIAL URL at mount — before the direct-send
@@ -713,6 +716,41 @@ export default function PaymentPage() {
     payMode === 'wallet' &&
     !manualPayDetected &&
     (showCircleEmailBridgePay || showCircleSolanaEmailBridgePay || showCirclePaymasterButton)
+
+  const refreshPolymarketBridgeStatus = useCallback(async () => {
+    if (!isPolymarketBridge || !activeRecipient) return
+    setPolymarketBridgeStatus('checking')
+    setPolymarketBridgeStatusText('Checking Polymarket Bridge status...')
+    try {
+      const response = await fetch('/api/polymarket-bridge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'status', depositAddress: activeRecipient }),
+      })
+      const data = await response.json().catch(() => ({})) as {
+        ok?: boolean
+        latest?: { status?: string; txHash?: string } | null
+        error?: string
+      }
+      if (!response.ok || !data.ok) throw new Error(data.error || 'Bridge status unavailable')
+      const latestStatus = String(data.latest?.status || '').toUpperCase()
+      setPolymarketBridgeLatestTx(data.latest?.txHash || '')
+      if (latestStatus === 'COMPLETED') {
+        setPolymarketBridgeStatus('complete')
+        setPolymarketBridgeStatusText('Bridge completed. Refresh Polymarket if the balance does not update immediately.')
+      } else if (latestStatus) {
+        setPolymarketBridgeStatus('pending')
+        setPolymarketBridgeStatusText(`Bridge ${latestStatus.toLowerCase()}. Polymarket credit can take a few minutes.`)
+      } else {
+        setPolymarketBridgeStatus('pending')
+        setPolymarketBridgeStatusText('Base transfer complete. Polymarket Bridge may take a few minutes to index it.')
+      }
+    } catch (err) {
+      setPolymarketBridgeStatus('error')
+      setPolymarketBridgeStatusText(readableErrorMsg(err, 'Bridge status unavailable. Keep the tx hash for support.'))
+    }
+  }, [activeRecipient, isPolymarketBridge])
+
   const showArbitrumRelayCost =
     chain === 'arbitrum' &&
     payMode === 'wallet' &&
@@ -2646,6 +2684,13 @@ export default function PaymentPage() {
                           ? 'Transaction reverted. The permit may have expired or your USDC balance was insufficient.'
                           : (evmSendError?.message ?? 'An unknown error occurred').slice(0, 140)
 
+  useEffect(() => {
+    if (!isConfirmed || !isPolymarketBridge) return
+    void refreshPolymarketBridgeStatus()
+    const timer = window.setTimeout(() => void refreshPolymarketBridgeStatus(), 15_000)
+    return () => window.clearTimeout(timer)
+  }, [isConfirmed, isPolymarketBridge, refreshPolymarketBridgeStatus])
+
   // ── Direct Send display address ───────────────────────────────────────────
   const directDisplayAddr = chain === 'starknet' ? starkDirectAddr : directVault
 
@@ -2948,6 +2993,62 @@ export default function PaymentPage() {
                 </div>
               )}
             </div>
+
+            {isPolymarketBridge && (
+              <div className={cn(
+                'rounded-xl border px-4 py-3',
+                polymarketBridgeStatus === 'complete'
+                  ? 'border-emerald-200 bg-emerald-50'
+                  : polymarketBridgeStatus === 'error'
+                  ? 'border-amber-200 bg-amber-50'
+                  : 'border-blue-200 bg-blue-50',
+              )}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className={cn(
+                      'text-xs font-semibold',
+                      polymarketBridgeStatus === 'complete'
+                        ? 'text-emerald-800'
+                        : polymarketBridgeStatus === 'error'
+                        ? 'text-amber-800'
+                        : 'text-blue-800',
+                    )}>
+                      {polymarketBridgeStatus === 'complete'
+                        ? 'Bridge completed'
+                        : polymarketBridgeStatus === 'checking'
+                        ? 'Checking bridge'
+                        : polymarketBridgeStatus === 'error'
+                        ? 'Bridge status unavailable'
+                        : 'Bridge processing'}
+                    </p>
+                    <p className={cn(
+                      'mt-1 text-xs leading-relaxed',
+                      polymarketBridgeStatus === 'complete'
+                        ? 'text-emerald-700'
+                        : polymarketBridgeStatus === 'error'
+                        ? 'text-amber-700'
+                        : 'text-blue-700',
+                    )}>
+                      {polymarketBridgeStatusText || 'Base transfer complete. Polymarket credit can take a few minutes.'}
+                    </p>
+                    {polymarketBridgeLatestTx && (
+                      <p className="mt-1 truncate font-mono text-[11px] text-gray-500">
+                        Bridge tx {truncateAddress(polymarketBridgeLatestTx, 8)}
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void refreshPolymarketBridgeStatus()}
+                    disabled={polymarketBridgeStatus === 'checking'}
+                    className="shrink-0 rounded-lg border border-white/70 bg-white/80 p-2 text-gray-500 shadow-sm transition-all hover:bg-white hover:text-gray-800 active:scale-95 disabled:opacity-60"
+                    aria-label="Refresh Polymarket Bridge status"
+                  >
+                    <RefreshCw className={cn('h-3.5 w-3.5', polymarketBridgeStatus === 'checking' && 'animate-spin')} />
+                  </button>
+                </div>
+              </div>
+            )}
 
             {primaryExplorerUrl && (
               <a href={primaryExplorerUrl} target="_blank" rel="noopener noreferrer"
