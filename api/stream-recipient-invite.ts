@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express'
 import crypto from 'node:crypto'
+import { sendTransactionalEmail } from './email-provider.js'
 
-const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY
 const FROM_EMAIL = process.env.STREAM_INVITE_FROM_EMAIL ?? process.env.ALERT_FROM_EMAIL
 const FROM_NAME = process.env.STREAM_INVITE_FROM_NAME ?? 'StreamPay'
 
@@ -31,24 +31,6 @@ function baseUrl(req: Request) {
   const proto = String(req.headers['x-forwarded-proto'] ?? req.protocol ?? 'https').split(',')[0]
   const host = String(req.headers['x-forwarded-host'] ?? req.headers.host ?? '').split(',')[0]
   return `${proto}://${host}`.replace(/\/+$/, '')
-}
-
-async function sendSendGridMail(payload: Record<string, unknown>) {
-  if (!SENDGRID_API_KEY || !FROM_EMAIL) {
-    throw new Error('StreamPay invite email is not configured. Set SENDGRID_API_KEY and STREAM_INVITE_FROM_EMAIL or ALERT_FROM_EMAIL.')
-  }
-  const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${SENDGRID_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(payload),
-  })
-  if (!response.ok) {
-    const body = await response.text().catch(() => '')
-    throw new Error(body ? `SendGrid rejected invite: ${body.slice(0, 180)}` : 'SendGrid rejected invite email.')
-  }
 }
 
 export default async function handler(req: Request, res: Response) {
@@ -86,14 +68,14 @@ export default async function handler(req: Request, res: Response) {
         </div>
       `
 
-      await sendSendGridMail({
-        personalizations: [{ to: [{ email }] }],
-        from: { email: FROM_EMAIL, name: FROM_NAME },
+      await sendTransactionalEmail({
+        to: email,
+        fromEmail: FROM_EMAIL,
+        fromName: FROM_NAME,
         subject,
-        content: [
-          { type: 'text/plain', value: text },
-          { type: 'text/html', value: html },
-        ],
+        text,
+        html,
+        context: 'invite',
       })
 
       return res.json({ ok: true, email, streamUrl })
@@ -131,14 +113,14 @@ export default async function handler(req: Request, res: Response) {
       </div>
     `
 
-    await sendSendGridMail({
-      personalizations: [{ to: [{ email }] }],
-      from: { email: FROM_EMAIL, name: FROM_NAME },
+    await sendTransactionalEmail({
+      to: email,
+      fromEmail: FROM_EMAIL,
+      fromName: FROM_NAME,
       subject,
-      content: [
-        { type: 'text/plain', value: text },
-        { type: 'text/html', value: html },
-      ],
+      text,
+      html,
+      context: 'invite',
     })
 
     return res.json({ ok: true, email, pendingId, setupUrl })

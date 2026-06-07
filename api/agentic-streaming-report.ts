@@ -7,8 +7,8 @@ import {
   type AgenticStreamingDelivery,
   type AgenticStreamingSubscription,
 } from './agentic-streaming-store.js'
+import { sendTransactionalEmail } from './email-provider.js'
 
-const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY
 const FROM_EMAIL = process.env.AGENTIC_STREAMING_FROM_EMAIL ?? process.env.STREAM_INVITE_FROM_EMAIL ?? process.env.ALERT_FROM_EMAIL
 const FROM_NAME = process.env.AGENTIC_STREAMING_FROM_NAME ?? 'Hash PayLink Agent'
 const REPORT_SECRET = String(process.env.AGENTIC_STREAMING_CRON_SECRET ?? process.env.CRON_SECRET ?? process.env.AGENT_WALLET_SERVICE_SECRET ?? '').trim()
@@ -118,28 +118,16 @@ function escapeHtml(value: string) {
 }
 
 async function sendReportEmail(subscription: AgenticStreamingSubscription, scout: Scout) {
-  if (!SENDGRID_API_KEY || !FROM_EMAIL) throw new Error('Email is not configured. Set SENDGRID_API_KEY and AGENTIC_STREAMING_FROM_EMAIL or ALERT_FROM_EMAIL.')
   const { text, html } = emailBody(subscription, scout)
-  const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${SENDGRID_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      personalizations: [{ to: [{ email: subscription.reportEmail }] }],
-      from: { email: FROM_EMAIL, name: FROM_NAME },
-      subject: `LP research report - ${new Date().toISOString().slice(0, 10)}`,
-      content: [
-        { type: 'text/plain', value: text },
-        { type: 'text/html', value: html },
-      ],
-    }),
+  await sendTransactionalEmail({
+    to: subscription.reportEmail,
+    fromEmail: FROM_EMAIL,
+    fromName: FROM_NAME,
+    subject: `LP research report - ${new Date().toISOString().slice(0, 10)}`,
+    text,
+    html,
+    context: 'report',
   })
-  if (!response.ok) {
-    const body = await response.text().catch(() => '')
-    throw new Error(body ? `SendGrid rejected report: ${body.slice(0, 180)}` : 'SendGrid rejected report email.')
-  }
 }
 
 function isDue(subscription: AgenticStreamingSubscription, now: number, force: boolean) {
