@@ -833,13 +833,18 @@ export default function AgentDemo() {
                 </>
               ) : walletMode === 'choose' ? (
                 <>
-                  <div className="rounded-lg border border-gray-200 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.06]">
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Signed in</p>
-                    <p className="mt-0.5 truncate text-sm font-medium text-gray-800 dark:text-gray-100">
-                      {PRIVY_AUTH_ENABLED ? privyEmail || 'Email session active' : 'Choose how to continue'}
-                    </p>
+                  <div className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.06]">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-200">
+                      <CheckCircle2 className="h-4 w-4" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Signed in</p>
+                      <p className="mt-0.5 truncate text-sm font-medium text-gray-800 dark:text-gray-100">
+                        {PRIVY_AUTH_ENABLED ? privyEmail || 'Email session active' : 'Choose how to continue'}
+                      </p>
+                    </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-2">
                     <button
                       type="button"
                       onClick={() => {
@@ -849,8 +854,9 @@ export default function AgentDemo() {
                         setWalletError(null)
                       }}
                       disabled={walletBusy}
-                      className="rounded-lg bg-black px-3 py-2.5 text-sm font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+                      className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
                     >
+                      <Wallet className="h-4 w-4" />
                       Set up wallet
                     </button>
                     <button
@@ -862,13 +868,14 @@ export default function AgentDemo() {
                         setWalletError(null)
                       }}
                       disabled={walletBusy}
-                      className="rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/[0.1]"
+                      className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-3 text-sm font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/[0.1]"
                     >
+                      <ExternalLink className="h-4 w-4" />
                       Connect existing
                     </button>
                   </div>
                   <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
-                    Circle agent wallet
+                    Circle agent wallet access
                   </p>
                 </>
               ) : (
@@ -876,13 +883,18 @@ export default function AgentDemo() {
                   {walletStep !== 'otp' && (
                     <>
                       {PRIVY_AUTH_ENABLED && privyAuthenticated ? (
-                        <div className="rounded-lg border border-gray-200 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.06]">
-                          <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">
-                            {walletMode === 'create' ? 'Set up wallet' : 'Connect existing'}
-                          </p>
-                          <p className="mt-0.5 truncate text-sm font-medium text-gray-800 dark:text-gray-100">
-                            {privyEmail || 'Email session active'}
-                          </p>
+                        <div className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.06]">
+                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-700 dark:bg-white/[0.08] dark:text-gray-200">
+                            <Wallet className="h-4 w-4" />
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+                              {walletMode === 'create' ? 'Set up Circle wallet' : 'Connect existing wallet'}
+                            </p>
+                            <p className="mt-0.5 truncate text-sm font-medium text-gray-800 dark:text-gray-100">
+                              {privyEmail || 'Email session active'}
+                            </p>
+                          </div>
                         </div>
                       ) : (
                         <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.06]">
@@ -919,10 +931,10 @@ export default function AgentDemo() {
                       >
                         {walletBusy && walletStep === 'idle'
                           ? <><Loader2 className="h-4 w-4 animate-spin" /> Opening Circle wallet</>
-                          : <><img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert mix-blend-screen" /> Continue</>}
+                          : <><img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert mix-blend-screen" /> {walletMode === 'create' ? 'Set up wallet' : 'Connect wallet'}</>}
                       </button>
                       <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
-                        Circle will email a login code.
+                        Circle will email a one-time code for this wallet session.
                       </p>
                     </>
                   )}
