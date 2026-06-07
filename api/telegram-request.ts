@@ -20,6 +20,7 @@ type TelegramRequestRecord = {
   network: TelegramRequestNetwork
   evmWallet?: string
   solanaWallet?: string
+  polymarketWallet?: string
   label: string
   amount: string
   target: string
@@ -154,8 +155,8 @@ export default async function handler(req: Request, res: Response) {
     }
     if (!label) return res.status(400).json({ ok: false, error: 'Missing request label' })
     if (kind === 'polymarket-funding') {
-      if (network !== 'base') {
-        return res.status(400).json({ ok: false, error: 'Polymarket funding requires a Base EVM funding wallet.' })
+      if (network === 'arc' || network === 'all') {
+        return res.status(400).json({ ok: false, error: 'Polymarket Bridge supports Base, Arbitrum, or Solana funding.' })
       }
     }
 
@@ -167,6 +168,7 @@ export default async function handler(req: Request, res: Response) {
       network,
       evmWallet: network === 'all' || isEvmNetwork(network) ? evmWallet || primaryWallet : '',
       solanaWallet: network === 'all' || network === 'solana' ? solanaWallet || primaryWallet : '',
+      polymarketWallet: cleanText(body.polymarketWallet, '').slice(0, 96),
       label,
       amount,
       target,

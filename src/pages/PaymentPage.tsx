@@ -288,6 +288,8 @@ export default function PaymentPage() {
   const ngPosBackMerchantId = searchParams.get('merchant') ?? ''
   const ngPosBackUrl = ngPosBackMerchantId ? `/pos/ng?merchant_id=${encodeURIComponent(ngPosBackMerchantId)}` : '/'
   const isPolymarketFunding = searchParams.get('brand') === 'polymarket' || searchParams.get('pm') === '1'
+  const isPolymarketBridge = isPolymarketFunding && searchParams.get('bridge') === 'polymarket'
+  const polymarketWalletParam = (searchParams.get('pmw') || '').trim()
   const polymarketFundingLabel = (searchParams.get('funding') || searchParams.get('payer') || '').trim() || 'Self funding'
   const telegramUrl = telegramReturnUrl(searchParams)
 
@@ -2874,6 +2876,7 @@ export default function PaymentPage() {
             </div>
             <h2 className="text-xl font-bold text-gray-900">
               {isUnder ? 'Underpayment Detected'
+               : isPolymarketBridge ? 'USDC Sent to Bridge'
                : isPolymarketFunding ? 'Funding Complete!'
                : 'Payment Sent!'}
             </h2>
@@ -2884,7 +2887,7 @@ export default function PaymentPage() {
                     {formatPaymentAmountDisplay(recipientAmt, meta.decimals)} {meta.asset}
                   </span>
                   {' '}
-                  {isUnder ? 'received - ' : isPolymarketFunding ? 'delivered to funding wallet' : 'received by recipient'}
+                  {isUnder ? 'received - ' : isPolymarketBridge ? 'sent to Polymarket Bridge' : isPolymarketFunding ? 'delivered to funding wallet' : 'received by recipient'}
                   {isUnder && (
                     <span className={cn(
                       'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold',
@@ -2906,7 +2909,9 @@ export default function PaymentPage() {
                   <span className="font-semibold text-gray-900">
                     {formatAmount(effectiveAmt, meta.decimals)} {meta.asset}
                   </span>{' '}
-                  {isPolymarketFunding
+                  {isPolymarketBridge
+                    ? 'sent to Polymarket Bridge'
+                    : isPolymarketFunding
                     ? 'delivered to funding wallet'
                     : manualPayDetected && directStatus !== 'success'
                     ? 'received by recipient'
@@ -2921,6 +2926,7 @@ export default function PaymentPage() {
               <Row label="Amount"    value={`${formatAmount(effectiveAmt, meta.decimals)} ${meta.asset}`} mono={false} />
               <Row label="Recipient" value={truncateAddress(activeRecipient, 8)} mono />
               <Row label="Network"   value={meta.label} mono={false} />
+              {isPolymarketBridge && polymarketWalletParam && <Row label="Polymarket" value={truncateAddress(polymarketWalletParam, 8)} mono />}
               {memo && <Row label={isPolymarketFunding ? 'Funding' : 'For'} value={isPolymarketFunding ? polymarketFundingLabel : memo} mono={false} />}
               {txHash && (
                 <div className="flex items-center justify-between px-4 py-3">

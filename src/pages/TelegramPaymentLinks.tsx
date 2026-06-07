@@ -77,6 +77,12 @@ const requestNetworks: Array<{ key: RequestNetwork; label: string; badge?: strin
   { key: 'all', label: 'All' },
 ]
 
+const polymarketBridgeNetworks: Array<{ key: RequestNetwork; label: string; badge?: string }> = [
+  { key: 'base', label: 'Base' },
+  { key: 'solana', label: 'Solana' },
+  { key: 'arbitrum', label: 'Arbitrum' },
+]
+
 const requestNetworkLabels: Record<RequestNetwork, string> = {
   base: 'Base',
   arc: 'Arc',
@@ -92,6 +98,7 @@ type SavedRequest = {
   network?: RequestNetwork
   evmWallet?: string
   solanaWallet?: string
+  polymarketWallet?: string
   label: string
   target: string
   amount: string
@@ -121,6 +128,9 @@ export default function TelegramPaymentLinks() {
   const [polymarketWallet, setPolymarketWallet] = useState('')
   const [polymarketAmount, setPolymarketAmount] = useState('')
   const [polymarketFunder, setPolymarketFunder] = useState('')
+  const [polymarketNetwork, setPolymarketNetwork] = useState<RequestNetwork>('base')
+  const [polymarketBridgeBusy, setPolymarketBridgeBusy] = useState(false)
+  const [polymarketBridgeError, setPolymarketBridgeError] = useState('')
   const telegramName = useMemo(
     () => displayTelegramName(searchParams.get('u') ?? searchParams.get('username'), 'there'),
     [searchParams],
@@ -133,9 +143,10 @@ export default function TelegramPaymentLinks() {
   const canSaveRequest = requestWalletReady && label.trim().length > 1 && requestFormTarget.length > 1 && !!requestMode
   const polymarketAmountNumber = Number(polymarketAmount)
   const polymarketWalletReady = /^0x[a-fA-F0-9]{40}$/.test(polymarketWallet.trim())
-  const polymarketAmountReady = Number.isFinite(polymarketAmountNumber) && polymarketAmountNumber > 0
+  const polymarketBridgeMinimum = 2
+  const polymarketAmountReady = Number.isFinite(polymarketAmountNumber) && polymarketAmountNumber >= polymarketBridgeMinimum
   const polymarketFunderReady = polymarketMode !== 'friends' || polymarketFunder.trim().length > 1
-  const canUsePolymarketFunding = polymarketWalletReady && polymarketAmountReady && polymarketFunderReady
+  const canUsePolymarketFunding = polymarketWalletReady && polymarketAmountReady && polymarketFunderReady && !polymarketBridgeBusy
 
   function openRequestService() {
     setActiveService('request-usdc')
@@ -194,21 +205,66 @@ export default function TelegramPaymentLinks() {
     setPolymarketMode('')
   }
 
-  function openPolymarketCheckout() {
+  async function preparePolymarketBridge(funding: string) {
     if (!canUsePolymarketFunding) return
-    window.location.href = buildPolymarketPayLink({
-      wallet: polymarketWallet.trim(),
-      amount: polymarketAmount.trim(),
-      funding: 'Self funding',
-    })
+    setPolymarketBridgeBusy(true)
+    setPolymarketBridgeError('')
+    try {
+      const response = await fetch('/api/polymarket-bridge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          polymarketWallet: polymarketWallet.trim(),
+          network: polymarketNetwork,
+        }),
+      })
+      const data = await response.json() as {
+        ok?: boolean
+        network?: RequestNetwork
+        depositAddress?: string
+        addressType?: 'evm' | 'svm'
+        minimumUsdc?: number
+        error?: string
+      }
+      if (!response.ok || !data.ok || !data.depositAddress || !data.network) {
+        throw new Error(data.error || 'Could not prepare Polymarket bridge address.')
+      }
+      return {
+        network: data.network,
+        depositAddress: data.depositAddress,
+        payUrl: buildPolymarketPayLink({
+          wallet: data.depositAddress,
+          amount: polymarketAmount.trim(),
+          funding,
+          network: data.network,
+          polymarketWallet: polymarketWallet.trim(),
+        }),
+      }
+    } catch (err) {
+      setPolymarketBridgeError(err instanceof Error ? err.message : 'Could not prepare Polymarket bridge address.')
+      return null
+    } finally {
+      setPolymarketBridgeBusy(false)
+    }
   }
 
-  function savePolymarketRequest() {
-    if (!canUsePolymarketFunding) return
+  async function openPolymarketCheckout() {
+    const bridge = await preparePolymarketBridge('Self funding')
+    if (!bridge) return
+    window.location.href = bridge.payUrl
+  }
+
+  async function savePolymarketRequest() {
+    const bridge = await preparePolymarketBridge(polymarketFunder.trim())
+    if (!bridge) return
     setSavedPolymarketRequest({
       kind: 'polymarket-funding',
       mode: 'person',
-      wallet: polymarketWallet.trim(),
+      network: bridge.network,
+      wallet: bridge.depositAddress,
+      evmWallet: bridge.network === 'solana' ? '' : bridge.depositAddress,
+      solanaWallet: bridge.network === 'solana' ? bridge.depositAddress : '',
+      polymarketWallet: polymarketWallet.trim(),
       label: 'Polymarket',
       target: polymarketFunder.trim(),
       amount: polymarketAmount.trim(),
@@ -325,6 +381,7 @@ export default function TelegramPaymentLinks() {
           ) : activeService === 'fund-polymarket' ? (
             <PolymarketFundingPanel
               mode={polymarketMode}
+              network={polymarketNetwork}
               wallet={polymarketWallet}
               amount={polymarketAmount}
               funder={polymarketFunder}
@@ -333,7 +390,11 @@ export default function TelegramPaymentLinks() {
               amountReady={polymarketAmountReady}
               walletReady={polymarketWalletReady}
               funderReady={polymarketFunderReady}
+              minimumAmount={polymarketBridgeMinimum}
+              busy={polymarketBridgeBusy}
+              error={polymarketBridgeError}
               setMode={setPolymarketMode}
+              setNetwork={setPolymarketNetwork}
               setWallet={setPolymarketWallet}
               setAmount={setPolymarketAmount}
               setFunder={setPolymarketFunder}
@@ -346,7 +407,8 @@ export default function TelegramPaymentLinks() {
               onSaveRequest={savePolymarketRequest}
               onEditSaved={() => {
                 if (!savedPolymarketRequest) return
-                setPolymarketWallet(savedPolymarketRequest.wallet)
+                setPolymarketWallet(savedPolymarketRequest.polymarketWallet ?? savedPolymarketRequest.wallet)
+                setPolymarketNetwork(savedPolymarketRequest.network ?? 'base')
                 setPolymarketAmount(savedPolymarketRequest.amount)
                 setPolymarketFunder(savedPolymarketRequest.target)
                 setPolymarketMode('friends')
@@ -397,6 +459,7 @@ export default function TelegramPaymentLinks() {
 
 function PolymarketFundingPanel({
   mode,
+  network,
   wallet,
   amount,
   funder,
@@ -405,7 +468,11 @@ function PolymarketFundingPanel({
   amountReady,
   walletReady,
   funderReady,
+  minimumAmount,
+  busy,
+  error,
   setMode,
+  setNetwork,
   setWallet,
   setAmount,
   setFunder,
@@ -416,6 +483,7 @@ function PolymarketFundingPanel({
   onEditSaved,
 }: {
   mode: PolymarketMode
+  network: RequestNetwork
   wallet: string
   amount: string
   funder: string
@@ -424,7 +492,11 @@ function PolymarketFundingPanel({
   amountReady: boolean
   walletReady: boolean
   funderReady: boolean
+  minimumAmount: number
+  busy: boolean
+  error: string
   setMode: (mode: PolymarketMode) => void
+  setNetwork: (network: RequestNetwork) => void
   setWallet: (value: string) => void
   setAmount: (value: string) => void
   setFunder: (value: string) => void
@@ -494,12 +566,14 @@ function PolymarketFundingPanel({
             <div className="mt-4 space-y-3">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">
-                  {mode === 'self' ? 'Direct checkout' : 'Telegram request'}
+                  {mode === 'self' ? 'Bridge checkout' : 'Bridge request'}
                 </p>
                 <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-white">
-                  {mode === 'self' ? 'Pay into your Polymarket wallet' : 'Share a Polymarket funding card'}
+                  {mode === 'self' ? 'Fund through Polymarket Bridge' : 'Share a bridge-backed funding card'}
                 </p>
               </div>
+
+              <NetworkChipGroup value={network} onChange={setNetwork} options={polymarketBridgeNetworks} />
 
               <InputBlock
                 label="Polymarket wallet"
@@ -529,8 +603,9 @@ function PolymarketFundingPanel({
                 <p className="px-1 text-xs text-red-500 dark:text-red-300">Enter the payer name.</p>
               )}
               {amount && !amountReady && (
-                <p className="px-1 text-xs text-red-500 dark:text-red-300">Enter an amount above 0 USDC.</p>
+                <p className="px-1 text-xs text-red-500 dark:text-red-300">Minimum bridge amount is {minimumAmount} USDC.</p>
               )}
+              {error && <p className="px-1 text-xs text-red-500 dark:text-red-300">{error}</p>}
 
               <button
                 type="button"
@@ -539,7 +614,7 @@ function PolymarketFundingPanel({
                 className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
               >
                 <Send className="h-4 w-4" />
-                {mode === 'self' ? 'Continue to checkout' : 'Save funding request'}
+                {busy ? 'Preparing bridge...' : mode === 'self' ? 'Continue to checkout' : 'Save funding request'}
               </button>
             </div>
           )}
@@ -776,15 +851,17 @@ function RequestModeButton({
 function NetworkChipGroup({
   value,
   onChange,
+  options = requestNetworks,
 }: {
   value: RequestNetwork
   onChange: (value: RequestNetwork) => void
+  options?: Array<{ key: RequestNetwork; label: string; badge?: string }>
 }) {
   return (
     <div className="rounded-xl border border-gray-100 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.05]">
       <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Network</p>
       <div className="mt-2 flex gap-1.5 overflow-x-auto pb-0.5">
-        {requestNetworks.map(network => (
+        {options.map(network => (
           <button
             key={network.key}
             type="button"
@@ -916,7 +993,7 @@ function SavedRequestCard({
             </p>
             <p className="mt-0.5 truncate text-xs text-gray-500 dark:text-gray-400">
               {isPolymarket
-                ? `${shortAddress(request.wallet)} - ${amountLine}`
+                ? `${shortAddress(request.polymarketWallet ?? request.wallet)} - ${amountLine}`
                 : `${networkLabel} - ${request.target} ${request.amount ? `- ${request.amount} USDC` : '- flexible amount'}`}
             </p>
           </div>
@@ -945,15 +1022,30 @@ function SavedRequestCard({
   )
 }
 
-function buildPolymarketPayLink({ wallet, amount, funding }: { wallet: string; amount: string; funding?: string }) {
+function buildPolymarketPayLink({
+  wallet,
+  amount,
+  funding,
+  network,
+  polymarketWallet,
+}: {
+  wallet: string
+  amount: string
+  funding?: string
+  network: RequestNetwork
+  polymarketWallet: string
+}) {
   const params = new URLSearchParams()
   params.set('a', amount)
   params.set('src', 't')
-  params.set('n', 'base')
-  params.set('e', wallet)
+  params.set('n', network)
+  if (network === 'solana') params.set('s', wallet)
+  else params.set('e', wallet)
   params.set('m', 'Polymarket')
   params.set('brand', 'polymarket')
   params.set('pm', '1')
+  params.set('bridge', 'polymarket')
+  params.set('pmw', polymarketWallet)
   if (funding) params.set('funding', funding)
   return `${window.location.origin}/pay?${params.toString()}`
 }
