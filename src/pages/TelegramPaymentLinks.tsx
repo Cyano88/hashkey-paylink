@@ -361,7 +361,8 @@ export default function TelegramPaymentLinks() {
     [searchParams],
   )
   const telegramIdentity = useMemo(() => telegramOwnerFromContext(searchParams, telegramName), [searchParams, telegramName])
-  const agentOwner = telegramIdentity.owner
+  const agentOwner = telegramIdentity.isStable ? telegramIdentity.owner : ''
+  const needsTelegramIdentity = activeSection === 'agent-wallets' && !telegramIdentity.isStable
 
   const requestFormTarget = target.trim()
   const requestWalletReady = requestNetwork === 'all'
@@ -376,6 +377,11 @@ export default function TelegramPaymentLinks() {
   const canUsePolymarketFunding = polymarketWalletReady && polymarketAmountReady && polymarketFunderReady && !polymarketBridgeBusy
 
   async function loadAgentProfiles() {
+    if (!agentOwner) {
+      setAgentProfiles([])
+      setAgentProfilesError('')
+      return
+    }
     setAgentProfilesError('')
     try {
       const profileParams = new URLSearchParams({ owner: agentOwner })
@@ -391,7 +397,7 @@ export default function TelegramPaymentLinks() {
 
   useEffect(() => {
     if (activeSection === 'agent-wallets') void loadAgentProfiles()
-  }, [activeSection, agentOwner]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeSection, agentOwner, telegramIdentity.legacyOwner]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function openRequestService() {
     setActiveService('request-usdc')
@@ -628,7 +634,9 @@ export default function TelegramPaymentLinks() {
             ))}
           </div>
 
-          {activeService === 'request-usdc' ? (
+          {needsTelegramIdentity ? (
+            <ConnectTelegramPanel onBack={() => setActiveSection('payment-links')} />
+          ) : activeService === 'request-usdc' ? (
             <RequestUsdcPanel
               requestMode={requestMode}
               savedRequest={savedRequest}
@@ -780,6 +788,42 @@ function TelegramServiceCard({
       </span>
       {service.active ? <ArrowRight className="h-4 w-4 text-gray-400" /> : <CheckCircle2 className="h-4 w-4 text-gray-300" />}
     </button>
+  )
+}
+
+function ConnectTelegramPanel({ onBack }: { onBack: () => void }) {
+  return (
+    <div className="mt-4 space-y-3">
+      <button
+        type="button"
+        onClick={onBack}
+        className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-400 transition-colors hover:text-gray-700 dark:hover:text-gray-200"
+      >
+        <ArrowLeft className="h-3.5 w-3.5" />
+        Payment Links
+      </button>
+
+      <div className="rounded-xl border border-gray-100 bg-white p-4 dark:border-white/10 dark:bg-white/[0.03]">
+        <div className="flex items-start gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-gray-800 dark:bg-white/[0.08] dark:text-gray-100">
+            <MessageCircle className="h-5 w-5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-base font-semibold text-gray-900 dark:text-white">Connect Telegram to continue</p>
+            <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
+              Open Hash PayLink from Telegram to load your saved agents, helper access, and funding tools.
+            </p>
+          </div>
+        </div>
+        <a
+          href={TELEGRAM_BOT_URL}
+          className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+        >
+          <MessageCircle className="h-4 w-4" />
+          Open in Telegram
+        </a>
+      </div>
+    </div>
   )
 }
 
