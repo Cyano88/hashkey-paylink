@@ -8,6 +8,8 @@ const STORE_PATH = process.env.AGENT_PROFILE_STORE
 const UPSTASH_REST_URL = (process.env.UPSTASH_REDIS_REST_URL ?? '').trim().replace(/\/+$/, '')
 const UPSTASH_REST_TOKEN = (process.env.UPSTASH_REDIS_REST_TOKEN ?? '').trim()
 const UPSTASH_STORE_KEY = (process.env.AGENT_PROFILE_STORE_KEY ?? 'hashpaylink:agent-profiles').trim()
+const PLATFORM_AGENT_SLUG = (process.env.DEFAULT_AGENT_SLUG ?? '').trim().toLowerCase() || 'hashpaylink-agent'
+const PLATFORM_AGENT_WALLET_ADDRESS = (process.env.DEFAULT_AGENT_WALLET_ADDRESS ?? '').trim()
 
 export type AgentProfile = {
   slug: string
@@ -31,6 +33,18 @@ function publicAgent(agent: AgentProfile) {
     walletAddress: agent.walletAddress,
     createdAt: agent.createdAt,
     updatedAt: agent.updatedAt,
+  }
+}
+
+function platformAgentProfile(): AgentProfile {
+  return {
+    slug: PLATFORM_AGENT_SLUG,
+    name: 'Hash PayLink Agent',
+    purpose: 'Owner-managed platform agent for treasury, x402, LP Scout, and StreamPay services.',
+    ownerKey: 'platform',
+    walletAddress: PLATFORM_AGENT_WALLET_ADDRESS || undefined,
+    createdAt: 0,
+    updatedAt: 0,
   }
 }
 
@@ -111,14 +125,19 @@ export async function setAgentProfileWallet(slug: string, walletAddress: string)
 
 export default async function handler(req: Request, res: Response) {
   if (req.method === 'GET') {
-    const store = await readStore()
     const slug = cleanString(req.query.slug ?? req.query.agent, 80)
     if (slug) {
+      if (slug.toLowerCase() === PLATFORM_AGENT_SLUG) {
+        return res.json({ ok: true, agent: publicAgent(platformAgentProfile()) })
+      }
+
+      const store = await readStore()
       const agent = store.agents[slug]
       if (!agent) return res.status(404).json({ ok: false, error: 'Agent profile not found.' })
       return res.json({ ok: true, agent: publicAgent(agent) })
     }
 
+    const store = await readStore()
     const key = ownerKey(req.query.owner)
     if (!key) return res.status(400).json({ ok: false, error: 'Missing owner.' })
     return res.json({ ok: true, agents: visibleAgents(store, key) })
