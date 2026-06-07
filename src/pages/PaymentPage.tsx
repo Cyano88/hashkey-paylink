@@ -358,6 +358,7 @@ export default function PaymentPage() {
   const isEventMode      = hasPaylinkFlag(initParams, 'event', 'v')
   const eventId          = initParams.get('id') ?? ''
   const agentUrl         = getPaylinkParam(initParams, 'agent', 'g')
+  const autoAccessRedirect = getPaylinkParam(initParams, 'ad', 'autoRedirect') === '1'
   const agentFundingSlug = getPaylinkParam(initParams, 'agentSlug', 'agent')
   const isAgentFunding   = getPaylinkParam(initParams, 'src', 'src') === 'agent' && !!agentFundingSlug
   const isNgPosPayment   = getPaylinkParam(initParams, 'src', 'src') === 'ngpos'
@@ -367,9 +368,10 @@ export default function PaymentPage() {
   const ngPosAmountNgn   = (initParams.get('ngn') ?? '').trim()
   const smartWalletOnlyFunding = isPolymarketFunding || isAgentFunding
   const isMainHashPaylinkPayment = !isTelegramSource && !smartWalletOnlyFunding
-  const [attendeeName,   setAttendeeName]   = useState('')
+  const [attendeeName,   setAttendeeName]   = useState(() => initParams.get('payer') ?? '')
   const [eventRegStatus, setEventRegStatus] = useState<'idle' | 'pending' | 'ok' | 'error'>('idle')
   const eventRegistered  = useRef(false)
+  const accessRedirected = useRef(false)
   const ngPosRegistered  = useRef(false)
   const requiresAttendeeName = (isEventMode || isNgPosPayment) && !isPolymarketFunding && !isAgentFunding
 
@@ -2837,6 +2839,28 @@ export default function PaymentPage() {
   }, [solanaDirectStatus, attendeeName])
 
   // ── openConnectModal unused lint suppression ──────────────────────────────
+  useEffect(() => {
+    if (!autoAccessRedirect || accessRedirected.current || !isEventMode || !agentUrl || eventRegStatus !== 'ok') return
+    const payerName = isAgentFunding ? (memo || 'Agent wallet funding') : attendeeName.trim()
+    if (!eventId || (!payerName && !isAgentFunding)) return
+    accessRedirected.current = true
+    const timer = window.setTimeout(() => {
+      try {
+        const next = new URL(agentUrl, window.location.origin)
+        next.searchParams.set('eventId', eventId)
+        if (payerName) next.searchParams.set('payer', payerName)
+        if (isAgentFunding) {
+          if (!next.searchParams.get('funding')) next.searchParams.set('funding', 'submitted')
+          next.searchParams.set('agentFunding', '1')
+        }
+        window.location.assign(next.toString())
+      } catch {
+        accessRedirected.current = false
+      }
+    }, 900)
+    return () => window.clearTimeout(timer)
+  }, [autoAccessRedirect, isEventMode, agentUrl, eventRegStatus, eventId, attendeeName, isAgentFunding, memo])
+
   void openConnectModal
 
   // ────────────────────────────────────────────────────────────────────────────

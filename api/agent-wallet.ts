@@ -5,6 +5,7 @@ import { dirname, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import crypto from 'node:crypto'
 import { appendAgentActivity, listAgentActivity } from './agent-activity.js'
+import { setAgentProfileWallet } from './agent-profile.js'
 import { getAgentGovernanceProfile, getAgentLegalProfile } from './agent-legal.js'
 
 const execFileAsync = promisify(execFile)
@@ -515,6 +516,7 @@ export default async function handler(req: Request, res: Response) {
         [agentSlug]: { walletAddress, chain, emailHash: pending.emailHash, sessionId: id, updatedAt: Date.now(), source: 'store' },
       }
       await writeStore(store)
+      await setAgentProfileWallet(agentSlug, walletAddress)
       await appendAgentActivity({
         agentSlug,
         type: 'wallet_connected',
@@ -543,6 +545,7 @@ export default async function handler(req: Request, res: Response) {
       }
       delete store.agents[agentSlug]
       await writeStore(store)
+      await setAgentProfileWallet(agentSlug, '')
       return res.json({ ok: true, disconnected: true, forgotten: true, agentSlug })
     }
 

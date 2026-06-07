@@ -64,6 +64,18 @@ services:
         sync: false                   # Upstash Redis REST token
       - key: CIRCLE_RECIPIENT_WALLET_KEY_PREFIX
         value: "circle-recipient-wallet"
+      - key: RESEND_API_KEY
+        sync: false                   # Resend API key for Hash PayLink transactional emails
+      - key: STREAM_INVITE_FROM_EMAIL
+        value: "no-reply@mail.hashpaylink.com"
+      - key: STREAM_INVITE_FROM_NAME
+        value: "StreamPay"
+      - key: AGENTIC_STREAMING_FROM_EMAIL
+        value: "no-reply@mail.hashpaylink.com"
+      - key: AGENTIC_STREAMING_FROM_NAME
+        value: "Hash PayLink Agent"
+      - key: ALERT_FROM_EMAIL
+        value: "no-reply@mail.hashpaylink.com"
 
       # ── V2 relayer (api/relay-v2.ts) ──────────────────────────────────────
       - key: PAYLINK_FACTORY_V2

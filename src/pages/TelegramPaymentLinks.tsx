@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
   ArrowLeft,
@@ -9,16 +9,20 @@ import {
   Coins,
   ExternalLink,
   LineChart,
+  Loader2,
   MessageCircle,
   Pencil,
   Radio,
   Send,
+  ShieldCheck,
   Sparkles,
   UserRound,
   UsersRound,
   Wallet,
+  Zap,
 } from 'lucide-react'
 import { cn } from '../lib/utils'
+import { EVM_TREASURY } from '../lib/chains'
 
 const TELEGRAM_BOT_URL = import.meta.env.VITE_TELEGRAM_AGENT_URL || 'https://t.me/HashPayLinkBot'
 const PUBLIC_PAYLINK_ORIGIN = (import.meta.env.VITE_PUBLIC_PAYLINK_ORIGIN || 'https://hashpaylink.com').replace(/\/+$/, '')
@@ -35,35 +39,142 @@ function shortAddress(value: string) {
   return value.length > 14 ? `${value.slice(0, 6)}...${value.slice(-4)}` : value
 }
 
-const paymentLinkServices = [
-  {
-    title: 'Request USDC',
-    body: 'Request one payer or collect from a group.',
-    icon: Coins,
-    status: 'Open',
-    active: true,
-  },
-  {
-    title: 'Fund Polymarket',
-    body: 'Fund your account or share a funding request.',
-    icon: Building2,
-    status: 'Open',
-    active: true,
-  },
-  {
-    title: 'Fund Agent Wallet',
-    body: 'Fund a Circle CLI agent wallet.',
-    icon: Wallet,
-    status: 'Soon',
-    active: false,
-  },
-]
+type TelegramSectionId = 'payment-links' | 'agent-wallets' | 'market-tools' | 'streampay'
+type TelegramServiceId =
+  | 'request-usdc'
+  | 'fund-polymarket'
+  | 'hashpaylink-agent'
+  | 'create-your-agent'
+  | 'hashpaylink-helper'
+  | 'agent-marketplace'
+  | 'fund-agent-wallet'
+  | 'lp-scout'
+  | 'agentic-lp-research'
+  | 'create-streampay'
+  | 'agentic-streampay'
 
-const telegramSections = [
-  { id: 'payment-links', title: 'Payment Links', icon: Coins, active: true },
-  { id: 'agent-wallets', title: 'Agent Wallets', icon: Bot, active: false },
-  { id: 'market-tools', title: 'Market Tools', icon: LineChart, active: false },
-  { id: 'streampay', title: 'StreamPay', icon: Radio, active: false },
+type TelegramService = {
+  id: TelegramServiceId
+  title: string
+  body: string
+  icon: typeof Coins
+  status: 'Open' | 'Soon' | 'Next' | '1 USDC'
+  active: boolean
+  brand?: 'polymarket'
+}
+
+const sectionServices: Record<TelegramSectionId, TelegramService[]> = {
+  'payment-links': [
+    {
+      id: 'request-usdc',
+      title: 'Request USDC',
+      body: 'Request one payer or collect from a group.',
+      icon: Coins,
+      status: 'Open',
+      active: true,
+    },
+  ],
+  'agent-wallets': [
+    {
+      id: 'hashpaylink-agent',
+      title: 'Hash PayLink Agent',
+      body: 'Owner-managed platform agent for treasury, x402, LP Scout, and StreamPay services.',
+      icon: Bot,
+      status: 'Open',
+      active: true,
+    },
+    {
+      id: 'create-your-agent',
+      title: 'Create Your Agent',
+      body: 'Name, purpose, Circle email login, wallet setup, and reusable agent profile.',
+      icon: Wallet,
+      status: 'Open',
+      active: true,
+    },
+    {
+      id: 'hashpaylink-helper',
+      title: 'Hash PayLink Helper',
+      body: 'Paid AI helper with 0G proof now; personal memory comes next.',
+      icon: Sparkles,
+      status: '1 USDC',
+      active: true,
+    },
+    {
+      id: 'fund-agent-wallet',
+      title: 'Fund Agent Wallet',
+      body: 'Add USDC to the agent wallet. Activate x402 from the agent dashboard.',
+      icon: Wallet,
+      status: 'Open',
+      active: true,
+    },
+    {
+      id: 'agent-marketplace',
+      title: 'Agent Marketplace',
+      body: 'Discover public agents, paid services, and agent-to-agent workflows.',
+      icon: Radio,
+      status: 'Soon',
+      active: false,
+    },
+  ],
+  'market-tools': [
+    {
+      id: 'fund-polymarket',
+      title: 'Fund Polymarket',
+      body: 'Fund your account or share a funding request.',
+      icon: Building2,
+      status: 'Open',
+      active: true,
+      brand: 'polymarket',
+    },
+    {
+      id: 'lp-scout',
+      title: 'LP Scout',
+      body: 'Launch paid Polymarket LP research from Telegram.',
+      icon: LineChart,
+      status: 'Soon',
+      active: false,
+    },
+    {
+      id: 'agentic-lp-research',
+      title: 'Agentic LP Research',
+      body: 'Daily Polymarket reports delivered by email.',
+      icon: Sparkles,
+      status: 'Soon',
+      active: false,
+    },
+  ],
+  streampay: [
+    {
+      id: 'create-streampay',
+      title: 'Create StreamPay',
+      body: 'Open Arc USDC streaming from Telegram.',
+      icon: Radio,
+      status: 'Open',
+      active: true,
+    },
+    {
+      id: 'agentic-streampay',
+      title: 'Agentic StreamPay',
+      body: 'Stream USDC for ongoing agent work.',
+      icon: Sparkles,
+      status: 'Soon',
+      active: false,
+    },
+  ],
+}
+
+const sectionDescriptions: Record<TelegramSectionId, string> = {
+  'payment-links': 'Create normal USDC requests and share them into Telegram.',
+  'agent-wallets': 'Manage agent wallets, balances, paid helpers, and x402 prep.',
+  'market-tools': 'Launch Polymarket funding and market intelligence workflows.',
+  streampay: 'Launch Arc StreamPay retainers and recipient workflows.',
+}
+
+const telegramSections: Array<{ id: TelegramSectionId; title: string; icon: typeof Coins }> = [
+  { id: 'payment-links', title: 'Payment Links', icon: Coins },
+  { id: 'agent-wallets', title: 'Agent Wallets', icon: Bot },
+  { id: 'market-tools', title: 'Polymarket Tools', icon: LineChart },
+  { id: 'streampay', title: 'StreamPay', icon: Radio },
 ]
 
 type RequestMode = 'person' | 'group'
@@ -106,14 +217,91 @@ type SavedRequest = {
 
 type PolymarketMode = 'self' | 'friends' | ''
 
+type HelperVerifyResult = {
+  verified: boolean
+  payment?: { payer: string; chain: string; amount: string; ts: number }
+  proof?: { ogTxHash: string; ogExplorer: string; network: string }
+  error?: string
+}
+
+type HelperMessage = {
+  question: string
+  answer: string
+  proof: { ogTxHash: string; ogExplorer: string }
+}
+
+type HelperProfile = {
+  id: string
+  payer: string
+  displayName: string
+  telegramHandle?: string
+  accessEventId?: string
+  preferences?: string[]
+  memorySummary?: string
+  memoryProof?: {
+    rootHash: string
+    ogTxHash: string
+    ogExplorer: string
+    archivedAt: number
+  }
+}
+
+type AgentProfile = {
+  slug: string
+  name: string
+  purpose: string
+  walletAddress?: string
+  createdAt: number
+  updatedAt: number
+}
+
+function shortAgentWallet(value?: string) {
+  if (!value) return ''
+  return value.length > 14 ? `${value.slice(0, 6)}...${value.slice(-4)}` : value
+}
+
+function agentWalletStatus(agent: AgentProfile, ready = false) {
+  if (!agent.walletAddress) {
+    return {
+      label: 'No wallet',
+      detail: 'Connect Circle wallet',
+      className: 'bg-gray-100 text-gray-500 dark:bg-white/[0.08] dark:text-gray-400',
+    }
+  }
+  return {
+    label: ready ? 'Ready to fund' : 'Wallet connected',
+    detail: shortAgentWallet(agent.walletAddress),
+    className: ready
+      ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-400/10 dark:text-emerald-300'
+      : 'bg-blue-50 text-blue-600 dark:bg-blue-400/10 dark:text-blue-300',
+  }
+}
+
 export default function TelegramPaymentLinks() {
   const [searchParams] = useSearchParams()
   const initialMode: RequestMode | '' = searchParams.get('mode') === 'group' ? 'group' : searchParams.get('mode') === 'person' ? 'person' : ''
+  const initialSectionParam = searchParams.get('section')
+  const initialSection: TelegramSectionId =
+    initialSectionParam === 'agent-wallets' || initialSectionParam === 'market-tools' || initialSectionParam === 'streampay'
+      ? initialSectionParam
+      : 'payment-links'
+  const initialServiceParam = searchParams.get('service')
+  const initialService: TelegramServiceId | '' =
+    initialServiceParam === 'hashpaylink-helper'
+      ? 'hashpaylink-helper'
+      : initialServiceParam === 'create-your-agent'
+      ? 'create-your-agent'
+      : initialServiceParam === 'fund-agent-wallet'
+      ? 'fund-agent-wallet'
+      : initialMode
+      ? 'request-usdc'
+      : ''
+  const initialAgentService = initialService === 'hashpaylink-helper' || initialService === 'create-your-agent' || initialService === 'fund-agent-wallet'
   const initialPersonTarget = displayTelegramName(searchParams.get('target') ?? searchParams.get('payer') ?? searchParams.get('p'), '')
   const initialGroupTarget = displayTelegramName(searchParams.get('target') ?? searchParams.get('group') ?? searchParams.get('g') ?? searchParams.get('chat'), '')
   const [opened, setOpened] = useState(searchParams.get('open') === '1')
-  const [activeSection] = useState('payment-links')
-  const [activeService, setActiveService] = useState(initialMode ? 'request-usdc' : '')
+  const [activeSection, setActiveSection] = useState<TelegramSectionId>(initialAgentService ? 'agent-wallets' : initialSection)
+  const [activeService, setActiveService] = useState<TelegramServiceId | ''>(initialService)
   const [requestMode, setRequestMode] = useState<RequestMode | ''>(initialMode)
   const [savedRequest, setSavedRequest] = useState<SavedRequest | null>(null)
   const [polymarketMode, setPolymarketMode] = useState<PolymarketMode>('')
@@ -131,10 +319,13 @@ export default function TelegramPaymentLinks() {
   const [polymarketNetwork, setPolymarketNetwork] = useState<RequestNetwork>('base')
   const [polymarketBridgeBusy, setPolymarketBridgeBusy] = useState(false)
   const [polymarketBridgeError, setPolymarketBridgeError] = useState('')
+  const [agentProfiles, setAgentProfiles] = useState<AgentProfile[]>([])
+  const [agentProfilesError, setAgentProfilesError] = useState('')
   const telegramName = useMemo(
     () => displayTelegramName(searchParams.get('u') ?? searchParams.get('username'), 'there'),
     [searchParams],
   )
+  const agentOwner = telegramName === 'there' ? 'telegram-user' : telegramName
 
   const requestFormTarget = target.trim()
   const requestWalletReady = requestNetwork === 'all'
@@ -147,6 +338,22 @@ export default function TelegramPaymentLinks() {
   const polymarketAmountReady = Number.isFinite(polymarketAmountNumber) && polymarketAmountNumber >= polymarketBridgeMinimum
   const polymarketFunderReady = polymarketMode !== 'friends' || polymarketFunder.trim().length > 1
   const canUsePolymarketFunding = polymarketWalletReady && polymarketAmountReady && polymarketFunderReady && !polymarketBridgeBusy
+
+  async function loadAgentProfiles() {
+    setAgentProfilesError('')
+    try {
+      const res = await fetch(`/api/agent-profile?owner=${encodeURIComponent(agentOwner)}`)
+      const data = await res.json() as { ok?: boolean; agents?: AgentProfile[]; error?: string }
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Could not load agents.')
+      setAgentProfiles(data.agents ?? [])
+    } catch (err) {
+      setAgentProfilesError(err instanceof Error ? err.message : 'Could not load agents.')
+    }
+  }
+
+  useEffect(() => {
+    if (activeSection === 'agent-wallets') void loadAgentProfiles()
+  }, [activeSection, agentOwner]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function openRequestService() {
     setActiveService('request-usdc')
@@ -203,6 +410,44 @@ export default function TelegramPaymentLinks() {
   function openPolymarketService() {
     setActiveService('fund-polymarket')
     setPolymarketMode('')
+  }
+
+  function selectSection(section: TelegramSectionId) {
+    setActiveSection(section)
+    setActiveService('')
+    setRequestMode('')
+    setPolymarketMode('')
+  }
+
+  function openService(service: TelegramService) {
+    if (!service.active) return
+    if (service.id === 'request-usdc') {
+      openRequestService()
+      return
+    }
+    if (service.id === 'fund-polymarket') {
+      openPolymarketService()
+      return
+    }
+    if (service.id === 'hashpaylink-agent') {
+      window.location.href = '/agent?profile=agent&agent=hashpaylink-agent&src=telegram'
+      return
+    }
+    if (service.id === 'hashpaylink-helper') {
+      setActiveService('hashpaylink-helper')
+      return
+    }
+    if (service.id === 'create-your-agent') {
+      setActiveService('create-your-agent')
+      return
+    }
+    if (service.id === 'fund-agent-wallet') {
+      setActiveService('fund-agent-wallet')
+      return
+    }
+    if (service.id === 'create-streampay') {
+      window.location.href = '/?app=streampay&src=telegram'
+    }
   }
 
   async function preparePolymarketBridge(funding: string) {
@@ -327,17 +572,16 @@ export default function TelegramPaymentLinks() {
           </div>
 
           <div className="mt-4 grid grid-cols-2 gap-2">
-            {telegramSections.map(({ id, title, icon: Icon, active }) => (
+            {telegramSections.map(({ id, title, icon: Icon }) => (
               <button
                 key={id}
                 type="button"
-                disabled={!active}
+                onClick={() => selectSection(id)}
                 className={cn(
                   'flex min-h-[44px] items-center gap-2 rounded-xl border px-3 text-left text-xs font-semibold transition-all',
                   id === activeSection
                     ? 'border-gray-900 bg-gray-900 text-white dark:border-white dark:bg-white dark:text-gray-950'
-                    : 'border-gray-100 bg-gray-50 text-gray-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-400',
-                  !active && 'cursor-not-allowed opacity-70',
+                    : 'border-gray-100 bg-gray-50 text-gray-500 hover:border-gray-200 hover:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-400 dark:hover:bg-white/[0.07]',
                 )}
               >
                 <Icon className="h-4 w-4 shrink-0" />
@@ -414,41 +658,981 @@ export default function TelegramPaymentLinks() {
                 setPolymarketMode('friends')
               }}
             />
+          ) : activeService === 'hashpaylink-helper' ? (
+            <TelegramHelperPanel
+              telegramName={telegramName}
+              initialEventId={searchParams.get('eventId') ?? ''}
+              initialPayer={searchParams.get('payer') ?? ''}
+              onBack={() => setActiveService('')}
+            />
+          ) : activeService === 'create-your-agent' ? (
+            <CreateAgentPanel
+              telegramName={telegramName}
+              agents={agentProfiles}
+              setAgents={setAgentProfiles}
+              onBack={() => setActiveService('')}
+            />
+          ) : activeService === 'fund-agent-wallet' ? (
+            <FundAgentWalletPanel
+              owner={agentOwner}
+              agents={agentProfiles}
+              setAgents={setAgentProfiles}
+              loadError={agentProfilesError}
+              setLoadError={setAgentProfilesError}
+              onCreateAgent={() => setActiveService('create-your-agent')}
+              onBack={() => setActiveService('')}
+            />
           ) : (
             <div className="mt-4 space-y-2">
-              {paymentLinkServices.map(({ title, body, icon: Icon, status, active }) => (
-                <button
-                  key={title}
-                  type="button"
-                  onClick={active ? (title === 'Fund Polymarket' ? openPolymarketService : openRequestService) : undefined}
-                  disabled={!active}
-                  className={cn(
-                    'flex w-full items-center gap-3 rounded-xl border px-3 py-3 text-left transition-all',
-                    active
-                      ? 'border-gray-200 bg-gray-50 hover:border-gray-300 hover:bg-white active:scale-[0.99] dark:border-white/10 dark:bg-white/[0.05] dark:hover:bg-white/[0.08]'
-                      : 'cursor-not-allowed border-gray-100 bg-gray-50/60 opacity-70 dark:border-white/10 dark:bg-white/[0.03]',
-                  )}
-                >
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-gray-700 shadow-sm dark:bg-white/[0.08] dark:text-gray-200">
-                    {title === 'Fund Polymarket'
-                      ? <img src={POLYMARKET_LOGO} alt="" className="h-4 w-4 invert dark:invert-0" />
-                      : <Icon className="h-4 w-4" />}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-gray-900 dark:text-white">{title}</span>
-                      <span className={cn(
-                        'rounded-full px-2 py-0.5 text-[10px] font-bold uppercase',
-                        active ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-400/10 dark:text-emerald-300' : 'bg-gray-100 text-gray-400 dark:bg-white/[0.06]',
-                      )}>
-                        {status}
-                      </span>
-                    </span>
-                    <span className="mt-0.5 block text-xs leading-relaxed text-gray-500 dark:text-gray-400">{body}</span>
-                  </span>
-                  {active ? <ArrowRight className="h-4 w-4 text-gray-400" /> : <CheckCircle2 className="h-4 w-4 text-gray-300" />}
-                </button>
+              <p className="pb-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                {sectionDescriptions[activeSection]}
+              </p>
+              {sectionServices[activeSection].map(service => (
+                <TelegramServiceCard
+                  key={service.id}
+                  service={service}
+                  onClick={() => openService(service)}
+                />
               ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function TelegramServiceCard({
+  service,
+  onClick,
+}: {
+  service: TelegramService
+  onClick: () => void
+}) {
+  const Icon = service.icon
+  return (
+    <button
+      type="button"
+      onClick={service.active ? onClick : undefined}
+      disabled={!service.active}
+      className={cn(
+        'flex w-full items-center gap-3 rounded-xl border px-3 py-3 text-left transition-all',
+        service.active
+          ? 'border-gray-200 bg-gray-50 hover:border-gray-300 hover:bg-white active:scale-[0.99] dark:border-white/10 dark:bg-white/[0.05] dark:hover:bg-white/[0.08]'
+          : 'cursor-not-allowed border-gray-100 bg-gray-50/60 opacity-70 dark:border-white/10 dark:bg-white/[0.03]',
+      )}
+    >
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-gray-700 shadow-sm dark:bg-white/[0.08] dark:text-gray-200">
+        {service.brand === 'polymarket'
+          ? <img src={POLYMARKET_LOGO} alt="" className="h-4 w-4 invert dark:invert-0" />
+          : <Icon className="h-4 w-4" />}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-2">
+          <span className="text-sm font-semibold text-gray-900 dark:text-white">{service.title}</span>
+          <span className={cn(
+            'rounded-full px-2 py-0.5 text-[10px] font-bold uppercase',
+            service.active ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-400/10 dark:text-emerald-300' : 'bg-gray-100 text-gray-400 dark:bg-white/[0.06]',
+          )}>
+            {service.status}
+          </span>
+        </span>
+        <span className="mt-0.5 block text-xs leading-relaxed text-gray-500 dark:text-gray-400">{service.body}</span>
+      </span>
+      {service.active ? <ArrowRight className="h-4 w-4 text-gray-400" /> : <CheckCircle2 className="h-4 w-4 text-gray-300" />}
+    </button>
+  )
+}
+
+function TelegramHelperPanel({
+  telegramName,
+  initialEventId,
+  initialPayer,
+  onBack,
+}: {
+  telegramName: string
+  initialEventId: string
+  initialPayer: string
+  onBack: () => void
+}) {
+  const cleanTelegramName = telegramName === 'there' ? '' : telegramName
+  const [started, setStarted] = useState(Boolean(initialEventId && initialPayer))
+  const [helperName, setHelperName] = useState(() => window.localStorage.getItem('hashpaylink-helper-name') ?? (initialPayer || cleanTelegramName))
+  const [helperNameDraft, setHelperNameDraft] = useState(() => window.localStorage.getItem('hashpaylink-helper-name') ?? (initialPayer || cleanTelegramName))
+  const [eventId, setEventId] = useState(initialEventId)
+  const [payer, setPayer] = useState(initialPayer || cleanTelegramName)
+  const [verified, setVerified] = useState<HelperVerifyResult | null>(null)
+  const [verifying, setVerifying] = useState(false)
+  const [messages, setMessages] = useState<HelperMessage[]>([])
+  const [question, setQuestion] = useState('')
+  const [asking, setAsking] = useState(false)
+  const [askError, setAskError] = useState('')
+  const [profile, setProfile] = useState<HelperProfile | null>(null)
+  const [profileBusy, setProfileBusy] = useState(false)
+  const [profileError, setProfileError] = useState('')
+  const [memoryDraft, setMemoryDraft] = useState('')
+  const [checkpointBusy, setCheckpointBusy] = useState(false)
+
+  useEffect(() => {
+    if (!initialEventId || !initialPayer || verified?.verified) return
+    let cancelled = false
+    let attempts = 0
+
+    const run = async () => {
+      attempts += 1
+      await verifyAccess(initialEventId, initialPayer)
+      if (!cancelled && attempts < 8) {
+        window.setTimeout(run, attempts < 3 ? 4000 : 8000)
+      }
+    }
+
+    void run()
+    return () => { cancelled = true }
+  }, [initialEventId, initialPayer, verified?.verified]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const lookupPayer = payer.trim()
+    if (!lookupPayer) return
+    let cancelled = false
+    setProfileBusy(true)
+    setProfileError('')
+    fetch(`/api/helper-profile?payer=${encodeURIComponent(lookupPayer)}`)
+      .then(res => res.json() as Promise<{ ok?: boolean; profile?: HelperProfile | null; error?: string }>)
+      .then(data => {
+        if (cancelled) return
+        if (!data.ok) throw new Error(data.error || 'Could not load helper profile.')
+        setProfile(data.profile ?? null)
+        if (data.profile?.displayName) {
+          setHelperName(current => current || data.profile?.displayName || '')
+          setHelperNameDraft(current => current || data.profile?.displayName || '')
+        }
+        if (data.profile?.memorySummary) setMemoryDraft(data.profile.memorySummary)
+      })
+      .catch(err => {
+        if (!cancelled) setProfileError(err instanceof Error ? err.message : 'Could not load helper profile.')
+      })
+      .finally(() => {
+        if (!cancelled) setProfileBusy(false)
+      })
+    return () => { cancelled = true }
+  }, [payer])
+
+  function startHelper() {
+    setStarted(true)
+    if (helperName && !payer.trim()) setPayer(helperName)
+  }
+
+  function saveName() {
+    const clean = helperNameDraft.trim().slice(0, 48)
+    if (!clean) return
+    window.localStorage.setItem('hashpaylink-helper-name', clean)
+    setHelperName(clean)
+    if (!payer.trim()) setPayer(clean)
+    void saveProfile({ displayName: clean })
+  }
+
+  async function saveProfile(extra: Partial<HelperProfile> = {}) {
+    const cleanPayer = (payer || helperName || helperNameDraft || cleanTelegramName).trim()
+    if (!cleanPayer) return
+    setProfileBusy(true)
+    setProfileError('')
+    try {
+      const res = await fetch('/api/helper-profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'save',
+          payer: cleanPayer,
+          displayName: extra.displayName ?? (helperName || helperNameDraft || cleanPayer),
+          telegramHandle: cleanTelegramName,
+          accessEventId: eventId,
+          memorySummary: extra.memorySummary ?? memoryDraft,
+          preferences: extra.preferences ?? profile?.preferences ?? [],
+        }),
+      })
+      const data = await res.json() as { ok?: boolean; profile?: HelperProfile; error?: string }
+      if (!res.ok || !data.ok || !data.profile) throw new Error(data.error || 'Could not save helper profile.')
+      setProfile(data.profile)
+      if (data.profile.memorySummary) setMemoryDraft(data.profile.memorySummary)
+    } catch (err) {
+      setProfileError(err instanceof Error ? err.message : 'Could not save helper profile.')
+    } finally {
+      setProfileBusy(false)
+    }
+  }
+
+  async function checkpointMemory() {
+    const cleanPayer = (payer || helperName || helperNameDraft || cleanTelegramName).trim()
+    const summary = memoryDraft.trim()
+    if (!cleanPayer || !summary) return
+    setCheckpointBusy(true)
+    setProfileError('')
+    try {
+      const res = await fetch('/api/helper-profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'checkpoint',
+          payer: cleanPayer,
+          displayName: helperName || helperNameDraft || cleanPayer,
+          telegramHandle: cleanTelegramName,
+          accessEventId: eventId,
+          memorySummary: summary,
+          preferences: profile?.preferences ?? [],
+        }),
+      })
+      const data = await res.json() as { ok?: boolean; profile?: HelperProfile; error?: string }
+      if (!res.ok || !data.ok || !data.profile) throw new Error(data.error || 'Could not checkpoint memory.')
+      setProfile(data.profile)
+      if (data.profile.memorySummary) setMemoryDraft(data.profile.memorySummary)
+    } catch (err) {
+      setProfileError(err instanceof Error ? err.message : 'Could not checkpoint memory.')
+    } finally {
+      setCheckpointBusy(false)
+    }
+  }
+
+  async function verifyAccess(nextEventId = eventId, nextPayer = payer) {
+    if (!nextEventId.trim() || !nextPayer.trim()) return
+    setVerifying(true)
+    setVerified(null)
+    try {
+      const res = await fetch(`/api/agent-verify?eventId=${encodeURIComponent(nextEventId.trim())}&payer=${encodeURIComponent(nextPayer.trim())}`)
+      const data = await res.json() as HelperVerifyResult
+      setVerified(data)
+      if (data.verified) setMessages([])
+    } catch {
+      setVerified({ verified: false, error: 'Verification service unreachable.' })
+    } finally {
+      setVerifying(false)
+    }
+  }
+
+  async function askHelper() {
+    if (!question.trim() || asking || !verified?.verified) return
+    const nextQuestion = question.trim()
+    setQuestion('')
+    setAskError('')
+    setAsking(true)
+    try {
+      const res = await fetch('/api/agent-ask', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: eventId.trim(),
+          payer: payer.trim(),
+          question: nextQuestion,
+          memorySummary: memoryDraft.trim() || profile?.memorySummary || '',
+        }),
+      })
+      const data = await res.json() as {
+        answer?: string
+        proof?: { ogTxHash: string; ogExplorer: string }
+        error?: string
+      }
+      if (!data.answer || !data.proof) throw new Error(data.error ?? 'No helper response returned.')
+      setMessages(prev => [...prev, { question: nextQuestion, answer: data.answer!, proof: data.proof! }])
+      if (!memoryDraft.trim()) {
+        setMemoryDraft(`User is known as ${helperName || payer}. They use Hash PayLink Helper from Telegram and may ask about payments, Polymarket, StreamPay, agents, research, planning, and daily questions.`)
+      }
+    } catch (err) {
+      setAskError(err instanceof Error ? err.message : 'Helper request failed.')
+    } finally {
+      setAsking(false)
+    }
+  }
+
+  function fillExistingTestReceipt() {
+    setEventId('test-0g-1778114523394')
+    setPayer('HashPayLink 0G Test')
+    setVerified(null)
+    setMessages([])
+  }
+
+  function openHelperCheckout() {
+    const cleanPayer = (helperName || payer || cleanTelegramName || 'Helper user').trim()
+    const helperEventId = `helper-${Date.now().toString(36)}`
+    const returnUrl = new URL('/telegram/payment-links', window.location.origin)
+    returnUrl.searchParams.set('open', '1')
+    returnUrl.searchParams.set('section', 'agent-wallets')
+    returnUrl.searchParams.set('service', 'hashpaylink-helper')
+
+    const params = new URLSearchParams()
+    params.set('e', EVM_TREASURY)
+    params.set('a', '1')
+    params.set('m', 'Hash PayLink Helper Access')
+    params.set('n', 'base')
+    params.set('v', '1')
+    params.set('id', helperEventId)
+    params.set('src', 'telegram-helper')
+    params.set('g', returnUrl.toString())
+    params.set('ad', '1')
+    if (cleanPayer) params.set('payer', cleanPayer)
+    window.location.href = `/pay?${params.toString()}`
+  }
+
+  return (
+    <div className="mt-4 space-y-3">
+      <button
+        type="button"
+        onClick={onBack}
+        className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-400 transition-colors hover:text-gray-700 dark:hover:text-gray-200"
+      >
+        <ArrowLeft className="h-3.5 w-3.5" />
+        Agent Wallets
+      </button>
+
+      <div className="rounded-xl border border-gray-100 bg-gray-50/80 p-3 dark:border-white/10 dark:bg-white/[0.04]">
+        <div className="flex items-start gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-gray-800 shadow-sm dark:bg-white/[0.08] dark:text-gray-100">
+            <Sparkles className="h-4 w-4" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-semibold text-gray-900 dark:text-white">Hash PayLink Helper</p>
+              <span className="rounded-full bg-purple-50 px-2 py-0.5 text-[10px] font-bold uppercase text-purple-600 dark:bg-purple-300/15 dark:text-purple-200">1 USDC</span>
+            </div>
+            <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+              Pocket help for payments, Polymarket funding, StreamPay, agent setup, research, and daily questions.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          {['0G access', profile?.memoryProof ? '0G memory' : profile?.memorySummary || memoryDraft ? 'Memory local' : 'Memory next', 'Telegram live'].map(label => (
+            <span
+              key={label}
+              className="rounded-full border border-gray-100 bg-white px-2 py-1 text-[10px] font-semibold text-gray-500 dark:border-white/10 dark:bg-white/[0.05] dark:text-gray-400"
+            >
+              {label}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {!started ? (
+        <div className="space-y-3 rounded-xl border border-purple-100 bg-purple-50/70 p-3 dark:border-purple-400/20 dark:bg-purple-400/10">
+          <div className="flex items-center gap-2">
+            <span className="rounded-md border border-purple-100 bg-white px-1.5 py-0.5 text-[10px] font-black text-purple-600 dark:border-purple-300/20 dark:bg-white/[0.08] dark:text-purple-200">0G</span>
+            <p className="text-xs font-semibold text-gray-900 dark:text-white">Verifiable access first</p>
+          </div>
+          <p className="text-xs leading-relaxed text-gray-600 dark:text-gray-300">
+            The helper opens from Telegram, verifies paid access with 0G receipts, and can checkpoint approved profile memory to 0G.
+          </p>
+          <button
+            type="button"
+            onClick={startHelper}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+          >
+            <Zap className="h-4 w-4" />
+            {helperName ? `Continue as ${helperName}` : 'Start helper'}
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {!helperName && (
+            <div className="rounded-xl border border-gray-100 bg-white p-3 dark:border-white/10 dark:bg-white/[0.03]">
+              <p className="text-sm font-semibold text-gray-900 dark:text-white">What should I call you?</p>
+              <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                Saved on this browser for now. 0G-backed profile memory comes next.
+              </p>
+              <div className="mt-3 flex items-center gap-2">
+                <input
+                  value={helperNameDraft}
+                  onChange={event => setHelperNameDraft(event.target.value)}
+                  onKeyDown={event => event.key === 'Enter' && saveName()}
+                  placeholder="Name or Telegram handle"
+                  className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:ring-2 focus:ring-gray-200 dark:border-white/10 dark:bg-white/[0.05] dark:text-white"
+                />
+                <button
+                  type="button"
+                  onClick={saveName}
+                  disabled={!helperNameDraft.trim()}
+                  className="rounded-xl bg-black px-3 py-2.5 text-sm font-semibold text-white transition-all hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-950"
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          )}
+
+              {!verified?.verified && (
+                <div className="space-y-3 rounded-xl border border-gray-100 bg-white p-3 dark:border-white/10 dark:bg-white/[0.03]">
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900 dark:text-white">Unlock helper access</p>
+                    <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                      Pay 1 USDC to unlock the helper. After checkout succeeds, you return here with 0G access verification.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={openHelperCheckout}
+                    disabled={!helperName && !helperNameDraft.trim()}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+                  >
+                    <ShieldCheck className="h-4 w-4" />
+                    Pay 1 USDC and unlock
+                  </button>
+                  <button
+                    type="button"
+                    onClick={fillExistingTestReceipt}
+                    className="mx-auto flex items-center gap-1.5 text-xs font-semibold text-gray-400 transition-colors hover:text-gray-700 dark:hover:text-gray-200"
+                  >
+                    <Zap className="h-3 w-3" /> Use existing 0G test receipt
+                  </button>
+                  {eventId && payer && (
+                    <button
+                      type="button"
+                      onClick={() => verifyAccess()}
+                      disabled={verifying}
+                      className="mx-auto flex items-center gap-1.5 text-xs font-semibold text-purple-500 transition-colors hover:text-purple-700 disabled:opacity-50"
+                    >
+                      {verifying ? <Loader2 className="h-3 w-3 animate-spin" /> : <ShieldCheck className="h-3 w-3" />}
+                      Check returned access
+                    </button>
+                  )}
+              {verified?.verified === false && (
+                <p className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs font-medium text-red-600 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200">
+                  {verified.error ?? 'No verified 0G access receipt found for this payer.'}
+                </p>
+              )}
+            </div>
+          )}
+
+          {verified?.verified && (
+            <div className="overflow-hidden rounded-xl border border-gray-100 bg-white dark:border-white/10 dark:bg-white/[0.03]">
+              <div className="flex items-center justify-between gap-3 border-b border-gray-100 px-3 py-2.5 dark:border-white/10">
+                <div>
+                  <p className="text-xs font-semibold text-gray-900 dark:text-white">
+                    {helperName ? `Hi ${helperName}` : 'Helper is live'}
+                  </p>
+                  <p className="text-[11px] text-gray-400">Access verified with 0G proof</p>
+                </div>
+                <a
+                  href={verified.proof?.ogExplorer}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 rounded-lg border border-purple-100 bg-purple-50 px-2 py-1 text-[10px] font-bold text-purple-600 dark:border-purple-300/20 dark:bg-purple-300/10 dark:text-purple-200"
+                >
+                  0G <ExternalLink className="h-2.5 w-2.5" />
+                </a>
+              </div>
+
+              <div className="space-y-2 border-b border-gray-100 p-3 dark:border-white/10">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+                      {profile?.memoryProof ? '0G memory active' : memoryDraft.trim() || profile?.memorySummary ? 'Memory local' : 'Memory setup'}
+                    </p>
+                    <p className="mt-0.5 truncate text-xs text-gray-500 dark:text-gray-400">
+                      {profile?.memoryProof
+                        ? 'Latest profile checkpoint is archived.'
+                        : memoryDraft.trim() || profile?.memorySummary
+                        ? 'Profile summary will personalize replies.'
+                        : 'Add what the helper should remember.'}
+                    </p>
+                  </div>
+                  {profile?.memoryProof && (
+                    <a
+                      href={profile.memoryProof.ogExplorer}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 rounded-lg border border-purple-100 bg-purple-50 px-2 py-1 text-[10px] font-bold text-purple-600 dark:border-purple-300/20 dark:bg-purple-300/10 dark:text-purple-200"
+                    >
+                      0G memory <ExternalLink className="h-2.5 w-2.5" />
+                    </a>
+                  )}
+                </div>
+                <textarea
+                  value={memoryDraft}
+                  onChange={event => setMemoryDraft(event.target.value.slice(0, 1200))}
+                  onBlur={() => void saveProfile({ memorySummary: memoryDraft })}
+                  placeholder="Example: Call me Ada. I like concise answers and I am building with Hash PayLink, Polymarket, StreamPay, and 0G."
+                  className="min-h-[58px] w-full resize-none rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-xs leading-relaxed text-gray-900 outline-none placeholder:text-gray-400 focus:ring-2 focus:ring-gray-200 dark:border-white/10 dark:bg-white/[0.05] dark:text-white"
+                />
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[10px] text-gray-400">
+                    {profileBusy ? 'Saving...' : profileError || 'Only approved summary memory is saved.'}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={checkpointMemory}
+                    disabled={checkpointBusy || !memoryDraft.trim()}
+                    className="inline-flex items-center gap-1 rounded-lg bg-gray-900 px-2.5 py-1.5 text-[11px] font-semibold text-white transition-all hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-950"
+                  >
+                    {checkpointBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : <ShieldCheck className="h-3 w-3" />}
+                    Checkpoint
+                  </button>
+                </div>
+              </div>
+
+              <div className="max-h-[360px] min-h-[220px] space-y-4 overflow-y-auto p-3">
+                {messages.length === 0 && !asking && (
+                  <div className="rounded-2xl rounded-tl-md bg-gray-50 px-3 py-2.5 dark:bg-white/[0.05]">
+                    <p className="text-sm text-gray-700 dark:text-gray-200">
+                      {helperName ? `Welcome back, ${helperName}.` : 'Welcome.'} Ask me about payments, Polymarket funding, StreamPay, agent setup, research, planning, or daily questions.
+                    </p>
+                    <div className="mt-2 inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400">
+                      <span className="rounded border border-purple-100 px-1 text-[8px] font-black text-purple-500 dark:border-purple-300/20 dark:text-purple-200">0G</span>
+                      access proof active
+                    </div>
+                  </div>
+                )}
+
+                {messages.map((message, index) => (
+                  <div key={index} className="space-y-2">
+                    <div className="flex justify-end">
+                      <div className="max-w-[86%] rounded-2xl rounded-tr-md bg-gray-900 px-3 py-2 text-sm text-white dark:bg-white dark:text-gray-950">
+                        {message.question}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="max-w-[86%] whitespace-pre-wrap rounded-2xl rounded-tl-md border border-gray-100 bg-gray-50 px-3 py-2.5 text-sm text-gray-800 dark:border-white/10 dark:bg-white/[0.05] dark:text-gray-200">
+                        {message.answer}
+                      </div>
+                      <a
+                        href={message.proof.ogExplorer}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-1 inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400 transition-colors hover:text-gray-600 dark:hover:text-gray-200"
+                      >
+                        <span className="rounded border border-purple-100 px-1 text-[8px] font-black text-purple-500 dark:border-purple-300/20 dark:text-purple-200">0G</span>
+                        response proof
+                      </a>
+                    </div>
+                  </div>
+                ))}
+
+                {asking && (
+                  <div className="inline-flex items-center gap-2 rounded-xl bg-gray-50 px-3 py-2 text-sm text-gray-400 dark:bg-white/[0.05]">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Thinking...
+                  </div>
+                )}
+                {askError && (
+                  <p className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs font-medium text-red-600 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200">{askError}</p>
+                )}
+              </div>
+
+              <div className="border-t border-gray-100 p-3 dark:border-white/10">
+                <div className="flex items-center gap-2">
+                  <input
+                    value={question}
+                    onChange={event => setQuestion(event.target.value)}
+                    onKeyDown={event => event.key === 'Enter' && !event.shiftKey && askHelper()}
+                    placeholder="Ask your helper..."
+                    disabled={asking}
+                    className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:ring-2 focus:ring-gray-200 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.05] dark:text-white"
+                  />
+                  <button
+                    type="button"
+                    onClick={askHelper}
+                    disabled={asking || !question.trim()}
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-black text-white transition-all hover:bg-gray-800 active:scale-95 disabled:opacity-40 dark:bg-white dark:text-gray-950"
+                  >
+                    <Send className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function CreateAgentPanel({
+  telegramName,
+  agents,
+  setAgents,
+  onBack,
+}: {
+  telegramName: string
+  agents: AgentProfile[]
+  setAgents: (agents: AgentProfile[]) => void
+  onBack: () => void
+}) {
+  const owner = telegramName === 'there' ? 'telegram-user' : telegramName
+  const [name, setName] = useState('')
+  const [purpose, setPurpose] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [savedAgent, setSavedAgent] = useState<AgentProfile | null>(null)
+
+  async function saveAgent() {
+    if (busy) return
+    setBusy(true)
+    setError('')
+    try {
+      const res = await fetch('/api/agent-profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ owner, name, purpose }),
+      })
+      const data = await res.json() as { ok?: boolean; agent?: AgentProfile; agents?: AgentProfile[]; error?: string }
+      if (!res.ok || !data.ok || !data.agent) throw new Error(data.error || 'Could not save agent.')
+      setSavedAgent(data.agent)
+      setAgents(data.agents ?? [data.agent])
+      setName('')
+      setPurpose('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not save agent.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const canSave = name.trim().length >= 2 && purpose.trim().length >= 6 && !busy
+
+  return (
+    <div className="mt-4 space-y-3">
+      <button
+        type="button"
+        onClick={onBack}
+        className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-400 transition-colors hover:text-gray-700 dark:hover:text-gray-200"
+      >
+        <ArrowLeft className="h-3.5 w-3.5" />
+        Agent Wallets
+      </button>
+
+      <div className="rounded-xl border border-gray-100 bg-gray-50/80 p-3 dark:border-white/10 dark:bg-white/[0.04]">
+        <div className="flex items-start gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-gray-800 shadow-sm dark:bg-white/[0.08] dark:text-gray-100">
+            <Bot className="h-4 w-4" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-gray-900 dark:text-white">Create Your Agent</p>
+            <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+              Start with identity and purpose. Circle wallet setup comes next for funding and x402.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-3 rounded-xl border border-gray-100 bg-white p-3 dark:border-white/10 dark:bg-white/[0.03]">
+        <label className="block">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Agent name</span>
+          <input
+            value={name}
+            onChange={event => setName(event.target.value)}
+            placeholder="e.g. PayLink Scout"
+            className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:ring-2 focus:ring-gray-200 dark:border-white/10 dark:bg-white/[0.05] dark:text-white"
+          />
+        </label>
+        <label className="block">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Purpose</span>
+          <textarea
+            value={purpose}
+            onChange={event => setPurpose(event.target.value.slice(0, 260))}
+            placeholder="What should this agent do for you?"
+            className="mt-1 min-h-[82px] w-full resize-none rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm leading-relaxed text-gray-900 outline-none placeholder:text-gray-400 focus:ring-2 focus:ring-gray-200 dark:border-white/10 dark:bg-white/[0.05] dark:text-white"
+          />
+        </label>
+        <button
+          type="button"
+          onClick={saveAgent}
+          disabled={!canSave}
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+        >
+          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+          Save agent profile
+        </button>
+        {error && <p className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs font-medium text-red-600 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200">{error}</p>}
+        {savedAgent && (
+          <div className="rounded-xl border border-emerald-100 bg-emerald-50/80 p-3 dark:border-emerald-400/20 dark:bg-emerald-400/10">
+            <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-200">{savedAgent.name} saved</p>
+            <p className="mt-1 text-xs leading-relaxed text-emerald-700/80 dark:text-emerald-200/80">
+              Next: connect a Circle agent wallet, fund treasury, then activate x402 from the agent dashboard.
+            </p>
+            <a
+              href={`/agent?profile=agent&agent=${encodeURIComponent(savedAgent.slug)}&src=telegram`}
+              className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950"
+            >
+              <Wallet className="h-4 w-4" />
+              Connect wallet next
+            </a>
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-2">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Saved agents</p>
+        {agents.length ? agents.map(agent => {
+          const status = agentWalletStatus(agent)
+          return (
+            <a
+              key={agent.slug}
+              href={`/agent?profile=agent&agent=${encodeURIComponent(agent.slug)}&src=telegram`}
+              className="flex w-full items-center gap-3 rounded-xl border border-gray-100 bg-white px-3 py-3 text-left transition-all hover:border-gray-200 hover:bg-gray-50 active:scale-[0.99] dark:border-white/10 dark:bg-white/[0.03] dark:hover:bg-white/[0.06]"
+            >
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-700 dark:bg-white/[0.08] dark:text-gray-200">
+                <Bot className="h-4 w-4" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="flex min-w-0 items-center gap-2">
+                  <span className="truncate text-sm font-semibold text-gray-900 dark:text-white">{agent.name}</span>
+                  <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase', status.className)}>
+                    {status.label}
+                  </span>
+                </span>
+                <span className="mt-0.5 block truncate text-xs text-gray-500 dark:text-gray-400">{status.detail} · {agent.purpose}</span>
+              </span>
+              {agent.walletAddress ? (
+                <span className="hidden shrink-0 items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-gray-700 transition-colors dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 sm:inline-flex">
+                  Dashboard
+                  <ExternalLink className="h-3 w-3" />
+                </span>
+              ) : (
+                <ArrowRight className="h-4 w-4 shrink-0 text-gray-400" />
+              )}
+            </a>
+          )
+        }) : (
+          <p className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-3 text-xs text-gray-500 dark:border-white/10 dark:bg-white/[0.03] dark:text-gray-400">
+            No saved agents yet.
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function FundAgentWalletPanel({
+  owner,
+  agents,
+  setAgents,
+  loadError,
+  setLoadError,
+  onCreateAgent,
+  onBack,
+}: {
+  owner: string
+  agents: AgentProfile[]
+  setAgents: (agents: AgentProfile[]) => void
+  loadError: string
+  setLoadError: (value: string) => void
+  onCreateAgent: () => void
+  onBack: () => void
+}) {
+  const [selectedSlug, setSelectedSlug] = useState('')
+  const [walletAddress, setWalletAddress] = useState('')
+  const [walletConnected, setWalletConnected] = useState(false)
+  const [walletChain, setWalletChain] = useState('')
+  const [walletBusy, setWalletBusy] = useState(false)
+  const [walletError, setWalletError] = useState('')
+  const [amount, setAmount] = useState('5')
+  const selectedAgent = agents.find(agent => agent.slug === selectedSlug) ?? agents[0]
+  const selectedStatus = selectedAgent ? agentWalletStatus({
+    ...selectedAgent,
+    walletAddress: walletAddress || selectedAgent.walletAddress,
+  }, Boolean(walletAddress && walletConnected)) : null
+
+  async function refreshAgents() {
+    setLoadError('')
+    try {
+      const res = await fetch(`/api/agent-profile?owner=${encodeURIComponent(owner)}`)
+      const data = await res.json() as { ok?: boolean; agents?: AgentProfile[]; error?: string }
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Could not load agents.')
+      setAgents(data.agents ?? [])
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : 'Could not load agents.')
+    }
+  }
+
+  useEffect(() => {
+    if (!agents.length) void refreshAgents()
+  }, [owner]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!selectedSlug && agents[0]?.slug) setSelectedSlug(agents[0].slug)
+  }, [agents, selectedSlug])
+
+  useEffect(() => {
+    if (!selectedAgent?.slug) return
+    let cancelled = false
+    setWalletBusy(true)
+    setWalletError('')
+    setWalletAddress('')
+    setWalletConnected(false)
+    fetch(`/api/agent-wallet?agent=${encodeURIComponent(selectedAgent.slug)}`)
+      .then(res => res.json() as Promise<{ ok?: boolean; walletAddress?: string; connected?: boolean; storedChain?: string; chain?: string; error?: string }>)
+      .then(data => {
+        if (cancelled) return
+        if (!data.ok) throw new Error(data.error || 'Could not load agent wallet.')
+        setWalletAddress(data.walletAddress ?? selectedAgent.walletAddress ?? '')
+        setWalletConnected(Boolean(data.connected))
+        setWalletChain(data.storedChain || data.chain || '')
+      })
+      .catch(err => {
+        if (!cancelled) setWalletError(err instanceof Error ? err.message : 'Could not load agent wallet.')
+      })
+      .finally(() => {
+        if (!cancelled) setWalletBusy(false)
+      })
+    return () => { cancelled = true }
+  }, [selectedAgent?.slug]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function openFundingCheckout() {
+    if (!selectedAgent || !walletAddress) return
+    const cleanAmount = Number(amount)
+    const checkoutAmount = Number.isFinite(cleanAmount) && cleanAmount > 0 ? String(cleanAmount) : '5'
+    const fundingEventId = `agent-${selectedAgent.slug}-fund-${Date.now().toString(36)}`
+    const returnUrl = new URL('/agent', window.location.origin)
+    returnUrl.searchParams.set('profile', 'agent')
+    returnUrl.searchParams.set('agent', selectedAgent.slug)
+    returnUrl.searchParams.set('src', 'telegram')
+    returnUrl.searchParams.set('funding', 'submitted')
+    returnUrl.searchParams.set('fundingId', fundingEventId)
+    returnUrl.searchParams.set('fundedAmount', checkoutAmount)
+    returnUrl.searchParams.set('n', 'base')
+    const params = new URLSearchParams()
+    params.set('e', walletAddress)
+    params.set('a', checkoutAmount)
+    params.set('m', `Fund agent wallet: ${selectedAgent.name}`)
+    params.set('n', 'base')
+    params.set('v', '1')
+    params.set('id', fundingEventId)
+    params.set('src', 'agent')
+    params.set('agentSlug', selectedAgent.slug)
+    params.set('g', returnUrl.toString())
+    params.set('ad', '1')
+    window.location.href = `/pay?${params.toString()}`
+  }
+
+  return (
+    <div className="mt-4 space-y-3">
+      <button
+        type="button"
+        onClick={onBack}
+        className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-400 transition-colors hover:text-gray-700 dark:hover:text-gray-200"
+      >
+        <ArrowLeft className="h-3.5 w-3.5" />
+        Agent Wallets
+      </button>
+
+      <div className="rounded-xl border border-gray-100 bg-gray-50/80 p-3 dark:border-white/10 dark:bg-white/[0.04]">
+        <div className="flex items-start gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-gray-800 shadow-sm dark:bg-white/[0.08] dark:text-gray-100">
+            <Wallet className="h-4 w-4" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-gray-900 dark:text-white">Fund Agent Wallet</p>
+            <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+              Add USDC to the agent wallet. Activate x402 from the agent dashboard after funding.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {loadError && <p className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs font-medium text-red-600 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200">{loadError}</p>}
+
+      {!agents.length ? (
+        <div className="rounded-xl border border-gray-100 bg-white p-3 dark:border-white/10 dark:bg-white/[0.03]">
+          <p className="text-sm font-semibold text-gray-900 dark:text-white">Create an agent first</p>
+          <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+            Funding needs a saved agent profile so the wallet and activity can be linked correctly.
+          </p>
+          <button
+            type="button"
+            onClick={onCreateAgent}
+            className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950"
+          >
+            <Bot className="h-4 w-4" />
+            Create Your Agent
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <div className="rounded-xl border border-gray-100 bg-white p-3 dark:border-white/10 dark:bg-white/[0.03]">
+            <label className="block">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Pick agent</span>
+              <select
+                value={selectedAgent?.slug ?? ''}
+                onChange={event => setSelectedSlug(event.target.value)}
+                className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm font-semibold text-gray-900 outline-none focus:ring-2 focus:ring-gray-200 dark:border-white/10 dark:bg-white/[0.05] dark:text-white"
+              >
+                {agents.map(agent => (
+                  <option key={agent.slug} value={agent.slug}>
+                    {agent.name} - {agent.walletAddress ? 'Wallet connected' : 'No wallet'}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {selectedAgent && (
+              <div className="mt-2 flex items-start justify-between gap-3">
+                <p className="min-w-0 flex-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">{selectedAgent.purpose}</p>
+                {selectedStatus && (
+                  <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase', selectedStatus.className)}>
+                    {selectedStatus.label}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-xl border border-gray-100 bg-white p-3 dark:border-white/10 dark:bg-white/[0.03]">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Wallet status</p>
+                <p className="mt-1 truncate font-mono text-xs text-gray-700 dark:text-gray-200">
+                  {walletBusy ? 'Checking...' : walletAddress || 'No wallet connected'}
+                </p>
+                {walletChain && <p className="mt-1 text-[11px] text-gray-400">{walletChain}</p>}
+              </div>
+              {selectedStatus && (
+                <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase', selectedStatus.className)}>
+                  {selectedStatus.label}
+                </span>
+              )}
+            </div>
+            {walletError && <p className="mt-2 text-xs text-amber-600 dark:text-amber-300">{walletError}</p>}
+            {walletAddress && selectedAgent && (
+              <a
+                href={`/agent?profile=agent&agent=${encodeURIComponent(selectedAgent.slug)}&src=telegram`}
+                className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-3 text-sm font-semibold text-gray-800 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-100"
+              >
+                <ExternalLink className="h-4 w-4" />
+                Open dashboard
+              </a>
+            )}
+            {!walletAddress && selectedAgent && (
+              <a
+                href={`/agent?profile=agent&agent=${encodeURIComponent(selectedAgent.slug)}&src=telegram`}
+                className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950"
+              >
+                <Wallet className="h-4 w-4" />
+                Connect Circle wallet first
+              </a>
+            )}
+          </div>
+
+          {walletAddress && (
+            <div className="space-y-3 rounded-xl border border-gray-100 bg-white p-3 dark:border-white/10 dark:bg-white/[0.03]">
+              <label className="block">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Amount</span>
+                <div className="mt-1 flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.05]">
+                  <input
+                    value={amount}
+                    onChange={event => setAmount(event.target.value)}
+                    inputMode="decimal"
+                    className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-gray-900 outline-none dark:text-white"
+                  />
+                  <span className="text-xs font-semibold text-gray-400">USDC</span>
+                </div>
+              </label>
+              <button
+                type="button"
+                onClick={openFundingCheckout}
+                disabled={!Number.isFinite(Number(amount)) || Number(amount) <= 0}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-50 dark:bg-white dark:text-gray-950"
+              >
+                <Wallet className="h-4 w-4" />
+                Continue to funding
+              </button>
+              <p className="text-center text-[11px] text-gray-400">
+                x402 is activated later from the agent dashboard using this funded wallet balance.
+              </p>
             </div>
           )}
         </div>

@@ -32,6 +32,7 @@ const ARCHIVE_ABI = [
 const MAX_EVENT_ID_LENGTH = 128
 const MAX_PAYER_LENGTH = 128
 const MAX_QUESTION_LENGTH = 4_000
+const MAX_MEMORY_LENGTH = 1_600
 
 const HASH_PAYLINK_SYSTEM_PROMPT = [
   'You are the Hash PayLink Strategy Agent for Circle, Arc, 0G, Polymarket, and agentic USDC commerce.',
@@ -105,14 +106,17 @@ async function verifyPayment(eventId: string, payer: string) {
 
 // ─── AI response ──────────────────────────────────────────────────────────────
 
-async function getAiResponse(question: string, payerName: string, chain: string, amount: string): Promise<string> {
+async function getAiResponse(question: string, payerName: string, chain: string, amount: string, memorySummary = ''): Promise<string> {
+  const memoryContext = memorySummary
+    ? `\n\nUser memory summary approved by the payer:\n${memorySummary}\nUse this only to personalize helpful context. Do not expose it unless the user asks.`
+    : ''
   if (process.env.ANTHROPIC_API_KEY) {
     try {
       const client  = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
       const message = await client.messages.create({
         model:      'claude-haiku-4-5-20251001',
         max_tokens: 900,
-        system:     `${HASH_PAYLINK_SYSTEM_PROMPT}\n\nVerified access context: ${payerName} paid ${amount} on ${chain}, confirmed on 0G decentralized storage.`,
+        system:     `${HASH_PAYLINK_SYSTEM_PROMPT}\n\nVerified access context: ${payerName} paid ${amount} on ${chain}, confirmed on 0G decentralized storage.${memoryContext}`,
         messages:   [{ role: 'user', content: question }],
       })
       const block = message.content[0]
@@ -145,15 +149,17 @@ export default async function handler(req: Request, res: Response) {
   if (req.method !== 'POST')
     return res.status(405).json({ error: 'Method not allowed' })
 
-  const { eventId: rawEventId, payer: rawPayer, question: rawQuestion } = (req.body ?? {}) as Record<string, unknown>
+  const { eventId: rawEventId, payer: rawPayer, question: rawQuestion, memorySummary: rawMemorySummary } = (req.body ?? {}) as Record<string, unknown>
   let eventId: string
   let payer: string
   let question: string
+  let memorySummary = ''
 
   try {
     eventId = normalizeBoundedString(rawEventId, 'eventId', MAX_EVENT_ID_LENGTH)
     payer = normalizeBoundedString(rawPayer, 'payer', MAX_PAYER_LENGTH)
     question = normalizeBoundedString(rawQuestion, 'question', MAX_QUESTION_LENGTH)
+    if (typeof rawMemorySummary === 'string') memorySummary = rawMemorySummary.trim().slice(0, MAX_MEMORY_LENGTH)
   } catch (err) {
     return res.status(400).json({ error: err instanceof Error ? err.message : 'Invalid request' })
   }
@@ -178,6 +184,7 @@ export default async function handler(req: Request, res: Response) {
       result.payment.payer,
       result.payment.chain,
       result.payment.amount,
+      memorySummary,
     )
 
     return res.json({
