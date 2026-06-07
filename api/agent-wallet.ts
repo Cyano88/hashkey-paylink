@@ -485,10 +485,35 @@ export default async function handler(req: Request, res: Response) {
       const wallets = parseWalletAddresses(listOutput)
       const existing = resolveAgentRecord(store, agentSlug)
       const expectedWallet = normalizeExpectedWallet(req.body?.expectedWallet)
-      const walletAddress =
-        (expectedWallet && wallets.find(item => item.toLowerCase() === expectedWallet.toLowerCase()))
-        || (existing?.walletAddress && wallets.find(item => item.toLowerCase() === existing.walletAddress.toLowerCase()))
-        || wallets[0]
+      const expectedMatch = expectedWallet
+        ? wallets.find(item => item.toLowerCase() === expectedWallet.toLowerCase())
+        : undefined
+      const existingMatch = existing?.walletAddress
+        ? wallets.find(item => item.toLowerCase() === existing.walletAddress.toLowerCase())
+        : undefined
+      let walletAddress = expectedMatch || existingMatch
+      if (!walletAddress && expectedWallet) {
+        return res.status(409).json({
+          ok: false,
+          code: 'expected_wallet_not_found',
+          error: 'Circle login succeeded, but the expected agent wallet was not found for this email.',
+          existingWallet: existing?.walletAddress,
+          expectedWallet,
+          availableWallets: wallets.length,
+        })
+      }
+      if (!walletAddress && wallets.length === 1) {
+        walletAddress = wallets[0]
+      }
+      if (!walletAddress && wallets.length > 1) {
+        return res.status(409).json({
+          ok: false,
+          code: 'multiple_agent_wallets',
+          error: 'Circle returned multiple agent wallets. Enter the funded agent wallet address so Hash PayLink does not pick the wrong wallet.',
+          existingWallet: existing?.walletAddress,
+          availableWallets: wallets.length,
+        })
+      }
       if (!walletAddress) return res.status(502).json({ ok: false, error: 'Circle login completed, but no wallet address was found.' })
       delete store.pending[id]
       const envRecord = getEnvAgentRecord(agentSlug)

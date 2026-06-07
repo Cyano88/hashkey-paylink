@@ -155,6 +155,7 @@ export default function AgentDemo() {
   const [copiedWallet, setCopiedWallet] = useState(false)
   const [walletEmail, setWalletEmail] = useState('')
   const [walletOtp, setWalletOtp] = useState('')
+  const [walletExpectedAddress, setWalletExpectedAddress] = useState('')
   const [walletMode, setWalletMode] = useState<'choose' | 'create' | 'login'>('choose')
   const [walletStep, setWalletStep] = useState<'idle' | 'otp' | 'done'>('idle')
   const [walletBusy, setWalletBusy] = useState(false)
@@ -471,12 +472,19 @@ export default function AgentDemo() {
           email,
           otp: walletOtp,
           testnet: agentNetwork === 'arc',
-          expectedWallet: ignoreUrlAgentWallet ? currentAgentWallet || undefined : intendedAgentWallet || currentAgentWallet || undefined,
+          expectedWallet: walletExpectedAddress.trim()
+            || (ignoreUrlAgentWallet ? currentAgentWallet || undefined : intendedAgentWallet || currentAgentWallet || undefined),
         }),
       })
       const data = await res.json() as { ok?: boolean; error?: string; walletAddress?: string; chain?: string; code?: string; existingWallet?: string; newWallet?: string }
       if (data.code === 'wallet_mismatch') {
         throw new Error(`Circle returned a different wallet. Existing: ${data.existingWallet ?? 'saved wallet'}. New: ${data.newWallet ?? 'new wallet'}. Login with the email for the existing funded wallet, or disconnect and replace intentionally.`)
+      }
+      if (data.code === 'multiple_agent_wallets') {
+        throw new Error('Circle returned multiple agent wallets. Paste the funded wallet address, then verify again.')
+      }
+      if (data.code === 'expected_wallet_not_found') {
+        throw new Error('That wallet was not found for this Circle email. Check the address or sign in with the email that owns the funded agent wallet.')
       }
       if (!res.ok || !data.ok) throw new Error(data.error ?? 'Circle Agent Wallet request failed')
       if (action === 'init') {
@@ -843,7 +851,7 @@ export default function AgentDemo() {
                       disabled={walletBusy}
                       className="rounded-lg bg-black px-3 py-2.5 text-sm font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
                     >
-                      Create wallet
+                      Set up wallet
                     </button>
                     <button
                       type="button"
@@ -856,11 +864,11 @@ export default function AgentDemo() {
                       disabled={walletBusy}
                       className="rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/[0.1]"
                     >
-                      Existing wallet
+                      Connect existing
                     </button>
                   </div>
                   <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
-                    Circle wallet
+                    Circle agent wallet
                   </p>
                 </>
               ) : (
@@ -870,7 +878,7 @@ export default function AgentDemo() {
                       {PRIVY_AUTH_ENABLED && privyAuthenticated ? (
                         <div className="rounded-lg border border-gray-200 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.06]">
                           <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">
-                            {walletMode === 'create' ? 'New agent wallet' : 'Existing agent wallet'}
+                            {walletMode === 'create' ? 'Set up agent wallet' : 'Connect existing agent wallet'}
                           </p>
                           <p className="mt-0.5 truncate text-sm font-medium text-gray-800 dark:text-gray-100">
                             {privyEmail || 'Email session active'}
@@ -888,6 +896,18 @@ export default function AgentDemo() {
                           />
                         </div>
                       )}
+                      {walletMode === 'login' && !currentAgentWallet && (
+                        <div className="rounded-lg border border-gray-200 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.06]">
+                          <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Funded wallet address</p>
+                          <input
+                            value={walletExpectedAddress}
+                            onChange={e => setWalletExpectedAddress(e.target.value.trim())}
+                            placeholder="0x..."
+                            disabled={walletBusy || walletStep === 'done'}
+                            className="mt-1 w-full bg-transparent font-mono text-sm text-gray-800 placeholder:text-gray-400 outline-none disabled:opacity-60 dark:text-white dark:placeholder:text-gray-500"
+                          />
+                        </div>
+                      )}
                       <button
                         type="button"
                         onClick={() => callAgentWallet('init')}
@@ -899,7 +919,7 @@ export default function AgentDemo() {
                           : <><img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert mix-blend-screen" /> Continue</>}
                       </button>
                       <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
-                        Circle OTP required
+                        Circle OTP required. Existing wallets are matched by address.
                       </p>
                     </>
                   )}
@@ -946,7 +966,7 @@ export default function AgentDemo() {
                     disabled={walletBusy}
                     className="text-xs font-semibold text-gray-500 transition-colors hover:text-gray-900 disabled:opacity-50 dark:text-gray-400 dark:hover:text-white"
                   >
-                    {walletMode === 'create' ? 'Already have a wallet? Connect existing' : 'Need a new wallet? Create one'}
+                    {walletMode === 'create' ? 'Already have a wallet? Connect existing' : 'Need a wallet first? Set up with Circle'}
                   </button>
                 </div>
               )}
