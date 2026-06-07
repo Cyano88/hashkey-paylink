@@ -439,9 +439,9 @@ function PolymarketFundingPanel({
             </span>
             <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Polymarket</p>
           </div>
-          <h2 className="mt-2 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Polymarket Funding</h2>
+          <h2 className="mt-2 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Fund Polymarket</h2>
           <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-            Add USDC to a Polymarket funding wallet through Hash PayLink checkout.
+            Add USDC to a Polymarket funding wallet, or share a funding request in Telegram.
           </p>
         </div>
         {savedRequest && (
@@ -464,14 +464,14 @@ function PolymarketFundingPanel({
             <div className="mt-4 space-y-2">
               <RequestModeButton
                 icon={Wallet}
-                title="Fund myself"
-                body="Open Circle USDC checkout for your funding wallet."
+                title="Fund my account"
+                body="Pay directly into your Polymarket funding wallet."
                 onClick={() => setMode('self')}
               />
               <RequestModeButton
                 icon={UsersRound}
-                title="Ask friends"
-                body="Share a clean Polymarket funding card in Telegram."
+                title="Get funded"
+                body="Share a Polymarket funding request in Telegram."
                 onClick={() => setMode('friends')}
               />
             </div>
@@ -479,22 +479,17 @@ function PolymarketFundingPanel({
 
           {mode && (
             <div className="mt-4 space-y-3">
-              <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
+              <div>
                 <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">
-                  {mode === 'self' ? 'Direct funding' : 'Telegram funding request'}
+                  {mode === 'self' ? 'Direct checkout' : 'Telegram request'}
                 </p>
                 <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-white">
-                  {mode === 'self' ? 'Fund your Polymarket wallet' : 'Ask someone to fund it'}
-                </p>
-                <p className="mt-0.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                  {mode === 'self'
-                    ? 'Hash PayLink opens with the funding wallet and amount prefilled.'
-                    : 'Telegram will ask where to share the funding card.'}
+                  {mode === 'self' ? 'Pay into your Polymarket wallet' : 'Share a Polymarket funding card'}
                 </p>
               </div>
 
               <InputBlock
-                label="Funding wallet"
+                label="Polymarket wallet"
                 value={wallet}
                 onChange={setWallet}
                 placeholder="0x... funding wallet"
@@ -520,7 +515,7 @@ function PolymarketFundingPanel({
                 className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
               >
                 <Send className="h-4 w-4" />
-                {mode === 'self' ? 'Open funding checkout' : 'Save funding card'}
+                {mode === 'self' ? 'Continue to checkout' : 'Save funding request'}
               </button>
             </div>
           )}
