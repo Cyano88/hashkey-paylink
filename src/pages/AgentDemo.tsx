@@ -807,7 +807,7 @@ export default function AgentDemo() {
             <div className="mt-4 space-y-2 rounded-xl border border-gray-200 bg-gray-50/70 p-3 transition-all dark:border-white/10 dark:bg-white/[0.04]">
               <div>
                 <p className="text-sm font-semibold text-gray-900 dark:text-white">Sign in</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Privy email + Circle wallet access.</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Email sign-in for wallet access.</p>
               </div>
 
               {PRIVY_AUTH_ENABLED && !privyAuthenticated ? (
@@ -878,7 +878,7 @@ export default function AgentDemo() {
                       {PRIVY_AUTH_ENABLED && privyAuthenticated ? (
                         <div className="rounded-lg border border-gray-200 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.06]">
                           <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">
-                            {walletMode === 'create' ? 'Set up agent wallet' : 'Connect existing agent wallet'}
+                            {walletMode === 'create' ? 'Set up wallet' : 'Connect existing'}
                           </p>
                           <p className="mt-0.5 truncate text-sm font-medium text-gray-800 dark:text-gray-100">
                             {privyEmail || 'Email session active'}
@@ -898,7 +898,7 @@ export default function AgentDemo() {
                       )}
                       {walletMode === 'login' && !currentAgentWallet && (
                         <div className="rounded-lg border border-gray-200 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.06]">
-                          <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Funded wallet address</p>
+                          <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Wallet address</p>
                           <input
                             value={walletExpectedAddress}
                             onChange={e => setWalletExpectedAddress(e.target.value.trim())}
@@ -906,6 +906,9 @@ export default function AgentDemo() {
                             disabled={walletBusy || walletStep === 'done'}
                             className="mt-1 w-full bg-transparent font-mono text-sm text-gray-800 placeholder:text-gray-400 outline-none disabled:opacity-60 dark:text-white dark:placeholder:text-gray-500"
                           />
+                          <p className="mt-1 text-[11px] font-medium text-gray-400 dark:text-gray-500">
+                            Used only to match the correct Circle agent wallet.
+                          </p>
                         </div>
                       )}
                       <button
@@ -919,7 +922,7 @@ export default function AgentDemo() {
                           : <><img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert mix-blend-screen" /> Continue</>}
                       </button>
                       <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
-                        Circle OTP required. Existing wallets are matched by address.
+                        Circle will email a login code.
                       </p>
                     </>
                   )}
@@ -966,7 +969,7 @@ export default function AgentDemo() {
                     disabled={walletBusy}
                     className="text-xs font-semibold text-gray-500 transition-colors hover:text-gray-900 disabled:opacity-50 dark:text-gray-400 dark:hover:text-white"
                   >
-                    {walletMode === 'create' ? 'Already have a wallet? Connect existing' : 'Need a wallet first? Set up with Circle'}
+                    {walletMode === 'create' ? 'Connect existing instead' : 'Set up with Circle instead'}
                   </button>
                 </div>
               )}
@@ -1200,7 +1203,7 @@ export default function AgentDemo() {
               </span>
               <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-2">
-                  <span className="text-sm font-semibold text-gray-900 dark:text-white">Create Your Agent</span>
+                  <span className="text-sm font-semibold text-gray-900 dark:text-white">Agent Setup</span>
                   <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-bold uppercase text-gray-400 dark:bg-white/[0.06]">Next</span>
                 </span>
                 <span className="mt-0.5 block text-xs leading-relaxed text-gray-500 dark:text-gray-400">

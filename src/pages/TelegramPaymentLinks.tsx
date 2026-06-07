@@ -85,8 +85,8 @@ const sectionServices: Record<TelegramSectionId, TelegramService[]> = {
     },
     {
       id: 'create-your-agent',
-      title: 'Create Your Agent',
-      body: 'Name, purpose, Circle email login, wallet setup, and reusable agent profile.',
+      title: 'Agent Setup',
+      body: 'Create a profile, then connect or set up a Circle agent wallet.',
       icon: Wallet,
       status: 'Open',
       active: true,
@@ -1302,9 +1302,9 @@ function CreateAgentPanel({
             <Bot className="h-4 w-4" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-gray-900 dark:text-white">Create Your Agent</p>
+            <p className="text-sm font-semibold text-gray-900 dark:text-white">Agent Setup</p>
             <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-              Start with identity and purpose. Circle wallet setup comes next for funding and x402.
+              Create a profile, then connect or set up a Circle agent wallet.
             </p>
           </div>
         </div>
@@ -1336,21 +1336,21 @@ function CreateAgentPanel({
           className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
         >
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-          Save agent profile
+          Save profile
         </button>
         {error && <p className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs font-medium text-red-600 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200">{error}</p>}
         {savedAgent && (
           <div className="rounded-xl border border-emerald-100 bg-emerald-50/80 p-3 dark:border-emerald-400/20 dark:bg-emerald-400/10">
             <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-200">{savedAgent.name} saved</p>
             <p className="mt-1 text-xs leading-relaxed text-emerald-700/80 dark:text-emerald-200/80">
-              Next: connect a Circle agent wallet, fund treasury, then activate x402 from the agent dashboard.
+              Next: connect wallet, fund treasury, then activate x402.
             </p>
             <a
               href={`/agent?profile=agent&agent=${encodeURIComponent(savedAgent.slug)}&src=telegram`}
               className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950"
             >
               <Wallet className="h-4 w-4" />
-              Connect wallet next
+              Connect wallet
             </a>
           </div>
         )}
@@ -1390,7 +1390,7 @@ function CreateAgentPanel({
           )
         }) : (
           <p className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-3 text-xs text-gray-500 dark:border-white/10 dark:bg-white/[0.03] dark:text-gray-400">
-            No saved agents yet.
+            No agents yet.
           </p>
         )}
       </div>
@@ -1539,7 +1539,7 @@ function FundAgentWalletPanel({
             className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950"
           >
             <Bot className="h-4 w-4" />
-            Create Your Agent
+            Agent Setup
           </button>
         </div>
       ) : (
@@ -1602,7 +1602,7 @@ function FundAgentWalletPanel({
                 className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950"
               >
                 <Wallet className="h-4 w-4" />
-                Connect Circle wallet first
+                Connect wallet first
               </a>
             )}
           </div>
