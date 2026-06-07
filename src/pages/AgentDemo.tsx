@@ -97,7 +97,6 @@ type AgentProfileSummary = {
 // ─── Demo credentials (pre-filled for judges) ─────────────────────────────────
 const DEMO_EVENT_ID = 'test-0g-1778114523394'
 const DEMO_PAYER    = 'HashPayLink 0G Test'
-const AGENT_WALLET_CHAINS: Extract<ChainKey, 'base' | 'arbitrum' | 'arc'>[] = ['base', 'arbitrum', 'arc']
 const PLATFORM_AGENT_SLUG = 'hashpaylink-agent'
 const PLATFORM_AGENT_PROFILE: AgentProfileSummary = {
   slug: PLATFORM_AGENT_SLUG,
@@ -108,8 +107,8 @@ const PLATFORM_AGENT_PROFILE: AgentProfileSummary = {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function AgentDemo() {
-  const { selectedNet, onNetworkSelect } = useOutletContext<LayoutOutletContext>()
-  const { authenticated: privyAuthenticated, user: privyUser, login: loginPrivy, getAccessToken } = usePrivy()
+  const { onNetworkSelect } = useOutletContext<LayoutOutletContext>()
+  const { authenticated: privyAuthenticated, user: privyUser, login: loginPrivy, logout: logoutPrivy, getAccessToken } = usePrivy()
   const privyEmail = emailFromPrivyUser(privyUser).trim().toLowerCase()
   const params = new URLSearchParams(window.location.search)
   const agentSlug = params.get('agent') ?? ''
@@ -124,12 +123,9 @@ export default function AgentDemo() {
   const urlAgentNetwork = params.get('n') ?? 'base'
   const isAgentTreasuryNetwork = (value: string): value is Extract<ChainKey, 'base' | 'arbitrum' | 'arc'> =>
     value === 'base' || value === 'arbitrum' || value === 'arc'
-  const agentNetwork = isAgentTreasuryNetwork(selectedNet)
-    ? selectedNet
-    : isAgentTreasuryNetwork(urlAgentNetwork)
+  const agentNetwork = isAgentTreasuryNetwork(urlAgentNetwork)
     ? urlAgentNetwork
     : 'base'
-  const agentMeta = CHAIN_META[agentNetwork]
   const showAgentProfile = params.get('profile') === 'agent' || Boolean(agentSlug || agentWallet)
   const showHelperDemo = params.get('helper') === 'live' || params.get('helper') === 'demo' || params.get('demo') === 'ai'
   const [eventId,    setEventId]    = useState(() => params.get('eventId') ?? '')
@@ -402,6 +398,18 @@ export default function AgentDemo() {
     window.setTimeout(() => setCopiedWallet(false), 1600)
   }
 
+  async function switchWalletEmail() {
+    setWalletMode('choose')
+    setWalletStep('idle')
+    setWalletOtp('')
+    setWalletError(null)
+    setWalletEmail('')
+    setWalletExpectedAddress('')
+    if (PRIVY_AUTH_ENABLED) {
+      await logoutPrivy()
+    }
+  }
+
   function buildAgentFundUrl() {
     const displayName = agentProfile?.name || agentSlug || 'Hash PayLink Agent'
     const fundingId = `agent-${agentSlug || 'hashpaylink'}-fund-${Date.now().toString(36)}`
@@ -564,7 +572,7 @@ export default function AgentDemo() {
     setX402Status('')
     setX402BalanceError('')
     try {
-      if (agentNetwork === 'arc') throw new Error('x402 Gateway activation supports Base or Arbitrum funding. Switch network to Base or Arbitrum.')
+      if (agentNetwork === 'arc') throw new Error('x402 Gateway activation supports Base or Arbitrum funding. Open this agent dashboard on Base or Arbitrum to activate x402.')
       const amount = Number(x402Amount)
       if (!Number.isFinite(amount) || amount <= 0) throw new Error('Enter a valid x402 amount.')
       const res = await fetch('/api/agent-wallet', {
@@ -647,37 +655,6 @@ export default function AgentDemo() {
         <div
           className="relative rounded-xl border border-gray-100 bg-white p-4 shadow-card transition-all dark:border-white/10 dark:bg-[#111114]"
         >
-          <div className="mb-4 flex justify-center">
-            <div className="flex w-full items-center justify-center gap-0.5 overflow-x-auto rounded-xl border border-gray-200 bg-gray-100/80 p-1 dark:border-white/10 dark:bg-white/[0.06] sm:w-auto sm:gap-1">
-              {AGENT_WALLET_CHAINS.map((chainKey) => {
-                const chainMeta = CHAIN_META[chainKey]
-                const isActive = agentNetwork === chainKey
-                return (
-                  <button
-                    key={chainKey}
-                    type="button"
-                    onClick={() => onNetworkSelect(chainKey)}
-                    className={cn(
-                      'flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-[10px] font-semibold transition-all duration-150 sm:gap-1.5 sm:px-3 sm:py-1.5 sm:text-xs',
-                      isActive ? chainMeta.toggleActive : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200',
-                    )}
-                  >
-                    <span className={cn('h-1.5 w-1.5 rounded-full transition-colors', isActive ? 'bg-white/80' : chainMeta.dotColor)} />
-                    <span>{chainMeta.label}</span>
-                    {chainKey === 'arc' && (
-                      <span className={cn(
-                        'rounded-full px-1.5 py-0.5 text-[8px] font-bold uppercase leading-none',
-                        isActive ? 'bg-white/20 text-white' : 'bg-cyan-100 text-cyan-700 dark:bg-cyan-400/10 dark:text-cyan-200',
-                      )}>
-                        Testnet
-                      </span>
-                    )}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-
           {currentAgentWallet && (
             <button
               type="button"
@@ -838,11 +815,21 @@ export default function AgentDemo() {
                       <CheckCircle2 className="h-4 w-4" />
                     </span>
                     <div className="min-w-0 flex-1">
-                      <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Signed in</p>
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Wallet email</p>
                       <p className="mt-0.5 truncate text-sm font-medium text-gray-800 dark:text-gray-100">
                         {PRIVY_AUTH_ENABLED ? privyEmail || 'Email session active' : 'Choose how to continue'}
                       </p>
                     </div>
+                    {PRIVY_AUTH_ENABLED && (
+                      <button
+                        type="button"
+                        onClick={switchWalletEmail}
+                        disabled={walletBusy}
+                        className="shrink-0 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300 dark:hover:bg-white/[0.1]"
+                      >
+                        Switch
+                      </button>
+                    )}
                   </div>
                   <div className="space-y-2">
                     <button
@@ -895,6 +882,14 @@ export default function AgentDemo() {
                               {privyEmail || 'Email session active'}
                             </p>
                           </div>
+                          <button
+                            type="button"
+                            onClick={switchWalletEmail}
+                            disabled={walletBusy}
+                            className="shrink-0 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300 dark:hover:bg-white/[0.1]"
+                          >
+                            Switch
+                          </button>
                         </div>
                       ) : (
                         <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.06]">
@@ -1775,7 +1770,7 @@ export default function AgentDemo() {
 
             {agentNetwork === 'arc' && (
               <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-200">
-                x402 Gateway activation currently funds from Base or Arbitrum. Switch the network selector to Base or Arbitrum.
+                x402 Gateway activation currently funds from Base or Arbitrum.
               </p>
             )}
             {treasuryEmpty && (
