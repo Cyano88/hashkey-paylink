@@ -255,6 +255,41 @@ type AgentProfile = {
   updatedAt: number
 }
 
+type TelegramWebAppUser = {
+  id?: number | string
+  username?: string
+  first_name?: string
+  last_name?: string
+}
+
+function telegramWebAppUser(): TelegramWebAppUser | null {
+  const telegram = (window as unknown as {
+    Telegram?: {
+      WebApp?: {
+        initDataUnsafe?: {
+          user?: TelegramWebAppUser
+        }
+      }
+    }
+  }).Telegram
+  return telegram?.WebApp?.initDataUnsafe?.user ?? null
+}
+
+function telegramOwnerFromContext(searchParams: URLSearchParams, displayName: string) {
+  const webAppUser = telegramWebAppUser()
+  const urlUserId = searchParams.get('telegramId') ?? searchParams.get('tgid') ?? searchParams.get('tid') ?? searchParams.get('userId')
+  const stableId = String(webAppUser?.id ?? urlUserId ?? '').trim()
+  const username = String(webAppUser?.username ?? searchParams.get('u') ?? searchParams.get('username') ?? '').replace(/^@+/, '').trim()
+  const legacyOwner = displayName === 'there' ? 'telegram-user' : displayName
+  const owner = stableId ? `telegram:${stableId}` : legacyOwner
+  return {
+    owner,
+    legacyOwner: legacyOwner !== owner ? legacyOwner : '',
+    isStable: Boolean(stableId),
+    username,
+  }
+}
+
 function shortAgentWallet(value?: string) {
   if (!value) return ''
   return value.length > 14 ? `${value.slice(0, 6)}...${value.slice(-4)}` : value
@@ -325,7 +360,8 @@ export default function TelegramPaymentLinks() {
     () => displayTelegramName(searchParams.get('u') ?? searchParams.get('username'), 'there'),
     [searchParams],
   )
-  const agentOwner = telegramName === 'there' ? 'telegram-user' : telegramName
+  const telegramIdentity = useMemo(() => telegramOwnerFromContext(searchParams, telegramName), [searchParams, telegramName])
+  const agentOwner = telegramIdentity.owner
 
   const requestFormTarget = target.trim()
   const requestWalletReady = requestNetwork === 'all'
@@ -342,7 +378,9 @@ export default function TelegramPaymentLinks() {
   async function loadAgentProfiles() {
     setAgentProfilesError('')
     try {
-      const res = await fetch(`/api/agent-profile?owner=${encodeURIComponent(agentOwner)}`)
+      const profileParams = new URLSearchParams({ owner: agentOwner })
+      if (telegramIdentity.legacyOwner) profileParams.set('fallbackOwner', telegramIdentity.legacyOwner)
+      const res = await fetch(`/api/agent-profile?${profileParams.toString()}`)
       const data = await res.json() as { ok?: boolean; agents?: AgentProfile[]; error?: string }
       if (!res.ok || !data.ok) throw new Error(data.error || 'Could not load agents.')
       setAgentProfiles(data.agents ?? [])
@@ -667,7 +705,7 @@ export default function TelegramPaymentLinks() {
             />
           ) : activeService === 'create-your-agent' ? (
             <CreateAgentPanel
-              telegramName={telegramName}
+              owner={agentOwner}
               agents={agentProfiles}
               setAgents={setAgentProfiles}
               onBack={() => setActiveService('')}
@@ -675,6 +713,7 @@ export default function TelegramPaymentLinks() {
           ) : activeService === 'fund-agent-wallet' ? (
             <FundAgentWalletPanel
               owner={agentOwner}
+              fallbackOwner={telegramIdentity.legacyOwner}
               agents={agentProfiles}
               setAgents={setAgentProfiles}
               loadError={agentProfilesError}
@@ -1243,17 +1282,16 @@ function TelegramHelperPanel({
 }
 
 function CreateAgentPanel({
-  telegramName,
+  owner,
   agents,
   setAgents,
   onBack,
 }: {
-  telegramName: string
+  owner: string
   agents: AgentProfile[]
   setAgents: (agents: AgentProfile[]) => void
   onBack: () => void
 }) {
-  const owner = telegramName === 'there' ? 'telegram-user' : telegramName
   const [name, setName] = useState('')
   const [purpose, setPurpose] = useState('')
   const [busy, setBusy] = useState(false)
@@ -1397,13 +1435,16 @@ function CreateAgentPanel({
         <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Saved agents</p>
         {agents.length ? agents.map(agent => {
           const status = agentWalletStatus(agent)
+          const dashboardUrl = `/agent?profile=agent&agent=${encodeURIComponent(agent.slug)}&src=telegram`
           return (
-            <button
+            <div
               key={agent.slug}
-              type="button"
-              onClick={() => editAgent(agent)}
-              className="flex w-full items-center gap-3 rounded-xl border border-gray-100 bg-white px-3 py-3 text-left transition-all hover:border-gray-200 hover:bg-gray-50 active:scale-[0.99] dark:border-white/10 dark:bg-white/[0.03] dark:hover:bg-white/[0.06]"
+              className="flex w-full items-center gap-2 rounded-xl border border-gray-100 bg-white p-2 text-left transition-all hover:border-gray-200 hover:bg-gray-50 dark:border-white/10 dark:bg-white/[0.03] dark:hover:bg-white/[0.06]"
             >
+              <a
+                href={dashboardUrl}
+                className="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-1 py-1.5 active:scale-[0.99]"
+              >
               <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-700 dark:bg-white/[0.08] dark:text-gray-200">
                 <Bot className="h-4 w-4" />
               </span>
@@ -1416,14 +1457,16 @@ function CreateAgentPanel({
                 </span>
                 <span className="mt-0.5 block truncate text-xs text-gray-500 dark:text-gray-400">{status.detail} · {agent.purpose}</span>
               </span>
-              {agent.walletAddress ? (
-                <span className="hidden shrink-0 items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-gray-700 transition-colors dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 sm:inline-flex">
-                  Edit
-                </span>
-              ) : (
                 <ArrowRight className="h-4 w-4 shrink-0 text-gray-400" />
-              )}
-            </button>
+              </a>
+              <button
+                type="button"
+                onClick={() => editAgent(agent)}
+                className="shrink-0 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-gray-700 transition-colors hover:bg-gray-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/[0.1]"
+              >
+                Edit
+              </button>
+            </div>
           )
         }) : (
           <p className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-3 text-xs text-gray-500 dark:border-white/10 dark:bg-white/[0.03] dark:text-gray-400">
@@ -1437,6 +1480,7 @@ function CreateAgentPanel({
 
 function FundAgentWalletPanel({
   owner,
+  fallbackOwner,
   agents,
   setAgents,
   loadError,
@@ -1445,6 +1489,7 @@ function FundAgentWalletPanel({
   onBack,
 }: {
   owner: string
+  fallbackOwner: string
   agents: AgentProfile[]
   setAgents: (agents: AgentProfile[]) => void
   loadError: string
@@ -1468,7 +1513,9 @@ function FundAgentWalletPanel({
   async function refreshAgents() {
     setLoadError('')
     try {
-      const res = await fetch(`/api/agent-profile?owner=${encodeURIComponent(owner)}`)
+      const profileParams = new URLSearchParams({ owner })
+      if (fallbackOwner) profileParams.set('fallbackOwner', fallbackOwner)
+      const res = await fetch(`/api/agent-profile?${profileParams.toString()}`)
       const data = await res.json() as { ok?: boolean; agents?: AgentProfile[]; error?: string }
       if (!res.ok || !data.ok) throw new Error(data.error || 'Could not load agents.')
       setAgents(data.agents ?? [])
@@ -1479,7 +1526,7 @@ function FundAgentWalletPanel({
 
   useEffect(() => {
     if (!agents.length) void refreshAgents()
-  }, [owner]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [owner, fallbackOwner]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!selectedSlug && agents[0]?.slug) setSelectedSlug(agents[0].slug)

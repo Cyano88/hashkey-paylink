@@ -110,6 +110,22 @@ function visibleAgents(store: Store, key: string) {
     .sort((a, b) => b.updatedAt - a.updatedAt)
 }
 
+async function migrateVisibleAgents(store: Store, fromKey: string, toKey: string) {
+  if (!fromKey || !toKey || fromKey === toKey) return []
+  const agents = visibleAgents(store, fromKey)
+  if (!agents.length) return []
+  const now = Date.now()
+  for (const agent of agents) {
+    store.agents[agent.slug] = {
+      ...agent,
+      ownerKey: toKey,
+      updatedAt: now,
+    }
+  }
+  await writeStore(store)
+  return visibleAgents(store, toKey)
+}
+
 export async function setAgentProfileWallet(slug: string, walletAddress: string) {
   const cleanSlug = slugify(slug)
   const cleanWallet = cleanString(walletAddress, 80)
@@ -140,7 +156,11 @@ export default async function handler(req: Request, res: Response) {
     const store = await readStore()
     const key = ownerKey(req.query.owner)
     if (!key) return res.status(400).json({ ok: false, error: 'Missing owner.' })
-    return res.json({ ok: true, agents: visibleAgents(store, key) })
+    const agents = visibleAgents(store, key)
+    if (agents.length) return res.json({ ok: true, agents })
+    const fallbackKey = ownerKey(req.query.fallbackOwner)
+    const migrated = await migrateVisibleAgents(store, fallbackKey, key)
+    return res.json({ ok: true, agents: migrated })
   }
 
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed' })
