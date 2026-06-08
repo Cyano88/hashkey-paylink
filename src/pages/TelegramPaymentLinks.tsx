@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   ArrowLeft,
   ArrowRight,
@@ -314,6 +314,7 @@ function agentWalletStatus(agent: AgentProfile, ready = false) {
 }
 
 export default function TelegramPaymentLinks() {
+  const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const initialMode: RequestMode | '' = searchParams.get('mode') === 'group' ? 'group' : searchParams.get('mode') === 'person' ? 'person' : ''
   const initialSectionParam = searchParams.get('section')
@@ -562,12 +563,24 @@ export default function TelegramPaymentLinks() {
     setPolymarketMode('')
   }
 
+  function goBackFromTelegramDashboard() {
+    if (window.history.length > 1) {
+      navigate(-1)
+      return
+    }
+    navigate('/')
+  }
+
   return (
     <div className="mx-auto max-w-md animate-slide-up space-y-5">
-      <Link to="/" className="inline-flex items-center gap-1.5 text-sm text-gray-500 transition-colors hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+      <button
+        type="button"
+        onClick={goBackFromTelegramDashboard}
+        className="inline-flex items-center gap-1.5 text-sm text-gray-500 transition-colors hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+      >
         <ArrowLeft className="h-3.5 w-3.5" />
         Back
-      </Link>
+      </button>
 
       <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card dark:border-white/10 dark:bg-[#111114]">
         <div className="flex items-center gap-2 text-[11px] font-semibold text-gray-400">
