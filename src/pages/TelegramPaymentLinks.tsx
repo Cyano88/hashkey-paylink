@@ -1379,7 +1379,34 @@ function CreateAgentPanel({
     setShowProfileForm(true)
   }
 
+  async function deleteAgent(agent: AgentProfile) {
+    if (busy) return
+    setBusy(true)
+    setError('')
+    try {
+      const res = await fetch('/api/agent-profile', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ owner, slug: agent.slug }),
+      })
+      const data = await res.json() as { ok?: boolean; agents?: AgentProfile[]; error?: string }
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Could not delete agent.')
+      setAgents(data.agents ?? [])
+      if (editingAgent?.slug === agent.slug) {
+        setEditingAgent(null)
+        setName('')
+        setPurpose('')
+      }
+      if (savedAgent?.slug === agent.slug) setSavedAgent(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not delete agent.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const connectedAgents = agents.filter(agent => Boolean(agent.walletAddress))
+  const draftAgents = agents.filter(agent => !agent.walletAddress)
   const atAgentLimit = !editingAgent && agents.length >= MAX_USER_AGENTS
   const canSave = name.trim().length >= 2 && purpose.trim().length >= 6 && !busy && !atAgentLimit
 
@@ -1451,7 +1478,7 @@ function CreateAgentPanel({
               </label>
               {atAgentLimit && (
                 <p className="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-200">
-                  You can keep up to {MAX_USER_AGENTS} agent profiles. Connect or edit an existing agent before creating another.
+                  You can keep up to {MAX_USER_AGENTS} agent profiles. Delete an unfinished profile below, or edit one and connect its wallet.
                 </p>
               )}
               <button
@@ -1480,6 +1507,40 @@ function CreateAgentPanel({
             </a>
           </div>
           ) : null}
+        </div>
+      )}
+
+      {draftAgents.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Saved profiles</p>
+          {draftAgents.map(agent => (
+            <div
+              key={agent.slug}
+              className="flex w-full items-center gap-2 rounded-xl border border-gray-100 bg-white p-2 text-left dark:border-white/10 dark:bg-white/[0.03]"
+            >
+              <button
+                type="button"
+                onClick={() => editAgent(agent)}
+                className="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-1 py-1.5 text-left transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.06]"
+              >
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-700 dark:bg-white/[0.08] dark:text-gray-200">
+                  <Bot className="h-4 w-4" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-semibold text-gray-900 dark:text-white">{agent.name}</span>
+                  <span className="mt-0.5 block truncate text-xs text-gray-500 dark:text-gray-400">Not connected · {agent.purpose}</span>
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => deleteAgent(agent)}
+                disabled={busy}
+                className="shrink-0 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-gray-500 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300 dark:hover:border-red-400/30 dark:hover:bg-red-400/10 dark:hover:text-red-200"
+              >
+                Delete
+              </button>
+            </div>
+          ))}
         </div>
       )}
 

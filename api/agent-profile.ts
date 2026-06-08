@@ -164,6 +164,22 @@ export default async function handler(req: Request, res: Response) {
     return res.json({ ok: true, agents: migrated })
   }
 
+  if (req.method === 'DELETE') {
+    const key = ownerKey(req.body?.owner ?? req.query.owner)
+    const slug = slugify(cleanString(req.body?.slug ?? req.query.slug ?? req.query.agent, 80))
+    if (!key) return res.status(400).json({ ok: false, error: 'Missing owner.' })
+    if (!slug) return res.status(400).json({ ok: false, error: 'Missing agent.' })
+    if (slug === PLATFORM_AGENT_SLUG) return res.status(403).json({ ok: false, error: 'Platform agent cannot be deleted.' })
+
+    const store = await readStore()
+    const existing = store.agents[slug]
+    if (!existing) return res.status(404).json({ ok: false, error: 'Agent profile not found.' })
+    if (existing.ownerKey !== key) return res.status(403).json({ ok: false, error: 'Agent profile does not belong to this user.' })
+    delete store.agents[slug]
+    await writeStore(store)
+    return res.json({ ok: true, agents: visibleAgents(store, key) })
+  }
+
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed' })
 
   const key = ownerKey(req.body?.owner)
