@@ -9,7 +9,7 @@
  */
 
 import { useState, useRef, useEffect } from 'react'
-import { Link, useOutletContext }       from 'react-router-dom'
+import { Link, useNavigate, useOutletContext } from 'react-router-dom'
 import { usePrivy }                     from '@privy-io/react-auth'
 import { cn }                           from '../lib/utils'
 import type { LayoutOutletContext }     from '../Layout'
@@ -133,6 +133,7 @@ function readableTreasuryBalanceError(error: unknown, networkLabel: string) {
 
 export default function AgentDemo() {
   const { onNetworkSelect } = useOutletContext<LayoutOutletContext>()
+  const navigate = useNavigate()
   const { authenticated: privyAuthenticated, user: privyUser, login: loginPrivy, logout: logoutPrivy, getAccessToken } = usePrivy()
   const privyEmail = emailFromPrivyUser(privyUser).trim().toLowerCase()
   const params = new URLSearchParams(window.location.search)
@@ -183,6 +184,7 @@ export default function AgentDemo() {
   const [walletBusy, setWalletBusy] = useState(false)
   const [activityBusy, setActivityBusy] = useState(false)
   const [walletError, setWalletError] = useState<string | null>(null)
+  const [showWalletAccessPanel, setShowWalletAccessPanel] = useState(false)
   const [verifying,  setVerifying]  = useState(false)
   const [verified,   setVerified]   = useState<VerifyResult | null>(null)
   const [question,   setQuestion]   = useState('')
@@ -683,6 +685,8 @@ export default function AgentDemo() {
   const displayAgentPurpose = displayAgentProfile?.purpose || 'Connect a Circle agent wallet, fund treasury, and activate x402 from the dashboard.'
   const agentEmailConnected = Boolean(PRIVY_AUTH_ENABLED && privyAuthenticated)
   const agentWalletAccessConnected = Boolean(currentAgentWallet && agentWalletSessionConnected && (!PRIVY_AUTH_ENABLED || privyAuthenticated))
+  const connectedWalletNeedsAccess = Boolean(currentAgentWallet && !agentWalletAccessConnected)
+  const showAgentWalletAccessPanel = Boolean(!agentWalletAccessConnected && (!currentAgentWallet || showWalletAccessPanel))
   const treasuryRefreshing = Boolean(agentWalletAccessConnected && !treasuryBalanceChecked)
   const x402Refreshing = Boolean(agentWalletAccessConnected && !x402BalanceChecked)
   const walletErrorMessage = walletError
@@ -695,9 +699,16 @@ export default function AgentDemo() {
     <div className={cn('mx-auto animate-slide-up space-y-6', showAgentProfile || showHelperDemo ? 'max-w-md' : 'max-w-2xl')}>
 
       {/* ── Back ──────────────────────────────────────────────────────────── */}
-      <Link to={backHref} className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors">
+      <button
+        type="button"
+        onClick={() => {
+          if (window.history.length > 1) navigate(-1)
+          else navigate(backHref)
+        }}
+        className="inline-flex items-center gap-1.5 text-sm text-gray-500 transition-colors hover:text-gray-700"
+      >
         <ArrowLeft className="h-3.5 w-3.5" /> Back
-      </Link>
+      </button>
 
       {showAgentProfile && (
         <div
@@ -779,6 +790,8 @@ export default function AgentDemo() {
                   <p className="text-sm font-semibold text-gray-900 dark:text-white" title={treasuryBalanceError || undefined}>
                     {treasuryBalance !== null
                       ? `${Number(treasuryBalance).toLocaleString(undefined, { maximumFractionDigits: 6 })} USDC`
+                      : connectedWalletNeedsAccess
+                      ? 'Connect to view'
                       : currentAgentWallet
                       ? treasuryBalanceError || treasuryBalanceChecked ? 'Unavailable' : 'Checking...'
                       : 'No wallet'}
@@ -801,6 +814,29 @@ export default function AgentDemo() {
               <p className="mt-3 text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
                 Fund the wallet treasury first. x402 activation moves part of that funded balance into Circle Gateway.
               </p>
+            )}
+            {connectedWalletNeedsAccess && (
+              <div className="mt-3 rounded-lg border border-gray-100 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.04]">
+                <p className="text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
+                  Connect this agent wallet to view global balances, receipts, and x402 actions.
+                </p>
+                {!showWalletAccessPanel && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowWalletAccessPanel(true)
+                      setWalletMode('login')
+                      setWalletStep('idle')
+                      setWalletOtp('')
+                      setWalletError(null)
+                    }}
+                    className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-700 transition-all hover:bg-white active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/[0.1]"
+                  >
+                    <Wallet className="h-3.5 w-3.5" />
+                    Connect to continue
+                  </button>
+                )}
+              </div>
             )}
             {fundingSubmitted && (
               <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 dark:border-emerald-400/20 dark:bg-emerald-400/10">
@@ -840,14 +876,18 @@ export default function AgentDemo() {
             )}
           </div>
 
-          {!agentWalletAccessConnected && (
+          {showAgentWalletAccessPanel && (
             <div className="mt-4 space-y-2 rounded-xl border border-gray-200 bg-gray-50/70 p-3 transition-all dark:border-white/10 dark:bg-white/[0.04]">
               <div>
                 <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                  {agentEmailConnected ? 'Wallet access' : 'Sign in'}
+                  {currentAgentWallet ? 'Connect wallet access' : agentEmailConnected ? 'Set up agent wallet' : 'Sign in'}
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
-                  {agentEmailConnected ? 'Use this email to set up or reconnect a Circle agent wallet.' : 'Email sign-in for wallet access.'}
+                  {currentAgentWallet
+                    ? 'Reconnect this saved wallet before balances, receipts, and x402 actions appear.'
+                    : agentEmailConnected
+                    ? 'Create a new Circle agent wallet or connect an existing one.'
+                    : 'Email sign-in is required before wallet setup.'}
                 </p>
               </div>
 
