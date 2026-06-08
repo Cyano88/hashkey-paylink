@@ -63,6 +63,27 @@ loadEnv({ path: '.env', override: false })
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const app = express()
 
+app.use((_req, res, next) => {
+  res.setHeader('X-Frame-Options', 'DENY')
+  res.setHeader(
+    'Content-Security-Policy',
+    [
+      "default-src 'self'",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com",
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' data: blob: https:",
+      "font-src 'self' data:",
+      "connect-src 'self' https: wss:",
+      "frame-src 'self' https://auth.privy.io https://verify.walletconnect.com https://verify.walletconnect.org https://challenges.cloudflare.com",
+      "child-src 'self' https://auth.privy.io https://verify.walletconnect.com https://verify.walletconnect.org https://challenges.cloudflare.com",
+      "frame-ancestors 'none'",
+      "base-uri 'self'",
+      "form-action 'self'",
+    ].join('; '),
+  )
+  next()
+})
+
 // Parse JSON bodies before any route handler sees req.body.
 app.use(express.json({ limit: '64kb' }))
 
