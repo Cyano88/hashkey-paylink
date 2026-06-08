@@ -87,7 +87,7 @@ const sectionServices: Record<TelegramSectionId, TelegramService[]> = {
     {
       id: 'create-your-agent',
       title: 'Agent Setup',
-      body: 'Create a profile, then connect or set up a Circle agent wallet.',
+      body: 'Create a profile, then create or sign in to your Circle agent wallet and link it to that profile.',
       icon: Wallet,
       status: 'Open',
       active: true,
@@ -1442,7 +1442,7 @@ function CreateAgentPanel({
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold text-gray-900 dark:text-white">Agent Setup</p>
             <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-              Create a profile, then connect or set up a Circle agent wallet.
+              Name your agent, describe its purpose, then create or sign in to a Circle agent wallet. Once linked, that wallet becomes the agent treasury and x402 funding source.
             </p>
           </div>
         </div>

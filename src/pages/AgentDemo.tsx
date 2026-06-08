@@ -989,21 +989,6 @@ export default function AgentDemo() {
                           />
                         </div>
                       )}
-                      {walletMode === 'login' && (
-                        <div className="rounded-lg border border-gray-200 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.06]">
-                          <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Expected wallet</p>
-                          <input
-                            value={walletExpectedAddress}
-                            onChange={e => setWalletExpectedAddress(e.target.value.trim())}
-                            placeholder={currentAgentWallet || '0x...'}
-                            disabled={walletBusy || walletStep === 'done'}
-                            className="mt-1 w-full bg-transparent font-mono text-sm text-gray-800 placeholder:text-gray-400 outline-none disabled:opacity-60 dark:text-white dark:placeholder:text-gray-500"
-                          />
-                          <p className="mt-1 text-[11px] font-medium text-gray-400 dark:text-gray-500">
-                            Optional. Paste the funded wallet to prevent Circle from selecting the wrong agent wallet.
-                          </p>
-                        </div>
-                      )}
                       {walletChoices.length > 0 && (
                         <div className="space-y-2 rounded-lg border border-amber-100 bg-amber-50/70 p-2 dark:border-amber-400/20 dark:bg-amber-400/10">
                           <p className="px-1 text-[11px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-200">Choose wallet</p>
