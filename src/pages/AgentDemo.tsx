@@ -497,7 +497,7 @@ export default function AgentDemo() {
       return
     }
     if (PRIVY_AUTH_ENABLED && !privyEmail) {
-      setWalletError('Sign in with email to manage your Circle CLI agent wallet.')
+      setWalletError('Sign in with email to manage your Circle agent wallet.')
       return
     }
     const email = (PRIVY_AUTH_ENABLED ? privyEmail : walletEmail).trim().toLowerCase()
@@ -521,7 +521,7 @@ export default function AgentDemo() {
       })
       const data = await res.json() as { ok?: boolean; error?: string; walletAddress?: string; chain?: string; code?: string; existingWallet?: string; newWallet?: string; availableWallets?: WalletChoice[] }
       if (data.code === 'wallet_mismatch') {
-        throw new Error(`Circle returned a different wallet. Existing: ${data.existingWallet ?? 'saved wallet'}. New: ${data.newWallet ?? 'new wallet'}. Login with the email for the existing funded wallet, or disconnect and replace intentionally.`)
+        throw new Error(`Circle returned a different wallet. Existing: ${data.existingWallet ?? 'saved wallet'}. New: ${data.newWallet ?? 'new wallet'}. Sign in with the email for the existing funded wallet, or replace it intentionally.`)
       }
       if (data.code === 'multiple_agent_wallets') {
         setWalletChoices(Array.isArray(data.availableWallets) ? data.availableWallets : [])
@@ -712,7 +712,7 @@ export default function AgentDemo() {
   const x402AmountExceedsTreasury = treasuryBalanceKnown && Number.isFinite(x402AmountNumber) && x402AmountNumber > treasuryBalanceNumber
   const displayAgentProfile = agentProfile ?? (agentSlug === PLATFORM_AGENT_SLUG || !agentSlug ? PLATFORM_AGENT_PROFILE : null)
   const displayAgentName = displayAgentProfile?.name || agentSlug || 'Your agent wallet'
-  const displayAgentPurpose = displayAgentProfile?.purpose || 'Connect a Circle agent wallet, fund treasury, and activate x402 from the dashboard.'
+  const displayAgentPurpose = displayAgentProfile?.purpose || 'Sign in, link a Circle agent wallet, fund treasury, and activate x402 from the dashboard.'
   const agentEmailConnected = Boolean(PRIVY_AUTH_ENABLED && privyAuthenticated)
   const agentWalletAccessConnected = Boolean(currentAgentWallet && agentWalletSessionConnected && (!PRIVY_AUTH_ENABLED || privyAuthenticated))
   const connectedWalletNeedsAccess = Boolean(currentAgentWallet && !agentWalletAccessConnected)
@@ -833,7 +833,7 @@ export default function AgentDemo() {
                     {treasuryBalance !== null
                       ? `${Number(treasuryBalance).toLocaleString(undefined, { maximumFractionDigits: 6 })} USDC`
                       : connectedWalletNeedsAccess
-                      ? 'Connect to view'
+                      ? 'Sign in to view'
                       : currentAgentWallet
                       ? treasuryBalanceError || treasuryBalanceChecked ? 'Unavailable' : 'Checking...'
                       : 'No wallet'}
@@ -860,7 +860,7 @@ export default function AgentDemo() {
             {connectedWalletNeedsAccess && (
               <div className="mt-3 rounded-lg border border-gray-100 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.04]">
                 <p className="text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
-                  Connect this agent wallet to view global balances, receipts, and x402 actions.
+                  Sign in to view balances, receipts, and x402 actions.
                 </p>
                 {!showWalletAccessPanel && (
                   <button
@@ -875,7 +875,7 @@ export default function AgentDemo() {
                     className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-700 transition-all hover:bg-white active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/[0.1]"
                   >
                     <Wallet className="h-3.5 w-3.5" />
-                    Connect to continue
+                    Sign in
                   </button>
                 )}
               </div>
@@ -922,13 +922,13 @@ export default function AgentDemo() {
             <div className="mt-4 space-y-2 rounded-xl border border-gray-200 bg-gray-50/70 p-3 transition-all dark:border-white/10 dark:bg-white/[0.04]">
               <div>
                 <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                  {currentAgentWallet ? 'Connect wallet access' : agentEmailConnected ? 'Set up agent wallet' : 'Sign in'}
+                  {currentAgentWallet ? 'Sign in' : agentEmailConnected ? 'Link wallet' : 'Sign in'}
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
                   {currentAgentWallet
-                    ? 'Reconnect this saved wallet before balances, receipts, and x402 actions appear.'
+                    ? 'Restore access before balances, receipts, and x402 actions appear.'
                     : agentEmailConnected
-                    ? 'Create a new Circle agent wallet or connect an existing one.'
+                    ? 'Create or link a Circle agent wallet.'
                     : 'Email sign-in is required before wallet setup.'}
                 </p>
               </div>
@@ -948,7 +948,7 @@ export default function AgentDemo() {
                     className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-6 py-3.5 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-60 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
                   >
                     <img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert mix-blend-screen" />
-                    Continue with email
+                    Sign in with email
                   </button>
                   <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
                     Privy email
@@ -980,7 +980,7 @@ export default function AgentDemo() {
                       className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
                     >
                       <Wallet className="h-4 w-4" />
-                      Set up wallet
+                      Create wallet
                     </button>
                     <button
                       type="button"
@@ -994,7 +994,7 @@ export default function AgentDemo() {
                       className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-3 text-sm font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/[0.1]"
                     >
                       <ExternalLink className="h-4 w-4" />
-                      Connect existing
+                      Link existing
                     </button>
                   </div>
                   <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
@@ -1012,7 +1012,7 @@ export default function AgentDemo() {
                           </span>
                           <div className="min-w-0 flex-1">
                             <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">
-                              {walletMode === 'create' ? 'Set up Circle wallet' : 'Connect existing wallet'}
+                              {walletMode === 'create' ? 'Create Circle wallet' : 'Link existing wallet'}
                             </p>
                             <p className="mt-0.5 truncate text-sm font-medium text-gray-800 dark:text-gray-100">
                               {privyEmail || 'Email session active'}
@@ -1071,7 +1071,7 @@ export default function AgentDemo() {
                       >
                         {walletBusy && walletStep === 'idle'
                           ? <><Loader2 className="h-4 w-4 animate-spin" /> Opening Circle wallet</>
-                          : <><img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert mix-blend-screen" /> {walletMode === 'create' ? 'Set up wallet' : 'Connect wallet'}</>}
+                          : <><img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert mix-blend-screen" /> {walletMode === 'create' ? 'Create wallet' : 'Link wallet'}</>}
                       </button>
                       <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
                         Circle will email a one-time code for this wallet session.
@@ -1121,7 +1121,7 @@ export default function AgentDemo() {
                     disabled={walletBusy}
                     className="text-xs font-semibold text-gray-500 transition-colors hover:text-gray-900 disabled:opacity-50 dark:text-gray-400 dark:hover:text-white"
                   >
-                    {walletMode === 'create' ? 'Connect existing instead' : 'Set up with Circle instead'}
+                    {walletMode === 'create' ? 'Link existing instead' : 'Create wallet instead'}
                   </button>
                 </div>
               )}

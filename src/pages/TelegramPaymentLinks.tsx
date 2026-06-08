@@ -87,7 +87,7 @@ const sectionServices: Record<TelegramSectionId, TelegramService[]> = {
     {
       id: 'create-your-agent',
       title: 'Agent Setup',
-      body: 'Create a profile, then create or sign in to your Circle agent wallet and link it to that profile.',
+      body: 'Create a profile, sign in, then link a Circle agent wallet.',
       icon: Wallet,
       status: 'Open',
       active: true,
@@ -300,12 +300,12 @@ function agentWalletStatus(agent: AgentProfile, ready = false) {
   if (!agent.walletAddress) {
     return {
       label: 'No wallet',
-      detail: 'Connect Circle wallet',
+      detail: 'Link Circle wallet',
       className: 'bg-gray-100 text-gray-500 dark:bg-white/[0.08] dark:text-gray-400',
     }
   }
   return {
-    label: ready ? 'Ready to fund' : 'Wallet connected',
+    label: ready ? 'Ready to fund' : 'Wallet linked',
     detail: shortAgentWallet(agent.walletAddress),
     className: ready
       ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-400/10 dark:text-emerald-300'
@@ -1357,6 +1357,7 @@ function CreateAgentPanel({
   const [savedAgent, setSavedAgent] = useState<AgentProfile | null>(null)
   const [editingAgent, setEditingAgent] = useState<AgentProfile | null>(null)
   const [showProfileForm, setShowProfileForm] = useState(true)
+  const [showExistingProfiles, setShowExistingProfiles] = useState(false)
 
   async function saveAgent() {
     if (busy) return
@@ -1442,11 +1443,29 @@ function CreateAgentPanel({
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold text-gray-900 dark:text-white">Agent Setup</p>
             <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-              Name your agent, describe its purpose, then create or sign in to a Circle agent wallet. Once linked, that wallet becomes the agent treasury and x402 funding source.
+              Create a profile, sign in, then link a Circle agent wallet. Once linked, that wallet becomes the agent treasury and x402 funding source.
             </p>
           </div>
         </div>
       </div>
+
+      {agents.length > 0 && !showExistingProfiles && (
+        <div className="rounded-xl border border-gray-100 bg-white p-3 dark:border-white/10 dark:bg-white/[0.03]">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-gray-900 dark:text-white">Existing profiles</p>
+              <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Sign in to restore saved agents.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowExistingProfiles(true)}
+              className="shrink-0 rounded-lg bg-black px-3 py-2 text-xs font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950"
+            >
+              Sign in
+            </button>
+          </div>
+        </div>
+      )}
 
       {(showProfileForm || savedAgent) && (
         <div className="space-y-3 rounded-xl border border-gray-100 bg-white p-3 dark:border-white/10 dark:bg-white/[0.03]">
@@ -1493,7 +1512,7 @@ function CreateAgentPanel({
                 <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">
                   <p className="text-xs font-semibold text-gray-800 dark:text-gray-100">Profile limit reached</p>
                   <p className="mt-0.5 text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
-                    You can keep up to {MAX_USER_AGENTS} agent profiles. Log in to an existing profile or delete one to create another.
+                    You can keep up to {MAX_USER_AGENTS} agent profiles. Sign in to an existing profile or delete an unfinished one to create another.
                   </p>
                 </div>
               )}
@@ -1512,23 +1531,23 @@ function CreateAgentPanel({
           <div className="rounded-xl border border-emerald-100 bg-emerald-50/80 p-3 dark:border-emerald-400/20 dark:bg-emerald-400/10">
             <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-200">{savedAgent.name} saved</p>
             <p className="mt-1 text-xs leading-relaxed text-emerald-700/80 dark:text-emerald-200/80">
-              Next: connect wallet, fund treasury, then activate x402.
+              Next: sign in, link wallet, fund treasury, then activate x402.
             </p>
             <a
               href={`/agent?profile=agent&agent=${encodeURIComponent(savedAgent.slug)}&src=telegram`}
               className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950"
             >
               <Wallet className="h-4 w-4" />
-              Connect wallet
+              Sign in
             </a>
           </div>
           ) : null}
         </div>
       )}
 
-      {draftAgents.length > 0 && (
+      {showExistingProfiles && draftAgents.length > 0 && (
         <div className="space-y-2">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Saved profiles</p>
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Profiles to finish</p>
           {draftAgents.map(agent => (
             <div
               key={agent.slug}
@@ -1544,7 +1563,7 @@ function CreateAgentPanel({
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-semibold text-gray-900 dark:text-white">{agent.name}</span>
-                  <span className="mt-0.5 block truncate text-xs text-gray-500 dark:text-gray-400">Not connected · {agent.purpose}</span>
+                  <span className="mt-0.5 block truncate text-xs text-gray-500 dark:text-gray-400">Wallet not linked · {agent.purpose}</span>
                 </span>
               </button>
               <button
@@ -1560,8 +1579,9 @@ function CreateAgentPanel({
         </div>
       )}
 
+      {showExistingProfiles && (
       <div className="space-y-2">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Connected agents</p>
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Existing profiles</p>
         {connectedAgents.length ? connectedAgents.map(agent => {
           const status = agentWalletStatus(agent)
           const dashboardUrl = `/agent?profile=agent&agent=${encodeURIComponent(agent.slug)}&src=telegram`
@@ -1599,10 +1619,11 @@ function CreateAgentPanel({
           )
         }) : (
           <p className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-3 text-xs text-gray-500 dark:border-white/10 dark:bg-white/[0.03] dark:text-gray-400">
-            No connected agents yet. Connect a Circle wallet after saving a profile.
+            No linked agents yet. Sign in after creating a profile to link a Circle wallet.
           </p>
         )}
       </div>
+      )}
     </div>
   )
 }
@@ -1749,9 +1770,9 @@ function FundAgentWalletPanel({
 
       {!connectedAgents.length ? (
         <div className="rounded-xl border border-gray-100 bg-white p-3 dark:border-white/10 dark:bg-white/[0.03]">
-          <p className="text-sm font-semibold text-gray-900 dark:text-white">Connect an agent wallet first</p>
+          <p className="text-sm font-semibold text-gray-900 dark:text-white">Link an agent wallet first</p>
           <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-            Funding only works after an agent profile has a Circle wallet connected.
+            Funding works after an agent profile has a Circle wallet linked.
           </p>
           <button
             type="button"
@@ -1774,7 +1795,7 @@ function FundAgentWalletPanel({
               >
                 {connectedAgents.map(agent => (
                   <option key={agent.slug} value={agent.slug}>
-                    {agent.name} - Wallet connected
+                    {agent.name} - Wallet linked
                   </option>
                 ))}
               </select>
@@ -1796,7 +1817,7 @@ function FundAgentWalletPanel({
               <div className="min-w-0">
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Wallet status</p>
                 <p className="mt-1 truncate font-mono text-xs text-gray-700 dark:text-gray-200">
-                  {walletBusy ? 'Checking...' : walletAddress || 'No wallet connected'}
+                  {walletBusy ? 'Checking...' : walletAddress || 'No wallet linked'}
                 </p>
                 {walletChain && <p className="mt-1 text-[11px] text-gray-400">{walletChain}</p>}
               </div>
@@ -1822,7 +1843,7 @@ function FundAgentWalletPanel({
                 className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950"
               >
                 <Wallet className="h-4 w-4" />
-                Connect wallet first
+                Link wallet first
               </a>
             )}
           </div>
