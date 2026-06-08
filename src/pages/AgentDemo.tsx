@@ -109,6 +109,16 @@ const PLATFORM_AGENT_PROFILE: AgentProfileSummary = {
   name: 'Hash PayLink Agent',
   purpose: 'Owner-managed platform agent for treasury, x402, LP Scout, and StreamPay services.',
 }
+type AgentTreasuryNetwork = Extract<ChainKey, 'base' | 'arbitrum' | 'arc'>
+const AGENT_TREASURY_NETWORKS: Array<{ key: AgentTreasuryNetwork; label: string }> = [
+  { key: 'base', label: 'Base' },
+  { key: 'arbitrum', label: 'Arbitrum' },
+  { key: 'arc', label: 'Arc Testnet' },
+]
+
+function isAgentTreasuryNetwork(value: string): value is AgentTreasuryNetwork {
+  return value === 'base' || value === 'arbitrum' || value === 'arc'
+}
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -127,11 +137,8 @@ export default function AgentDemo() {
   const fundingEventId = params.get('fundingId') ?? params.get('eventId') ?? ''
   const fundedAmount = params.get('fundedAmount') ?? params.get('amount') ?? ''
   const urlAgentNetwork = params.get('n') ?? 'base'
-  const isAgentTreasuryNetwork = (value: string): value is Extract<ChainKey, 'base' | 'arbitrum' | 'arc'> =>
-    value === 'base' || value === 'arbitrum' || value === 'arc'
-  const agentNetwork = isAgentTreasuryNetwork(urlAgentNetwork)
-    ? urlAgentNetwork
-    : 'base'
+  const initialAgentNetwork = isAgentTreasuryNetwork(urlAgentNetwork) ? urlAgentNetwork : 'base'
+  const [agentNetwork, setAgentNetwork] = useState<AgentTreasuryNetwork>(initialAgentNetwork)
   const showAgentProfile = params.get('profile') === 'agent' || Boolean(agentSlug || agentWallet)
   const showHelperDemo = params.get('helper') === 'live' || params.get('helper') === 'demo' || params.get('demo') === 'ai'
   const backHref = params.get('src') === 'telegram'
@@ -412,6 +419,19 @@ export default function AgentDemo() {
     await navigator.clipboard.writeText(currentAgentWallet)
     setCopiedWallet(true)
     window.setTimeout(() => setCopiedWallet(false), 1600)
+  }
+
+  function handleAgentNetworkChange(next: AgentTreasuryNetwork) {
+    if (next === agentNetwork) return
+    const nextParams = new URLSearchParams(window.location.search)
+    nextParams.set('n', next)
+    window.history.replaceState(null, '', `${window.location.pathname}?${nextParams.toString()}${window.location.hash}`)
+    setAgentNetwork(next)
+    setTreasuryBalance(null)
+    setTreasuryBalanceChecked(false)
+    setTreasuryBalanceError('')
+    setBalanceRefreshNonce(current => current + 1)
+    onNetworkSelect(next)
   }
 
   function buildAgentFundUrl() {
@@ -718,6 +738,26 @@ export default function AgentDemo() {
           </div>
 
           <div className="mt-4 rounded-lg border border-gray-100 bg-gray-50/70 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Balance network</p>
+                <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">Check where this wallet holds USDC.</p>
+              </div>
+              <select
+                value={agentNetwork}
+                onChange={event => {
+                  const next = event.target.value
+                  if (isAgentTreasuryNetwork(next)) handleAgentNetworkChange(next)
+                }}
+                className="h-8 rounded-lg border border-gray-200 bg-white px-2 text-xs font-semibold text-gray-700 outline-none transition-colors hover:bg-gray-50 focus:border-gray-400 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/[0.1]"
+              >
+                {AGENT_TREASURY_NETWORKS.map(network => (
+                  <option key={network.key} value={network.key}>
+                    {network.label}
+                  </option>
+                ))}
+              </select>
+            </div>
             <div className="divide-y divide-gray-100 dark:divide-white/10">
               <div className="flex items-center justify-between gap-4 py-1.5 first:pt-0">
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Wallet treasury</p>
