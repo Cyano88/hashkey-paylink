@@ -3267,7 +3267,26 @@ export default function PaymentPage() {
         <div className={cn('border-b border-gray-100 dark:border-white/10 bg-gradient-to-br p-6 text-center mt-4', meta.headerBg, 'dark:from-gray-800 dark:to-gray-900')}>
           {isFlex ? (
             <div className="flex flex-col items-center gap-2">
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-300">Enter Amount</p>
+              {isAgentFunding ? (
+                <div className="flex flex-col items-center gap-1">
+                  <div className="flex items-center justify-center gap-2">
+                    <span
+                      className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/70 text-white shadow-sm"
+                      style={{
+                        background: `linear-gradient(135deg, hsl(${agentFundingHue} 72% 42%), hsl(${(agentFundingHue + 44) % 360} 72% 34%))`,
+                      }}
+                    >
+                      <Bot className="h-4 w-4" />
+                    </span>
+                    <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-300">Agent Funding</p>
+                  </div>
+                  <p className="max-w-[15rem] truncate text-sm font-semibold text-gray-800 dark:text-gray-100">
+                    {agentFundingName}
+                  </p>
+                </div>
+              ) : (
+                <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-300">Enter Amount</p>
+              )}
 
               {/* Input centered exactly under label; asset label floats right via absolute */}
               <div className="relative flex justify-center">
@@ -3341,7 +3360,7 @@ export default function PaymentPage() {
                 <span className="text-[2.75rem] font-bold leading-none tracking-tight text-gray-900 dark:text-white">{formatAmount(effectiveAmt, meta.decimals)}</span>
                 <span className="text-xl font-semibold text-gray-400">{meta.asset}</span>
               </div>
-              {memo && (
+              {memo && !isAgentFunding && (
                 <p className="mt-1 text-sm font-medium text-gray-500 dark:text-gray-300">
                   {isPolymarketFunding ? (
                     polymarketFundingLabel

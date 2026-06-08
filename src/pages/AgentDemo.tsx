@@ -611,6 +611,36 @@ export default function AgentDemo() {
     }
   }
 
+  async function logoutAgentProfile() {
+    if (walletBusy) return
+    setWalletBusy(true)
+    setWalletError(null)
+    try {
+      if (PRIVY_AUTH_ENABLED && privyAuthenticated) {
+        await logoutPrivy()
+      }
+      setAgentWalletSessionConnected(false)
+      setTreasuryBalance(null)
+      setTreasuryBalanceChecked(true)
+      setTreasuryBalanceError('')
+      setX402Balance(null)
+      setX402BalanceChecked(true)
+      setX402BalanceError('')
+      setX402Status('')
+      setWalletStep('idle')
+      setWalletOtp('')
+      setWalletMode('choose')
+      setWalletEmail('')
+      setWalletExpectedAddress('')
+      setWalletChoices([])
+      setShowWalletAccessPanel(false)
+    } catch (err) {
+      setWalletError(err instanceof Error ? err.message : 'Could not log out.')
+    } finally {
+      setWalletBusy(false)
+    }
+  }
+
   async function activateX402Balance() {
     if (!currentAgentWallet || x402Busy) return
     setX402Busy(true)
@@ -714,52 +744,64 @@ export default function AgentDemo() {
         <div
           className="relative rounded-xl border border-gray-100 bg-white p-4 shadow-card transition-all dark:border-white/10 dark:bg-[#111114]"
         >
-          <div className="flex items-start gap-3 sm:gap-4">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-white/[0.06]">
-              <Bot className="h-[18px] w-[18px] text-gray-700 dark:text-gray-200" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Agent wallet</p>
-              <h1 className="mt-1 truncate text-lg font-semibold tracking-tight text-gray-900 dark:text-white">
-                {displayAgentName}
-              </h1>
-              <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                {displayAgentPurpose}
-              </p>
-              {agentProfileError && (
-                <p className="mt-1 text-[11px] font-medium text-amber-600 dark:text-amber-300">
-                  {agentProfileError}
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex min-w-0 items-start gap-3 sm:gap-4">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-white/[0.06]">
+                <Bot className="h-[18px] w-[18px] text-gray-700 dark:text-gray-200" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Agent wallet</p>
+                <h1 className="mt-1 truncate text-lg font-semibold tracking-tight text-gray-900 dark:text-white">
+                  {displayAgentName}
+                </h1>
+                <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                  {displayAgentPurpose}
                 </p>
-              )}
-              <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2">
-                <p className={cn(
-                  'max-w-full truncate text-xs text-gray-500 dark:text-gray-400',
-                  currentAgentWallet && 'font-mono',
-                )}>
-                  {currentAgentWallet || 'Not connected'}
-                </p>
-                {displayAgentWalletChain && (
-                  <span className="rounded-full bg-gray-100 px-2 py-1 text-[10px] font-semibold text-gray-500 dark:bg-white/[0.06] dark:text-gray-400">
-                    {displayAgentWalletChain} session
-                  </span>
+                {agentProfileError && (
+                  <p className="mt-1 text-[11px] font-medium text-amber-600 dark:text-amber-300">
+                    {agentProfileError}
+                  </p>
                 )}
-                {currentAgentWallet && (
-                  <button
-                    type="button"
-                    onClick={copyAgentWallet}
-                    className="relative inline-flex h-7 items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 text-[11px] font-semibold text-gray-600 transition-colors hover:bg-gray-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300"
-                  >
-                    <Copy className="h-3 w-3" />
-                    Copy
-                    {copiedWallet && (
-                      <span className="absolute left-1/2 top-full z-10 mt-1 -translate-x-1/2 whitespace-nowrap rounded-md bg-gray-900 px-2 py-1 text-[10px] font-semibold text-white shadow-lg">
-                        Copied
-                      </span>
-                    )}
-                  </button>
-                )}
+                <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2">
+                  <p className={cn(
+                    'max-w-full truncate text-xs text-gray-500 dark:text-gray-400',
+                    currentAgentWallet && 'font-mono',
+                  )}>
+                    {currentAgentWallet || 'Not connected'}
+                  </p>
+                  {displayAgentWalletChain && (
+                    <span className="rounded-full bg-gray-100 px-2 py-1 text-[10px] font-semibold text-gray-500 dark:bg-white/[0.06] dark:text-gray-400">
+                      {displayAgentWalletChain} session
+                    </span>
+                  )}
+                  {currentAgentWallet && (
+                    <button
+                      type="button"
+                      onClick={copyAgentWallet}
+                      className="relative inline-flex h-7 items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 text-[11px] font-semibold text-gray-600 transition-colors hover:bg-gray-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300"
+                    >
+                      <Copy className="h-3 w-3" />
+                      Copy
+                      {copiedWallet && (
+                        <span className="absolute left-1/2 top-full z-10 mt-1 -translate-x-1/2 whitespace-nowrap rounded-md bg-gray-900 px-2 py-1 text-[10px] font-semibold text-white shadow-lg">
+                          Copied
+                        </span>
+                      )}
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
+            {agentWalletAccessConnected && (
+              <button
+                type="button"
+                onClick={logoutAgentProfile}
+                disabled={walletBusy}
+                className="shrink-0 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-900 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300 dark:hover:bg-white/[0.1] dark:hover:text-white"
+              >
+                {walletBusy ? 'Logging out' : 'Log out'}
+              </button>
+            )}
           </div>
 
           <div className="mt-4 rounded-lg border border-gray-100 bg-gray-50/70 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">

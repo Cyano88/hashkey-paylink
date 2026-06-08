@@ -1490,9 +1490,12 @@ function CreateAgentPanel({
                 />
               </label>
               {atAgentLimit && (
-                <p className="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-200">
-                  You can keep up to {MAX_USER_AGENTS} agent profiles. Delete an unfinished profile below, or edit one and connect its wallet.
-                </p>
+                <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">
+                  <p className="text-xs font-semibold text-gray-800 dark:text-gray-100">Profile limit reached</p>
+                  <p className="mt-0.5 text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
+                    You can keep up to {MAX_USER_AGENTS} agent profiles. Log in to an existing profile or delete one to create another.
+                  </p>
+                </div>
               )}
               <button
                 type="button"
