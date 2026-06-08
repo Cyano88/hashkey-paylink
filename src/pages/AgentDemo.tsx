@@ -632,7 +632,8 @@ export default function AgentDemo() {
   const displayAgentProfile = agentProfile ?? (agentSlug === PLATFORM_AGENT_SLUG || !agentSlug ? PLATFORM_AGENT_PROFILE : null)
   const displayAgentName = displayAgentProfile?.name || agentSlug || 'Your agent wallet'
   const displayAgentPurpose = displayAgentProfile?.purpose || 'Connect a Circle agent wallet, fund treasury, and activate x402 from the dashboard.'
-  const showAgentDisconnect = Boolean(currentAgentWallet || agentWalletSessionConnected || (PRIVY_AUTH_ENABLED && privyAuthenticated))
+  const agentEmailConnected = Boolean(PRIVY_AUTH_ENABLED && privyAuthenticated)
+  const showAgentDisconnect = Boolean(currentAgentWallet || agentWalletSessionConnected || agentEmailConnected)
   const walletErrorMessage = walletError
     ? /invalid or expired request id/i.test(walletError)
       ? 'OTP expired. Resend OTP and use the newest code.'
@@ -779,8 +780,12 @@ export default function AgentDemo() {
           {(!currentAgentWallet || !agentWalletSessionConnected) && (
             <div className="mt-4 space-y-2 rounded-xl border border-gray-200 bg-gray-50/70 p-3 transition-all dark:border-white/10 dark:bg-white/[0.04]">
               <div>
-                <p className="text-sm font-semibold text-gray-900 dark:text-white">Sign in</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Email sign-in for wallet access.</p>
+                <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                  {agentEmailConnected ? 'Wallet access' : 'Sign in'}
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  {agentEmailConnected ? 'Use this email to set up or reconnect a Circle agent wallet.' : 'Email sign-in for wallet access.'}
+                </p>
               </div>
 
               {PRIVY_AUTH_ENABLED && !privyAuthenticated ? (
