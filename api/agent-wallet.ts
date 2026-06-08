@@ -336,6 +336,28 @@ function isCircleLoginExpired(error: unknown) {
   return /not logged in|session expired|run [`']?circle wallet login/i.test(detail)
 }
 
+async function walletChoicesWithBalances(wallets: string[], key: string, chain: string) {
+  const uniqueWallets = [...new Set(wallets)].slice(0, 8)
+  const choices: Array<{ address: string; balance?: string; balanceError?: string }> = []
+  for (const address of uniqueWallets) {
+    const choice: { address: string; balance?: string; balanceError?: string } = { address }
+    try {
+      let output = ''
+      try {
+        output = await runCircle(['wallet', 'balance', '--address', address, '--chain', chain, '--output', 'json'], key, 20_000)
+      } catch {
+        output = await runCircle(['wallet', 'balance', '--address', address, '--chain', chain], key, 20_000)
+      }
+      choice.balance = parseBalance(output)
+      if (choice.balance === undefined) choice.balanceError = 'Balance unavailable'
+    } catch (err) {
+      choice.balanceError = err instanceof Error ? err.message.slice(0, 120) : 'Balance unavailable'
+    }
+    choices.push(choice)
+  }
+  return choices
+}
+
 async function runCircle(args: string[], key: string, timeoutMs = 60_000) {
   const sessionHome = resolve(process.cwd(), 'data', 'circle-web-sessions', safeSessionKey(key))
   await mkdir(sessionHome, { recursive: true })
@@ -499,7 +521,7 @@ export default async function handler(req: Request, res: Response) {
           error: 'Circle login succeeded, but the expected agent wallet was not found for this email.',
           existingWallet: existing?.walletAddress,
           expectedWallet,
-          availableWallets: wallets.length,
+          availableWallets: await walletChoicesWithBalances(wallets, key, chain),
         })
       }
       if (!walletAddress && wallets.length === 1) {
@@ -511,7 +533,7 @@ export default async function handler(req: Request, res: Response) {
           code: 'multiple_agent_wallets',
           error: 'Circle returned multiple agent wallets. Enter the funded agent wallet address so Hash PayLink does not pick the wrong wallet.',
           existingWallet: existing?.walletAddress,
-          availableWallets: wallets.length,
+          availableWallets: await walletChoicesWithBalances(wallets, key, chain),
         })
       }
       if (!walletAddress) return res.status(502).json({ ok: false, error: 'Circle login completed, but no wallet address was found.' })

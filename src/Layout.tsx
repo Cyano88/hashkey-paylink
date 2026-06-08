@@ -586,7 +586,7 @@ export default function Layout() {
             {!isCreatePage && !isPayPage && !isDashPage && !isNgPosPage && !isTelegramPaymentLinksPage && (
               <>
                 {/* Connect Wallet — when disconnected */}
-                {!headerControlConnected && (
+                {!headerControlConnected && !isAgentProfilePage && (
                   PRIVY_AUTH_ENABLED && selectedNet !== 'starknet' && selectedNet !== 'solana' ? (
                     <PrivyConnectButton className="inline-flex h-9 items-center gap-1.5 rounded-full border border-gray-200 dark:border-white/10 bg-white dark:bg-[#1c1c20] px-3 text-[13px] font-medium text-gray-700 dark:text-gray-200 shadow-sm hover:bg-gray-50 dark:hover:bg-white/5 transition-colors disabled:opacity-60">
                       <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500 animate-pulse" />
