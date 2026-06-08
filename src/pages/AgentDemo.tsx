@@ -120,6 +120,15 @@ function isAgentTreasuryNetwork(value: string): value is AgentTreasuryNetwork {
   return value === 'base' || value === 'arbitrum' || value === 'arc'
 }
 
+function readableTreasuryBalanceError(error: unknown, networkLabel: string) {
+  const message = error instanceof Error ? error.message : String(error || '')
+  if (/failed to fetch|http request failed|rpc\.testnet\.arc\.network/i.test(message)) {
+    return `${networkLabel} balance is temporarily unavailable. Try another network or refresh.`
+  }
+  if (/balance unavailable/i.test(message)) return `${networkLabel} balance unavailable.`
+  return message.slice(0, 140) || `${networkLabel} balance unavailable.`
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function AgentDemo() {
@@ -287,14 +296,13 @@ export default function AgentDemo() {
         if (cancelled) return
         const row = result.rows.find(item => item.key === agentNetwork)
         if (!row || row.status === 'error') {
-          setTreasuryBalanceError(row?.error || 'Balance unavailable')
+          setTreasuryBalanceError(readableTreasuryBalanceError(row?.error || 'Balance unavailable', row?.label || CHAIN_META[agentNetwork].label))
           return
         }
         setTreasuryBalance(String(row.balance))
-        setAgentWalletChain(row.label)
       })
       .catch(error => {
-        if (!cancelled) setTreasuryBalanceError(error instanceof Error ? error.message : 'Balance unavailable')
+        if (!cancelled) setTreasuryBalanceError(readableTreasuryBalanceError(error, CHAIN_META[agentNetwork].label))
       })
       .finally(() => {
         if (!cancelled) setTreasuryBalanceChecked(true)
@@ -663,6 +671,7 @@ export default function AgentDemo() {
     agentWalletChain === 'ARBITRUM' ? 'Arbitrum' :
     agentWalletChain === 'ARC-TESTNET' ? 'Arc Testnet' :
     agentWalletChain
+  const selectedAgentNetworkLabel = AGENT_TREASURY_NETWORKS.find(network => network.key === agentNetwork)?.label ?? CHAIN_META[agentNetwork].label
   const treasuryBalanceNumber = treasuryBalance !== null ? Number(treasuryBalance) : null
   const x402AmountNumber = Number(x402Amount)
   const x402AmountInvalid = !Number.isFinite(x402AmountNumber) || x402AmountNumber <= 0
@@ -718,6 +727,11 @@ export default function AgentDemo() {
                 )}>
                   {currentAgentWallet || 'Not connected'}
                 </p>
+                {displayAgentWalletChain && (
+                  <span className="rounded-full bg-gray-100 px-2 py-1 text-[10px] font-semibold text-gray-500 dark:bg-white/[0.06] dark:text-gray-400">
+                    {displayAgentWalletChain} session
+                  </span>
+                )}
                 {currentAgentWallet && (
                   <button
                     type="button"
@@ -769,9 +783,7 @@ export default function AgentDemo() {
                       ? treasuryBalanceError || treasuryBalanceChecked ? 'Unavailable' : 'Checking...'
                       : 'No wallet'}
                   </p>
-                  {displayAgentWalletChain && (
-                    <p className="mt-0.5 text-[10px] font-semibold text-gray-400">{displayAgentWalletChain}</p>
-                  )}
+                  <p className="mt-0.5 text-[10px] font-semibold text-gray-400">{selectedAgentNetworkLabel}</p>
                 </div>
               </div>
               <div className="flex items-center justify-between gap-4 py-1.5 last:pb-0">
