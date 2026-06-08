@@ -33,7 +33,7 @@ const BASE_PAYMASTER_URL = import.meta.env.VITE_BASE_PAYMASTER_URL as string | u
 import {
   ArrowLeft, ArrowRight, CheckCircle2, ExternalLink, AlertCircle, Loader2, ArrowLeftRight,
   RefreshCw, ShieldCheck, Zap, Copy, CheckCheck, Wallet, ChevronDown,
-  AlertTriangle, Radio, Mail, X,
+  AlertTriangle, Radio, Mail, X, Bot,
 } from 'lucide-react'
 import {
   CHAIN_META, PLATFORM_FEE_BPS, EVM_TREASURY, STARK_TREASURY, type ChainKey,
@@ -69,6 +69,18 @@ type ArgentStarknetSession = Awaited<ReturnType<typeof connectArgentStarknetEmai
 const CHAINS: ChainKey[] = ['base', 'solana', 'arbitrum']
 const POLYMARKET_SIGNUP_URL = 'https://polymarket.com'
 const POLYMARKET_LOGO = '/brand/polymarket-logo.png'
+
+function agentAvatarHue(seed: string) {
+  let hash = 0
+  for (let i = 0; i < seed.length; i += 1) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0
+  return hash % 360
+}
+
+function agentDisplayNameFromMemo(memo: string, slug: string) {
+  const fromMemo = memo.replace(/^Fund agent wallet:\s*/i, '').trim()
+  if (fromMemo) return fromMemo
+  return slug.replace(/[-_]+/g, ' ').replace(/\b\w/g, char => char.toUpperCase()) || 'Agent Wallet'
+}
 
 const CHAIN_DISPLAY_NAMES: Record<number, string> = {
   1:       'Ethereum',
@@ -304,6 +316,10 @@ export default function PaymentPage() {
       window.history.back()
       return
     }
+    if (isAgentFunding) {
+      window.location.assign(agentFundingBackUrl)
+      return
+    }
     window.location.assign(ngPosBackUrl)
   }
 
@@ -361,6 +377,20 @@ export default function PaymentPage() {
   const autoAccessRedirect = getPaylinkParam(initParams, 'ad', 'autoRedirect') === '1'
   const agentFundingSlug = getPaylinkParam(initParams, 'agentSlug', 'agent')
   const isAgentFunding   = getPaylinkParam(initParams, 'src', 'src') === 'agent' && !!agentFundingSlug
+  const agentFundingBackUrl = (() => {
+    const raw = getPaylinkParam(initParams, 'return', 'g').trim()
+    if (raw) {
+      try {
+        const url = new URL(raw, window.location.origin)
+        if (url.origin === window.location.origin) return `${url.pathname}${url.search}${url.hash}`
+      } catch {
+        if (raw.startsWith('/')) return raw
+      }
+    }
+    return `/agent?profile=agent&agent=${encodeURIComponent(agentFundingSlug || 'hashpaylink-agent')}`
+  })()
+  const agentFundingName = isAgentFunding ? agentDisplayNameFromMemo(memo, agentFundingSlug) : ''
+  const agentFundingHue = agentAvatarHue(`${agentFundingSlug}:${agentFundingName}`)
   const isNgPosPayment   = getPaylinkParam(initParams, 'src', 'src') === 'ngpos'
   const ngPosMerchantId  = (initParams.get('merchant') ?? '').trim().replace(/[^a-zA-Z0-9_-]/g, '')
   const ngPosEventId     = ngPosMerchantId ? `ngpos-${ngPosMerchantId}` : ''
@@ -3145,7 +3175,7 @@ export default function PaymentPage() {
   // ────────────────────────────────────────────────────────────────────────────
   return (
     <div className="mx-auto max-w-md animate-slide-up">
-      {isNgPosSource || isPolymarketFunding ? (
+      {isNgPosSource || isPolymarketFunding || isAgentFunding ? (
         <button
           type="button"
           onClick={goBackFromCheckout}
@@ -3289,6 +3319,18 @@ export default function PaymentPage() {
                 <img src={POLYMARKET_LOGO} alt="" className="h-4 w-4 invert dark:invert-0" />
               </span>
               <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Polymarket Funding</p>
+            </div>
+          ) : isAgentFunding ? (
+            <div className="mb-2 flex items-center justify-center gap-2">
+              <span
+                className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/70 text-white shadow-sm"
+                style={{
+                  background: `linear-gradient(135deg, hsl(${agentFundingHue} 72% 42%), hsl(${(agentFundingHue + 44) % 360} 72% 34%))`,
+                }}
+              >
+                <Bot className="h-4 w-4" />
+              </span>
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Agent Funding</p>
             </div>
           ) : (
             <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-widest text-gray-400">Payment Request</p>
@@ -4413,10 +4455,13 @@ export default function PaymentPage() {
         </div>
 
         <p className="mt-6 text-center text-xs text-gray-400">
-          {isPolymarketFunding ? 'Polymarket Funding on ' : 'Built with Circle USDC on '}
+          {isPolymarketFunding ? 'Polymarket Funding on ' : isAgentFunding ? 'Agent payments on ' : 'Built with Circle USDC on '}
           {(isPolymarketFunding ? [
             { label: 'Base',      href: 'https://basescan.org' },
             { label: 'Solana',   href: 'https://solscan.io' },
+            { label: 'Arbitrum', href: 'https://arbiscan.io' },
+          ] : isAgentFunding ? [
+            { label: 'Base',      href: 'https://basescan.org' },
             { label: 'Arbitrum', href: 'https://arbiscan.io' },
           ] : [
             { label: 'Base',      href: 'https://basescan.org' },
