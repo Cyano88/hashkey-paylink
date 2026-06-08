@@ -92,12 +92,37 @@ type AgentProfileSummary = {
   name: string
   purpose: string
   walletAddress?: string
+  profileImage?: {
+    initials: string
+    hue: number
+    accentHue: number
+  }
 }
 
 type WalletChoice = {
   address: string
   balance?: string
   balanceError?: string
+}
+
+function agentAvatarHue(seed: string) {
+  let hash = 0
+  for (let i = 0; i < seed.length; i += 1) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0
+  return hash % 360
+}
+
+function agentProfileInitials(name: string) {
+  const parts = name.replace(/[^a-z0-9\s-]/gi, ' ').trim().split(/\s+/).filter(Boolean)
+  return parts.slice(0, 2).map(part => part[0]?.toUpperCase()).join('') || 'AG'
+}
+
+function resolveAgentProfileImage(profile: AgentProfileSummary) {
+  const hue = agentAvatarHue(`${profile.slug}:${profile.name}`)
+  return profile.profileImage ?? {
+    initials: agentProfileInitials(profile.name),
+    hue,
+    accentHue: (hue + 44) % 360,
+  }
 }
 
 // ─── Demo credentials (pre-filled for judges) ─────────────────────────────────
@@ -108,6 +133,11 @@ const PLATFORM_AGENT_PROFILE: AgentProfileSummary = {
   slug: PLATFORM_AGENT_SLUG,
   name: 'Hash PayLink Agent',
   purpose: 'Owner-managed platform agent for treasury, x402, LP Scout, and StreamPay services.',
+  profileImage: {
+    initials: 'HP',
+    hue: agentAvatarHue(`${PLATFORM_AGENT_SLUG}:Hash PayLink Agent`),
+    accentHue: (agentAvatarHue(`${PLATFORM_AGENT_SLUG}:Hash PayLink Agent`) + 44) % 360,
+  },
 }
 type AgentTreasuryNetwork = Extract<ChainKey, 'base' | 'arbitrum' | 'arc'>
 const AGENT_TREASURY_NETWORKS: Array<{ key: AgentTreasuryNetwork; label: string }> = [
@@ -713,6 +743,7 @@ export default function AgentDemo() {
   const displayAgentProfile = agentProfile ?? (agentSlug === PLATFORM_AGENT_SLUG || !agentSlug ? PLATFORM_AGENT_PROFILE : null)
   const displayAgentName = displayAgentProfile?.name || agentSlug || 'Your agent wallet'
   const displayAgentPurpose = displayAgentProfile?.purpose || 'Sign in, link a Circle agent wallet, fund treasury, and activate x402 from the dashboard.'
+  const displayAgentImage = displayAgentProfile ? resolveAgentProfileImage(displayAgentProfile) : null
   const agentEmailConnected = Boolean(PRIVY_AUTH_ENABLED && privyAuthenticated)
   const agentWalletAccessConnected = Boolean(currentAgentWallet && agentWalletSessionConnected && (!PRIVY_AUTH_ENABLED || privyAuthenticated))
   const connectedWalletNeedsAccess = Boolean(currentAgentWallet && !agentWalletAccessConnected)
@@ -746,8 +777,15 @@ export default function AgentDemo() {
         >
           <div className="flex items-start justify-between gap-3">
             <div className="flex min-w-0 items-start gap-3 sm:gap-4">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-white/[0.06]">
-                <Bot className="h-[18px] w-[18px] text-gray-700 dark:text-gray-200" />
+              <div
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[11px] font-black text-white shadow-sm"
+                style={{
+                  background: displayAgentImage
+                    ? `linear-gradient(135deg, hsl(${displayAgentImage.hue} 72% 42%), hsl(${displayAgentImage.accentHue} 72% 34%))`
+                    : undefined,
+                }}
+              >
+                {displayAgentImage?.initials ?? <Bot className="h-[18px] w-[18px]" />}
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Agent wallet</p>

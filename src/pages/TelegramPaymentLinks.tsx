@@ -48,6 +48,7 @@ type TelegramServiceId =
   | 'create-your-agent'
   | 'hashpaylink-helper'
   | 'agent-marketplace'
+  | 'agent-dashboard'
   | 'fund-agent-wallet'
   | 'lp-scout'
   | 'agentic-lp-research'
@@ -93,9 +94,9 @@ const sectionServices: Record<TelegramSectionId, TelegramService[]> = {
       active: true,
     },
     {
-      id: 'fund-agent-wallet',
-      title: 'Fund Agent Wallet',
-      body: 'Add USDC to the agent wallet. Activate x402 from the agent dashboard.',
+      id: 'agent-dashboard',
+      title: 'Agent Dashboard',
+      body: 'Manage balances, fund treasury, activate x402, and view receipts.',
       icon: Wallet,
       status: 'Open',
       active: true,
@@ -244,6 +245,11 @@ type AgentProfile = {
   name: string
   purpose: string
   walletAddress?: string
+  profileImage?: {
+    initials: string
+    hue: number
+    accentHue: number
+  }
   createdAt: number
   updatedAt: number
 }
@@ -305,6 +311,32 @@ function agentWalletStatus(agent: AgentProfile, ready = false) {
   }
 }
 
+function fallbackAgentImage(agent: AgentProfile) {
+  const seed = `${agent.slug}:${agent.name}`
+  let hash = 0
+  for (let i = 0; i < seed.length; i += 1) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0
+  const parts = agent.name.replace(/[^a-z0-9\s-]/gi, ' ').trim().split(/\s+/).filter(Boolean)
+  return {
+    initials: parts.slice(0, 2).map(part => part[0]?.toUpperCase()).join('') || 'AG',
+    hue: hash % 360,
+    accentHue: (hash + 44) % 360,
+  }
+}
+
+function AgentProfileAvatar({ agent, className = 'h-8 w-8 rounded-lg text-[11px]' }: { agent: AgentProfile; className?: string }) {
+  const image = agent.profileImage ?? fallbackAgentImage(agent)
+  return (
+    <span
+      className={cn('flex shrink-0 items-center justify-center font-black text-white shadow-sm', className)}
+      style={{
+        background: `linear-gradient(135deg, hsl(${image.hue} 72% 42%), hsl(${image.accentHue} 72% 34%))`,
+      }}
+    >
+      {image.initials}
+    </span>
+  )
+}
+
 export default function TelegramPaymentLinks() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -320,12 +352,12 @@ export default function TelegramPaymentLinks() {
       ? 'hashpaylink-helper'
       : initialServiceParam === 'create-your-agent'
       ? 'create-your-agent'
-      : initialServiceParam === 'fund-agent-wallet'
-      ? 'fund-agent-wallet'
+      : initialServiceParam === 'fund-agent-wallet' || initialServiceParam === 'agent-dashboard'
+      ? 'agent-dashboard'
       : initialMode
       ? 'request-usdc'
       : ''
-  const initialAgentService = initialService === 'hashpaylink-helper' || initialService === 'create-your-agent' || initialService === 'fund-agent-wallet'
+  const initialAgentService = initialService === 'hashpaylink-helper' || initialService === 'create-your-agent' || initialService === 'agent-dashboard'
   const initialPersonTarget = displayTelegramName(searchParams.get('target') ?? searchParams.get('payer') ?? searchParams.get('p'), '')
   const initialGroupTarget = displayTelegramName(searchParams.get('target') ?? searchParams.get('group') ?? searchParams.get('g') ?? searchParams.get('chat'), '')
   const [opened, setOpened] = useState(searchParams.get('open') === '1')
@@ -479,8 +511,8 @@ export default function TelegramPaymentLinks() {
       setActiveService('create-your-agent')
       return
     }
-    if (service.id === 'fund-agent-wallet') {
-      setActiveService('fund-agent-wallet')
+    if (service.id === 'agent-dashboard' || service.id === 'fund-agent-wallet') {
+      setActiveService('agent-dashboard')
       return
     }
     if (service.id === 'create-streampay') {
@@ -724,8 +756,8 @@ export default function TelegramPaymentLinks() {
               setAgents={setAgentProfiles}
               onBack={() => setActiveService('')}
             />
-          ) : activeService === 'fund-agent-wallet' ? (
-            <FundAgentWalletPanel
+          ) : activeService === 'agent-dashboard' || activeService === 'fund-agent-wallet' ? (
+            <AgentDashboardPanel
               owner={agentOwner}
               fallbackOwner={telegramIdentity.legacyOwner}
               agents={agentProfiles}
@@ -1436,7 +1468,7 @@ function CreateAgentPanel({
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold text-gray-900 dark:text-white">Agent Setup</p>
             <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-              Create a profile, sign in, then link a Circle agent wallet. Once linked, that wallet becomes the agent treasury and x402 funding source.
+              Create, sign in, edit, log out, or delete agent profiles. Funding and x402 live in Agent Dashboard.
             </p>
           </div>
         </div>
@@ -1524,7 +1556,7 @@ function CreateAgentPanel({
           <div className="rounded-xl border border-emerald-100 bg-emerald-50/80 p-3 dark:border-emerald-400/20 dark:bg-emerald-400/10">
             <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-200">{savedAgent.name} saved</p>
             <p className="mt-1 text-xs leading-relaxed text-emerald-700/80 dark:text-emerald-200/80">
-              Next: sign in, link wallet, fund treasury, then activate x402.
+              Next: sign in and link a Circle agent wallet to this profile.
             </p>
             <a
               href={`/agent?profile=agent&agent=${encodeURIComponent(savedAgent.slug)}&src=telegram`}
@@ -1551,12 +1583,10 @@ function CreateAgentPanel({
                 onClick={() => editAgent(agent)}
                 className="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-1 py-1.5 text-left transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.06]"
               >
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-700 dark:bg-white/[0.08] dark:text-gray-200">
-                  <Bot className="h-4 w-4" />
-                </span>
+                <AgentProfileAvatar agent={agent} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-semibold text-gray-900 dark:text-white">{agent.name}</span>
-                  <span className="mt-0.5 block truncate text-xs text-gray-500 dark:text-gray-400">Wallet not linked · {agent.purpose}</span>
+                <span className="mt-0.5 block truncate text-xs text-gray-500 dark:text-gray-400">Needs wallet - {agent.purpose}</span>
                 </span>
               </button>
               <button
@@ -1587,9 +1617,7 @@ function CreateAgentPanel({
                 href={dashboardUrl}
                 className="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-1 py-1.5 active:scale-[0.99]"
               >
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-700 dark:bg-white/[0.08] dark:text-gray-200">
-                <Bot className="h-4 w-4" />
-              </span>
+              <AgentProfileAvatar agent={agent} />
               <span className="min-w-0 flex-1">
                 <span className="flex min-w-0 items-center gap-2">
                   <span className="truncate text-sm font-semibold text-gray-900 dark:text-white">{agent.name}</span>
@@ -1597,7 +1625,7 @@ function CreateAgentPanel({
                     {status.label}
                   </span>
                 </span>
-                <span className="mt-0.5 block truncate text-xs text-gray-500 dark:text-gray-400">{status.detail} · {agent.purpose}</span>
+                <span className="mt-0.5 block truncate text-xs text-gray-500 dark:text-gray-400">{status.detail} - {agent.purpose}</span>
               </span>
                 <ArrowRight className="h-4 w-4 shrink-0 text-gray-400" />
               </a>
@@ -1621,7 +1649,7 @@ function CreateAgentPanel({
   )
 }
 
-function FundAgentWalletPanel({
+function AgentDashboardPanel({
   owner,
   fallbackOwner,
   agents,
@@ -1751,9 +1779,9 @@ function FundAgentWalletPanel({
             <Wallet className="h-4 w-4" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-gray-900 dark:text-white">Fund Agent Wallet</p>
+            <p className="text-sm font-semibold text-gray-900 dark:text-white">Agent Dashboard</p>
             <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-              Add USDC to the agent wallet. Activate x402 from the agent dashboard after funding.
+              Pick an agent, fund treasury, activate x402, and review receipts from one place.
             </p>
           </div>
         </div>
@@ -1763,9 +1791,9 @@ function FundAgentWalletPanel({
 
       {!connectedAgents.length ? (
         <div className="rounded-xl border border-gray-100 bg-white p-3 dark:border-white/10 dark:bg-white/[0.03]">
-          <p className="text-sm font-semibold text-gray-900 dark:text-white">Link an agent wallet first</p>
+          <p className="text-sm font-semibold text-gray-900 dark:text-white">Set up an agent first</p>
           <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-            Funding works after an agent profile has a Circle wallet linked.
+            Dashboard actions unlock after a profile has a Circle wallet linked.
           </p>
           <button
             type="button"
@@ -1794,8 +1822,11 @@ function FundAgentWalletPanel({
               </select>
             </label>
             {selectedAgent && (
-              <div className="mt-2 flex items-start justify-between gap-3">
-                <p className="min-w-0 flex-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">{selectedAgent.purpose}</p>
+              <div className="mt-3 flex items-start justify-between gap-3">
+                <div className="flex min-w-0 flex-1 items-center gap-3">
+                  <AgentProfileAvatar agent={selectedAgent} />
+                  <p className="min-w-0 flex-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">{selectedAgent.purpose}</p>
+                </div>
                 {selectedStatus && (
                   <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase', selectedStatus.className)}>
                     {selectedStatus.label}
@@ -1836,7 +1867,7 @@ function FundAgentWalletPanel({
                 className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950"
               >
                 <Wallet className="h-4 w-4" />
-                Link wallet first
+                Sign in to link wallet
               </a>
             )}
           </div>
@@ -1865,7 +1896,7 @@ function FundAgentWalletPanel({
                 Continue to funding
               </button>
               <p className="text-center text-[11px] text-gray-400">
-                x402 is activated later from the agent dashboard using this funded wallet balance.
+                x402 activation uses this funded treasury balance.
               </p>
             </div>
           )}

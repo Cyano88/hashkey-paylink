@@ -18,22 +18,56 @@ export type AgentProfile = {
   purpose: string
   ownerKey: string
   walletAddress?: string
+  profileImage?: AgentProfileImage
   createdAt: number
   updatedAt: number
+}
+
+type AgentProfileImage = {
+  initials: string
+  hue: number
+  accentHue: number
 }
 
 type Store = {
   agents: Record<string, AgentProfile>
 }
 
-function publicAgent(agent: AgentProfile) {
+function profileInitials(name: string) {
+  const parts = name.replace(/[^a-z0-9\s-]/gi, ' ').trim().split(/\s+/).filter(Boolean)
+  const initials = parts.slice(0, 2).map(part => part[0]?.toUpperCase()).join('')
+  return initials || 'AG'
+}
+
+function agentProfileImage(slug: string, name: string): AgentProfileImage {
+  const seed = `${slug}:${name}`
+  let hash = 0
+  for (let i = 0; i < seed.length; i += 1) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0
+  const hue = hash % 360
   return {
-    slug: agent.slug,
-    name: agent.name,
-    purpose: agent.purpose,
-    walletAddress: agent.walletAddress,
-    createdAt: agent.createdAt,
-    updatedAt: agent.updatedAt,
+    initials: profileInitials(name),
+    hue,
+    accentHue: (hue + 44) % 360,
+  }
+}
+
+function withProfileImage(agent: AgentProfile): AgentProfile {
+  return {
+    ...agent,
+    profileImage: agent.profileImage ?? agentProfileImage(agent.slug, agent.name),
+  }
+}
+
+function publicAgent(agent: AgentProfile) {
+  const safeAgent = withProfileImage(agent)
+  return {
+    slug: safeAgent.slug,
+    name: safeAgent.name,
+    purpose: safeAgent.purpose,
+    walletAddress: safeAgent.walletAddress,
+    profileImage: safeAgent.profileImage,
+    createdAt: safeAgent.createdAt,
+    updatedAt: safeAgent.updatedAt,
   }
 }
 
@@ -44,6 +78,7 @@ function platformAgentProfile(): AgentProfile {
     purpose: 'Owner-managed platform agent for treasury, x402, LP Scout, and StreamPay services.',
     ownerKey: 'platform',
     walletAddress: PLATFORM_AGENT_WALLET_ADDRESS || undefined,
+    profileImage: agentProfileImage(PLATFORM_AGENT_SLUG, 'Hash PayLink Agent'),
     createdAt: 0,
     updatedAt: 0,
   }
@@ -109,6 +144,11 @@ function visibleAgents(store: Store, key: string) {
   return Object.values(store.agents)
     .filter(agent => agent.ownerKey === key)
     .sort((a, b) => b.updatedAt - a.updatedAt)
+    .map(withProfileImage)
+}
+
+function publicAgents(agents: AgentProfile[]) {
+  return agents.map(publicAgent)
 }
 
 async function migrateVisibleAgents(store: Store, fromKey: string, toKey: string) {
@@ -158,10 +198,10 @@ export default async function handler(req: Request, res: Response) {
     const key = ownerKey(req.query.owner)
     if (!key) return res.status(400).json({ ok: false, error: 'Missing owner.' })
     const agents = visibleAgents(store, key)
-    if (agents.length) return res.json({ ok: true, agents })
+    if (agents.length) return res.json({ ok: true, agents: publicAgents(agents) })
     const fallbackKey = ownerKey(req.query.fallbackOwner)
     const migrated = await migrateVisibleAgents(store, fallbackKey, key)
-    return res.json({ ok: true, agents: migrated })
+    return res.json({ ok: true, agents: publicAgents(migrated) })
   }
 
   if (req.method === 'DELETE') {
@@ -177,7 +217,7 @@ export default async function handler(req: Request, res: Response) {
     if (existing.ownerKey !== key) return res.status(403).json({ ok: false, error: 'Agent profile does not belong to this user.' })
     delete store.agents[slug]
     await writeStore(store)
-    return res.json({ ok: true, agents: visibleAgents(store, key) })
+    return res.json({ ok: true, agents: publicAgents(visibleAgents(store, key)) })
   }
 
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed' })
@@ -209,10 +249,11 @@ export default async function handler(req: Request, res: Response) {
     purpose,
     ownerKey: key,
     walletAddress: cleanString(req.body?.walletAddress, 80) || existing?.walletAddress,
+    profileImage: existing?.profileImage ?? agentProfileImage(slug, name),
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
   }
   store.agents[slug] = agent
   await writeStore(store)
-  return res.json({ ok: true, agent, agents: visibleAgents(store, key) })
+  return res.json({ ok: true, agent: publicAgent(agent), agents: publicAgents(visibleAgents(store, key)) })
 }
