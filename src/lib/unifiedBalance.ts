@@ -6,8 +6,6 @@ import type {
   GetBalancesResult,
   UnifiedBalanceChainIdentifier,
 } from '@circle-fin/unified-balance-kit'
-import { EVM_CLIENTS, ERC20_BALANCE_OF_ABI } from './router'
-import { CHAIN_META } from './chains'
 
 export type UnifiedBalanceChainKey = 'base' | 'arc' | 'arbitrum' | 'solana' | 'starknet'
 
@@ -94,14 +92,14 @@ async function queryCircleBalance(address: string, chain: UnifiedBalanceChainIde
 }
 
 async function queryEvmTokenBalance(key: 'base' | 'arc' | 'arbitrum', address: string): Promise<number> {
-  const meta = CHAIN_META[key]
-  const raw = await EVM_CLIENTS[key].readContract({
-    address: meta.tokenAddress,
-    abi: ERC20_BALANCE_OF_ABI,
-    functionName: 'balanceOf',
-    args: [address as `0x${string}`],
+  const response = await fetch('/api/evm-balance', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ chain: key, address }),
   })
-  return Number(raw) / 10 ** meta.decimals
+  const data = await response.json() as { ok?: boolean; balance?: string; error?: string }
+  if (!response.ok || !data.ok) throw new Error(data.error ?? 'EVM balance query failed')
+  return asNumber(data.balance)
 }
 
 async function querySolanaWalletBalance(address: string): Promise<number> {

@@ -18,6 +18,7 @@ import txStatusHandler        from './api/tx-status.js'
 import recoverStarknetHandler from './api/recover-starknet.js'
 import starkBalanceHandler    from './api/starknet-balance.js'
 import solanaBalanceHandler   from './api/solana-balance.js'
+import evmBalanceHandler      from './api/evm-balance.js'
 import setupRelayerHandler    from './api/setup-relayer.js'
 // ── Streampay module ──────────────────────────────────────────────────────────
 import relayStreamHandler               from './modules/streampay/api/relay-stream.js'
@@ -97,6 +98,7 @@ app.post('/api/relay-starknet',        relayStarknetHandler)
 app.post('/api/tx-status',             txStatusHandler)
 app.post('/api/starknet-balance',      starkBalanceHandler)
 app.post('/api/solana-balance',        solanaBalanceHandler)
+app.post('/api/evm-balance',           readLimiter, evmBalanceHandler)
 app.get('/api/setup-starknet-relayer', setupRelayerHandler)
 app.post('/api/recover-starknet',      recoverStarknetHandler)
 // ── Streampay routes ──────────────────────────────────────────────────────────
