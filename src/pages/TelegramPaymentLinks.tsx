@@ -27,6 +27,7 @@ import { EVM_TREASURY } from '../lib/chains'
 const TELEGRAM_BOT_URL = import.meta.env.VITE_TELEGRAM_AGENT_URL || 'https://t.me/HashPayLinkBot'
 const PUBLIC_PAYLINK_ORIGIN = (import.meta.env.VITE_PUBLIC_PAYLINK_ORIGIN || 'https://hashpaylink.com').replace(/\/+$/, '')
 const POLYMARKET_LOGO = '/brand/polymarket-logo.png'
+const MAX_USER_AGENTS = 3
 
 function displayTelegramName(rawName: string | null, fallback = 'there') {
   const clean = (rawName ?? '').replace(/^@+/, '').trim()
@@ -1378,7 +1379,9 @@ function CreateAgentPanel({
     setShowProfileForm(true)
   }
 
-  const canSave = name.trim().length >= 2 && purpose.trim().length >= 6 && !busy
+  const connectedAgents = agents.filter(agent => Boolean(agent.walletAddress))
+  const atAgentLimit = !editingAgent && agents.length >= MAX_USER_AGENTS
+  const canSave = name.trim().length >= 2 && purpose.trim().length >= 6 && !busy && !atAgentLimit
 
   return (
     <div className="mt-4 space-y-3">
@@ -1446,6 +1449,11 @@ function CreateAgentPanel({
                   className="mt-1 min-h-[82px] w-full resize-none rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm leading-relaxed text-gray-900 outline-none placeholder:text-gray-400 focus:ring-2 focus:ring-gray-200 dark:border-white/10 dark:bg-white/[0.05] dark:text-white"
                 />
               </label>
+              {atAgentLimit && (
+                <p className="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-200">
+                  You can keep up to {MAX_USER_AGENTS} agent profiles. Connect or edit an existing agent before creating another.
+                </p>
+              )}
               <button
                 type="button"
                 onClick={saveAgent}
@@ -1476,8 +1484,8 @@ function CreateAgentPanel({
       )}
 
       <div className="space-y-2">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Saved agents</p>
-        {agents.length ? agents.map(agent => {
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Connected agents</p>
+        {connectedAgents.length ? connectedAgents.map(agent => {
           const status = agentWalletStatus(agent)
           const dashboardUrl = `/agent?profile=agent&agent=${encodeURIComponent(agent.slug)}&src=telegram`
           return (
@@ -1514,7 +1522,7 @@ function CreateAgentPanel({
           )
         }) : (
           <p className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-3 text-xs text-gray-500 dark:border-white/10 dark:bg-white/[0.03] dark:text-gray-400">
-            No agents yet.
+            No connected agents yet. Connect a Circle wallet after saving a profile.
           </p>
         )}
       </div>
@@ -1548,7 +1556,8 @@ function FundAgentWalletPanel({
   const [walletBusy, setWalletBusy] = useState(false)
   const [walletError, setWalletError] = useState('')
   const [amount, setAmount] = useState('5')
-  const selectedAgent = agents.find(agent => agent.slug === selectedSlug) ?? agents[0]
+  const connectedAgents = useMemo(() => agents.filter(agent => Boolean(agent.walletAddress)), [agents])
+  const selectedAgent = connectedAgents.find(agent => agent.slug === selectedSlug) ?? connectedAgents[0]
   const selectedStatus = selectedAgent ? agentWalletStatus({
     ...selectedAgent,
     walletAddress: walletAddress || selectedAgent.walletAddress,
@@ -1573,8 +1582,14 @@ function FundAgentWalletPanel({
   }, [owner, fallbackOwner]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (!selectedSlug && agents[0]?.slug) setSelectedSlug(agents[0].slug)
-  }, [agents, selectedSlug])
+    if (!selectedSlug && connectedAgents[0]?.slug) {
+      setSelectedSlug(connectedAgents[0].slug)
+      return
+    }
+    if (selectedSlug && !connectedAgents.some(agent => agent.slug === selectedSlug)) {
+      setSelectedSlug(connectedAgents[0]?.slug ?? '')
+    }
+  }, [connectedAgents, selectedSlug])
 
   useEffect(() => {
     if (!selectedAgent?.slug) return
@@ -1655,11 +1670,11 @@ function FundAgentWalletPanel({
 
       {loadError && <p className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs font-medium text-red-600 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200">{loadError}</p>}
 
-      {!agents.length ? (
+      {!connectedAgents.length ? (
         <div className="rounded-xl border border-gray-100 bg-white p-3 dark:border-white/10 dark:bg-white/[0.03]">
-          <p className="text-sm font-semibold text-gray-900 dark:text-white">Create an agent first</p>
+          <p className="text-sm font-semibold text-gray-900 dark:text-white">Connect an agent wallet first</p>
           <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-            Funding needs a saved agent profile so the wallet and activity can be linked correctly.
+            Funding only works after an agent profile has a Circle wallet connected.
           </p>
           <button
             type="button"
@@ -1680,9 +1695,9 @@ function FundAgentWalletPanel({
                 onChange={event => setSelectedSlug(event.target.value)}
                 className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm font-semibold text-gray-900 outline-none focus:ring-2 focus:ring-gray-200 dark:border-white/10 dark:bg-white/[0.05] dark:text-white"
               >
-                {agents.map(agent => (
+                {connectedAgents.map(agent => (
                   <option key={agent.slug} value={agent.slug}>
-                    {agent.name} - {agent.walletAddress ? 'Wallet connected' : 'No wallet'}
+                    {agent.name} - Wallet connected
                   </option>
                 ))}
               </select>

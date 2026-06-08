@@ -10,6 +10,7 @@ const UPSTASH_REST_TOKEN = (process.env.UPSTASH_REDIS_REST_TOKEN ?? '').trim()
 const UPSTASH_STORE_KEY = (process.env.AGENT_PROFILE_STORE_KEY ?? 'hashpaylink:agent-profiles').trim()
 const PLATFORM_AGENT_SLUG = (process.env.DEFAULT_AGENT_SLUG ?? '').trim().toLowerCase() || 'hashpaylink-agent'
 const PLATFORM_AGENT_WALLET_ADDRESS = (process.env.DEFAULT_AGENT_WALLET_ADDRESS ?? '').trim()
+const MAX_OWNER_AGENTS = 3
 
 export type AgentProfile = {
   slug: string
@@ -182,6 +183,9 @@ export default async function handler(req: Request, res: Response) {
   }
 
   const existing = store.agents[slug]
+  if (!existing && visibleAgents(store, key).length >= MAX_OWNER_AGENTS) {
+    return res.status(400).json({ ok: false, error: `You can create up to ${MAX_OWNER_AGENTS} agents.` })
+  }
   const now = Date.now()
   const agent: AgentProfile = {
     slug,

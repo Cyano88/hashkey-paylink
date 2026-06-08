@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Outlet, Link, useLocation, useSearchParams } from 'react-router-dom'
 import { useConnectModal } from '@rainbow-me/rainbowkit'
 import { useAccount, useDisconnect, useSwitchChain } from 'wagmi'
+import { usePrivy } from '@privy-io/react-auth'
 import { ChevronDown, MessageCircle, LogOut, X, Send, ExternalLink, Search, Sun, Moon } from 'lucide-react'
 import { useStarknet } from './lib/StarknetContext'
 import { useSolana }   from './lib/SolanaContext'
@@ -362,8 +363,11 @@ export default function Layout() {
   const { openConnectModal }          = useConnectModal()
   const { address: starkAddress,  connect: connectStarknet,  disconnect: disconnectStarknet  } = useStarknet()
   const { address: solanaAddress, connect: connectSolana,   disconnect: disconnectSolana    } = useSolana()
+  const { authenticated: privyAuthenticated } = usePrivy()
 
   const anyConnected = evmConnected || !!starkAddress || !!solanaAddress
+  const agentEmailConnected = Boolean(isAgentProfilePage && PRIVY_AUTH_ENABLED && privyAuthenticated)
+  const headerControlConnected = anyConnected || agentEmailConnected
   const evmNetKey    = evmConnected
     ? ([CHAIN_META.base, CHAIN_META.arbitrum, CHAIN_META.hashkey] as const).find(n => n.chainId === evmChainId)?.key ?? null
     : null
@@ -375,7 +379,7 @@ export default function Layout() {
   const [payChain,    setPayChain]    = useState<ChainKey | null>(null)
   const [payWalletConnected, setPayWalletConnected] = useState(false)
   const [payWalletDisconnect, setPayWalletDisconnect] = useState<(() => void) | null>(null)
-  const headerWalletConnected = anyConnected || (isPayPage && payWalletConnected)
+  const headerWalletConnected = headerControlConnected || (isPayPage && payWalletConnected)
 
   // Sync selectedNet when a wallet actually connects / chain changes.
   // Guard: never override an explicit Solana selection — that would cause a
@@ -582,7 +586,7 @@ export default function Layout() {
             {!isCreatePage && !isPayPage && !isDashPage && !isNgPosPage && !isTelegramPaymentLinksPage && (
               <>
                 {/* Connect Wallet — when disconnected */}
-                {!anyConnected && (
+                {!headerControlConnected && (
                   PRIVY_AUTH_ENABLED && selectedNet !== 'starknet' && selectedNet !== 'solana' ? (
                     <PrivyConnectButton className="inline-flex h-9 items-center gap-1.5 rounded-full border border-gray-200 dark:border-white/10 bg-white dark:bg-[#1c1c20] px-3 text-[13px] font-medium text-gray-700 dark:text-gray-200 shadow-sm hover:bg-gray-50 dark:hover:bg-white/5 transition-colors disabled:opacity-60">
                       <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500 animate-pulse" />
@@ -602,7 +606,7 @@ export default function Layout() {
                 )}
 
                 {/* Disconnect all */}
-                {anyConnected && (
+                {headerControlConnected && (
                   PRIVY_AUTH_ENABLED ? (
                     <PrivyDisconnectButton
                       onDisconnectWallets={disconnectAll}

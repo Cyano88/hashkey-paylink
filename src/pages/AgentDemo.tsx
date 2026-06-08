@@ -21,7 +21,7 @@ import { resolvePrivyCircleLink, savePrivyCircleLink } from '../lib/privyCircleL
 import {
   CheckCircle2, AlertCircle, Loader2, Send,
   ExternalLink, ArrowLeft, ShieldCheck, Zap,
-  Wallet, Radio, Copy, LogOut, X, Bot, Sparkles,
+  Wallet, Radio, Copy, X, Bot, Sparkles,
   RefreshCw,
 } from 'lucide-react'
 
@@ -633,7 +633,6 @@ export default function AgentDemo() {
   const displayAgentName = displayAgentProfile?.name || agentSlug || 'Your agent wallet'
   const displayAgentPurpose = displayAgentProfile?.purpose || 'Connect a Circle agent wallet, fund treasury, and activate x402 from the dashboard.'
   const agentEmailConnected = Boolean(PRIVY_AUTH_ENABLED && privyAuthenticated)
-  const showAgentDisconnect = Boolean(currentAgentWallet || agentWalletSessionConnected || agentEmailConnected)
   const walletErrorMessage = walletError
     ? /invalid or expired request id/i.test(walletError)
       ? 'OTP expired. Resend OTP and use the newest code.'
@@ -652,19 +651,7 @@ export default function AgentDemo() {
         <div
           className="relative rounded-xl border border-gray-100 bg-white p-4 shadow-card transition-all dark:border-white/10 dark:bg-[#111114]"
         >
-          {showAgentDisconnect && (
-            <button
-              type="button"
-              onClick={disconnectAgentWallet}
-              disabled={walletBusy}
-              aria-label="Disconnect agent wallet access"
-              title="Disconnect agent wallet access"
-              className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-100 text-zinc-900 transition-colors hover:bg-zinc-200 active:scale-95 disabled:opacity-60 dark:bg-white/10 dark:text-zinc-100 dark:hover:bg-white/15"
-            >
-              {walletBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <LogOut className="h-3.5 w-3.5" />}
-            </button>
-          )}
-          <div className="flex items-start gap-3 pr-9 sm:gap-4">
+          <div className="flex items-start gap-3 sm:gap-4">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-white/[0.06]">
               <Bot className="h-[18px] w-[18px] text-gray-700 dark:text-gray-200" />
             </div>
