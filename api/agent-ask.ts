@@ -19,6 +19,9 @@
 import type { Request, Response } from 'express'
 import { ethers }                  from 'ethers'
 import Anthropic                   from '@anthropic-ai/sdk'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { dirname } from 'node:path'
+import crypto from 'node:crypto'
 
 // ─── 0G Mainnet config ────────────────────────────────────────────────────────
 const OG_RPC       = 'https://evmrpc.0g.ai'
@@ -33,6 +36,22 @@ const MAX_EVENT_ID_LENGTH = 128
 const MAX_PAYER_LENGTH = 128
 const MAX_QUESTION_LENGTH = 4_000
 const MAX_MEMORY_LENGTH = 1_600
+const HELPER_DAILY_PROMPT_LIMIT = Math.max(1, parseInt(process.env.HELPER_DAILY_PROMPT_LIMIT ?? '20', 10) || 20)
+const HELPER_USAGE_WINDOW_MS = 24 * 60 * 60 * 1000
+const HELPER_USAGE_STORE = process.env.HELPER_USAGE_STORE
+  ?? (process.env.DATA_PATH ? `${process.env.DATA_PATH}/helper-usage.json` : './data/helper-usage.json')
+const UPSTASH_REST_URL = (process.env.UPSTASH_REDIS_REST_URL ?? '').trim().replace(/\/+$/, '')
+const UPSTASH_REST_TOKEN = (process.env.UPSTASH_REDIS_REST_TOKEN ?? '').trim()
+const UPSTASH_USAGE_KEY = (process.env.HELPER_USAGE_STORE_KEY ?? 'hashpaylink:helper-usage').trim()
+
+type UsageRecord = {
+  count: number
+  resetAt: number
+}
+
+type UsageStore = {
+  usage: Record<string, UsageRecord>
+}
 
 const HASH_PAYLINK_SYSTEM_PROMPT = [
   'You are the Hash PayLink Strategy Agent for Circle, Arc, 0G, Polymarket, and agentic USDC commerce.',
@@ -65,6 +84,72 @@ function normalizeBoundedString(value: unknown, field: string, maxLength: number
   if (!normalized) throw new Error(`${field} is required`)
   if (normalized.length > maxLength) throw new Error(`${field} is too long`)
   return normalized
+}
+
+async function upstashCommand<T>(command: unknown[]): Promise<T | undefined> {
+  if (!UPSTASH_REST_URL || !UPSTASH_REST_TOKEN) return undefined
+  const response = await fetch(UPSTASH_REST_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${UPSTASH_REST_TOKEN}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(command),
+  })
+  if (!response.ok) throw new Error(`Upstash request failed: ${response.status}`)
+  const data = await response.json() as { result?: T }
+  return data.result
+}
+
+async function readUsageStore(): Promise<UsageStore> {
+  try {
+    const remote = await upstashCommand<string>(['GET', UPSTASH_USAGE_KEY])
+    if (remote) return JSON.parse(remote) as UsageStore
+  } catch (err) {
+    console.warn('[agent-ask] Upstash usage load failed; using file fallback.', err instanceof Error ? err.message : String(err))
+  }
+
+  try {
+    return JSON.parse(await readFile(HELPER_USAGE_STORE, 'utf8')) as UsageStore
+  } catch {
+    return { usage: {} }
+  }
+}
+
+async function writeUsageStore(store: UsageStore) {
+  await mkdir(dirname(HELPER_USAGE_STORE), { recursive: true })
+  await writeFile(HELPER_USAGE_STORE, JSON.stringify(store, null, 2), 'utf8')
+  try {
+    await upstashCommand(['SET', UPSTASH_USAGE_KEY, JSON.stringify(store)])
+  } catch (err) {
+    console.warn('[agent-ask] Upstash usage save failed; file fallback saved.', err instanceof Error ? err.message : String(err))
+  }
+}
+
+function usageKey(eventId: string, payer: string) {
+  return crypto.createHash('sha256').update(`${eventId.toLowerCase()}:${payer.toLowerCase()}`).digest('hex')
+}
+
+async function consumeHelperPrompt(eventId: string, payer: string) {
+  const now = Date.now()
+  const key = usageKey(eventId, payer)
+  const store = await readUsageStore()
+  const current = store.usage[key]
+
+  if (!current || current.resetAt <= now) {
+    store.usage[key] = { count: 1, resetAt: now + HELPER_USAGE_WINDOW_MS }
+    await writeUsageStore(store)
+    return { allowed: true, remaining: HELPER_DAILY_PROMPT_LIMIT - 1, resetAt: store.usage[key].resetAt }
+  }
+
+  if (current.count >= HELPER_DAILY_PROMPT_LIMIT) {
+    return { allowed: false, remaining: 0, resetAt: current.resetAt }
+  }
+
+  current.count += 1
+  store.usage[key] = current
+  await writeUsageStore(store)
+  return { allowed: true, remaining: Math.max(0, HELPER_DAILY_PROMPT_LIMIT - current.count), resetAt: current.resetAt }
 }
 
 // ─── Payment verification (same logic as agent-verify, kept local) ────────────
@@ -179,6 +264,17 @@ export default async function handler(req: Request, res: Response) {
     }
 
     // 2. Payment verified — get AI response
+    const usage = await consumeHelperPrompt(eventId, result.payment.payer)
+    if (!usage.allowed) {
+      res.setHeader('Retry-After', Math.ceil((usage.resetAt - Date.now()) / 1000).toString())
+      return res.status(429).json({
+        error: 'Daily helper prompt limit reached. Try again after the cooldown.',
+        cooldown: true,
+        limit: HELPER_DAILY_PROMPT_LIMIT,
+        resetAt: usage.resetAt,
+      })
+    }
+
     const answer = await getAiResponse(
       question,
       result.payment.payer,
@@ -190,6 +286,11 @@ export default async function handler(req: Request, res: Response) {
     return res.json({
       answer,
       paymentVerified: true,
+      usage: {
+        remaining: usage.remaining,
+        limit: HELPER_DAILY_PROMPT_LIMIT,
+        resetAt: usage.resetAt,
+      },
       payment:         result.payment,
       proof:           result.proof,
     })

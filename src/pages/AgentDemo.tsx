@@ -1380,11 +1380,11 @@ export default function AgentDemo() {
               </span>
               <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-2">
-                  <span className="text-sm font-semibold text-gray-900 dark:text-white">Hash PayLink Helper</span>
-                  <span className="rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-bold uppercase text-purple-600 dark:bg-purple-300/15 dark:text-purple-200">1 USDC</span>
+                  <span className="text-sm font-semibold text-gray-900 dark:text-white">Hash PayLink Agent Helper</span>
+                  <span className="rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-bold uppercase text-purple-600 dark:bg-purple-300/15 dark:text-purple-200">0.5 USDC</span>
                 </span>
                 <span className="mt-0.5 block text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                  Secondary paid AI helper. Current demo uses 0G payment proof; memory comes next.
+                  Paid helper inside the platform agent. 0G proof now; memory checkpoints next.
                 </span>
               </span>
               <ExternalLink className="h-4 w-4 text-purple-400" />
@@ -1421,8 +1421,8 @@ export default function AgentDemo() {
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <p className="text-sm font-semibold text-gray-900 dark:text-white">Hash PayLink Helper</p>
-                  <span className="rounded-full bg-purple-50 px-2 py-0.5 text-[10px] font-bold uppercase text-purple-600 dark:bg-purple-300/15 dark:text-purple-200">1 USDC</span>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">Hash PayLink Agent Helper</p>
+                  <span className="rounded-full bg-purple-50 px-2 py-0.5 text-[10px] font-bold uppercase text-purple-600 dark:bg-purple-300/15 dark:text-purple-200">0.5 USDC</span>
                 </div>
                 <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
                   A pocket AI helper for payments, Polymarket funding, StreamPay, research, planning, and daily questions.
@@ -1498,7 +1498,7 @@ export default function AgentDemo() {
                   <div>
                     <p className="text-sm font-semibold text-gray-900 dark:text-white">Unlock helper access</p>
                     <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                      Enter the 1 USDC payment proof details. The helper reads the access receipt from 0G before chat opens.
+                      Enter the 0.5 USDC payment proof details. The helper reads the access receipt from 0G before chat opens.
                     </p>
                   </div>
                   <input

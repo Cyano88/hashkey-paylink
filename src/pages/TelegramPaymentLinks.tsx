@@ -59,7 +59,7 @@ type TelegramService = {
   title: string
   body: string
   icon: typeof Coins
-  status: 'Open' | 'Soon' | 'Next' | '1 USDC'
+  status: 'Open' | 'Soon' | 'Next' | '0.5 USDC'
   active: boolean
   brand?: 'polymarket'
 }
@@ -79,7 +79,7 @@ const sectionServices: Record<TelegramSectionId, TelegramService[]> = {
     {
       id: 'hashpaylink-agent',
       title: 'Hash PayLink Agent',
-      body: 'Owner-managed platform agent for treasury, x402, LP Scout, and StreamPay services.',
+      body: 'Platform agent with paid helper access for Hash PayLink services.',
       icon: Bot,
       status: 'Open',
       active: true,
@@ -90,14 +90,6 @@ const sectionServices: Record<TelegramSectionId, TelegramService[]> = {
       body: 'Create a profile, sign in, then link a Circle agent wallet.',
       icon: Wallet,
       status: 'Open',
-      active: true,
-    },
-    {
-      id: 'hashpaylink-helper',
-      title: 'Hash PayLink Helper',
-      body: 'Paid AI helper with 0G proof now; personal memory comes next.',
-      icon: Sparkles,
-      status: '1 USDC',
       active: true,
     },
     {
@@ -476,7 +468,7 @@ export default function TelegramPaymentLinks() {
       return
     }
     if (service.id === 'hashpaylink-agent') {
-      window.location.href = '/agent?profile=agent&agent=hashpaylink-agent&src=telegram'
+      window.location.href = '/agent?helper=live&agent=hashpaylink-agent&src=telegram'
       return
     }
     if (service.id === 'hashpaylink-helper') {
@@ -1030,7 +1022,7 @@ function TelegramHelperPanel({
       if (!data.answer || !data.proof) throw new Error(data.error ?? 'No helper response returned.')
       setMessages(prev => [...prev, { question: nextQuestion, answer: data.answer!, proof: data.proof! }])
       if (!memoryDraft.trim()) {
-        setMemoryDraft(`User is known as ${helperName || payer}. They use Hash PayLink Helper from Telegram and may ask about payments, Polymarket, StreamPay, agents, research, planning, and daily questions.`)
+        setMemoryDraft(`User is known as ${helperName || payer}. They use Hash PayLink Agent Helper from Telegram and may ask about payments, Polymarket, StreamPay, agents, research, planning, and daily questions.`)
       }
     } catch (err) {
       setAskError(err instanceof Error ? err.message : 'Helper request failed.')
@@ -1053,11 +1045,12 @@ function TelegramHelperPanel({
     returnUrl.searchParams.set('open', '1')
     returnUrl.searchParams.set('section', 'agent-wallets')
     returnUrl.searchParams.set('service', 'hashpaylink-helper')
+    returnUrl.searchParams.set('agent', 'hashpaylink-agent')
 
     const params = new URLSearchParams()
     params.set('e', EVM_TREASURY)
-    params.set('a', '1')
-    params.set('m', 'Hash PayLink Helper Access')
+    params.set('a', '0.5')
+    params.set('m', 'Hash PayLink Agent Helper Access')
     params.set('n', 'base')
     params.set('v', '1')
     params.set('id', helperEventId)
@@ -1086,8 +1079,8 @@ function TelegramHelperPanel({
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <p className="text-sm font-semibold text-gray-900 dark:text-white">Hash PayLink Helper</p>
-              <span className="rounded-full bg-purple-50 px-2 py-0.5 text-[10px] font-bold uppercase text-purple-600 dark:bg-purple-300/15 dark:text-purple-200">1 USDC</span>
+              <p className="text-sm font-semibold text-gray-900 dark:text-white">Hash PayLink Agent Helper</p>
+              <span className="rounded-full bg-purple-50 px-2 py-0.5 text-[10px] font-bold uppercase text-purple-600 dark:bg-purple-300/15 dark:text-purple-200">0.5 USDC</span>
             </div>
             <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
               Pocket help for payments, Polymarket funding, StreamPay, agent setup, research, and daily questions.
@@ -1158,7 +1151,7 @@ function TelegramHelperPanel({
                   <div>
                     <p className="text-sm font-semibold text-gray-900 dark:text-white">Unlock helper access</p>
                     <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                      Pay 1 USDC to unlock the helper. After checkout succeeds, you return here with 0G access verification.
+                      Pay 0.5 USDC to unlock the helper. After checkout succeeds, you return here with 0G access verification.
                     </p>
                   </div>
                   <button
@@ -1168,7 +1161,7 @@ function TelegramHelperPanel({
                     className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
                   >
                     <ShieldCheck className="h-4 w-4" />
-                    Pay 1 USDC and unlock
+                    Pay 0.5 USDC and unlock
                   </button>
                   <button
                     type="button"
