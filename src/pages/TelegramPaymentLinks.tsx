@@ -751,6 +751,7 @@ export default function TelegramPaymentLinks() {
               telegramName={telegramName}
               ownerKey={telegramIdentity.isStable ? telegramIdentity.owner : ''}
               telegramId={telegramIdentity.isStable ? telegramIdentity.owner.replace(/^telegram:/, '') : ''}
+              fallbackOwner={telegramIdentity.legacyOwner}
               initialEventId={searchParams.get('eventId') ?? ''}
               initialPayer={searchParams.get('payer') ?? ''}
               onBack={() => setActiveService('')}
@@ -875,6 +876,7 @@ function TelegramHelperPanel({
   telegramName,
   ownerKey,
   telegramId,
+  fallbackOwner,
   initialEventId,
   initialPayer,
   onBack,
@@ -882,6 +884,7 @@ function TelegramHelperPanel({
   telegramName: string
   ownerKey: string
   telegramId: string
+  fallbackOwner: string
   initialEventId: string
   initialPayer: string
   onBack: () => void
@@ -931,6 +934,7 @@ function TelegramHelperPanel({
     const profileParams = new URLSearchParams()
     if (ownerKey) profileParams.set('owner', ownerKey)
     if (lookupPayer) profileParams.set('payer', lookupPayer)
+    if (fallbackOwner) profileParams.set('fallbackOwner', fallbackOwner)
     fetch(`/api/helper-profile?${profileParams.toString()}`)
       .then(res => res.json() as Promise<{ ok?: boolean; profile?: HelperProfile | null; error?: string }>)
       .then(data => {
@@ -955,7 +959,7 @@ function TelegramHelperPanel({
         if (!cancelled) setProfileBusy(false)
       })
     return () => { cancelled = true }
-  }, [payer, ownerKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [payer, ownerKey, fallbackOwner]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function startHelper() {
     setStarted(true)
@@ -984,6 +988,7 @@ function TelegramHelperPanel({
           action: 'save',
           payer: cleanPayer,
           owner: ownerKey || undefined,
+          fallbackOwner: fallbackOwner || undefined,
           displayName: extra.displayName ?? (helperName || helperNameDraft || cleanPayer),
           accessPayer: extra.accessPayer ?? (payer || cleanPayer),
           telegramHandle: cleanTelegramName,
@@ -1017,6 +1022,7 @@ function TelegramHelperPanel({
           action: 'checkpoint',
           payer: cleanPayer,
           owner: ownerKey || undefined,
+          fallbackOwner: fallbackOwner || undefined,
           displayName: helperName || helperNameDraft || cleanPayer,
           accessPayer: profile?.accessPayer || payer || cleanPayer,
           telegramHandle: cleanTelegramName,

@@ -137,11 +137,13 @@ export default async function handler(req: Request, res: Response) {
   if (req.method === 'GET') {
     const payer = normalizePayer(req.query.payer)
     const ownerKey = normalizePayer(req.query.owner ?? req.query.ownerKey)
+    const fallbackOwner = normalizePayer(req.query.fallbackOwner)
     if (!payer && !ownerKey) return res.status(400).json({ ok: false, error: 'Missing payer.' })
     const store = await readStore()
     const ownerProfile = ownerKey ? store.profiles[profileId(ownerKey)] : undefined
     const payerProfile = payer ? store.profiles[profileId(payer)] : undefined
-    return res.json({ ok: true, profile: publicProfile(ownerProfile ?? payerProfile) })
+    const fallbackProfile = fallbackOwner ? store.profiles[profileId(fallbackOwner)] : undefined
+    return res.json({ ok: true, profile: publicProfile(ownerProfile ?? payerProfile ?? fallbackProfile) })
   }
 
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed' })
@@ -149,12 +151,13 @@ export default async function handler(req: Request, res: Response) {
   const action = cleanString(req.body?.action, 32) || 'save'
   const payer = normalizePayer(req.body?.payer)
   const ownerKey = normalizePayer(req.body?.owner ?? req.body?.ownerKey)
+  const fallbackOwner = normalizePayer(req.body?.fallbackOwner)
   if (!payer && !ownerKey) return res.status(400).json({ ok: false, error: 'Missing payer.' })
 
   const store = await readStore()
   const storageKey = ownerKey || payer
   const id = profileId(storageKey)
-  const existing = store.profiles[id]
+  const existing = store.profiles[id] ?? (fallbackOwner ? store.profiles[profileId(fallbackOwner)] : undefined)
   const now = Date.now()
 
   const next: HelperProfile = {
