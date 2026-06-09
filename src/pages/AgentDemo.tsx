@@ -125,6 +125,10 @@ function resolveAgentProfileImage(profile: AgentProfileSummary) {
   }
 }
 
+function compactAgentWallet(value: string) {
+  return value.length > 10 ? `${value.slice(0, 4)}..${value.slice(-3)}` : value
+}
+
 // ─── Demo credentials (pre-filled for judges) ─────────────────────────────────
 const DEMO_EVENT_ID = 'test-0g-1778114523394'
 const DEMO_PAYER    = 'HashPayLink 0G Test'
@@ -728,11 +732,6 @@ export default function AgentDemo() {
     setCopiedProofId(item.id)
     window.setTimeout(() => setCopiedProofId(''), 1400)
   }
-  const displayAgentWalletChain =
-    agentWalletChain === 'BASE' ? 'Base' :
-    agentWalletChain === 'ARBITRUM' ? 'Arbitrum' :
-    agentWalletChain === 'ARC-TESTNET' ? 'Arc Testnet' :
-    agentWalletChain
   const selectedAgentNetworkLabel = AGENT_TREASURY_NETWORKS.find(network => network.key === agentNetwork)?.label ?? CHAIN_META[agentNetwork].label
   const treasuryBalanceNumber = treasuryBalance !== null ? Number(treasuryBalance) : null
   const x402AmountNumber = Number(x402Amount)
@@ -805,13 +804,8 @@ export default function AgentDemo() {
                     'max-w-full truncate text-xs text-gray-500 dark:text-gray-400',
                     currentAgentWallet && 'font-mono',
                   )}>
-                    {currentAgentWallet || 'Not connected'}
+                    {currentAgentWallet ? compactAgentWallet(currentAgentWallet) : 'Not connected'}
                   </p>
-                  {displayAgentWalletChain && (
-                    <span className="rounded-full bg-gray-100 px-2 py-1 text-[10px] font-semibold text-gray-500 dark:bg-white/[0.06] dark:text-gray-400">
-                      {displayAgentWalletChain} session
-                    </span>
-                  )}
                   {currentAgentWallet && (
                     <button
                       type="button"

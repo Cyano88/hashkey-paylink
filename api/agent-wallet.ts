@@ -15,6 +15,7 @@ const CIRCLE_CLI_ENABLED = ['1', 'true', 'yes', 'on'].includes(String(process.en
 const SERVICE_SECRET = process.env.AGENT_WALLET_SERVICE_SECRET
 const DEFAULT_AGENT_SLUG = normalizeSlug(process.env.DEFAULT_AGENT_SLUG || 'hashpaylink-agent')
 const DEFAULT_AGENT_WALLET_ADDRESS = normalizeExpectedWallet(process.env.DEFAULT_AGENT_WALLET_ADDRESS)
+const DEFAULT_AGENT_WALLET_CHAIN = normalizeBalanceChain(process.env.DEFAULT_AGENT_WALLET_CHAIN ?? process.env.DEFAULT_AGENT_CHAIN, 'BASE')
 const DEFAULT_SCOUT_URL = `${(process.env.HASH_PAYLINK_BASE_URL ?? 'https://hashpaylink.com').replace(/\/+$/, '')}/api/x402/polymarket-scout`
 const ALLOWED_SERVICE_URLS = new Set(
   (process.env.AGENT_WALLET_ALLOWED_SERVICE_URLS ?? process.env.X402_POLYMARKET_SCOUT_URL ?? DEFAULT_SCOUT_URL)
@@ -219,7 +220,7 @@ function parseEnvRegistry(): Record<string, AgentWalletRecord> {
   if (DEFAULT_AGENT_SLUG && DEFAULT_AGENT_WALLET_ADDRESS) {
     registry[DEFAULT_AGENT_SLUG] = {
       walletAddress: DEFAULT_AGENT_WALLET_ADDRESS,
-      chain: 'ARC-TESTNET',
+      chain: DEFAULT_AGENT_WALLET_CHAIN,
       updatedAt: 0,
       source: 'env',
     }
@@ -237,7 +238,7 @@ function parseEnvRegistry(): Record<string, AgentWalletRecord> {
       if (!walletAddress) continue
       registry[slug] = {
         walletAddress,
-        chain: normalizeBalanceChain(entry.chain, 'ARC-TESTNET'),
+        chain: normalizeBalanceChain(entry.chain, DEFAULT_AGENT_WALLET_CHAIN),
         updatedAt: Number(entry.updatedAt) || 0,
         source: 'env',
       }
