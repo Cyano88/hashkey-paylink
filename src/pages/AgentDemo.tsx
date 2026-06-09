@@ -247,7 +247,7 @@ export default function AgentDemo() {
   const bottomRef    = useRef<HTMLDivElement>(null)
   const autoRan      = useRef(false)
   const agentPrivyRestoreKey = useRef('')
-  const agentFundingReturnLogoutRan = useRef(false)
+  const agentFundingReturnSetupRan = useRef(false)
   const returningFromHelperPayment = Boolean(eventId && payer && showHelperDemo && !verified?.verified)
 
   useEffect(() => {
@@ -277,16 +277,14 @@ export default function AgentDemo() {
   }, [agentSlug, showAgentProfile]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (!showAgentProfile || !fundingSubmitted || !PRIVY_AUTH_ENABLED || !privyAuthenticated || agentFundingReturnLogoutRan.current) return
-    agentFundingReturnLogoutRan.current = true
-    setWalletEmail('')
+    if (!showAgentProfile || !fundingSubmitted || agentFundingReturnSetupRan.current) return
+    agentFundingReturnSetupRan.current = true
     setWalletMode('login')
     setWalletStep('idle')
     setWalletOtp('')
     setWalletOtpContext(null)
     setShowWalletAccessPanel(true)
-    logoutPrivy().catch(() => undefined)
-  }, [showAgentProfile, fundingSubmitted, privyAuthenticated, logoutPrivy])
+  }, [showAgentProfile, fundingSubmitted])
 
   useEffect(() => {
     let cancelled = false
