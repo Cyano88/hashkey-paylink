@@ -13,7 +13,7 @@ import { Link, useNavigate, useOutletContext } from 'react-router-dom'
 import { usePrivy }                     from '@privy-io/react-auth'
 import { cn }                           from '../lib/utils'
 import type { LayoutOutletContext }     from '../Layout'
-import { CHAIN_META }                   from '../lib/chains'
+import { CHAIN_META, EVM_TREASURY }     from '../lib/chains'
 import type { ChainKey }                from '../lib/chains'
 import { queryBalances }                from '../lib/unifiedBalance'
 import { PRIVY_AUTH_ENABLED }           from '../lib/authMode'
@@ -130,8 +130,6 @@ function compactAgentWallet(value: string) {
 }
 
 // ─── Demo credentials (pre-filled for judges) ─────────────────────────────────
-const DEMO_EVENT_ID = 'test-0g-1778114523394'
-const DEMO_PAYER    = 'HashPayLink 0G Test'
 const PLATFORM_AGENT_SLUG = 'hashpaylink-agent'
 const PLATFORM_AGENT_PROFILE: AgentProfileSummary = {
   slug: PLATFORM_AGENT_SLUG,
@@ -231,6 +229,7 @@ export default function AgentDemo() {
   const bottomRef    = useRef<HTMLDivElement>(null)
   const autoRan      = useRef(false)
   const agentPrivyRestoreKey = useRef('')
+  const returningFromHelperPayment = Boolean(eventId && payer && showHelperDemo && !verified?.verified)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -436,11 +435,26 @@ export default function AgentDemo() {
     }
   }
 
-  function fillDemo() {
-    setEventId(DEMO_EVENT_ID)
-    setPayer(DEMO_PAYER)
-    setVerified(null)
-    setMessages([])
+  function openHelperCheckout() {
+    const cleanPayer = (helperName || helperNameDraft || payer || 'Helper user').trim()
+    const helperEventId = `helper-${Date.now().toString(36)}`
+    const returnUrl = new URL('/agent', window.location.origin)
+    returnUrl.searchParams.set('helper', 'live')
+    returnUrl.searchParams.set('agent', 'hashpaylink-agent')
+    returnUrl.searchParams.set('src', params.get('src') || 'dashboard')
+
+    const checkout = new URLSearchParams()
+    checkout.set('e', EVM_TREASURY)
+    checkout.set('a', '0.5')
+    checkout.set('m', 'Hash PayLink Agent Helper Access')
+    checkout.set('n', 'base')
+    checkout.set('v', '1')
+    checkout.set('id', helperEventId)
+    checkout.set('src', 'telegram-helper')
+    checkout.set('g', returnUrl.toString())
+    checkout.set('ad', '1')
+    if (cleanPayer) checkout.set('payer', cleanPayer)
+    window.location.href = `/pay?${checkout.toString()}`
   }
 
   function startHelper() {
@@ -1484,69 +1498,66 @@ export default function AgentDemo() {
                 <div className="rounded-xl border border-gray-100 bg-gray-50/80 p-3 dark:border-white/10 dark:bg-white/[0.04]">
                   <p className="text-sm font-semibold text-gray-900 dark:text-white">What should I call you?</p>
                   <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                    This preference is saved on this browser for now. 0G-backed profile memory comes next.
+                    This keeps the helper personal when you come back.
                   </p>
-                  <div className="mt-3 flex items-center gap-2">
+                  <div className="mt-3 space-y-2">
                     <input
                       value={helperNameDraft}
                       onChange={event => setHelperNameDraft(event.target.value)}
-                      onKeyDown={event => event.key === 'Enter' && saveHelperName()}
+                      onKeyDown={event => {
+                        if (event.key !== 'Enter' || !helperNameDraft.trim()) return
+                        saveHelperName()
+                        window.setTimeout(openHelperCheckout, 0)
+                      }}
                       placeholder="Your name or Telegram handle"
-                      className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:ring-2 focus:ring-gray-200 dark:border-white/10 dark:bg-white/[0.06] dark:text-white dark:focus:ring-white/10"
+                      className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:ring-2 focus:ring-gray-200 dark:border-white/10 dark:bg-white/[0.06] dark:text-white dark:focus:ring-white/10"
                     />
                     <button
                       type="button"
-                      onClick={saveHelperName}
+                      onClick={() => {
+                        saveHelperName()
+                        window.setTimeout(openHelperCheckout, 0)
+                      }}
                       disabled={!helperNameDraft.trim()}
-                      className="rounded-xl bg-black px-3 py-2.5 text-sm font-semibold text-white transition-all hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-950"
+                      className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-50 dark:bg-white dark:text-gray-950"
                     >
-                      Save
+                      <ShieldCheck className="h-4 w-4" />
+                      Continue to payment
                     </button>
                   </div>
                 </div>
               )}
 
-              {!verified?.verified && (
+              {!helperName && verified?.verified !== true ? null : !verified?.verified && (
                 <div className="space-y-3 rounded-xl border border-gray-100 bg-white p-3 dark:border-white/10 dark:bg-white/[0.03]">
                   <div>
                     <p className="text-sm font-semibold text-gray-900 dark:text-white">Unlock helper access</p>
                     <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                      Enter the 0.5 USDC payment proof details. The helper reads the access receipt from 0G before chat opens.
+                      {returningFromHelperPayment
+                        ? 'Payment received. Verifying your 0G access receipt now.'
+                        : 'Pay 0.5 USDC once to unlock the helper.'}
                     </p>
                   </div>
-                  <input
-                    value={eventId}
-                    onChange={event => setEventId(event.target.value)}
-                    onKeyDown={event => event.key === 'Enter' && handleVerify()}
-                    placeholder="Payment event ID"
-                    className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 font-mono text-xs text-gray-900 outline-none placeholder:text-gray-400 focus:ring-2 focus:ring-gray-200 dark:border-white/10 dark:bg-white/[0.05] dark:text-white"
-                  />
-                  <input
-                    value={payer}
-                    onChange={event => setPayer(event.target.value)}
-                    onKeyDown={event => event.key === 'Enter' && handleVerify()}
-                    placeholder="Name used when paying"
-                    className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:ring-2 focus:ring-gray-200 dark:border-white/10 dark:bg-white/[0.05] dark:text-white"
-                  />
+                  {returningFromHelperPayment && (
+                    <div className="flex items-center gap-2 rounded-xl border border-purple-100 bg-purple-50 px-3 py-2.5 text-xs font-medium text-purple-700 dark:border-purple-300/20 dark:bg-purple-300/10 dark:text-purple-200">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Redirecting shortly while 0G verifies access
+                    </div>
+                  )}
                   <button
                     type="button"
-                    onClick={handleVerify}
-                    disabled={verifying || !eventId.trim() || !payer.trim()}
+                    onClick={openHelperCheckout}
+                    disabled={returningFromHelperPayment || (!helperName && !helperNameDraft.trim())}
                     className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
                   >
-                    {verifying ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
-                    Verify 0G access
-                  </button>
-                  <button
-                    type="button"
-                    onClick={fillDemo}
-                    className="mx-auto flex items-center gap-1.5 text-xs font-semibold text-gray-400 transition-colors hover:text-gray-700 dark:hover:text-gray-200"
-                  >
-                    <Zap className="h-3 w-3" /> Use existing 0G test receipt
+                    <ShieldCheck className="h-4 w-4" />
+                    Continue to payment
                   </button>
                   {verified && !verified.verified && (
                     <p className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs font-medium text-red-600 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200">
-                      {verified.error ?? 'No verified 0G access receipt found for this payer.'}
+                      {returningFromHelperPayment
+                        ? 'Still confirming the 0G receipt. This usually clears shortly.'
+                        : verified.error ?? 'Access is not active yet.'}
                     </p>
                   )}
                 </div>
@@ -1673,10 +1684,10 @@ export default function AgentDemo() {
 
         {/* Demo shortcut */}
         <button
-          onClick={fillDemo}
+          onClick={() => undefined}
           className="mt-4 inline-flex items-center gap-1.5 rounded-lg border border-dashed border-purple-200 dark:border-purple-800 px-3 py-1.5 text-xs font-medium text-purple-500 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors"
         >
-          <Zap className="h-3 w-3" /> Try with demo credentials
+          <Zap className="h-3 w-3" /> Continue
         </button>
       </div>
 
