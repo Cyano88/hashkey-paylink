@@ -132,7 +132,23 @@ function isCircleCloseMessage(data: unknown) {
 function deviceIdError(err: unknown) {
   const message = readableError(err).toLowerCase()
   if (message.includes('cancel')) return 'Payment cancelled.'
-  return 'Smart wallet could not start. Refresh and try again.'
+  if (
+    message.includes('timeout') ||
+    message.includes('timed out') ||
+    message.includes('deviceid') ||
+    message.includes('device id')
+  ) {
+    return 'Circle Smart Wallet could not open. Refresh this page and try again.'
+  }
+  if (
+    message.includes('failed to fetch') ||
+    message.includes('networkerror') ||
+    message.includes('network error') ||
+    message.includes('load failed')
+  ) {
+    return 'Circle Smart Wallet could not connect. Check your network and try again.'
+  }
+  return 'Circle Smart Wallet could not open. Refresh this page and try again.'
 }
 
 function isHexHash(value: unknown): value is Hex {

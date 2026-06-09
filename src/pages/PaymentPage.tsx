@@ -4457,6 +4457,10 @@ export default function PaymentPage() {
             { n: '1', title: 'Review wallet', body: 'Confirm the funding wallet and amount' },
             { n: '2', title: 'Fund with USDC', body: 'Pay from your gasless wallet or another wallet' },
             { n: '3', title: 'Continue trading', body: 'Use the success screen to return to Polymarket' },
+          ] : isAgentFunding ? [
+            { n: '1', title: 'Fund treasury', body: 'Add USDC to this agent wallet' },
+            { n: '2', title: 'Use for actions', body: 'Treasury can support services, tips, and x402 activation' },
+            { n: '3', title: 'Track receipts', body: 'Return to the agent dashboard for balances and receipts' },
           ] : [
             { n: '1', title: 'Check the request', body: "Confirm the amount and who it's for" },
             { n: '2', title: 'Choose how to pay', body: 'Use the gasless wallet, your wallet, or an exchange' },
