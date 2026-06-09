@@ -783,13 +783,14 @@ export default function AgentDemo() {
       const data = await res.json() as { ok?: boolean; error?: string; amount?: string }
       if (!res.ok || !data.ok) throw new Error(data.error ?? 'x402 activation failed')
       const activatedAmount = data.amount ?? x402Amount
-      setX402Status(`${activatedAmount} USDC added to x402.`)
       setX402ActivationSuccess(`${activatedAmount} USDC added to x402.`)
+      setX402ModalOpen(false)
       await refreshX402Balance()
       await loadAgentWallet()
       window.setTimeout(() => {
         setX402ActivationSuccess('')
-      }, 3000)
+        refreshX402Balance().catch(() => undefined)
+      }, 5000)
     } catch (err) {
       const rawMessage = err instanceof Error ? err.message : 'x402 activation failed'
       const friendlyMessage = /at least 0\.5|minimum|Invalid --amount/i.test(rawMessage)
