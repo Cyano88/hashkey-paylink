@@ -46,6 +46,39 @@ const LABEL_BY_KEY: Record<UnifiedBalanceChainKey, string> = {
   starknet: 'Starknet',
 }
 
+const BALANCE_TIMEOUT_MS = 10_000
+
+function timeoutError(label: string) {
+  return new Error(`${label} balance lookup timed out`)
+}
+
+async function withTimeout<T>(promise: Promise<T>, label: string, timeoutMs = BALANCE_TIMEOUT_MS): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timeoutId = setTimeout(() => reject(timeoutError(label)), timeoutMs)
+      }),
+    ])
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId)
+  }
+}
+
+async function fetchJsonWithTimeout<T>(input: RequestInfo | URL, init: RequestInit, label: string): Promise<Response> {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), BALANCE_TIMEOUT_MS)
+  try {
+    return await fetch(input, { ...init, signal: controller.signal })
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') throw timeoutError(label)
+    throw error
+  } finally {
+    clearTimeout(timeoutId)
+  }
+}
+
 function asNumber(value: string | undefined): number {
   if (!value) return 0
   const parsed = Number.parseFloat(value)
@@ -83,42 +116,42 @@ function updateRow(
 }
 
 async function queryCircleBalance(address: string, chain: UnifiedBalanceChainIdentifier): Promise<number> {
-  const result = await getBalances(context, {
+  const result = await withTimeout(getBalances(context, {
     token: 'USDC',
     sources: { address, chains: chain },
     includePending: false,
-  })
+  }), `${chain} Circle`)
   return amountForCircleChain(result, chain)
 }
 
 async function queryEvmTokenBalance(key: 'base' | 'arc' | 'arbitrum', address: string): Promise<number> {
-  const response = await fetch('/api/evm-balance', {
+  const response = await fetchJsonWithTimeout('/api/evm-balance', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ chain: key, address }),
-  })
+  }, LABEL_BY_KEY[key])
   const data = await response.json() as { ok?: boolean; balance?: string; error?: string }
   if (!response.ok || !data.ok) throw new Error(data.error ?? 'EVM balance query failed')
   return asNumber(data.balance)
 }
 
 async function querySolanaWalletBalance(address: string): Promise<number> {
-  const response = await fetch('/api/solana-balance', {
+  const response = await fetchJsonWithTimeout('/api/solana-balance', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ accountAddress: address }),
-  })
+  }, 'Solana')
   const data = await response.json() as { ok?: boolean; balance?: string; error?: string }
   if (!response.ok || !data.ok) throw new Error(data.error ?? 'Solana balance query failed')
   return Number(BigInt(data.balance ?? '0')) / 1_000_000
 }
 
 async function queryStarknetBalance(address: string): Promise<number> {
-  const response = await fetch('/api/starknet-balance', {
+  const response = await fetchJsonWithTimeout('/api/starknet-balance', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ accountAddress: address }),
-  })
+  }, 'Starknet')
   const data = await response.json() as { ok?: boolean; balance?: string; error?: string }
   if (!response.ok || !data.ok) throw new Error(data.error ?? 'Starknet balance query failed')
   return Number(BigInt(data.balance ?? '0x0')) / 1_000_000

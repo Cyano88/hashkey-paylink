@@ -165,7 +165,7 @@ function isAgentTreasuryNetwork(value: string): value is AgentTreasuryNetwork {
 
 function readableTreasuryBalanceError(error: unknown, networkLabel: string) {
   const message = error instanceof Error ? error.message : String(error || '')
-  if (/failed to fetch|http request failed|rpc\.testnet\.arc\.network/i.test(message)) {
+  if (/timed out|failed to fetch|http request failed|rpc\.testnet\.arc\.network/i.test(message)) {
     return `${networkLabel} balance is temporarily unavailable. Try another network or refresh.`
   }
   if (/balance unavailable/i.test(message)) return `${networkLabel} balance unavailable.`
