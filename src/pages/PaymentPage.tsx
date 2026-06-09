@@ -2902,7 +2902,7 @@ export default function PaymentPage() {
       } catch {
         accessRedirected.current = false
       }
-    }, 900)
+    }, isAgentFunding ? 2600 : 900)
     return () => window.clearTimeout(timer)
   }, [autoAccessRedirect, isEventMode, agentUrl, eventRegStatus, eventId, attendeeName, isAgentFunding, memo])
 
@@ -3161,7 +3161,24 @@ export default function PaymentPage() {
               </div>
             )}
 
-            {isPolymarketFunding ? (
+            {isAgentFunding ? (
+              <div className="space-y-2">
+                <p className="flex items-center justify-center gap-1 text-center text-[11px] font-medium text-gray-400">
+                  Redirecting in a few seconds
+                  <span className="inline-flex w-5 items-center justify-start gap-0.5">
+                    <span className="h-1 w-1 animate-pulse rounded-full bg-gray-300" />
+                    <span className="h-1 w-1 animate-pulse rounded-full bg-gray-300 [animation-delay:120ms]" />
+                    <span className="h-1 w-1 animate-pulse rounded-full bg-gray-300 [animation-delay:240ms]" />
+                  </span>
+                </p>
+                <a
+                  href={agentFundingBackUrl}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-2.5 text-sm font-medium text-white transition-all hover:bg-gray-800 active:scale-[0.98]"
+                >
+                  Tap to redirect
+                </a>
+              </div>
+            ) : isPolymarketFunding ? (
               <a
                 href={POLYMARKET_SIGNUP_URL}
                 target="_blank"
