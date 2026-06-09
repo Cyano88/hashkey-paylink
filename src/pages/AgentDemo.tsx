@@ -1564,7 +1564,7 @@ export default function AgentDemo() {
           </div>
           <div className="space-y-2">
             <Link
-              to={`/agent?helper=live&agent=${PLATFORM_AGENT_SLUG}&src=dashboard`}
+              to="/telegram/payment-links?section=agent-wallets&service=hashpaylink-agent&open=1"
               className="flex w-full items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-left transition-all hover:border-gray-300 hover:bg-white active:scale-[0.99] dark:border-white/10 dark:bg-white/[0.05] dark:hover:bg-white/[0.08]"
             >
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-gray-700 shadow-sm dark:bg-white/[0.08] dark:text-gray-200">

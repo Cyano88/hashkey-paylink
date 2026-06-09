@@ -19,6 +19,8 @@ type HelperProfile = {
   id: string
   payer: string
   displayName: string
+  ownerKey?: string
+  accessPayer?: string
   telegramHandle?: string
   accessEventId?: string
   preferences?: string[]
@@ -134,26 +136,33 @@ async function checkpointMemory(profile: HelperProfile) {
 export default async function handler(req: Request, res: Response) {
   if (req.method === 'GET') {
     const payer = normalizePayer(req.query.payer)
-    if (!payer) return res.status(400).json({ ok: false, error: 'Missing payer.' })
+    const ownerKey = normalizePayer(req.query.owner ?? req.query.ownerKey)
+    if (!payer && !ownerKey) return res.status(400).json({ ok: false, error: 'Missing payer.' })
     const store = await readStore()
-    return res.json({ ok: true, profile: publicProfile(store.profiles[profileId(payer)]) })
+    const ownerProfile = ownerKey ? store.profiles[profileId(ownerKey)] : undefined
+    const payerProfile = payer ? store.profiles[profileId(payer)] : undefined
+    return res.json({ ok: true, profile: publicProfile(ownerProfile ?? payerProfile) })
   }
 
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed' })
 
   const action = cleanString(req.body?.action, 32) || 'save'
   const payer = normalizePayer(req.body?.payer)
-  if (!payer) return res.status(400).json({ ok: false, error: 'Missing payer.' })
+  const ownerKey = normalizePayer(req.body?.owner ?? req.body?.ownerKey)
+  if (!payer && !ownerKey) return res.status(400).json({ ok: false, error: 'Missing payer.' })
 
   const store = await readStore()
-  const id = profileId(payer)
+  const storageKey = ownerKey || payer
+  const id = profileId(storageKey)
   const existing = store.profiles[id]
   const now = Date.now()
 
   const next: HelperProfile = {
     id,
-    payer,
-    displayName: cleanString(req.body?.displayName, 80) || existing?.displayName || payer,
+    payer: payer || existing?.payer || storageKey,
+    displayName: cleanString(req.body?.displayName, 80) || existing?.displayName || payer || storageKey,
+    ownerKey: ownerKey || existing?.ownerKey,
+    accessPayer: cleanString(req.body?.accessPayer, 128) || existing?.accessPayer || payer,
     telegramHandle: cleanString(req.body?.telegramHandle, 80) || existing?.telegramHandle,
     accessEventId: cleanString(req.body?.accessEventId, 128) || existing?.accessEventId,
     preferences: cleanList(req.body?.preferences).length ? cleanList(req.body?.preferences) : existing?.preferences ?? [],

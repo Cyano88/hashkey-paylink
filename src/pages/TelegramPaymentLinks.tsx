@@ -228,6 +228,8 @@ type HelperProfile = {
   id: string
   payer: string
   displayName: string
+  ownerKey?: string
+  accessPayer?: string
   telegramHandle?: string
   accessEventId?: string
   preferences?: string[]
@@ -747,6 +749,8 @@ export default function TelegramPaymentLinks() {
           ) : activeService === 'hashpaylink-helper' ? (
             <TelegramHelperPanel
               telegramName={telegramName}
+              ownerKey={telegramIdentity.isStable ? telegramIdentity.owner : ''}
+              telegramId={telegramIdentity.isStable ? telegramIdentity.owner.replace(/^telegram:/, '') : ''}
               initialEventId={searchParams.get('eventId') ?? ''}
               initialPayer={searchParams.get('payer') ?? ''}
               onBack={() => setActiveService('')}
@@ -869,11 +873,15 @@ function ConnectTelegramPanel({ onBack }: { onBack: () => void }) {
 
 function TelegramHelperPanel({
   telegramName,
+  ownerKey,
+  telegramId,
   initialEventId,
   initialPayer,
   onBack,
 }: {
   telegramName: string
+  ownerKey: string
+  telegramId: string
   initialEventId: string
   initialPayer: string
   onBack: () => void
@@ -916,16 +924,24 @@ function TelegramHelperPanel({
 
   useEffect(() => {
     const lookupPayer = payer.trim()
-    if (!lookupPayer) return
+    if (!lookupPayer && !ownerKey) return
     let cancelled = false
     setProfileBusy(true)
     setProfileError('')
-    fetch(`/api/helper-profile?payer=${encodeURIComponent(lookupPayer)}`)
+    const profileParams = new URLSearchParams()
+    if (ownerKey) profileParams.set('owner', ownerKey)
+    if (lookupPayer) profileParams.set('payer', lookupPayer)
+    fetch(`/api/helper-profile?${profileParams.toString()}`)
       .then(res => res.json() as Promise<{ ok?: boolean; profile?: HelperProfile | null; error?: string }>)
       .then(data => {
         if (cancelled) return
         if (!data.ok) throw new Error(data.error || 'Could not load helper profile.')
         setProfile(data.profile ?? null)
+        if (data.profile?.accessEventId && data.profile?.accessPayer && !verified?.verified) {
+          setEventId(current => current || data.profile?.accessEventId || '')
+          setPayer(current => current || data.profile?.accessPayer || '')
+          void verifyAccess(data.profile.accessEventId, data.profile.accessPayer)
+        }
         if (data.profile?.displayName) {
           setHelperName(current => current || data.profile?.displayName || '')
           setHelperNameDraft(current => current || data.profile?.displayName || '')
@@ -939,7 +955,7 @@ function TelegramHelperPanel({
         if (!cancelled) setProfileBusy(false)
       })
     return () => { cancelled = true }
-  }, [payer])
+  }, [payer, ownerKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function startHelper() {
     setStarted(true)
@@ -967,9 +983,11 @@ function TelegramHelperPanel({
         body: JSON.stringify({
           action: 'save',
           payer: cleanPayer,
+          owner: ownerKey || undefined,
           displayName: extra.displayName ?? (helperName || helperNameDraft || cleanPayer),
+          accessPayer: extra.accessPayer ?? (payer || cleanPayer),
           telegramHandle: cleanTelegramName,
-          accessEventId: eventId,
+          accessEventId: extra.accessEventId ?? eventId,
           memorySummary: extra.memorySummary ?? memoryDraft,
           preferences: extra.preferences ?? profile?.preferences ?? [],
         }),
@@ -998,7 +1016,9 @@ function TelegramHelperPanel({
         body: JSON.stringify({
           action: 'checkpoint',
           payer: cleanPayer,
+          owner: ownerKey || undefined,
           displayName: helperName || helperNameDraft || cleanPayer,
+          accessPayer: profile?.accessPayer || payer || cleanPayer,
           telegramHandle: cleanTelegramName,
           accessEventId: eventId,
           memorySummary: summary,
@@ -1024,7 +1044,11 @@ function TelegramHelperPanel({
       const res = await fetch(`/api/agent-verify?eventId=${encodeURIComponent(nextEventId.trim())}&payer=${encodeURIComponent(nextPayer.trim())}`)
       const data = await res.json() as HelperVerifyResult
       setVerified(data)
-      if (data.verified) setMessages([])
+      if (data.verified) {
+        setStarted(true)
+        setMessages([])
+        void saveProfile({ displayName: helperName || helperNameDraft || nextPayer, accessEventId: nextEventId, accessPayer: nextPayer })
+      }
     } catch {
       setVerified({ verified: false, error: 'Verification service unreachable.' })
     } finally {
@@ -1074,6 +1098,8 @@ function TelegramHelperPanel({
     returnUrl.searchParams.set('section', 'agent-wallets')
     returnUrl.searchParams.set('service', 'hashpaylink-helper')
     returnUrl.searchParams.set('agent', 'hashpaylink-agent')
+    if (telegramId) returnUrl.searchParams.set('telegramId', telegramId)
+    if (cleanTelegramName) returnUrl.searchParams.set('u', cleanTelegramName)
 
     const params = new URLSearchParams()
     params.set('e', EVM_TREASURY)
