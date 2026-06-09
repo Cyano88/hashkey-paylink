@@ -197,6 +197,23 @@ export default function AgentDemo() {
   const [agentNetwork, setAgentNetwork] = useState<AgentTreasuryNetwork>(initialAgentNetwork)
   const showHelperDemo = params.get('helper') === 'live' || params.get('helper') === 'demo' || params.get('demo') === 'ai'
   const showAgentProfile = !showHelperDemo && (params.get('profile') === 'agent' || Boolean(agentSlug || agentWallet))
+  useEffect(() => {
+    if (!showHelperDemo) return
+    const next = new URLSearchParams({
+      open: '1',
+      section: 'agent-wallets',
+      service: 'hashpaylink-agent',
+    })
+    const eventIdParam = params.get('eventId')
+    const payerParam = params.get('payer')
+    const telegramIdParam = params.get('telegramId') ?? params.get('tgid') ?? params.get('tid')
+    const usernameParam = params.get('u') ?? params.get('username')
+    if (eventIdParam) next.set('eventId', eventIdParam)
+    if (payerParam) next.set('payer', payerParam)
+    if (telegramIdParam) next.set('telegramId', telegramIdParam)
+    if (usernameParam) next.set('u', usernameParam)
+    navigate(`/telegram/payment-links?${next.toString()}`, { replace: true })
+  }, [showHelperDemo, navigate]) // eslint-disable-line react-hooks/exhaustive-deps
   const backHref = params.get('src') === 'telegram'
     ? '/telegram/payment-links?section=agent-wallets'
     : '/'
@@ -870,8 +887,18 @@ export default function AgentDemo() {
     setBalanceRefreshNonce(current => current + 1)
   }, [agentWalletAccessConnected]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  if (showHelperDemo) {
+    return (
+      <div className="mx-auto max-w-md animate-slide-up">
+        <div className="rounded-xl border border-gray-100 bg-white p-4 text-sm text-gray-500 shadow-card dark:border-white/10 dark:bg-[#111114] dark:text-gray-400">
+          Opening Hash PayLink Agent Helper in Telegram...
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className={cn('mx-auto animate-slide-up space-y-6', showAgentProfile || showHelperDemo ? 'max-w-md' : 'max-w-2xl')}>
+    <div className={cn('mx-auto animate-slide-up space-y-6', showAgentProfile ? 'max-w-md' : 'max-w-2xl')}>
 
       {/* ── Back ──────────────────────────────────────────────────────────── */}
       <button
