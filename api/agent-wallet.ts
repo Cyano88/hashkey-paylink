@@ -32,6 +32,7 @@ type PendingSession = {
   agentSlug: string
   emailHash: string
   requestId?: string
+  expectedWallet?: string
   testnet: boolean
   createdAt: number
 }
@@ -501,7 +502,8 @@ export default async function handler(req: Request, res: Response) {
       const output = await runCircle(args, key)
       const requestId = parseRequestId(output)
       const store = await readStore()
-      store.pending[id] = { agentSlug, emailHash: emailHash(email), requestId, testnet, createdAt: Date.now() }
+      const expectedWallet = normalizeExpectedWallet(req.body?.expectedWallet)
+      store.pending[id] = { agentSlug, emailHash: emailHash(email), requestId, expectedWallet, testnet, createdAt: Date.now() }
       await writeStore(store)
       return res.json({ ok: true, sessionId: id, requestId, message: 'OTP sent by Circle.' })
     }
@@ -529,7 +531,7 @@ export default async function handler(req: Request, res: Response) {
       }
       const wallets = parseWalletAddresses(listOutput)
       const existing = resolveAgentRecord(store, agentSlug)
-      const expectedWallet = normalizeExpectedWallet(req.body?.expectedWallet)
+      const expectedWallet = pending.expectedWallet || normalizeExpectedWallet(req.body?.expectedWallet)
       const expectedMatch = expectedWallet
         ? wallets.find(item => item.toLowerCase() === expectedWallet.toLowerCase())
         : undefined
