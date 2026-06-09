@@ -226,6 +226,7 @@ export default function AgentDemo() {
   const [walletChoices, setWalletChoices] = useState<WalletChoice[]>([])
   const [walletMode, setWalletMode] = useState<'choose' | 'create' | 'login'>('choose')
   const [walletStep, setWalletStep] = useState<'idle' | 'otp' | 'done'>('idle')
+  const [walletOtpContext, setWalletOtpContext] = useState<{ email: string; network: AgentTreasuryNetwork } | null>(null)
   const [walletBusy, setWalletBusy] = useState(false)
   const [activityBusy, setActivityBusy] = useState(false)
   const [walletError, setWalletError] = useState<string | null>(null)
@@ -493,6 +494,10 @@ export default function AgentDemo() {
 
   function handleAgentNetworkChange(next: AgentTreasuryNetwork) {
     if (next === agentNetwork) return
+    if (walletStep === 'otp') {
+      setWalletError('Finish this OTP login or resend OTP before changing network.')
+      return
+    }
     const nextParams = new URLSearchParams(window.location.search)
     nextParams.set('n', next)
     window.history.replaceState(null, '', `${window.location.pathname}?${nextParams.toString()}${window.location.hash}`)
@@ -562,6 +567,20 @@ export default function AgentDemo() {
     }
     const email = (PRIVY_AUTH_ENABLED ? privyEmail : walletEmail).trim().toLowerCase()
     if (email) setWalletEmail(email)
+    if (action === 'complete') {
+      if (!walletOtpContext) {
+        setWalletError('Resend OTP and use the newest code.')
+        return
+      }
+      if (walletOtpContext.email !== email || walletOtpContext.network !== agentNetwork) {
+        setWalletOtp('')
+        const contextChanged = walletOtpContext.email !== email
+          ? `This code was requested for ${walletOtpContext.email}.`
+          : `This code was requested for ${CHAIN_META[walletOtpContext.network].label}.`
+        setWalletError(`${contextChanged} Resend OTP and use the newest code.`)
+        return
+      }
+    }
     setWalletBusy(true)
     setWalletError(null)
     setWalletChoices([])
@@ -591,8 +610,18 @@ export default function AgentDemo() {
         setWalletChoices(Array.isArray(data.availableWallets) ? data.availableWallets : [])
         throw new Error('That wallet was not found for this Circle email. Select one of the wallets below or sign in with the email that owns the funded wallet.')
       }
+      if (data.code === 'otp_mismatch') {
+        setWalletOtp('')
+        throw new Error(data.error ?? 'Circle code was not accepted. Use the newest OTP from your email, or resend OTP and try again.')
+      }
+      if (data.code === 'otp_expired') {
+        setWalletOtp('')
+        throw new Error(data.error ?? 'OTP expired. Resend OTP and use the newest code.')
+      }
       if (!res.ok || !data.ok) throw new Error(data.error ?? 'Circle Agent Wallet request failed')
       if (action === 'init') {
+        setWalletOtp('')
+        setWalletOtpContext({ email, network: agentNetwork })
         setWalletStep('otp')
       } else if (data.walletAddress) {
         setCurrentAgentWallet(data.walletAddress)
@@ -601,6 +630,7 @@ export default function AgentDemo() {
         setTreasuryBalanceChecked(false)
         setTreasuryBalanceError('')
         setWalletStep('done')
+        setWalletOtpContext(null)
         setAgentWalletSessionConnected(true)
         if (PRIVY_AUTH_ENABLED && privyAuthenticated) {
           const token = await getAccessToken()
@@ -660,6 +690,7 @@ export default function AgentDemo() {
       setAgentWalletSessionConnected(false)
       setWalletStep('idle')
       setWalletOtp('')
+      setWalletOtpContext(null)
       setWalletMode('choose')
       setWalletEmail('')
       setWalletExpectedAddress('')
@@ -689,6 +720,7 @@ export default function AgentDemo() {
       setX402Status('')
       setWalletStep('idle')
       setWalletOtp('')
+      setWalletOtpContext(null)
       setWalletMode('choose')
       setWalletEmail('')
       setWalletExpectedAddress('')
@@ -801,6 +833,8 @@ export default function AgentDemo() {
   const walletErrorMessage = walletError
     ? /invalid or expired request id/i.test(walletError)
       ? 'OTP expired. Resend OTP and use the newest code.'
+      : /otp value is not matched|otp value.*not match|otp token match|invalid otp/i.test(walletError)
+      ? 'Circle code was not accepted. Use the newest OTP from your email, or resend OTP and try again.'
       : walletError.replace(/^Command failed:[\s\S]*?\n/i, '').replace(/^Error:\s*/i, '').slice(0, 180)
     : ''
 
@@ -897,7 +931,8 @@ export default function AgentDemo() {
                   const next = event.target.value
                   if (isAgentTreasuryNetwork(next)) handleAgentNetworkChange(next)
                 }}
-                className="h-8 rounded-lg border border-gray-200 bg-white px-2 text-xs font-semibold text-gray-700 outline-none transition-colors hover:bg-gray-50 focus:border-gray-400 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/[0.1]"
+                disabled={walletStep === 'otp'}
+                className="h-8 rounded-lg border border-gray-200 bg-white px-2 text-xs font-semibold text-gray-700 outline-none transition-colors hover:bg-gray-50 focus:border-gray-400 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/[0.1]"
               >
                 {AGENT_TREASURY_NETWORKS.map(network => (
                   <option key={network.key} value={network.key}>
@@ -951,6 +986,7 @@ export default function AgentDemo() {
                       setWalletMode('login')
                       setWalletStep('idle')
                       setWalletOtp('')
+                      setWalletOtpContext(null)
                       setWalletError(null)
                     }}
                     className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-700 transition-all hover:bg-white active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/[0.1]"
@@ -1022,6 +1058,7 @@ export default function AgentDemo() {
                       setWalletMode('login')
                       setWalletStep('idle')
                       setWalletOtp('')
+                      setWalletOtpContext(null)
                       setWalletError(null)
                       loginPrivy({ loginMethods: ['email'] })
                     }}
@@ -1055,6 +1092,7 @@ export default function AgentDemo() {
                         setWalletMode('create')
                         setWalletStep('idle')
                         setWalletOtp('')
+                        setWalletOtpContext(null)
                         setWalletError(null)
                       }}
                       disabled={walletBusy}
@@ -1069,6 +1107,7 @@ export default function AgentDemo() {
                         setWalletMode('login')
                         setWalletStep('idle')
                         setWalletOtp('')
+                        setWalletOtpContext(null)
                         setWalletError(null)
                       }}
                       disabled={walletBusy}
@@ -1162,6 +1201,9 @@ export default function AgentDemo() {
 
                   {walletStep === 'otp' && (
                     <div className="space-y-2">
+                      <p className="rounded-lg bg-gray-50 px-3 py-2 text-[11px] font-medium text-gray-500 dark:bg-white/[0.04] dark:text-gray-400">
+                        Code sent to {walletOtpContext?.email || walletEmail || privyEmail || 'your email'} · {CHAIN_META[walletOtpContext?.network ?? agentNetwork].label} agent wallet
+                      </p>
                       <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.06]">
                         <input
                           value={walletOtp}
@@ -1178,11 +1220,14 @@ export default function AgentDemo() {
                         className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-6 py-3.5 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-60 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
                       >
                         {walletBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                        Verify
+                        Verify latest code
                       </button>
                       <button
                         type="button"
-                        onClick={() => callAgentWallet('init', walletMode)}
+                        onClick={() => {
+                          setWalletOtp('')
+                          void callAgentWallet('init', walletMode)
+                        }}
                         disabled={walletBusy || (!PRIVY_AUTH_ENABLED && !walletEmail.trim())}
                         className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 transition-all hover:bg-gray-50 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200"
                       >
@@ -1198,6 +1243,7 @@ export default function AgentDemo() {
                         setWalletMode(walletMode === 'create' ? 'login' : 'create')
                         setWalletStep('idle')
                         setWalletOtp('')
+                        setWalletOtpContext(null)
                         setWalletError(null)
                       }}
                       disabled={walletBusy}
@@ -1212,7 +1258,7 @@ export default function AgentDemo() {
               {walletErrorMessage && <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-600 dark:bg-red-950/20 dark:text-red-300">{walletErrorMessage}</p>}
               {walletStep === 'otp' && !walletError && (
                 <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                  Check your email for the latest OTP.
+                  Use the newest email code. Resending replaces the previous code.
                 </p>
               )}
             </div>

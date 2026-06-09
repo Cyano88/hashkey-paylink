@@ -337,6 +337,28 @@ function isCircleLoginExpired(error: unknown) {
   return /not logged in|session expired|run [`']?circle wallet login/i.test(detail)
 }
 
+function safeCircleCliError(detail: string) {
+  if (/otp value is not matched|otp value.*not match|otp token match|invalid otp|otp.*expired/i.test(detail)) {
+    return {
+      status: 400,
+      code: 'otp_mismatch',
+      error: 'Circle code was not accepted. Use the newest OTP from your email, or resend OTP and try again.',
+    }
+  }
+  if (/invalid or expired request id|request id.*expired|request.*expired/i.test(detail)) {
+    return {
+      status: 400,
+      code: 'otp_expired',
+      error: 'OTP expired. Resend OTP and use the newest code.',
+    }
+  }
+  return {
+    status: 500,
+    code: 'circle_cli_error',
+    error: detail || 'Circle CLI request failed.',
+  }
+}
+
 async function walletChoicesWithBalances(wallets: string[], key: string, chain: string) {
   const uniqueWallets = [...new Set(wallets)].slice(0, 8)
   const choices: Array<{ address: string; balance?: string; balanceError?: string }> = []
@@ -790,6 +812,7 @@ export default async function handler(req: Request, res: Response) {
   } catch (err) {
     const error = err as Error & { stdout?: string; stderr?: string }
     const detail = [error.stdout, error.stderr, error.message].filter(Boolean).join('\n').slice(0, 1200)
-    return res.status(500).json({ ok: false, error: detail || 'Circle CLI request failed.' })
+    const safe = safeCircleCliError(detail)
+    return res.status(safe.status).json({ ok: false, code: safe.code, error: safe.error })
   }
 }
