@@ -183,8 +183,8 @@ export default function AgentDemo() {
   const urlAgentNetwork = params.get('n') ?? 'base'
   const initialAgentNetwork = isAgentTreasuryNetwork(urlAgentNetwork) ? urlAgentNetwork : 'base'
   const [agentNetwork, setAgentNetwork] = useState<AgentTreasuryNetwork>(initialAgentNetwork)
-  const showAgentProfile = params.get('profile') === 'agent' || Boolean(agentSlug || agentWallet)
   const showHelperDemo = params.get('helper') === 'live' || params.get('helper') === 'demo' || params.get('demo') === 'ai'
+  const showAgentProfile = !showHelperDemo && (params.get('profile') === 'agent' || Boolean(agentSlug || agentWallet))
   const backHref = params.get('src') === 'telegram'
     ? '/telegram/payment-links?section=agent-wallets'
     : '/'
@@ -1366,7 +1366,7 @@ export default function AgentDemo() {
           </div>
           <div className="space-y-2">
             <Link
-              to={`/agent?profile=agent&agent=${PLATFORM_AGENT_SLUG}&src=dashboard`}
+              to={`/agent?helper=live&agent=${PLATFORM_AGENT_SLUG}&src=dashboard`}
               className="flex w-full items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-left transition-all hover:border-gray-300 hover:bg-white active:scale-[0.99] dark:border-white/10 dark:bg-white/[0.05] dark:hover:bg-white/[0.08]"
             >
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-gray-700 shadow-sm dark:bg-white/[0.08] dark:text-gray-200">
@@ -1402,25 +1402,6 @@ export default function AgentDemo() {
                 </span>
               </span>
             </button>
-
-            <Link
-              to="/agent?helper=live&src=dashboard"
-              className="flex w-full items-center gap-3 rounded-xl border border-purple-100 bg-purple-50/70 px-3 py-3 text-left transition-all hover:border-purple-200 hover:bg-white active:scale-[0.99] dark:border-purple-400/20 dark:bg-purple-400/10 dark:hover:bg-purple-400/15"
-            >
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-purple-600 shadow-sm dark:bg-white/[0.08] dark:text-purple-200">
-                <ShieldCheck className="h-4 w-4" />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="flex items-center gap-2">
-                  <span className="text-sm font-semibold text-gray-900 dark:text-white">Hash PayLink Agent Helper</span>
-                  <span className="rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-bold uppercase text-purple-600 dark:bg-purple-300/15 dark:text-purple-200">0.5 USDC</span>
-                </span>
-                <span className="mt-0.5 block text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                  Paid helper inside the platform agent. 0G proof now; memory checkpoints next.
-                </span>
-              </span>
-              <ExternalLink className="h-4 w-4 text-purple-400" />
-            </Link>
 
             <button
               type="button"

@@ -315,16 +315,18 @@ function fallbackAgentImage(agent: AgentProfile) {
   const seed = `${agent.slug}:${agent.name}`
   let hash = 0
   for (let i = 0; i < seed.length; i += 1) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0
+  const hues = [216, 266, 188, 336, 28, 201, 292, 156, 232]
+  const hue = hues[hash % hues.length]
   const parts = agent.name.replace(/[^a-z0-9\s-]/gi, ' ').trim().split(/\s+/).filter(Boolean)
   return {
     initials: parts.slice(0, 2).map(part => part[0]?.toUpperCase()).join('') || 'AG',
-    hue: hash % 360,
-    accentHue: (hash + 44) % 360,
+    hue,
+    accentHue: (hue + 34) % 360,
   }
 }
 
 function AgentProfileAvatar({ agent, className = 'h-8 w-8 rounded-lg text-[11px]' }: { agent: AgentProfile; className?: string }) {
-  const image = agent.profileImage ?? fallbackAgentImage(agent)
+  const image = { ...fallbackAgentImage(agent), initials: agent.profileImage?.initials ?? fallbackAgentImage(agent).initials }
   return (
     <span
       className={cn('flex shrink-0 items-center justify-center font-black text-white shadow-sm', className)}
@@ -1668,19 +1670,7 @@ function AgentDashboardPanel({
   onCreateAgent: () => void
   onBack: () => void
 }) {
-  const [selectedSlug, setSelectedSlug] = useState('')
-  const [walletAddress, setWalletAddress] = useState('')
-  const [walletConnected, setWalletConnected] = useState(false)
-  const [walletChain, setWalletChain] = useState('')
-  const [walletBusy, setWalletBusy] = useState(false)
-  const [walletError, setWalletError] = useState('')
-  const [amount, setAmount] = useState('5')
   const connectedAgents = useMemo(() => agents.filter(agent => Boolean(agent.walletAddress)), [agents])
-  const selectedAgent = connectedAgents.find(agent => agent.slug === selectedSlug) ?? connectedAgents[0]
-  const selectedStatus = selectedAgent ? agentWalletStatus({
-    ...selectedAgent,
-    walletAddress: walletAddress || selectedAgent.walletAddress,
-  }, Boolean(walletAddress && walletConnected)) : null
 
   async function refreshAgents() {
     setLoadError('')
@@ -1699,68 +1689,6 @@ function AgentDashboardPanel({
   useEffect(() => {
     if (!agents.length) void refreshAgents()
   }, [owner, fallbackOwner]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    if (!selectedSlug && connectedAgents[0]?.slug) {
-      setSelectedSlug(connectedAgents[0].slug)
-      return
-    }
-    if (selectedSlug && !connectedAgents.some(agent => agent.slug === selectedSlug)) {
-      setSelectedSlug(connectedAgents[0]?.slug ?? '')
-    }
-  }, [connectedAgents, selectedSlug])
-
-  useEffect(() => {
-    if (!selectedAgent?.slug) return
-    let cancelled = false
-    setWalletBusy(true)
-    setWalletError('')
-    setWalletAddress('')
-    setWalletConnected(false)
-    fetch(`/api/agent-wallet?agent=${encodeURIComponent(selectedAgent.slug)}`)
-      .then(res => res.json() as Promise<{ ok?: boolean; walletAddress?: string; connected?: boolean; storedChain?: string; chain?: string; error?: string }>)
-      .then(data => {
-        if (cancelled) return
-        if (!data.ok) throw new Error(data.error || 'Could not load agent wallet.')
-        setWalletAddress(data.walletAddress ?? selectedAgent.walletAddress ?? '')
-        setWalletConnected(Boolean(data.connected))
-        setWalletChain(data.storedChain || data.chain || '')
-      })
-      .catch(err => {
-        if (!cancelled) setWalletError(err instanceof Error ? err.message : 'Could not load agent wallet.')
-      })
-      .finally(() => {
-        if (!cancelled) setWalletBusy(false)
-      })
-    return () => { cancelled = true }
-  }, [selectedAgent?.slug]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  function openFundingCheckout() {
-    if (!selectedAgent || !walletAddress) return
-    const cleanAmount = Number(amount)
-    const checkoutAmount = Number.isFinite(cleanAmount) && cleanAmount > 0 ? String(cleanAmount) : '5'
-    const fundingEventId = `agent-${selectedAgent.slug}-fund-${Date.now().toString(36)}`
-    const returnUrl = new URL('/agent', window.location.origin)
-    returnUrl.searchParams.set('profile', 'agent')
-    returnUrl.searchParams.set('agent', selectedAgent.slug)
-    returnUrl.searchParams.set('src', 'telegram')
-    returnUrl.searchParams.set('funding', 'submitted')
-    returnUrl.searchParams.set('fundingId', fundingEventId)
-    returnUrl.searchParams.set('fundedAmount', checkoutAmount)
-    returnUrl.searchParams.set('n', 'base')
-    const params = new URLSearchParams()
-    params.set('e', walletAddress)
-    params.set('a', checkoutAmount)
-    params.set('m', `Fund agent wallet: ${selectedAgent.name}`)
-    params.set('n', 'base')
-    params.set('v', '1')
-    params.set('id', fundingEventId)
-    params.set('src', 'agent')
-    params.set('agentSlug', selectedAgent.slug)
-    params.set('g', returnUrl.toString())
-    params.set('ad', '1')
-    window.location.href = `/pay?${params.toString()}`
-  }
 
   return (
     <div className="mt-4 space-y-3">
@@ -1805,101 +1733,36 @@ function AgentDashboardPanel({
           </button>
         </div>
       ) : (
-        <div className="space-y-3">
-          <div className="rounded-xl border border-gray-100 bg-white p-3 dark:border-white/10 dark:bg-white/[0.03]">
-            <label className="block">
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Pick agent</span>
-              <select
-                value={selectedAgent?.slug ?? ''}
-                onChange={event => setSelectedSlug(event.target.value)}
-                className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm font-semibold text-gray-900 outline-none focus:ring-2 focus:ring-gray-200 dark:border-white/10 dark:bg-white/[0.05] dark:text-white"
+        <div className="space-y-2">
+          {connectedAgents.map(agent => {
+            const status = agentWalletStatus(agent, true)
+            return (
+              <a
+                key={agent.slug}
+                href={`/agent?profile=agent&agent=${encodeURIComponent(agent.slug)}&src=telegram`}
+                className="flex w-full items-center gap-3 rounded-xl border border-gray-100 bg-white p-3 text-left transition-all hover:border-gray-200 hover:bg-gray-50 active:scale-[0.99] dark:border-white/10 dark:bg-white/[0.03] dark:hover:bg-white/[0.06]"
               >
-                {connectedAgents.map(agent => (
-                  <option key={agent.slug} value={agent.slug}>
-                    {agent.name} - Wallet linked
-                  </option>
-                ))}
-              </select>
-            </label>
-            {selectedAgent && (
-              <div className="mt-3 flex items-start justify-between gap-3">
-                <div className="flex min-w-0 flex-1 items-center gap-3">
-                  <AgentProfileAvatar agent={selectedAgent} />
-                  <p className="min-w-0 flex-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">{selectedAgent.purpose}</p>
-                </div>
-                {selectedStatus && (
-                  <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase', selectedStatus.className)}>
-                    {selectedStatus.label}
+                <AgentProfileAvatar agent={agent} className="h-10 w-10 rounded-xl text-xs" />
+                <span className="min-w-0 flex-1">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="truncate text-sm font-semibold text-gray-900 dark:text-white">{agent.name}</span>
+                    <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase', status.className)}>
+                      Connected
+                    </span>
                   </span>
-                )}
-              </div>
-            )}
-          </div>
-
-          <div className="rounded-xl border border-gray-100 bg-white p-3 dark:border-white/10 dark:bg-white/[0.03]">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Wallet status</p>
-                <p className="mt-1 truncate font-mono text-xs text-gray-700 dark:text-gray-200">
-                  {walletBusy ? 'Checking...' : walletAddress || 'No wallet linked'}
-                </p>
-                {walletChain && <p className="mt-1 text-[11px] text-gray-400">{walletChain}</p>}
-              </div>
-              {selectedStatus && (
-                <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase', selectedStatus.className)}>
-                  {selectedStatus.label}
+                  <span className="mt-0.5 block truncate text-xs text-gray-500 dark:text-gray-400">
+                    {agent.purpose || 'Agent profile'}
+                  </span>
+                  {agent.walletAddress && (
+                    <span className="mt-1 block font-mono text-[11px] text-gray-400">
+                      {shortAgentWallet(agent.walletAddress)}
+                    </span>
+                  )}
                 </span>
-              )}
-            </div>
-            {walletError && <p className="mt-2 text-xs text-amber-600 dark:text-amber-300">{walletError}</p>}
-            {walletAddress && selectedAgent && (
-              <a
-                href={`/agent?profile=agent&agent=${encodeURIComponent(selectedAgent.slug)}&src=telegram`}
-                className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-3 text-sm font-semibold text-gray-800 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-100"
-              >
-                <ExternalLink className="h-4 w-4" />
-                Open dashboard
+                <ExternalLink className="h-4 w-4 shrink-0 text-gray-400" />
               </a>
-            )}
-            {!walletAddress && selectedAgent && (
-              <a
-                href={`/agent?profile=agent&agent=${encodeURIComponent(selectedAgent.slug)}&src=telegram`}
-                className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950"
-              >
-                <Wallet className="h-4 w-4" />
-                Sign in to link wallet
-              </a>
-            )}
-          </div>
-
-          {walletAddress && (
-            <div className="space-y-3 rounded-xl border border-gray-100 bg-white p-3 dark:border-white/10 dark:bg-white/[0.03]">
-              <label className="block">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Amount</span>
-                <div className="mt-1 flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.05]">
-                  <input
-                    value={amount}
-                    onChange={event => setAmount(event.target.value)}
-                    inputMode="decimal"
-                    className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-gray-900 outline-none dark:text-white"
-                  />
-                  <span className="text-xs font-semibold text-gray-400">USDC</span>
-                </div>
-              </label>
-              <button
-                type="button"
-                onClick={openFundingCheckout}
-                disabled={!Number.isFinite(Number(amount)) || Number(amount) <= 0}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-50 dark:bg-white dark:text-gray-950"
-              >
-                <Wallet className="h-4 w-4" />
-                Continue to funding
-              </button>
-              <p className="text-center text-[11px] text-gray-400">
-                x402 activation uses this funded treasury balance.
-              </p>
-            </div>
-          )}
+            )
+          })}
         </div>
       )}
     </div>
