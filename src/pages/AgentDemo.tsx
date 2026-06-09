@@ -181,12 +181,15 @@ export default function AgentDemo() {
   const privyEmail = emailFromPrivyUser(privyUser).trim().toLowerCase()
   const params = new URLSearchParams(window.location.search)
   const agentSlug = params.get('agent') ?? ''
-  const agentWallet = params.get('wallet') ?? params.get('e') ?? ''
-  const intendedAgentWallet = params.get('wallet') ?? params.get('expectedWallet') ?? params.get('e') ?? ''
-  const [ignoreUrlAgentWallet, setIgnoreUrlAgentWallet] = useState(false)
   const agentStreamPrice = params.get('streamPrice') ?? ''
   const agentStreamDuration = params.get('streamDuration') ?? ''
   const fundingSubmitted = params.get('funding') === 'submitted' || params.get('agentFunding') === '1'
+  const shouldOpenWalletLinkPanel = params.get('linkWallet') === '1'
+  const urlAgentWallet = params.get('wallet') ?? params.get('e') ?? ''
+  const expectedAgentWallet = params.get('expectedWallet') ?? ''
+  const agentWallet = urlAgentWallet || (shouldOpenWalletLinkPanel ? expectedAgentWallet : '')
+  const intendedAgentWallet = urlAgentWallet || expectedAgentWallet
+  const [ignoreUrlAgentWallet, setIgnoreUrlAgentWallet] = useState(false)
   const fundingEventId = params.get('fundingId') ?? params.get('eventId') ?? ''
   const fundedAmount = params.get('fundedAmount') ?? params.get('amount') ?? ''
   const urlAgentNetwork = params.get('n') ?? 'base'
@@ -200,7 +203,7 @@ export default function AgentDemo() {
   const [eventId,    setEventId]    = useState(() => params.get('eventId') ?? '')
   const [payer,      setPayer]      = useState(() => params.get('payer')   ?? '')
   const [currentAgentWallet, setCurrentAgentWallet] = useState(agentWallet)
-  const [agentWalletSessionConnected, setAgentWalletSessionConnected] = useState(Boolean(agentWallet))
+  const [agentWalletSessionConnected, setAgentWalletSessionConnected] = useState(Boolean(urlAgentWallet && !shouldOpenWalletLinkPanel))
   const [agentWalletChain, setAgentWalletChain] = useState('')
   const [treasuryBalance, setTreasuryBalance] = useState<string | null>(null)
   const [treasuryBalanceChecked, setTreasuryBalanceChecked] = useState(false)
@@ -225,13 +228,13 @@ export default function AgentDemo() {
   const [walletOtp, setWalletOtp] = useState('')
   const [walletExpectedAddress, setWalletExpectedAddress] = useState('')
   const [walletChoices, setWalletChoices] = useState<WalletChoice[]>([])
-  const [walletMode, setWalletMode] = useState<'choose' | 'create' | 'login'>('choose')
+  const [walletMode, setWalletMode] = useState<'choose' | 'create' | 'login'>(shouldOpenWalletLinkPanel ? 'login' : 'choose')
   const [walletStep, setWalletStep] = useState<'idle' | 'otp' | 'done'>('idle')
   const [walletOtpContext, setWalletOtpContext] = useState<{ email: string; network: AgentTreasuryNetwork } | null>(null)
   const [walletBusy, setWalletBusy] = useState(false)
   const [activityBusy, setActivityBusy] = useState(false)
   const [walletError, setWalletError] = useState<string | null>(null)
-  const [showWalletAccessPanel, setShowWalletAccessPanel] = useState(false)
+  const [showWalletAccessPanel, setShowWalletAccessPanel] = useState(shouldOpenWalletLinkPanel)
   const [verifying,  setVerifying]  = useState(false)
   const [verified,   setVerified]   = useState<VerifyResult | null>(null)
   const [question,   setQuestion]   = useState('')
@@ -277,11 +280,11 @@ export default function AgentDemo() {
     if (!showAgentProfile || !fundingSubmitted || !PRIVY_AUTH_ENABLED || !privyAuthenticated || agentFundingReturnLogoutRan.current) return
     agentFundingReturnLogoutRan.current = true
     setWalletEmail('')
-    setWalletMode('choose')
+    setWalletMode('login')
     setWalletStep('idle')
     setWalletOtp('')
     setWalletOtpContext(null)
-    setShowWalletAccessPanel(false)
+    setShowWalletAccessPanel(true)
     logoutPrivy().catch(() => undefined)
   }, [showAgentProfile, fundingSubmitted, privyAuthenticated, logoutPrivy])
 
@@ -533,6 +536,8 @@ export default function AgentDemo() {
     returnUrl.searchParams.set('funding', 'submitted')
     returnUrl.searchParams.set('fundingId', fundingId)
     returnUrl.searchParams.set('n', agentNetwork)
+    returnUrl.searchParams.set('linkWallet', '1')
+    if (currentAgentWallet) returnUrl.searchParams.set('expectedWallet', currentAgentWallet)
     const p = new URLSearchParams()
     p.set('id', fundingId)
     p.set('m', `Fund agent wallet: ${displayName}`)
@@ -551,14 +556,6 @@ export default function AgentDemo() {
 
   function handleFundAgent() {
     onNetworkSelect(agentNetwork)
-  }
-
-  function refreshFundedAgentBalance() {
-    setTreasuryBalance(null)
-    setTreasuryBalanceChecked(false)
-    setTreasuryBalanceError('')
-    setBalanceRefreshNonce(current => current + 1)
-    window.setTimeout(() => setFundingNoticeVisible(false), 1800)
   }
 
   function buildAgentStreamUrl() {
@@ -850,7 +847,6 @@ export default function AgentDemo() {
   const agentWalletAccessConnected = Boolean(currentAgentWallet && agentWalletSessionConnected && (!PRIVY_AUTH_ENABLED || privyAuthenticated))
   const connectedWalletNeedsAccess = Boolean(currentAgentWallet && !agentWalletAccessConnected)
   const showAgentWalletAccessPanel = Boolean(!agentWalletAccessConnected && (!currentAgentWallet || showWalletAccessPanel))
-  const treasuryRefreshing = Boolean(agentWalletAccessConnected && !treasuryBalanceChecked)
   const x402Refreshing = Boolean(agentWalletAccessConnected && !x402BalanceChecked)
   const walletErrorMessage = walletError
     ? /invalid or expired request id/i.test(walletError)
@@ -1018,29 +1014,19 @@ export default function AgentDemo() {
               </div>
             )}
             {fundingNoticeVisible && (
-              <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 dark:border-emerald-400/20 dark:bg-emerald-400/10">
-                <div className="flex items-start gap-2">
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-300" />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-semibold text-emerald-800 dark:text-emerald-100">Funding submitted</p>
-                    <p className="mt-0.5 text-[11px] leading-relaxed text-emerald-700 dark:text-emerald-200">
-                      {fundedAmount ? `${fundedAmount} USDC was sent to this agent wallet. ` : 'USDC was sent to this agent wallet. '}
-                      Treasury balance can take a moment to update.
-                    </p>
-                    {fundingEventId && (
-                      <p className="mt-1 truncate font-mono text-[10px] text-emerald-700/80 dark:text-emerald-200/80">{fundingEventId}</p>
-                    )}
-                  </div>
+              <div className="mt-3 flex items-start gap-2 rounded-lg border border-emerald-100 bg-emerald-50/70 px-3 py-2 dark:border-emerald-400/15 dark:bg-emerald-400/10">
+                <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-300" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-[11px] font-semibold text-emerald-800 dark:text-emerald-100">
+                    Funding submitted{fundedAmount ? ` · ${fundedAmount} USDC` : ''}
+                  </p>
+                  <p className="mt-0.5 text-[10px] leading-relaxed text-emerald-700/80 dark:text-emerald-200/80">
+                    Link this wallet to view updated balances and receipts.
+                  </p>
+                  {fundingEventId && (
+                    <p className="mt-1 truncate font-mono text-[9px] text-emerald-700/60 dark:text-emerald-200/60">{fundingEventId}</p>
+                  )}
                 </div>
-                <button
-                  type="button"
-                  onClick={refreshFundedAgentBalance}
-                  disabled={treasuryRefreshing}
-                  className="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-emerald-200 bg-white px-3 py-2 text-xs font-semibold text-emerald-800 transition-all hover:bg-emerald-50 active:scale-[0.98] dark:border-emerald-400/20 dark:bg-white/[0.08] dark:text-emerald-100"
-                >
-                  <RefreshCw className={cn('h-3.5 w-3.5', treasuryRefreshing && 'animate-spin')} />
-                  {treasuryRefreshing ? 'Checking...' : 'Refresh balance'}
-                </button>
               </div>
             )}
             {treasuryBalanceError && (
@@ -1059,11 +1045,11 @@ export default function AgentDemo() {
             <div className="mt-4 space-y-2 rounded-xl border border-gray-200 bg-gray-50/70 p-3 transition-all dark:border-white/10 dark:bg-white/[0.04]">
               <div>
                 <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                  {currentAgentWallet ? 'Sign in' : agentEmailConnected ? 'Link wallet' : 'Sign in'}
+                  {currentAgentWallet ? 'Link wallet' : agentEmailConnected ? 'Link wallet' : 'Sign in'}
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
                   {currentAgentWallet
-                    ? 'Restore access before balances, receipts, and x402 actions appear.'
+                    ? 'Link this Circle agent wallet before balances, receipts, and x402 actions appear.'
                     : agentEmailConnected
                     ? 'Create or link a Circle agent wallet.'
                     : 'Email sign-in is required before wallet setup.'}
@@ -1086,7 +1072,7 @@ export default function AgentDemo() {
                     className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-6 py-3.5 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-60 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
                   >
                     <img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert mix-blend-screen" />
-                    Sign in with email
+                    {currentAgentWallet ? 'Link wallet' : 'Sign in with email'}
                   </button>
                   <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
                     Privy email
