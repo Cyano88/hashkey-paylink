@@ -209,7 +209,7 @@ export default function AgentDemo() {
   const [x402Balance, setX402Balance] = useState<string | null>(null)
   const [x402BalanceChecked, setX402BalanceChecked] = useState(false)
   const [x402BalanceError, setX402BalanceError] = useState('')
-  const [x402Amount, setX402Amount] = useState('1')
+  const [x402Amount, setX402Amount] = useState('0.5')
   const [x402Busy, setX402Busy] = useState(false)
   const [x402Status, setX402Status] = useState('')
   const [x402ModalOpen, setX402ModalOpen] = useState(false)
@@ -333,7 +333,6 @@ export default function AgentDemo() {
       return
     }
 
-    setTreasuryBalance(null)
     setTreasuryBalanceChecked(false)
     setTreasuryBalanceError('')
     queryBalances({
@@ -777,6 +776,18 @@ export default function AgentDemo() {
   const treasuryBalanceKnown = treasuryBalanceNumber !== null && Number.isFinite(treasuryBalanceNumber)
   const treasuryEmpty = treasuryBalanceKnown && treasuryBalanceNumber <= 0
   const x402AmountExceedsTreasury = treasuryBalanceKnown && Number.isFinite(x402AmountNumber) && x402AmountNumber > treasuryBalanceNumber
+  const x402ValidationMessage = agentNetwork === 'arc'
+    ? 'x402 activation currently supports Base or Arbitrum.'
+    : treasuryEmpty
+    ? 'Fund treasury first, then activate x402.'
+    : x402AmountInvalid
+    ? 'Enter a valid x402 amount.'
+    : x402AmountExceedsTreasury
+    ? 'Amount is higher than the current treasury balance.'
+    : x402AmountBelowMinimum
+    ? `Minimum x402 top up is ${MIN_X402_ACTIVATION_USDC} USDC.`
+    : ''
+  const x402ActivationBlocked = Boolean(agentNetwork === 'arc' || !x402Amount || x402AmountInvalid || x402AmountBelowMinimum || treasuryEmpty || x402AmountExceedsTreasury)
   const displayAgentProfile = agentProfile ?? (agentSlug === PLATFORM_AGENT_SLUG || !agentSlug ? PLATFORM_AGENT_PROFILE : null)
   const displayAgentName = displayAgentProfile?.name || agentSlug || 'Your agent wallet'
   const displayAgentPurpose = displayAgentProfile?.purpose || 'Sign in, link a Circle agent wallet, fund treasury, and activate x402 from the dashboard.'
@@ -1248,9 +1259,9 @@ export default function AgentDemo() {
                     <p className="mt-1 text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
                       {treasuryEmpty ? 'Fund treasury before activation.' : 'Activate from treasury when your agent needs API spend.'}
                     </p>
-                    {(x402BalanceError || x402Status) && (
-                      <p className={cn('mt-2 text-xs font-medium', x402BalanceError ? 'text-amber-600 dark:text-amber-300' : 'text-emerald-600 dark:text-emerald-300')}>
-                        {x402BalanceError || x402Status}
+                    {x402Status && (
+                      <p className="mt-2 text-xs font-medium text-emerald-600 dark:text-emerald-300">
+                        {x402Status}
                       </p>
                     )}
                   </div>
@@ -1299,52 +1310,22 @@ export default function AgentDemo() {
                         </div>
                         <div className="mt-3">
                           <label className="mb-1.5 block text-xs font-semibold text-gray-600 dark:text-gray-300">Amount</label>
-                          <div className="flex min-w-0 items-center overflow-hidden rounded-xl border border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-white/[0.06]">
+                          <div className="flex h-10 max-w-[150px] min-w-0 items-center overflow-hidden rounded-lg border border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-white/[0.06]">
                             <input
                               value={x402Amount}
-                              onChange={event => setX402Amount(event.target.value.replace(/[^\d.]/g, ''))}
+                              onChange={event => {
+                                setX402BalanceError('')
+                                setX402Amount(event.target.value.replace(/[^\d.]/g, ''))
+                              }}
                               inputMode="decimal"
-                              className="min-w-0 flex-1 bg-transparent px-3 py-3 text-sm font-semibold text-gray-900 outline-none dark:text-white"
+                              className="min-w-0 flex-1 bg-transparent px-3 py-2 text-sm font-semibold text-gray-900 outline-none dark:text-white"
                             />
-                            <span className="border-l border-gray-200 px-3 text-xs font-semibold text-gray-400 dark:border-white/10">USDC</span>
-                          </div>
-                          <div className="mt-2 grid grid-cols-3 gap-2">
-                            {['0.5', '1', '5'].map(amount => (
-                              <button
-                                key={amount}
-                                type="button"
-                                onClick={() => setX402Amount(amount)}
-                                disabled={x402Busy}
-                                className={cn(
-                                  'rounded-lg border px-3 py-2 text-xs font-semibold transition-all active:scale-[0.98] disabled:opacity-50',
-                                  x402Amount === amount
-                                    ? 'border-gray-900 bg-gray-900 text-white dark:border-white dark:bg-white dark:text-gray-950'
-                                    : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300',
-                                )}
-                              >
-                                {amount}
-                              </button>
-                            ))}
+                            <span className="border-l border-gray-200 px-2.5 text-[11px] font-semibold text-gray-400 dark:border-white/10">USDC</span>
                           </div>
                         </div>
-                        {agentNetwork === 'arc' && (
+                        {(x402ValidationMessage || x402BalanceError) && (
                           <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-200">
-                            x402 activation currently supports Base or Arbitrum.
-                          </p>
-                        )}
-                        {treasuryEmpty && (
-                          <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-200">
-                            Fund treasury first, then activate x402.
-                          </p>
-                        )}
-                        {x402AmountBelowMinimum && (
-                          <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-200">
-                            Minimum x402 top up is {MIN_X402_ACTIVATION_USDC} USDC.
-                          </p>
-                        )}
-                        {x402AmountExceedsTreasury && (
-                          <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-200">
-                            Amount is higher than the current treasury balance.
+                            {x402ValidationMessage || x402BalanceError}
                           </p>
                         )}
                         <div className="mt-3 grid grid-cols-2 gap-2">
@@ -1359,7 +1340,7 @@ export default function AgentDemo() {
                           <button
                             type="button"
                             onClick={activateX402Balance}
-                            disabled={x402Busy || agentNetwork === 'arc' || !x402Amount || x402AmountInvalid || x402AmountBelowMinimum || treasuryEmpty || x402AmountExceedsTreasury}
+                            disabled={x402Busy || x402ActivationBlocked}
                             className="inline-flex items-center justify-center gap-2 rounded-xl bg-gray-900 px-4 py-3 text-sm font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-50 dark:bg-white dark:text-gray-950"
                           >
                             {x402Busy ? <><span>Activating</span><PulsingDots /></> : <><ArrowRight className="h-4 w-4" /> Activate</>}
