@@ -386,10 +386,18 @@ export default function TelegramPaymentLinks() {
   const [polymarketBridgeError, setPolymarketBridgeError] = useState('')
   const [agentProfiles, setAgentProfiles] = useState<AgentProfile[]>([])
   const [agentProfilesError, setAgentProfilesError] = useState('')
-  const telegramName = useMemo(
-    () => displayTelegramName(searchParams.get('u') ?? searchParams.get('username'), 'there'),
-    [searchParams],
-  )
+  const [recoveredTelegramName, setRecoveredTelegramName] = useState('')
+  const telegramName = useMemo(() => {
+    const webAppUser = telegramWebAppUser()
+    return displayTelegramName(
+      searchParams.get('u')
+        ?? searchParams.get('username')
+        ?? webAppUser?.username
+        ?? webAppUser?.first_name
+        ?? recoveredTelegramName,
+      'there',
+    )
+  }, [searchParams, recoveredTelegramName])
   const telegramIdentity = useMemo(() => telegramOwnerFromContext(searchParams, telegramName), [searchParams, telegramName])
   const agentOwner = telegramIdentity.isStable ? telegramIdentity.owner : ''
   const needsTelegramIdentity = activeSection === 'agent-wallets' && !telegramIdentity.isStable
@@ -754,6 +762,7 @@ export default function TelegramPaymentLinks() {
               fallbackOwner={telegramIdentity.legacyOwner}
               initialEventId={searchParams.get('eventId') ?? ''}
               initialPayer={searchParams.get('payer') ?? ''}
+              onRecoverTelegramName={setRecoveredTelegramName}
               onBack={() => setActiveService('')}
             />
           ) : activeService === 'create-your-agent' ? (
@@ -879,6 +888,7 @@ function TelegramHelperPanel({
   fallbackOwner,
   initialEventId,
   initialPayer,
+  onRecoverTelegramName,
   onBack,
 }: {
   telegramName: string
@@ -887,6 +897,7 @@ function TelegramHelperPanel({
   fallbackOwner: string
   initialEventId: string
   initialPayer: string
+  onRecoverTelegramName: (name: string) => void
   onBack: () => void
 }) {
   const cleanTelegramName = telegramName === 'there' ? '' : telegramName
@@ -950,6 +961,8 @@ function TelegramHelperPanel({
           setHelperName(current => current || data.profile?.displayName || '')
           setHelperNameDraft(current => current || data.profile?.displayName || '')
         }
+        const recoveredName = data.profile?.telegramHandle || data.profile?.displayName || ''
+        if (recoveredName) onRecoverTelegramName(recoveredName)
         if (data.profile?.memorySummary) setMemoryDraft(data.profile.memorySummary)
       })
       .catch(err => {
@@ -1048,15 +1061,20 @@ function TelegramHelperPanel({
     setVerified(null)
     try {
       const res = await fetch(`/api/agent-verify?eventId=${encodeURIComponent(nextEventId.trim())}&payer=${encodeURIComponent(nextPayer.trim())}`)
-      const data = await res.json() as HelperVerifyResult
+      const data = await res.json().catch(() => null) as HelperVerifyResult | null
+      if (!data) throw new Error('Verification service returned an unreadable response.')
+      if (!res.ok && !data.verified) throw new Error(data.error || 'Access is not active yet.')
       setVerified(data)
       if (data.verified) {
         setStarted(true)
         setMessages([])
         void saveProfile({ displayName: helperName || helperNameDraft || nextPayer, accessEventId: nextEventId, accessPayer: nextPayer })
       }
-    } catch {
-      setVerified({ verified: false, error: 'Verification service unreachable.' })
+    } catch (err) {
+      const message = err instanceof Error && err.message
+        ? err.message
+        : 'Verification service unreachable.'
+      setVerified({ verified: false, error: message })
     } finally {
       setVerifying(false)
     }
