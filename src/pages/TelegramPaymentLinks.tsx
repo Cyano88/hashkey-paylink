@@ -88,7 +88,7 @@ const sectionServices: Record<TelegramSectionId, TelegramService[]> = {
     {
       id: 'create-your-agent',
       title: 'Agent Setup',
-      body: 'Create a profile, sign in, then link a Circle agent wallet.',
+      body: 'Create or restore profiles, then link a Circle agent wallet.',
       icon: Wallet,
       status: 'Open',
       active: true,
@@ -96,7 +96,7 @@ const sectionServices: Record<TelegramSectionId, TelegramService[]> = {
     {
       id: 'agent-dashboard',
       title: 'Agent Dashboard',
-      body: 'Manage balances, fund treasury, activate x402, and view receipts.',
+      body: 'Pick an agent, fund treasury, activate x402, and view receipts.',
       icon: Wallet,
       status: 'Open',
       active: true,
@@ -159,7 +159,7 @@ const sectionServices: Record<TelegramSectionId, TelegramService[]> = {
 
 const sectionDescriptions: Record<TelegramSectionId, string> = {
   'payment-links': 'Create normal USDC requests and share them into Telegram.',
-  'agent-wallets': 'Manage agent wallets, balances, paid helpers, and x402 prep.',
+  'agent-wallets': 'Manage agent profiles, helper access, balances, and x402.',
   'market-tools': 'Launch Polymarket funding and market intelligence workflows.',
   streampay: 'Launch Arc StreamPay retainers and recipient workflows.',
 }
@@ -1511,7 +1511,7 @@ function CreateAgentPanel({
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold text-gray-900 dark:text-white">Agent Setup</p>
             <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-              Create, sign in, edit, log out, or delete agent profiles. Funding and x402 live in Agent Dashboard.
+              Create or restore agent profiles, then link Circle wallets. Funding and x402 live in Agent Dashboard.
             </p>
           </div>
         </div>
