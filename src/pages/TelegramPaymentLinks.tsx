@@ -350,7 +350,7 @@ export default function TelegramPaymentLinks() {
       : 'payment-links'
   const initialServiceParam = searchParams.get('service')
   const initialService: TelegramServiceId | '' =
-    initialServiceParam === 'hashpaylink-helper'
+    initialServiceParam === 'hashpaylink-agent' || initialServiceParam === 'hashpaylink-helper'
       ? 'hashpaylink-helper'
       : initialServiceParam === 'create-your-agent'
       ? 'create-your-agent'
@@ -502,7 +502,7 @@ export default function TelegramPaymentLinks() {
       return
     }
     if (service.id === 'hashpaylink-agent') {
-      window.location.href = '/agent?helper=live&agent=hashpaylink-agent&src=telegram'
+      setActiveService('hashpaylink-helper')
       return
     }
     if (service.id === 'hashpaylink-helper') {

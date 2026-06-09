@@ -1582,10 +1582,9 @@ export default function AgentDemo() {
               <ExternalLink className="h-4 w-4 text-gray-400" />
             </Link>
 
-            <button
-              type="button"
-              disabled
-              className="flex w-full cursor-not-allowed items-center gap-3 rounded-xl border border-gray-100 bg-gray-50/60 px-3 py-3 text-left opacity-70 dark:border-white/10 dark:bg-white/[0.03]"
+            <Link
+              to="/telegram/payment-links?section=agent-wallets&service=create-your-agent&open=1"
+              className="flex w-full items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-left transition-all hover:border-gray-300 hover:bg-white active:scale-[0.99] dark:border-white/10 dark:bg-white/[0.05] dark:hover:bg-white/[0.08]"
             >
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-gray-700 shadow-sm dark:bg-white/[0.08] dark:text-gray-200">
                 <Wallet className="h-4 w-4" />
@@ -1593,13 +1592,33 @@ export default function AgentDemo() {
               <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-2">
                   <span className="text-sm font-semibold text-gray-900 dark:text-white">Agent Setup</span>
-                  <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-bold uppercase text-gray-400 dark:bg-white/[0.06]">Next</span>
+                  <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-600 dark:bg-emerald-400/10 dark:text-emerald-300">Open</span>
                 </span>
                 <span className="mt-0.5 block text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                  Name, purpose, Circle email login, wallet setup, and reusable agent profile.
+                  Create, edit, delete, and link Circle wallets to agent profiles.
                 </span>
               </span>
-            </button>
+              <ExternalLink className="h-4 w-4 text-gray-400" />
+            </Link>
+
+            <Link
+              to="/telegram/payment-links?section=agent-wallets&service=agent-dashboard&open=1"
+              className="flex w-full items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-left transition-all hover:border-gray-300 hover:bg-white active:scale-[0.99] dark:border-white/10 dark:bg-white/[0.05] dark:hover:bg-white/[0.08]"
+            >
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-gray-700 shadow-sm dark:bg-white/[0.08] dark:text-gray-200">
+                <Wallet className="h-4 w-4" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-gray-900 dark:text-white">Agent Dashboard</span>
+                  <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-600 dark:bg-emerald-400/10 dark:text-emerald-300">Open</span>
+                </span>
+                <span className="mt-0.5 block text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                  Pick an agent, fund treasury, activate x402, and view receipts.
+                </span>
+              </span>
+              <ExternalLink className="h-4 w-4 text-gray-400" />
+            </Link>
 
             <button
               type="button"
