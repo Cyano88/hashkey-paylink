@@ -316,6 +316,20 @@ export default function PaymentPage() {
       window.history.back()
       return
     }
+    if (isHelperAccess && agentUrl) {
+      try {
+        const url = new URL(agentUrl, window.location.origin)
+        if (url.origin === window.location.origin) {
+          window.location.assign(`${url.pathname}${url.search}${url.hash}`)
+          return
+        }
+      } catch {
+        if (agentUrl.startsWith('/')) {
+          window.location.assign(agentUrl)
+          return
+        }
+      }
+    }
     if (isAgentFunding) {
       window.location.assign(agentFundingBackUrl)
       return
@@ -375,6 +389,7 @@ export default function PaymentPage() {
   const eventId          = initParams.get('id') ?? ''
   const agentUrl         = getPaylinkParam(initParams, 'agent', 'g')
   const autoAccessRedirect = getPaylinkParam(initParams, 'ad', 'autoRedirect') === '1'
+  const isHelperAccess   = getPaylinkParam(initParams, 'src', 'src') === 'telegram-helper' && !!agentUrl
   const agentFundingSlug = getPaylinkParam(initParams, 'agentSlug', 'agent')
   const isAgentFunding   = getPaylinkParam(initParams, 'src', 'src') === 'agent' && !!agentFundingSlug
   const agentFundingBackUrl = (() => {
@@ -396,14 +411,14 @@ export default function PaymentPage() {
   const ngPosEventId     = ngPosMerchantId ? `ngpos-${ngPosMerchantId}` : ''
   const ngPosSettlement  = (initParams.get('settlement') ?? '').trim()
   const ngPosAmountNgn   = (initParams.get('ngn') ?? '').trim()
-  const smartWalletOnlyFunding = isPolymarketFunding || isAgentFunding
+  const smartWalletOnlyFunding = isPolymarketFunding || isAgentFunding || isHelperAccess
   const isMainHashPaylinkPayment = !isTelegramSource && !smartWalletOnlyFunding
   const [attendeeName,   setAttendeeName]   = useState(() => initParams.get('payer') ?? '')
   const [eventRegStatus, setEventRegStatus] = useState<'idle' | 'pending' | 'ok' | 'error'>('idle')
   const eventRegistered  = useRef(false)
   const accessRedirected = useRef(false)
   const ngPosRegistered  = useRef(false)
-  const requiresAttendeeName = (isEventMode || isNgPosPayment) && !isPolymarketFunding && !isAgentFunding
+  const requiresAttendeeName = (isEventMode || isNgPosPayment) && !isPolymarketFunding && !isAgentFunding && !isHelperAccess
 
   // ── FX display (event mode only — reads params baked into the URL at link creation) ──
   const fxCurrency  = isEventMode ? getPaylinkParam(initParams, 'fx', 'fx') : ''
@@ -3175,7 +3190,7 @@ export default function PaymentPage() {
   // ────────────────────────────────────────────────────────────────────────────
   return (
     <div className="mx-auto max-w-md animate-slide-up">
-      {isNgPosSource || isPolymarketFunding || isAgentFunding ? (
+      {isNgPosSource || isPolymarketFunding || isAgentFunding || isHelperAccess ? (
         <button
           type="button"
           onClick={goBackFromCheckout}
@@ -3332,6 +3347,10 @@ export default function PaymentPage() {
             <div className="mb-2 flex flex-wrap items-center justify-center gap-2">
               <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-semibold text-amber-600 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">Testnet</span>
             </div>
+          ) : isHelperAccess ? (
+            <div className="mb-2 flex items-center justify-center">
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Helper Access</p>
+            </div>
           ) : isPolymarketFunding ? (
             <div className="mb-2 flex items-center justify-center gap-2">
               <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.06]">
@@ -3362,7 +3381,9 @@ export default function PaymentPage() {
               </div>
               {memo && !isAgentFunding && (
                 <p className="mt-1 text-sm font-medium text-gray-500 dark:text-gray-300">
-                  {isPolymarketFunding ? (
+                  {isHelperAccess ? (
+                    'Hash PayLink Agent Helper'
+                  ) : isPolymarketFunding ? (
                     polymarketFundingLabel
                   ) : (
                     <>For {memo}</>
@@ -4428,7 +4449,11 @@ export default function PaymentPage() {
           How it works
         </p>
         <div className="grid grid-cols-3 gap-3">
-          {(isPolymarketFunding ? [
+          {(isHelperAccess ? [
+            { n: '1', title: 'Pay once', body: 'Unlock helper access with 0.5 USDC' },
+            { n: '2', title: 'Verify access', body: 'Hash PayLink confirms the payment receipt' },
+            { n: '3', title: 'Open helper', body: 'Return to Telegram with access unlocked' },
+          ] : isPolymarketFunding ? [
             { n: '1', title: 'Review wallet', body: 'Confirm the funding wallet and amount' },
             { n: '2', title: 'Fund with USDC', body: 'Pay from your gasless wallet or another wallet' },
             { n: '3', title: 'Continue trading', body: 'Use the success screen to return to Polymarket' },
@@ -4474,12 +4499,12 @@ export default function PaymentPage() {
         </div>
 
         <p className="mt-6 text-center text-xs text-gray-400">
-          {isPolymarketFunding ? 'Polymarket Funding on ' : isAgentFunding ? 'Agent payments on ' : 'Built with Circle USDC on '}
+          {isHelperAccess ? 'Helper access on ' : isPolymarketFunding ? 'Polymarket Funding on ' : isAgentFunding ? 'Agent payments on ' : 'Built with Circle USDC on '}
           {(isPolymarketFunding ? [
             { label: 'Base',      href: 'https://basescan.org' },
             { label: 'Solana',   href: 'https://solscan.io' },
             { label: 'Arbitrum', href: 'https://arbiscan.io' },
-          ] : isAgentFunding ? [
+          ] : isAgentFunding || isHelperAccess ? [
             { label: 'Base',      href: 'https://basescan.org' },
             { label: 'Arbitrum', href: 'https://arbiscan.io' },
           ] : [

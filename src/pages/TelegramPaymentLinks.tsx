@@ -1140,10 +1140,9 @@ function TelegramHelperPanel({
           <button
             type="button"
             onClick={startHelper}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+            className="flex w-full items-center justify-center rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
           >
-            <Zap className="h-4 w-4" />
-            {helperName ? `Continue as ${helperName}` : 'Start helper'}
+            {helperName ? `-> Continue as ${helperName}` : 'Start helper'}
           </button>
         </div>
       ) : (
@@ -1175,7 +1174,6 @@ function TelegramHelperPanel({
                   disabled={!helperNameDraft.trim()}
                   className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-50 dark:bg-white dark:text-gray-950"
                 >
-                  <ShieldCheck className="h-4 w-4" />
                   Continue to payment
                 </button>
               </div>
@@ -1204,7 +1202,6 @@ function TelegramHelperPanel({
                     disabled={returningFromPayment || (!helperName && !helperNameDraft.trim())}
                     className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
                   >
-                    <ShieldCheck className="h-4 w-4" />
                     Continue to payment
                   </button>
               {verified?.verified === false && (
