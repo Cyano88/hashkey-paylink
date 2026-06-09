@@ -4507,6 +4507,7 @@ export default function PaymentPage() {
           ] : isAgentFunding || isHelperAccess ? [
             { label: 'Base',      href: 'https://basescan.org' },
             { label: 'Arbitrum', href: 'https://arbiscan.io' },
+            { label: 'Arc Testnet', href: 'https://testnet.arcscan.app' },
           ] : [
             { label: 'Base',      href: 'https://basescan.org' },
             { label: 'Arbitrum', href: 'https://arbiscan.io' },

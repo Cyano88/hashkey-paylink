@@ -324,7 +324,7 @@ export default function Layout() {
     !!searchParams.get('wallet') ||
     !!searchParams.get('e')
   )
-  const agentNetworks = [CHAIN_META.base, CHAIN_META.arbitrum] as const
+  const agentNetworks = [CHAIN_META.base, CHAIN_META.arbitrum, { label: 'Arc Testnet', explorerUrl: CHAIN_META.arc.explorerUrl }] as const
   // Both the pay page and the dashboard show a locked chain pill from the URL param
   const pageNetParam = (isPayPage || isDashPage) ? (getPaylinkParam(searchParams, 'net', 'n') as ChainKey | '') : ''
   const activeNet = (pageNetParam && pageNetParam in CHAIN_META) ? pageNetParam : null
@@ -606,7 +606,7 @@ export default function Layout() {
                 )}
 
                 {/* Disconnect all */}
-                {headerControlConnected && (
+                {headerControlConnected && !isAgentProfilePage && (
                   PRIVY_AUTH_ENABLED ? (
                     <PrivyDisconnectButton
                       onDisconnectWallets={disconnectAll}
