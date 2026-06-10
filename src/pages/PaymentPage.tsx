@@ -2894,10 +2894,6 @@ export default function PaymentPage() {
         const next = new URL(agentUrl, window.location.origin)
         next.searchParams.set('eventId', eventId)
         if (payerName) next.searchParams.set('payer', payerName)
-        if (isAgentFunding) {
-          if (!next.searchParams.get('funding')) next.searchParams.set('funding', 'submitted')
-          next.searchParams.set('agentFunding', '1')
-        }
         window.location.assign(next.toString())
       } catch {
         accessRedirected.current = false
