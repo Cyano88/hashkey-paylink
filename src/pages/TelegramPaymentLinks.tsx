@@ -1424,8 +1424,9 @@ function CreateAgentPanel({
   const [error, setError] = useState('')
   const [savedAgent, setSavedAgent] = useState<AgentProfile | null>(null)
   const [editingAgent, setEditingAgent] = useState<AgentProfile | null>(null)
-  const [showProfileForm, setShowProfileForm] = useState(true)
+  const [showProfileForm, setShowProfileForm] = useState(agents.length === 0)
   const [showExistingProfiles, setShowExistingProfiles] = useState(false)
+  const [pendingDeleteSlug, setPendingDeleteSlug] = useState('')
 
   async function saveAgent() {
     if (busy) return
@@ -1445,6 +1446,7 @@ function CreateAgentPanel({
       setPurpose('')
       setEditingAgent(null)
       setShowProfileForm(false)
+      setShowExistingProfiles(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save agent.')
     } finally {
@@ -1458,6 +1460,7 @@ function CreateAgentPanel({
     setName(agent.name)
     setPurpose(agent.purpose)
     setError('')
+    setShowExistingProfiles(true)
     setShowProfileForm(true)
   }
 
@@ -1466,6 +1469,15 @@ function CreateAgentPanel({
     setBusy(true)
     setError('')
     try {
+      if (agent.walletAddress) {
+        const walletRes = await fetch('/api/agent-wallet', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'disconnect', agentSlug: agent.slug }),
+        })
+        const walletData = await walletRes.json().catch(() => ({})) as { ok?: boolean; error?: string }
+        if (!walletRes.ok || !walletData.ok) throw new Error(walletData.error || 'Could not unlink agent wallet.')
+      }
       const res = await fetch('/api/agent-profile', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
@@ -1480,11 +1492,33 @@ function CreateAgentPanel({
         setPurpose('')
       }
       if (savedAgent?.slug === agent.slug) setSavedAgent(null)
+      if (pendingDeleteSlug === agent.slug) setPendingDeleteSlug('')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not delete agent.')
     } finally {
       setBusy(false)
     }
+  }
+
+  function requestDeleteAgent(agent: AgentProfile) {
+    if (busy) return
+    if (pendingDeleteSlug === agent.slug) {
+      void deleteAgent(agent)
+      return
+    }
+    setError('')
+    setPendingDeleteSlug(agent.slug)
+  }
+
+  function startNewAgent() {
+    setSavedAgent(null)
+    setEditingAgent(null)
+    setName('')
+    setPurpose('')
+    setError('')
+    setPendingDeleteSlug('')
+    setShowExistingProfiles(true)
+    setShowProfileForm(true)
   }
 
   const connectedAgents = agents.filter(agent => Boolean(agent.walletAddress))
@@ -1526,7 +1560,10 @@ function CreateAgentPanel({
             </div>
             <button
               type="button"
-              onClick={() => setShowExistingProfiles(true)}
+              onClick={() => {
+                setShowExistingProfiles(true)
+                setShowProfileForm(false)
+              }}
               className="shrink-0 rounded-lg bg-black px-3 py-2 text-xs font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950"
             >
               Sign in
@@ -1580,7 +1617,7 @@ function CreateAgentPanel({
                 <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">
                   <p className="text-xs font-semibold text-gray-800 dark:text-gray-100">Profile limit reached</p>
                   <p className="mt-0.5 text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
-                    You can keep up to {MAX_USER_AGENTS} agent profiles. Sign in to an existing profile or delete an unfinished one to create another.
+                    You can keep up to {MAX_USER_AGENTS} agent profiles. Sign in to an existing profile or delete one to create another.
                   </p>
                 </div>
               )}
@@ -1651,6 +1688,7 @@ function CreateAgentPanel({
         {connectedAgents.length ? connectedAgents.map(agent => {
           const status = agentWalletStatus(agent)
           const dashboardUrl = `/agent?profile=agent&agent=${encodeURIComponent(agent.slug)}&src=telegram`
+          const confirmingDelete = pendingDeleteSlug === agent.slug
           return (
             <div
               key={agent.slug}
@@ -1679,11 +1717,38 @@ function CreateAgentPanel({
               >
                 Edit
               </button>
+              <button
+                type="button"
+                onClick={() => requestDeleteAgent(agent)}
+                disabled={busy}
+                className={cn(
+                  'shrink-0 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition-colors disabled:opacity-50',
+                  confirmingDelete
+                    ? 'border-red-200 bg-red-50 text-red-600 hover:bg-red-100 dark:border-red-400/30 dark:bg-red-400/10 dark:text-red-200 dark:hover:bg-red-400/15'
+                    : 'border-gray-200 bg-white text-gray-500 hover:border-red-200 hover:bg-red-50 hover:text-red-600 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300 dark:hover:border-red-400/30 dark:hover:bg-red-400/10 dark:hover:text-red-200',
+                )}
+              >
+                {confirmingDelete ? 'Confirm' : 'Delete'}
+              </button>
             </div>
           )
         }) : (
           <p className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-3 text-xs text-gray-500 dark:border-white/10 dark:bg-white/[0.03] dark:text-gray-400">
             No linked agents yet. Sign in after creating a profile to link a Circle wallet.
+          </p>
+        )}
+        {!showProfileForm && !atAgentLimit && (
+          <button
+            type="button"
+            onClick={startNewAgent}
+            className="mt-2 flex w-full items-center justify-center rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-50 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:bg-white/[0.08]"
+          >
+            New profile
+          </button>
+        )}
+        {!showProfileForm && atAgentLimit && (
+          <p className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 text-[11px] leading-relaxed text-gray-500 dark:border-white/10 dark:bg-white/[0.03] dark:text-gray-400">
+            You can keep up to {MAX_USER_AGENTS} agent profiles. Delete one before creating another.
           </p>
         )}
       </div>
