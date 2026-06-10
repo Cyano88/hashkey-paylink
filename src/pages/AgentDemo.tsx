@@ -982,7 +982,9 @@ export default function AgentDemo() {
             <div className="mb-2 flex items-center justify-between gap-3">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Balance network</p>
-                <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">Check where this wallet holds USDC.</p>
+                <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">
+                  {agentWalletAccessConnected ? 'Balances and actions appear below.' : 'Connect wallet access to view balances.'}
+                </p>
               </div>
               <select
                 value={agentNetwork}
@@ -1000,34 +1002,36 @@ export default function AgentDemo() {
                 ))}
               </select>
             </div>
-            <div className="divide-y divide-gray-100 dark:divide-white/10">
-              <div className="flex items-center justify-between gap-4 py-1.5 first:pt-0">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Wallet treasury</p>
-                <div className="text-right">
-                  <p className="text-sm font-semibold text-gray-900 dark:text-white" title={treasuryBalanceError || undefined}>
-                    {treasuryBalance !== null
-                      ? `${Number(treasuryBalance).toLocaleString(undefined, { maximumFractionDigits: 6 })} USDC`
-                      : connectedWalletNeedsAccess
-                      ? 'Sign in to view'
-                      : currentAgentWallet
-                      ? treasuryBalanceError || treasuryBalanceChecked ? 'Unavailable' : 'Checking...'
-                      : 'No wallet'}
+            {!agentWalletAccessConnected && (
+              <div className="divide-y divide-gray-100 dark:divide-white/10">
+                <div className="flex items-center justify-between gap-4 py-1.5 first:pt-0">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Wallet treasury</p>
+                  <div className="text-right">
+                    <p className="text-sm font-semibold text-gray-900 dark:text-white" title={treasuryBalanceError || undefined}>
+                      {treasuryBalance !== null
+                        ? `${Number(treasuryBalance).toLocaleString(undefined, { maximumFractionDigits: 6 })} USDC`
+                        : connectedWalletNeedsAccess
+                        ? 'Sign in to view'
+                        : currentAgentWallet
+                        ? treasuryBalanceError || treasuryBalanceChecked ? 'Unavailable' : 'Checking...'
+                        : 'No wallet'}
+                    </p>
+                    <p className="mt-0.5 text-[10px] font-semibold text-gray-400">{selectedAgentNetworkLabel}</p>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between gap-4 py-1.5 last:pb-0">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">x402</p>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white" title={x402BalanceError || undefined}>
+                    {x402Balance !== null
+                      ? `${Number(x402Balance).toLocaleString(undefined, { maximumFractionDigits: 6 })} USDC`
+                      : agentWalletAccessConnected
+                      ? x402BalanceError || x402BalanceChecked ? 'Unavailable' : 'Checking...'
+                      : 'Not connected'}
                   </p>
-                  <p className="mt-0.5 text-[10px] font-semibold text-gray-400">{selectedAgentNetworkLabel}</p>
                 </div>
               </div>
-              <div className="flex items-center justify-between gap-4 py-1.5 last:pb-0">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">x402</p>
-                <p className="text-sm font-semibold text-gray-900 dark:text-white" title={x402BalanceError || undefined}>
-                  {x402Balance !== null
-                    ? `${Number(x402Balance).toLocaleString(undefined, { maximumFractionDigits: 6 })} USDC`
-                    : agentWalletAccessConnected
-                    ? x402BalanceError || x402BalanceChecked ? 'Unavailable' : 'Checking...'
-                    : 'Not connected'}
-                </p>
-              </div>
-            </div>
-            {currentAgentWallet && (
+            )}
+            {currentAgentWallet && !agentWalletAccessConnected && (
               <p className="mt-3 text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
                 Fund the wallet treasury first. x402 activation moves part of that funded balance into Circle Gateway.
               </p>
