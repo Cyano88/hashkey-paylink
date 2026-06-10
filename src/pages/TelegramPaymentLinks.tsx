@@ -88,7 +88,7 @@ const sectionServices: Record<TelegramSectionId, TelegramService[]> = {
     {
       id: 'create-your-agent',
       title: 'Agent Setup',
-      body: 'Create or restore profiles, then link a Circle agent wallet.',
+      body: 'Create, restore, edit, or delete agent profiles.',
       icon: Wallet,
       status: 'Open',
       active: true,
@@ -96,7 +96,7 @@ const sectionServices: Record<TelegramSectionId, TelegramService[]> = {
     {
       id: 'agent-dashboard',
       title: 'Agent Dashboard',
-      body: 'Pick an agent, fund treasury, activate x402, and view receipts.',
+      body: 'Open a linked agent to fund treasury, activate x402, and view receipts.',
       icon: Wallet,
       status: 'Open',
       active: true,
@@ -1545,7 +1545,7 @@ function CreateAgentPanel({
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold text-gray-900 dark:text-white">Agent Setup</p>
             <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-              Create or restore agent profiles, then link Circle wallets. Funding and x402 live in Agent Dashboard.
+              Create, restore, edit, or delete profiles. Funding and x402 live in Agent Dashboard.
             </p>
           </div>
         </div>
@@ -1556,7 +1556,7 @@ function CreateAgentPanel({
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
               <p className="text-sm font-semibold text-gray-900 dark:text-white">Existing profiles</p>
-              <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Sign in to restore saved agents.</p>
+              <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Restore saved agents for this Telegram account.</p>
             </div>
             <button
               type="button"
@@ -1566,7 +1566,7 @@ function CreateAgentPanel({
               }}
               className="shrink-0 rounded-lg bg-black px-3 py-2 text-xs font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950"
             >
-              Sign in
+              Restore
             </button>
           </div>
         </div>
@@ -1643,7 +1643,7 @@ function CreateAgentPanel({
               className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950"
             >
               <Wallet className="h-4 w-4" />
-              Sign in
+              Link wallet
             </a>
           </div>
           ) : null}
@@ -1815,7 +1815,7 @@ function AgentDashboardPanel({
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold text-gray-900 dark:text-white">Agent Dashboard</p>
             <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-              Pick an agent, fund treasury, activate x402, and review receipts from one place.
+              Open a linked agent to fund treasury, activate x402, and review receipts.
             </p>
           </div>
         </div>
@@ -1865,7 +1865,7 @@ function AgentDashboardPanel({
                     </span>
                   )}
                 </span>
-                <ExternalLink className="h-4 w-4 shrink-0 text-gray-400" />
+                <ArrowRight className="h-4 w-4 shrink-0 text-gray-400" />
               </a>
             )
           })}

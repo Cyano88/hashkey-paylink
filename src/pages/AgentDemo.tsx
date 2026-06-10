@@ -1615,7 +1615,7 @@ export default function AgentDemo() {
                   {PLATFORM_AGENT_PROFILE.purpose}
                 </span>
               </span>
-              <ExternalLink className="h-4 w-4 text-gray-400" />
+              <ArrowRight className="h-4 w-4 text-gray-400" />
             </Link>
 
             <Link
@@ -1631,10 +1631,10 @@ export default function AgentDemo() {
                   <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-600 dark:bg-emerald-400/10 dark:text-emerald-300">Open</span>
                 </span>
                 <span className="mt-0.5 block text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                  Create, edit, delete, and link Circle wallets to agent profiles.
+                  Create, restore, edit, or delete agent profiles.
                 </span>
               </span>
-              <ExternalLink className="h-4 w-4 text-gray-400" />
+              <ArrowRight className="h-4 w-4 text-gray-400" />
             </Link>
 
             <Link
@@ -1650,10 +1650,10 @@ export default function AgentDemo() {
                   <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-600 dark:bg-emerald-400/10 dark:text-emerald-300">Open</span>
                 </span>
                 <span className="mt-0.5 block text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                  Pick an agent, fund treasury, activate x402, and view receipts.
+                  Open a linked agent to fund treasury, activate x402, and view receipts.
                 </span>
               </span>
-              <ExternalLink className="h-4 w-4 text-gray-400" />
+              <ArrowRight className="h-4 w-4 text-gray-400" />
             </Link>
 
             <button
