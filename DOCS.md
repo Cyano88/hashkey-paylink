@@ -678,7 +678,7 @@ The `PayLinkFactoryV2` contract enforces on-chain:
 
 ### Private Key Security
 
-- `RELAYER_PRIVATE_KEY` lives **only in server environment variables** (Render/Vercel secrets)
+- `RELAYER_PRIVATE_KEY` lives **only in server environment variables** (Render secrets)
 - It is **never prefixed `NEXT_PUBLIC_` or `VITE_`** — it can never reach the browser
 - Each chain uses an isolated relayer key (`RELAYER_PRIVATE_KEY`, `RELAYER_PRIVATE_KEY_SOLANA`)
 - The key is used only inside API route handlers, never stored or logged
@@ -733,7 +733,7 @@ The `/agent-terms`, `/api/agent-legal-profile`, and `/api/agent-governance` surf
 
 ## 18. Environment Variables Reference
 
-Required on the server (Render / Vercel environment settings):
+Required on the server (Render environment settings):
 
 ```env
 # ── EVM Relay ────────────────────────────────────────────────────────────

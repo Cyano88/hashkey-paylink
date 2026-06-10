@@ -436,7 +436,7 @@ The `PayLinkFactoryV2` contract enforces:
 
 ### Private Key Security
 
-- `RELAYER_PRIVATE_KEY` is stored exclusively as a server-side environment variable (Render/Vercel secrets)
+- `RELAYER_PRIVATE_KEY` is stored exclusively as a server-side environment variable (Render secrets)
 - It is **never prefixed `NEXT_PUBLIC_` or `VITE_`** — it can never reach the browser
 - The relayer key is used only inside API route handlers, isolated per request
 - Starknet and Solana each have their own dedicated relayer keys (`RELAYER_PRIVATE_KEY_STARKNET`, `RELAYER_PRIVATE_KEY_SOLANA`) — chain-isolated
