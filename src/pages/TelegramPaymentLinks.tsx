@@ -40,6 +40,36 @@ function shortAddress(value: string) {
   return value.length > 14 ? `${value.slice(0, 6)}...${value.slice(-4)}` : value
 }
 
+function openHashPayLinkAgentCheckout({
+  amount,
+  memo,
+  source,
+  service,
+}: {
+  amount: string
+  memo: string
+  source: string
+  service: TelegramServiceId
+}) {
+  const checkoutId = `${source}-${Date.now().toString(36)}`
+  const returnUrl = new URL('/telegram/payment-links', window.location.origin)
+  returnUrl.searchParams.set('open', '1')
+  returnUrl.searchParams.set('section', 'market-tools')
+  returnUrl.searchParams.set('service', service)
+
+  const params = new URLSearchParams()
+  params.set('e', EVM_TREASURY)
+  params.set('a', amount)
+  params.set('m', memo.slice(0, 160))
+  params.set('n', 'base')
+  params.set('v', '1')
+  params.set('id', checkoutId)
+  params.set('src', source)
+  params.set('g', returnUrl.toString())
+  params.set('ad', '1')
+  window.location.href = `/pay?${params.toString()}`
+}
+
 type TelegramSectionId = 'payment-links' | 'agent-wallets' | 'market-tools' | 'streampay'
 type TelegramServiceId =
   | 'request-usdc'
@@ -1891,14 +1921,74 @@ function AgentDashboardPanel({
   )
 }
 
+type LpScoutMode = 'best' | 'theme' | 'market'
+
+type LpScoutOption = {
+  id: LpScoutMode
+  title: string
+  body: string
+  amount: string
+  icon: typeof LineChart
+  inputLabel?: string
+  inputPlaceholder?: string
+}
+
+const lpScoutOptions: LpScoutOption[] = [
+  {
+    id: 'best',
+    title: 'Best reward markets',
+    body: 'Tip the Hash PayLink Agent to rank active reward markets by spread, liquidity, rewards, and risk.',
+    amount: '1',
+    icon: LineChart,
+  },
+  {
+    id: 'theme',
+    title: 'Scout a theme',
+    body: 'Pick a sector, event, token, election, or sports category for a focused market scan.',
+    amount: '1',
+    icon: Sparkles,
+    inputLabel: 'Theme',
+    inputPlaceholder: 'crypto, AI, election, football...',
+  },
+  {
+    id: 'market',
+    title: 'Inspect one market',
+    body: 'Send one Polymarket URL or slug for a maker quote and LP risk review.',
+    amount: '1',
+    icon: ExternalLink,
+    inputLabel: 'Market URL or slug',
+    inputPlaceholder: 'https://polymarket.com/event/...',
+  },
+]
+
 function LpScoutPanel({ onBack }: { onBack: () => void }) {
-  const [mode, setMode] = useState<'best' | 'theme' | 'market'>('best')
+  const [mode, setMode] = useState<LpScoutMode>('best')
   const [query, setQuery] = useState('')
   const [budget, setBudget] = useState('')
-  const [prepared, setPrepared] = useState(false)
-  const needsQuery = mode !== 'best'
-  const canPrepare = !needsQuery || query.trim().length > 2
-  const modeLabel = mode === 'best' ? 'Best reward markets' : mode === 'theme' ? 'Theme scout' : 'Single market'
+  const [tipAmount, setTipAmount] = useState(lpScoutOptions[0].amount)
+  const selectedOption = lpScoutOptions.find(option => option.id === mode) ?? lpScoutOptions[0]
+  const needsQuery = Boolean(selectedOption.inputLabel)
+  const contextReady = !needsQuery || query.trim().length > 2
+  const amountReady = Number(tipAmount) > 0
+  const canContinue = contextReady && amountReady
+
+  function selectOption(option: LpScoutOption) {
+    setMode(option.id)
+    setTipAmount(option.amount)
+    setQuery('')
+  }
+
+  function openScoutCheckout() {
+    if (!canContinue) return
+    const context = needsQuery ? ` for ${query.trim()}` : ''
+    const budgetNote = budget.trim() ? ` Budget context: ${budget.trim()}.` : ''
+    openHashPayLinkAgentCheckout({
+      amount: tipAmount.trim(),
+      memo: `LP Scout: ${selectedOption.title}${context}.${budgetNote}`,
+      source: 'lp-scout',
+      service: 'lp-scout',
+    })
+  }
 
   return (
     <div className="mt-4 space-y-4">
@@ -1918,32 +2008,65 @@ function LpScoutPanel({ onBack }: { onBack: () => void }) {
             </span>
             <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">LP Scout</p>
           </div>
-          <h2 className="mt-2 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Find Polymarket LP opportunities</h2>
+          <h2 className="mt-2 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Tip the Hash PayLink Agent for Polymarket research</h2>
           <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-            Pick a scouting mode, add the market context, then create a paid scout request.
+            Choose a Polymarket service below. The checkout pays the Hash PayLink Agent treasury directly, so this flow does not ask you to sign into the platform agent wallet.
           </p>
         </div>
       </div>
 
       <div className="grid gap-2">
-        <RequestModeButton icon={LineChart} title="Best reward markets" body="Rank live reward markets by spread, liquidity, reward rate, and risk." onClick={() => { setMode('best'); setPrepared(false) }} />
-        <RequestModeButton icon={Sparkles} title="Scout a theme" body="Focus the report on a sector, event, token, election, or sports category." onClick={() => { setMode('theme'); setPrepared(false) }} />
-        <RequestModeButton icon={ExternalLink} title="Inspect one market" body="Review one Polymarket URL or slug before quoting maker orders." onClick={() => { setMode('market'); setPrepared(false) }} />
+        {lpScoutOptions.map(option => {
+          const Icon = option.icon
+          const selected = option.id === mode
+          return (
+            <button
+              key={option.id}
+              type="button"
+              onClick={() => selectOption(option)}
+              className={cn(
+                'flex w-full items-center gap-3 rounded-xl border bg-white px-3 py-3 text-left transition-all active:scale-[0.99] dark:bg-white/[0.05]',
+                selected
+                  ? 'border-gray-950 ring-2 ring-gray-950/10 dark:border-white dark:ring-white/15'
+                  : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50 dark:border-white/10 dark:hover:bg-white/[0.08]',
+              )}
+            >
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gray-50 text-gray-700 shadow-sm dark:bg-white/[0.08] dark:text-gray-200">
+                <Icon className="h-4 w-4" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="flex min-w-0 items-center justify-between gap-3">
+                  <span className="truncate text-sm font-semibold text-gray-900 dark:text-white">{option.title}</span>
+                  <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-200">
+                    {option.amount} USDC
+                  </span>
+                </span>
+                <span className="mt-0.5 block text-xs leading-relaxed text-gray-500 dark:text-gray-400">{option.body}</span>
+              </span>
+            </button>
+          )
+        })}
       </div>
 
       <div className="space-y-3 rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Selected scout</p>
-          <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{modeLabel}</p>
+          <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Selected service</p>
+          <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{selectedOption.title}</p>
         </div>
-        {needsQuery && (
+        {selectedOption.inputLabel && (
           <InputBlock
-            label={mode === 'theme' ? 'Theme' : 'Market URL or slug'}
+            label={selectedOption.inputLabel}
             value={query}
-            onChange={value => { setQuery(value); setPrepared(false) }}
-            placeholder={mode === 'theme' ? 'crypto, AI, election, football...' : 'https://polymarket.com/event/...'}
+            onChange={setQuery}
+            placeholder={selectedOption.inputPlaceholder ?? 'Add context'}
           />
         )}
+        <InputBlock
+          label="Tip amount"
+          value={tipAmount}
+          onChange={setTipAmount}
+          placeholder="1"
+        />
         <InputBlock
           label="Optional budget"
           value={budget}
@@ -1952,33 +2075,17 @@ function LpScoutPanel({ onBack }: { onBack: () => void }) {
         />
         <button
           type="button"
-          onClick={() => setPrepared(true)}
-          disabled={!canPrepare}
+          onClick={openScoutCheckout}
+          disabled={!canContinue}
           className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
         >
           <Send className="h-4 w-4" />
-          Prepare scout request
+          Tip Hash PayLink Agent
         </button>
+        <p className="px-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+          Recipient: Hash PayLink Agent treasury on Base, {shortAddress(EVM_TREASURY)}.
+        </p>
       </div>
-
-      {prepared && (
-        <div className="space-y-3 rounded-xl border border-emerald-100 bg-emerald-50/70 p-3 dark:border-emerald-400/20 dark:bg-emerald-400/10">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-300" />
-            <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-200">Scout request ready</p>
-          </div>
-          <p className="text-xs leading-relaxed text-emerald-700/80 dark:text-emerald-200/80">
-            {modeLabel}{needsQuery ? ` for ${query.trim()}` : ''}{budget.trim() ? ` with ${budget.trim()} budget context` : ''}.
-          </p>
-          <a
-            href="/agent?profile=agent&agent=hashpaylink-agent&src=lp-scout"
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
-          >
-            <ArrowRight className="h-4 w-4" />
-            Continue to paid scout
-          </a>
-        </div>
-      )}
     </div>
   )
 }
@@ -1988,9 +2095,22 @@ function AgenticLpResearchPanel({ onBack }: { onBack: () => void }) {
   const [duration, setDuration] = useState('7d')
   const [focus, setFocus] = useState('Best Polymarket LP reward markets')
   const [budget, setBudget] = useState('')
+  const [streamAmount, setStreamAmount] = useState('5')
   const emailReady = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
   const durationReady = /^\d+[dhw]$/.test(duration.trim())
-  const canContinue = emailReady && durationReady
+  const amountReady = Number(streamAmount) > 0
+  const canContinue = emailReady && durationReady && amountReady
+  const streamHref = useMemo(() => {
+    const params = new URLSearchParams()
+    params.set('app', 'streampay')
+    params.set('amount', streamAmount.trim() || '5')
+    params.set('recipient', EVM_TREASURY)
+    params.set('duration', duration.trim() || '7d')
+    params.set('reason', `Agentic LP Research: ${focus.trim() || 'Best Polymarket LP reward markets'} for ${email.trim() || 'report recipient'}${budget.trim() ? `, budget ${budget.trim()}` : ''}`)
+    params.set('src', 'agentic-lp-research')
+    params.set('wallet', 'circle')
+    return `/?${params.toString()}`
+  }, [budget, duration, email, focus, streamAmount])
 
   return (
     <div className="mt-4 space-y-4">
@@ -2010,9 +2130,9 @@ function AgenticLpResearchPanel({ onBack }: { onBack: () => void }) {
             </span>
             <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Agentic LP Research</p>
           </div>
-          <h2 className="mt-2 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Daily Polymarket reports</h2>
+          <h2 className="mt-2 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Stream to Hash PayLink Agent for daily reports</h2>
           <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-            Configure the report recipient and research focus before starting the StreamPay-backed service.
+            Configure the recipient, stream amount, and research focus. StreamPay opens with the Hash PayLink Agent treasury already selected.
           </p>
         </div>
       </div>
@@ -2020,12 +2140,13 @@ function AgenticLpResearchPanel({ onBack }: { onBack: () => void }) {
       <div className="space-y-3 rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
         <InputBlock label="Report email" value={email} onChange={setEmail} placeholder="you@example.com" />
         {email && !emailReady && <p className="px-1 text-xs text-red-500 dark:text-red-300">Enter a valid email address.</p>}
+        <InputBlock label="Stream amount" value={streamAmount} onChange={setStreamAmount} placeholder="5" />
         <InputBlock label="Duration" value={duration} onChange={setDuration} placeholder="7d, 14d, 30d" />
         {duration && !durationReady && <p className="px-1 text-xs text-red-500 dark:text-red-300">Use a duration like 7d, 2w, or 24h.</p>}
         <InputBlock label="Research focus" value={focus} onChange={setFocus} placeholder="Best LP reward markets" />
         <InputBlock label="Optional budget" value={budget} onChange={setBudget} placeholder="Example: 250 USDC" />
         <a
-          href="/?app=streampay&src=agentic-lp-research"
+          href={streamHref}
           aria-disabled={!canContinue}
           onClick={event => { if (!canContinue) event.preventDefault() }}
           className={cn(
@@ -2034,15 +2155,18 @@ function AgenticLpResearchPanel({ onBack }: { onBack: () => void }) {
           )}
         >
           <Radio className="h-4 w-4" />
-          Continue to StreamPay setup
+          Stream to Hash PayLink Agent
         </a>
+        <p className="px-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+          Recipient: Hash PayLink Agent treasury on Base, {shortAddress(EVM_TREASURY)}.
+        </p>
       </div>
 
       <div className="rounded-xl border border-gray-100 bg-white p-3 dark:border-white/10 dark:bg-white/[0.05]">
         <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Service summary</p>
         <div className="mt-2 grid gap-2 text-xs text-gray-500 dark:text-gray-400">
           <div className="flex items-center justify-between gap-3"><span>Email</span><span className="truncate font-semibold text-gray-800 dark:text-gray-200">{email || 'Not set'}</span></div>
-          <div className="flex items-center justify-between gap-3"><span>Duration</span><span className="font-semibold text-gray-800 dark:text-gray-200">{duration || 'Not set'}</span></div>
+          <div className="flex items-center justify-between gap-3"><span>Stream</span><span className="font-semibold text-gray-800 dark:text-gray-200">{streamAmount || '0'} USDC / {duration || 'Not set'}</span></div>
           <div className="flex items-center justify-between gap-3"><span>Focus</span><span className="truncate font-semibold text-gray-800 dark:text-gray-200">{focus || 'Default LP report'}</span></div>
         </div>
       </div>
