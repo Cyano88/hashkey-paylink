@@ -359,7 +359,7 @@ export default function AgentDemo() {
 
   useEffect(() => {
     let cancelled = false
-    if (!showAgentProfile || !currentAgentWallet || (PRIVY_AUTH_ENABLED && !privyAuthenticated)) {
+    if (!showAgentProfile || !currentAgentWallet || !agentWalletSessionConnected) {
       setTreasuryBalance(null)
       setTreasuryBalanceChecked(true)
       setTreasuryBalanceError('')
@@ -398,10 +398,10 @@ export default function AgentDemo() {
       cancelled = true
       window.clearTimeout(watchdog)
     }
-  }, [agentNetwork, currentAgentWallet, showAgentProfile, balanceRefreshNonce, privyAuthenticated])
+  }, [agentNetwork, currentAgentWallet, showAgentProfile, balanceRefreshNonce, agentWalletSessionConnected])
 
   async function refreshX402Balance() {
-    if (!showAgentProfile || !currentAgentWallet || !agentWalletSessionConnected || (PRIVY_AUTH_ENABLED && !privyAuthenticated)) {
+    if (!showAgentProfile || !currentAgentWallet || !agentWalletSessionConnected) {
       setX402Balance(null)
       setX402BalanceChecked(true)
       setX402BalanceError('')
@@ -430,7 +430,7 @@ export default function AgentDemo() {
 
   useEffect(() => {
     refreshX402Balance().catch(() => undefined)
-  }, [agentSlug, agentWalletSessionConnected, currentAgentWallet, showAgentProfile, privyAuthenticated]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [agentSlug, agentWalletSessionConnected, currentAgentWallet, showAgentProfile]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-verify when eventId + payer arrive via access link URL params
   useEffect(() => {
@@ -599,16 +599,21 @@ export default function AgentDemo() {
   async function callAgentWallet(action: 'init' | 'complete', mode?: 'create' | 'login') {
     const selectedMode = mode ?? (walletMode === 'choose' ? 'login' : walletMode)
     setWalletMode(selectedMode)
-    if (PRIVY_AUTH_ENABLED && !privyAuthenticated) {
+    const requiresPrivyWalletAuth = Boolean(PRIVY_AUTH_ENABLED && !currentAgentWallet)
+    if (requiresPrivyWalletAuth && !privyAuthenticated) {
       setWalletError(null)
       loginPrivy({ loginMethods: ['email'] })
       return
     }
-    if (PRIVY_AUTH_ENABLED && !privyEmail) {
+    if (requiresPrivyWalletAuth && !privyEmail) {
       setWalletError('Sign in with email to manage your Circle agent wallet.')
       return
     }
-    const email = (PRIVY_AUTH_ENABLED ? privyEmail : walletEmail).trim().toLowerCase()
+    const email = (!currentAgentWallet && PRIVY_AUTH_ENABLED && privyAuthenticated && privyEmail ? privyEmail : walletEmail).trim().toLowerCase()
+    if (!email) {
+      setWalletError('Enter the Circle email for this agent wallet.')
+      return
+    }
     if (email) setWalletEmail(email)
     if (action === 'complete') {
       if (!walletOtpContext) {
@@ -869,7 +874,7 @@ export default function AgentDemo() {
   const displayAgentPurpose = displayAgentProfile?.purpose || 'Sign in, link a Circle agent wallet, fund treasury, and activate x402 from the dashboard.'
   const displayAgentImage = displayAgentProfile ? resolveAgentProfileImage(displayAgentProfile) : null
   const agentEmailConnected = Boolean(PRIVY_AUTH_ENABLED && privyAuthenticated)
-  const agentWalletAccessConnected = Boolean(currentAgentWallet && agentWalletSessionConnected && (!PRIVY_AUTH_ENABLED || privyAuthenticated))
+  const agentWalletAccessConnected = Boolean(currentAgentWallet && agentWalletSessionConnected)
   const connectedWalletNeedsAccess = Boolean(currentAgentWallet && !agentWalletAccessConnected)
   const showAgentWalletAccessPanel = Boolean(!agentWalletAccessConnected && (!currentAgentWallet || showWalletAccessPanel))
   const x402Refreshing = Boolean(agentWalletAccessConnected && !x402BalanceChecked)
@@ -1098,7 +1103,7 @@ export default function AgentDemo() {
                 </p>
               </div>
 
-              {PRIVY_AUTH_ENABLED && !privyAuthenticated ? (
+              {PRIVY_AUTH_ENABLED && !currentAgentWallet && !privyAuthenticated ? (
                 <>
                   <button
                     type="button"
@@ -1173,7 +1178,7 @@ export default function AgentDemo() {
                 <div className="space-y-2">
                   {walletStep !== 'otp' && (
                     <>
-                      {PRIVY_AUTH_ENABLED && privyAuthenticated ? (
+                      {PRIVY_AUTH_ENABLED && !currentAgentWallet && privyAuthenticated ? (
                         <div className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.06]">
                           <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-700 dark:bg-white/[0.08] dark:text-gray-200">
                             <Wallet className="h-4 w-4" />
@@ -1234,7 +1239,7 @@ export default function AgentDemo() {
                       <button
                         type="button"
                         onClick={() => callAgentWallet('init')}
-                        disabled={walletBusy || (!PRIVY_AUTH_ENABLED && !walletEmail.trim()) || walletStep === 'done'}
+                        disabled={walletBusy || (!(!currentAgentWallet && PRIVY_AUTH_ENABLED && privyAuthenticated && privyEmail) && !walletEmail.trim()) || walletStep === 'done'}
                         className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-6 py-3.5 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-60 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
                       >
                         {walletBusy && walletStep === 'idle'
@@ -1276,7 +1281,7 @@ export default function AgentDemo() {
                           setWalletOtp('')
                           void callAgentWallet('init', walletMode)
                         }}
-                        disabled={walletBusy || (!PRIVY_AUTH_ENABLED && !walletEmail.trim())}
+                        disabled={walletBusy || (!(!currentAgentWallet && PRIVY_AUTH_ENABLED && privyAuthenticated && privyEmail) && !walletEmail.trim())}
                         className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 transition-all hover:bg-gray-50 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200"
                       >
                         Resend OTP
