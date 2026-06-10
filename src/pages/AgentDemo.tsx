@@ -190,8 +190,6 @@ export default function AgentDemo() {
   const agentWallet = urlAgentWallet || (shouldOpenWalletLinkPanel ? expectedAgentWallet : '')
   const intendedAgentWallet = urlAgentWallet || expectedAgentWallet
   const [ignoreUrlAgentWallet, setIgnoreUrlAgentWallet] = useState(false)
-  const fundingEventId = params.get('fundingId') ?? params.get('eventId') ?? ''
-  const fundedAmount = params.get('fundedAmount') ?? params.get('amount') ?? ''
   const urlAgentNetwork = params.get('n') ?? 'base'
   const initialAgentNetwork = isAgentTreasuryNetwork(urlAgentNetwork) ? urlAgentNetwork : 'base'
   const [agentNetwork, setAgentNetwork] = useState<AgentTreasuryNetwork>(initialAgentNetwork)
@@ -226,7 +224,6 @@ export default function AgentDemo() {
   const [treasuryBalanceChecked, setTreasuryBalanceChecked] = useState(false)
   const [treasuryBalanceError, setTreasuryBalanceError] = useState('')
   const [balanceRefreshNonce, setBalanceRefreshNonce] = useState(0)
-  const [fundingNoticeVisible, setFundingNoticeVisible] = useState(fundingSubmitted)
   const [x402Balance, setX402Balance] = useState<string | null>(null)
   const [x402BalanceChecked, setX402BalanceChecked] = useState(false)
   const [x402BalanceError, setX402BalanceError] = useState('')
@@ -426,6 +423,15 @@ export default function AgentDemo() {
     } finally {
       setX402BalanceChecked(true)
     }
+  }
+
+  async function refreshAgentBalances() {
+    if (!agentWalletAccessConnected) return
+    setBalanceRefreshNonce(current => current + 1)
+    await Promise.all([
+      refreshX402Balance(),
+      loadAgentWallet(),
+    ])
   }
 
   useEffect(() => {
@@ -878,6 +884,7 @@ export default function AgentDemo() {
   const connectedWalletNeedsAccess = Boolean(currentAgentWallet && !agentWalletAccessConnected)
   const showAgentWalletAccessPanel = Boolean(!agentWalletAccessConnected && (!currentAgentWallet || showWalletAccessPanel))
   const x402Refreshing = Boolean(agentWalletAccessConnected && !x402BalanceChecked)
+  const balancesRefreshing = Boolean(agentWalletAccessConnected && (!treasuryBalanceChecked || x402Refreshing || activityBusy))
   const walletErrorMessage = walletError
     ? /invalid or expired request id/i.test(walletError)
       ? 'OTP expired. Resend OTP and use the newest code.'
@@ -888,9 +895,8 @@ export default function AgentDemo() {
 
   useEffect(() => {
     if (!agentWalletAccessConnected) return
-    if (fundingNoticeVisible) setFundingNoticeVisible(false)
     setBalanceRefreshNonce(current => current + 1)
-  }, [agentWalletAccessConnected]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [agentWalletAccessConnected])
 
   if (showHelperDemo) {
     return (
@@ -991,21 +997,34 @@ export default function AgentDemo() {
                   {agentWalletAccessConnected ? 'Balances and actions appear below.' : 'Connect wallet access to view balances.'}
                 </p>
               </div>
-              <select
-                value={agentNetwork}
-                onChange={event => {
-                  const next = event.target.value
-                  if (isAgentTreasuryNetwork(next)) handleAgentNetworkChange(next)
-                }}
-                disabled={walletStep === 'otp'}
-                className="h-8 rounded-lg border border-gray-200 bg-white px-2 text-xs font-semibold text-gray-700 outline-none transition-colors hover:bg-gray-50 focus:border-gray-400 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/[0.1]"
-              >
-                {AGENT_TREASURY_NETWORKS.map(network => (
-                  <option key={network.key} value={network.key}>
-                    {network.label}
-                  </option>
-                ))}
-              </select>
+              <div className="flex shrink-0 items-center gap-2">
+                <select
+                  value={agentNetwork}
+                  onChange={event => {
+                    const next = event.target.value
+                    if (isAgentTreasuryNetwork(next)) handleAgentNetworkChange(next)
+                  }}
+                  disabled={walletStep === 'otp'}
+                  className="h-8 rounded-lg border border-gray-200 bg-white px-2 text-xs font-semibold text-gray-700 outline-none transition-colors hover:bg-gray-50 focus:border-gray-400 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/[0.1]"
+                >
+                  {AGENT_TREASURY_NETWORKS.map(network => (
+                    <option key={network.key} value={network.key}>
+                      {network.label}
+                    </option>
+                  ))}
+                </select>
+                {agentWalletAccessConnected && (
+                  <button
+                    type="button"
+                    onClick={() => refreshAgentBalances()}
+                    disabled={balancesRefreshing || x402Busy}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300 dark:hover:bg-white/[0.1]"
+                    aria-label="Refresh balances"
+                  >
+                    <RefreshCw className={cn('h-3.5 w-3.5', balancesRefreshing && 'animate-spin')} />
+                  </button>
+                )}
+              </div>
             </div>
             {!agentWalletAccessConnected && (
               <div className="divide-y divide-gray-100 dark:divide-white/10">
@@ -1061,19 +1080,6 @@ export default function AgentDemo() {
                   <Wallet className="h-3.5 w-3.5" />
                   Sign in
                 </button>
-              </div>
-            )}
-            {fundingNoticeVisible && !agentWalletAccessConnected && (
-              <div className="mt-3 flex items-start gap-2 rounded-lg border border-emerald-100 bg-emerald-50/70 px-3 py-2 dark:border-emerald-400/15 dark:bg-emerald-400/10">
-                <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-300" />
-                <div className="min-w-0 flex-1">
-                  <p className="text-[11px] font-semibold text-emerald-800 dark:text-emerald-100">
-                    Funding submitted{fundedAmount ? ` - ${fundedAmount} USDC` : ''}
-                  </p>
-                  {fundingEventId && (
-                    <p className="mt-1 truncate font-mono text-[9px] text-emerald-700/60 dark:text-emerald-200/60">{fundingEventId}</p>
-                  )}
-                </div>
               </div>
             )}
             {treasuryBalanceError && (
@@ -1352,15 +1358,6 @@ export default function AgentDemo() {
                       </p>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => refreshX402Balance()}
-                        disabled={x402Busy || x402Refreshing}
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300"
-                        aria-label="Refresh x402 balance"
-                      >
-                        <RefreshCw className={cn('h-3.5 w-3.5', x402Refreshing && 'animate-spin')} />
-                      </button>
                       <button
                         type="button"
                         onClick={() => {
