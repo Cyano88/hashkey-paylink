@@ -1319,19 +1319,16 @@ export default function AgentDemo() {
 
           {agentWalletAccessConnected && (
             <div className="mt-4 space-y-3">
-              <div className="rounded-lg border border-gray-100 bg-white p-3 dark:border-white/10 dark:bg-white/[0.04]">
-                <div className="flex items-start justify-between gap-3">
+              <div className="overflow-hidden rounded-lg border border-gray-100 bg-white dark:border-white/10 dark:bg-white/[0.04]">
+                <div className="flex items-center justify-between gap-3 px-3 py-3">
                   <div className="min-w-0">
-                    <p className="text-xs font-semibold text-gray-900 dark:text-white">Treasury</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Treasury</p>
                     <p className="mt-0.5 text-sm font-semibold text-gray-900 dark:text-white" title={treasuryBalanceError || undefined}>
                       {treasuryBalance !== null
                         ? `${Number(treasuryBalance).toLocaleString(undefined, { maximumFractionDigits: 6 })} USDC`
                         : treasuryBalanceError || treasuryBalanceChecked
                         ? 'Unavailable'
                         : 'Checking...'}
-                    </p>
-                    <p className="mt-1 text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
-                      Fund this wallet first. x402 activation uses this balance.
                     </p>
                   </div>
                   <Link
@@ -1342,53 +1339,48 @@ export default function AgentDemo() {
                     <ArrowRight className="h-3.5 w-3.5" /> Fund
                   </Link>
                 </div>
-              </div>
-
-              <div className="rounded-lg border border-gray-100 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-xs font-semibold text-gray-900 dark:text-white">x402</p>
-                    <p className="mt-0.5 text-sm font-semibold text-gray-900 dark:text-white" title={x402BalanceError || undefined}>
-                      {x402Balance !== null
-                        ? `${Number(x402Balance).toLocaleString(undefined, { maximumFractionDigits: 6 })} USDC`
-                        : x402BalanceError || x402BalanceChecked
-                        ? 'Unavailable'
-                        : 'Checking...'}
-                    </p>
-                    <p className="mt-1 text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
-                      {treasuryEmpty ? 'Fund treasury before activation.' : 'Activate from treasury when your agent needs API spend.'}
-                    </p>
-                    {x402Status && (
-                      <p className="mt-2 text-xs font-medium text-emerald-600 dark:text-emerald-300">
-                        {x402Status}
+                <div className="border-t border-gray-100 px-3 py-3 dark:border-white/10">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">x402</p>
+                      <p className="mt-0.5 text-sm font-semibold text-gray-900 dark:text-white" title={x402BalanceError || undefined}>
+                        {x402Balance !== null
+                          ? `${Number(x402Balance).toLocaleString(undefined, { maximumFractionDigits: 6 })} USDC`
+                          : x402BalanceError || x402BalanceChecked
+                          ? 'Unavailable'
+                          : 'Checking...'}
                       </p>
-                    )}
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => refreshX402Balance()}
+                        disabled={x402Busy || x402Refreshing}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300"
+                        aria-label="Refresh x402 balance"
+                      >
+                        <RefreshCw className={cn('h-3.5 w-3.5', x402Refreshing && 'animate-spin')} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setX402BalanceError('')
+                          setX402ActivationSuccess('')
+                          setX402ModalOpen(open => !open)
+                        }}
+                        disabled={x402Busy || treasuryEmpty}
+                        className="inline-flex h-8 min-w-[82px] items-center justify-center gap-1.5 rounded-lg bg-gray-900 px-3 text-xs font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+                      >
+                        {x402Busy ? <><span>Activating</span><PulsingDots /></> : <><ArrowRight className="h-3.5 w-3.5" /> Activate</>}
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex shrink-0 flex-col items-end gap-2">
-                    <button
-                      type="button"
-                      onClick={() => refreshX402Balance()}
-                      disabled={x402Busy || x402Refreshing}
-                      className="rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-gray-500 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300"
-                    >
-                      {x402Refreshing ? 'Checking' : 'Refresh'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setX402BalanceError('')
-                        setX402ActivationSuccess('')
-                        setX402ModalOpen(open => !open)
-                      }}
-                      disabled={x402Busy || treasuryEmpty}
-                      className="inline-flex h-8 min-w-[82px] items-center justify-center gap-1.5 rounded-lg bg-gray-900 px-3 text-xs font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
-                    >
-                      {x402Busy ? <><span>Activating</span><PulsingDots /></> : <><ArrowRight className="h-3.5 w-3.5" /> Activate</>}
-                    </button>
-                  </div>
+                  <p className="mt-2 text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
+                    {treasuryEmpty ? 'Fund treasury before activation.' : 'Activate from treasury when your agent needs API spend.'}
+                  </p>
                 </div>
                 {(x402ModalOpen || x402ActivationSuccess) && (
-                  <div className="mt-3 rounded-lg border border-gray-100 bg-white p-3 dark:border-white/10 dark:bg-black/10">
+                  <div className="border-t border-gray-100 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-black/10">
                     {x402ActivationSuccess ? (
                       <div className="py-2 text-center">
                         <div className="mx-auto flex h-9 w-9 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 dark:bg-emerald-400/10 dark:text-emerald-200">
