@@ -51,6 +51,44 @@ function cleanList(value: unknown) {
   return value.map(item => cleanString(item, 80)).filter(Boolean).slice(0, 12)
 }
 
+function compactMemoryText(value: string, max = 180) {
+  return value.replace(/\s+/g, ' ').trim().slice(0, max)
+}
+
+function inferTopics(text: string) {
+  const value = text.toLowerCase()
+  return [
+    value.includes('polymarket') && 'Polymarket',
+    value.includes('stream') && 'StreamPay',
+    value.includes('agent') && 'agent setup',
+    value.includes('wallet') && 'wallets',
+    value.includes('base') && 'Base',
+    value.includes('arc') && 'Arc',
+    value.includes('circle') && 'Circle',
+    value.includes('0g') && '0G proofs',
+    value.includes('payment') && 'payments',
+  ].filter(Boolean) as string[]
+}
+
+function deriveMemorySummary(input: {
+  existing?: string
+  displayName: string
+  question?: string
+  answer?: string
+}) {
+  const base = input.existing?.trim()
+    || `Prefers to be called ${input.displayName}. Uses Hash PayLink Agent Helper for payments, Polymarket funding, StreamPay, planning, and agent setup.`
+  const question = compactMemoryText(input.question ?? '', 120)
+  if (!question) return base.slice(0, 1600)
+
+  const topics = inferTopics(`${input.question ?? ''}\n${input.answer ?? ''}`).join(', ')
+  const answerHint = compactMemoryText((input.answer ?? '').split('\n').find(line => line.trim().length > 40) ?? '', 120)
+  const note = `Recent need: ${question}${topics ? ` (${topics})` : ''}.`
+  const updated = answerHint ? `${base}\n${note} Helpful framing: ${answerHint}` : `${base}\n${note}`
+  const uniqueLines = Array.from(new Set(updated.split('\n').map(line => line.trim()).filter(Boolean)))
+  return uniqueLines.slice(-8).join('\n').slice(-1600)
+}
+
 async function upstashCommand<T>(command: unknown[]): Promise<T | undefined> {
   if (!UPSTASH_REST_URL || !UPSTASH_REST_TOKEN) return undefined
   const response = await fetch(UPSTASH_REST_URL, {
@@ -159,17 +197,27 @@ export default async function handler(req: Request, res: Response) {
   const id = profileId(storageKey)
   const existing = store.profiles[id] ?? (fallbackOwner ? store.profiles[profileId(fallbackOwner)] : undefined)
   const now = Date.now()
+  const displayName = cleanString(req.body?.displayName, 80) || existing?.displayName || payer || storageKey
+  const requestedMemory = cleanString(req.body?.memorySummary, 1600)
+  const question = cleanString(req.body?.question, 1000)
+  const answer = cleanString(req.body?.answer, 2000)
+  const memorySummary = requestedMemory || deriveMemorySummary({
+    existing: existing?.memorySummary,
+    displayName,
+    question,
+    answer,
+  })
 
   const next: HelperProfile = {
     id,
     payer: payer || existing?.payer || storageKey,
-    displayName: cleanString(req.body?.displayName, 80) || existing?.displayName || payer || storageKey,
+    displayName,
     ownerKey: ownerKey || existing?.ownerKey,
     accessPayer: cleanString(req.body?.accessPayer, 128) || existing?.accessPayer || payer,
     telegramHandle: cleanString(req.body?.telegramHandle, 80) || existing?.telegramHandle,
     accessEventId: cleanString(req.body?.accessEventId, 128) || existing?.accessEventId,
     preferences: cleanList(req.body?.preferences).length ? cleanList(req.body?.preferences) : existing?.preferences ?? [],
-    memorySummary: cleanString(req.body?.memorySummary, 1600) || existing?.memorySummary || '',
+    memorySummary,
     memoryProof: existing?.memoryProof,
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
@@ -184,3 +232,5 @@ export default async function handler(req: Request, res: Response) {
   await writeStore(store)
   return res.json({ ok: true, profile: publicProfile(next), checkpointed: action === 'checkpoint' && !!next.memoryProof })
 }
+
+

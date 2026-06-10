@@ -99,6 +99,17 @@ type AgentProfileSummary = {
   }
 }
 
+type HelperProfile = {
+  id: string
+  displayName: string
+  preferences?: string[]
+  memorySummary?: string
+  memoryProof?: {
+    ogExplorer: string
+    archivedAt: number
+  }
+}
+
 type WalletChoice = {
   address: string
   balance?: string
@@ -173,6 +184,32 @@ function readableTreasuryBalanceError(error: unknown, networkLabel: string) {
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
+
+function compactMemoryText(value: string, max = 180) {
+  return value.replace(/\s+/g, ' ').trim().slice(0, max)
+}
+
+function nextHelperMemorySummary(existing: string, displayName: string, question: string, answer: string) {
+  const base = existing.trim()
+    || `Prefers to be called ${displayName}. Uses Hash PayLink Agent Helper for payments, Polymarket funding, StreamPay, planning, and agent setup.`
+  const lowerQuestion = question.toLowerCase()
+  const topics = [
+    lowerQuestion.includes('polymarket') && 'Polymarket',
+    lowerQuestion.includes('stream') && 'StreamPay',
+    lowerQuestion.includes('agent') && 'agent setup',
+    lowerQuestion.includes('wallet') && 'wallets',
+    lowerQuestion.includes('base') && 'Base',
+    lowerQuestion.includes('arc') && 'Arc',
+    lowerQuestion.includes('circle') && 'Circle',
+    lowerQuestion.includes('0g') && '0G proofs',
+    lowerQuestion.includes('payment') && 'payments',
+  ].filter(Boolean).join(', ')
+  const note = `Recent need: ${compactMemoryText(question, 120)}${topics ? ` (${topics})` : ''}.`
+  const usefulAnswerHint = compactMemoryText(answer.split('\n').find(line => line.trim().length > 40) ?? '', 120)
+  const updated = usefulAnswerHint ? `${base}\n${note} Helpful framing: ${usefulAnswerHint}` : `${base}\n${note}`
+  const uniqueLines = Array.from(new Set(updated.split('\n').map(line => line.trim()).filter(Boolean)))
+  return uniqueLines.slice(-8).join('\n').slice(-1600)
+}
 
 export default function AgentDemo() {
   const { onNetworkSelect } = useOutletContext<LayoutOutletContext>()
@@ -257,14 +294,74 @@ export default function AgentDemo() {
   const [helperStarted, setHelperStarted] = useState(false)
   const [helperName, setHelperName] = useState(() => window.localStorage.getItem('hashpaylink-helper-name') ?? '')
   const [helperNameDraft, setHelperNameDraft] = useState(() => window.localStorage.getItem('hashpaylink-helper-name') ?? '')
+  const [helperProfile, setHelperProfile] = useState<HelperProfile | null>(null)
+  const [helperMemoryBusy, setHelperMemoryBusy] = useState(false)
   const bottomRef    = useRef<HTMLDivElement>(null)
   const autoRan      = useRef(false)
   const agentPrivyRestoreKey = useRef('')
+  const helperCheckpointKey = useRef('')
   const returningFromHelperPayment = Boolean(eventId && payer && showHelperDemo && !verified?.verified)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, isAsking])
+
+  async function loadHelperProfile(owner: string, fallbackOwner = '') {
+    const cleanOwner = owner.trim()
+    const fallback = fallbackOwner.trim()
+    if (!cleanOwner && !fallback) return
+    const query = new URLSearchParams()
+    if (cleanOwner) query.set('owner', cleanOwner)
+    if (cleanOwner) query.set('payer', cleanOwner)
+    if (fallback) query.set('fallbackOwner', fallback)
+    const res = await fetch(`/api/helper-profile?${query.toString()}`)
+    const data = await res.json() as { ok?: boolean; profile?: HelperProfile | null }
+    if (res.ok && data.ok) setHelperProfile(data.profile ?? null)
+  }
+
+  async function saveHelperProfile(action: 'save' | 'checkpoint' = 'save', memorySummaryOverride = '') {
+    const displayName = (helperName || helperNameDraft || payer).trim().slice(0, 48)
+    if (!displayName) return
+    setHelperMemoryBusy(true)
+    try {
+      const memorySummary = memorySummaryOverride.trim()
+        || helperProfile?.memorySummary
+        || `Prefers to be called ${displayName}. Uses Hash PayLink Agent Helper for payments, Polymarket funding, StreamPay, planning, and agent setup.`
+      const res = await fetch('/api/helper-profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action,
+          owner: displayName,
+          payer: payer || displayName,
+          displayName,
+          accessEventId: eventId || undefined,
+          memorySummary,
+        }),
+      })
+      const data = await res.json() as { ok?: boolean; profile?: HelperProfile | null }
+      if (res.ok && data.ok) setHelperProfile(data.profile ?? null)
+    } finally {
+      setHelperMemoryBusy(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!showHelperDemo) return
+    const owner = helperName || payer
+    if (!owner) return
+    loadHelperProfile(owner, payer).catch(() => undefined)
+  }, [showHelperDemo, helperName, payer])
+
+  useEffect(() => {
+    if (!showHelperDemo || !verified?.verified) return
+    const owner = (helperName || payer).trim()
+    if (!owner) return
+    const key = `${eventId}:${owner}:${Boolean(helperProfile?.memoryProof)}`
+    if (helperCheckpointKey.current === key || helperProfile?.memoryProof) return
+    helperCheckpointKey.current = key
+    saveHelperProfile('checkpoint').catch(() => undefined)
+  }, [showHelperDemo, verified?.verified, helperName, payer, eventId, helperProfile?.memoryProof]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function loadAgentWallet() {
     const slug = agentSlug || 'hashpaylink-agent'
@@ -469,13 +566,24 @@ export default function AgentDemo() {
       const res  = await fetch('/api/agent-ask', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ eventId: eventId.trim(), payer: payer.trim(), question: q }),
+        body:    JSON.stringify({
+          eventId: eventId.trim(),
+          payer: payer.trim(),
+          question: q,
+          memorySummary: helperProfile?.memorySummary || undefined,
+        }),
       })
       const data = await res.json() as {
         answer?: string; proof?: { ogTxHash: string; ogExplorer: string }; error?: string
       }
       if (!data.answer || !data.proof) throw new Error(data.error ?? 'No response')
       setMessages(prev => [...prev, { question: q, answer: data.answer!, proof: data.proof! }])
+      const displayName = (helperName || payer || 'Helper user').trim()
+      const nextMemory = nextHelperMemorySummary(helperProfile?.memorySummary ?? '', displayName, q, data.answer)
+      setHelperProfile(current => current
+        ? { ...current, memorySummary: nextMemory }
+        : { id: '', displayName, memorySummary: nextMemory })
+      saveHelperProfile('save', nextMemory).catch(() => undefined)
     } catch (err) {
       setAskError(err instanceof Error ? err.message : 'Request failed')
     } finally {
@@ -518,6 +626,7 @@ export default function AgentDemo() {
     window.localStorage.setItem('hashpaylink-helper-name', clean)
     setHelperName(clean)
     setPayer(current => current || clean)
+    saveHelperProfile('save').catch(() => undefined)
   }
 
   async function copyAgentWallet() {
@@ -1674,8 +1783,8 @@ export default function AgentDemo() {
 
             <div className="mt-3 grid grid-cols-3 gap-2">
               {[
-                ['0G proof', 'Access receipts'],
-                ['Memory', 'Checkpoint next'],
+                ['Verified', 'Payment proof'],
+                ['Memory', helperMemoryBusy ? 'Saving...' : helperProfile?.memorySummary ? 'Profile saved' : 'Profile ready'],
                 ['Telegram', 'Quick launch'],
               ].map(([label, body]) => (
                 <div key={label} className="rounded-lg border border-gray-100 bg-gray-50 px-2 py-2 dark:border-white/10 dark:bg-white/[0.04]">
@@ -1691,10 +1800,10 @@ export default function AgentDemo() {
               <div className="rounded-xl border border-purple-100 bg-purple-50/70 p-3 dark:border-purple-400/20 dark:bg-purple-400/10">
                 <div className="flex items-center gap-2">
                   <span className="rounded-md border border-purple-100 bg-white px-1.5 py-0.5 text-[10px] font-black text-purple-600 dark:border-purple-300/20 dark:bg-white/[0.08] dark:text-purple-200">0G</span>
-                  <p className="text-xs font-semibold text-gray-900 dark:text-white">Built on verifiable access</p>
+                  <p className="text-xs font-semibold text-gray-900 dark:text-white">Secure helper access</p>
                 </div>
                 <p className="mt-1.5 text-xs leading-relaxed text-gray-600 dark:text-gray-300">
-                  Helper access is verified from 0G payment proofs. Personal profile memory starts locally here, then moves to approved 0G memory checkpoints in the next backend batch.
+                  Helper access is verified from 0G payment proofs. Memory saves quietly so future sessions can stay personal and useful.
                 </p>
               </div>
 
@@ -1747,14 +1856,14 @@ export default function AgentDemo() {
                     <p className="text-sm font-semibold text-gray-900 dark:text-white">Unlock helper access</p>
                     <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
                       {returningFromHelperPayment
-                        ? 'Payment received. Verifying your 0G access receipt now.'
+                        ? 'Payment received. Confirming your access receipt now.'
                         : 'Pay 0.5 USDC once to unlock the helper.'}
                     </p>
                   </div>
                   {returningFromHelperPayment && (
                     <div className="flex items-center gap-2 rounded-xl border border-purple-100 bg-purple-50 px-3 py-2.5 text-xs font-medium text-purple-700 dark:border-purple-300/20 dark:bg-purple-300/10 dark:text-purple-200">
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      Redirecting shortly while 0G verifies access
+                      Redirecting shortly while access is confirmed
                     </div>
                   )}
                   <button
@@ -1782,7 +1891,9 @@ export default function AgentDemo() {
                       <p className="text-xs font-semibold text-gray-900 dark:text-white">
                         {helperName ? `Hi ${helperName}` : 'Helper is live'}
                       </p>
-                      <p className="text-[11px] text-gray-400">Access verified with 0G proof</p>
+                      <p className="text-[11px] text-gray-400">
+                        {helperMemoryBusy ? 'Saving helper memory' : helperProfile?.memorySummary ? 'Access verified; memory saved' : 'Access verified'}
+                      </p>
                     </div>
                     <a
                       href={verified.proof?.ogExplorer}
@@ -2107,3 +2218,5 @@ export default function AgentDemo() {
     </div>
   )
 }
+
+

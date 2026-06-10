@@ -193,7 +193,7 @@ async function verifyPayment(eventId: string, payer: string) {
 
 async function getAiResponse(question: string, payerName: string, chain: string, amount: string, memorySummary = ''): Promise<string> {
   const memoryContext = memorySummary
-    ? `\n\nUser memory summary approved by the payer:\n${memorySummary}\nUse this only to personalize helpful context. Do not expose it unless the user asks.`
+    ? `\n\nSaved Hash PayLink helper memory summary:\n${memorySummary}\nUse this only to personalize helpful context. Do not expose it unless the user asks.`
     : ''
   if (process.env.ANTHROPIC_API_KEY) {
     try {

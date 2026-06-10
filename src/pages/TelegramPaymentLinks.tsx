@@ -60,7 +60,7 @@ type TelegramService = {
   title: string
   body: string
   icon: typeof Coins
-  status: 'Open' | 'Soon' | 'Next' | '0.5 USDC'
+  status: 'Open' | 'Soon' | 'Next' | 'Telegram' | '0.5 USDC'
   active: boolean
   brand?: 'polymarket'
 }
@@ -123,18 +123,18 @@ const sectionServices: Record<TelegramSectionId, TelegramService[]> = {
     {
       id: 'lp-scout',
       title: 'LP Scout',
-      body: 'Launch paid Polymarket LP research from Telegram.',
+      body: 'Scout reward markets, themes, or one Polymarket market from a guided UI.',
       icon: LineChart,
-      status: 'Soon',
-      active: false,
+      status: 'Open',
+      active: true,
     },
     {
       id: 'agentic-lp-research',
       title: 'Agentic LP Research',
-      body: 'Daily Polymarket reports delivered by email.',
+      body: 'Set up recurring LP research reports with email delivery.',
       icon: Sparkles,
-      status: 'Soon',
-      active: false,
+      status: 'Open',
+      active: true,
     },
   ],
   streampay: [
@@ -149,19 +149,19 @@ const sectionServices: Record<TelegramSectionId, TelegramService[]> = {
     {
       id: 'agentic-streampay',
       title: 'Agentic StreamPay',
-      body: 'Stream USDC for ongoing agent work.',
+      body: 'Use /streamagent for ongoing agent retainers.',
       icon: Sparkles,
-      status: 'Soon',
-      active: false,
+      status: 'Telegram',
+      active: true,
     },
   ],
 }
 
 const sectionDescriptions: Record<TelegramSectionId, string> = {
   'payment-links': 'Create normal USDC requests and share them into Telegram.',
-  'agent-wallets': 'Manage agent profiles, helper access, balances, and x402.',
-  'market-tools': 'Launch Polymarket funding and market intelligence workflows.',
-  streampay: 'Launch Arc StreamPay retainers and recipient workflows.',
+  'agent-wallets': 'Open the helper, manage wallets, and keep Marketplace marked Soon.',
+  'market-tools': 'Polymarket funding, LP Scout, market inspection, and daily research.',
+  streampay: 'Arc USDC streams for recipients, services, and ongoing retainers.',
 }
 
 const telegramSections: Array<{ id: TelegramSectionId; title: string; icon: typeof Coins }> = [
@@ -529,6 +529,18 @@ export default function TelegramPaymentLinks() {
     }
     if (service.id === 'create-streampay') {
       window.location.href = '/?app=streampay&src=telegram'
+      return
+    }
+    if (service.id === 'lp-scout') {
+      setActiveService('lp-scout')
+      return
+    }
+    if (service.id === 'agentic-lp-research') {
+      setActiveService('agentic-lp-research')
+      return
+    }
+    if (service.id === 'agentic-streampay') {
+      setActiveService('agentic-streampay')
     }
   }
 
@@ -754,6 +766,10 @@ export default function TelegramPaymentLinks() {
                 setPolymarketMode('friends')
               }}
             />
+          ) : activeService === 'lp-scout' ? (
+            <LpScoutPanel onBack={() => setActiveService('')} />
+          ) : activeService === 'agentic-lp-research' ? (
+            <AgenticLpResearchPanel onBack={() => setActiveService('')} />
           ) : activeService === 'hashpaylink-helper' ? (
             <TelegramHelperPanel
               telegramName={telegramName}
@@ -1185,7 +1201,7 @@ function TelegramHelperPanel({
             <p className="text-xs font-semibold text-gray-900 dark:text-white">Verifiable access first</p>
           </div>
           <p className="text-xs leading-relaxed text-gray-600 dark:text-gray-300">
-            The helper opens from Telegram, verifies paid access with 0G receipts, and can checkpoint approved profile memory to 0G.
+            The helper opens from Telegram, verifies paid access with 0G receipts, and saves useful profile context quietly. 0G memory checkpointing is optional proof, not an approval step.
           </p>
           <button
             type="button"
@@ -1317,7 +1333,7 @@ function TelegramHelperPanel({
                 />
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-[10px] text-gray-400">
-                    {profileBusy ? 'Saving...' : profileError || 'Only approved summary memory is saved.'}
+                    {profileBusy ? 'Saving...' : profileError || 'Profile context saves quietly to personalize future replies.'}
                   </p>
                   <button
                     type="button"
@@ -1326,7 +1342,7 @@ function TelegramHelperPanel({
                     className="inline-flex items-center gap-1 rounded-lg bg-gray-900 px-2.5 py-1.5 text-[11px] font-semibold text-white transition-all hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-950"
                   >
                     {checkpointBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : <ShieldCheck className="h-3 w-3" />}
-                    Checkpoint
+                    Archive
                   </button>
                 </div>
               </div>
@@ -1875,6 +1891,164 @@ function AgentDashboardPanel({
   )
 }
 
+function LpScoutPanel({ onBack }: { onBack: () => void }) {
+  const [mode, setMode] = useState<'best' | 'theme' | 'market'>('best')
+  const [query, setQuery] = useState('')
+  const [budget, setBudget] = useState('')
+  const [prepared, setPrepared] = useState(false)
+  const needsQuery = mode !== 'best'
+  const canPrepare = !needsQuery || query.trim().length > 2
+  const modeLabel = mode === 'best' ? 'Best reward markets' : mode === 'theme' ? 'Theme scout' : 'Single market'
+
+  return (
+    <div className="mt-4 space-y-4">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <button
+            type="button"
+            onClick={onBack}
+            className="mb-2 inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 transition-colors hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Back
+          </button>
+          <div className="flex items-center gap-2">
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.06]">
+              <img src={POLYMARKET_LOGO} alt="" className="h-4 w-4 invert dark:invert-0" />
+            </span>
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">LP Scout</p>
+          </div>
+          <h2 className="mt-2 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Find Polymarket LP opportunities</h2>
+          <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
+            Pick a scouting mode, add the market context, then create a paid scout request.
+          </p>
+        </div>
+      </div>
+
+      <div className="grid gap-2">
+        <RequestModeButton icon={LineChart} title="Best reward markets" body="Rank live reward markets by spread, liquidity, reward rate, and risk." onClick={() => { setMode('best'); setPrepared(false) }} />
+        <RequestModeButton icon={Sparkles} title="Scout a theme" body="Focus the report on a sector, event, token, election, or sports category." onClick={() => { setMode('theme'); setPrepared(false) }} />
+        <RequestModeButton icon={ExternalLink} title="Inspect one market" body="Review one Polymarket URL or slug before quoting maker orders." onClick={() => { setMode('market'); setPrepared(false) }} />
+      </div>
+
+      <div className="space-y-3 rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Selected scout</p>
+          <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{modeLabel}</p>
+        </div>
+        {needsQuery && (
+          <InputBlock
+            label={mode === 'theme' ? 'Theme' : 'Market URL or slug'}
+            value={query}
+            onChange={value => { setQuery(value); setPrepared(false) }}
+            placeholder={mode === 'theme' ? 'crypto, AI, election, football...' : 'https://polymarket.com/event/...'}
+          />
+        )}
+        <InputBlock
+          label="Optional budget"
+          value={budget}
+          onChange={setBudget}
+          placeholder="Example: 100 USDC"
+        />
+        <button
+          type="button"
+          onClick={() => setPrepared(true)}
+          disabled={!canPrepare}
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+        >
+          <Send className="h-4 w-4" />
+          Prepare scout request
+        </button>
+      </div>
+
+      {prepared && (
+        <div className="space-y-3 rounded-xl border border-emerald-100 bg-emerald-50/70 p-3 dark:border-emerald-400/20 dark:bg-emerald-400/10">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-300" />
+            <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-200">Scout request ready</p>
+          </div>
+          <p className="text-xs leading-relaxed text-emerald-700/80 dark:text-emerald-200/80">
+            {modeLabel}{needsQuery ? ` for ${query.trim()}` : ''}{budget.trim() ? ` with ${budget.trim()} budget context` : ''}.
+          </p>
+          <a
+            href="/agent?profile=agent&agent=hashpaylink-agent&src=lp-scout"
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+          >
+            <ArrowRight className="h-4 w-4" />
+            Continue to paid scout
+          </a>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function AgenticLpResearchPanel({ onBack }: { onBack: () => void }) {
+  const [email, setEmail] = useState('')
+  const [duration, setDuration] = useState('7d')
+  const [focus, setFocus] = useState('Best Polymarket LP reward markets')
+  const [budget, setBudget] = useState('')
+  const emailReady = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
+  const durationReady = /^\d+[dhw]$/.test(duration.trim())
+  const canContinue = emailReady && durationReady
+
+  return (
+    <div className="mt-4 space-y-4">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <button
+            type="button"
+            onClick={onBack}
+            className="mb-2 inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 transition-colors hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Back
+          </button>
+          <div className="flex items-center gap-2">
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-100 bg-white text-gray-700 shadow-sm dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200">
+              <Sparkles className="h-4 w-4" />
+            </span>
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Agentic LP Research</p>
+          </div>
+          <h2 className="mt-2 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Daily Polymarket reports</h2>
+          <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
+            Configure the report recipient and research focus before starting the StreamPay-backed service.
+          </p>
+        </div>
+      </div>
+
+      <div className="space-y-3 rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
+        <InputBlock label="Report email" value={email} onChange={setEmail} placeholder="you@example.com" />
+        {email && !emailReady && <p className="px-1 text-xs text-red-500 dark:text-red-300">Enter a valid email address.</p>}
+        <InputBlock label="Duration" value={duration} onChange={setDuration} placeholder="7d, 14d, 30d" />
+        {duration && !durationReady && <p className="px-1 text-xs text-red-500 dark:text-red-300">Use a duration like 7d, 2w, or 24h.</p>}
+        <InputBlock label="Research focus" value={focus} onChange={setFocus} placeholder="Best LP reward markets" />
+        <InputBlock label="Optional budget" value={budget} onChange={setBudget} placeholder="Example: 250 USDC" />
+        <a
+          href="/?app=streampay&src=agentic-lp-research"
+          aria-disabled={!canContinue}
+          onClick={event => { if (!canContinue) event.preventDefault() }}
+          className={cn(
+            'flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200',
+            !canContinue && 'pointer-events-none opacity-50',
+          )}
+        >
+          <Radio className="h-4 w-4" />
+          Continue to StreamPay setup
+        </a>
+      </div>
+
+      <div className="rounded-xl border border-gray-100 bg-white p-3 dark:border-white/10 dark:bg-white/[0.05]">
+        <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Service summary</p>
+        <div className="mt-2 grid gap-2 text-xs text-gray-500 dark:text-gray-400">
+          <div className="flex items-center justify-between gap-3"><span>Email</span><span className="truncate font-semibold text-gray-800 dark:text-gray-200">{email || 'Not set'}</span></div>
+          <div className="flex items-center justify-between gap-3"><span>Duration</span><span className="font-semibold text-gray-800 dark:text-gray-200">{duration || 'Not set'}</span></div>
+          <div className="flex items-center justify-between gap-3"><span>Focus</span><span className="truncate font-semibold text-gray-800 dark:text-gray-200">{focus || 'Default LP report'}</span></div>
+        </div>
+      </div>
+    </div>
+  )
+}
 function PolymarketFundingPanel({
   mode,
   network,
