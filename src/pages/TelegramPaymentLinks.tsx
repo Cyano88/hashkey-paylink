@@ -40,36 +40,6 @@ function shortAddress(value: string) {
   return value.length > 14 ? `${value.slice(0, 6)}...${value.slice(-4)}` : value
 }
 
-function openHashPayLinkAgentCheckout({
-  amount,
-  memo,
-  source,
-  service,
-}: {
-  amount: string
-  memo: string
-  source: string
-  service: TelegramServiceId
-}) {
-  const checkoutId = `${source}-${Date.now().toString(36)}`
-  const returnUrl = new URL('/telegram/payment-links', window.location.origin)
-  returnUrl.searchParams.set('open', '1')
-  returnUrl.searchParams.set('section', 'market-tools')
-  returnUrl.searchParams.set('service', service)
-
-  const params = new URLSearchParams()
-  params.set('e', EVM_TREASURY)
-  params.set('a', amount)
-  params.set('m', memo.slice(0, 160))
-  params.set('n', 'base')
-  params.set('v', '1')
-  params.set('id', checkoutId)
-  params.set('src', source)
-  params.set('g', returnUrl.toString())
-  params.set('ad', '1')
-  window.location.href = `/pay?${params.toString()}`
-}
-
 type TelegramSectionId = 'payment-links' | 'agent-wallets' | 'market-tools' | 'streampay'
 type TelegramServiceId =
   | 'request-usdc'
@@ -464,8 +434,8 @@ export default function TelegramPaymentLinks() {
   }
 
   useEffect(() => {
-    if (activeSection === 'agent-wallets') void loadAgentProfiles()
-  }, [activeSection, agentOwner, telegramIdentity.legacyOwner]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (activeSection === 'agent-wallets' || activeService === 'lp-scout') void loadAgentProfiles()
+  }, [activeSection, activeService, agentOwner, telegramIdentity.legacyOwner]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function openRequestService() {
     setActiveService('request-usdc')
@@ -797,7 +767,15 @@ export default function TelegramPaymentLinks() {
               }}
             />
           ) : activeService === 'lp-scout' ? (
-            <LpScoutPanel onBack={() => setActiveService('')} />
+            <LpScoutPanel
+              agents={agentProfiles}
+              loadError={agentProfilesError}
+              onCreateAgent={() => {
+                setActiveSection('agent-wallets')
+                setActiveService('create-your-agent')
+              }}
+              onBack={() => setActiveService('')}
+            />
           ) : activeService === 'agentic-lp-research' ? (
             <AgenticLpResearchPanel onBack={() => setActiveService('')} />
           ) : activeService === 'hashpaylink-helper' ? (
@@ -1922,6 +1900,8 @@ function AgentDashboardPanel({
 }
 
 type LpScoutMode = 'best' | 'theme' | 'market'
+type LpScoutPath = '' | 'access' | 'daily'
+type LpScoutStep = 'service' | 'agent'
 
 type LpScoutOption = {
   id: LpScoutMode
@@ -1937,14 +1917,14 @@ const lpScoutOptions: LpScoutOption[] = [
   {
     id: 'best',
     title: 'Best reward markets',
-    body: 'Tip the Hash PayLink Agent to rank active reward markets by spread, liquidity, rewards, and risk.',
+    body: 'Have your agent buy the x402 LP Scout service and rank live reward markets by spread, liquidity, rewards, and risk.',
     amount: '1',
     icon: LineChart,
   },
   {
     id: 'theme',
     title: 'Scout a theme',
-    body: 'Pick a sector, event, token, election, or sports category for a focused market scan.',
+    body: 'Have your agent focus the x402 scout on a sector, event, token, election, or sports category.',
     amount: '1',
     icon: Sparkles,
     inputLabel: 'Theme',
@@ -1953,7 +1933,7 @@ const lpScoutOptions: LpScoutOption[] = [
   {
     id: 'market',
     title: 'Inspect one market',
-    body: 'Send one Polymarket URL or slug for a maker quote and LP risk review.',
+    body: 'Have your agent request one Polymarket URL or slug for maker quote and LP risk context.',
     amount: '1',
     icon: ExternalLink,
     inputLabel: 'Market URL or slug',
@@ -1961,33 +1941,118 @@ const lpScoutOptions: LpScoutOption[] = [
   },
 ]
 
-function LpScoutPanel({ onBack }: { onBack: () => void }) {
+function LpScoutPanel({
+  agents,
+  loadError,
+  onCreateAgent,
+  onBack,
+}: {
+  agents: AgentProfile[]
+  loadError: string
+  onCreateAgent: () => void
+  onBack: () => void
+}) {
+  const [path, setPath] = useState<LpScoutPath>('')
+  const [step, setStep] = useState<LpScoutStep>('service')
   const [mode, setMode] = useState<LpScoutMode>('best')
   const [query, setQuery] = useState('')
   const [budget, setBudget] = useState('')
-  const [tipAmount, setTipAmount] = useState(lpScoutOptions[0].amount)
+  const [maxSpend, setMaxSpend] = useState(lpScoutOptions[0].amount)
+  const connectedAgents = useMemo(() => agents.filter(agent => Boolean(agent.walletAddress)), [agents])
   const selectedOption = lpScoutOptions.find(option => option.id === mode) ?? lpScoutOptions[0]
   const needsQuery = Boolean(selectedOption.inputLabel)
   const contextReady = !needsQuery || query.trim().length > 2
-  const amountReady = Number(tipAmount) > 0
-  const canContinue = contextReady && amountReady
+  const amountReady = Number(maxSpend) > 0
+  const canChooseAgent = contextReady && amountReady
 
   function selectOption(option: LpScoutOption) {
     setMode(option.id)
-    setTipAmount(option.amount)
+    setMaxSpend(option.amount)
     setQuery('')
+    setStep('service')
   }
 
-  function openScoutCheckout() {
-    if (!canContinue) return
-    const context = needsQuery ? ` for ${query.trim()}` : ''
-    const budgetNote = budget.trim() ? ` Budget context: ${budget.trim()}.` : ''
-    openHashPayLinkAgentCheckout({
-      amount: tipAmount.trim(),
-      memo: `LP Scout: ${selectedOption.title}${context}.${budgetNote}`,
-      source: 'lp-scout',
-      service: 'lp-scout',
-    })
+  function startAccessFlow() {
+    setPath('access')
+    setStep('service')
+  }
+
+  function startDailyFlow() {
+    setPath('daily')
+  }
+
+  function backFromPath() {
+    if (path === 'daily') {
+      setPath('')
+      return
+    }
+    if (step === 'agent') {
+      setStep('service')
+      return
+    }
+    setPath('')
+  }
+
+  function buildAgentScoutUrl(agent: AgentProfile) {
+    const params = new URLSearchParams()
+    params.set('profile', 'agent')
+    params.set('agent', agent.slug)
+    params.set('src', 'lp-scout')
+    params.set('run', 'polymarket-scout')
+    params.set('scoutMode', selectedOption.id)
+    params.set('maxAmount', maxSpend.trim())
+    params.set('serviceUrl', '/api/x402/polymarket-scout')
+    if (query.trim()) params.set('context', query.trim())
+    if (budget.trim()) params.set('budget', budget.trim())
+    return `/agent?${params.toString()}`
+  }
+
+  if (path === 'daily') {
+    return <AgenticLpResearchPanel onBack={backFromPath} />
+  }
+
+  if (!path) {
+    return (
+      <div className="mt-4 space-y-4">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <button
+              type="button"
+              onClick={onBack}
+              className="mb-2 inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 transition-colors hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              Back
+            </button>
+            <div className="flex items-center gap-2">
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.06]">
+                <img src={POLYMARKET_LOGO} alt="" className="h-4 w-4 invert dark:invert-0" />
+              </span>
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">LP Scout</p>
+            </div>
+            <h2 className="mt-2 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Choose how LP Scout should work</h2>
+            <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
+              Use a linked agent for one-time Polymarket x402 access, or stream USDC daily for LP alpha by email.
+            </p>
+          </div>
+        </div>
+
+        <div className="grid gap-2">
+          <RequestModeButton
+            icon={Zap}
+            title="Tip for LP Scout access"
+            body="Pick a Polymarket scout category, then choose which linked agent pays Hash PayLink through the agent/x402 route."
+            onClick={startAccessFlow}
+          />
+          <RequestModeButton
+            icon={Radio}
+            title="Stream daily LP alpha"
+            body="Stream USDC to Hash PayLink for daily Polymarket LP research delivered to your email."
+            onClick={startDailyFlow}
+          />
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -1996,7 +2061,7 @@ function LpScoutPanel({ onBack }: { onBack: () => void }) {
         <div className="min-w-0">
           <button
             type="button"
-            onClick={onBack}
+            onClick={backFromPath}
             className="mb-2 inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 transition-colors hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
@@ -2006,11 +2071,11 @@ function LpScoutPanel({ onBack }: { onBack: () => void }) {
             <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.06]">
               <img src={POLYMARKET_LOGO} alt="" className="h-4 w-4 invert dark:invert-0" />
             </span>
-            <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">LP Scout</p>
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">LP Scout x402</p>
           </div>
-          <h2 className="mt-2 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Tip the Hash PayLink Agent for Polymarket research</h2>
+          <h2 className="mt-2 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Tip Hash PayLink Agent with your agent</h2>
           <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-            Choose a Polymarket service below. The checkout pays the Hash PayLink Agent treasury directly, so this flow does not ask you to sign into the platform agent wallet.
+            Choose the Polymarket research category first. Next, pick the linked agent that should pay Hash PayLink for access.
           </p>
         </div>
       </div>
@@ -2038,7 +2103,7 @@ function LpScoutPanel({ onBack }: { onBack: () => void }) {
                 <span className="flex min-w-0 items-center justify-between gap-3">
                   <span className="truncate text-sm font-semibold text-gray-900 dark:text-white">{option.title}</span>
                   <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-200">
-                    {option.amount} USDC
+                    max {option.amount} USDC
                   </span>
                 </span>
                 <span className="mt-0.5 block text-xs leading-relaxed text-gray-500 dark:text-gray-400">{option.body}</span>
@@ -2062,9 +2127,9 @@ function LpScoutPanel({ onBack }: { onBack: () => void }) {
           />
         )}
         <InputBlock
-          label="Tip amount"
-          value={tipAmount}
-          onChange={setTipAmount}
+          label="Max x402 spend"
+          value={maxSpend}
+          onChange={setMaxSpend}
           placeholder="1"
         />
         <InputBlock
@@ -2075,21 +2140,75 @@ function LpScoutPanel({ onBack }: { onBack: () => void }) {
         />
         <button
           type="button"
-          onClick={openScoutCheckout}
-          disabled={!canContinue}
+          onClick={() => setStep('agent')}
+          disabled={!canChooseAgent}
           className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
         >
-          <Send className="h-4 w-4" />
-          Tip Hash PayLink Agent
+          <Bot className="h-4 w-4" />
+          Choose paying agent
         </button>
-        <p className="px-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-          Recipient: Hash PayLink Agent treasury on Base, {shortAddress(EVM_TREASURY)}.
-        </p>
       </div>
+
+      {step === 'agent' && (
+        <div className="space-y-3 rounded-xl border border-gray-100 bg-white p-3 dark:border-white/10 dark:bg-white/[0.05]">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Paying agent</p>
+            <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-white">Pick the agent that will tip Hash PayLink Agent</p>
+            <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+              The selected agent opens its dashboard with this LP Scout request attached. Fund and activate x402 there if needed.
+            </p>
+          </div>
+
+          {loadError && <p className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs font-medium text-red-600 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200">{loadError}</p>}
+
+          {connectedAgents.length ? (
+            <div className="grid gap-2">
+              {connectedAgents.map(agent => {
+                const status = agentWalletStatus(agent, true)
+                return (
+                  <a
+                    key={agent.slug}
+                    href={buildAgentScoutUrl(agent)}
+                    className="flex w-full items-center gap-3 rounded-xl border border-gray-100 bg-gray-50/70 p-3 text-left transition-all hover:border-gray-200 hover:bg-white active:scale-[0.99] dark:border-white/10 dark:bg-white/[0.04] dark:hover:bg-white/[0.08]"
+                  >
+                    <AgentProfileAvatar agent={agent} className="h-10 w-10 rounded-xl text-xs" />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex min-w-0 items-center gap-2">
+                        <span className="truncate text-sm font-semibold text-gray-900 dark:text-white">{agent.name}</span>
+                        <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase', status.className)}>
+                          Connected
+                        </span>
+                      </span>
+                      <span className="mt-0.5 block truncate text-xs text-gray-500 dark:text-gray-400">
+                        {shortAgentWallet(agent.walletAddress)} pays max {maxSpend || selectedOption.amount} USDC for {selectedOption.title}
+                      </span>
+                    </span>
+                    <ArrowRight className="h-4 w-4 shrink-0 text-gray-400" />
+                  </a>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="rounded-xl border border-gray-100 bg-gray-50 p-3 dark:border-white/10 dark:bg-white/[0.03]">
+              <p className="text-sm font-semibold text-gray-900 dark:text-white">No linked paying agent yet</p>
+              <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                Create or link an agent wallet first, then return here to run LP Scout through x402.
+              </p>
+              <button
+                type="button"
+                onClick={onCreateAgent}
+                className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+              >
+                <Wallet className="h-4 w-4" />
+                Create or link agent
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
-
 function AgenticLpResearchPanel({ onBack }: { onBack: () => void }) {
   const [email, setEmail] = useState('')
   const [duration, setDuration] = useState('7d')
