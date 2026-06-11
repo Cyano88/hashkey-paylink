@@ -1512,22 +1512,23 @@ export default function AgentDemo() {
                                 </p>
                               )}
                             </div>
-                            {latestPrimaryOpportunity.marketUrl && (
-                              <a
-                                href={latestPrimaryOpportunity.marketUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="shrink-0 text-[10px] font-semibold text-blue-600 hover:text-blue-800 dark:text-blue-300"
-                              >
-                                Market
-                              </a>
-                            )}
                           </div>
                           <div className="mt-2 grid grid-cols-3 gap-1.5 text-center text-[10px]">
                             <span className="rounded-lg bg-white px-2 py-1 text-gray-600 dark:bg-white/[0.06] dark:text-gray-300">YES near {scoutPrice(latestPrimaryOpportunity.suggestedYesBid)}</span>
                             <span className="rounded-lg bg-white px-2 py-1 text-gray-600 dark:bg-white/[0.06] dark:text-gray-300">NO near {scoutPrice(latestPrimaryOpportunity.suggestedNoBid)}</span>
                             <span className="rounded-lg bg-white px-2 py-1 text-gray-600 dark:bg-white/[0.06] dark:text-gray-300">Depth {latestPrimaryOpportunity.depthAtTwoCents ?? 'n/a'}</span>
                           </div>
+                          {latestPrimaryOpportunity.marketUrl && (
+                            <a
+                              href={latestPrimaryOpportunity.marketUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-[11px] font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200"
+                            >
+                              <ExternalLink className="h-3.5 w-3.5" />
+                              Open market
+                            </a>
+                          )}
                           {latestPrimaryOpportunity.executionPlan?.length ? (
                             <div className="mt-2 space-y-1">
                               {latestPrimaryOpportunity.executionPlan.slice(0, 5).map((step, index) => (
@@ -1547,7 +1548,7 @@ export default function AgentDemo() {
                         {latestX402Spend?.proof?.proofHash && (
                           <Link
                             to={`/receipt/${encodeURIComponent(latestX402Spend.id)}`}
-                            className="text-blue-600 transition-colors hover:text-blue-800 dark:text-blue-300"
+                            className="inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200"
                           >
                             View x402 receipt
                           </Link>
@@ -1557,7 +1558,7 @@ export default function AgentDemo() {
                             href={latestX402Spend.og.ogExplorer}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-purple-600 transition-colors hover:text-purple-800 dark:text-purple-300"
+                            className="inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200"
                           >
                             0G proof
                           </a>
@@ -1627,12 +1628,19 @@ export default function AgentDemo() {
                     >
                       {lpScoutBusy ? (
                         <><Loader2 className="h-4 w-4 animate-spin" /> Working</>
+                      ) : agentWalletAccessConnected && lpScoutHasResult ? (
+                        <><RefreshCw className="h-4 w-4" /> Refresh LP Alpha · {pendingScoutMaxAmount || '0.01'} USDC</>
                       ) : agentWalletAccessConnected ? (
                         <><Send className="h-4 w-4" /> Get LP Alpha</>
                       ) : (
                         <><Wallet className="h-4 w-4" /> Connect agent session</>
                       )}
                     </button>
+                    {agentWalletAccessConnected && lpScoutHasResult && (
+                      <p className="text-center text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
+                        Runs a fresh paid scout with live Polymarket data.
+                      </p>
+                    )}
                     {!agentWalletAccessConnected && (
                       <p className="text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
                         This only authorizes the selected paying agent. You are not signing into the Hash PayLink platform wallet.
