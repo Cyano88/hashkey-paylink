@@ -116,6 +116,32 @@ type WalletChoice = {
   balanceError?: string
 }
 
+type LpScoutServiceResponse = {
+  service?: string
+  scout?: {
+    summary?: string
+    highlights?: string[]
+    nextAction?: string
+    source?: string
+  }
+  receipt?: {
+    provider?: string
+    price?: string
+    seller?: string
+  }
+  payment?: {
+    amount?: string
+    network?: string
+    transaction?: string
+  }
+}
+
+type LpScoutRunResult = {
+  response?: LpScoutServiceResponse
+  maxAmount?: string
+  serviceUrl?: string
+}
+
 function agentAvatarHue(seed: string) {
   let hash = 0
   for (let i = 0; i < seed.length; i += 1) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0
@@ -183,6 +209,12 @@ function readableTreasuryBalanceError(error: unknown, networkLabel: string) {
   return message.slice(0, 140) || `${networkLabel} balance unavailable.`
 }
 
+function scoutModeLabel(value: string) {
+  if (value === 'theme') return 'Scout a theme'
+  if (value === 'market') return 'Inspect one market'
+  return 'Best reward markets'
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 function compactMemoryText(value: string, max = 180) {
@@ -221,6 +253,12 @@ export default function AgentDemo() {
   const agentStreamPrice = params.get('streamPrice') ?? ''
   const agentStreamDuration = params.get('streamDuration') ?? ''
   const shouldOpenWalletLinkPanel = params.get('linkWallet') === '1'
+  const pendingRun = params.get('run') ?? ''
+  const pendingScoutMode = params.get('scoutMode') ?? 'best'
+  const pendingScoutContext = params.get('context') ?? ''
+  const pendingScoutBudget = params.get('budget') ?? ''
+  const pendingScoutMaxAmount = params.get('maxAmount') ?? '0.01'
+  const hasPendingLpScoutRequest = pendingRun === 'polymarket-scout'
   const urlAgentWallet = params.get('wallet') ?? params.get('e') ?? ''
   const expectedAgentWallet = params.get('expectedWallet') ?? ''
   const agentWallet = urlAgentWallet || (shouldOpenWalletLinkPanel ? expectedAgentWallet : '')
@@ -268,6 +306,9 @@ export default function AgentDemo() {
   const [x402Status, setX402Status] = useState('')
   const [x402ModalOpen, setX402ModalOpen] = useState(false)
   const [x402ActivationSuccess, setX402ActivationSuccess] = useState('')
+  const [lpScoutBusy, setLpScoutBusy] = useState(false)
+  const [lpScoutError, setLpScoutError] = useState('')
+  const [lpScoutResult, setLpScoutResult] = useState<LpScoutRunResult | null>(null)
   const [receiptsOpen, setReceiptsOpen] = useState(false)
   const [agentProfile, setAgentProfile] = useState<AgentProfileSummary | null>(agentSlug === PLATFORM_AGENT_SLUG || !agentSlug ? PLATFORM_AGENT_PROFILE : null)
   const [agentProfileError, setAgentProfileError] = useState('')
@@ -924,6 +965,38 @@ export default function AgentDemo() {
     }
   }
 
+  async function runLpScoutRequest() {
+    if (!agentWalletAccessConnected || lpScoutBusy) return
+    setLpScoutBusy(true)
+    setLpScoutError('')
+    setLpScoutResult(null)
+    try {
+      const res = await fetch('/api/agent-wallet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'pay-lp-scout',
+          agentSlug: agentSlug || PLATFORM_AGENT_SLUG,
+          sellerAgentSlug: PLATFORM_AGENT_SLUG,
+          maxAmount: pendingScoutMaxAmount,
+          scoutMode: pendingScoutMode,
+          context: pendingScoutContext || undefined,
+          budget: pendingScoutBudget || undefined,
+        }),
+      })
+      const data = await res.json() as LpScoutRunResult & { ok?: boolean; error?: string }
+      if (!res.ok || !data.ok) throw new Error(data.error ?? 'LP Scout x402 request failed')
+      setLpScoutResult(data)
+      setReceiptsOpen(true)
+      await refreshX402Balance()
+      await loadAgentWallet()
+    } catch (err) {
+      setLpScoutError(err instanceof Error ? err.message : 'LP Scout x402 request failed')
+    } finally {
+      setLpScoutBusy(false)
+    }
+  }
+
   const agentStreamUrl = buildAgentStreamUrl()
   const activityAmount = (item: AgentActivity) => {
     if (!item.amount) return item.direction === 'result' ? 'Result' : item.direction === 'system' ? 'Setup' : ''
@@ -1187,6 +1260,61 @@ export default function AgentDemo() {
               <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
                 StreamPay retainer: {agentStreamPrice} USDC / {agentStreamDuration}
               </p>
+            )}
+            {hasPendingLpScoutRequest && (
+              <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50 px-3 py-3 dark:border-blue-400/20 dark:bg-blue-400/10">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-blue-500 dark:text-blue-200">LP Scout x402 request</p>
+                    <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{scoutModeLabel(pendingScoutMode)}</p>
+                    <p className="mt-1 text-xs leading-relaxed text-blue-700 dark:text-blue-100">
+                      This agent pays Hash PayLink Agent through x402, then receives live Polymarket LP research.
+                    </p>
+                  </div>
+                  <span className="shrink-0 rounded-full bg-white px-2 py-1 text-[10px] font-semibold text-blue-600 shadow-sm dark:bg-white/10 dark:text-blue-100">
+                    Max {pendingScoutMaxAmount || '0.01'} USDC
+                  </span>
+                </div>
+                {(pendingScoutContext || pendingScoutBudget) && (
+                  <div className="mt-2 grid gap-1 rounded-lg bg-white/70 px-2.5 py-2 text-[11px] text-gray-600 dark:bg-black/10 dark:text-blue-100">
+                    {pendingScoutContext && <p className="truncate"><span className="font-semibold">Context:</span> {pendingScoutContext}</p>}
+                    {pendingScoutBudget && <p className="truncate"><span className="font-semibold">Budget:</span> {pendingScoutBudget}</p>}
+                  </div>
+                )}
+                {lpScoutResult?.response?.scout && (
+                  <div className="mt-3 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 dark:border-emerald-400/20 dark:bg-emerald-400/10">
+                    <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-200">Scout returned</p>
+                    <p className="mt-1 text-xs leading-relaxed text-emerald-700 dark:text-emerald-100">
+                      {lpScoutResult.response.scout.summary ?? 'LP Scout returned live Polymarket data.'}
+                    </p>
+                    {lpScoutResult.response.scout.highlights?.length ? (
+                      <div className="mt-2 space-y-1">
+                        {lpScoutResult.response.scout.highlights.slice(0, 3).map((item, index) => (
+                          <p key={`${item}-${index}`} className="text-[11px] leading-relaxed text-emerald-700 dark:text-emerald-100">{item}</p>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+                {lpScoutError && (
+                  <p className="mt-2 rounded-lg border border-red-100 bg-white px-3 py-2 text-xs font-medium text-red-600 dark:border-red-400/20 dark:bg-black/10 dark:text-red-200">
+                    {lpScoutError}
+                  </p>
+                )}
+                <button
+                  type="button"
+                  onClick={runLpScoutRequest}
+                  disabled={!agentWalletAccessConnected || lpScoutBusy || x402Refreshing}
+                  className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gray-900 px-4 py-3 text-sm font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-50 dark:bg-white dark:text-gray-950"
+                >
+                  {lpScoutBusy ? <><Loader2 className="h-4 w-4 animate-spin" /> Running LP Scout</> : <><Zap className="h-4 w-4" /> Run LP Scout with x402</>}
+                </button>
+                {!agentWalletAccessConnected && (
+                  <p className="mt-2 text-[11px] leading-relaxed text-blue-700 dark:text-blue-100">
+                    Sign in to this agent wallet first so the secure Circle session can pay the x402 service.
+                  </p>
+                )}
+              </div>
             )}
           </div>
 

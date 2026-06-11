@@ -68,6 +68,100 @@ type X402ServiceResponse = {
   }
 }
 
+async function payX402Service(params: {
+  agentSlug: string
+  sellerAgentSlug: string
+  serviceUrl: string
+  maxAmount: number
+}) {
+  const store = await readStore()
+  const record = resolveAgentRecord(store, params.agentSlug)
+  if (!record?.walletAddress || !record.sessionId) {
+    const error = new Error('Agent wallet session not found. Create the wallet on the web dashboard first.') as Error & { status?: number }
+    error.status = 404
+    throw error
+  }
+
+  const serviceKey = `${params.agentSlug}_${record.sessionId}`
+  let output = ''
+  try {
+    output = await runCircle([
+      'services',
+      'pay',
+      params.serviceUrl,
+      '--address',
+      record.walletAddress,
+      '--chain',
+      'BASE',
+      '--max-amount',
+      String(params.maxAmount),
+    ], serviceKey)
+  } catch (err) {
+    if (isCircleLoginExpired(err)) {
+      const error = new Error('Circle Agent Wallet is connected, but the secure spending session expired. Reconnect the wallet on the agent dashboard, then retry /lp x402.') as Error & { status?: number; code?: string }
+      error.status = 409
+      error.code = 'circle_session_expired'
+      throw error
+    }
+    throw err
+  }
+
+  const parsedResponse = extractJsonFromCliOutput(output) as X402ServiceResponse | undefined
+  const proof = buildX402Proof({
+    response: parsedResponse,
+    buyerAgent: params.agentSlug,
+    sellerAgent: params.sellerAgentSlug,
+    buyerWallet: record.walletAddress,
+    serviceUrl: params.serviceUrl,
+    maxAmount: String(params.maxAmount),
+    circleOutput: output,
+  })
+  await appendAgentActivity({
+    agentSlug: params.agentSlug,
+    type: 'x402_spent',
+    title: 'Bought LP Scout API',
+    amount: String(params.maxAmount),
+    asset: 'USDC',
+    direction: 'out',
+    network: 'Circle Gateway x402',
+    wallet: record.walletAddress,
+    serviceUrl: params.serviceUrl,
+    detail: 'Agent paid a machine-to-machine service',
+    proof,
+  })
+  await appendAgentActivity({
+    agentSlug: params.agentSlug,
+    type: 'scout_returned',
+    title: 'Live Polymarket scout returned',
+    direction: 'result',
+    network: 'Polymarket CLOB',
+    wallet: record.walletAddress,
+    serviceUrl: params.serviceUrl,
+    detail: 'API returned ranked LP opportunities',
+  })
+  if (params.sellerAgentSlug && params.sellerAgentSlug !== params.agentSlug) {
+    await appendAgentActivity({
+      agentSlug: params.sellerAgentSlug,
+      type: 'x402_sold',
+      title: 'Sold LP Scout API',
+      amount: String(params.maxAmount),
+      asset: 'USDC',
+      direction: 'in',
+      network: 'Circle Gateway x402',
+      wallet: parsedResponse?.receipt?.seller ?? '',
+      serviceUrl: params.serviceUrl,
+      detail: `${params.agentSlug} bought live Polymarket scout data`,
+      proof,
+    })
+  }
+
+  return {
+    walletAddress: record.walletAddress,
+    response: parsedResponse,
+    raw: output.slice(0, 3000),
+  }
+}
+
 function normalizeEmail(value: unknown) {
   const email = String(value ?? '').trim().toLowerCase()
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : ''
@@ -706,108 +800,50 @@ export default async function handler(req: Request, res: Response) {
       })
     }
 
-    if (action === 'pay-service') {
+    if (action === 'pay-service' || action === 'pay-lp-scout') {
       const secret = String(req.headers['x-agent-wallet-secret'] ?? req.body?.secret ?? '')
       const authorized = SERVICE_SECRET
         && secret.length === SERVICE_SECRET.length
         && crypto.timingSafeEqual(Buffer.from(secret), Buffer.from(SERVICE_SECRET))
-      if (!authorized) return res.status(401).json({ ok: false, error: 'Unauthorized' })
+      if (action === 'pay-service' && !authorized) return res.status(401).json({ ok: false, error: 'Unauthorized' })
 
-      const serviceUrl = String(req.body?.serviceUrl ?? '').trim()
+      const serviceUrl = action === 'pay-lp-scout'
+        ? DEFAULT_SCOUT_URL
+        : String(req.body?.serviceUrl ?? '').trim()
       const sellerAgentSlug = normalizeSlug(req.body?.sellerAgentSlug) || DEFAULT_AGENT_SLUG
       const requested = cleanAmount(req.body?.maxAmount)
       const maxAmount = Math.min(requested ?? MAX_SERVICE_AMOUNT, MAX_SERVICE_AMOUNT)
       if (!ALLOWED_SERVICE_URLS.has(serviceUrl)) return res.status(403).json({ ok: false, error: 'Service URL is not allowlisted.' })
       if (!maxAmount || maxAmount <= 0) return res.status(400).json({ ok: false, error: 'Invalid max amount.' })
 
-      const store = await readStore()
-      const record = resolveAgentRecord(store, agentSlug)
-      if (!record?.walletAddress || !record.sessionId) {
-        return res.status(404).json({ ok: false, error: 'Agent wallet session not found. Create the wallet on the web dashboard first.' })
-      }
-
-      const serviceKey = `${agentSlug}_${record.sessionId}`
-      let output = ''
       try {
-        output = await runCircle([
-          'services',
-          'pay',
+        const result = await payX402Service({
+          agentSlug,
+          sellerAgentSlug,
           serviceUrl,
-          '--address',
-          record.walletAddress,
-          '--chain',
-          'BASE',
-          '--max-amount',
-          String(maxAmount),
-        ], serviceKey)
+          maxAmount,
+        })
+        return res.json({
+          ok: true,
+          agentSlug,
+          walletAddress: result.walletAddress,
+          serviceUrl,
+          maxAmount: String(maxAmount),
+          response: result.response,
+          raw: result.raw,
+        })
       } catch (err) {
-        if (isCircleLoginExpired(err)) {
+        const serviceError = err as Error & { status?: number; code?: string }
+        if (serviceError.status === 409 && serviceError.code === 'circle_session_expired') {
           return res.status(409).json({
             ok: false,
             code: 'circle_session_expired',
-            error: 'Circle Agent Wallet is connected, but the secure spending session expired. Reconnect the wallet on the agent dashboard, then retry /lp x402.',
+            error: serviceError.message,
           })
         }
+        if (serviceError.status === 404) return res.status(404).json({ ok: false, error: serviceError.message })
         throw err
       }
-      const parsedResponse = extractJsonFromCliOutput(output) as X402ServiceResponse | undefined
-      const proof = buildX402Proof({
-        response: parsedResponse,
-        buyerAgent: agentSlug,
-        sellerAgent: sellerAgentSlug,
-        buyerWallet: record.walletAddress,
-        serviceUrl,
-        maxAmount: String(maxAmount),
-        circleOutput: output,
-      })
-      await appendAgentActivity({
-        agentSlug,
-        type: 'x402_spent',
-        title: 'Bought LP Scout API',
-        amount: String(maxAmount),
-        asset: 'USDC',
-        direction: 'out',
-        network: 'Circle Gateway x402',
-        wallet: record.walletAddress,
-        serviceUrl,
-        detail: 'Agent paid a machine-to-machine service',
-        proof,
-      })
-      await appendAgentActivity({
-        agentSlug,
-        type: 'scout_returned',
-        title: 'Live Polymarket scout returned',
-        direction: 'result',
-        network: 'Polymarket CLOB',
-        wallet: record.walletAddress,
-        serviceUrl,
-        detail: 'API returned ranked LP opportunities',
-      })
-      if (sellerAgentSlug && sellerAgentSlug !== agentSlug) {
-        await appendAgentActivity({
-          agentSlug: sellerAgentSlug,
-          type: 'x402_sold',
-          title: 'Sold LP Scout API',
-          amount: String(maxAmount),
-          asset: 'USDC',
-          direction: 'in',
-          network: 'Circle Gateway x402',
-          wallet: parsedResponse?.receipt?.seller ?? '',
-          serviceUrl,
-          detail: `${agentSlug} bought live Polymarket scout data`,
-          proof,
-        })
-      }
-
-      return res.json({
-        ok: true,
-        agentSlug,
-        walletAddress: record.walletAddress,
-        serviceUrl,
-        maxAmount: String(maxAmount),
-        response: parsedResponse,
-        raw: output.slice(0, 3000),
-      })
     }
 
     return res.status(400).json({ ok: false, error: 'Unknown action.' })
