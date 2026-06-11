@@ -65,6 +65,18 @@ type AgentActivity = {
     summary?: string
     signals?: string[]
     highlights?: string[]
+    opportunities?: Array<{
+      title?: string
+      marketUrl?: string
+      bestBid?: number
+      bestAsk?: number
+      liveSpread?: number
+      depthAtTwoCents?: number
+      suggestedYesBid?: number
+      suggestedNoBid?: number
+      lpExecutionRisk?: string
+      executionPlan?: string[]
+    }>
     nextAction?: string
     source?: string
   }
@@ -129,6 +141,18 @@ type LpScoutServiceResponse = {
     summary?: string
     signals?: string[]
     highlights?: string[]
+    opportunities?: Array<{
+      title?: string
+      marketUrl?: string
+      bestBid?: number
+      bestAsk?: number
+      liveSpread?: number
+      depthAtTwoCents?: number
+      suggestedYesBid?: number
+      suggestedNoBid?: number
+      lpExecutionRisk?: string
+      executionPlan?: string[]
+    }>
     nextAction?: string
     source?: string
   }
@@ -1037,7 +1061,10 @@ export default function AgentDemo() {
   const latestX402Spend = activity.find(item => item.type === 'x402_spent' && item.proof?.proofHash)
   const latestScoutOutput = lpScoutResult?.response?.scout ?? latestScoutActivity?.result
   const latestScoutSignals = latestScoutOutput?.signals ?? latestScoutOutput?.highlights ?? []
+  const latestPrimaryOpportunity = latestScoutOutput?.opportunities?.[0]
   const lpScoutHasResult = Boolean(latestScoutOutput?.summary || latestScoutSignals.length)
+  const scoutPrice = (value: number | undefined) => typeof value === 'number' && Number.isFinite(value) ? value.toFixed(3) : 'n/a'
+  const scoutCents = (value: number | undefined) => typeof value === 'number' && Number.isFinite(value) ? `${(value * 100).toFixed(1)}c` : 'n/a'
   const selectedAgentNetworkLabel = AGENT_TREASURY_NETWORKS.find(network => network.key === agentNetwork)?.label ?? CHAIN_META[agentNetwork].label
   const treasuryBalanceNumber = treasuryBalance !== null ? Number(treasuryBalance) : null
   const x402AmountNumber = Number(x402Amount)
@@ -1359,6 +1386,40 @@ export default function AgentDemo() {
                           ))}
                         </div>
                       ) : null}
+                      {latestPrimaryOpportunity && (
+                        <div className="mt-2 rounded-xl border border-gray-100 bg-gray-50/80 p-2.5 dark:border-white/10 dark:bg-black/10">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="text-[11px] font-semibold text-gray-900 dark:text-white">{latestPrimaryOpportunity.title ?? 'Primary market'}</p>
+                              <p className="mt-1 text-[10px] text-gray-500 dark:text-gray-400">
+                                Bid {scoutPrice(latestPrimaryOpportunity.bestBid)} · Ask {scoutPrice(latestPrimaryOpportunity.bestAsk)} · Spread {scoutCents(latestPrimaryOpportunity.liveSpread)}
+                              </p>
+                            </div>
+                            {latestPrimaryOpportunity.marketUrl && (
+                              <a
+                                href={latestPrimaryOpportunity.marketUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="shrink-0 text-[10px] font-semibold text-blue-600 hover:text-blue-800 dark:text-blue-300"
+                              >
+                                Market
+                              </a>
+                            )}
+                          </div>
+                          <div className="mt-2 grid grid-cols-3 gap-1.5 text-center text-[10px]">
+                            <span className="rounded-lg bg-white px-2 py-1 text-gray-600 dark:bg-white/[0.06] dark:text-gray-300">YES {scoutPrice(latestPrimaryOpportunity.suggestedYesBid)}</span>
+                            <span className="rounded-lg bg-white px-2 py-1 text-gray-600 dark:bg-white/[0.06] dark:text-gray-300">NO {scoutPrice(latestPrimaryOpportunity.suggestedNoBid)}</span>
+                            <span className="rounded-lg bg-white px-2 py-1 text-gray-600 dark:bg-white/[0.06] dark:text-gray-300">Depth {latestPrimaryOpportunity.depthAtTwoCents ?? 'n/a'}</span>
+                          </div>
+                          {latestPrimaryOpportunity.executionPlan?.length ? (
+                            <div className="mt-2 space-y-1">
+                              {latestPrimaryOpportunity.executionPlan.slice(0, 4).map((step, index) => (
+                                <p key={`${step}-${index}`} className="text-[10px] leading-relaxed text-gray-500 dark:text-gray-400">{index + 1}. {step}</p>
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
+                      )}
                       {latestScoutOutput?.nextAction && (
                         <p className="mt-2 text-[11px] font-medium text-gray-500 dark:text-gray-400">{latestScoutOutput.nextAction}</p>
                       )}

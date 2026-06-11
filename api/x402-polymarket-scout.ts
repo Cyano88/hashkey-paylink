@@ -39,6 +39,17 @@ type PolymarketBookSummary = {
   bestAsk?: number
   midpoint?: number
   spread?: number
+  bidDepth?: number
+  askDepth?: number
+  depthAtTwoCents?: number
+}
+
+type ScoutMode = 'best' | 'theme' | 'market'
+
+type ScoutOptions = {
+  mode: ScoutMode
+  context?: string
+  budget?: string
 }
 
 type PolymarketLpOpportunity = {
@@ -56,9 +67,14 @@ type PolymarketLpOpportunity = {
   bestAsk?: number
   midpoint?: number
   spread?: number
+  bidDepth?: number
+  askDepth?: number
+  depthAtTwoCents?: number
   suggestedYesBid?: number
   suggestedNoBid?: number
   eligible?: boolean
+  sourceUrl?: string
+  executionPlan?: string[]
   lpExecutionRisk: 'low' | 'medium' | 'high'
   outcomeRisk: 'medium' | 'high'
   score: number
@@ -127,6 +143,30 @@ function readString(record: Record<string, unknown>, keys: string[]) {
   return undefined
 }
 
+function readStringArray(record: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = record[key]
+    if (Array.isArray(value)) {
+      return value
+        .map(item => typeof item === 'string' ? item.trim() : '')
+        .filter(Boolean)
+    }
+    if (typeof value === 'string' && value.trim()) {
+      try {
+        const parsed = JSON.parse(value) as unknown
+        if (Array.isArray(parsed)) {
+          return parsed
+            .map(item => typeof item === 'string' ? item.trim() : '')
+            .filter(Boolean)
+        }
+      } catch {
+        return value.split(',').map(item => item.trim()).filter(Boolean)
+      }
+    }
+  }
+  return []
+}
+
 function readNumber(record: Record<string, unknown>, keys: string[]) {
   for (const key of keys) {
     const value = record[key]
@@ -159,6 +199,29 @@ function normalizeSpread(value: number | undefined) {
 
 function clampPrice(value: number) {
   return Math.min(0.99, Math.max(0.01, value))
+}
+
+function cleanContext(value: unknown) {
+  return String(value ?? '').trim().replace(/\s+/g, ' ').slice(0, 180)
+}
+
+function normalizeScoutMode(value: unknown): ScoutMode {
+  const mode = String(value ?? '').trim().toLowerCase()
+  if (mode === 'theme') return 'theme'
+  if (mode === 'market') return 'market'
+  return 'best'
+}
+
+function parseMarketSlug(value: string | undefined) {
+  if (!value) return ''
+  const clean = value.trim()
+  try {
+    const url = new URL(clean)
+    const parts = url.pathname.split('/').filter(Boolean)
+    return parts.at(-1)?.trim() ?? ''
+  } catch {
+    return clean.replace(/^\/+|\/+$/g, '')
+  }
 }
 
 function daysUntil(rawDate: string | undefined) {
@@ -195,6 +258,44 @@ async function fetchPolymarketRewardMarkets(query?: string) {
   return []
 }
 
+async function fetchGammaMarkets(query?: string) {
+  const params = new URLSearchParams({
+    active: 'true',
+    closed: 'false',
+    limit: '40',
+  })
+  if (query) params.set('search', query)
+  const data = await fetchPolymarketJson(`https://gamma-api.polymarket.com/markets?${params.toString()}`)
+  const record = asRecord(data)
+  if (Array.isArray(data)) return data.map(asRecord).filter((item): item is PolymarketRewardMarket => Boolean(item))
+  if (record) {
+    for (const key of ['data', 'markets', 'results']) {
+      const value = record[key]
+      if (Array.isArray(value)) return value.map(asRecord).filter((item): item is PolymarketRewardMarket => Boolean(item))
+    }
+  }
+  return []
+}
+
+async function fetchGammaMarketBySlug(slug: string) {
+  if (!slug) return undefined
+  const urls = [
+    `https://gamma-api.polymarket.com/markets?slug=${encodeURIComponent(slug)}`,
+    `https://gamma-api.polymarket.com/events?slug=${encodeURIComponent(slug)}`,
+  ]
+  for (const url of urls) {
+    const data = await fetchPolymarketJson(url)
+    const items = Array.isArray(data)
+      ? data.map(asRecord).filter((item): item is PolymarketRewardMarket => Boolean(item))
+      : extractRewardMarkets(data)
+    if (items.length) {
+      const direct = items.find(item => readString(item, ['slug', 'market_slug', 'event_slug']) === slug)
+      return direct ?? items[0]
+    }
+  }
+  return undefined
+}
+
 function extractPolymarketTokenIds(market: PolymarketRewardMarket) {
   const ids = new Set<string>()
   for (const key of ['token_id', 'tokenId', 'asset_id', 'assetId', 'clobTokenId']) {
@@ -217,6 +318,10 @@ function extractPolymarketTokenIds(market: PolymarketRewardMarket) {
     }
   }
 
+  for (const id of readStringArray(market, ['clobTokenIds', 'clob_token_ids', 'tokenIds', 'token_ids'])) {
+    if (id) ids.add(id)
+  }
+
   return [...ids]
 }
 
@@ -228,13 +333,22 @@ function readBookPrice(level: PolymarketBookLevel) {
 async function fetchPolymarketBook(tokenId: string): Promise<PolymarketBookSummary> {
   const data = await fetchPolymarketJson(`https://clob.polymarket.com/book?token_id=${encodeURIComponent(tokenId)}`) as PolymarketBookResponse | null
   if (!data) return {}
-  const bidPrices = (data.bids ?? []).map(readBookPrice).filter((price): price is number => typeof price === 'number')
-  const askPrices = (data.asks ?? []).map(readBookPrice).filter((price): price is number => typeof price === 'number')
+  const bidLevels = (data.bids ?? []).map(level => ({ price: readBookPrice(level), size: readNumber(level as Record<string, unknown>, ['size']) }))
+  const askLevels = (data.asks ?? []).map(level => ({ price: readBookPrice(level), size: readNumber(level as Record<string, unknown>, ['size']) }))
+  const bidPrices = bidLevels.map(level => level.price).filter((price): price is number => typeof price === 'number')
+  const askPrices = askLevels.map(level => level.price).filter((price): price is number => typeof price === 'number')
   const bestBid = bidPrices.length ? Math.max(...bidPrices) : undefined
   const bestAsk = askPrices.length ? Math.min(...askPrices) : undefined
   const spread = typeof bestBid === 'number' && typeof bestAsk === 'number' ? Math.max(0, bestAsk - bestBid) : undefined
   const midpoint = typeof bestBid === 'number' && typeof bestAsk === 'number' ? (bestBid + bestAsk) / 2 : bestBid ?? bestAsk
-  return { bestBid, bestAsk, midpoint, spread }
+  const bidDepth = bidLevels.reduce((sum, level) => sum + (level.size ?? 0), 0)
+  const askDepth = askLevels.reduce((sum, level) => sum + (level.size ?? 0), 0)
+  const depthAtTwoCents =
+    typeof bestBid === 'number' || typeof bestAsk === 'number'
+      ? bidLevels.reduce((sum, level) => sum + (typeof level.price === 'number' && typeof bestBid === 'number' && bestBid - level.price <= 0.02 ? level.size ?? 0 : 0), 0)
+        + askLevels.reduce((sum, level) => sum + (typeof level.price === 'number' && typeof bestAsk === 'number' && level.price - bestAsk <= 0.02 ? level.size ?? 0 : 0), 0)
+      : undefined
+  return { bestBid, bestAsk, midpoint, spread, bidDepth, askDepth, depthAtTwoCents }
 }
 
 function baseLpOpportunity(market: PolymarketRewardMarket): PolymarketLpOpportunity {
@@ -258,6 +372,7 @@ function baseLpOpportunity(market: PolymarketRewardMarket): PolymarketLpOpportun
   const liquidity = readNumber(market, ['liquidity', 'volume_24hr', 'volume24hr', 'volume', 'oneDayVolume'])
   const endDate = readString(market, ['end_date', 'endDate', 'resolution_date', 'resolutionDate', 'closed_time'])
   const slug = readString(market, ['slug', 'market_slug', 'event_slug'])
+  const marketUrl = readString(market, ['marketUrl', 'url']) ?? (slug ? `https://polymarket.com/market/${slug}` : undefined)
 
   return {
     title,
@@ -273,8 +388,29 @@ function baseLpOpportunity(market: PolymarketRewardMarket): PolymarketLpOpportun
     lpExecutionRisk: 'medium',
     outcomeRisk: 'high',
     score: 0,
-    marketUrl: slug ? `https://polymarket.com/market/${slug}` : undefined,
+    marketUrl,
+    sourceUrl: marketUrl,
   }
+}
+
+function buildExecutionPlan(opportunity: PolymarketLpOpportunity, budget?: string) {
+  const budgetText = budget ? `Use the stated budget cap (${budget}) and split into small maker quotes.` : 'Use a small maker test quote first; scale only after fills and spread stability.'
+  const spreadText = typeof opportunity.spread === 'number'
+    ? `Current live spread is ${(opportunity.spread * 100).toFixed(1)}c; quote inside the reward spread, not through the book.`
+    : 'Re-check the live order book before quoting; skip if bid/ask is unavailable.'
+  const depthText = typeof opportunity.depthAtTwoCents === 'number'
+    ? `Depth within 2c of top of book is about ${opportunity.depthAtTwoCents.toFixed(0)} shares; avoid sizing beyond visible depth.`
+    : 'Depth could not be confirmed; keep size conservative until the book refreshes.'
+  const priceText = typeof opportunity.suggestedYesBid === 'number'
+    ? `Indicative maker bid: YES around ${opportunity.suggestedYesBid.toFixed(3)} or NO around ${opportunity.suggestedNoBid?.toFixed(3) ?? 'n/a'}, then re-price after every fill.`
+    : 'Do not quote until midpoint and bid/ask are available.'
+  return [
+    budgetText,
+    spreadText,
+    depthText,
+    priceText,
+    'Cancel stale quotes before news, scheduled starts, or visible momentum against the position.',
+  ]
 }
 
 async function analyzePolymarketLpMarket(market: PolymarketRewardMarket): Promise<PolymarketLpOpportunity> {
@@ -323,58 +459,120 @@ function rounded(value: number | undefined, digits = 4) {
   return typeof value === 'number' && Number.isFinite(value) ? Number(value.toFixed(digits)) : undefined
 }
 
-export async function buildLiveScout() {
-  const markets = await fetchPolymarketRewardMarkets()
+function scoutModeTitle(mode: ScoutMode) {
+  if (mode === 'theme') return 'theme scout'
+  if (mode === 'market') return 'single market inspection'
+  return 'best reward markets'
+}
+
+async function loadScoutMarkets(options: ScoutOptions) {
+  if (options.mode === 'market') {
+    const slug = parseMarketSlug(options.context)
+    const exact = await fetchGammaMarketBySlug(slug)
+    return exact ? [exact] : []
+  }
+
+  if (options.mode === 'theme') {
+    const query = cleanContext(options.context)
+    const [rewardMarkets, gammaMarkets] = await Promise.all([
+      fetchPolymarketRewardMarkets(query),
+      fetchGammaMarkets(query),
+    ])
+    const seen = new Set<string>()
+    return [...rewardMarkets, ...gammaMarkets].filter(market => {
+      const key = readString(market, ['condition_id', 'conditionId', 'id', 'slug', 'market_slug']) ?? JSON.stringify(market).slice(0, 80)
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+  }
+
+  return fetchPolymarketRewardMarkets()
+}
+
+function formatOpportunitySignal(opportunity: ReturnType<typeof serializeOpportunity>, index: number, mode: ScoutMode) {
+  const depth = typeof opportunity.depthAtTwoCents === 'number' ? ` | depth2c ${opportunity.depthAtTwoCents}` : ''
+  const spread = typeof opportunity.liveSpread === 'number' ? `${(opportunity.liveSpread * 100).toFixed(1)}c` : 'n/a'
+  const reward = opportunity.dailyReward ?? 'n/a'
+  const prefix = mode === 'market' ? 'Market' : `${index + 1}.`
+  return `${prefix} ${opportunity.title.slice(0, 82)} | reward/day ${reward} USDC | spread ${spread}${depth} | risk ${opportunity.lpExecutionRisk}`
+}
+
+function serializeOpportunity(opportunity: PolymarketLpOpportunity, budget?: string) {
+  return {
+    title: opportunity.title,
+    marketUrl: opportunity.marketUrl,
+    daysToResolve: opportunity.daysToResolve,
+    dailyReward: rounded(opportunity.dailyReward, 2),
+    maxSpread: rounded(opportunity.maxSpread),
+    minSize: rounded(opportunity.minSize, 2),
+    liquidity: rounded(opportunity.liquidity, 2),
+    bestBid: rounded(opportunity.bestBid),
+    bestAsk: rounded(opportunity.bestAsk),
+    liveSpread: rounded(opportunity.spread),
+    bidDepth: rounded(opportunity.bidDepth, 2),
+    askDepth: rounded(opportunity.askDepth, 2),
+    depthAtTwoCents: rounded(opportunity.depthAtTwoCents, 2),
+    suggestedYesBid: rounded(opportunity.suggestedYesBid),
+    suggestedNoBid: rounded(opportunity.suggestedNoBid),
+    eligible: opportunity.eligible,
+    lpExecutionRisk: opportunity.lpExecutionRisk,
+    outcomeRisk: opportunity.outcomeRisk,
+    score: rounded(opportunity.score, 2),
+    executionPlan: buildExecutionPlan(opportunity, budget),
+  }
+}
+
+export async function buildLiveScout(options: Partial<ScoutOptions> = {}) {
+  const mode = normalizeScoutMode(options.mode)
+  const context = cleanContext(options.context)
+  const budget = cleanContext(options.budget)
+  const markets = await loadScoutMarkets({ mode, context, budget })
   if (!markets.length) {
     return {
-      summary: 'Live Polymarket reward markets are unavailable right now.',
-      signals: ['Retry shortly, then compare active reward markets with live order books before quoting.'],
+      summary: `Live Polymarket ${scoutModeTitle(mode)} data is unavailable right now.`,
+      signals: ['Retry shortly, then compare active Gamma market data with live CLOB order books before quoting.'],
       opportunities: [],
-      nextAction: 'Retry /lp x402 after the Polymarket rewards API is available.',
+      nextAction: 'Retry LP Scout after Polymarket public APIs are available.',
       disclaimer: 'Educational product signal only. Not financial advice.',
-      source: 'Polymarket CLOB rewards and order book APIs',
+      source: 'Polymarket Gamma and CLOB public APIs',
+      request: { mode, context, budget },
     }
   }
 
-  const candidates = markets.slice(0, 12)
+  const candidates = markets.slice(0, mode === 'market' ? 4 : 12)
   const opportunities = (await Promise.all(candidates.map(analyzePolymarketLpMarket)))
     .sort((a, b) => b.score - a.score)
-    .slice(0, 3)
-    .map(opportunity => ({
-      title: opportunity.title,
-      marketUrl: opportunity.marketUrl,
-      daysToResolve: opportunity.daysToResolve,
-      dailyReward: rounded(opportunity.dailyReward, 2),
-      maxSpread: rounded(opportunity.maxSpread),
-      minSize: rounded(opportunity.minSize, 2),
-      liquidity: rounded(opportunity.liquidity, 2),
-      bestBid: rounded(opportunity.bestBid),
-      bestAsk: rounded(opportunity.bestAsk),
-      liveSpread: rounded(opportunity.spread),
-      suggestedYesBid: rounded(opportunity.suggestedYesBid),
-      suggestedNoBid: rounded(opportunity.suggestedNoBid),
-      eligible: opportunity.eligible,
-      lpExecutionRisk: opportunity.lpExecutionRisk,
-      outcomeRisk: opportunity.outcomeRisk,
-      score: rounded(opportunity.score, 2),
-    }))
+    .slice(0, mode === 'market' ? 1 : 3)
+    .map(opportunity => serializeOpportunity(opportunity, budget))
+
+  const themeText = mode === 'theme' && context ? ` for "${context}"` : ''
+  const marketText = mode === 'market' && context ? ` for "${context}"` : ''
+  const summary = mode === 'market'
+    ? `Live LP Scout inspected one Polymarket market${marketText} with current CLOB book, spread, depth, and maker-order risk.`
+    : mode === 'theme'
+    ? `Live LP Scout ranked ${opportunities.length} active Polymarket opportunities${themeText} by rewards, book spread, depth, liquidity, and volatility.`
+    : `Live LP Scout ranked ${opportunities.length} active Polymarket reward markets by rewards, book spread, depth, liquidity, and volatility.`
 
   return {
-    summary: `Live LP Scout ranked ${opportunities.length} active Polymarket reward markets by rewards, book spread, duration, liquidity, and volatility.`,
-    signals: opportunities.map((opportunity, index) => (
-      `${index + 1}. ${opportunity.title.slice(0, 82)} | reward/day ${opportunity.dailyReward ?? 'n/a'} USDC | spread ${typeof opportunity.liveSpread === 'number' ? `${(opportunity.liveSpread * 100).toFixed(1)}c` : 'n/a'} | risk ${opportunity.lpExecutionRisk}`
-    )),
+    summary,
+    signals: opportunities.map((opportunity, index) => formatOpportunitySignal(opportunity, index, mode)),
     opportunities,
-    nextAction: 'Before quoting, have the agent re-check the market page and order book depth, then place maker orders only inside the reward spread.',
+    nextAction: 'Before quoting, re-check the market page, CLOB order book, and reward constraints. Place maker orders only inside the reward spread and cancel stale quotes quickly.',
     disclaimer: 'Educational product signal only. Not financial advice.',
-    source: 'Polymarket CLOB rewards and order book APIs',
+    source: 'Polymarket Gamma markets/events plus CLOB rewards and order book APIs',
+    request: { mode, context, budget },
   }
 }
 
 async function scoutResponse(req: PaidRequest) {
   const payment = req.payment
   const amount = payment?.amount ? `${formatUnits(BigInt(payment.amount), 6)} USDC` : PRICE
-  const scout = await buildLiveScout()
+  const scout = await buildLiveScout({
+    mode: normalizeScoutMode(req.query.scoutMode),
+    context: cleanContext(req.query.context),
+    budget: cleanContext(req.query.budget),
+  })
   return {
     ok: true,
     service: 'Hash PayLink x402 Polymarket LP Scout',

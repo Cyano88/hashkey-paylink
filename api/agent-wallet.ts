@@ -166,6 +166,16 @@ async function payX402Service(params: {
   }
 }
 
+function withServiceParams(serviceUrl: string, params: Record<string, string | undefined>) {
+  const base = process.env.HASH_PAYLINK_BASE_URL ?? 'https://hashpaylink.com'
+  const url = new URL(serviceUrl, base)
+  for (const [key, value] of Object.entries(params)) {
+    const clean = String(value ?? '').trim()
+    if (clean) url.searchParams.set(key, clean.slice(0, 240))
+  }
+  return url.toString()
+}
+
 function normalizeEmail(value: unknown) {
   const email = String(value ?? '').trim().toLowerCase()
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : ''
@@ -812,12 +822,17 @@ export default async function handler(req: Request, res: Response) {
       if (action === 'pay-service' && !authorized) return res.status(401).json({ ok: false, error: 'Unauthorized' })
 
       const serviceUrl = action === 'pay-lp-scout'
-        ? DEFAULT_SCOUT_URL
+        ? withServiceParams(DEFAULT_SCOUT_URL, {
+            scoutMode: String(req.body?.scoutMode ?? 'best'),
+            context: String(req.body?.context ?? ''),
+            budget: String(req.body?.budget ?? ''),
+          })
         : String(req.body?.serviceUrl ?? '').trim()
+      const allowlistedServiceUrl = action === 'pay-lp-scout' ? DEFAULT_SCOUT_URL : serviceUrl
       const sellerAgentSlug = normalizeSlug(req.body?.sellerAgentSlug) || DEFAULT_AGENT_SLUG
       const requested = cleanAmount(req.body?.maxAmount)
       const maxAmount = Math.min(requested ?? MAX_SERVICE_AMOUNT, MAX_SERVICE_AMOUNT)
-      if (!ALLOWED_SERVICE_URLS.has(serviceUrl)) return res.status(403).json({ ok: false, error: 'Service URL is not allowlisted.' })
+      if (!ALLOWED_SERVICE_URLS.has(allowlistedServiceUrl)) return res.status(403).json({ ok: false, error: 'Service URL is not allowlisted.' })
       if (!maxAmount || maxAmount <= 0) return res.status(400).json({ ok: false, error: 'Invalid max amount.' })
 
       try {
