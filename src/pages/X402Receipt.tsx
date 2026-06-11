@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
-import { useParams } from 'react-router-dom'
-import { CheckCircle2, Copy, Loader2, ShieldCheck, XCircle } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
+import { ArrowLeft, CheckCircle2, Copy, Download, Loader2, ShieldCheck, XCircle } from 'lucide-react'
 
 type ReceiptResponse = {
   ok?: boolean
@@ -34,25 +34,24 @@ type ReceiptResponse = {
 
 export default function X402Receipt() {
   const { activityId = '' } = useParams()
+  const navigate = useNavigate()
   const [data, setData] = useState<ReceiptResponse | null>(null)
   const [busy, setBusy] = useState(true)
-  const [verifying, setVerifying] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [circleNotice, setCircleNotice] = useState(false)
 
-  async function load(verify = false) {
-    if (verify) setVerifying(true)
-    else setBusy(true)
+  async function load() {
+    setBusy(true)
     try {
-      const res = await fetch(`/api/x402/receipt?id=${encodeURIComponent(activityId)}${verify ? '&verify=1' : ''}`)
+      const res = await fetch(`/api/x402/receipt?id=${encodeURIComponent(activityId)}`)
       setData(await res.json())
     } finally {
       setBusy(false)
-      setVerifying(false)
     }
   }
 
   useEffect(() => {
-    void load(false)
+    void load()
   }, [activityId])
 
   const receiptJson = JSON.stringify(data?.receipt ?? {}, null, 2)
@@ -61,6 +60,28 @@ export default function X402Receipt() {
   const legal = data?.receipt?.legal ?? {}
   const governance = data?.receipt?.governance ?? {}
   const circleOk = data?.circle?.ok
+  const receiptFile = useMemo(() => {
+    const receipt = data?.receipt
+    if (!receipt) return ''
+    return [
+      'Hash PayLink x402 Receipt',
+      '',
+      `Title: ${receipt.title ?? 'Receipt'}`,
+      `Amount: ${receipt.amount ?? 'x402 payment'}`,
+      `Service: ${String(proof.service ?? 'Hash PayLink service')}`,
+      `Buyer: ${String(proof.buyerAgent ?? proof.payer ?? '')}`,
+      `Seller: ${String(proof.sellerAgent ?? proof.seller ?? '')}`,
+      `Counterparty: ${String(legal.entityName ?? 'Hash PayLink Agent')}`,
+      `Network: ${String(proof.network ?? 'Circle Gateway')}`,
+      `Transaction reference: ${String(proof.transaction ?? '')}`,
+      `Governance version: ${String(governance.governanceVersion ?? 'unversioned')}`,
+      `Proof: ${String(proof.proofHash ?? '')}`,
+      og?.rootHash ? `0G root: ${og.rootHash}` : '',
+      og?.ogTxHash ? `0G tx: ${og.ogTxHash}` : '',
+      '',
+      'This receipt records an agent-to-agent x402 service payment. Hash PayLink does not place, cancel, or manage Polymarket orders.',
+    ].filter(Boolean).join('\n')
+  }, [data?.receipt, governance.governanceVersion, legal.entityName, og?.ogTxHash, og?.rootHash, proof])
 
   async function copyReceipt() {
     await navigator.clipboard.writeText(receiptJson)
@@ -68,15 +89,41 @@ export default function X402Receipt() {
     window.setTimeout(() => setCopied(false), 1400)
   }
 
+  function showCircleComingSoon() {
+    setCircleNotice(true)
+    window.setTimeout(() => setCircleNotice(false), 5000)
+  }
+
+  function downloadReceipt() {
+    if (!receiptFile) return
+    const blob = new Blob([receiptFile], { type: 'text/plain;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `hashpaylink-x402-receipt-${activityId || 'receipt'}.txt`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
+  }
+
   return (
-    <main className="mx-auto flex min-h-[calc(100vh-120px)] w-full max-w-2xl items-center px-4 py-10">
+    <main className="mx-auto flex min-h-[calc(100vh-120px)] w-full max-w-2xl flex-col px-4 py-6 sm:py-10">
+      <button
+        type="button"
+        onClick={() => navigate(-1)}
+        className="mb-3 inline-flex w-fit items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200"
+      >
+        <ArrowLeft className="h-3.5 w-3.5" />
+        Back
+      </button>
       <section className="w-full rounded-2xl border border-gray-100 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-[#1c1c20] sm:p-6">
         <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-blue-100 bg-blue-50 dark:border-blue-900/30 dark:bg-blue-900/20">
-            <ShieldCheck className="h-5 w-5 text-blue-600" />
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-gray-100 bg-gray-950 p-2 dark:border-white/10 dark:bg-white">
+            <img src="/hash-logo-transparent.png" alt="" className="h-full w-full object-contain invert dark:invert-0" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Circle Gateway x402 Receipt</p>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Hash PayLink receipt</p>
             <h1 className="mt-1 truncate text-lg font-semibold tracking-tight text-gray-900 dark:text-white">
               {data?.receipt?.title ?? 'Receipt'}
             </h1>
@@ -84,6 +131,16 @@ export default function X402Receipt() {
               {data?.receipt?.amount ?? 'x402 payment'} · {String(proof.service ?? 'Hash PayLink service')}
             </p>
           </div>
+          {data?.ok && data.receipt && (
+            <button
+              type="button"
+              onClick={downloadReceipt}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-[11px] font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200"
+            >
+              <Download className="h-3.5 w-3.5" />
+              Download
+            </button>
+          )}
         </div>
 
         {busy ? (
@@ -128,14 +185,19 @@ export default function X402Receipt() {
               </div>
             )}
 
+            {circleNotice && (
+              <div className="mt-3 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-700 dark:border-white/10 dark:bg-white/[0.05] dark:text-gray-200">
+                Circle verification is coming soon.
+              </div>
+            )}
+
             <div className="mt-5 grid gap-2 sm:grid-cols-2">
               <button
                 type="button"
-                onClick={() => load(true)}
-                disabled={verifying}
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-gray-900 px-4 py-3 text-sm font-semibold text-white transition-all hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-950"
+                onClick={showCircleComingSoon}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-gray-900 px-4 py-3 text-sm font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950"
               >
-                {verifying ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                <ShieldCheck className="h-4 w-4" />
                 Verify with Circle
               </button>
               <button

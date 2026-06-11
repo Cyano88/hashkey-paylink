@@ -1523,9 +1523,9 @@ export default function AgentDemo() {
                               href={latestPrimaryOpportunity.marketUrl}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-[11px] font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200"
+                              className="mt-2 inline-flex w-fit items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[10px] font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200"
                             >
-                              <ExternalLink className="h-3.5 w-3.5" />
+                              <ExternalLink className="h-3 w-3" />
                               Open market
                             </a>
                           )}
@@ -1548,7 +1548,7 @@ export default function AgentDemo() {
                         {latestX402Spend?.proof?.proofHash && (
                           <Link
                             to={`/receipt/${encodeURIComponent(latestX402Spend.id)}`}
-                            className="inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200"
+                            className="inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-[10px] text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200"
                           >
                             View x402 receipt
                           </Link>
@@ -1558,7 +1558,7 @@ export default function AgentDemo() {
                             href={latestX402Spend.og.ogExplorer}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200"
+                            className="inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-[10px] text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200"
                           >
                             0G proof
                           </a>
@@ -1629,7 +1629,7 @@ export default function AgentDemo() {
                       {lpScoutBusy ? (
                         <><Loader2 className="h-4 w-4 animate-spin" /> Working</>
                       ) : agentWalletAccessConnected && lpScoutHasResult ? (
-                        <><RefreshCw className="h-4 w-4" /> Refresh LP Alpha · {pendingScoutMaxAmount || '0.01'} USDC</>
+                        <><RefreshCw className="h-4 w-4" /> Refresh LP Alpha</>
                       ) : agentWalletAccessConnected ? (
                         <><Send className="h-4 w-4" /> Get LP Alpha</>
                       ) : (
@@ -1638,7 +1638,7 @@ export default function AgentDemo() {
                     </button>
                     {agentWalletAccessConnected && lpScoutHasResult && (
                       <p className="text-center text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
-                        Runs a fresh paid scout with live Polymarket data.
+                        Fresh paid scout with live Polymarket data - {pendingScoutMaxAmount || '0.01'} USDC.
                       </p>
                     )}
                     {!agentWalletAccessConnected && (
@@ -2688,5 +2688,3 @@ export default function AgentDemo() {
     </div>
   )
 }
-
-
