@@ -54,6 +54,7 @@ export type AgentActivity = {
   txHash?: string
   serviceUrl?: string
   detail?: string
+  result?: Record<string, unknown>
   proof?: AgentActivityProof
   og?: AgentActivityOgProof
   createdAt: number

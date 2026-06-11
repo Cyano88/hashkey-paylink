@@ -66,6 +66,7 @@ type X402ServiceResponse = {
     seller?: string
     generatedAt?: string
   }
+  scout?: Record<string, unknown>
 }
 
 async function payX402Service(params: {
@@ -137,7 +138,10 @@ async function payX402Service(params: {
     network: 'Polymarket CLOB',
     wallet: record.walletAddress,
     serviceUrl: params.serviceUrl,
-    detail: 'API returned ranked LP opportunities',
+    detail: typeof parsedResponse?.scout?.summary === 'string'
+      ? parsedResponse.scout.summary
+      : 'API returned ranked LP opportunities',
+    result: parsedResponse?.scout,
   })
   if (params.sellerAgentSlug && params.sellerAgentSlug !== params.agentSlug) {
     await appendAgentActivity({

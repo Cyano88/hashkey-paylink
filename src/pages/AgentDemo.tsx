@@ -61,6 +61,13 @@ type AgentActivity = {
   wallet?: string
   txHash?: string
   detail?: string
+  result?: {
+    summary?: string
+    signals?: string[]
+    highlights?: string[]
+    nextAction?: string
+    source?: string
+  }
   proof?: {
     kind: 'circle_gateway_x402'
     provider?: string
@@ -120,6 +127,7 @@ type LpScoutServiceResponse = {
   service?: string
   scout?: {
     summary?: string
+    signals?: string[]
     highlights?: string[]
     nextAction?: string
     source?: string
@@ -1022,6 +1030,11 @@ export default function AgentDemo() {
     setCopiedProofId(item.id)
     window.setTimeout(() => setCopiedProofId(''), 1400)
   }
+  const latestScoutActivity = activity.find(item => item.type === 'scout_returned')
+  const latestX402Spend = activity.find(item => item.type === 'x402_spent' && item.proof?.proofHash)
+  const latestScoutOutput = lpScoutResult?.response?.scout ?? latestScoutActivity?.result
+  const latestScoutSignals = latestScoutOutput?.signals ?? latestScoutOutput?.highlights ?? []
+  const lpScoutHasResult = Boolean(latestScoutOutput?.summary || latestScoutSignals.length)
   const selectedAgentNetworkLabel = AGENT_TREASURY_NETWORKS.find(network => network.key === agentNetwork)?.label ?? CHAIN_META[agentNetwork].label
   const treasuryBalanceNumber = treasuryBalance !== null ? Number(treasuryBalance) : null
   const x402AmountNumber = Number(x402Amount)
@@ -1262,42 +1275,138 @@ export default function AgentDemo() {
               </p>
             )}
             {hasPendingLpScoutRequest && (
-              <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50 px-3 py-3 dark:border-blue-400/20 dark:bg-blue-400/10">
+              <div className="mt-3 space-y-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 dark:border-white/10 dark:bg-white/[0.05]">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-blue-500 dark:text-blue-200">LP Scout x402 request</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">LP Scout</p>
                     <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{scoutModeLabel(pendingScoutMode)}</p>
-                    <p className="mt-1 text-xs leading-relaxed text-blue-700 dark:text-blue-100">
-                      This agent pays Hash PayLink Agent through x402, then receives live Polymarket LP research.
+                    <p className="mt-0.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                      Agent-to-agent x402 payment to Hash PayLink Agent.
                     </p>
                   </div>
-                  <span className="shrink-0 rounded-full bg-white px-2 py-1 text-[10px] font-semibold text-blue-600 shadow-sm dark:bg-white/10 dark:text-blue-100">
+                  <span className="shrink-0 rounded-full bg-white px-2 py-1 text-[10px] font-semibold text-gray-500 shadow-sm dark:bg-white/[0.08] dark:text-gray-300">
                     Max {pendingScoutMaxAmount || '0.01'} USDC
                   </span>
                 </div>
                 {(pendingScoutContext || pendingScoutBudget) && (
-                  <div className="mt-2 grid gap-1 rounded-lg bg-white/70 px-2.5 py-2 text-[11px] text-gray-600 dark:bg-black/10 dark:text-blue-100">
+                  <div className="grid gap-1 rounded-lg bg-white px-2.5 py-2 text-[11px] text-gray-500 dark:bg-white/[0.06] dark:text-gray-400">
                     {pendingScoutContext && <p className="truncate"><span className="font-semibold">Context:</span> {pendingScoutContext}</p>}
                     {pendingScoutBudget && <p className="truncate"><span className="font-semibold">Budget:</span> {pendingScoutBudget}</p>}
                   </div>
                 )}
-                {lpScoutResult?.response?.scout && (
-                  <div className="mt-3 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 dark:border-emerald-400/20 dark:bg-emerald-400/10">
-                    <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-200">Scout returned</p>
-                    <p className="mt-1 text-xs leading-relaxed text-emerald-700 dark:text-emerald-100">
-                      {lpScoutResult.response.scout.summary ?? 'LP Scout returned live Polymarket data.'}
-                    </p>
-                    {lpScoutResult.response.scout.highlights?.length ? (
-                      <div className="mt-2 space-y-1">
-                        {lpScoutResult.response.scout.highlights.slice(0, 3).map((item, index) => (
-                          <p key={`${item}-${index}`} className="text-[11px] leading-relaxed text-emerald-700 dark:text-emerald-100">{item}</p>
-                        ))}
-                      </div>
-                    ) : null}
+
+                {agentWalletAccessConnected && (
+                  <div className="flex items-center justify-between gap-3 rounded-lg border border-gray-100 bg-white px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">x402 balance</p>
+                      <p className="mt-0.5 text-sm font-semibold text-gray-900 dark:text-white" title={x402BalanceError || undefined}>
+                        {x402Balance !== null
+                          ? `${Number(x402Balance).toLocaleString(undefined, { maximumFractionDigits: 6 })} USDC`
+                          : x402BalanceError || x402BalanceChecked
+                          ? 'Unavailable'
+                          : 'Checking...'}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setX402BalanceError('')
+                        setX402ActivationSuccess('')
+                        setX402ModalOpen(open => !open)
+                      }}
+                      disabled={x402Busy || treasuryEmpty}
+                      className="shrink-0 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200"
+                    >
+                      Add x402
+                    </button>
                   </div>
                 )}
+
+                <div className="space-y-2">
+                  <div className="ml-auto max-w-[88%] rounded-2xl rounded-br-md bg-gray-900 px-3 py-2 text-xs leading-relaxed text-white dark:bg-white dark:text-gray-950">
+                    Tip Hash PayLink Agent for {scoutModeLabel(pendingScoutMode).toLowerCase()}.
+                  </div>
+                  <div className="max-w-[92%] rounded-2xl rounded-bl-md border border-gray-100 bg-white px-3 py-2 text-xs leading-relaxed text-gray-600 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300">
+                    {!agentWalletAccessConnected
+                      ? 'Connect this agent wallet to continue.'
+                      : lpScoutBusy
+                      ? 'Working... LP Alpha paid for. Pulling live Polymarket reward markets.'
+                      : lpScoutHasResult
+                      ? 'LP Alpha delivered.'
+                      : 'Ready. I will pay with x402 and return the LP Scout result here.'}
+                  </div>
+                  {lpScoutHasResult && (
+                    <div className="max-w-[96%] rounded-2xl rounded-bl-md border border-emerald-100 bg-white px-3 py-3 text-xs leading-relaxed text-gray-700 dark:border-emerald-400/20 dark:bg-white/[0.06] dark:text-gray-200">
+                      <p className="font-semibold text-gray-900 dark:text-white">{latestScoutOutput?.summary ?? 'LP Scout returned live Polymarket data.'}</p>
+                      {latestScoutSignals.length ? (
+                        <div className="mt-2 space-y-1.5">
+                          {latestScoutSignals.slice(0, 5).map((item, index) => (
+                            <p key={`${item}-${index}`} className="rounded-lg bg-gray-50 px-2 py-1.5 text-[11px] leading-relaxed text-gray-600 dark:bg-black/10 dark:text-gray-300">{item}</p>
+                          ))}
+                        </div>
+                      ) : null}
+                      {latestScoutOutput?.nextAction && (
+                        <p className="mt-2 text-[11px] font-medium text-gray-500 dark:text-gray-400">{latestScoutOutput.nextAction}</p>
+                      )}
+                      <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] font-semibold">
+                        {latestX402Spend?.proof?.proofHash && (
+                          <Link
+                            to={`/receipt/${encodeURIComponent(latestX402Spend.id)}`}
+                            className="text-blue-600 transition-colors hover:text-blue-800 dark:text-blue-300"
+                          >
+                            View x402 receipt
+                          </Link>
+                        )}
+                        {latestX402Spend?.og?.ogExplorer && (
+                          <a
+                            href={latestX402Spend.og.ogExplorer}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-purple-600 transition-colors hover:text-purple-800 dark:text-purple-300"
+                          >
+                            0G proof
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {x402ModalOpen && agentWalletAccessConnected && !x402ActivationSuccess && (
+                  <div className="rounded-lg border border-gray-100 bg-white p-3 dark:border-white/10 dark:bg-white/[0.04]">
+                    <p className="text-xs font-semibold text-gray-900 dark:text-white">Add x402 balance</p>
+                    <div className="mt-2 flex h-10 max-w-[160px] min-w-0 items-center overflow-hidden rounded-lg border border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-white/[0.06]">
+                      <input
+                        value={x402Amount}
+                        onChange={event => {
+                          setX402BalanceError('')
+                          setX402Amount(event.target.value.replace(/[^\d.]/g, ''))
+                        }}
+                        inputMode="decimal"
+                        className="min-w-0 flex-1 bg-transparent px-3 py-2 text-sm font-semibold text-gray-900 outline-none dark:text-white"
+                      />
+                      <span className="border-l border-gray-200 px-2.5 text-[11px] font-semibold text-gray-400 dark:border-white/10">USDC</span>
+                    </div>
+                    {(x402ValidationMessage || x402BalanceError) && (
+                      <p className="mt-2 text-xs font-medium text-amber-700 dark:text-amber-200">{x402ValidationMessage || x402BalanceError}</p>
+                    )}
+                    <button
+                      type="button"
+                      onClick={activateX402Balance}
+                      disabled={x402Busy || x402ActivationBlocked}
+                      className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gray-900 px-4 py-3 text-sm font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-50 dark:bg-white dark:text-gray-950"
+                    >
+                      {x402Busy ? <><span>Adding</span><PulsingDots /></> : 'Add balance'}
+                    </button>
+                  </div>
+                )}
+                {x402ActivationSuccess && (
+                  <p className="rounded-lg border border-emerald-100 bg-white px-3 py-2 text-xs font-medium text-emerald-700 dark:border-emerald-400/20 dark:bg-white/[0.04] dark:text-emerald-200">
+                    {x402ActivationSuccess}
+                  </p>
+                )}
                 {lpScoutError && (
-                  <p className="mt-2 rounded-lg border border-red-100 bg-white px-3 py-2 text-xs font-medium text-red-600 dark:border-red-400/20 dark:bg-black/10 dark:text-red-200">
+                  <p className="rounded-lg border border-red-100 bg-white px-3 py-2 text-xs font-medium text-red-600 dark:border-red-400/20 dark:bg-black/10 dark:text-red-200">
                     {lpScoutError}
                   </p>
                 )}
@@ -1305,12 +1414,12 @@ export default function AgentDemo() {
                   type="button"
                   onClick={runLpScoutRequest}
                   disabled={!agentWalletAccessConnected || lpScoutBusy || x402Refreshing}
-                  className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gray-900 px-4 py-3 text-sm font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-50 dark:bg-white dark:text-gray-950"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
                 >
-                  {lpScoutBusy ? <><Loader2 className="h-4 w-4 animate-spin" /> Running LP Scout</> : <><Zap className="h-4 w-4" /> Run LP Scout with x402</>}
+                  {lpScoutBusy ? <><Loader2 className="h-4 w-4 animate-spin" /> Working</> : <><Send className="h-4 w-4" /> Tip Hash PayLink Agent</>}
                 </button>
                 {!agentWalletAccessConnected && (
-                  <p className="mt-2 text-[11px] leading-relaxed text-blue-700 dark:text-blue-100">
+                  <p className="text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
                     Sign in to this agent wallet first so the secure Circle session can pay the x402 service.
                   </p>
                 )}
@@ -1547,7 +1656,7 @@ export default function AgentDemo() {
             </div>
           )}
 
-          {agentWalletAccessConnected && (
+          {agentWalletAccessConnected && !hasPendingLpScoutRequest && (
             <div className="mt-4 space-y-3">
               <div className="overflow-hidden rounded-lg border border-gray-100 bg-white dark:border-white/10 dark:bg-white/[0.04]">
                 <div className="flex items-center justify-between gap-3 px-3 py-3">
