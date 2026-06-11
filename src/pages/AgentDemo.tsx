@@ -1068,6 +1068,7 @@ export default function AgentDemo() {
   const agentWalletAccessConnected = Boolean(currentAgentWallet && agentWalletSessionConnected)
   const connectedWalletNeedsAccess = Boolean(currentAgentWallet && !agentWalletAccessConnected)
   const showAgentWalletAccessPanel = Boolean(!agentWalletAccessConnected && (!currentAgentWallet || showWalletAccessPanel))
+  const lpScoutAuthorizationOpen = Boolean(hasPendingLpScoutRequest && showAgentWalletAccessPanel && !agentWalletAccessConnected)
   const x402Refreshing = Boolean(agentWalletAccessConnected && !x402BalanceChecked)
   const balancesRefreshing = Boolean(agentWalletAccessConnected && (!treasuryBalanceChecked || x402Refreshing || activityBusy))
   const walletErrorMessage = walletError
@@ -1332,21 +1333,22 @@ export default function AgentDemo() {
                   </div>
                 )}
 
-                <div className="space-y-2">
-                  <div className="ml-auto max-w-[88%] break-words rounded-2xl rounded-br-md bg-gray-900 px-3 py-2 text-xs leading-relaxed text-white dark:bg-white dark:text-gray-950">
-                    {agentWalletAccessConnected
-                      ? `Tip Hash PayLink Agent for ${scoutModeLabel(pendingScoutMode).toLowerCase()}.`
-                      : `Authorize ${displayAgentProfile?.name ?? agentSlug ?? 'this agent'} for LP Scout.`}
-                  </div>
-                  <div className="max-w-[92%] break-words rounded-2xl rounded-bl-md border border-gray-100 bg-white px-3 py-2 text-xs leading-relaxed text-gray-600 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300">
-                    {!agentWalletAccessConnected
-                      ? 'One secure agent session is needed. Then x402 pays and the LP result returns here.'
-                      : lpScoutBusy
-                      ? 'Working... LP Alpha paid for. Pulling live Polymarket reward markets.'
-                      : lpScoutHasResult
-                      ? 'LP Alpha delivered.'
-                      : 'Ready. I will pay with x402 and return the LP Scout result here.'}
-                  </div>
+                {!lpScoutAuthorizationOpen && (
+                  <div className="space-y-2">
+                    <div className="ml-auto max-w-[88%] break-words rounded-2xl rounded-br-md bg-gray-900 px-3 py-2 text-xs leading-relaxed text-white dark:bg-white dark:text-gray-950">
+                      {agentWalletAccessConnected
+                        ? `Tip Hash PayLink Agent for ${scoutModeLabel(pendingScoutMode).toLowerCase()}.`
+                        : `Authorize ${displayAgentProfile?.name ?? agentSlug ?? 'this agent'} for LP Scout.`}
+                    </div>
+                    <div className="max-w-[92%] break-words rounded-2xl rounded-bl-md border border-gray-100 bg-white px-3 py-2 text-xs leading-relaxed text-gray-600 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300">
+                      {!agentWalletAccessConnected
+                        ? 'One secure agent session is needed. Then x402 pays and the LP result returns here.'
+                        : lpScoutBusy
+                        ? 'Working... LP Alpha paid for. Pulling live Polymarket reward markets.'
+                        : lpScoutHasResult
+                        ? 'LP Alpha delivered.'
+                        : 'Ready. I will pay with x402 and return the LP Scout result here.'}
+                    </div>
                   {lpScoutHasResult && (
                     <div className="max-w-[96%] rounded-2xl rounded-bl-md border border-emerald-100 bg-white px-3 py-3 text-xs leading-relaxed text-gray-700 dark:border-emerald-400/20 dark:bg-white/[0.06] dark:text-gray-200">
                       <p className="font-semibold text-gray-900 dark:text-white">{latestScoutOutput?.summary ?? 'LP Scout returned live Polymarket data.'}</p>
@@ -1382,7 +1384,8 @@ export default function AgentDemo() {
                       </div>
                     </div>
                   )}
-                </div>
+                  </div>
+                )}
 
                 {x402ModalOpen && agentWalletAccessConnected && !x402ActivationSuccess && (
                   <div className="rounded-lg border border-gray-100 bg-white p-3 dark:border-white/10 dark:bg-white/[0.04]">
@@ -1422,35 +1425,39 @@ export default function AgentDemo() {
                     {lpScoutError}
                   </p>
                 )}
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!agentWalletAccessConnected) {
-                      setShowWalletAccessPanel(true)
-                      setWalletMode('login')
-                      setWalletStep('idle')
-                      setWalletOtp('')
-                      setWalletOtpContext(null)
-                      setWalletError(null)
-                      return
-                    }
-                    runLpScoutRequest()
-                  }}
-                  disabled={lpScoutBusy || x402Refreshing}
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
-                >
-                  {lpScoutBusy ? (
-                    <><Loader2 className="h-4 w-4 animate-spin" /> Working</>
-                  ) : agentWalletAccessConnected ? (
-                    <><Send className="h-4 w-4" /> Tip Hash PayLink Agent</>
-                  ) : (
-                    <><Wallet className="h-4 w-4" /> Connect agent session</>
-                  )}
-                </button>
-                {!agentWalletAccessConnected && (
-                  <p className="text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
-                    This only authorizes the selected paying agent. You are not signing into the Hash PayLink platform wallet.
-                  </p>
+                {!lpScoutAuthorizationOpen && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!agentWalletAccessConnected) {
+                          setShowWalletAccessPanel(true)
+                          setWalletMode('login')
+                          setWalletStep('idle')
+                          setWalletOtp('')
+                          setWalletOtpContext(null)
+                          setWalletError(null)
+                          return
+                        }
+                        runLpScoutRequest()
+                      }}
+                      disabled={lpScoutBusy || x402Refreshing}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+                    >
+                      {lpScoutBusy ? (
+                        <><Loader2 className="h-4 w-4 animate-spin" /> Working</>
+                      ) : agentWalletAccessConnected ? (
+                        <><Send className="h-4 w-4" /> Tip Hash PayLink Agent</>
+                      ) : (
+                        <><Wallet className="h-4 w-4" /> Connect agent session</>
+                      )}
+                    </button>
+                    {!agentWalletAccessConnected && (
+                      <p className="text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
+                        This only authorizes the selected paying agent. You are not signing into the Hash PayLink platform wallet.
+                      </p>
+                    )}
+                  </>
                 )}
               </div>
             )}
