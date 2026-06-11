@@ -365,8 +365,6 @@ export default function TelegramPaymentLinks() {
       ? 'agentic-lp-research'
       : initialServiceParam === 'request-usdc'
       ? 'request-usdc'
-      : initialMode
-      ? 'request-usdc'
       : ''
   const initialAgentService = initialService === 'hashpaylink-helper' || initialService === 'create-your-agent' || initialService === 'agent-dashboard'
   const initialMarketService = initialService === 'fund-polymarket' || initialService === 'lp-scout' || initialService === 'agentic-lp-research'
@@ -375,7 +373,7 @@ export default function TelegramPaymentLinks() {
   const [opened, setOpened] = useState(searchParams.get('open') === '1')
   const [activeSection, setActiveSection] = useState<TelegramSectionId>(initialAgentService ? 'agent-wallets' : initialMarketService ? 'market-tools' : initialSection)
   const [activeService, setActiveService] = useState<TelegramServiceId | ''>(initialService)
-  const [requestMode, setRequestMode] = useState<RequestMode | ''>(initialMode)
+  const [requestMode, setRequestMode] = useState<RequestMode | ''>(initialService === 'request-usdc' ? initialMode : '')
   const [savedRequest, setSavedRequest] = useState<SavedRequest | null>(null)
   const [polymarketMode, setPolymarketMode] = useState<PolymarketMode>('')
   const [savedPolymarketRequest, setSavedPolymarketRequest] = useState<SavedRequest | null>(null)
@@ -447,6 +445,10 @@ export default function TelegramPaymentLinks() {
 
   function openRequestService() {
     setActiveService('request-usdc')
+    if (!savedRequest && initialMode) {
+      resetRequestForm(initialMode)
+      return
+    }
     if (savedRequest) {
       restoreRequestDraft(savedRequest)
     }
