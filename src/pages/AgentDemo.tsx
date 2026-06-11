@@ -303,7 +303,7 @@ export default function AgentDemo() {
   const [eventId,    setEventId]    = useState(() => params.get('eventId') ?? '')
   const [payer,      setPayer]      = useState(() => params.get('payer')   ?? '')
   const [currentAgentWallet, setCurrentAgentWallet] = useState(agentWallet)
-  const [agentWalletSessionConnected, setAgentWalletSessionConnected] = useState(Boolean(urlAgentWallet && !shouldOpenWalletLinkPanel))
+  const [agentWalletSessionConnected, setAgentWalletSessionConnected] = useState(false)
   const [agentWalletChain, setAgentWalletChain] = useState('')
   const [treasuryBalance, setTreasuryBalance] = useState<string | null>(null)
   const [treasuryBalanceChecked, setTreasuryBalanceChecked] = useState(false)
@@ -1060,7 +1060,9 @@ export default function AgentDemo() {
   const x402ActivationBlocked = Boolean(agentNetwork === 'arc' || !x402Amount || x402AmountInvalid || x402AmountBelowMinimum || treasuryEmpty || x402AmountExceedsTreasury)
   const displayAgentProfile = agentProfile ?? (agentSlug === PLATFORM_AGENT_SLUG || !agentSlug ? PLATFORM_AGENT_PROFILE : null)
   const displayAgentName = displayAgentProfile?.name || agentSlug || 'Your agent wallet'
-  const displayAgentPurpose = displayAgentProfile?.purpose || 'Sign in, link a Circle agent wallet, fund treasury, and activate x402 from the dashboard.'
+  const displayAgentPurpose = hasPendingLpScoutRequest
+    ? 'Selected paying agent for LP Scout x402 access.'
+    : displayAgentProfile?.purpose || 'Sign in, link a Circle agent wallet, fund treasury, and activate x402 from the dashboard.'
   const displayAgentImage = displayAgentProfile ? resolveAgentProfileImage(displayAgentProfile) : null
   const agentEmailConnected = Boolean(PRIVY_AUTH_ENABLED && privyAuthenticated)
   const agentWalletAccessConnected = Boolean(currentAgentWallet && agentWalletSessionConnected)
@@ -1289,7 +1291,7 @@ export default function AgentDemo() {
                     <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">LP Scout</p>
                     <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{scoutModeLabel(pendingScoutMode)}</p>
                     <p className="mt-0.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                      Agent-to-agent x402 payment to Hash PayLink Agent.
+                      Pays Hash PayLink Agent with x402.
                     </p>
                   </div>
                   <span className="shrink-0 rounded-full bg-white px-2 py-1 text-[10px] font-semibold text-gray-500 shadow-sm dark:bg-white/[0.08] dark:text-gray-300">
@@ -1332,11 +1334,13 @@ export default function AgentDemo() {
 
                 <div className="space-y-2">
                   <div className="ml-auto max-w-[88%] break-words rounded-2xl rounded-br-md bg-gray-900 px-3 py-2 text-xs leading-relaxed text-white dark:bg-white dark:text-gray-950">
-                    Tip Hash PayLink Agent for {scoutModeLabel(pendingScoutMode).toLowerCase()}.
+                    {agentWalletAccessConnected
+                      ? `Tip Hash PayLink Agent for ${scoutModeLabel(pendingScoutMode).toLowerCase()}.`
+                      : `Authorize ${displayAgentProfile?.name ?? agentSlug ?? 'this agent'} for LP Scout.`}
                   </div>
                   <div className="max-w-[92%] break-words rounded-2xl rounded-bl-md border border-gray-100 bg-white px-3 py-2 text-xs leading-relaxed text-gray-600 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300">
                     {!agentWalletAccessConnected
-                      ? 'Connect this agent wallet to continue.'
+                      ? 'One secure agent session is needed. Then x402 pays and the LP result returns here.'
                       : lpScoutBusy
                       ? 'Working... LP Alpha paid for. Pulling live Polymarket reward markets.'
                       : lpScoutHasResult
@@ -1420,15 +1424,32 @@ export default function AgentDemo() {
                 )}
                 <button
                   type="button"
-                  onClick={runLpScoutRequest}
-                  disabled={!agentWalletAccessConnected || lpScoutBusy || x402Refreshing}
+                  onClick={() => {
+                    if (!agentWalletAccessConnected) {
+                      setShowWalletAccessPanel(true)
+                      setWalletMode('login')
+                      setWalletStep('idle')
+                      setWalletOtp('')
+                      setWalletOtpContext(null)
+                      setWalletError(null)
+                      return
+                    }
+                    runLpScoutRequest()
+                  }}
+                  disabled={lpScoutBusy || x402Refreshing}
                   className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
                 >
-                  {lpScoutBusy ? <><Loader2 className="h-4 w-4 animate-spin" /> Working</> : <><Send className="h-4 w-4" /> Tip Hash PayLink Agent</>}
+                  {lpScoutBusy ? (
+                    <><Loader2 className="h-4 w-4 animate-spin" /> Working</>
+                  ) : agentWalletAccessConnected ? (
+                    <><Send className="h-4 w-4" /> Tip Hash PayLink Agent</>
+                  ) : (
+                    <><Wallet className="h-4 w-4" /> Connect agent session</>
+                  )}
                 </button>
                 {!agentWalletAccessConnected && (
                   <p className="text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
-                    Sign in to this agent wallet first so the secure Circle session can pay the x402 service.
+                    This only authorizes the selected paying agent. You are not signing into the Hash PayLink platform wallet.
                   </p>
                 )}
               </div>
@@ -1436,13 +1457,21 @@ export default function AgentDemo() {
           </div>
 
           {showAgentWalletAccessPanel && (
-            <div className="mt-4 space-y-2 rounded-xl border border-gray-200 bg-gray-50/70 p-3 transition-all dark:border-white/10 dark:bg-white/[0.04]">
-              <div>
+            <div className="mt-4 w-full min-w-0 space-y-2 overflow-hidden rounded-xl border border-gray-200 bg-gray-50/70 p-3 transition-all dark:border-white/10 dark:bg-white/[0.04]">
+              <div className="min-w-0">
                 <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                  {currentAgentWallet ? 'Wallet access' : agentEmailConnected ? 'Wallet access' : 'Sign in'}
+                  {hasPendingLpScoutRequest
+                    ? 'Authorize paying agent'
+                    : currentAgentWallet
+                    ? 'Wallet access'
+                    : agentEmailConnected
+                    ? 'Wallet access'
+                    : 'Sign in'}
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
-                  {currentAgentWallet
+                  {hasPendingLpScoutRequest
+                    ? 'Confirm this agent before it tips Hash PayLink through x402.'
+                    : currentAgentWallet
                     ? 'Confirm the Circle email for this agent to view balances and receipts.'
                     : agentEmailConnected
                     ? 'Create or link a Circle agent wallet.'
