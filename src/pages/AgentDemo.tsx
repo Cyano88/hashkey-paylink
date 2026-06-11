@@ -174,6 +174,13 @@ type LpScoutRunResult = {
   serviceUrl?: string
 }
 
+type SavedLpScoutIntent = {
+  agentSlug: string
+  href: string
+  label: string
+  savedAt: number
+}
+
 function agentAvatarHue(seed: string) {
   let hash = 0
   for (let i = 0; i < seed.length; i += 1) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0
@@ -211,6 +218,8 @@ function PulsingDots() {
 // ─── Demo credentials (pre-filled for judges) ─────────────────────────────────
 const PLATFORM_AGENT_SLUG = 'hashpaylink-agent'
 const MIN_X402_ACTIVATION_USDC = 0.5
+const LP_SCOUT_INTENT_KEY = 'hashpaylink:lp-scout-intent'
+const LP_SCOUT_INTENT_TTL_MS = 30 * 60 * 1000
 const PLATFORM_AGENT_PROFILE: AgentProfileSummary = {
   slug: PLATFORM_AGENT_SLUG,
   name: 'Hash PayLink Agent',
@@ -245,6 +254,39 @@ function scoutModeLabel(value: string) {
   if (value === 'theme') return 'Scout a theme'
   if (value === 'market') return 'Inspect one market'
   return 'Best reward markets'
+}
+
+function readSavedLpScoutIntent(agentSlug: string) {
+  try {
+    const raw = window.sessionStorage.getItem(LP_SCOUT_INTENT_KEY) || window.localStorage.getItem(LP_SCOUT_INTENT_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as SavedLpScoutIntent
+    if (!parsed?.href || !parsed.savedAt) return null
+    if (Date.now() - parsed.savedAt > LP_SCOUT_INTENT_TTL_MS) return null
+    if (parsed.agentSlug && agentSlug && parsed.agentSlug !== agentSlug) return null
+    return parsed
+  } catch {
+    return null
+  }
+}
+
+function saveLpScoutIntent(intent: SavedLpScoutIntent) {
+  try {
+    const value = JSON.stringify(intent)
+    window.sessionStorage.setItem(LP_SCOUT_INTENT_KEY, value)
+    window.localStorage.setItem(LP_SCOUT_INTENT_KEY, value)
+  } catch {
+    // Storage may be unavailable in private contexts; the URL still carries the live request.
+  }
+}
+
+function clearLpScoutIntent() {
+  try {
+    window.sessionStorage.removeItem(LP_SCOUT_INTENT_KEY)
+    window.localStorage.removeItem(LP_SCOUT_INTENT_KEY)
+  } catch {
+    // Ignore storage cleanup failures.
+  }
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -291,6 +333,8 @@ export default function AgentDemo() {
   const pendingScoutBudget = params.get('budget') ?? ''
   const pendingScoutMaxAmount = params.get('maxAmount') ?? '0.01'
   const hasPendingLpScoutRequest = pendingRun === 'polymarket-scout'
+  const normalizedAgentSlug = agentSlug || PLATFORM_AGENT_SLUG
+  const savedLpScoutIntent = readSavedLpScoutIntent(normalizedAgentSlug)
   const urlAgentWallet = params.get('wallet') ?? params.get('e') ?? ''
   const expectedAgentWallet = params.get('expectedWallet') ?? ''
   const agentWallet = urlAgentWallet || (shouldOpenWalletLinkPanel ? expectedAgentWallet : '')
@@ -361,6 +405,25 @@ export default function AgentDemo() {
   const [activityBusy, setActivityBusy] = useState(false)
   const [walletError, setWalletError] = useState<string | null>(null)
   const [showWalletAccessPanel, setShowWalletAccessPanel] = useState(shouldOpenWalletLinkPanel)
+
+  useEffect(() => {
+    if (!hasPendingLpScoutRequest) return
+    const intentUrl = new URL(window.location.href)
+    intentUrl.searchParams.set('profile', 'agent')
+    intentUrl.searchParams.set('agent', normalizedAgentSlug)
+    saveLpScoutIntent({
+      agentSlug: normalizedAgentSlug,
+      href: `${intentUrl.pathname}${intentUrl.search}${intentUrl.hash}`,
+      label: scoutModeLabel(pendingScoutMode),
+      savedAt: Date.now(),
+    })
+  }, [hasPendingLpScoutRequest, normalizedAgentSlug, pendingScoutMode])
+
+  useEffect(() => {
+    if (!hasPendingLpScoutRequest || agentWalletSessionConnected) return
+    setShowWalletAccessPanel(true)
+    setWalletMode('login')
+  }, [hasPendingLpScoutRequest, agentWalletSessionConnected])
   const [verifying,  setVerifying]  = useState(false)
   const [verified,   setVerified]   = useState<VerifyResult | null>(null)
   const [question,   setQuestion]   = useState('')
@@ -758,6 +821,17 @@ export default function AgentDemo() {
     onNetworkSelect(agentNetwork)
   }
 
+  function resumeSavedLpScoutIntent() {
+    const intent = readSavedLpScoutIntent(normalizedAgentSlug)
+    if (!intent) return false
+    if (hasPendingLpScoutRequest) {
+      setShowWalletAccessPanel(false)
+      return true
+    }
+    navigate(intent.href, { replace: true })
+    return true
+  }
+
   function buildAgentStreamUrl() {
     if (!currentAgentWallet || !agentStreamPrice || !agentStreamDuration) return ''
     const displayName = agentProfile?.name || agentSlug || 'Hash PayLink Agent'
@@ -856,6 +930,7 @@ export default function AgentDemo() {
         setWalletStep('done')
         setWalletOtpContext(null)
         setAgentWalletSessionConnected(true)
+        if (hasPendingLpScoutRequest) setShowWalletAccessPanel(false)
         if (PRIVY_AUTH_ENABLED && privyAuthenticated) {
           const token = await getAccessToken()
           if (token) {
@@ -873,6 +948,9 @@ export default function AgentDemo() {
           }
         }
         void loadAgentWallet()
+        window.setTimeout(() => {
+          resumeSavedLpScoutIntent()
+        }, 0)
       }
     } catch (err) {
       setWalletError(err instanceof Error ? err.message : 'Circle Agent Wallet request failed')
@@ -1023,6 +1101,7 @@ export default function AgentDemo() {
       if (!res.ok || !data.ok) throw new Error(data.error ?? 'LP Scout x402 request failed')
       setLpScoutResult(data)
       setReceiptsOpen(true)
+      clearLpScoutIntent()
       await refreshX402Balance()
       await loadAgentWallet()
     } catch (err) {
@@ -1206,6 +1285,33 @@ export default function AgentDemo() {
             'mt-4',
             !hasPendingLpScoutRequest && 'rounded-lg border border-gray-100 bg-gray-50/70 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]',
           )}>
+            {!hasPendingLpScoutRequest && savedLpScoutIntent && (
+              <div className="mb-3 rounded-xl border border-emerald-100 bg-emerald-50/80 p-3 dark:border-emerald-400/20 dark:bg-emerald-400/10">
+                <p className="text-xs font-semibold text-emerald-900 dark:text-emerald-100">LP Scout request saved</p>
+                <p className="mt-1 text-[11px] leading-relaxed text-emerald-700 dark:text-emerald-200/80">
+                  Finish wallet access, then continue {savedLpScoutIntent.label.toLowerCase()} without starting over.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (agentWalletAccessConnected) {
+                      resumeSavedLpScoutIntent()
+                      return
+                    }
+                    setShowWalletAccessPanel(true)
+                    setWalletMode('login')
+                    setWalletStep('idle')
+                    setWalletOtp('')
+                    setWalletOtpContext(null)
+                    setWalletError(null)
+                  }}
+                  className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-950 px-3 py-2 text-xs font-semibold text-white transition-all hover:bg-emerald-900 active:scale-[0.98] dark:bg-emerald-100 dark:text-emerald-950 dark:hover:bg-white"
+                >
+                  {agentWalletAccessConnected ? <ArrowRight className="h-3.5 w-3.5" /> : <Wallet className="h-3.5 w-3.5" />}
+                  {agentWalletAccessConnected ? 'Continue LP Scout' : 'Authorize paying agent'}
+                </button>
+              </div>
+            )}
             {!hasPendingLpScoutRequest && (
             <div className="mb-2 flex items-center justify-between gap-3">
               <div>
