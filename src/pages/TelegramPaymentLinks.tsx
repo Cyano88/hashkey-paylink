@@ -19,7 +19,6 @@ import {
   UserRound,
   UsersRound,
   Wallet,
-  Zap,
 } from 'lucide-react'
 import { cn } from '../lib/utils'
 import { EVM_TREASURY } from '../lib/chains'
@@ -358,14 +357,23 @@ export default function TelegramPaymentLinks() {
       ? 'create-your-agent'
       : initialServiceParam === 'fund-agent-wallet' || initialServiceParam === 'agent-dashboard'
       ? 'agent-dashboard'
+      : initialServiceParam === 'fund-polymarket'
+      ? 'fund-polymarket'
+      : initialServiceParam === 'lp-scout'
+      ? 'lp-scout'
+      : initialServiceParam === 'agentic-lp-research'
+      ? 'agentic-lp-research'
+      : initialServiceParam === 'request-usdc'
+      ? 'request-usdc'
       : initialMode
       ? 'request-usdc'
       : ''
   const initialAgentService = initialService === 'hashpaylink-helper' || initialService === 'create-your-agent' || initialService === 'agent-dashboard'
+  const initialMarketService = initialService === 'fund-polymarket' || initialService === 'lp-scout' || initialService === 'agentic-lp-research'
   const initialPersonTarget = displayTelegramName(searchParams.get('target') ?? searchParams.get('payer') ?? searchParams.get('p'), '')
   const initialGroupTarget = displayTelegramName(searchParams.get('target') ?? searchParams.get('group') ?? searchParams.get('g') ?? searchParams.get('chat'), '')
   const [opened, setOpened] = useState(searchParams.get('open') === '1')
-  const [activeSection, setActiveSection] = useState<TelegramSectionId>(initialAgentService ? 'agent-wallets' : initialSection)
+  const [activeSection, setActiveSection] = useState<TelegramSectionId>(initialAgentService ? 'agent-wallets' : initialMarketService ? 'market-tools' : initialSection)
   const [activeService, setActiveService] = useState<TelegramServiceId | ''>(initialService)
   const [requestMode, setRequestMode] = useState<RequestMode | ''>(initialMode)
   const [savedRequest, setSavedRequest] = useState<SavedRequest | null>(null)
@@ -620,7 +628,7 @@ export default function TelegramPaymentLinks() {
   }
 
   return (
-    <div className="mx-auto max-w-md animate-slide-up space-y-5">
+    <div className="mx-auto w-full min-w-0 max-w-[calc(100vw-2rem)] animate-slide-up space-y-5 sm:max-w-md">
       <button
         type="button"
         onClick={goBackFromTelegramDashboard}
@@ -2002,6 +2010,11 @@ function LpScoutPanel({
     params.set('scoutMode', selectedOption.id)
     params.set('maxAmount', maxSpend.trim())
     params.set('serviceUrl', '/api/x402/polymarket-scout')
+    params.set('n', 'base')
+    if (agent.walletAddress) {
+      params.set('wallet', agent.walletAddress)
+      params.set('expectedWallet', agent.walletAddress)
+    }
     if (query.trim()) params.set('context', query.trim())
     if (budget.trim()) params.set('budget', budget.trim())
     return `/agent?${params.toString()}`
@@ -2039,7 +2052,7 @@ function LpScoutPanel({
 
         <div className="grid gap-2">
           <RequestModeButton
-            icon={Zap}
+            icon={Bot}
             title="Tip for LP Scout access"
             body="Pick a Polymarket scout category, then choose which linked agent pays Hash PayLink through the agent/x402 route."
             onClick={startAccessFlow}

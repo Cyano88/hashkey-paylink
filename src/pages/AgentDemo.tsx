@@ -294,8 +294,11 @@ export default function AgentDemo() {
     if (usernameParam) next.set('u', usernameParam)
     navigate(`/telegram/payment-links?${next.toString()}`, { replace: true })
   }, [showHelperDemo, navigate]) // eslint-disable-line react-hooks/exhaustive-deps
-  const backHref = params.get('src') === 'telegram'
+  const sourceParam = params.get('src')
+  const backHref = sourceParam === 'telegram'
     ? '/telegram/payment-links?section=agent-wallets'
+    : sourceParam === 'lp-scout'
+    ? '/telegram/payment-links?section=market-tools&service=lp-scout&open=1'
     : '/'
   const [eventId,    setEventId]    = useState(() => params.get('eventId') ?? '')
   const [payer,      setPayer]      = useState(() => params.get('payer')   ?? '')
@@ -1089,7 +1092,7 @@ export default function AgentDemo() {
   }
 
   return (
-    <div className={cn('mx-auto animate-slide-up space-y-6', showAgentProfile ? 'max-w-md' : 'max-w-2xl')}>
+    <div className={cn('mx-auto w-full min-w-0 animate-slide-up space-y-6', showAgentProfile ? 'max-w-[calc(100vw-2rem)] sm:max-w-md' : 'max-w-2xl')}>
 
       {/* ── Back ──────────────────────────────────────────────────────────── */}
       <button
@@ -1105,7 +1108,7 @@ export default function AgentDemo() {
 
       {showAgentProfile && (
         <div
-          className="relative rounded-xl border border-gray-100 bg-white p-4 shadow-card transition-all dark:border-white/10 dark:bg-[#111114]"
+          className="relative w-full min-w-0 overflow-hidden rounded-xl border border-gray-100 bg-white p-4 shadow-card transition-all dark:border-white/10 dark:bg-[#111114]"
         >
           <div className="flex items-start justify-between gap-3">
             <div className="flex min-w-0 items-start gap-3 sm:gap-4">
@@ -1150,14 +1153,14 @@ export default function AgentDemo() {
                 <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
                   {displayAgentPurpose}
                 </p>
-                {agentProfileError && (
+                {agentProfileError && !hasPendingLpScoutRequest && (
                   <p className="mt-1 text-[11px] font-medium text-amber-600 dark:text-amber-300">
                     {agentProfileError}
                   </p>
                 )}
               </div>
             </div>
-            {agentWalletAccessConnected && (
+            {agentWalletAccessConnected && !hasPendingLpScoutRequest && (
               <button
                 type="button"
                 onClick={logoutAgentProfile}
@@ -1169,7 +1172,11 @@ export default function AgentDemo() {
             )}
           </div>
 
-          <div className="mt-4 rounded-lg border border-gray-100 bg-gray-50/70 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">
+          <div className={cn(
+            'mt-4',
+            !hasPendingLpScoutRequest && 'rounded-lg border border-gray-100 bg-gray-50/70 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]',
+          )}>
+            {!hasPendingLpScoutRequest && (
             <div className="mb-2 flex items-center justify-between gap-3">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Balance network</p>
@@ -1206,7 +1213,8 @@ export default function AgentDemo() {
                 )}
               </div>
             </div>
-            {!agentWalletAccessConnected && (
+            )}
+            {!hasPendingLpScoutRequest && !agentWalletAccessConnected && (
               connectedWalletNeedsAccess ? (
                 <div className="flex items-center justify-between gap-4 rounded-lg border border-gray-100 bg-white px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">
                   <div>
@@ -1237,12 +1245,12 @@ export default function AgentDemo() {
                 </div>
               )
             )}
-            {currentAgentWallet && !agentWalletAccessConnected && !connectedWalletNeedsAccess && (
+            {!hasPendingLpScoutRequest && currentAgentWallet && !agentWalletAccessConnected && !connectedWalletNeedsAccess && (
               <p className="mt-3 text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
                 Fund the wallet treasury first. x402 activation moves part of that funded balance into Circle Gateway.
               </p>
             )}
-            {connectedWalletNeedsAccess && !showWalletAccessPanel && (
+            {!hasPendingLpScoutRequest && connectedWalletNeedsAccess && !showWalletAccessPanel && (
               <div className="mt-3 rounded-lg border border-gray-100 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.04]">
                 <p className="text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
                   Sign in to view balances, receipts, and x402 actions.
@@ -1264,19 +1272,19 @@ export default function AgentDemo() {
                 </button>
               </div>
             )}
-            {treasuryBalanceError && (
+            {!hasPendingLpScoutRequest && treasuryBalanceError && (
               <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-200">
                 {treasuryBalanceError}
               </p>
             )}
-            {agentStreamPrice && agentStreamDuration && (
+            {!hasPendingLpScoutRequest && agentStreamPrice && agentStreamDuration && (
               <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
                 StreamPay retainer: {agentStreamPrice} USDC / {agentStreamDuration}
               </p>
             )}
             {hasPendingLpScoutRequest && (
-              <div className="mt-3 space-y-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 dark:border-white/10 dark:bg-white/[0.05]">
-                <div className="flex items-start justify-between gap-3">
+              <div className="w-full min-w-0 space-y-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 dark:border-white/10 dark:bg-white/[0.05]">
+                <div className="flex flex-col items-start gap-2 sm:flex-row sm:justify-between sm:gap-3">
                   <div className="min-w-0">
                     <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">LP Scout</p>
                     <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{scoutModeLabel(pendingScoutMode)}</p>
@@ -1296,7 +1304,7 @@ export default function AgentDemo() {
                 )}
 
                 {agentWalletAccessConnected && (
-                  <div className="flex items-center justify-between gap-3 rounded-lg border border-gray-100 bg-white px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">
+                  <div className="flex flex-col gap-2 rounded-lg border border-gray-100 bg-white px-3 py-2 dark:border-white/10 dark:bg-white/[0.04] sm:flex-row sm:items-center sm:justify-between sm:gap-3">
                     <div>
                       <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">x402 balance</p>
                       <p className="mt-0.5 text-sm font-semibold text-gray-900 dark:text-white" title={x402BalanceError || undefined}>
@@ -1315,7 +1323,7 @@ export default function AgentDemo() {
                         setX402ModalOpen(open => !open)
                       }}
                       disabled={x402Busy || treasuryEmpty}
-                      className="shrink-0 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200"
+                      className="inline-flex w-full shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 sm:w-auto"
                     >
                       Add x402
                     </button>
@@ -1323,10 +1331,10 @@ export default function AgentDemo() {
                 )}
 
                 <div className="space-y-2">
-                  <div className="ml-auto max-w-[88%] rounded-2xl rounded-br-md bg-gray-900 px-3 py-2 text-xs leading-relaxed text-white dark:bg-white dark:text-gray-950">
+                  <div className="ml-auto max-w-[88%] break-words rounded-2xl rounded-br-md bg-gray-900 px-3 py-2 text-xs leading-relaxed text-white dark:bg-white dark:text-gray-950">
                     Tip Hash PayLink Agent for {scoutModeLabel(pendingScoutMode).toLowerCase()}.
                   </div>
-                  <div className="max-w-[92%] rounded-2xl rounded-bl-md border border-gray-100 bg-white px-3 py-2 text-xs leading-relaxed text-gray-600 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300">
+                  <div className="max-w-[92%] break-words rounded-2xl rounded-bl-md border border-gray-100 bg-white px-3 py-2 text-xs leading-relaxed text-gray-600 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300">
                     {!agentWalletAccessConnected
                       ? 'Connect this agent wallet to continue.'
                       : lpScoutBusy
