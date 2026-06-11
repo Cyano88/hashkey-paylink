@@ -140,7 +140,7 @@ async function payX402Service(params: {
     serviceUrl: params.serviceUrl,
     detail: typeof parsedResponse?.scout?.summary === 'string'
       ? parsedResponse.scout.summary
-      : 'API returned ranked LP opportunities',
+      : 'API returned one conservative LP candidate',
     result: parsedResponse?.scout,
   })
   if (params.sellerAgentSlug && params.sellerAgentSlug !== params.agentSlug) {

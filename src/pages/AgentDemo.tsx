@@ -71,10 +71,13 @@ type AgentActivity = {
       bestBid?: number
       bestAsk?: number
       liveSpread?: number
+      daysToResolve?: number
+      dailyReward?: number
       depthAtTwoCents?: number
       suggestedYesBid?: number
       suggestedNoBid?: number
       lpExecutionRisk?: string
+      scoutReason?: string
       executionPlan?: string[]
     }>
     nextAction?: string
@@ -147,10 +150,13 @@ type LpScoutServiceResponse = {
       bestBid?: number
       bestAsk?: number
       liveSpread?: number
+      daysToResolve?: number
+      dailyReward?: number
       depthAtTwoCents?: number
       suggestedYesBid?: number
       suggestedNoBid?: number
       lpExecutionRisk?: string
+      scoutReason?: string
       executionPlan?: string[]
     }>
     nextAction?: string
@@ -1477,17 +1483,17 @@ export default function AgentDemo() {
                       {!agentWalletAccessConnected
                         ? 'One secure agent session is needed. Then x402 pays and the LP result returns here.'
                         : lpScoutBusy
-                        ? 'Working... LP Alpha paid for. Pulling live Polymarket reward markets.'
+                        ? 'Working... LP Alpha paid for. Checking live rewards, spread, depth, time left, and volatility.'
                         : lpScoutHasResult
                         ? 'LP Alpha delivered.'
-                        : 'Ready. I will pay with x402 and return the LP Scout result here.'}
+                        : 'Ready. I will pay with x402 and return one clear LP Scout result for human review.'}
                     </div>
                   {lpScoutHasResult && (
                     <div className="max-w-[96%] rounded-2xl rounded-bl-md border border-emerald-100 bg-white px-3 py-3 text-xs leading-relaxed text-gray-700 dark:border-emerald-400/20 dark:bg-white/[0.06] dark:text-gray-200">
                       <p className="font-semibold text-gray-900 dark:text-white">{latestScoutOutput?.summary ?? 'LP Scout returned live Polymarket data.'}</p>
                       {latestScoutSignals.length ? (
                         <div className="mt-2 space-y-1.5">
-                          {latestScoutSignals.slice(0, 5).map((item, index) => (
+                          {latestScoutSignals.slice(0, 1).map((item, index) => (
                             <p key={`${item}-${index}`} className="rounded-lg bg-gray-50 px-2 py-1.5 text-[11px] leading-relaxed text-gray-600 dark:bg-black/10 dark:text-gray-300">{item}</p>
                           ))}
                         </div>
@@ -1500,6 +1506,11 @@ export default function AgentDemo() {
                               <p className="mt-1 text-[10px] text-gray-500 dark:text-gray-400">
                                 Bid {scoutPrice(latestPrimaryOpportunity.bestBid)} · Ask {scoutPrice(latestPrimaryOpportunity.bestAsk)} · Spread {scoutCents(latestPrimaryOpportunity.liveSpread)}
                               </p>
+                              {latestPrimaryOpportunity.scoutReason && (
+                                <p className="mt-1 text-[10px] leading-relaxed text-gray-500 dark:text-gray-400">
+                                  Why selected: {latestPrimaryOpportunity.scoutReason}
+                                </p>
+                              )}
                             </div>
                             {latestPrimaryOpportunity.marketUrl && (
                               <a
@@ -1513,13 +1524,13 @@ export default function AgentDemo() {
                             )}
                           </div>
                           <div className="mt-2 grid grid-cols-3 gap-1.5 text-center text-[10px]">
-                            <span className="rounded-lg bg-white px-2 py-1 text-gray-600 dark:bg-white/[0.06] dark:text-gray-300">YES {scoutPrice(latestPrimaryOpportunity.suggestedYesBid)}</span>
-                            <span className="rounded-lg bg-white px-2 py-1 text-gray-600 dark:bg-white/[0.06] dark:text-gray-300">NO {scoutPrice(latestPrimaryOpportunity.suggestedNoBid)}</span>
+                            <span className="rounded-lg bg-white px-2 py-1 text-gray-600 dark:bg-white/[0.06] dark:text-gray-300">YES near {scoutPrice(latestPrimaryOpportunity.suggestedYesBid)}</span>
+                            <span className="rounded-lg bg-white px-2 py-1 text-gray-600 dark:bg-white/[0.06] dark:text-gray-300">NO near {scoutPrice(latestPrimaryOpportunity.suggestedNoBid)}</span>
                             <span className="rounded-lg bg-white px-2 py-1 text-gray-600 dark:bg-white/[0.06] dark:text-gray-300">Depth {latestPrimaryOpportunity.depthAtTwoCents ?? 'n/a'}</span>
                           </div>
                           {latestPrimaryOpportunity.executionPlan?.length ? (
                             <div className="mt-2 space-y-1">
-                              {latestPrimaryOpportunity.executionPlan.slice(0, 4).map((step, index) => (
+                              {latestPrimaryOpportunity.executionPlan.slice(0, 5).map((step, index) => (
                                 <p key={`${step}-${index}`} className="text-[10px] leading-relaxed text-gray-500 dark:text-gray-400">{index + 1}. {step}</p>
                               ))}
                             </div>
@@ -1529,6 +1540,9 @@ export default function AgentDemo() {
                       {latestScoutOutput?.nextAction && (
                         <p className="mt-2 text-[11px] font-medium text-gray-500 dark:text-gray-400">{latestScoutOutput.nextAction}</p>
                       )}
+                      <p className="mt-2 text-[10px] leading-relaxed text-gray-400 dark:text-gray-500">
+                        This is research for a human LP. Hash PayLink does not place, cancel, or manage Polymarket orders for you.
+                      </p>
                       <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] font-semibold">
                         {latestX402Spend?.proof?.proofHash && (
                           <Link
@@ -1614,7 +1628,7 @@ export default function AgentDemo() {
                       {lpScoutBusy ? (
                         <><Loader2 className="h-4 w-4 animate-spin" /> Working</>
                       ) : agentWalletAccessConnected ? (
-                        <><Send className="h-4 w-4" /> Tip Hash PayLink Agent</>
+                        <><Send className="h-4 w-4" /> Get LP Alpha</>
                       ) : (
                         <><Wallet className="h-4 w-4" /> Connect agent session</>
                       )}

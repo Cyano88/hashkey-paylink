@@ -79,6 +79,7 @@ type PolymarketLpOpportunity = {
   outcomeRisk: 'medium' | 'high'
   score: number
   marketUrl?: string
+  scoutReason?: string
 }
 
 async function getGatewayMiddleware() {
@@ -229,6 +230,43 @@ function daysUntil(rawDate: string | undefined) {
   const timestamp = new Date(rawDate).getTime()
   if (!Number.isFinite(timestamp)) return undefined
   return Math.max(0, Math.ceil((timestamp - Date.now()) / 86_400_000))
+}
+
+function conservativeDurationScore(days: number | undefined) {
+  if (typeof days !== 'number') return -8
+  if (days < 7) return -85
+  if (days <= 21) return 42
+  if (days <= 45) return 30
+  if (days <= 90) return 12
+  return -10
+}
+
+function conservativeDepthScore(depth: number | undefined) {
+  if (typeof depth !== 'number') return -20
+  if (depth >= 50_000) return 35
+  if (depth >= 15_000) return 22
+  if (depth >= 5_000) return 8
+  return -35
+}
+
+function conservativePriceScore(midpoint: number | undefined) {
+  if (typeof midpoint !== 'number') return -15
+  if (midpoint >= 0.25 && midpoint <= 0.75) return 24
+  if (midpoint >= 0.15 && midpoint <= 0.85) return 8
+  return -40
+}
+
+function isHeadlineSensitiveMarket(title: string) {
+  return /\b(war|ceasefire|peace deal|nuclear|iran|russia|ukraine|israel|gaza|tariff|fed|rate cut|election|president|trump|biden|supreme court|hurricane|earthquake)\b/i.test(title)
+}
+
+function isConservativeCandidate(opportunity: PolymarketLpOpportunity) {
+  const longEnough = typeof opportunity.daysToResolve !== 'number' || opportunity.daysToResolve >= 7
+  const notTooFar = typeof opportunity.daysToResolve !== 'number' || opportunity.daysToResolve <= 90
+  const confirmedSpread = typeof opportunity.spread === 'number' && opportunity.spread <= Math.min(opportunity.maxSpread ?? 0.03, 0.025)
+  const confirmedDepth = typeof opportunity.depthAtTwoCents === 'number' && opportunity.depthAtTwoCents >= 5_000
+  const tradableMid = typeof opportunity.midpoint === 'number' && opportunity.midpoint >= 0.15 && opportunity.midpoint <= 0.85
+  return opportunity.lpExecutionRisk !== 'high' && longEnough && notTooFar && confirmedSpread && confirmedDepth && tradableMid
 }
 
 function extractRewardMarkets(data: unknown): PolymarketRewardMarket[] {
@@ -394,22 +432,22 @@ function baseLpOpportunity(market: PolymarketRewardMarket): PolymarketLpOpportun
 }
 
 function buildExecutionPlan(opportunity: PolymarketLpOpportunity, budget?: string) {
-  const budgetText = budget ? `Use the stated budget cap (${budget}) and split into small maker quotes.` : 'Use a small maker test quote first; scale only after fills and spread stability.'
+  const budgetText = budget ? `Budget cap: ${budget}. Start with a small maker order, not the full budget at once.` : 'Start with a small maker test order; add more only if the book stays stable.'
   const spreadText = typeof opportunity.spread === 'number'
-    ? `Current live spread is ${(opportunity.spread * 100).toFixed(1)}c; quote inside the reward spread, not through the book.`
+    ? `Live spread is ${(opportunity.spread * 100).toFixed(1)}c. Place a maker order inside the spread; do not cross the book with a market order.`
     : 'Re-check the live order book before quoting; skip if bid/ask is unavailable.'
   const depthText = typeof opportunity.depthAtTwoCents === 'number'
-    ? `Depth within 2c of top of book is about ${opportunity.depthAtTwoCents.toFixed(0)} shares; avoid sizing beyond visible depth.`
+    ? `Visible depth within 2c is about ${opportunity.depthAtTwoCents.toFixed(0)} shares. Keep your order small compared with visible depth.`
     : 'Depth could not be confirmed; keep size conservative until the book refreshes.'
   const priceText = typeof opportunity.suggestedYesBid === 'number'
-    ? `Indicative maker bid: YES around ${opportunity.suggestedYesBid.toFixed(3)} or NO around ${opportunity.suggestedNoBid?.toFixed(3) ?? 'n/a'}, then re-price after every fill.`
+    ? `Suggested human quote: try YES near ${opportunity.suggestedYesBid.toFixed(3)} or NO near ${opportunity.suggestedNoBid?.toFixed(3) ?? 'n/a'}. If any part fills, refresh the market before placing the next order.`
     : 'Do not quote until midpoint and bid/ask are available.'
   return [
     budgetText,
     spreadText,
     depthText,
     priceText,
-    'Cancel stale quotes before news, scheduled starts, or visible momentum against the position.',
+    'Cancel or adjust stale quotes before news, scheduled starts, or fast price movement.',
   ]
 }
 
@@ -424,23 +462,30 @@ async function analyzePolymarketLpMarket(market: PolymarketRewardMarket): Promis
   const eligible = typeof spread === 'number' && typeof opportunity.maxSpread === 'number' ? spread <= opportunity.maxSpread : undefined
 
   let lpExecutionRisk: PolymarketLpOpportunity['lpExecutionRisk'] = 'medium'
+  if (isHeadlineSensitiveMarket(opportunity.title)) lpExecutionRisk = 'high'
   if (typeof midpoint === 'number' && (midpoint < 0.08 || midpoint > 0.92)) lpExecutionRisk = 'high'
   if (typeof spread === 'number' && typeof opportunity.maxSpread === 'number' && spread > opportunity.maxSpread) lpExecutionRisk = 'high'
   if (typeof opportunity.oneDayPriceChange === 'number' && Math.abs(opportunity.oneDayPriceChange) > 0.08) lpExecutionRisk = 'high'
-  if (lpExecutionRisk !== 'high' && typeof spread === 'number' && spread <= 0.02 && typeof midpoint === 'number' && midpoint > 0.15 && midpoint < 0.85) {
+  if (lpExecutionRisk !== 'high' && typeof spread === 'number' && spread <= 0.02 && typeof midpoint === 'number' && midpoint > 0.15 && midpoint < 0.85 && typeof book.depthAtTwoCents === 'number' && book.depthAtTwoCents >= 15_000) {
     lpExecutionRisk = 'low'
   }
 
-  const rewardScore = Math.min(150, opportunity.dailyReward ?? 0)
-  const liquidityScore = Math.min(500, opportunity.liquidity ?? 0) / 25
+  const rewardScore = Math.min(80, (opportunity.dailyReward ?? 0) / 25)
+  const liquidityScore = Math.min(35, (opportunity.liquidity ?? 0) / 1_000)
   const eligibilityScore = eligible === false ? -50 : eligible === true ? 25 : 0
-  const durationScore = typeof opportunity.daysToResolve === 'number'
-    ? Math.min(35, Math.max(-60, opportunity.daysToResolve - 7))
-    : 0
-  const nearResolutionPenalty = typeof opportunity.daysToResolve === 'number' && opportunity.daysToResolve < 7 ? 75 : 0
-  const volatilityPenalty = typeof opportunity.oneDayPriceChange === 'number' ? Math.min(60, Math.abs(opportunity.oneDayPriceChange) * 400) : 8
-  const spreadPenalty = typeof spread === 'number' ? spread * 100 : 8
-  const riskPenalty = lpExecutionRisk === 'high' ? 30 : lpExecutionRisk === 'medium' ? 10 : 0
+  const durationScore = conservativeDurationScore(opportunity.daysToResolve)
+  const depthScore = conservativeDepthScore(book.depthAtTwoCents)
+  const priceScore = conservativePriceScore(midpoint)
+  const nearResolutionPenalty = typeof opportunity.daysToResolve === 'number' && opportunity.daysToResolve < 7 ? 100 : 0
+  const volatilityPenalty = typeof opportunity.oneDayPriceChange === 'number' ? Math.min(80, Math.abs(opportunity.oneDayPriceChange) * 500) : 10
+  const spreadPenalty = typeof spread === 'number' ? spread * 650 : 18
+  const riskPenalty = lpExecutionRisk === 'high' ? 220 : lpExecutionRisk === 'medium' ? 18 : 0
+  const scoutReason = [
+    typeof opportunity.daysToResolve === 'number' ? `${opportunity.daysToResolve} days left` : 'duration unknown',
+    typeof spread === 'number' ? `${(spread * 100).toFixed(1)}c spread` : 'spread unknown',
+    typeof book.depthAtTwoCents === 'number' ? `${book.depthAtTwoCents.toFixed(0)} depth within 2c` : 'depth unknown',
+    typeof opportunity.dailyReward === 'number' ? `${opportunity.dailyReward.toFixed(0)} USDC/day rewards` : 'reward rate unknown',
+  ].join(' · ')
 
   return {
     ...opportunity,
@@ -451,7 +496,8 @@ async function analyzePolymarketLpMarket(market: PolymarketRewardMarket): Promis
     eligible,
     lpExecutionRisk,
     outcomeRisk: 'high',
-    score: rewardScore + liquidityScore + eligibilityScore + durationScore - spreadPenalty - riskPenalty - volatilityPenalty - nearResolutionPenalty,
+    scoutReason,
+    score: rewardScore + liquidityScore + eligibilityScore + durationScore + depthScore + priceScore - spreadPenalty - riskPenalty - volatilityPenalty - nearResolutionPenalty,
   }
 }
 
@@ -494,8 +540,9 @@ function formatOpportunitySignal(opportunity: ReturnType<typeof serializeOpportu
   const depth = typeof opportunity.depthAtTwoCents === 'number' ? ` | depth2c ${opportunity.depthAtTwoCents}` : ''
   const spread = typeof opportunity.liveSpread === 'number' ? `${(opportunity.liveSpread * 100).toFixed(1)}c` : 'n/a'
   const reward = opportunity.dailyReward ?? 'n/a'
-  const prefix = mode === 'market' ? 'Market' : `${index + 1}.`
-  return `${prefix} ${opportunity.title.slice(0, 82)} | reward/day ${reward} USDC | spread ${spread}${depth} | risk ${opportunity.lpExecutionRisk}`
+  const prefix = mode === 'market' ? 'Inspected market' : 'Best current LP candidate'
+  const days = typeof opportunity.daysToResolve === 'number' ? ` | ${opportunity.daysToResolve}d left` : ''
+  return `${prefix}: ${opportunity.title.slice(0, 82)} | reward/day ${reward} USDC | spread ${spread}${depth}${days} | risk ${opportunity.lpExecutionRisk}`
 }
 
 function serializeOpportunity(opportunity: PolymarketLpOpportunity, budget?: string) {
@@ -519,6 +566,7 @@ function serializeOpportunity(opportunity: PolymarketLpOpportunity, budget?: str
     lpExecutionRisk: opportunity.lpExecutionRisk,
     outcomeRisk: opportunity.outcomeRisk,
     score: rounded(opportunity.score, 2),
+    scoutReason: opportunity.scoutReason,
     executionPlan: buildExecutionPlan(opportunity, budget),
   }
 }
@@ -540,10 +588,26 @@ export async function buildLiveScout(options: Partial<ScoutOptions> = {}) {
     }
   }
 
-  const candidates = markets.slice(0, mode === 'market' ? 4 : 12)
-  const opportunities = (await Promise.all(candidates.map(analyzePolymarketLpMarket)))
+  const candidates = markets.slice(0, mode === 'market' ? 4 : 24)
+  const analyzed = (await Promise.all(candidates.map(analyzePolymarketLpMarket)))
+  const conservative = analyzed.filter(isConservativeCandidate)
+  if (mode !== 'market' && !conservative.length) {
+    const themeText = mode === 'theme' && context ? ` for "${context}"` : ''
+    return {
+      summary: `Live LP Scout did not find a clean conservative Polymarket LP candidate${themeText} right now.`,
+      signals: [
+        'No paid pick was forced: current reward markets failed the conservative screen for time left, spread, depth, headline risk, or tradable midpoint.',
+      ],
+      opportunities: [],
+      nextAction: 'Wait for a cleaner reward market instead of forcing a trade. Re-run LP Scout later before committing USDC.',
+      disclaimer: 'Educational LP research for human review only. Not financial advice and not an automated trading instruction.',
+      source: 'Polymarket Gamma markets/events plus CLOB rewards and order book APIs',
+      request: { mode, context, budget },
+    }
+  }
+  const opportunities = (conservative.length ? conservative : analyzed)
     .sort((a, b) => b.score - a.score)
-    .slice(0, mode === 'market' ? 1 : 3)
+    .slice(0, 1)
     .map(opportunity => serializeOpportunity(opportunity, budget))
 
   const themeText = mode === 'theme' && context ? ` for "${context}"` : ''
@@ -551,15 +615,15 @@ export async function buildLiveScout(options: Partial<ScoutOptions> = {}) {
   const summary = mode === 'market'
     ? `Live LP Scout inspected one Polymarket market${marketText} with current CLOB book, spread, depth, and maker-order risk.`
     : mode === 'theme'
-    ? `Live LP Scout ranked ${opportunities.length} active Polymarket opportunities${themeText} by rewards, book spread, depth, liquidity, and volatility.`
-    : `Live LP Scout ranked ${opportunities.length} active Polymarket reward markets by rewards, book spread, depth, liquidity, and volatility.`
+    ? `Live LP Scout selected the strongest conservative Polymarket LP candidate${themeText} after checking rewards, spread, depth, time left, and volatility.`
+    : `Live LP Scout selected one conservative Polymarket reward market after checking rewards, spread, depth, time left, and volatility.`
 
   return {
     summary,
     signals: opportunities.map((opportunity, index) => formatOpportunitySignal(opportunity, index, mode)),
     opportunities,
-    nextAction: 'Before quoting, re-check the market page, CLOB order book, and reward constraints. Place maker orders only inside the reward spread and cancel stale quotes quickly.',
-    disclaimer: 'Educational product signal only. Not financial advice.',
+    nextAction: 'Human action only: open the market, confirm the live book still matches this scout, then place a small maker order inside the spread. Do not use market orders.',
+    disclaimer: 'Educational LP research for human review only. Not financial advice and not an automated trading instruction.',
     source: 'Polymarket Gamma markets/events plus CLOB rewards and order book APIs',
     request: { mode, context, budget },
   }
