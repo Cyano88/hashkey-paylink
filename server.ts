@@ -51,6 +51,7 @@ import helperProfileHandler from './api/helper-profile.js'
 import agentProfileHandler from './api/agent-profile.js'
 import agentGovernanceHandler from './api/agent-governance.js'
 import agentLegalProfileHandler from './api/agent-legal-profile.js'
+import polyWorldcupNewsHandler from './api/poly-worldcup-news.js'
 import x402PolymarketScoutHandler from './api/x402-polymarket-scout.js'
 import x402ReceiptHandler from './api/x402-receipt.js'
 import checkAgentUrlHandler from './api/check-agent-url.js'
@@ -137,6 +138,7 @@ app.all('/api/helper-profile',         strictLimiter, helperProfileHandler)
 app.all('/api/agent-profile',          strictLimiter, agentProfileHandler)
 app.post('/api/agent-governance',      strictLimiter, agentGovernanceHandler)
 app.get('/api/agent-legal-profile',    readLimiter, agentLegalProfileHandler)
+app.get('/api/poly-worldcup-news',      readLimiter, polyWorldcupNewsHandler)
 app.get('/api/x402/polymarket-scout',  strictLimiter, x402PolymarketScoutHandler)
 app.get('/api/x402/receipt',           readLimiter, x402ReceiptHandler)
 app.get('/api/check-agent-url',        strictLimiter, checkAgentUrlHandler)

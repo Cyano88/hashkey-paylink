@@ -11,6 +11,7 @@ import {
   LineChart,
   Loader2,
   MessageCircle,
+  Newspaper,
   Pencil,
   Radio,
   Send,
@@ -50,6 +51,7 @@ type TelegramServiceId =
   | 'agent-dashboard'
   | 'fund-agent-wallet'
   | 'lp-scout'
+  | 'poly-worldcup-news'
   | 'agentic-lp-research'
   | 'create-streampay'
   | 'agentic-streampay'
@@ -124,6 +126,14 @@ const sectionServices: Record<TelegramSectionId, TelegramService[]> = {
       title: 'LP Scout',
       body: 'Scout reward markets, themes, or one Polymarket market from a guided UI.',
       icon: LineChart,
+      status: 'Open',
+      active: true,
+    },
+    {
+      id: 'poly-worldcup-news',
+      title: 'World Cup News',
+      body: 'Follow World Cup headlines that can move Polymarket prices and LP risk.',
+      icon: Newspaper,
       status: 'Open',
       active: true,
     },
@@ -361,11 +371,13 @@ export default function TelegramPaymentLinks() {
       ? 'fund-polymarket'
       : initialServiceParam === 'lp-scout'
       ? 'lp-scout'
+      : initialServiceParam === 'poly-worldcup-news'
+      ? 'poly-worldcup-news'
       : initialServiceParam === 'agentic-lp-research'
       ? 'agentic-lp-research'
       : ''
   const initialAgentService = initialService === 'hashpaylink-helper' || initialService === 'create-your-agent' || initialService === 'agent-dashboard'
-  const initialMarketService = initialService === 'fund-polymarket' || initialService === 'lp-scout' || initialService === 'agentic-lp-research'
+  const initialMarketService = initialService === 'fund-polymarket' || initialService === 'lp-scout' || initialService === 'poly-worldcup-news' || initialService === 'agentic-lp-research'
   const initialPersonTarget = displayTelegramName(searchParams.get('target') ?? searchParams.get('payer') ?? searchParams.get('p'), '')
   const initialGroupTarget = displayTelegramName(searchParams.get('target') ?? searchParams.get('group') ?? searchParams.get('g') ?? searchParams.get('chat'), '')
   const [opened, setOpened] = useState(searchParams.get('open') !== '0')
@@ -541,6 +553,10 @@ export default function TelegramPaymentLinks() {
     }
     if (service.id === 'lp-scout') {
       setActiveService('lp-scout')
+      return
+    }
+    if (service.id === 'poly-worldcup-news') {
+      setActiveService('poly-worldcup-news')
       return
     }
     if (service.id === 'agentic-lp-research') {
@@ -783,6 +799,11 @@ export default function TelegramPaymentLinks() {
                 setActiveService('create-your-agent')
               }}
               onBack={() => setActiveService('')}
+            />
+          ) : activeService === 'poly-worldcup-news' ? (
+            <PolyWorldCupNewsPanel
+              onBack={() => setActiveService('')}
+              onOpenLpScout={() => setActiveService('lp-scout')}
             />
           ) : activeService === 'agentic-lp-research' ? (
             <AgenticLpResearchPanel onBack={() => setActiveService('')} />
@@ -2219,6 +2240,237 @@ function LpScoutPanel({
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+type PolyWorldCupArticle = {
+  title: string
+  description: string
+  source: string
+  image: string
+  url: string
+  publishedAt: string
+  tag: string
+}
+
+type PolyWorldCupFeed = {
+  ok?: boolean
+  providerConfigured?: boolean
+  source?: string
+  updatedAt?: string
+  articles?: PolyWorldCupArticle[]
+}
+
+const fallbackWorldCupArticles: PolyWorldCupArticle[] = [
+  {
+    title: 'World Cup market context is ready',
+    description: 'Connect a provider feed to follow World Cup headlines, then use LP Scout before placing maker orders.',
+    source: 'Hash PayLink desk',
+    image: POLYMARKET_LOGO,
+    url: '',
+    publishedAt: new Date().toISOString(),
+    tag: 'Markets',
+  },
+]
+
+function relativeNewsTime(value?: string) {
+  if (!value) return ''
+  const time = new Date(value).getTime()
+  if (!Number.isFinite(time)) return ''
+  const diff = Math.max(0, Date.now() - time)
+  const minutes = Math.floor(diff / 60_000)
+  if (minutes < 1) return 'just now'
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  return `${Math.floor(hours / 24)}d ago`
+}
+
+function PolyWorldCupNewsPanel({
+  onBack,
+  onOpenLpScout,
+}: {
+  onBack: () => void
+  onOpenLpScout: () => void
+}) {
+  const [active, setActive] = useState(0)
+  const [feed, setFeed] = useState<PolyWorldCupFeed | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [brokenImages, setBrokenImages] = useState<Record<string, boolean>>({})
+
+  const articles = feed?.articles?.length ? feed.articles : fallbackWorldCupArticles
+  const lead = articles[active % articles.length] ?? articles[0]
+  const statusText = loading
+    ? 'Refreshing feed'
+    : error
+    ? 'Provider feed unavailable'
+    : feed?.source === 'provider'
+    ? `Updated ${relativeNewsTime(feed.updatedAt)}`
+    : 'Hash PayLink desk feed'
+
+  useEffect(() => {
+    let cancelled = false
+    async function loadNews() {
+      setLoading(true)
+      setError('')
+      try {
+        const response = await fetch('/api/poly-worldcup-news')
+        const text = await response.text()
+        const data = JSON.parse(text) as PolyWorldCupFeed
+        if (!response.ok || !data.ok) throw new Error('News feed is not available.')
+        if (!cancelled) setFeed(data)
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : 'News feed is not available.')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    void loadNews()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    setActive(0)
+  }, [feed?.updatedAt])
+
+  useEffect(() => {
+    if (articles.length <= 1) return undefined
+    const timer = window.setInterval(() => {
+      setActive(current => (current + 1) % articles.length)
+    }, 6500)
+    return () => window.clearInterval(timer)
+  }, [articles.length])
+
+  return (
+    <div className="mt-4 space-y-4">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <button
+            type="button"
+            onClick={onBack}
+            className="mb-2 inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 transition-colors hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Back
+          </button>
+          <div className="flex items-center gap-2">
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.06]">
+              <Newspaper className="h-4 w-4 text-gray-800 dark:text-gray-100" />
+            </span>
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Polymarket News</p>
+          </div>
+          <h2 className="mt-2 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">World Cup market pulse</h2>
+          <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
+            Track World Cup headlines that can affect Polymarket prices, liquidity, and LP risk before asking the agent for paid alpha.
+          </p>
+        </div>
+        <span className={cn(
+          'shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold',
+          feed?.source === 'provider' && !error
+            ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-200'
+            : 'bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-300',
+        )}>
+          {statusText}
+        </span>
+      </div>
+
+      <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.05]">
+        <div className="relative min-h-[260px]">
+          <img
+            src={brokenImages[lead.title] ? POLYMARKET_LOGO : lead.image || POLYMARKET_LOGO}
+            alt=""
+            onError={() => setBrokenImages(current => ({ ...current, [lead.title]: true }))}
+            className={cn(
+              'absolute inset-0 h-full w-full object-cover',
+              brokenImages[lead.title] || !lead.image ? 'bg-gray-950 object-contain p-16 opacity-20' : '',
+            )}
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black via-black/55 to-black/10" />
+          <div className="relative flex min-h-[260px] flex-col justify-end p-4 sm:p-5">
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-bold uppercase text-gray-950">{lead.tag || 'World Cup'}</span>
+              <span className="rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-semibold text-white ring-1 ring-white/20">{lead.source}</span>
+              {relativeNewsTime(lead.publishedAt) && (
+                <span className="rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-semibold text-white ring-1 ring-white/20">{relativeNewsTime(lead.publishedAt)}</span>
+              )}
+            </div>
+            <h3 className="max-w-2xl text-xl font-semibold leading-tight text-white sm:text-2xl">{lead.title}</h3>
+            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-white/75">{lead.description}</p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {lead.url ? (
+                <a
+                  href={lead.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-gray-950 transition-all hover:bg-gray-100 active:scale-[0.98]"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  Open source
+                </a>
+              ) : (
+                <span className="inline-flex items-center justify-center rounded-xl bg-white/15 px-4 py-2.5 text-sm font-semibold text-white ring-1 ring-white/20">
+                  Source pending
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={onOpenLpScout}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-400 px-4 py-2.5 text-sm font-semibold text-gray-950 transition-all hover:bg-emerald-300 active:scale-[0.98]"
+              >
+                <LineChart className="h-4 w-4" />
+                Ask LP Scout
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid gap-2 p-3">
+          {articles.map((article, index) => {
+            const selected = index === active % articles.length
+            const imageBroken = brokenImages[article.title]
+            return (
+              <button
+                key={`${article.title}-${index}`}
+                type="button"
+                onClick={() => setActive(index)}
+                onMouseEnter={() => setActive(index)}
+                className={cn(
+                  'flex w-full items-center gap-3 rounded-xl border p-2 text-left transition-all',
+                  selected
+                    ? 'border-gray-950 bg-gray-50 dark:border-white dark:bg-white/10'
+                    : 'border-transparent hover:border-gray-200 hover:bg-gray-50 dark:hover:border-white/10 dark:hover:bg-white/[0.06]',
+                )}
+              >
+                <span className="flex h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-gray-100 dark:bg-white/10">
+                  <img
+                    src={imageBroken ? POLYMARKET_LOGO : article.image || POLYMARKET_LOGO}
+                    alt=""
+                    onError={() => setBrokenImages(current => ({ ...current, [article.title]: true }))}
+                    className={cn('h-full w-full object-cover', imageBroken || !article.image ? 'object-contain p-2 opacity-60' : '')}
+                  />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                    <span>{article.tag || 'World Cup'}</span>
+                    <span>{article.source}</span>
+                  </span>
+                  <span className="mt-0.5 block truncate text-sm font-semibold text-gray-900 dark:text-white">{article.title}</span>
+                  <span className="mt-0.5 block truncate text-xs text-gray-500 dark:text-gray-400">{article.description}</span>
+                </span>
+                <ArrowRight className={cn('h-4 w-4 shrink-0', selected ? 'text-gray-900 dark:text-white' : 'text-gray-300')} />
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      <p className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-800 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-100">
+        News is context only. Use LP Scout for live Polymarket book checks before placing human maker orders.
+      </p>
     </div>
   )
 }
