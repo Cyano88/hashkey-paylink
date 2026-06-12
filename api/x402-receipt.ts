@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express'
-import { findAgentActivity } from './agent-activity.js'
+import { ensureAgentActivityArchived, findAgentActivity } from './agent-activity.js'
 import { getAgentGovernanceProfile, getAgentLegalProfile } from './agent-legal.js'
 
 const CIRCLE_GATEWAY_API_BASE = (process.env.CIRCLE_GATEWAY_API_BASE ?? 'https://api.circle.com').replace(/\/+$/, '')
@@ -38,8 +38,9 @@ export default async function handler(req: Request, res: Response) {
   if (!id) return res.status(400).json({ ok: false, error: 'Missing receipt id.' })
 
   try {
-    const activity = await findAgentActivity(id)
-    if (!activity?.proof) return res.status(404).json({ ok: false, error: 'x402 receipt not found.' })
+    const initialActivity = await findAgentActivity(id)
+    if (!initialActivity?.proof) return res.status(404).json({ ok: false, error: 'x402 receipt not found.' })
+    const activity = initialActivity.og ? initialActivity : await ensureAgentActivityArchived(id) ?? initialActivity
     const shouldVerify = String(req.query.verify ?? '') === '1'
     const circle = shouldVerify
       ? await verifyCircleTransfer(activity.proof.transaction ?? '')

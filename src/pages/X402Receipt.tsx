@@ -83,8 +83,16 @@ export default function X402Receipt() {
     ].filter(Boolean).join('\n')
   }, [data?.receipt, governance.governanceVersion, legal.entityName, og?.ogTxHash, og?.rootHash, proof])
 
-  function receiptPdfBlob() {
-    return new Blob([createReceiptPdf(receiptFile)], { type: 'application/pdf' })
+  async function receiptPdfBlob() {
+    if (!data?.receipt) return new Blob([], { type: 'application/pdf' })
+    return createReceiptImagePdf({
+      receipt: data.receipt,
+      proof,
+      legal,
+      governance,
+      og,
+      receiptUrl: window.location.href,
+    })
   }
 
   function receiptPdfName() {
@@ -93,7 +101,8 @@ export default function X402Receipt() {
 
   async function shareReceipt() {
     if (!receiptFile) return
-    const file = new File([receiptPdfBlob()], receiptPdfName(), { type: 'application/pdf' })
+    const pdf = await receiptPdfBlob()
+    const file = new File([pdf], receiptPdfName(), { type: 'application/pdf' })
     const nav = navigator as Navigator & {
       canShare?: (data: ShareData) => boolean
       share?: (data: ShareData) => Promise<void>
@@ -116,9 +125,9 @@ export default function X402Receipt() {
     window.setTimeout(() => setCircleNotice(false), 5000)
   }
 
-  function downloadReceipt() {
+  async function downloadReceipt() {
     if (!receiptFile) return
-    const blob = receiptPdfBlob()
+    const blob = await receiptPdfBlob()
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
@@ -253,61 +262,181 @@ export default function X402Receipt() {
   )
 }
 
-function createReceiptPdf(text: string) {
-  const lines = wrapPdfLines(text)
-  const content = [
-    'BT',
-    '/F1 16 Tf',
-    '72 760 Td',
-    `(${pdfEscape(lines[0] ?? 'Hash PayLink Agentic Receipt')}) Tj`,
-    '/F1 10 Tf',
-    '0 -26 Td',
-    ...lines.slice(1).flatMap(line => [`(${pdfEscape(line)}) Tj`, '0 -14 Td']),
-    'ET',
-  ].join('\n')
-  const objects = [
-    '<< /Type /Catalog /Pages 2 0 R >>',
-    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
-    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>',
-    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
-    `<< /Length ${content.length} >>\nstream\n${content}\nendstream`,
+type VisualReceiptInput = {
+  receipt: NonNullable<ReceiptResponse['receipt']>
+  proof: Record<string, unknown>
+  legal: Record<string, unknown>
+  governance: Record<string, unknown>
+  og?: ReceiptResponse['receipt']['og']
+  receiptUrl: string
+}
+
+async function createReceiptImagePdf(input: VisualReceiptInput) {
+  const canvas = document.createElement('canvas')
+  const scale = 2
+  const width = 612
+  const height = 792
+  canvas.width = width * scale
+  canvas.height = height * scale
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return new Blob([], { type: 'application/pdf' })
+  ctx.scale(scale, scale)
+  drawReceiptCanvas(ctx, input, width, height)
+  const jpeg = await new Promise<string>((resolve) => canvas.toBlob(blob => {
+    if (!blob) return resolve('')
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result ?? ''))
+    reader.readAsDataURL(blob)
+  }, 'image/jpeg', 0.92))
+  return createPdfWithJpeg(jpeg, width, height)
+}
+
+function drawReceiptCanvas(ctx: CanvasRenderingContext2D, input: VisualReceiptInput, width: number, height: number) {
+  const proof = input.proof
+  const legal = input.legal
+  const governance = input.governance
+  ctx.fillStyle = '#f5f5f7'
+  ctx.fillRect(0, 0, width, height)
+  roundRect(ctx, 36, 34, width - 72, height - 68, 24, '#ffffff')
+  ctx.fillStyle = '#111827'
+  roundRect(ctx, 64, 64, 48, 48, 14, '#111827')
+  ctx.fillStyle = '#ffffff'
+  ctx.font = '700 16px Arial'
+  ctx.fillText('HP', 78, 94)
+  ctx.fillStyle = '#111827'
+  ctx.font = '700 22px Arial'
+  ctx.fillText('Hash PayLink', 128, 82)
+  ctx.fillStyle = '#6b7280'
+  ctx.font = '700 10px Arial'
+  ctx.fillText('AGENTIC RECEIPT', 128, 101)
+  drawBadge(ctx, input.og?.ogExplorer ? '0G ARCHIVED' : '0G ARCHIVING', input.og?.ogExplorer ? '#f3e8ff' : '#f3f4f6', input.og?.ogExplorer ? '#7e22ce' : '#6b7280', 438, 73)
+
+  ctx.fillStyle = '#111827'
+  ctx.font = '700 24px Arial'
+  drawText(ctx, input.receipt.title ?? 'Receipt', 64, 154, 470, 28)
+  ctx.fillStyle = '#4b5563'
+  ctx.font = '500 13px Arial'
+  drawText(ctx, `${input.receipt.amount ?? 'x402 payment'} - ${String(proof.service ?? 'Hash PayLink service')}`, 64, 186, 470, 18)
+
+  const rows: Array<[string, string]> = [
+    ['Buyer', String(proof.buyerAgent ?? proof.payer ?? '')],
+    ['Seller', String(proof.sellerAgent ?? proof.seller ?? '')],
+    ['Counterparty', String(legal.entityName ?? 'Hash PayLink Agent')],
+    ['Network', String(proof.network ?? 'Circle Gateway')],
+    ['Tx ref', String(proof.transaction ?? '')],
+    ['Gov version', String(governance.governanceVersion ?? 'unversioned')],
+    ['Proof', String(proof.proofHash ?? '').slice(0, 28)],
+    ['0G root', input.og?.rootHash ? input.og.rootHash.slice(0, 30) : 'Pending archive'],
   ]
-  let body = '%PDF-1.4\n'
-  const offsets = [0]
-  objects.forEach((object, index) => {
-    offsets.push(body.length)
-    body += `${index + 1} 0 obj\n${object}\nendobj\n`
-  })
-  const xref = body.length
-  body += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`
-  body += offsets.slice(1).map(offset => `${String(offset).padStart(10, '0')} 00000 n \n`).join('')
-  body += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`
-  return body
-}
-
-function wrapPdfLines(text: string) {
-  const out: string[] = []
-  for (const raw of text.split('\n')) {
-    const line = raw.trim()
-    if (!line) {
-      out.push('')
-      continue
-    }
-    let current = ''
-    for (const word of line.split(/\s+/)) {
-      const next = current ? `${current} ${word}` : word
-      if (next.length > 82) {
-        out.push(current)
-        current = word
-      } else {
-        current = next
-      }
-    }
-    if (current) out.push(current)
+  let y = 232
+  for (const [label, value] of rows) {
+    ctx.fillStyle = '#f9fafb'
+    roundRect(ctx, 64, y - 20, width - 128, 38, 10, '#f9fafb')
+    ctx.fillStyle = '#6b7280'
+    ctx.font = '600 11px Arial'
+    ctx.fillText(label, 82, y + 3)
+    ctx.fillStyle = '#111827'
+    ctx.font = '600 11px Courier New'
+    drawRightText(ctx, value || '-', 526, y + 3, 300)
+    y += 45
   }
-  return out.slice(0, 46)
+
+  const statusText = input.og?.ogExplorer ? 'Archived on 0G Storage and anchored on-chain' : '0G archive is still being finalized'
+  roundRect(ctx, 64, y - 12, width - 128, 48, 14, input.og?.ogExplorer ? '#faf5ff' : '#f9fafb')
+  ctx.fillStyle = input.og?.ogExplorer ? '#7e22ce' : '#6b7280'
+  ctx.font = '700 12px Arial'
+  ctx.fillText(statusText, 82, y + 17)
+  y += 82
+
+  ctx.fillStyle = '#6b7280'
+  ctx.font = '500 11px Arial'
+  drawText(ctx, 'This receipt records an agent-to-agent x402 service payment. Hash PayLink does not place, cancel, or manage Polymarket orders.', 64, y, width - 128, 18)
+  ctx.fillStyle = '#9ca3af'
+  ctx.font = '500 9px Arial'
+  drawText(ctx, input.receiptUrl, 64, height - 72, width - 128, 12)
 }
 
-function pdfEscape(value: string) {
-  return value.replace(/[^\x20-\x7E]/g, ' ').replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)')
+function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number, fill: string) {
+  ctx.beginPath()
+  ctx.moveTo(x + r, y)
+  ctx.lineTo(x + w - r, y)
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r)
+  ctx.lineTo(x + w, y + h - r)
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h)
+  ctx.lineTo(x + r, y + h)
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r)
+  ctx.lineTo(x, y + r)
+  ctx.quadraticCurveTo(x, y, x + r, y)
+  ctx.closePath()
+  ctx.fillStyle = fill
+  ctx.fill()
+}
+
+function drawBadge(ctx: CanvasRenderingContext2D, text: string, bg: string, fg: string, x: number, y: number) {
+  roundRect(ctx, x, y, 108, 26, 13, bg)
+  ctx.fillStyle = fg
+  ctx.font = '700 9px Arial'
+  ctx.fillText(text, x + 15, y + 17)
+}
+
+function drawRightText(ctx: CanvasRenderingContext2D, text: string, right: number, y: number, maxWidth: number) {
+  const clipped = clipCanvasText(ctx, text, maxWidth)
+  ctx.fillText(clipped, right - ctx.measureText(clipped).width, y)
+}
+
+function drawText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, maxWidth: number, lineHeight: number) {
+  let line = ''
+  for (const word of text.split(/\s+/)) {
+    const next = line ? `${line} ${word}` : word
+    if (ctx.measureText(next).width > maxWidth && line) {
+      ctx.fillText(line, x, y)
+      y += lineHeight
+      line = word
+    } else {
+      line = next
+    }
+  }
+  if (line) ctx.fillText(line, x, y)
+}
+
+function clipCanvasText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number) {
+  if (ctx.measureText(text).width <= maxWidth) return text
+  let clipped = text
+  while (clipped.length > 4 && ctx.measureText(`${clipped.slice(0, -1)}...`).width > maxWidth) {
+    clipped = clipped.slice(0, -1)
+  }
+  return `${clipped}...`
+}
+
+function createPdfWithJpeg(dataUrl: string, width: number, height: number) {
+  const base64 = dataUrl.split(',')[1] ?? ''
+  const binary = atob(base64)
+  const imageBytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i += 1) imageBytes[i] = binary.charCodeAt(i)
+
+  const encoder = new TextEncoder()
+  const parts: BlobPart[] = []
+  const offsets: number[] = [0]
+  let offset = 0
+  const add = (part: string | ArrayBuffer) => {
+    parts.push(part)
+    offset += typeof part === 'string' ? encoder.encode(part).length : part.byteLength
+  }
+  const start = (id: number) => {
+    offsets[id] = offset
+    add(`${id} 0 obj\n`)
+  }
+  const stream = `q\n${width} 0 0 ${height} 0 0 cm\n/Im1 Do\nQ`
+
+  add('%PDF-1.4\n')
+  start(1); add('<< /Type /Catalog /Pages 2 0 R >>\nendobj\n')
+  start(2); add('<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n')
+  start(3); add(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${width} ${height}] /Resources << /XObject << /Im1 4 0 R >> >> /Contents 5 0 R >>\nendobj\n`)
+  start(4); add(`<< /Type /XObject /Subtype /Image /Width ${width * 2} /Height ${height * 2} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${imageBytes.byteLength} >>\nstream\n`); add(imageBytes.buffer.slice(0) as ArrayBuffer); add('\nendstream\nendobj\n')
+  start(5); add(`<< /Length ${encoder.encode(stream).length} >>\nstream\n${stream}\nendstream\nendobj\n`)
+  const xref = offset
+  add('xref\n0 6\n0000000000 65535 f \n')
+  for (let i = 1; i <= 5; i += 1) add(`${String(offsets[i]).padStart(10, '0')} 00000 n \n`)
+  add(`trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`)
+  return new Blob(parts, { type: 'application/pdf' })
 }

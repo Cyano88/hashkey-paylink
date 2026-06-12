@@ -121,6 +121,13 @@ async function archiveAgentActivity(item: AgentActivity) {
   })
 }
 
+export async function ensureAgentActivityArchived(activityId: string) {
+  const found = await findAgentActivity(activityId)
+  if (!found || found.og || !shouldArchiveActivity(found)) return found
+  await archiveAgentActivity(found)
+  return findAgentActivity(activityId)
+}
+
 export async function listAgentActivity(agentSlug: string, limit = 12) {
   const slug = normalizeActivitySlug(agentSlug)
   if (!slug) return []
@@ -158,10 +165,14 @@ export async function appendAgentActivity(input: Omit<AgentActivity, 'id' | 'cre
     || (input.proof?.proofHash && item.proof?.proofHash === input.proof.proofHash && item.type === input.type)
   ))
   if (isDuplicate) {
-    return existing.find(item => (
+    const duplicate = existing.find(item => (
       (input.txHash && item.txHash?.toLowerCase() === input.txHash.toLowerCase() && item.type === input.type)
       || (input.proof?.proofHash && item.proof?.proofHash === input.proof.proofHash && item.type === input.type)
     ))
+    if (duplicate && shouldArchiveActivity(duplicate) && !duplicate.og) {
+      void archiveAgentActivity(duplicate).catch(() => {})
+    }
+    return duplicate
   }
   store.activity[slug] = [next, ...existing].slice(0, 80)
   await writeActivityStore(store)
