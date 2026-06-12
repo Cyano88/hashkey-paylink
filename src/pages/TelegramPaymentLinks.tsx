@@ -363,14 +363,12 @@ export default function TelegramPaymentLinks() {
       ? 'lp-scout'
       : initialServiceParam === 'agentic-lp-research'
       ? 'agentic-lp-research'
-      : initialServiceParam === 'request-usdc'
-      ? 'request-usdc'
       : ''
   const initialAgentService = initialService === 'hashpaylink-helper' || initialService === 'create-your-agent' || initialService === 'agent-dashboard'
   const initialMarketService = initialService === 'fund-polymarket' || initialService === 'lp-scout' || initialService === 'agentic-lp-research'
   const initialPersonTarget = displayTelegramName(searchParams.get('target') ?? searchParams.get('payer') ?? searchParams.get('p'), '')
   const initialGroupTarget = displayTelegramName(searchParams.get('target') ?? searchParams.get('group') ?? searchParams.get('g') ?? searchParams.get('chat'), '')
-  const [opened, setOpened] = useState(searchParams.get('open') === '1')
+  const [opened, setOpened] = useState(searchParams.get('open') !== '0')
   const [activeSection, setActiveSection] = useState<TelegramSectionId>(initialAgentService ? 'agent-wallets' : initialMarketService ? 'market-tools' : initialSection)
   const [activeService, setActiveService] = useState<TelegramServiceId | ''>(initialService)
   const [requestMode, setRequestMode] = useState<RequestMode | ''>(initialService === 'request-usdc' ? initialMode : '')
