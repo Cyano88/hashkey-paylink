@@ -27,7 +27,6 @@ import { EVM_TREASURY } from '../lib/chains'
 const TELEGRAM_BOT_URL = import.meta.env.VITE_TELEGRAM_AGENT_URL || 'https://t.me/HashPayLinkBot'
 const PUBLIC_PAYLINK_ORIGIN = (import.meta.env.VITE_PUBLIC_PAYLINK_ORIGIN || 'https://hashpaylink.com').replace(/\/+$/, '')
 const POLYMARKET_LOGO = '/brand/polymarket-logo.png'
-const POLY_STREAM_PROVIDER_URL = (import.meta.env.VITE_POLY_STREAM_PROVIDER_URL || '').trim()
 const MAX_USER_AGENTS = 3
 
 function displayTelegramName(rawName: string | null, fallback = 'there') {
@@ -2559,30 +2558,50 @@ type PolyStreamMatch = {
   title: string
   time: string
   venue: string
+  status: string
   marketContext: string
+  sourceUrl: string
+  watchUrl: string
 }
 
-const polyStreamMatches: PolyStreamMatch[] = [
+type PolyStreamFeed = {
+  ok: boolean
+  providerConfigured: boolean
+  source: string
+  updatedAt: string
+  matches: PolyStreamMatch[]
+}
+
+const fallbackPolyStreamMatches: PolyStreamMatch[] = [
   {
     tag: 'Today',
     title: 'Featured live match window',
     time: 'Live or next',
     venue: 'Provider schedule',
+    status: 'Provider pending',
     marketContext: 'Active World Cup match, team momentum, and in-play sentiment markets',
+    sourceUrl: '',
+    watchUrl: '',
   },
   {
     tag: 'Results',
     title: 'Post-match reaction watch',
     time: 'Post-match',
     venue: 'Latest completed fixture',
+    status: 'Provider pending',
     marketContext: 'Group standings, qualification odds, and next-match repricing markets',
+    sourceUrl: '',
+    watchUrl: '',
   },
   {
     tag: 'Fixtures',
     title: 'Upcoming star fixture watch',
     time: 'Upcoming',
     venue: 'World Cup schedule',
+    status: 'Provider pending',
     marketContext: 'Outright winner, top scorer, national team, and headline-driven markets',
+    sourceUrl: '',
+    watchUrl: '',
   },
 ]
 
@@ -2595,12 +2614,46 @@ function PolyStreamPanel({
   onOpenLpScout: (prefill: LpScoutPrefill) => void
   onOpenNews: () => void
 }) {
-  const providerReady = Boolean(POLY_STREAM_PROVIDER_URL)
+  const [feed, setFeed] = useState<PolyStreamFeed | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const matches = feed?.matches?.length ? feed.matches : fallbackPolyStreamMatches
+  const providerReady = Boolean(feed?.providerConfigured && feed.source !== 'fallback' && !error)
+  const statusText = loading
+    ? 'Refreshing'
+    : error
+    ? 'Provider unavailable'
+    : providerReady
+    ? `Updated ${relativeNewsTime(feed.updatedAt)}`
+    : 'Provider pending'
+
+  useEffect(() => {
+    let cancelled = false
+    async function loadStream() {
+      setLoading(true)
+      setError('')
+      try {
+        const response = await fetch('/api/poly-stream')
+        const text = await response.text()
+        const data = JSON.parse(text) as PolyStreamFeed
+        if (!response.ok || !data.ok) throw new Error('Poly Stream feed is not available.')
+        if (!cancelled) setFeed(data)
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Poly Stream feed is not available.')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    void loadStream()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   function askScout(match: PolyStreamMatch) {
     onOpenLpScout({
       mode: 'theme',
-      query: `World Cup match context: ${match.marketContext}`.slice(0, 170),
+      query: `World Cup match: ${match.title}. ${match.time}. ${match.status}. ${match.marketContext}`.replace(/\s+/g, ' ').slice(0, 170),
     })
   }
 
@@ -2633,7 +2686,7 @@ function PolyStreamPanel({
             ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-200'
             : 'bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-300',
         )}>
-          {providerReady ? 'Provider ready' : 'Provider pending'}
+          {statusText}
         </span>
       </div>
 
@@ -2646,21 +2699,15 @@ function PolyStreamPanel({
             <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold text-gray-900 dark:text-white">Official stream access first</p>
               <p className="mt-0.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                Add the provider URL when ready. Until then, this page stays a clean match context hub and does not surface unverified streams.
+                Match context comes from the server feed. Watch links only appear when an official or verified provider is configured.
               </p>
             </div>
           </div>
           <div className="mt-3 flex flex-wrap gap-1.5">
             {providerReady ? (
-              <a
-                href={POLY_STREAM_PROVIDER_URL}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-black px-2.5 py-1.5 text-[11px] font-semibold text-white shadow-sm transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
-              >
-                <ExternalLink className="h-3 w-3" />
-                Open provider
-              </a>
+              <span className="inline-flex items-center justify-center rounded-lg bg-black px-2.5 py-1.5 text-[11px] font-semibold text-white shadow-sm dark:bg-white dark:text-gray-950">
+                Provider ready
+              </span>
             ) : (
               <span className="inline-flex items-center justify-center rounded-lg bg-gray-100 px-2.5 py-1.5 text-[11px] font-semibold text-gray-500 dark:bg-white/[0.08] dark:text-gray-300">
                 Stream API pending
@@ -2678,7 +2725,7 @@ function PolyStreamPanel({
         </div>
 
         <div className="max-h-[330px] space-y-1.5 overflow-y-auto p-2 [scrollbar-color:rgba(148,163,184,0.35)_transparent] [scrollbar-width:thin] dark:[scrollbar-color:rgba(255,255,255,0.22)_transparent] [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300/40 dark:[&::-webkit-scrollbar-thumb]:bg-white/20">
-          {polyStreamMatches.map(match => (
+          {matches.map(match => (
             <div
               key={match.title}
               className="rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]"
@@ -2688,6 +2735,7 @@ function PolyStreamPanel({
                   <div className="flex flex-wrap items-center gap-1.5">
                     <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold uppercase text-gray-600 dark:bg-white/[0.08] dark:text-gray-300">{match.tag}</span>
                     <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-gray-500 dark:bg-white/[0.08] dark:text-gray-400">{match.time}</span>
+                    <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-gray-500 dark:bg-white/[0.08] dark:text-gray-400">{match.status}</span>
                   </div>
                   <p className="mt-2 text-sm font-semibold text-gray-900 dark:text-white">{match.title}</p>
                   <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{match.venue}</p>
@@ -2695,15 +2743,26 @@ function PolyStreamPanel({
                 </div>
               </div>
               <div className="mt-2 flex flex-wrap gap-1.5">
-                {providerReady && (
+                {match.watchUrl && (
                   <a
-                    href={POLY_STREAM_PROVIDER_URL}
+                    href={match.watchUrl}
                     target="_blank"
                     rel="noreferrer"
                     className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[10px] font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200"
                   >
                     <ExternalLink className="h-3 w-3" />
                     Watch
+                  </a>
+                )}
+                {match.sourceUrl && match.sourceUrl !== match.watchUrl && (
+                  <a
+                    href={match.sourceUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[10px] font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200"
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    Source
                   </a>
                 )}
                 <button
