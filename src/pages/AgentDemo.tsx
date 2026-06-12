@@ -1495,6 +1495,11 @@ export default function AgentDemo() {
                         ? `Tip Hash PayLink Agent for ${scoutModeLabel(pendingScoutMode).toLowerCase()}.`
                         : `Authorize ${displayAgentProfile?.name ?? agentSlug ?? 'this agent'} for LP Scout.`}
                     </div>
+                    {pendingScoutContext && (
+                      <div className="ml-auto max-w-[88%] break-words rounded-2xl rounded-br-md border border-gray-200 bg-white px-3 py-2 text-xs leading-relaxed text-gray-600 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300">
+                        <span className="font-semibold text-gray-900 dark:text-white">Context:</span> {pendingScoutContext}
+                      </div>
+                    )}
                     <div className="max-w-[92%] break-words rounded-2xl rounded-bl-md border border-gray-100 bg-white px-3 py-2 text-xs leading-relaxed text-gray-600 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300">
                       {!agentWalletAccessConnected
                         ? 'One secure agent session is needed. Then x402 pays and the LP result returns here.'
@@ -1520,7 +1525,7 @@ export default function AgentDemo() {
                             <div className="min-w-0">
                               <p className="text-[11px] font-semibold text-gray-900 dark:text-white">{latestPrimaryOpportunity.title ?? 'Primary market'}</p>
                               <p className="mt-1 text-[10px] text-gray-500 dark:text-gray-400">
-                                Bid {scoutPrice(latestPrimaryOpportunity.bestBid)} · Ask {scoutPrice(latestPrimaryOpportunity.bestAsk)} · Spread {scoutCents(latestPrimaryOpportunity.liveSpread)}
+                                Bid {scoutPrice(latestPrimaryOpportunity.bestBid)} / Ask {scoutPrice(latestPrimaryOpportunity.bestAsk)} / Spread {scoutCents(latestPrimaryOpportunity.liveSpread)}
                               </p>
                               {latestPrimaryOpportunity.scoutReason && (
                                 <p className="mt-1 text-[10px] leading-relaxed text-gray-500 dark:text-gray-400">
@@ -1529,9 +1534,9 @@ export default function AgentDemo() {
                               )}
                             </div>
                           </div>
-                          <div className="mt-2 grid grid-cols-3 gap-1.5 text-center text-[10px]">
-                            <span className="rounded-lg bg-white px-2 py-1 text-gray-600 dark:bg-white/[0.06] dark:text-gray-300">YES near {scoutPrice(latestPrimaryOpportunity.suggestedYesBid)}</span>
-                            <span className="rounded-lg bg-white px-2 py-1 text-gray-600 dark:bg-white/[0.06] dark:text-gray-300">NO near {scoutPrice(latestPrimaryOpportunity.suggestedNoBid)}</span>
+                          <div className="mt-2 grid grid-cols-1 gap-1.5 text-[10px] sm:grid-cols-3">
+                            <span className="rounded-lg bg-white px-2 py-1 text-gray-600 dark:bg-white/[0.06] dark:text-gray-300">YES guide {scoutPrice(latestPrimaryOpportunity.suggestedYesBid)}</span>
+                            <span className="rounded-lg bg-white px-2 py-1 text-gray-600 dark:bg-white/[0.06] dark:text-gray-300">NO guide {scoutPrice(latestPrimaryOpportunity.suggestedNoBid)}</span>
                             <span className="rounded-lg bg-white px-2 py-1 text-gray-600 dark:bg-white/[0.06] dark:text-gray-300">Depth {latestPrimaryOpportunity.depthAtTwoCents ?? 'n/a'}</span>
                           </div>
                           {latestPrimaryOpportunity.marketUrl && (

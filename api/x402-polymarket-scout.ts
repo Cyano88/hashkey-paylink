@@ -432,22 +432,22 @@ function baseLpOpportunity(market: PolymarketRewardMarket): PolymarketLpOpportun
 }
 
 function buildExecutionPlan(opportunity: PolymarketLpOpportunity, budget?: string) {
-  const budgetText = budget ? `Budget cap: ${budget}. Start with a small maker order, not the full budget at once.` : 'Start with a small maker test order; add more only if the book stays stable.'
+  const budgetText = budget ? `Use ${budget} only as a cap. Start with a small maker quote first, not the full amount.` : 'Start with a small maker quote first; add more only if the book still looks stable.'
   const spreadText = typeof opportunity.spread === 'number'
-    ? `Live spread is ${(opportunity.spread * 100).toFixed(1)}c. Place a maker order inside the spread; do not cross the book with a market order.`
+    ? `Current spread is ${(opportunity.spread * 100).toFixed(1)}c. Quote inside that spread and avoid market orders.`
     : 'Re-check the live order book before quoting; skip if bid/ask is unavailable.'
   const depthText = typeof opportunity.depthAtTwoCents === 'number'
-    ? `Visible depth within 2c is about ${opportunity.depthAtTwoCents.toFixed(0)} shares. Keep your order small compared with visible depth.`
+    ? `Depth within 2c is about ${opportunity.depthAtTwoCents.toFixed(0)} shares. Keep your quote small compared with that depth.`
     : 'Depth could not be confirmed; keep size conservative until the book refreshes.'
   const priceText = typeof opportunity.suggestedYesBid === 'number'
-    ? `Suggested human quote: try YES near ${opportunity.suggestedYesBid.toFixed(3)} or NO near ${opportunity.suggestedNoBid?.toFixed(3) ?? 'n/a'}. If any part fills, refresh the market before placing the next order.`
+    ? `Human quote guide: try YES near ${opportunity.suggestedYesBid.toFixed(3)} or NO near ${opportunity.suggestedNoBid?.toFixed(3) ?? 'n/a'}, then refresh before the next quote.`
     : 'Do not quote until midpoint and bid/ask are available.'
   return [
     budgetText,
     spreadText,
     depthText,
     priceText,
-    'Cancel or adjust stale quotes before news, scheduled starts, or fast price movement.',
+    'Cancel stale quotes quickly before news, match starts, or fast price movement.',
   ]
 }
 
@@ -537,10 +537,10 @@ async function loadScoutMarkets(options: ScoutOptions) {
 }
 
 function formatOpportunitySignal(opportunity: ReturnType<typeof serializeOpportunity>, index: number, mode: ScoutMode) {
-  const depth = typeof opportunity.depthAtTwoCents === 'number' ? ` | depth2c ${opportunity.depthAtTwoCents}` : ''
+  const depth = typeof opportunity.depthAtTwoCents === 'number' ? ` | depth ${opportunity.depthAtTwoCents}` : ''
   const spread = typeof opportunity.liveSpread === 'number' ? `${(opportunity.liveSpread * 100).toFixed(1)}c` : 'n/a'
   const reward = opportunity.dailyReward ?? 'n/a'
-  const prefix = mode === 'market' ? 'Inspected market' : 'Best current LP candidate'
+  const prefix = mode === 'market' ? 'Market checked' : mode === 'theme' ? 'Best match for this request' : 'Best current LP candidate'
   const days = typeof opportunity.daysToResolve === 'number' ? ` | ${opportunity.daysToResolve}d left` : ''
   return `${prefix}: ${opportunity.title.slice(0, 82)} | reward/day ${reward} USDC | spread ${spread}${depth}${days} | risk ${opportunity.lpExecutionRisk}`
 }
@@ -577,9 +577,10 @@ export async function buildLiveScout(options: Partial<ScoutOptions> = {}) {
   const budget = cleanContext(options.budget)
   const markets = await loadScoutMarkets({ mode, context, budget })
   if (!markets.length) {
+    const requestText = mode === 'theme' && context ? ` for "${context}"` : mode === 'market' && context ? ` for "${context}"` : ''
     return {
-      summary: `Live Polymarket ${scoutModeTitle(mode)} data is unavailable right now.`,
-      signals: ['Retry shortly, then compare active Gamma market data with live CLOB order books before quoting.'],
+      summary: `Live Polymarket ${scoutModeTitle(mode)} data is unavailable${requestText} right now.`,
+      signals: ['No paid pick was forced. Retry shortly and confirm the market page plus order book before quoting.'],
       opportunities: [],
       nextAction: 'Retry LP Scout after Polymarket public APIs are available.',
       disclaimer: 'Educational product signal only. Not financial advice.',
@@ -596,10 +597,10 @@ export async function buildLiveScout(options: Partial<ScoutOptions> = {}) {
     return {
       summary: `Live LP Scout did not find a clean conservative Polymarket LP candidate${themeText} right now.`,
       signals: [
-        'No paid pick was forced: current reward markets failed the conservative screen for time left, spread, depth, headline risk, or tradable midpoint.',
+        'No paid pick was forced. Current markets failed the safety screen for time left, spread, depth, headline risk, or tradable midpoint.',
       ],
       opportunities: [],
-      nextAction: 'Wait for a cleaner reward market instead of forcing a trade. Re-run LP Scout later before committing USDC.',
+      nextAction: 'Wait for a cleaner setup. Re-run LP Scout later before committing USDC.',
       disclaimer: 'Educational LP research for human review only. Not financial advice and not an automated trading instruction.',
       source: 'Polymarket Gamma markets/events plus CLOB rewards and order book APIs',
       request: { mode, context, budget },
@@ -613,16 +614,16 @@ export async function buildLiveScout(options: Partial<ScoutOptions> = {}) {
   const themeText = mode === 'theme' && context ? ` for "${context}"` : ''
   const marketText = mode === 'market' && context ? ` for "${context}"` : ''
   const summary = mode === 'market'
-    ? `Live LP Scout inspected one Polymarket market${marketText} with current CLOB book, spread, depth, and maker-order risk.`
+    ? `Live LP Scout checked the requested Polymarket market${marketText} using current book, spread, depth, and maker-order risk.`
     : mode === 'theme'
-    ? `Live LP Scout selected the strongest conservative Polymarket LP candidate${themeText} after checking rewards, spread, depth, time left, and volatility.`
+    ? `Live LP Scout selected one conservative Polymarket LP candidate${themeText} after checking rewards, spread, depth, time left, and volatility.`
     : `Live LP Scout selected one conservative Polymarket reward market after checking rewards, spread, depth, time left, and volatility.`
 
   return {
     summary,
     signals: opportunities.map((opportunity, index) => formatOpportunitySignal(opportunity, index, mode)),
     opportunities,
-    nextAction: 'Human action only: open the market, confirm the live book still matches this scout, then place a small maker order inside the spread. Do not use market orders.',
+    nextAction: 'Human action only: open the market, confirm the live book still matches this scout, then place a small maker quote inside the spread. Do not use market orders.',
     disclaimer: 'Educational LP research for human review only. Not financial advice and not an automated trading instruction.',
     source: 'Polymarket Gamma markets/events plus CLOB rewards and order book APIs',
     request: { mode, context, budget },
