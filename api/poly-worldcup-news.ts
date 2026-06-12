@@ -29,6 +29,10 @@ const FALLBACK_IMAGE = '/brand/polymarket-logo.png'
 
 let cache: CacheEntry | null = null
 
+function envValue(primary: string, fallback: string) {
+  return process.env[primary]?.trim() || process.env[fallback]?.trim() || ''
+}
+
 function asString(value: unknown) {
   return typeof value === 'string' ? value.trim() : ''
 }
@@ -128,17 +132,17 @@ function fallbackArticles(): PolyWorldCupArticle[] {
 }
 
 async function fetchProviderArticles(): Promise<PolyWorldCupArticle[]> {
-  const apiUrl = process.env.POLY_NEWS_API_URL?.trim()
+  const apiUrl = envValue('POLY_NEWS_API_URL', 'NEWS_API_URL')
   if (!apiUrl) return []
 
   const url = new URL(apiUrl)
   const queryParam = process.env.POLY_NEWS_QUERY_PARAM?.trim() || 'q'
   const limitParam = process.env.POLY_NEWS_LIMIT_PARAM?.trim() || 'max'
-  if (!url.searchParams.has(queryParam)) url.searchParams.set(queryParam, process.env.POLY_NEWS_QUERY?.trim() || DEFAULT_QUERY)
+  if (!url.searchParams.has(queryParam)) url.searchParams.set(queryParam, envValue('POLY_NEWS_QUERY', 'NEWS_QUERY') || DEFAULT_QUERY)
   if (!url.searchParams.has(limitParam)) url.searchParams.set(limitParam, process.env.POLY_NEWS_LIMIT?.trim() || '10')
 
   const headers: Record<string, string> = { Accept: 'application/json' }
-  const apiKey = process.env.POLY_NEWS_API_KEY?.trim()
+  const apiKey = envValue('POLY_NEWS_API_KEY', 'NEWS_API_KEY')
   const authHeader = process.env.POLY_NEWS_API_AUTH_HEADER?.trim()
   if (apiKey && authHeader) {
     headers[authHeader] = apiKey
@@ -165,18 +169,18 @@ export default async function polyWorldcupNewsHandler(req: Request, res: Respons
     return res.status(405).json({ ok: false, error: 'Method not allowed' })
   }
 
-  const cacheMs = Number(process.env.POLY_NEWS_CACHE_MS ?? DEFAULT_CACHE_MS)
+  const cacheMs = Number(envValue('POLY_NEWS_CACHE_MS', 'NEWS_CACHE_MS') || DEFAULT_CACHE_MS)
   const ttl = Number.isFinite(cacheMs) && cacheMs > 0 ? cacheMs : DEFAULT_CACHE_MS
   if (cache && cache.expiresAt > Date.now()) return res.json(cache.feed)
 
-  const providerConfigured = Boolean(process.env.POLY_NEWS_API_URL?.trim())
+  const providerConfigured = Boolean(envValue('POLY_NEWS_API_URL', 'NEWS_API_URL'))
   try {
     const providerArticles = await fetchProviderArticles()
     const articles = providerArticles.length ? providerArticles : fallbackArticles()
     const feed = {
       ok: true as const,
       providerConfigured,
-      source: providerArticles.length ? 'provider' : 'fallback',
+      source: providerArticles.length ? envValue('POLY_NEWS_PROVIDER', 'NEWS_PROVIDER') || 'provider' : 'fallback',
       updatedAt: new Date().toISOString(),
       articles,
     }
