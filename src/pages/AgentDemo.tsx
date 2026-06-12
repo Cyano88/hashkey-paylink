@@ -25,6 +25,22 @@ import {
   RefreshCw,
 } from 'lucide-react'
 
+async function readAgentWalletJson<T>(response: Response): Promise<T> {
+  const contentType = response.headers.get('content-type') ?? ''
+  const text = await response.text()
+  if (!contentType.includes('application/json')) {
+    const looksLikeHtml = /^\s*</.test(text)
+    throw new Error(looksLikeHtml
+      ? 'Hash PayLink is still finishing the latest deploy. Wait a few seconds, then run LP Alpha again.'
+      : text.slice(0, 180) || 'Agent wallet API returned an unexpected response.')
+  }
+  try {
+    return JSON.parse(text) as T
+  } catch {
+    throw new Error('Agent wallet API returned invalid JSON. Refresh and try again.')
+  }
+}
+
 function emailFromPrivyUser(user: unknown) {
   const linkedAccounts = (user as { linkedAccounts?: Array<Record<string, unknown>> } | null)?.linkedAccounts ?? []
   for (const account of linkedAccounts) {
@@ -1103,7 +1119,7 @@ export default function AgentDemo() {
           budget: pendingScoutBudget || undefined,
         }),
       })
-      const data = await res.json() as LpScoutRunResult & { ok?: boolean; error?: string }
+      const data = await readAgentWalletJson<LpScoutRunResult & { ok?: boolean; error?: string }>(res)
       if (!res.ok || !data.ok) throw new Error(data.error ?? 'LP Scout x402 request failed')
       setLpScoutResult(data)
       setReceiptsOpen(true)
