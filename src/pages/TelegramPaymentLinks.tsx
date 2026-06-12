@@ -66,6 +66,13 @@ type TelegramService = {
   brand?: 'polymarket'
 }
 
+type LpScoutMode = 'best' | 'theme' | 'market'
+type LpScoutPrefill = {
+  mode: LpScoutMode
+  query: string
+  budget?: string
+}
+
 const sectionServices: Record<TelegramSectionId, TelegramService[]> = {
   'payment-links': [
     {
@@ -402,6 +409,7 @@ export default function TelegramPaymentLinks() {
   const [polymarketBridgeError, setPolymarketBridgeError] = useState('')
   const [agentProfiles, setAgentProfiles] = useState<AgentProfile[]>([])
   const [agentProfilesError, setAgentProfilesError] = useState('')
+  const [lpScoutPrefill, setLpScoutPrefill] = useState<LpScoutPrefill | null>(null)
   const [recoveredTelegramName, setRecoveredTelegramName] = useState('')
   const telegramName = useMemo(() => {
     const webAppUser = telegramWebAppUser()
@@ -794,6 +802,8 @@ export default function TelegramPaymentLinks() {
             <LpScoutPanel
               agents={agentProfiles}
               loadError={agentProfilesError}
+              prefill={lpScoutPrefill}
+              onPrefillConsumed={() => setLpScoutPrefill(null)}
               onCreateAgent={() => {
                 setActiveSection('agent-wallets')
                 setActiveService('create-your-agent')
@@ -803,7 +813,10 @@ export default function TelegramPaymentLinks() {
           ) : activeService === 'poly-worldcup-news' ? (
             <PolyWorldCupNewsPanel
               onBack={() => setActiveService('')}
-              onOpenLpScout={() => setActiveService('lp-scout')}
+              onOpenLpScout={prefill => {
+                setLpScoutPrefill(prefill)
+                setActiveService('lp-scout')
+              }}
             />
           ) : activeService === 'agentic-lp-research' ? (
             <AgenticLpResearchPanel onBack={() => setActiveService('')} />
@@ -1928,7 +1941,6 @@ function AgentDashboardPanel({
   )
 }
 
-type LpScoutMode = 'best' | 'theme' | 'market'
 type LpScoutPath = '' | 'access' | 'daily'
 type LpScoutStep = 'service' | 'agent'
 
@@ -1973,11 +1985,15 @@ const lpScoutOptions: LpScoutOption[] = [
 function LpScoutPanel({
   agents,
   loadError,
+  prefill,
+  onPrefillConsumed,
   onCreateAgent,
   onBack,
 }: {
   agents: AgentProfile[]
   loadError: string
+  prefill: LpScoutPrefill | null
+  onPrefillConsumed: () => void
   onCreateAgent: () => void
   onBack: () => void
 }) {
@@ -1993,6 +2009,18 @@ function LpScoutPanel({
   const contextReady = !needsQuery || query.trim().length > 2
   const amountReady = Number(maxSpend) > 0
   const canChooseAgent = contextReady && amountReady
+
+  useEffect(() => {
+    if (!prefill) return
+    const option = lpScoutOptions.find(item => item.id === prefill.mode) ?? lpScoutOptions[0]
+    setPath('access')
+    setStep('service')
+    setMode(option.id)
+    setQuery(prefill.query)
+    setMaxSpend(option.amount)
+    if (prefill.budget) setBudget(prefill.budget)
+    onPrefillConsumed()
+  }, [prefill])
 
   function selectOption(option: LpScoutOption) {
     setMode(option.id)
@@ -2292,7 +2320,7 @@ function PolyWorldCupNewsPanel({
   onOpenLpScout,
 }: {
   onBack: () => void
-  onOpenLpScout: () => void
+  onOpenLpScout: (prefill: LpScoutPrefill) => void
 }) {
   const [active, setActive] = useState(0)
   const [feed, setFeed] = useState<PolyWorldCupFeed | null>(null)
@@ -2345,6 +2373,13 @@ function PolyWorldCupNewsPanel({
     }, 6500)
     return () => window.clearInterval(timer)
   }, [articles.length])
+
+  function askLpScout() {
+    const headline = lead.title.replace(/\s+/g, ' ').trim()
+    const source = lead.source ? ` (${lead.source})` : ''
+    const query = `World Cup: ${headline}${source}`.slice(0, 170)
+    onOpenLpScout({ mode: 'theme', query })
+  }
 
   return (
     <div className="mt-4 space-y-3">
@@ -2424,7 +2459,7 @@ function PolyWorldCupNewsPanel({
               )}
               <button
                 type="button"
-                onClick={onOpenLpScout}
+                onClick={askLpScout}
                 className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-white/15 px-2.5 py-1.5 text-[11px] font-semibold text-white ring-1 ring-white/25 transition-all hover:bg-white/25 active:scale-[0.98]"
               >
                 <LineChart className="h-3 w-3" />
