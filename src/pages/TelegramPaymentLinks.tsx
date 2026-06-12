@@ -27,6 +27,7 @@ import { EVM_TREASURY } from '../lib/chains'
 const TELEGRAM_BOT_URL = import.meta.env.VITE_TELEGRAM_AGENT_URL || 'https://t.me/HashPayLinkBot'
 const PUBLIC_PAYLINK_ORIGIN = (import.meta.env.VITE_PUBLIC_PAYLINK_ORIGIN || 'https://hashpaylink.com').replace(/\/+$/, '')
 const POLYMARKET_LOGO = '/brand/polymarket-logo.png'
+const POLY_STREAM_PROVIDER_URL = (import.meta.env.VITE_POLY_STREAM_PROVIDER_URL || '').trim()
 const MAX_USER_AGENTS = 3
 
 function displayTelegramName(rawName: string | null, fallback = 'there') {
@@ -52,6 +53,7 @@ type TelegramServiceId =
   | 'fund-agent-wallet'
   | 'lp-scout'
   | 'poly-worldcup-news'
+  | 'poly-stream'
   | 'agentic-lp-research'
   | 'create-streampay'
   | 'agentic-streampay'
@@ -141,6 +143,14 @@ const sectionServices: Record<TelegramSectionId, TelegramService[]> = {
       title: 'World Cup News',
       body: 'Follow World Cup headlines that can move Polymarket prices and LP risk.',
       icon: Newspaper,
+      status: 'Open',
+      active: true,
+    },
+    {
+      id: 'poly-stream',
+      title: 'Poly Stream',
+      body: 'Track World Cup match windows and official viewing links for market context.',
+      icon: Radio,
       status: 'Open',
       active: true,
     },
@@ -380,11 +390,13 @@ export default function TelegramPaymentLinks() {
       ? 'lp-scout'
       : initialServiceParam === 'poly-worldcup-news'
       ? 'poly-worldcup-news'
+      : initialServiceParam === 'poly-stream'
+      ? 'poly-stream'
       : initialServiceParam === 'agentic-lp-research'
       ? 'agentic-lp-research'
       : ''
   const initialAgentService = initialService === 'hashpaylink-helper' || initialService === 'create-your-agent' || initialService === 'agent-dashboard'
-  const initialMarketService = initialService === 'fund-polymarket' || initialService === 'lp-scout' || initialService === 'poly-worldcup-news' || initialService === 'agentic-lp-research'
+  const initialMarketService = initialService === 'fund-polymarket' || initialService === 'lp-scout' || initialService === 'poly-worldcup-news' || initialService === 'poly-stream' || initialService === 'agentic-lp-research'
   const initialPersonTarget = displayTelegramName(searchParams.get('target') ?? searchParams.get('payer') ?? searchParams.get('p'), '')
   const initialGroupTarget = displayTelegramName(searchParams.get('target') ?? searchParams.get('group') ?? searchParams.get('g') ?? searchParams.get('chat'), '')
   const [opened, setOpened] = useState(searchParams.get('open') !== '0')
@@ -565,6 +577,10 @@ export default function TelegramPaymentLinks() {
     }
     if (service.id === 'poly-worldcup-news') {
       setActiveService('poly-worldcup-news')
+      return
+    }
+    if (service.id === 'poly-stream') {
+      setActiveService('poly-stream')
       return
     }
     if (service.id === 'agentic-lp-research') {
@@ -817,6 +833,15 @@ export default function TelegramPaymentLinks() {
                 setLpScoutPrefill(prefill)
                 setActiveService('lp-scout')
               }}
+            />
+          ) : activeService === 'poly-stream' ? (
+            <PolyStreamPanel
+              onBack={() => setActiveService('')}
+              onOpenLpScout={prefill => {
+                setLpScoutPrefill(prefill)
+                setActiveService('lp-scout')
+              }}
+              onOpenNews={() => setActiveService('poly-worldcup-news')}
             />
           ) : activeService === 'agentic-lp-research' ? (
             <AgenticLpResearchPanel onBack={() => setActiveService('')} />
@@ -2528,6 +2553,176 @@ function PolyWorldCupNewsPanel({
     </div>
   )
 }
+
+type PolyStreamMatch = {
+  tag: string
+  title: string
+  time: string
+  venue: string
+  marketContext: string
+}
+
+const polyStreamMatches: PolyStreamMatch[] = [
+  {
+    tag: 'Today',
+    title: 'Featured live match window',
+    time: 'Live or next',
+    venue: 'Provider schedule',
+    marketContext: 'Active World Cup match, team momentum, and in-play sentiment markets',
+  },
+  {
+    tag: 'Results',
+    title: 'Post-match reaction watch',
+    time: 'Post-match',
+    venue: 'Latest completed fixture',
+    marketContext: 'Group standings, qualification odds, and next-match repricing markets',
+  },
+  {
+    tag: 'Fixtures',
+    title: 'Upcoming star fixture watch',
+    time: 'Upcoming',
+    venue: 'World Cup schedule',
+    marketContext: 'Outright winner, top scorer, national team, and headline-driven markets',
+  },
+]
+
+function PolyStreamPanel({
+  onBack,
+  onOpenLpScout,
+  onOpenNews,
+}: {
+  onBack: () => void
+  onOpenLpScout: (prefill: LpScoutPrefill) => void
+  onOpenNews: () => void
+}) {
+  const providerReady = Boolean(POLY_STREAM_PROVIDER_URL)
+
+  function askScout(match: PolyStreamMatch) {
+    onOpenLpScout({
+      mode: 'theme',
+      query: `World Cup match context: ${match.marketContext}`.slice(0, 170),
+    })
+  }
+
+  return (
+    <div className="mt-4 space-y-3">
+      <div className="flex flex-col items-start justify-between gap-3 sm:flex-row">
+        <div className="min-w-0">
+          <button
+            type="button"
+            onClick={onBack}
+            className="mb-2 inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 transition-colors hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Back
+          </button>
+          <div className="flex items-center gap-2">
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.06]">
+              <Radio className="h-4 w-4 text-gray-800 dark:text-gray-100" />
+            </span>
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Poly Stream</p>
+          </div>
+          <h2 className="mt-2 text-base font-semibold tracking-tight text-gray-900 dark:text-white">World Cup match hub</h2>
+          <p className="mt-1 max-w-2xl text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+            Follow match windows, official viewing access, and Polymarket context before asking LP Scout for paid book checks.
+          </p>
+        </div>
+        <span className={cn(
+          'shrink-0 rounded-full px-2 py-1 text-[10px] font-bold sm:mt-7',
+          providerReady
+            ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-200'
+            : 'bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-300',
+        )}>
+          {providerReady ? 'Provider ready' : 'Provider pending'}
+        </span>
+      </div>
+
+      <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.05]">
+        <div className="border-b border-gray-100 p-3 dark:border-white/10">
+          <div className="flex items-start gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gray-950 text-white dark:bg-white dark:text-gray-950">
+              <Radio className="h-4 w-4" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-gray-900 dark:text-white">Official stream access first</p>
+              <p className="mt-0.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                Add the provider URL when ready. Until then, this page stays a clean match context hub and does not surface unverified streams.
+              </p>
+            </div>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {providerReady ? (
+              <a
+                href={POLY_STREAM_PROVIDER_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-black px-2.5 py-1.5 text-[11px] font-semibold text-white shadow-sm transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+              >
+                <ExternalLink className="h-3 w-3" />
+                Open provider
+              </a>
+            ) : (
+              <span className="inline-flex items-center justify-center rounded-lg bg-gray-100 px-2.5 py-1.5 text-[11px] font-semibold text-gray-500 dark:bg-white/[0.08] dark:text-gray-300">
+                Stream API pending
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={onOpenNews}
+              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200"
+            >
+              <Newspaper className="h-3 w-3" />
+              News
+            </button>
+          </div>
+        </div>
+
+        <div className="max-h-[330px] space-y-1.5 overflow-y-auto p-2 [scrollbar-color:rgba(148,163,184,0.35)_transparent] [scrollbar-width:thin] dark:[scrollbar-color:rgba(255,255,255,0.22)_transparent] [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300/40 dark:[&::-webkit-scrollbar-thumb]:bg-white/20">
+          {polyStreamMatches.map(match => (
+            <div
+              key={match.title}
+              className="rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold uppercase text-gray-600 dark:bg-white/[0.08] dark:text-gray-300">{match.tag}</span>
+                    <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-gray-500 dark:bg-white/[0.08] dark:text-gray-400">{match.time}</span>
+                  </div>
+                  <p className="mt-2 text-sm font-semibold text-gray-900 dark:text-white">{match.title}</p>
+                  <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{match.venue}</p>
+                  <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">{match.marketContext}</p>
+                </div>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {providerReady && (
+                  <a
+                    href={POLY_STREAM_PROVIDER_URL}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[10px] font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200"
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    Watch
+                  </a>
+                )}
+                <button
+                  type="button"
+                  onClick={() => askScout(match)}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-gray-900 px-2.5 py-1.5 text-[10px] font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950"
+                >
+                  <LineChart className="h-3 w-3" />
+                  Ask LP Scout
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function AgenticLpResearchPanel({ onBack }: { onBack: () => void }) {
   const [email, setEmail] = useState('')
   const [duration, setDuration] = useState('7d')
