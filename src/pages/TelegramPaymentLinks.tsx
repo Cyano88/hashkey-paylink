@@ -2348,7 +2348,7 @@ function PolyWorldCupNewsPanel({
 
   return (
     <div className="mt-4 space-y-3">
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex flex-col items-start justify-between gap-3 sm:flex-row">
         <div className="min-w-0">
           <button
             type="button"
@@ -2365,12 +2365,12 @@ function PolyWorldCupNewsPanel({
             <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Polymarket News</p>
           </div>
           <h2 className="mt-2 text-base font-semibold tracking-tight text-gray-900 dark:text-white">World Cup market pulse</h2>
-          <p className="mt-1 max-w-xl text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+          <p className="mt-1 max-w-2xl text-xs leading-relaxed text-gray-500 dark:text-gray-400">
             Track World Cup headlines that can affect Polymarket prices, liquidity, and LP risk before asking the agent for paid alpha.
           </p>
         </div>
         <span className={cn(
-          'shrink-0 rounded-full px-2 py-1 text-[10px] font-bold',
+          'shrink-0 rounded-full px-2 py-1 text-[10px] font-bold sm:mt-7',
           hasProviderFeed
             ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-200'
             : 'bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-300',
@@ -2406,35 +2406,35 @@ function PolyWorldCupNewsPanel({
             >
               {lead.description}
             </p>
-            <div className="mt-3 flex flex-wrap gap-2">
+            <div className="mt-3 flex flex-wrap gap-1.5">
               {lead.url ? (
                 <a
                   href={lead.url}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-white px-3 py-2 text-xs font-semibold text-gray-950 transition-all hover:bg-gray-100 active:scale-[0.98]"
+                  className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-white/95 px-2.5 py-1.5 text-[11px] font-semibold text-gray-950 shadow-sm ring-1 ring-white/30 transition-all hover:bg-white active:scale-[0.98]"
                 >
-                  <ExternalLink className="h-3.5 w-3.5" />
+                  <ExternalLink className="h-3 w-3" />
                   Open source
                 </a>
               ) : (
-                <span className="inline-flex items-center justify-center rounded-lg bg-white/15 px-3 py-2 text-xs font-semibold text-white ring-1 ring-white/20">
+                <span className="inline-flex items-center justify-center rounded-lg bg-white/15 px-2.5 py-1.5 text-[11px] font-semibold text-white ring-1 ring-white/20">
                   Source pending
                 </span>
               )}
               <button
                 type="button"
                 onClick={onOpenLpScout}
-                className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-emerald-400 px-3 py-2 text-xs font-semibold text-gray-950 transition-all hover:bg-emerald-300 active:scale-[0.98]"
+                className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-white/15 px-2.5 py-1.5 text-[11px] font-semibold text-white ring-1 ring-white/25 transition-all hover:bg-white/25 active:scale-[0.98]"
               >
-                <LineChart className="h-3.5 w-3.5" />
+                <LineChart className="h-3 w-3" />
                 Ask LP Scout
               </button>
             </div>
           </div>
         </div>
 
-        <div className="max-h-[280px] space-y-1.5 overflow-y-auto border-t border-gray-100 p-2 dark:border-white/10">
+        <div className="max-h-[280px] space-y-1.5 overflow-y-auto border-t border-gray-100 p-2 [scrollbar-color:rgba(148,163,184,0.35)_transparent] [scrollbar-width:thin] dark:border-white/10 dark:[scrollbar-color:rgba(255,255,255,0.22)_transparent] [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300/40 dark:[&::-webkit-scrollbar-thumb]:bg-white/20">
           {articles.map((article, index) => {
             const selected = index === active % articles.length
             const imageBroken = brokenImages[article.title]
@@ -2478,9 +2478,6 @@ function PolyWorldCupNewsPanel({
         </div>
       </div>
 
-      <p className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-800 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-100">
-        News is context only. Use LP Scout for live Polymarket book checks before placing human maker orders.
-      </p>
     </div>
   )
 }
