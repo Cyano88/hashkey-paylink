@@ -2003,6 +2003,7 @@ function LpScoutPanel({
   const [query, setQuery] = useState('')
   const [budget, setBudget] = useState('')
   const [maxSpend, setMaxSpend] = useState(lpScoutOptions[0].amount)
+  const [prefillNotice, setPrefillNotice] = useState('')
   const connectedAgents = useMemo(() => agents.filter(agent => Boolean(agent.walletAddress)), [agents])
   const selectedOption = lpScoutOptions.find(option => option.id === mode) ?? lpScoutOptions[0]
   const needsQuery = Boolean(selectedOption.inputLabel)
@@ -2018,6 +2019,7 @@ function LpScoutPanel({
     setMode(option.id)
     setQuery(prefill.query)
     setMaxSpend(option.amount)
+    setPrefillNotice(prefill.query)
     if (prefill.budget) setBudget(prefill.budget)
     onPrefillConsumed()
   }, [prefill])
@@ -2026,6 +2028,7 @@ function LpScoutPanel({
     setMode(option.id)
     setMaxSpend(option.amount)
     setQuery('')
+    setPrefillNotice('')
     setStep('service')
   }
 
@@ -2176,6 +2179,12 @@ function LpScoutPanel({
       </div>
 
       <div className="space-y-3 rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
+        {prefillNotice && (
+          <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 dark:border-emerald-400/20 dark:bg-emerald-400/10">
+            <p className="text-[11px] font-bold uppercase tracking-widest text-emerald-700 dark:text-emerald-200">News context loaded</p>
+            <p className="mt-0.5 truncate text-xs font-medium text-emerald-800/80 dark:text-emerald-100/80">{prefillNotice}</p>
+          </div>
+        )}
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Selected service</p>
           <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{selectedOption.title}</p>
@@ -2184,7 +2193,10 @@ function LpScoutPanel({
           <InputBlock
             label={selectedOption.inputLabel}
             value={query}
-            onChange={setQuery}
+            onChange={value => {
+              setQuery(value)
+              if (prefillNotice) setPrefillNotice('')
+            }}
             placeholder={selectedOption.inputPlaceholder ?? 'Add context'}
           />
         )}
