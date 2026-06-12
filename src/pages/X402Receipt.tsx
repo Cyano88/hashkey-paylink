@@ -159,7 +159,7 @@ export default function X402Receipt() {
               {data?.receipt?.title ?? 'Receipt'}
             </h1>
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              {data?.receipt?.amount ?? 'x402 payment'} · {String(proof.service ?? 'Hash PayLink service')}
+              {data?.receipt?.amount ?? 'x402 payment'} - {String(proof.service ?? 'Hash PayLink service')}
             </p>
           </div>
           {data?.ok && data.receipt && (
