@@ -1456,7 +1456,14 @@ export default function AgentDemo() {
                 </div>
                 {(pendingScoutContext || pendingScoutBudget) && (
                   <div className="grid gap-1 rounded-lg bg-white px-2.5 py-2 text-[11px] text-gray-500 dark:bg-white/[0.06] dark:text-gray-400">
-                    {pendingScoutContext && <p className="truncate"><span className="font-semibold">Context:</span> {pendingScoutContext}</p>}
+                    {pendingScoutContext && (
+                      <p
+                        className="overflow-hidden leading-snug"
+                        style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}
+                      >
+                        <span className="font-semibold">Context:</span> {pendingScoutContext}
+                      </p>
+                    )}
                     {pendingScoutBudget && <p className="truncate"><span className="font-semibold">Budget:</span> {pendingScoutBudget}</p>}
                   </div>
                 )}
@@ -1497,7 +1504,12 @@ export default function AgentDemo() {
                     </div>
                     {pendingScoutContext && (
                       <div className="ml-auto max-w-[88%] break-words rounded-2xl rounded-br-md border border-gray-200 bg-white px-3 py-2 text-xs leading-relaxed text-gray-600 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300">
-                        <span className="font-semibold text-gray-900 dark:text-white">Context:</span> {pendingScoutContext}
+                        <p
+                          className="overflow-hidden"
+                          style={{ display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical' }}
+                        >
+                          <span className="font-semibold text-gray-900 dark:text-white">Context:</span> {pendingScoutContext}
+                        </p>
                       </div>
                     )}
                     <div className="max-w-[92%] break-words rounded-2xl rounded-bl-md border border-gray-100 bg-white px-3 py-2 text-xs leading-relaxed text-gray-600 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300">
