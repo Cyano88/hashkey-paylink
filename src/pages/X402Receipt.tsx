@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, CheckCircle2, Copy, Download, Loader2, ShieldCheck, XCircle } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Download, ExternalLink, Loader2, Share2, ShieldCheck, XCircle } from 'lucide-react'
 
 type ReceiptResponse = {
   ok?: boolean
@@ -37,7 +37,7 @@ export default function X402Receipt() {
   const navigate = useNavigate()
   const [data, setData] = useState<ReceiptResponse | null>(null)
   const [busy, setBusy] = useState(true)
-  const [copied, setCopied] = useState(false)
+  const [shared, setShared] = useState(false)
   const [circleNotice, setCircleNotice] = useState(false)
 
   async function load() {
@@ -54,7 +54,6 @@ export default function X402Receipt() {
     void load()
   }, [activityId])
 
-  const receiptJson = JSON.stringify(data?.receipt ?? {}, null, 2)
   const proof = data?.receipt?.proof ?? {}
   const og = data?.receipt?.og
   const legal = data?.receipt?.legal ?? {}
@@ -64,7 +63,7 @@ export default function X402Receipt() {
     const receipt = data?.receipt
     if (!receipt) return ''
     return [
-      'Hash PayLink x402 Receipt',
+      'Hash PayLink Agentic Receipt',
       '',
       `Title: ${receipt.title ?? 'Receipt'}`,
       `Amount: ${receipt.amount ?? 'x402 payment'}`,
@@ -78,15 +77,38 @@ export default function X402Receipt() {
       `Proof: ${String(proof.proofHash ?? '')}`,
       og?.rootHash ? `0G root: ${og.rootHash}` : '',
       og?.ogTxHash ? `0G tx: ${og.ogTxHash}` : '',
+      `Receipt URL: ${window.location.href}`,
       '',
       'This receipt records an agent-to-agent x402 service payment. Hash PayLink does not place, cancel, or manage Polymarket orders.',
     ].filter(Boolean).join('\n')
   }, [data?.receipt, governance.governanceVersion, legal.entityName, og?.ogTxHash, og?.rootHash, proof])
 
-  async function copyReceipt() {
-    await navigator.clipboard.writeText(receiptJson)
-    setCopied(true)
-    window.setTimeout(() => setCopied(false), 1400)
+  function receiptPdfBlob() {
+    return new Blob([createReceiptPdf(receiptFile)], { type: 'application/pdf' })
+  }
+
+  function receiptPdfName() {
+    return `hashpaylink-agentic-receipt-${activityId || 'receipt'}.pdf`
+  }
+
+  async function shareReceipt() {
+    if (!receiptFile) return
+    const file = new File([receiptPdfBlob()], receiptPdfName(), { type: 'application/pdf' })
+    const nav = navigator as Navigator & {
+      canShare?: (data: ShareData) => boolean
+      share?: (data: ShareData) => Promise<void>
+    }
+    if (nav.share && (!nav.canShare || nav.canShare({ files: [file] }))) {
+      await nav.share({
+        title: 'Hash PayLink Agentic Receipt',
+        text: data?.receipt?.title ?? 'Hash PayLink x402 receipt',
+        files: [file],
+      })
+      return
+    }
+    downloadReceipt()
+    setShared(true)
+    window.setTimeout(() => setShared(false), 1800)
   }
 
   function showCircleComingSoon() {
@@ -96,11 +118,11 @@ export default function X402Receipt() {
 
   function downloadReceipt() {
     if (!receiptFile) return
-    const blob = new Blob([receiptFile], { type: 'text/plain;charset=utf-8' })
+    const blob = receiptPdfBlob()
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = `hashpaylink-x402-receipt-${activityId || 'receipt'}.txt`
+    link.download = receiptPdfName()
     document.body.appendChild(link)
     link.click()
     link.remove()
@@ -123,7 +145,7 @@ export default function X402Receipt() {
             <img src="/hash-logo-transparent.png" alt="" className="h-full w-full object-contain invert dark:invert-0" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Hash PayLink receipt</p>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Hash PayLink Agentic Receipt</p>
             <h1 className="mt-1 truncate text-lg font-semibold tracking-tight text-gray-900 dark:text-white">
               {data?.receipt?.title ?? 'Receipt'}
             </h1>
@@ -162,7 +184,7 @@ export default function X402Receipt() {
               )}
             </div>
 
-            {og?.ogExplorer && (
+            {og?.ogExplorer ? (
               <a
                 href={og.ogExplorer}
                 target="_blank"
@@ -170,8 +192,19 @@ export default function X402Receipt() {
                 className="mt-3 flex items-center gap-2 rounded-xl border border-purple-100 bg-purple-50 px-3 py-2 text-xs font-semibold text-purple-700 transition-colors hover:bg-purple-100 dark:border-purple-400/20 dark:bg-purple-400/10 dark:text-purple-200"
               >
                 <ShieldCheck className="h-4 w-4" />
-                0G proof archived
+                <span className="inline-flex items-center rounded border border-purple-100 bg-purple-50 px-1 py-0.5 text-[8px] font-bold leading-none text-purple-500 dark:border-purple-900/60 dark:bg-purple-950/50 dark:text-purple-300">
+                  0G
+                </span>
+                <span>Archived</span>
+                <ExternalLink className="h-3 w-3" />
               </a>
+            ) : (
+              <div className="mt-3 flex items-center justify-between gap-4 rounded-xl border border-gray-100 bg-gray-50/70 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">
+                <span className="text-xs text-gray-400 dark:text-gray-500">0G proof</span>
+                <span className="rounded border border-gray-100 bg-gray-50 px-2 py-1 text-[11px] font-semibold text-gray-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-500">
+                  Archiving
+                </span>
+              </div>
             )}
 
             {data.circle && (
@@ -202,11 +235,11 @@ export default function X402Receipt() {
               </button>
               <button
                 type="button"
-                onClick={copyReceipt}
+                onClick={shareReceipt}
                 className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-800 transition-all hover:bg-gray-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-100"
               >
-                <Copy className="h-4 w-4" />
-                {copied ? 'Copied' : 'Copy receipt'}
+                <Share2 className="h-4 w-4" />
+                {shared ? 'PDF downloaded' : 'Share'}
               </button>
             </div>
           </>
@@ -218,4 +251,63 @@ export default function X402Receipt() {
       </section>
     </main>
   )
+}
+
+function createReceiptPdf(text: string) {
+  const lines = wrapPdfLines(text)
+  const content = [
+    'BT',
+    '/F1 16 Tf',
+    '72 760 Td',
+    `(${pdfEscape(lines[0] ?? 'Hash PayLink Agentic Receipt')}) Tj`,
+    '/F1 10 Tf',
+    '0 -26 Td',
+    ...lines.slice(1).flatMap(line => [`(${pdfEscape(line)}) Tj`, '0 -14 Td']),
+    'ET',
+  ].join('\n')
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>',
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+    `<< /Length ${content.length} >>\nstream\n${content}\nendstream`,
+  ]
+  let body = '%PDF-1.4\n'
+  const offsets = [0]
+  objects.forEach((object, index) => {
+    offsets.push(body.length)
+    body += `${index + 1} 0 obj\n${object}\nendobj\n`
+  })
+  const xref = body.length
+  body += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`
+  body += offsets.slice(1).map(offset => `${String(offset).padStart(10, '0')} 00000 n \n`).join('')
+  body += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`
+  return body
+}
+
+function wrapPdfLines(text: string) {
+  const out: string[] = []
+  for (const raw of text.split('\n')) {
+    const line = raw.trim()
+    if (!line) {
+      out.push('')
+      continue
+    }
+    let current = ''
+    for (const word of line.split(/\s+/)) {
+      const next = current ? `${current} ${word}` : word
+      if (next.length > 82) {
+        out.push(current)
+        current = word
+      } else {
+        current = next
+      }
+    }
+    if (current) out.push(current)
+  }
+  return out.slice(0, 46)
+}
+
+function pdfEscape(value: string) {
+  return value.replace(/[^\x20-\x7E]/g, ' ').replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)')
 }
