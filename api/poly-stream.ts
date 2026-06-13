@@ -220,6 +220,44 @@ function sportmonksScore(match: ProviderMatch, location: 'home' | 'away') {
   return asScore(score.goals)
 }
 
+function sportmonksEventScore(match: ProviderMatch) {
+  const events = Array.isArray(match.events) ? match.events.map(asRecord) : []
+  const scoredEvents = events
+    .map((record, index) => {
+      const result = asText(record.result)
+      const matchResult = result.match(/^(\d+)\s*-\s*(\d+)$/)
+      if (!matchResult) return null
+      const minute = asNumber(record.minute) ?? asNumber(record.sort_order) ?? index
+      return {
+        home: Number(matchResult[1]),
+        away: Number(matchResult[2]),
+        minute,
+        index,
+      }
+    })
+    .filter((value): value is { home: number; away: number; minute: number; index: number } => Boolean(value))
+    .sort((a, b) => a.minute - b.minute || a.index - b.index)
+  const latest = scoredEvents.at(-1)
+  if (latest) return { home: latest.home, away: latest.away }
+
+  const totals = { home: 0, away: 0 }
+  for (const event of events) {
+    const type = [
+      asText(event.type_id),
+      asString(asRecord(event.type).name),
+      asString(asRecord(event.type).code),
+      asString(event.type_name),
+      asString(event.type),
+      asText(event.info),
+      asText(event.addition),
+    ].join(' ').toLowerCase()
+    if (!/\b14\b|\b15\b|\b16\b|\bgoal\b|own goal|penalty scored/.test(type)) continue
+    const location = sportmonksParticipantLocation(match, event.participant_id)
+    if (location === 'home' || location === 'away') totals[location] += 1
+  }
+  return totals.home || totals.away ? totals : null
+}
+
 function sportmonksEventType(record: ProviderMatch) {
   const typeId = Number(record.type_id)
   if (typeId === 14) return 'Goal'
@@ -277,6 +315,13 @@ function sportmonksParticipantById(match: ProviderMatch, participantId: unknown)
   const participants = Array.isArray(match.participants) ? match.participants : []
   const found = participants.find(item => String(asRecord(item).id ?? '') === String(participantId))
   return compactName(found)
+}
+
+function sportmonksParticipantLocation(match: ProviderMatch, participantId: unknown) {
+  if (participantId === undefined || participantId === null) return ''
+  const participants = Array.isArray(match.participants) ? match.participants : []
+  const found = participants.find(item => String(asRecord(item).id ?? '') === String(participantId))
+  return asString(asRecord(asRecord(found).meta).location).toLowerCase()
 }
 
 function sportmonksGoalScorers(match: ProviderMatch) {
@@ -365,8 +410,9 @@ function normalizeSportmonks(match: ProviderMatch): ScoreMatch | null {
   const leagueId = String(match.league_id ?? '')
   const fixtureId = String(match.id ?? '')
   const clock = sportmonksClock(match)
-  const homeScore = sportmonksScore(match, 'home')
-  const awayScore = sportmonksScore(match, 'away')
+  const eventScore = sportmonksEventScore(match)
+  const homeScore = sportmonksScore(match, 'home') ?? eventScore?.home
+  const awayScore = sportmonksScore(match, 'away') ?? eventScore?.away
   const exposeScore = shouldExposeScore(status)
 
   return {
