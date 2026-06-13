@@ -836,10 +836,6 @@ export default function TelegramPaymentLinks() {
           ) : activeService === 'poly-stream' ? (
             <PolyStreamPanel
               onBack={() => setActiveService('')}
-              onOpenLpScout={prefill => {
-                setLpScoutPrefill(prefill)
-                setActiveService('lp-scout')
-              }}
               onOpenNews={() => setActiveService('poly-worldcup-news')}
             />
           ) : activeService === 'agentic-lp-research' ? (
@@ -3000,7 +2996,6 @@ function PolyStreamPanel({
   onOpenNews,
 }: {
   onBack: () => void
-  onOpenLpScout: (prefill: LpScoutPrefill) => void
   onOpenNews: () => void
 }) {
   const [feed, setFeed] = useState<PolyStreamFeed | null>(null)
@@ -3114,6 +3109,9 @@ function PolyStreamPanel({
           error={error}
           onRetry={() => void loadStream()}
         />
+        <p className="px-1 pb-1 text-[10px] font-medium leading-relaxed text-gray-400 dark:text-gray-500">
+          Live markets move fast. Confirm the latest score and odds on Polymarket before trading.
+        </p>
       </div>
     </div>
   )
