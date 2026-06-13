@@ -222,6 +222,8 @@ function sportmonksScore(match: ProviderMatch, location: 'home' | 'away') {
 
 function sportmonksEventScore(match: ProviderMatch) {
   const events = Array.isArray(match.events) ? match.events.map(asRecord) : []
+  const home = sportmonksParticipantName(match, 'home').toLowerCase()
+  const away = sportmonksParticipantName(match, 'away').toLowerCase()
   const scoredEvents = events
     .map((record, index) => {
       const result = asText(record.result)
@@ -242,17 +244,12 @@ function sportmonksEventScore(match: ProviderMatch) {
 
   const totals = { home: 0, away: 0 }
   for (const event of events) {
-    const type = [
-      asText(event.type_id),
-      asString(asRecord(event.type).name),
-      asString(asRecord(event.type).code),
-      asString(event.type_name),
-      asString(event.type),
-      asText(event.info),
-      asText(event.addition),
-    ].join(' ').toLowerCase()
+    const type = sportmonksEventType(event).toLowerCase()
     if (!/\b14\b|\b15\b|\b16\b|\bgoal\b|own goal|penalty scored/.test(type)) continue
+    const eventTeam = (asString(event.participant_name) || compactName(event.participant) || sportmonksParticipantById(match, event.participant_id)).toLowerCase()
     const location = sportmonksParticipantLocation(match, event.participant_id)
+      || (eventTeam && eventTeam === home ? 'home' : '')
+      || (eventTeam && eventTeam === away ? 'away' : '')
     if (location === 'home' || location === 'away') totals[location] += 1
   }
   return totals.home || totals.away ? totals : null
