@@ -303,13 +303,23 @@ function sportmonksGoalScorers(match: ProviderMatch) {
 
 function sportmonksStats(match: ProviderMatch) {
   const stats = Array.isArray(match.statistics) ? match.statistics : []
-  return stats.slice(0, 6).map(item => {
+  return stats.map(item => {
     const record = asRecord(item)
     const type = asString(asRecord(record.type).name) || asString(record.type) || asString(record.type_name)
     const value = asText(record.value)
+      || asText(record.data)
+      || asText(asRecord(record.data).value)
+      || asText(asRecord(record.statistic).value)
+      || asText(record.total)
+      || asText(record.amount)
     const team = asString(record.participant_name) || compactName(record.participant)
+    if (!type || !value) return ''
     return [team, type, value].filter(Boolean).join(' ')
-  }).filter(Boolean)
+  }).filter(Boolean).slice(0, 6)
+}
+
+function publicMarketContext(title: string, status: string) {
+  return `${title}. ${status}. Live scores from Sportmonks with Polymarket prices when the main match market is confidently matched.`
 }
 
 function sportmonksWeather(match: ProviderMatch) {
@@ -362,7 +372,7 @@ function normalizeSportmonks(match: ProviderMatch): ScoreMatch | null {
     events: sportmonksEvents(match),
     stats: sportmonksStats(match),
     weather: sportmonksWeather(match),
-    marketContext: `${title}. ${status}. Open the main Polymarket match market when mapped, or ask LP Scout to check related match, group, qualification, scorer, and outright books.`,
+    marketContext: publicMarketContext(title, status),
     sourceUrl: fixtureId ? `https://www.sportmonks.com/football/fixtures/${fixtureId}` : '',
     polymarketUrl: exactPolymarketUrl(title, [`sportmonks:${fixtureId}`, `league:${leagueId}:${home}:${away}`]),
   }
@@ -401,7 +411,7 @@ function normalizeApiFootball(match: ProviderMatch): ScoreMatch | null {
     homeScore: exposeScore ? asScore(goals.home) : undefined,
     awayScore: exposeScore ? asScore(goals.away) : undefined,
     clock: typeof elapsed === 'number' ? `${elapsed}'` : '',
-    marketContext: `${title}. ${asString(status.long) || 'Scheduled'}. Open the main Polymarket match market when mapped, or ask LP Scout for paid book checks.`,
+    marketContext: publicMarketContext(title, asString(status.long) || 'Scheduled'),
     sourceUrl: '',
     polymarketUrl: exactPolymarketUrl(title, [`api-football:${fixtureId}`, `league:${leagueId}:${home}:${away}`]),
   }

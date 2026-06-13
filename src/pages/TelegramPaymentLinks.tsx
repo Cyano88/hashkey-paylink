@@ -2787,11 +2787,13 @@ function HashLiveScoreWidget({
   loading,
   providerReady,
   error,
+  onRetry,
 }: {
   matches: PolyStreamMatch[]
   loading: boolean
   providerReady: boolean
   error: string
+  onRetry: () => void
 }) {
   const [selectedMatchKey, setSelectedMatchKey] = useState('')
   const [detailIndex, setDetailIndex] = useState(0)
@@ -2842,8 +2844,19 @@ function HashLiveScoreWidget({
 
   if (error) {
     return (
-      <div className="rounded-xl border border-rose-100 bg-rose-50/70 p-4 text-sm font-semibold text-rose-700 dark:border-rose-400/20 dark:bg-rose-400/10 dark:text-rose-200">
-        Live scores unavailable
+      <div className="rounded-xl border border-rose-100 bg-rose-50/70 p-4 text-center dark:border-rose-400/20 dark:bg-rose-400/10">
+        <p className="text-sm font-semibold text-rose-700 dark:text-rose-200">Live scores temporarily unavailable</p>
+        <p className="mx-auto mt-1 max-w-xs text-xs leading-relaxed text-rose-600/80 dark:text-rose-100/70">
+          Refresh in a moment. We do not show stale World Cup rows.
+        </p>
+        <button
+          type="button"
+          onClick={onRetry}
+          className="mt-3 inline-flex items-center justify-center gap-1.5 rounded-lg border border-rose-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-rose-700 transition-all hover:bg-rose-50 active:scale-[0.98] dark:border-rose-300/20 dark:bg-white/10 dark:text-rose-100"
+        >
+          <Loader2 className={cn('h-3 w-3', loading && 'animate-spin')} />
+          Refresh
+        </button>
       </div>
     )
   }
@@ -2851,10 +2864,18 @@ function HashLiveScoreWidget({
   if (!providerReady || matches.length === 0) {
     return (
       <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-4 text-center dark:border-white/10 dark:bg-white/[0.04]">
-        <p className="text-sm font-semibold text-gray-900 dark:text-white">No World Cup matches returned</p>
+        <p className="text-sm font-semibold text-gray-900 dark:text-white">Live board is waiting for match data</p>
         <p className="mx-auto mt-1 max-w-xs text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-          Check the Sportmonks league ID, season, and token in Render.
+          Refresh shortly. Hash PayLink only shows current provider data here.
         </p>
+        <button
+          type="button"
+          onClick={onRetry}
+          className="mt-3 inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200"
+        >
+          <Loader2 className={cn('h-3 w-3', loading && 'animate-spin')} />
+          Refresh
+        </button>
       </div>
     )
   }
@@ -2889,7 +2910,9 @@ function HashLiveScoreWidget({
                 Trade
               </a>
             ) : (
-              <span />
+              <span className="inline-flex items-center justify-center rounded-full border border-white/10 bg-black/20 px-2 py-1 text-[10px] font-black text-white/55 backdrop-blur-sm">
+                Market pending
+              </span>
             )}
             <span className={cn(
               'justify-self-end rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ring-1',
@@ -3079,7 +3102,13 @@ function PolyStreamPanel({
           </div>
         </div>
 
-        <HashLiveScoreWidget matches={matches} loading={loading && !feed} providerReady={providerReady} error={error} />
+        <HashLiveScoreWidget
+          matches={matches}
+          loading={loading && !feed}
+          providerReady={providerReady}
+          error={error}
+          onRetry={() => void loadStream()}
+        />
       </div>
     </div>
   )
