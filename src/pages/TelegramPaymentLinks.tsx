@@ -2575,33 +2575,63 @@ type PolyStreamFeed = {
 
 const fallbackPolyStreamMatches: PolyStreamMatch[] = [
   {
-    tag: 'Live context',
-    title: 'World Cup match window',
-    time: 'Current cycle',
-    venue: 'World Cup schedule',
+    tag: 'Today',
+    title: 'Haiti vs Scotland',
+    time: 'June 13',
+    venue: 'Boston Stadium',
     status: 'Desk mode',
-    marketContext: 'Track active match momentum, lineup news, and in-play sentiment before asking LP Scout for paid market checks.',
-    sourceUrl: '',
+    marketContext: 'Group C opener. Check Scotland, Haiti, group qualification, and underdog headline markets before asking LP Scout for paid book depth.',
+    sourceUrl: 'https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026',
     watchUrl: '',
   },
   {
-    tag: 'Results',
-    title: 'Post-match repricing watch',
-    time: 'After matches',
-    venue: 'Latest result cycle',
+    tag: 'Today',
+    title: 'Australia vs Turkiye',
+    time: 'June 13',
+    venue: 'BC Place Vancouver',
     status: 'Desk mode',
-    marketContext: 'Use result shocks, group standings, and qualification pressure to decide which Polymarket markets deserve a fresh LP Scout check.',
-    sourceUrl: '',
+    marketContext: 'Group D match with strong regional interest. Watch team news and early price movement before checking related Polymarket liquidity.',
+    sourceUrl: 'https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026',
     watchUrl: '',
   },
   {
-    tag: 'Fixtures',
-    title: 'Upcoming fixture watch',
-    time: 'Next slate',
-    venue: 'World Cup schedule',
+    tag: 'Today',
+    title: 'Brazil vs Morocco',
+    time: 'June 13',
+    venue: 'New York New Jersey Stadium',
     status: 'Desk mode',
-    marketContext: 'Watch high-attention fixtures early because outright winner, team qualification, top scorer, and headline markets can move before kickoff.',
-    sourceUrl: '',
+    marketContext: 'High-attention Group C fixture. Watch Brazil outright, Morocco upset, scorer, and group-table markets before asking LP Scout.',
+    sourceUrl: 'https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026',
+    watchUrl: '',
+  },
+  {
+    tag: 'Today',
+    title: 'Qatar vs Switzerland',
+    time: 'June 13',
+    venue: 'San Francisco Bay Area Stadium',
+    status: 'Desk mode',
+    marketContext: 'Group B fixture. Check qualification, match winner, and news-driven pricing before committing to any LP strategy.',
+    sourceUrl: 'https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026',
+    watchUrl: '',
+  },
+  {
+    tag: 'Tomorrow',
+    title: "Cote d'Ivoire vs Ecuador",
+    time: 'June 14',
+    venue: 'Philadelphia Stadium',
+    status: 'Desk mode',
+    marketContext: 'Group E opener. Use early news and lineup context to decide if related Polymarket books deserve a paid scout.',
+    sourceUrl: 'https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026',
+    watchUrl: '',
+  },
+  {
+    tag: 'Tomorrow',
+    title: 'Germany vs Curacao',
+    time: 'June 14',
+    venue: 'Houston Stadium',
+    status: 'Desk mode',
+    marketContext: 'High-attention Group E fixture. Watch favorite pricing, handicap narratives, and scorer markets before asking LP Scout.',
+    sourceUrl: 'https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026',
     watchUrl: '',
   },
 ]
@@ -2763,7 +2793,7 @@ function PolyStreamPanel({
                     className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[10px] font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200"
                   >
                     <ExternalLink className="h-3 w-3" />
-                    Source
+                    Official schedule
                   </a>
                 )}
                 <button
