@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   ArrowLeft,
@@ -2558,6 +2558,7 @@ type PolyStreamMatch = {
   tag: string
   title: string
   time: string
+  kickoffAt?: string
   venue: string
   status: string
   homeScore?: number | string
@@ -2566,6 +2567,9 @@ type PolyStreamMatch = {
   homeCoach?: string
   awayCoach?: string
   probability?: string
+  homeMarketPrice?: string
+  awayMarketPrice?: string
+  drawMarketPrice?: string
   polymarketTitle?: string
   polymarketLiquidity?: string
   polymarketVolume?: string
@@ -2614,9 +2618,7 @@ const WORLD_CUP_TEAM_ISO: Record<string, string> = {
   colombia: 'co',
   croatia: 'hr',
   curacao: 'cw',
-  'curaçao': 'cw',
-  'côte d’ivoire': 'ci',
-  "côte d'ivoire": 'ci',
+  'cote divoire': 'ci',
   ecuador: 'ec',
   egypt: 'eg',
   england: 'gb-eng',
@@ -2648,15 +2650,21 @@ const WORLD_CUP_TEAM_ISO: Record<string, string> = {
   switzerland: 'ch',
   tunisia: 'tn',
   turkey: 'tr',
-  türkiye: 'tr',
+  turkiye: 'tr',
   'united states': 'us',
   usa: 'us',
   uruguay: 'uy',
   uzbekistan: 'uz',
 }
-
 function teamIso(name: string) {
-  const clean = name.toLowerCase().replace(/\./g, '').replace(/\s+/g, ' ').trim()
+  const clean = name
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[’']/g, '')
+    .replace(/\./g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
   return WORLD_CUP_TEAM_ISO[clean] || ''
 }
 
@@ -2667,7 +2675,7 @@ function flagUrlForTeam(name: string, size = 640) {
 
 function flagEmojiForTeam(name: string) {
   const iso = teamIso(name)
-  if (!iso || iso.includes('-')) return '🏆'
+  if (!iso || iso.includes('-')) return 'WC'
   return iso
     .toUpperCase()
     .replace(/./g, char => String.fromCodePoint(127397 + char.charCodeAt(0)))
@@ -2712,7 +2720,7 @@ function matchDisplayState(match: PolyStreamMatch) {
   if (/(ft|finished|result|complete|ended|after extra time|pen)/.test(status) || (hasScore && isPast)) {
     return { tag: 'FT', center: `${match.homeScore}-${match.awayScore}`, sub: 'Full time' }
   }
-  return { tag: 'NS', center: 'vs', sub: match.time }
+  return { tag: 'NS', center: 'vs', sub: matchCountdown(match) }
 }
 
 function rowStateLabel(match: PolyStreamMatch) {
@@ -2727,13 +2735,7 @@ function matchKey(match: PolyStreamMatch) {
 }
 
 function compactMatchTime(match: PolyStreamMatch) {
-  return match.time.replace(/\sUTC$/i, '')
-}
-
-function kickoffZone(match: PolyStreamMatch) {
-  if (/UTC$/i.test(match.time)) return 'UTC'
-  if (/GMT$/i.test(match.time)) return 'GMT'
-  return ''
+  return match.time
 }
 
 function detailItems(match: PolyStreamMatch) {
@@ -2744,7 +2746,7 @@ function detailItems(match: PolyStreamMatch) {
   if (goals.length) items.push({ label: 'Goals', value: goals.slice(0, 3).join(' | ') })
   if (match.homeCoach && match.awayCoach) items.push({ label: 'Coaches', value: [match.homeCoach, match.awayCoach].join(' vs ') })
   if (match.h2h) items.push({ label: 'H2H', value: match.h2h })
-  if (match.probability) items.push({ label: 'Polymarket odds', value: match.probability })
+  if (match.probability) items.push({ label: 'Market price', value: match.probability })
   if (match.polymarketLiquidity) items.push({ label: 'Market liquidity', value: match.polymarketLiquidity })
   if (match.polymarketVolume) items.push({ label: 'Market volume', value: match.polymarketVolume })
   if (match.form) items.push({ label: 'Form', value: match.form })
@@ -2754,6 +2756,30 @@ function detailItems(match: PolyStreamMatch) {
   const stats = (match.stats || []).filter(Boolean)
   if (stats.length) items.push({ label: 'Stats', value: stats.slice(0, 2).join(' | ') })
   return items
+}
+
+function matchCountdown(match: PolyStreamMatch) {
+  const source = match.kickoffAt || match.time
+  const ts = Date.parse(source)
+  if (!Number.isFinite(ts)) return 'Countdown'
+  const diffMs = ts - Date.now()
+  if (diffMs <= 0) return 'Starting'
+  const totalMinutes = Math.ceil(diffMs / 60_000)
+  const days = Math.floor(totalMinutes / 1440)
+  const hours = Math.floor((totalMinutes % 1440) / 60)
+  const minutes = totalMinutes % 60
+  if (days > 0) return `${days}d ${hours}h`
+  if (hours > 0) return `${hours}h ${minutes}m`
+  return `${minutes}m`
+}
+
+function MarketPricePill({ value }: { value?: string }) {
+  if (!value) return null
+  return (
+    <span className="mt-1 inline-flex items-center justify-center rounded-full border border-white/10 bg-black/25 px-2 py-0.5 text-[10px] font-black tabular-nums text-white/85 shadow-sm backdrop-blur-sm">
+      {value}
+    </span>
+  )
 }
 
 function HashLiveScoreWidget({
@@ -2769,6 +2795,7 @@ function HashLiveScoreWidget({
 }) {
   const [selectedMatchKey, setSelectedMatchKey] = useState('')
   const [detailIndex, setDetailIndex] = useState(0)
+  const [, setCountdownTick] = useState(0)
   const featured = matches.find(match => matchKey(match) === selectedMatchKey) || matches[0]
   const rest = featured ? matches.filter(match => matchKey(match) !== matchKey(featured)).slice(0, 8) : []
   const [home, away] = featured ? splitFixtureTitle(featured.title) : ['World Cup', 'Scores']
@@ -2794,6 +2821,13 @@ function HashLiveScoreWidget({
     }, 10_000)
     return () => window.clearInterval(timer)
   }, [featuredDetails.length, selectedMatchKey])
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setCountdownTick(current => current + 1)
+    }, 60_000)
+    return () => window.clearInterval(timer)
+  }, [])
 
   if (loading) {
     return (
@@ -2872,26 +2906,31 @@ function HashLiveScoreWidget({
                 <TeamFlagMark name={home} />
               </div>
               <p className="mt-2 truncate text-xs font-black tracking-wide">{home}</p>
+              <MarketPricePill value={featured.homeMarketPrice} />
             </div>
             <div className="min-w-[68px] rounded-xl border border-white/12 bg-black/35 px-2.5 py-2 text-center shadow-2xl backdrop-blur-sm">
               <p className="text-xl font-black tabular-nums">
                 {featuredState?.center}
               </p>
               <p className="mt-0.5 max-w-[82px] truncate text-[9px] font-bold uppercase text-white/55">
-                {featuredState?.tag === 'NS' && kickoffZone(featured) ? kickoffZone(featured) : featuredState?.sub}
+                {featuredState?.sub}
               </p>
+              {featured.drawMarketPrice && (
+                <p className="mt-1 text-[9px] font-black uppercase tabular-nums text-white/55">Draw {featured.drawMarketPrice}</p>
+              )}
             </div>
             <div className="min-w-0 text-center">
               <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-black/30 shadow-xl ring-1 ring-white/15 backdrop-blur-sm">
                 <TeamFlagMark name={away} />
               </div>
               <p className="mt-2 truncate text-xs font-black tracking-wide">{away || 'Opponent'}</p>
+              <MarketPricePill value={featured.awayMarketPrice} />
             </div>
           </div>
           {activeDetail && (
             <div className="relative z-10 mt-2 rounded-lg border border-white/10 bg-black/25 px-2.5 py-2 text-center backdrop-blur-sm">
               <p className="text-[9px] font-black uppercase tracking-[0.16em] text-white/45">{activeDetail.label}</p>
-              <p className="mt-0.5 truncate text-[11px] font-semibold text-white/90">{activeDetail.value}</p>
+              <p className="mt-0.5 text-[11px] font-semibold leading-snug text-white/90 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">{activeDetail.value}</p>
             </div>
           )}
         </div>
@@ -2903,7 +2942,7 @@ function HashLiveScoreWidget({
           return (
             <button
               type="button"
-              key={`${match.title}-${match.time}`}
+              key={matchKey(match)}
               onClick={() => setSelectedMatchKey(matchKey(match))}
               className="grid w-full grid-cols-[1fr_auto] items-center gap-2 p-2.5 text-left transition-colors hover:bg-gray-50 active:bg-gray-100 dark:hover:bg-white/[0.05] dark:active:bg-white/[0.08]"
             >
@@ -2930,7 +2969,6 @@ function HashLiveScoreWidget({
 
 function PolyStreamPanel({
   onBack,
-  onOpenLpScout,
   onOpenNews,
 }: {
   onBack: () => void
@@ -2940,8 +2978,8 @@ function PolyStreamPanel({
   const [feed, setFeed] = useState<PolyStreamFeed | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const mountedRef = useRef(true)
   const matches = feed?.matches ?? []
-  const exactMatches = matches.filter(match => polymarketUrl(match))
   const providerReady = Boolean(feed?.providerConfigured && feed.providerStatus === 'connected' && !error)
   const statusText = loading
     ? 'Refreshing'
@@ -2953,41 +2991,33 @@ function PolyStreamPanel({
     ? 'No matches'
     : 'Provider needed'
 
-  useEffect(() => {
-    let cancelled = false
-    async function loadStream() {
-      setLoading(true)
-      setError('')
-      try {
-        const response = await fetch('/api/poly-stream')
-        const text = await response.text()
-        const data = JSON.parse(text) as PolyStreamFeed
-        if (!response.ok || !data.ok) throw new Error('Poly Stream feed is not available.')
-        if (!cancelled) setFeed(data)
-      } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Poly Stream feed is not available.')
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    }
-    void loadStream()
-    return () => {
-      cancelled = true
+  const loadStream = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true)
+    if (!silent) setError('')
+    try {
+      const response = await fetch('/api/poly-stream')
+      const text = await response.text()
+      const data = JSON.parse(text) as PolyStreamFeed
+      if (!response.ok || !data.ok) throw new Error('Poly Stream feed is not available.')
+      if (mountedRef.current) setFeed(data)
+    } catch (err) {
+      if (mountedRef.current && !silent) setError(err instanceof Error ? err.message : 'Poly Stream feed is not available.')
+    } finally {
+      if (mountedRef.current) setLoading(false)
     }
   }, [])
 
-  function askScout(match: PolyStreamMatch) {
-    const exactUrl = polymarketUrl(match)
-    if (!exactUrl) return
-    onOpenLpScout({
-      mode: 'market',
-      query: exactUrl,
-    })
-  }
-
-  function polymarketUrl(match: PolyStreamMatch) {
-    return match.polymarketUrl?.trim() || ''
-  }
+  useEffect(() => {
+    mountedRef.current = true
+    void loadStream()
+    const timer = window.setInterval(() => {
+      void loadStream(true)
+    }, 60_000)
+    return () => {
+      mountedRef.current = false
+      window.clearInterval(timer)
+    }
+  }, [loadStream])
 
   return (
     <div className="mt-4 space-y-3">
@@ -3032,6 +3062,14 @@ function PolyStreamPanel({
           <div className="flex gap-1.5">
             <button
               type="button"
+              onClick={() => void loadStream()}
+              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200"
+            >
+              <Loader2 className={cn('h-3 w-3', loading && 'animate-spin')} />
+              Refresh
+            </button>
+            <button
+              type="button"
               onClick={onOpenNews}
               className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200"
             >
@@ -3041,45 +3079,7 @@ function PolyStreamPanel({
           </div>
         </div>
 
-        <HashLiveScoreWidget matches={matches} loading={loading} providerReady={providerReady} error={error} />
-
-        <div className="max-h-[260px] space-y-1.5 overflow-y-auto [scrollbar-color:rgba(148,163,184,0.35)_transparent] [scrollbar-width:thin] dark:[scrollbar-color:rgba(255,255,255,0.22)_transparent] [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300/40 dark:[&::-webkit-scrollbar-thumb]:bg-white/20">
-          {!loading && exactMatches.length === 0 && (
-            <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-3 text-center dark:border-white/10 dark:bg-white/[0.04]">
-              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400">Exact Polymarket links pending</p>
-            </div>
-          )}
-
-          {exactMatches.map(match => (
-            <div
-              key={match.title}
-              className="flex items-center justify-between gap-2 rounded-xl border border-gray-100 bg-gray-50/70 p-2 dark:border-white/10 dark:bg-white/[0.04]"
-            >
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">{match.title}</p>
-                <p className="mt-0.5 truncate text-[11px] text-gray-500 dark:text-gray-400">{match.tag} · {match.time}</p>
-              </div>
-              <div className="flex shrink-0 gap-1.5">
-                <a
-                  href={polymarketUrl(match)}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-gray-900 px-2.5 py-1.5 text-[10px] font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950"
-                >
-                  <LineChart className="h-3 w-3" />
-                  Market
-                </a>
-                <button
-                  type="button"
-                  onClick={() => askScout(match)}
-                  className="inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[10px] font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200"
-                >
-                  LP Scout
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+        <HashLiveScoreWidget matches={matches} loading={loading && !feed} providerReady={providerReady} error={error} />
       </div>
     </div>
   )

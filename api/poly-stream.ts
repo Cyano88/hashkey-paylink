@@ -7,6 +7,7 @@ type ScoreMatch = {
   tag: string
   title: string
   time: string
+  kickoffAt?: string
   venue: string
   status: string
   homeScore?: number | string
@@ -15,6 +16,9 @@ type ScoreMatch = {
   homeCoach?: string
   awayCoach?: string
   probability?: string
+  homeMarketPrice?: string
+  awayMarketPrice?: string
+  drawMarketPrice?: string
   polymarketTitle?: string
   polymarketLiquidity?: string
   polymarketVolume?: string
@@ -284,13 +288,20 @@ function normalizeSportmonks(match: ProviderMatch): ScoreMatch | null {
   const venue = asString(asRecord(match.venue).name) || 'World Cup venue'
   const leagueId = String(match.league_id ?? '')
   const fixtureId = String(match.id ?? '')
-  const clock = asString(match.minute) || asString(match.periods) || ''
+  const periods = Array.isArray(match.periods) ? match.periods.map(asRecord) : []
+  const latestPeriod = periods.slice().reverse().find(record => asText(record.minutes) || asText(record.minute))
+  const clockValue = asText(match.minute)
+    || asText(asRecord(match.state).minutes)
+    || asText(latestPeriod?.minutes)
+    || asText(latestPeriod?.minute)
+  const clock = clockValue ? `${clockValue}'` : ''
 
   return {
     fixtureId,
     tag: tagFor(status, startingAt),
     title,
     time: readableTime(startingAt),
+    kickoffAt: startingAt,
     venue,
     status,
     homeScore: sportmonksScore(match, 'home'),
@@ -333,6 +344,7 @@ function normalizeApiFootball(match: ProviderMatch): ScoreMatch | null {
     tag: tagFor(asString(status.short) || asString(status.long), date),
     title,
     time: readableTime(date),
+    kickoffAt: date,
     venue: asString(asRecord(fixture.venue).name) || 'World Cup venue',
     status: asString(status.long) || asString(status.short) || 'Scheduled',
     homeScore: asScore(goals.home),
@@ -431,6 +443,27 @@ function candidateText(candidate: ProviderMatch) {
   ].filter(Boolean).join(' ')
 }
 
+const TEAM_ALIASES: Record<string, string[]> = {
+  'united states': ['usa', 'usmnt', 'u s a', 'united states'],
+  usa: ['united states', 'usmnt', 'u s a', 'usa'],
+  switzerland: ['switzerland', 'swiss', 'che'],
+  qatar: ['qatar', 'qat'],
+  turkey: ['turkey', 'turkiye', 'türkiye'],
+  turkiye: ['turkey', 'turkiye', 'türkiye'],
+  'cote divoire': ['cote divoire', 'cote d ivoire', 'ivory coast'],
+  'ivory coast': ['cote divoire', 'cote d ivoire', 'ivory coast'],
+  'cape verde': ['cape verde', 'cape verde islands'],
+  germany: ['germany', 'deutschland'],
+  netherlands: ['netherlands', 'holland'],
+  south korea: ['south korea', 'korea republic', 'republic of korea'],
+}
+
+function teamSearchTerms(name: string) {
+  const normalized = normalizeSearchText(name)
+  const aliases = TEAM_ALIASES[normalized] || []
+  return Array.from(new Set([normalized, ...aliases.map(normalizeSearchText)])).filter(Boolean)
+}
+
 function isClosedMarket(candidate: ProviderMatch) {
   const record = asRecord(candidate)
   if (record.closed === true || record.archived === true) return true
@@ -440,15 +473,29 @@ function isClosedMarket(candidate: ProviderMatch) {
 
 function scorePolymarketCandidate(candidate: ProviderMatch, home: string, away: string) {
   const text = normalizeSearchText(candidateText(candidate))
-  const homeText = normalizeSearchText(home)
-  const awayText = normalizeSearchText(away)
-  if (!homeText || !awayText || !text.includes(homeText) || !text.includes(awayText)) return 0
+  const homeTerms = teamSearchTerms(home)
+  const awayTerms = teamSearchTerms(away)
+  if (!homeTerms.length || !awayTerms.length) return 0
+  const hasHome = homeTerms.some(term => text.includes(term))
+  const hasAway = awayTerms.some(term => text.includes(term))
+  if (!hasHome || !hasAway) return 0
   let score = 50
   if (/\bworld cup\b|\bfifa\b|\b2026\b/.test(text)) score += 18
   if (/\bvs\b|\bv\b|\bversus\b|\bbeat\b|\bwin\b/.test(text)) score += 8
   if (/winner|match|game|group|advance|qualif|score/.test(text)) score += 6
   if (isClosedMarket(candidate)) score -= 40
   return score
+}
+
+function hasWorldCupSeries(candidate: ProviderMatch) {
+  const record = asRecord(candidate)
+  const direct = asString(record.seriesSlug) || asString(record.series_slug)
+  if (direct === 'soccer-fifwc') return true
+  const series = Array.isArray(record.series) ? record.series : []
+  return series.some(item => {
+    const seriesRecord = asRecord(item)
+    return asString(seriesRecord.slug) === 'soccer-fifwc' || asString(seriesRecord.ticker) === 'soccer-fifwc'
+  })
 }
 
 function readMarketSlug(candidate: ProviderMatch) {
@@ -463,8 +510,7 @@ function readPolymarketUrl(candidate: ProviderMatch, kind: 'event' | 'market') {
   const directUrl = asString(record.marketUrl) || asString(record.url)
   if (directUrl.startsWith('https://polymarket.com/')) return directUrl
   const slug = readMarketSlug(candidate)
-  const seriesSlug = asString(record.seriesSlug) || asString(record.series_slug)
-  if (slug && kind === 'event' && seriesSlug === 'soccer-fifwc') return `https://polymarket.com/sports/world-cup/${slug}`
+  if (slug && kind === 'event' && hasWorldCupSeries(candidate)) return `https://polymarket.com/sports/world-cup/${slug}`
   return slug ? `https://polymarket.com/${kind}/${slug}` : ''
 }
 
@@ -483,29 +529,70 @@ function marketArray(candidate: ProviderMatch) {
   return [record]
 }
 
-function formatPolymarketProbability(candidate: ProviderMatch, home: string, away: string) {
-  const market = marketArray(candidate)[0]
+function readMarketOutcomePrice(market: ProviderMatch) {
   const outcomes = parseJsonArray(market.outcomes).map(value => String(value))
   const prices = parseJsonArray(market.outcomePrices).map(asNumber)
   if (outcomes.length && prices.length) {
     const pairs = outcomes
       .map((outcome, index) => ({ outcome, price: prices[index] }))
       .filter(item => item.price !== undefined)
-    const homeText = normalizeSearchText(home)
-    const awayText = normalizeSearchText(away)
-    const homePrice = pairs.find(item => normalizeSearchText(item.outcome).includes(homeText))?.price
-    const awayPrice = pairs.find(item => normalizeSearchText(item.outcome).includes(awayText))?.price
-    const parts = [
-      homePrice !== undefined ? `${home} ${(homePrice * 100).toFixed(0)}%` : '',
-      awayPrice !== undefined ? `${away} ${(awayPrice * 100).toFixed(0)}%` : '',
-    ].filter(Boolean)
-    if (parts.length) return parts.join(' / ')
     const yesPrice = pairs.find(item => /^yes$/i.test(item.outcome))?.price
-    if (yesPrice !== undefined) return `YES ${(yesPrice * 100).toFixed(0)}%`
+    if (yesPrice !== undefined) return yesPrice
+    return pairs[0]?.price
   }
   const lastTrade = asNumber(market.lastTradePrice ?? market.last_trade_price)
-  if (lastTrade !== undefined) return `Last ${(lastTrade * 100).toFixed(0)}%`
-  return ''
+  if (lastTrade !== undefined) return lastTrade
+  return undefined
+}
+
+function polymarketPriceSummary(candidate: ProviderMatch, home: string, away: string) {
+  const markets = marketArray(candidate)
+  const homeTerms = teamSearchTerms(home)
+  const awayTerms = teamSearchTerms(away)
+  const priceFor = (terms: string[]) => {
+    const market = markets.find(item => {
+      const text = normalizeSearchText([
+        asString(item.groupItemTitle),
+        asString(item.group_item_title),
+        asString(item.question),
+        asString(item.title),
+        asString(item.slug),
+      ].filter(Boolean).join(' '))
+      return terms.some(term => text.includes(term))
+    })
+    const price = market ? readMarketOutcomePrice(market) : undefined
+    return price !== undefined ? `${(price * 100).toFixed(0)}%` : ''
+  }
+  const homePrice = priceFor(homeTerms)
+  const awayPrice = priceFor(awayTerms)
+  const drawMarket = markets.find(item => /\bdraw\b|\btie\b/.test(normalizeSearchText([
+    asString(item.groupItemTitle),
+    asString(item.group_item_title),
+    asString(item.question),
+    asString(item.title),
+  ].filter(Boolean).join(' '))))
+  const drawPrice = drawMarket ? readMarketOutcomePrice(drawMarket) : undefined
+  const drawLabel = drawPrice !== undefined ? `${(drawPrice * 100).toFixed(0)}%` : ''
+  const parts = [
+    homePrice ? `${home} ${homePrice}` : '',
+    drawLabel ? `Draw ${drawLabel}` : '',
+    awayPrice ? `${away} ${awayPrice}` : '',
+  ].filter(Boolean)
+  if (parts.length) {
+    return {
+      summary: parts.join(' / '),
+      home: homePrice,
+      away: awayPrice,
+      draw: drawLabel,
+    }
+  }
+
+  const firstPrice = readMarketOutcomePrice(markets[0] || {})
+  if (firstPrice !== undefined) {
+    const yes = `${(firstPrice * 100).toFixed(0)}%`
+    return { summary: `YES ${yes}`, home: '', away: '', draw: '' }
+  }
+  return { summary: '', home: '', away: '', draw: '' }
 }
 
 async function fetchPolymarketJson(url: string) {
@@ -543,10 +630,14 @@ function polymarketMatchFromCandidates(match: ScoreMatch, candidates: Array<{ ki
   const record = asRecord(best.item)
   const marketsForValues = marketArray(best.item)
   const firstMarket = marketsForValues[0] || {}
+  const prices = polymarketPriceSummary(best.item, home, away)
   return {
     title: asString(record.title) || asString(record.question) || asString(firstMarket.question) || asString(firstMarket.title),
     url: readPolymarketUrl(best.item, best.kind),
-    probability: formatPolymarketProbability(best.item, home, away),
+    probability: prices.summary,
+    homeMarketPrice: prices.home,
+    awayMarketPrice: prices.away,
+    drawMarketPrice: prices.draw,
     liquidity: formatUsd(record.liquidity ?? record.liquidityNum ?? firstMarket.liquidity ?? firstMarket.liquidityNum),
     volume: formatUsd(record.volume ?? record.volumeNum ?? record.volume24hr ?? firstMarket.volume ?? firstMarket.volumeNum),
   }
@@ -585,6 +676,9 @@ async function enrichMatchesWithPolymarket(matches: ScoreMatch[]) {
       polymarketUrl: found.url,
       polymarketTitle: found.title,
       probability: found.probability,
+      homeMarketPrice: found.homeMarketPrice,
+      awayMarketPrice: found.awayMarketPrice,
+      drawMarketPrice: found.drawMarketPrice,
       polymarketLiquidity: found.liquidity,
       polymarketVolume: found.volume,
     }
@@ -730,7 +824,7 @@ async function fetchProviderMatches(): Promise<ScoreMatch[]> {
   if (!apiKey) return []
 
   const mode = fixtureMode()
-  const modes: FixtureMode[] = mode === 'auto' ? ['live', 'next'] : [mode]
+  const modes: FixtureMode[] = mode === 'auto' ? ['live', 'next', 'last'] : [mode]
   const batches = await Promise.all(modes.map(current => fetchProviderMode(provider, apiKey, current).catch(err => {
     lastProviderError = err instanceof Error ? err.message : 'Score provider failed.'
     return [] as ScoreMatch[]
