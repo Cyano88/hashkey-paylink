@@ -2589,6 +2589,10 @@ type PolyStreamFeed = {
   matches: PolyStreamMatch[]
 }
 
+type ScoreDetailItem =
+  | { type: 'goals'; label: string; goals: string[] }
+  | { type: 'text'; label: string; value: string }
+
 function hasMatchScore(match: PolyStreamMatch) {
   return match.homeScore !== undefined && match.homeScore !== '' && match.awayScore !== undefined && match.awayScore !== ''
 }
@@ -2756,23 +2760,41 @@ function compactMatchTime(match: PolyStreamMatch) {
 }
 
 function detailItems(match: PolyStreamMatch) {
-  const items: Array<{ label: string; value: string }> = []
-  if (hasMatchScore(match)) items.push({ label: 'Score', value: `${splitFixtureTitle(match.title)[0]} ${match.homeScore}-${match.awayScore} ${splitFixtureTitle(match.title)[1]}` })
-  if (match.venue && match.venue !== 'World Cup venue') items.push({ label: 'Stadium', value: match.venue })
-  const goals = (match.goalScorers || []).filter(Boolean)
-  if (goals.length) items.push({ label: 'Goals', value: goals.slice(0, 3).join(' | ') })
-  if (match.homeCoach && match.awayCoach) items.push({ label: 'Coaches', value: [match.homeCoach, match.awayCoach].join(' vs ') })
-  if (match.h2h) items.push({ label: 'H2H', value: match.h2h })
-  if (match.probability) items.push({ label: 'Market price', value: match.probability })
-  if (match.polymarketLiquidity) items.push({ label: 'Market liquidity', value: match.polymarketLiquidity })
-  if (match.polymarketVolume) items.push({ label: 'Market volume', value: match.polymarketVolume })
-  if (match.form) items.push({ label: 'Form', value: match.form })
-  if (match.weather) items.push({ label: 'Weather', value: match.weather })
+  const items: ScoreDetailItem[] = []
+  const [home, away] = splitFixtureTitle(match.title)
+  if (hasMatchScore(match)) items.push({ type: 'text', label: 'Score', value: `${home} ${match.homeScore}-${match.awayScore} ${away}` })
+  if (match.venue && match.venue !== 'World Cup venue') items.push({ type: 'text', label: 'Stadium', value: match.venue })
+  const goals = (match.goalScorers || []).map(goal => formatGoalScorer(goal, home, away)).filter(Boolean)
+  if (goals.length) items.push({ type: 'goals', label: 'Goals', goals })
+  if (match.homeCoach && match.awayCoach) items.push({ type: 'text', label: 'Coaches', value: [match.homeCoach, match.awayCoach].join(' vs ') })
+  if (match.h2h) items.push({ type: 'text', label: 'H2H', value: match.h2h })
+  if (match.probability) items.push({ type: 'text', label: 'Market price', value: match.probability })
+  if (match.polymarketLiquidity) items.push({ type: 'text', label: 'Market liquidity', value: match.polymarketLiquidity })
+  if (match.polymarketVolume) items.push({ type: 'text', label: 'Market volume', value: match.polymarketVolume })
+  if (match.form) items.push({ type: 'text', label: 'Form', value: match.form })
+  if (match.weather) items.push({ type: 'text', label: 'Weather', value: match.weather })
   const events = (match.events || []).filter(Boolean)
-  if (events.length) items.push({ label: goals.length ? 'Key events' : 'Events', value: events.slice(0, 2).join(' | ') })
+  const nonGoalEvents = goals.length ? events.filter(event => !/\b(goal|penalty)\b/i.test(event)) : events
+  if (nonGoalEvents.length) items.push({ type: 'text', label: 'Events', value: nonGoalEvents.slice(0, 2).join(' | ') })
   const stats = (match.stats || []).filter(Boolean)
-  if (stats.length) items.push({ label: 'Stats', value: stats.slice(0, 2).join(' | ') })
+  if (stats.length) items.push({ type: 'text', label: 'Stats', value: stats.slice(0, 2).join(' | ') })
   return items
+}
+
+function formatGoalScorer(value: string, home: string, away: string) {
+  let text = value.trim()
+  for (const team of [home, away].filter(Boolean)) {
+    const escaped = team.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    text = text.replace(new RegExp(`\\s+${escaped}$`, 'i'), '')
+  }
+  text = text.replace(/\s+/g, ' ').trim()
+  return text
+}
+
+function goalPages(goals: string[]) {
+  const pages: string[][] = []
+  for (let index = 0; index < goals.length; index += 2) pages.push(goals.slice(index, index + 2))
+  return pages
 }
 
 function matchCountdown(match: PolyStreamMatch) {
@@ -2816,6 +2838,7 @@ function HashLiveScoreWidget({
 }) {
   const [selectedMatchKey, setSelectedMatchKey] = useState('')
   const [detailIndex, setDetailIndex] = useState(0)
+  const [goalPageIndex, setGoalPageIndex] = useState(0)
   const [, setCountdownTick] = useState(0)
   const featured = matches.find(match => matchKey(match) === selectedMatchKey) || matches[0]
   const rest = featured ? matches.filter(match => matchKey(match) !== matchKey(featured)) : []
@@ -2823,8 +2846,10 @@ function HashLiveScoreWidget({
   const featuredState = featured ? matchDisplayState(featured) : null
   const homeFlag = flagUrlForTeam(home)
   const awayFlag = flagUrlForTeam(away)
-  const featuredDetails = featured ? detailItems(featured) : []
+  const featuredDetails = useMemo(() => featured ? detailItems(featured) : [], [featured])
   const activeDetail = featuredDetails.length ? featuredDetails[detailIndex % featuredDetails.length] : null
+  const activeGoalPages = activeDetail?.type === 'goals' ? goalPages(activeDetail.goals) : []
+  const activeGoalPage = activeGoalPages[goalPageIndex % Math.max(activeGoalPages.length, 1)] || []
 
   useEffect(() => {
     if (!matches.length) return
@@ -2833,15 +2858,25 @@ function HashLiveScoreWidget({
 
   useEffect(() => {
     setDetailIndex(0)
+    setGoalPageIndex(0)
   }, [selectedMatchKey])
 
   useEffect(() => {
-    if (featuredDetails.length <= 1) return
     const timer = window.setInterval(() => {
-      setDetailIndex(current => (current + 1) % featuredDetails.length)
-    }, 10_000)
+      if (!featuredDetails.length) return
+      const current = featuredDetails[detailIndex % featuredDetails.length]
+      if (current?.type === 'goals') {
+        const pages = goalPages(current.goals)
+        if (pages.length > 1 && goalPageIndex < pages.length - 1) {
+          setGoalPageIndex(currentPage => currentPage + 1)
+          return
+        }
+      }
+      setGoalPageIndex(0)
+      setDetailIndex(currentIndex => (currentIndex + 1) % featuredDetails.length)
+    }, activeDetail?.type === 'goals' ? 5_000 : 10_000)
     return () => window.clearInterval(timer)
-  }, [featuredDetails.length, selectedMatchKey])
+  }, [activeDetail?.type, detailIndex, featuredDetails, goalPageIndex, selectedMatchKey])
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -2972,7 +3007,22 @@ function HashLiveScoreWidget({
           {activeDetail && (
             <div className="relative z-10 mt-2 rounded-lg border border-white/10 bg-black/25 px-2.5 py-2 text-center backdrop-blur-sm">
               <p className="text-[9px] font-black uppercase tracking-[0.16em] text-white/45">{activeDetail.label}</p>
-              <p className="mt-0.5 text-[11px] font-semibold leading-snug text-white/90 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">{activeDetail.value}</p>
+              {activeDetail.type === 'goals' ? (
+                <div
+                  key={`${selectedMatchKey}-${goalPageIndex}`}
+                  className="mt-1 flex min-h-[18px] animate-[hpGoalRise_.28s_ease-out] items-center justify-center gap-2 overflow-hidden text-[11px] font-semibold leading-snug text-white/90"
+                >
+                  {activeGoalPage.map((goal, index) => (
+                    <span key={`${goal}-${index}`} className="inline-flex min-w-0 items-center gap-1">
+                      <span className="truncate">{goal}</span>
+                      <span className="shrink-0 text-[10px]" aria-hidden="true">⚽</span>
+                      {index < activeGoalPage.length - 1 && <span className="ml-1 shrink-0 text-white/35">|</span>}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-0.5 text-[11px] font-semibold leading-snug text-white/90 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">{activeDetail.value}</p>
+              )}
             </div>
           )}
         </div>
