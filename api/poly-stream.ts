@@ -43,6 +43,13 @@ function asRecord(value: unknown) {
   return value && typeof value === 'object' ? value as Record<string, unknown> : {}
 }
 
+function safeProviderMessage(value: unknown) {
+  const text = typeof value === 'string' ? value : JSON.stringify(value)
+  return text
+    .replace(/[A-Za-z0-9_-]{24,}/g, '[redacted]')
+    .slice(0, 260)
+}
+
 function extractMatches(payload: unknown): ProviderMatch[] {
   if (Array.isArray(payload)) return payload.filter(item => item && typeof item === 'object') as ProviderMatch[]
   const data = asRecord(payload)
@@ -246,11 +253,12 @@ async function fetchProviderMatches(): Promise<PolyStreamMatch[]> {
   const timeout = setTimeout(() => controller.abort(), 10_000)
   try {
     const response = await fetch(url, { headers, signal: controller.signal })
-    if (!response.ok) throw new Error(`Poly Stream provider returned ${response.status}`)
-    const payload = await response.json()
+    const text = await response.text()
+    if (!response.ok) throw new Error(`Poly Stream provider returned ${response.status}: ${safeProviderMessage(text)}`)
+    const payload = JSON.parse(text)
     const providerErrors = asRecord(payload).errors
     if (providerErrors && JSON.stringify(providerErrors) !== '[]' && JSON.stringify(providerErrors) !== '{}') {
-      throw new Error('Poly Stream provider returned an API error')
+      throw new Error(`Poly Stream provider error: ${safeProviderMessage(providerErrors)}`)
     }
     return extractMatches(payload).map(normalizeMatch).filter(Boolean).slice(0, 8) as PolyStreamMatch[]
   } finally {
