@@ -616,10 +616,7 @@ function polymarketPriceSummary(candidate: ProviderMatch, home: string, away: st
     const market = markets.find(item => {
       const label = normalizeSearchText(asString(item.groupItemTitle) || asString(item.group_item_title))
       if (!label || /\bdraw\b|\btie\b/.test(label)) return false
-      return terms.some(term => label === term || label.includes(term))
-    }) || markets.find(item => {
-      const slug = normalizeSearchText(asString(item.slug))
-      return terms.some(term => slug.endsWith(` ${term}`) || slug.includes(` ${term} `))
+      return terms.some(term => label === term)
     })
     const price = market ? readMarketOutcomePrice(market) : undefined
     return price !== undefined ? formatProbability(price) : ''
