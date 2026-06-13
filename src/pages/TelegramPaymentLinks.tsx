@@ -27,10 +27,6 @@ import { EVM_TREASURY } from '../lib/chains'
 const TELEGRAM_BOT_URL = import.meta.env.VITE_TELEGRAM_AGENT_URL || 'https://t.me/HashPayLinkBot'
 const PUBLIC_PAYLINK_ORIGIN = (import.meta.env.VITE_PUBLIC_PAYLINK_ORIGIN || 'https://hashpaylink.com').replace(/\/+$/, '')
 const POLYMARKET_LOGO = '/brand/polymarket-logo.png'
-const SPORTMONKS_WIDGET_URL = (import.meta.env.VITE_SPORTMONKS_WIDGET_URL || '').trim()
-const SPORTMONKS_WIDGET_CSS_URL = (import.meta.env.VITE_SPORTMONKS_WIDGET_CSS_URL || '').trim()
-const SPORTMONKS_WIDGET_JS_URL = (import.meta.env.VITE_SPORTMONKS_WIDGET_JS_URL || '').trim()
-const SPORTMONKS_WIDGET_HTML = (import.meta.env.VITE_SPORTMONKS_WIDGET_HTML || '').trim()
 const MAX_USER_AGENTS = 3
 
 function displayTelegramName(rawName: string | null, fallback = 'there') {
@@ -2580,57 +2576,118 @@ type PolyStreamFeed = {
   matches: PolyStreamMatch[]
 }
 
-function SportmonksLiveWidget() {
-  useEffect(() => {
-    if (SPORTMONKS_WIDGET_CSS_URL) {
-      const existing = document.querySelector(`link[data-sportmonks-widget-css="${SPORTMONKS_WIDGET_CSS_URL}"]`)
-      if (!existing) {
-        const link = document.createElement('link')
-        link.rel = 'stylesheet'
-        link.href = SPORTMONKS_WIDGET_CSS_URL
-        link.dataset.sportmonksWidgetCss = SPORTMONKS_WIDGET_CSS_URL
-        document.head.appendChild(link)
-      }
-    }
-    if (SPORTMONKS_WIDGET_JS_URL) {
-      const existing = document.querySelector(`script[data-sportmonks-widget-js="${SPORTMONKS_WIDGET_JS_URL}"]`)
-      if (!existing) {
-        const script = document.createElement('script')
-        script.src = SPORTMONKS_WIDGET_JS_URL
-        script.async = true
-        script.dataset.sportmonksWidgetJs = SPORTMONKS_WIDGET_JS_URL
-        document.body.appendChild(script)
-      }
-    }
-  }, [])
+function hasMatchScore(match: PolyStreamMatch) {
+  return match.homeScore !== undefined && match.homeScore !== '' && match.awayScore !== undefined && match.awayScore !== ''
+}
 
-  if (SPORTMONKS_WIDGET_URL) {
+function splitFixtureTitle(title: string) {
+  if (!title.includes(' vs ')) return [title, ''] as const
+  const [home, away] = title.split(' vs ', 2)
+  return [home.trim(), away.trim()] as const
+}
+
+function scoreTagClass(tag: string) {
+  if (tag === 'Live') return 'bg-emerald-50 text-emerald-700 ring-emerald-100 dark:bg-emerald-400/10 dark:text-emerald-200 dark:ring-emerald-400/20'
+  if (tag === 'Today') return 'bg-blue-50 text-blue-700 ring-blue-100 dark:bg-blue-400/10 dark:text-blue-200 dark:ring-blue-400/20'
+  if (tag === 'Result') return 'bg-gray-100 text-gray-600 ring-gray-200 dark:bg-white/[0.08] dark:text-gray-300 dark:ring-white/10'
+  return 'bg-amber-50 text-amber-700 ring-amber-100 dark:bg-amber-400/10 dark:text-amber-200 dark:ring-amber-400/20'
+}
+
+function HashLiveScoreWidget({
+  matches,
+  loading,
+  providerReady,
+  error,
+}: {
+  matches: PolyStreamMatch[]
+  loading: boolean
+  providerReady: boolean
+  error: string
+}) {
+  const featured = matches[0]
+  const rest = matches.slice(1, 8)
+  const [home, away] = featured ? splitFixtureTitle(featured.title) : ['World Cup', 'Scores']
+
+  if (loading) {
     return (
-      <div className="overflow-hidden rounded-xl border border-gray-100 bg-white dark:border-white/10 dark:bg-white/[0.04]">
-        <iframe
-          title="Sportmonks World Cup live scores"
-          src={SPORTMONKS_WIDGET_URL}
-          className="h-[520px] w-full border-0"
-          loading="lazy"
-        />
+      <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-4 dark:border-white/10 dark:bg-white/[0.04]">
+        <div className="flex items-center gap-2 text-sm font-semibold text-gray-600 dark:text-gray-300">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Loading live board
+        </div>
       </div>
     )
   }
 
-  if (SPORTMONKS_WIDGET_HTML) {
+  if (error) {
     return (
-      <div className="overflow-hidden rounded-xl border border-gray-100 bg-white p-2 dark:border-white/10 dark:bg-white/[0.04]">
-        <div dangerouslySetInnerHTML={{ __html: SPORTMONKS_WIDGET_HTML }} />
+      <div className="rounded-xl border border-rose-100 bg-rose-50/70 p-4 text-sm font-semibold text-rose-700 dark:border-rose-400/20 dark:bg-rose-400/10 dark:text-rose-200">
+        Live scores unavailable
+      </div>
+    )
+  }
+
+  if (!providerReady || matches.length === 0) {
+    return (
+      <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-4 text-center dark:border-white/10 dark:bg-white/[0.04]">
+        <p className="text-sm font-semibold text-gray-900 dark:text-white">No World Cup matches returned</p>
+        <p className="mx-auto mt-1 max-w-xs text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+          Check the Sportmonks league ID, season, and token in Render.
+        </p>
       </div>
     )
   }
 
   return (
-    <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-4 text-center dark:border-white/10 dark:bg-white/[0.04]">
-      <p className="text-sm font-semibold text-gray-900 dark:text-white">Sportmonks widget not configured</p>
-      <p className="mx-auto mt-1 max-w-xs text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-        Add the widget embed from MySportmonks to show the live match board here.
-      </p>
+    <div className="overflow-hidden rounded-xl border border-gray-100 bg-white dark:border-white/10 dark:bg-white/[0.04]">
+      {featured && (
+        <div className="border-b border-gray-100 bg-gray-950 p-3 text-white dark:border-white/10 dark:bg-white dark:text-gray-950">
+          <div className="flex items-center justify-between gap-2">
+            <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ring-1', scoreTagClass(featured.tag))}>
+              {featured.tag}
+            </span>
+            <span className="truncate text-[11px] font-semibold text-white/60 dark:text-gray-500">{featured.time}</span>
+          </div>
+          <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+            <div className="min-w-0 rounded-lg bg-white/10 p-2 text-center ring-1 ring-white/10 dark:bg-gray-50 dark:ring-gray-100">
+              <p className="truncate text-sm font-semibold">{home}</p>
+            </div>
+            <div className="min-w-[58px] text-center">
+              <p className="text-xl font-black tabular-nums">
+                {hasMatchScore(featured) ? `${featured.homeScore}-${featured.awayScore}` : 'vs'}
+              </p>
+              <p className="mt-0.5 text-[10px] font-bold uppercase text-white/50 dark:text-gray-400">{featured.clock || featured.status}</p>
+            </div>
+            <div className="min-w-0 rounded-lg bg-white/10 p-2 text-center ring-1 ring-white/10 dark:bg-gray-50 dark:ring-gray-100">
+              <p className="truncate text-sm font-semibold">{away || 'Opponent'}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="max-h-[280px] divide-y divide-gray-100 overflow-y-auto [scrollbar-color:rgba(148,163,184,0.28)_transparent] [scrollbar-width:thin] dark:divide-white/10 dark:[scrollbar-color:rgba(255,255,255,0.18)_transparent] [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300/40 dark:[&::-webkit-scrollbar-thumb]:bg-white/20">
+        {rest.map(match => {
+          const [rowHome, rowAway] = splitFixtureTitle(match.title)
+          return (
+            <div key={`${match.title}-${match.time}`} className="grid grid-cols-[1fr_auto] items-center gap-2 p-2.5">
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span className={cn('rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase ring-1', scoreTagClass(match.tag))}>
+                    {match.tag}
+                  </span>
+                  <span className="truncate text-[11px] text-gray-500 dark:text-gray-400">{match.time}</span>
+                </div>
+                <p className="mt-1 truncate text-xs font-semibold text-gray-900 dark:text-white">
+                  {rowHome}{rowAway ? ` vs ${rowAway}` : ''}
+                </p>
+              </div>
+              <div className="rounded-lg bg-gray-50 px-2 py-1 text-center text-xs font-black tabular-nums text-gray-900 dark:bg-white/[0.07] dark:text-white">
+                {hasMatchScore(match) ? `${match.homeScore}-${match.awayScore}` : 'vs'}
+              </div>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -2748,7 +2805,7 @@ function PolyStreamPanel({
           </div>
         </div>
 
-        <SportmonksLiveWidget />
+        <HashLiveScoreWidget matches={matches} loading={loading} providerReady={providerReady} error={error} />
 
         <div className="max-h-[260px] space-y-1.5 overflow-y-auto [scrollbar-color:rgba(148,163,184,0.35)_transparent] [scrollbar-width:thin] dark:[scrollbar-color:rgba(255,255,255,0.22)_transparent] [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300/40 dark:[&::-webkit-scrollbar-thumb]:bg-white/20">
           {!loading && exactMatches.length === 0 && (
