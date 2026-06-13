@@ -8,7 +8,13 @@
       "status": "Live/recent",
       "marketContext": "Host-nation Group D opener. Check USA momentum, Paraguay response, group qualification, scorer, and live sentiment markets before asking LP Scout.",
       "sourceUrl": "https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026",
-      "watchUrl": ""
+      "watchUrl": "",
+      "watchProviders": [
+        {
+          "label": "Global schedule",
+          "url": "https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026"
+        }
+      ]
     },
     {
       "tag": "Today",
@@ -18,7 +24,13 @@
       "status": "Scheduled",
       "marketContext": "Group C opener. Check Scotland, Haiti, group qualification, and underdog headline markets before asking LP Scout for paid book depth.",
       "sourceUrl": "https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026",
-      "watchUrl": ""
+      "watchUrl": "",
+      "watchProviders": [
+        {
+          "label": "Global schedule",
+          "url": "https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026"
+        }
+      ]
     },
     {
       "tag": "Today",
@@ -28,7 +40,13 @@
       "status": "Scheduled",
       "marketContext": "Group D match with strong regional interest. Watch team news and early price movement before checking related Polymarket liquidity.",
       "sourceUrl": "https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026",
-      "watchUrl": ""
+      "watchUrl": "",
+      "watchProviders": [
+        {
+          "label": "Global schedule",
+          "url": "https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026"
+        }
+      ]
     },
     {
       "tag": "Today",
@@ -38,7 +56,13 @@
       "status": "Scheduled",
       "marketContext": "High-attention Group C fixture. Watch Brazil outright, Morocco upset, scorer, and group-table markets before asking LP Scout.",
       "sourceUrl": "https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026",
-      "watchUrl": ""
+      "watchUrl": "",
+      "watchProviders": [
+        {
+          "label": "Global schedule",
+          "url": "https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026"
+        }
+      ]
     },
     {
       "tag": "Today",
@@ -48,7 +72,13 @@
       "status": "Scheduled",
       "marketContext": "Group B fixture. Check qualification, match winner, and news-driven pricing before committing to any LP strategy.",
       "sourceUrl": "https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026",
-      "watchUrl": ""
+      "watchUrl": "",
+      "watchProviders": [
+        {
+          "label": "Global schedule",
+          "url": "https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026"
+        }
+      ]
     },
     {
       "tag": "Tomorrow",
@@ -58,7 +88,13 @@
       "status": "Scheduled",
       "marketContext": "Group E opener. Use early news and lineup context to decide if related Polymarket books deserve a paid scout.",
       "sourceUrl": "https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026",
-      "watchUrl": ""
+      "watchUrl": "",
+      "watchProviders": [
+        {
+          "label": "Global schedule",
+          "url": "https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026"
+        }
+      ]
     },
     {
       "tag": "Tomorrow",
@@ -68,7 +104,13 @@
       "status": "Scheduled",
       "marketContext": "High-attention Group E fixture. Watch favorite pricing, handicap narratives, and scorer markets before asking LP Scout.",
       "sourceUrl": "https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026",
-      "watchUrl": ""
+      "watchUrl": "",
+      "watchProviders": [
+        {
+          "label": "Global schedule",
+          "url": "https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026"
+        }
+      ]
     }
   ]
 }

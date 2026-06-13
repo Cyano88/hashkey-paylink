@@ -14,6 +14,7 @@ type PolyStreamMatch = {
   marketContext: string
   sourceUrl: string
   watchUrl: string
+  watchProviders?: Array<{ label: string; url: string }>
 }
 
 type CacheEntry = {
@@ -95,6 +96,18 @@ function watchUrlFor(title: string) {
   return ''
 }
 
+function normalizeWatchProviders(value: unknown) {
+  if (!Array.isArray(value)) return []
+  return value
+    .map(item => {
+      const record = asRecord(item)
+      const label = asString(record.label)
+      const url = asString(record.url)
+      return label && url ? { label, url } : null
+    })
+    .filter(Boolean) as Array<{ label: string; url: string }>
+}
+
 function extractMatches(payload: unknown): ProviderMatch[] {
   if (Array.isArray(payload)) return payload.filter(item => item && typeof item === 'object') as ProviderMatch[]
   const data = asRecord(payload)
@@ -125,6 +138,7 @@ function normalizeFeedMatch(match: ProviderMatch): PolyStreamMatch | null {
     marketContext: asString(match.marketContext) || `${title}. Check related Polymarket books before asking LP Scout.`,
     sourceUrl: asString(match.sourceUrl),
     watchUrl: asString(match.watchUrl),
+    watchProviders: normalizeWatchProviders(match.watchProviders),
   }
 }
 
@@ -287,6 +301,7 @@ function normalizeMatch(match: ProviderMatch): PolyStreamMatch | null {
     marketContext: context,
     sourceUrl: url,
     watchUrl: watchUrlFor(title) || url,
+    watchProviders: normalizeWatchProviders(match.watchProviders),
   }
 }
 

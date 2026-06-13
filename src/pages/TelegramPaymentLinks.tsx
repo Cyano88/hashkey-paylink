@@ -2562,6 +2562,7 @@ type PolyStreamMatch = {
   marketContext: string
   sourceUrl: string
   watchUrl: string
+  watchProviders?: Array<{ label: string; url: string }>
 }
 
 type PolyStreamFeed = {
@@ -2658,6 +2659,7 @@ function PolyStreamPanel({
   const [feed, setFeed] = useState<PolyStreamFeed | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [watchMatch, setWatchMatch] = useState<PolyStreamMatch | null>(null)
   const matches = feed?.matches?.length ? feed.matches : fallbackPolyStreamMatches
   const providerReady = Boolean(feed?.providerConfigured && feed.source !== 'fallback' && !error)
   const statusText = loading
@@ -2696,6 +2698,21 @@ function PolyStreamPanel({
       mode: 'theme',
       query: `World Cup match: ${match.title}. ${match.time}. ${match.status}. ${match.marketContext}`.replace(/\s+/g, ' ').slice(0, 170),
     })
+  }
+
+  function watchOptions(match: PolyStreamMatch) {
+    const providers = Array.isArray(match.watchProviders) ? match.watchProviders.filter(provider => provider.label && provider.url) : []
+    if (providers.length) return providers
+    return match.watchUrl ? [{ label: 'Watch provider', url: match.watchUrl }] : []
+  }
+
+  function openWatch(match: PolyStreamMatch) {
+    const options = watchOptions(match)
+    if (options.length === 1) {
+      window.open(options[0].url, '_blank', 'noopener,noreferrer')
+      return
+    }
+    if (options.length > 1) setWatchMatch(match)
   }
 
   const featuredMatch = matches[0]
@@ -2799,6 +2816,16 @@ function PolyStreamPanel({
                 <p className="mt-1 text-xs leading-relaxed text-white/70 dark:text-gray-500">{featuredMatch.marketContext}</p>
               </div>
               <div className="mt-3 flex flex-wrap gap-1.5">
+                {watchOptions(featuredMatch).length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => openWatch(featuredMatch)}
+                    className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-emerald-400 px-2.5 py-1.5 text-[10px] font-bold text-gray-950 transition-all hover:bg-emerald-300 active:scale-[0.98]"
+                  >
+                    <Radio className="h-3 w-3" />
+                    Watch
+                  </button>
+                )}
                 {featuredMatch.sourceUrl && (
                   <a
                     href={featuredMatch.sourceUrl}
@@ -2813,7 +2840,7 @@ function PolyStreamPanel({
                 <button
                   type="button"
                   onClick={() => askScout(featuredMatch)}
-                  className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-emerald-400 px-2.5 py-1.5 text-[10px] font-bold text-gray-950 transition-all hover:bg-emerald-300 active:scale-[0.98]"
+                  className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-white/10 px-2.5 py-1.5 text-[10px] font-bold text-white ring-1 ring-white/15 transition-all hover:bg-white/20 active:scale-[0.98] dark:bg-gray-950 dark:text-white dark:ring-gray-900"
                 >
                   <LineChart className="h-3 w-3" />
                   Ask LP Scout
@@ -2839,6 +2866,16 @@ function PolyStreamPanel({
                 </div>
               </div>
               <div className="mt-2 flex flex-wrap gap-1.5">
+                {watchOptions(match).length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => openWatch(match)}
+                    className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-gray-900 px-2.5 py-1.5 text-[10px] font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950"
+                  >
+                    <Radio className="h-3 w-3" />
+                    Watch
+                  </button>
+                )}
                 {match.sourceUrl && (
                   <a
                     href={match.sourceUrl}
@@ -2853,7 +2890,7 @@ function PolyStreamPanel({
                 <button
                   type="button"
                   onClick={() => askScout(match)}
-                  className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-gray-900 px-2.5 py-1.5 text-[10px] font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950"
+                  className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[10px] font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200"
                 >
                   <LineChart className="h-3 w-3" />
                   Ask LP Scout
@@ -2863,6 +2900,38 @@ function PolyStreamPanel({
           ))}
         </div>
       </div>
+
+      {watchMatch && (
+        <div className="rounded-2xl border border-gray-100 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-white/[0.05]">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-gray-900 dark:text-white">Watch {watchMatch.title}</p>
+              <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Choose an official or verified provider.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setWatchMatch(null)}
+              className="rounded-lg border border-gray-200 px-2 py-1 text-[11px] font-semibold text-gray-500 transition-colors hover:bg-gray-50 dark:border-white/10 dark:text-gray-300 dark:hover:bg-white/[0.06]"
+            >
+              Close
+            </button>
+          </div>
+          <div className="mt-3 grid gap-1.5 sm:grid-cols-2">
+            {watchOptions(watchMatch).map(provider => (
+              <a
+                key={`${watchMatch.title}-${provider.label}`}
+                href={provider.url}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center justify-between gap-2 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-800 transition-colors hover:bg-gray-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-100 dark:hover:bg-white/[0.08]"
+              >
+                <span className="truncate">{provider.label}</span>
+                <ExternalLink className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

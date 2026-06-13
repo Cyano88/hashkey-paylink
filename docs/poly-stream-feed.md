@@ -17,11 +17,15 @@ Use this feed for curated World Cup match context, official schedule links, and 
   "status": "Live/recent",
   "marketContext": "Short market context for LP Scout handoff.",
   "sourceUrl": "https://www.fifa.com/...",
-  "watchUrl": "https://official-provider.example/watch"
+  "watchUrl": "https://official-provider.example/watch",
+  "watchProviders": [
+    { "label": "United States", "url": "https://official-us-provider.example" },
+    { "label": "Global schedule", "url": "https://www.fifa.com/..." }
+  ]
 }
 ```
 
-`watchUrl` is optional. If it is blank, the UI shows the official schedule link and LP Scout action only.
+`watchUrl` is optional. `watchProviders` is preferred when a match has more than one legal viewing option by country or platform. Add only official broadcaster, FIFA, or verified provider links. Do not add unofficial stream mirrors.
 
 ## Remote Override
 
