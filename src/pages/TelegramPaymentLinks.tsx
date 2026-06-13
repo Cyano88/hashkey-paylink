@@ -2713,15 +2713,20 @@ function matchDisplayState(match: PolyStreamMatch) {
   const matchTime = Date.parse(match.kickoffAt || match.time)
   const isPast = Number.isFinite(matchTime) && matchTime < Date.now() - 90 * 60 * 1000
   if (/(live|inplay|in play|1h|2h|1st|2nd|first half|second half|et)/.test(status)) {
-    return { tag: 'LIVE', center: hasScore ? `${match.homeScore}-${match.awayScore}` : 'Live', sub: match.clock || match.status }
+    return {
+      tag: 'LIVE',
+      phase: match.status && !/^live$/i.test(match.status) ? match.status : '',
+      center: hasScore ? `${match.homeScore}-${match.awayScore}` : 'Live',
+      sub: match.clock || 'Live',
+    }
   }
   if (/(half|ht)/.test(status)) {
-    return { tag: 'HT', center: hasScore ? `${match.homeScore}-${match.awayScore}` : 'HT', sub: 'Half time' }
+    return { tag: 'HT', phase: 'Half time', center: hasScore ? `${match.homeScore}-${match.awayScore}` : 'HT', sub: match.clock || 'Half time' }
   }
-  if (/(ft|finished|result|complete|ended|after extra time|pen)/.test(status) || (hasScore && isPast)) {
-    return { tag: 'FT', center: `${match.homeScore}-${match.awayScore}`, sub: 'Full time' }
+  if (/(ft|full time|full-time|finished|result|complete|ended|after extra time|pen)/.test(status) || (hasScore && isPast)) {
+    return { tag: 'FT', phase: 'Full time', center: `${match.homeScore}-${match.awayScore}`, sub: match.clock || 'Full time' }
   }
-  return { tag: 'NS', center: 'vs', sub: matchCountdown(match) }
+  return { tag: 'NS', phase: '', center: 'vs', sub: matchCountdown(match) }
 }
 
 function rowStateLabel(match: PolyStreamMatch) {
@@ -2800,7 +2805,7 @@ function HashLiveScoreWidget({
   const [detailIndex, setDetailIndex] = useState(0)
   const [, setCountdownTick] = useState(0)
   const featured = matches.find(match => matchKey(match) === selectedMatchKey) || matches[0]
-  const rest = featured ? matches.filter(match => matchKey(match) !== matchKey(featured)).slice(0, 8) : []
+  const rest = featured ? matches.filter(match => matchKey(match) !== matchKey(featured)) : []
   const [home, away] = featured ? splitFixtureTitle(featured.title) : ['World Cup', 'Scores']
   const featuredState = featured ? matchDisplayState(featured) : null
   const homeFlag = flagUrlForTeam(home)
@@ -2921,7 +2926,7 @@ function HashLiveScoreWidget({
                 ? 'bg-emerald-400/15 text-emerald-100 ring-emerald-300/30'
                 : 'bg-white/12 text-white/85 ring-white/15',
             )}>
-              {featuredState?.tag}
+              {featuredState?.phase ? `${featuredState.tag} - ${featuredState.phase}` : featuredState?.tag}
             </span>
           </div>
           <div className="relative z-10 mt-4 grid min-h-[112px] grid-cols-[minmax(0,1fr)_76px_minmax(0,1fr)] items-center gap-1.5 sm:grid-cols-[minmax(0,1fr)_88px_minmax(0,1fr)] sm:gap-2">

@@ -329,6 +329,26 @@ function sportmonksWeather(match: ProviderMatch) {
   return [description, temp ? `${temp}` : ''].filter(Boolean).join(' ')
 }
 
+function sportmonksClock(match: ProviderMatch) {
+  const direct = asText(match.minute) || asText(asRecord(match.state).minutes) || asText(asRecord(match.state).minute)
+  if (direct) return `${direct}'`
+  const periods = Array.isArray(match.periods) ? match.periods.map(asRecord) : []
+  const latestPeriod = periods
+    .slice()
+    .reverse()
+    .find(record => asText(record.minutes) || asText(record.minute) || asText(record.started))
+  const explicit = asText(latestPeriod?.minutes) || asText(latestPeriod?.minute)
+  if (explicit) return `${explicit}'`
+  const started = asNumber(latestPeriod?.started)
+  const countsFrom = asNumber(latestPeriod?.counts_from) ?? 0
+  const ticking = latestPeriod?.ticking === true || asString(latestPeriod?.ticking).toLowerCase() === 'true'
+  if (ticking && started) {
+    const elapsed = Math.floor((Date.now() / 1000 - started) / 60) + countsFrom
+    if (Number.isFinite(elapsed) && elapsed >= 0 && elapsed <= 140) return `${elapsed}'`
+  }
+  return ''
+}
+
 function normalizeSportmonks(match: ProviderMatch): ScoreMatch | null {
   const home = sportmonksParticipantName(match, 'home')
   const away = sportmonksParticipantName(match, 'away')
@@ -344,13 +364,7 @@ function normalizeSportmonks(match: ProviderMatch): ScoreMatch | null {
   const venue = asString(asRecord(match.venue).name) || 'World Cup venue'
   const leagueId = String(match.league_id ?? '')
   const fixtureId = String(match.id ?? '')
-  const periods = Array.isArray(match.periods) ? match.periods.map(asRecord) : []
-  const latestPeriod = periods.slice().reverse().find(record => asText(record.minutes) || asText(record.minute))
-  const clockValue = asText(match.minute)
-    || asText(asRecord(match.state).minutes)
-    || asText(latestPeriod?.minutes)
-    || asText(latestPeriod?.minute)
-  const clock = clockValue ? `${clockValue}'` : ''
+  const clock = sportmonksClock(match)
   const homeScore = sportmonksScore(match, 'home')
   const awayScore = sportmonksScore(match, 'away')
   const exposeScore = shouldExposeScore(status)
