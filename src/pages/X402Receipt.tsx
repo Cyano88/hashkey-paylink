@@ -267,7 +267,7 @@ type VisualReceiptInput = {
   proof: Record<string, unknown>
   legal: Record<string, unknown>
   governance: Record<string, unknown>
-  og?: ReceiptResponse['receipt']['og']
+  og?: NonNullable<ReceiptResponse['receipt']>['og']
   receiptUrl: string
 }
 

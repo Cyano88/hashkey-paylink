@@ -401,7 +401,7 @@ export default function TelegramPaymentLinks() {
   const [opened, setOpened] = useState(searchParams.get('open') !== '0')
   const [activeSection, setActiveSection] = useState<TelegramSectionId>(initialAgentService ? 'agent-wallets' : initialMarketService ? 'market-tools' : initialSection)
   const [activeService, setActiveService] = useState<TelegramServiceId | ''>(initialService)
-  const [requestMode, setRequestMode] = useState<RequestMode | ''>(initialService === 'request-usdc' ? initialMode : '')
+  const [requestMode, setRequestMode] = useState<RequestMode | ''>(initialServiceParam === 'request-usdc' ? initialMode : '')
   const [savedRequest, setSavedRequest] = useState<SavedRequest | null>(null)
   const [polymarketMode, setPolymarketMode] = useState<PolymarketMode>('')
   const [savedPolymarketRequest, setSavedPolymarketRequest] = useState<SavedRequest | null>(null)
@@ -2372,7 +2372,7 @@ function PolyWorldCupNewsPanel({
     : error
     ? 'Provider feed unavailable'
     : hasProviderFeed
-    ? `Updated ${relativeNewsTime(feed.updatedAt)}`
+    ? `Updated ${relativeNewsTime(feed?.updatedAt || '')}`
     : 'Hash PayLink desk feed'
 
   useEffect(() => {
@@ -2566,6 +2566,9 @@ type PolyStreamMatch = {
   homeCoach?: string
   awayCoach?: string
   probability?: string
+  polymarketTitle?: string
+  polymarketLiquidity?: string
+  polymarketVolume?: string
   h2h?: string
   form?: string
   events?: string[]
@@ -2710,6 +2713,13 @@ function matchDisplayState(match: PolyStreamMatch) {
   return { tag: 'NS', center: 'vs', sub: match.time }
 }
 
+function rowStateLabel(match: PolyStreamMatch) {
+  const state = matchDisplayState(match)
+  if (state.tag === 'FT' && hasMatchScore(match)) return `FT ${match.homeScore}-${match.awayScore}`
+  if ((state.tag === 'LIVE' || state.tag === 'HT') && hasMatchScore(match)) return `${state.tag} ${match.homeScore}-${match.awayScore}`
+  return state.tag
+}
+
 function matchKey(match: PolyStreamMatch) {
   return match.fixtureId || `${match.title}-${match.time}-${match.status}`
 }
@@ -2718,14 +2728,20 @@ function compactMatchTime(match: PolyStreamMatch) {
   return match.time.replace(/\sUTC$/i, '')
 }
 
+function kickoffZone(match: PolyStreamMatch) {
+  if (/UTC$/i.test(match.time)) return 'UTC'
+  if (/GMT$/i.test(match.time)) return 'GMT'
+  return ''
+}
+
 function detailItems(match: PolyStreamMatch) {
   const items: Array<{ label: string; value: string }> = []
   if (match.venue && match.venue !== 'World Cup venue') items.push({ label: 'Stadium', value: match.venue })
-  if (match.homeCoach || match.awayCoach) {
-    items.push({ label: 'Coaches', value: [match.homeCoach || 'Pending', match.awayCoach || 'Pending'].join(' vs ') })
-  }
+  if (match.homeCoach && match.awayCoach) items.push({ label: 'Coaches', value: [match.homeCoach, match.awayCoach].join(' vs ') })
   if (match.h2h) items.push({ label: 'H2H', value: match.h2h })
-  if (match.probability) items.push({ label: 'Win chance', value: match.probability })
+  if (match.probability) items.push({ label: 'Polymarket odds', value: match.probability })
+  if (match.polymarketLiquidity) items.push({ label: 'Market liquidity', value: match.polymarketLiquidity })
+  if (match.polymarketVolume) items.push({ label: 'Market volume', value: match.polymarketVolume })
   if (match.form) items.push({ label: 'Form', value: match.form })
   const events = (match.events || []).filter(Boolean)
   if (events.length) items.push({ label: 'Events', value: events.slice(0, 2).join(' | ') })
@@ -2855,7 +2871,9 @@ function HashLiveScoreWidget({
               <p className="text-xl font-black tabular-nums">
                 {featuredState?.center}
               </p>
-              <p className="mt-0.5 max-w-[76px] truncate text-[9px] font-bold uppercase text-white/55">{featuredState?.sub}</p>
+              <p className="mt-0.5 max-w-[82px] truncate text-[9px] font-bold uppercase text-white/55">
+                {featuredState?.tag === 'NS' && kickoffZone(featured) ? kickoffZone(featured) : featuredState?.sub}
+              </p>
             </div>
             <div className="min-w-0 text-center">
               <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-black/30 shadow-xl ring-1 ring-white/15 backdrop-blur-sm">
@@ -2876,7 +2894,6 @@ function HashLiveScoreWidget({
       <div className="max-h-[280px] divide-y divide-gray-100 overflow-y-auto [scrollbar-color:rgba(148,163,184,0.28)_transparent] [scrollbar-width:thin] dark:divide-white/10 dark:[scrollbar-color:rgba(255,255,255,0.18)_transparent] [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300/40 dark:[&::-webkit-scrollbar-thumb]:bg-white/20">
         {rest.map(match => {
           const [rowHome, rowAway] = splitFixtureTitle(match.title)
-          const state = matchDisplayState(match)
           return (
             <button
               type="button"
@@ -2885,21 +2902,17 @@ function HashLiveScoreWidget({
               className="grid w-full grid-cols-[1fr_auto] items-center gap-2 p-2.5 text-left transition-colors hover:bg-gray-50 active:bg-gray-100 dark:hover:bg-white/[0.05] dark:active:bg-white/[0.08]"
             >
               <div className="min-w-0">
-                <div className="flex items-center gap-1.5">
-                  <span className={cn('rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase ring-1', scoreTagClass(state.tag === 'FT' ? 'Result' : match.tag))}>
-                    {state.tag}
-                  </span>
-                  <span className="truncate text-[11px] text-gray-500 dark:text-gray-400">{compactMatchTime(match)}</span>
-                </div>
-                <div className="mt-1 grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1.5 text-xs font-semibold text-gray-900 dark:text-white">
+                <div className="truncate text-[11px] text-gray-500 dark:text-gray-400">{compactMatchTime(match)}</div>
+                <div className="mt-1 flex min-w-0 items-center gap-1.5 text-xs font-semibold text-gray-900 dark:text-white">
                   <TeamFlagMark name={rowHome} size="sm" />
-                  <span className="truncate">{rowHome}</span>
+                  <span className="min-w-0 truncate">{rowHome}</span>
+                  {rowAway && <span className="shrink-0 text-[10px] font-bold text-gray-400 dark:text-gray-500">vs</span>}
                   {rowAway && <TeamFlagMark name={rowAway} size="sm" />}
-                  {rowAway && <span className="truncate">{rowAway}</span>}
+                  {rowAway && <span className="min-w-0 truncate">{rowAway}</span>}
                 </div>
               </div>
-              <div className="rounded-lg bg-gray-50 px-2 py-1 text-center text-xs font-black tabular-nums text-gray-900 dark:bg-white/[0.07] dark:text-white">
-                {state.center}
+              <div className="rounded-lg bg-gray-50 px-2 py-1 text-center text-[11px] font-black tabular-nums text-gray-900 dark:bg-white/[0.07] dark:text-white">
+                {rowStateLabel(match)}
               </div>
             </button>
           )
@@ -2929,7 +2942,7 @@ function PolyStreamPanel({
     : error
     ? 'Provider error'
     : providerReady
-    ? `Updated ${relativeNewsTime(feed.updatedAt)}`
+    ? `Updated ${relativeNewsTime(feed?.updatedAt || '')}`
     : feed?.providerConfigured
     ? 'No matches'
     : 'Provider needed'

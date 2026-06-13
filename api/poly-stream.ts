@@ -15,6 +15,9 @@ type ScoreMatch = {
   homeCoach?: string
   awayCoach?: string
   probability?: string
+  polymarketTitle?: string
+  polymarketLiquidity?: string
+  polymarketVolume?: string
   h2h?: string
   form?: string
   events?: string[]
@@ -72,6 +75,15 @@ function asScore(value: unknown) {
   return typeof value === 'number' || typeof value === 'string' ? value : undefined
 }
 
+function asNumber(value: unknown) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string') {
+    const parsed = Number(value.replace(/[$,%]/g, ''))
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return undefined
+}
+
 function safeProviderMessage(value: unknown) {
   const text = typeof value === 'string' ? value : JSON.stringify(value)
   return text.replace(/[A-Za-z0-9_-]{24,}/g, '[redacted]').slice(0, 260)
@@ -106,6 +118,17 @@ function extractArray(payload: unknown): ProviderMatch[] {
     if (Array.isArray(value)) return value.filter(item => item && typeof item === 'object') as ProviderMatch[]
   }
   return []
+}
+
+function parseJsonArray(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value
+  if (typeof value !== 'string') return []
+  try {
+    const parsed = JSON.parse(value)
+    return Array.isArray(parsed) ? parsed : []
+  } catch (_err) {
+    return []
+  }
 }
 
 function readableTime(value: string) {
@@ -195,25 +218,6 @@ function sportmonksStats(match: ProviderMatch) {
   }).filter(Boolean)
 }
 
-function sportmonksProbability(match: ProviderMatch) {
-  const predictions = Array.isArray(match.predictions) ? match.predictions : []
-  const probability = predictions.find(item => {
-    const record = asRecord(item)
-    const type = `${asString(record.type)} ${asString(asRecord(record.type).name)}`.toLowerCase()
-    return /prob|winner|result/.test(type)
-  }) || asRecord(match).probability
-  const record = asRecord(probability)
-  const home = record.home ?? record.localteam ?? record.home_win
-  const draw = record.draw
-  const away = record.away ?? record.visitorteam ?? record.away_win
-  const parts = [
-    home !== undefined ? `Home ${home}` : '',
-    draw !== undefined ? `Draw ${draw}` : '',
-    away !== undefined ? `Away ${away}` : '',
-  ].filter(Boolean)
-  return parts.join(' / ')
-}
-
 function normalizeSportmonks(match: ProviderMatch): ScoreMatch | null {
   const home = sportmonksParticipantName(match, 'home')
   const away = sportmonksParticipantName(match, 'away')
@@ -240,7 +244,6 @@ function normalizeSportmonks(match: ProviderMatch): ScoreMatch | null {
     clock,
     homeCoach: sportmonksCoach(match, 'home'),
     awayCoach: sportmonksCoach(match, 'away'),
-    probability: sportmonksProbability(match),
     events: sportmonksEvents(match),
     stats: sportmonksStats(match),
     marketContext: `${title}. ${status}. Open the exact Polymarket market when mapped, or ask LP Scout to check related match, group, qualification, scorer, and outright books.`,
@@ -311,7 +314,7 @@ function sportmonksUrls(mode: FixtureMode, baseOnly = false) {
   const league = process.env.POLY_STREAM_LEAGUE_ID?.trim() || '732'
   const base = process.env.POLY_STREAM_BASE_URL?.trim() || DEFAULT_SPORTMONKS_BASE
   const baseInclude = 'participants;state;scores;venue;league'
-  const include = baseOnly ? baseInclude : process.env.POLY_STREAM_INCLUDE?.trim() || `${baseInclude};events;statistics;coaches;predictions`
+  const include = baseOnly ? baseInclude : process.env.POLY_STREAM_INCLUDE?.trim() || `${baseInclude};events;statistics;coaches`
   const withCommonParams = (path: string) => {
     const url = new URL(`${base}${path}`)
     url.searchParams.set('include', include)
@@ -324,6 +327,179 @@ function sportmonksUrls(mode: FixtureMode, baseOnly = false) {
     withCommonParams('/fixtures/upcoming'),
     withCommonParams(`/fixtures/between/${isoDate(0)}/${isoDate(21)}`),
   ]
+}
+
+function normalizeSearchText(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function splitFixtureTitle(title: string) {
+  if (!title.includes(' vs ')) return [title.trim(), ''] as const
+  const [home, away] = title.split(' vs ', 2)
+  return [home.trim(), away.trim()] as const
+}
+
+function candidateText(candidate: ProviderMatch) {
+  const market = asRecord(candidate)
+  const markets = parseJsonArray(market.markets)
+  const nestedMarket = asRecord(markets[0])
+  return [
+    asString(market.title),
+    asString(market.question),
+    asString(market.slug),
+    asString(market.ticker),
+    asString(nestedMarket.question),
+    asString(nestedMarket.title),
+    asString(nestedMarket.slug),
+  ].filter(Boolean).join(' ')
+}
+
+function isClosedMarket(candidate: ProviderMatch) {
+  const record = asRecord(candidate)
+  if (record.closed === true || record.archived === true) return true
+  if (record.active === false) return true
+  return false
+}
+
+function scorePolymarketCandidate(candidate: ProviderMatch, home: string, away: string) {
+  const text = normalizeSearchText(candidateText(candidate))
+  const homeText = normalizeSearchText(home)
+  const awayText = normalizeSearchText(away)
+  if (!homeText || !awayText || !text.includes(homeText) || !text.includes(awayText)) return 0
+  let score = 50
+  if (/\bworld cup\b|\bfifa\b|\b2026\b/.test(text)) score += 18
+  if (/\bvs\b|\bv\b|\bversus\b|\bbeat\b|\bwin\b/.test(text)) score += 8
+  if (/winner|match|game|group|advance|qualif|score/.test(text)) score += 6
+  if (isClosedMarket(candidate)) score -= 40
+  return score
+}
+
+function readMarketSlug(candidate: ProviderMatch) {
+  const record = asRecord(candidate)
+  const markets = parseJsonArray(record.markets)
+  const nested = asRecord(markets[0])
+  return asString(record.slug) || asString(nested.slug)
+}
+
+function readPolymarketUrl(candidate: ProviderMatch, kind: 'event' | 'market') {
+  const record = asRecord(candidate)
+  const directUrl = asString(record.marketUrl) || asString(record.url)
+  if (directUrl.startsWith('https://polymarket.com/')) return directUrl
+  const slug = readMarketSlug(candidate)
+  return slug ? `https://polymarket.com/${kind}/${slug}` : ''
+}
+
+function formatUsd(value: unknown) {
+  const num = asNumber(value)
+  if (num === undefined) return ''
+  if (num >= 1_000_000) return `$${(num / 1_000_000).toFixed(num >= 10_000_000 ? 0 : 1)}M`
+  if (num >= 1_000) return `$${(num / 1_000).toFixed(num >= 10_000 ? 0 : 1)}k`
+  return `$${num.toFixed(0)}`
+}
+
+function marketArray(candidate: ProviderMatch) {
+  const record = asRecord(candidate)
+  const markets = parseJsonArray(record.markets)
+  if (markets.length) return markets.map(asRecord)
+  return [record]
+}
+
+function formatPolymarketProbability(candidate: ProviderMatch, home: string, away: string) {
+  const market = marketArray(candidate)[0]
+  const outcomes = parseJsonArray(market.outcomes).map(value => String(value))
+  const prices = parseJsonArray(market.outcomePrices).map(asNumber)
+  if (outcomes.length && prices.length) {
+    const pairs = outcomes
+      .map((outcome, index) => ({ outcome, price: prices[index] }))
+      .filter(item => item.price !== undefined)
+    const homeText = normalizeSearchText(home)
+    const awayText = normalizeSearchText(away)
+    const homePrice = pairs.find(item => normalizeSearchText(item.outcome).includes(homeText))?.price
+    const awayPrice = pairs.find(item => normalizeSearchText(item.outcome).includes(awayText))?.price
+    const parts = [
+      homePrice !== undefined ? `${home} ${(homePrice * 100).toFixed(0)}%` : '',
+      awayPrice !== undefined ? `${away} ${(awayPrice * 100).toFixed(0)}%` : '',
+    ].filter(Boolean)
+    if (parts.length) return parts.join(' / ')
+    const yesPrice = pairs.find(item => /^yes$/i.test(item.outcome))?.price
+    if (yesPrice !== undefined) return `YES ${(yesPrice * 100).toFixed(0)}%`
+  }
+  const lastTrade = asNumber(market.lastTradePrice ?? market.last_trade_price)
+  if (lastTrade !== undefined) return `Last ${(lastTrade * 100).toFixed(0)}%`
+  return ''
+}
+
+async function fetchPolymarketJson(url: string) {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 8_000)
+  try {
+    const response = await fetch(url, { headers: { Accept: 'application/json' }, signal: controller.signal })
+    if (!response.ok) return []
+    const payload = await response.json()
+    return extractArray(payload)
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+async function findPolymarketMatch(match: ScoreMatch) {
+  const [home, away] = splitFixtureTitle(match.title)
+  if (!home || !away) return null
+  const query = `${home} ${away} World Cup`
+  const params = new URLSearchParams({
+    active: 'true',
+    closed: 'false',
+    limit: process.env.POLYMARKET_LOOKUP_LIMIT?.trim() || '20',
+    search: query,
+  })
+  const [events, markets] = await Promise.all([
+    fetchPolymarketJson(`https://gamma-api.polymarket.com/events?${params.toString()}`).catch(() => []),
+    fetchPolymarketJson(`https://gamma-api.polymarket.com/markets?${params.toString()}`).catch(() => []),
+  ])
+  const candidates = [
+    ...events.map(item => ({ kind: 'event' as const, item })),
+    ...markets.map(item => ({ kind: 'market' as const, item })),
+  ]
+    .map(candidate => ({ ...candidate, score: scorePolymarketCandidate(candidate.item, home, away) }))
+    .filter(candidate => candidate.score >= 50)
+    .sort((a, b) => b.score - a.score)
+  const best = candidates[0]
+  if (!best) return null
+  const record = asRecord(best.item)
+  const marketsForValues = marketArray(best.item)
+  const firstMarket = marketsForValues[0] || {}
+  return {
+    title: asString(record.title) || asString(record.question) || asString(firstMarket.question) || asString(firstMarket.title),
+    url: readPolymarketUrl(best.item, best.kind),
+    probability: formatPolymarketProbability(best.item, home, away),
+    liquidity: formatUsd(record.liquidity ?? record.liquidityNum ?? firstMarket.liquidity ?? firstMarket.liquidityNum),
+    volume: formatUsd(record.volume ?? record.volumeNum ?? record.volume24hr ?? firstMarket.volume ?? firstMarket.volumeNum),
+  }
+}
+
+async function enrichMatchesWithPolymarket(matches: ScoreMatch[]) {
+  if (process.env.POLYMARKET_MARKET_LOOKUP?.trim() === '0') return matches
+  const enriched = await Promise.all(matches.map(async match => {
+    if (match.polymarketUrl) return match
+    const found = await findPolymarketMatch(match).catch(() => null)
+    if (!found?.url) return match
+    return {
+      ...match,
+      polymarketUrl: found.url,
+      polymarketTitle: found.title,
+      probability: found.probability,
+      polymarketLiquidity: found.liquidity,
+      polymarketVolume: found.volume,
+    }
+  }))
+  return enriched
 }
 
 async function fetchProviderMode(provider: string, apiKey: string, mode: FixtureMode): Promise<ScoreMatch[]> {
@@ -411,9 +587,10 @@ async function fetchProviderMatches(): Promise<ScoreMatch[]> {
     lastProviderError = err instanceof Error ? err.message : 'Score provider failed.'
     return [] as ScoreMatch[]
   })))
-  return dedupeMatches(batches.flat())
+  const matches = dedupeMatches(batches.flat())
     .sort((a, b) => matchRank(a) - matchRank(b))
     .slice(0, Number(process.env.POLY_STREAM_LIMIT?.trim() || 12))
+  return enrichMatchesWithPolymarket(matches)
 }
 
 export default async function polyStreamHandler(req: Request, res: Response) {
