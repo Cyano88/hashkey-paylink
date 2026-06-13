@@ -2575,32 +2575,32 @@ type PolyStreamFeed = {
 
 const fallbackPolyStreamMatches: PolyStreamMatch[] = [
   {
-    tag: 'Today',
-    title: 'Featured live match window',
-    time: 'Live or next',
-    venue: 'Provider schedule',
-    status: 'Provider pending',
-    marketContext: 'Active World Cup match, team momentum, and in-play sentiment markets',
+    tag: 'Live context',
+    title: 'World Cup match window',
+    time: 'Current cycle',
+    venue: 'World Cup schedule',
+    status: 'Desk mode',
+    marketContext: 'Track active match momentum, lineup news, and in-play sentiment before asking LP Scout for paid market checks.',
     sourceUrl: '',
     watchUrl: '',
   },
   {
     tag: 'Results',
-    title: 'Post-match reaction watch',
-    time: 'Post-match',
-    venue: 'Latest completed fixture',
-    status: 'Provider pending',
-    marketContext: 'Group standings, qualification odds, and next-match repricing markets',
+    title: 'Post-match repricing watch',
+    time: 'After matches',
+    venue: 'Latest result cycle',
+    status: 'Desk mode',
+    marketContext: 'Use result shocks, group standings, and qualification pressure to decide which Polymarket markets deserve a fresh LP Scout check.',
     sourceUrl: '',
     watchUrl: '',
   },
   {
     tag: 'Fixtures',
-    title: 'Upcoming star fixture watch',
-    time: 'Upcoming',
+    title: 'Upcoming fixture watch',
+    time: 'Next slate',
     venue: 'World Cup schedule',
-    status: 'Provider pending',
-    marketContext: 'Outright winner, top scorer, national team, and headline-driven markets',
+    status: 'Desk mode',
+    marketContext: 'Watch high-attention fixtures early because outright winner, team qualification, top scorer, and headline markets can move before kickoff.',
     sourceUrl: '',
     watchUrl: '',
   },
@@ -2620,16 +2620,13 @@ function PolyStreamPanel({
   const [error, setError] = useState('')
   const matches = feed?.matches?.length ? feed.matches : fallbackPolyStreamMatches
   const providerReady = Boolean(feed?.providerConfigured && feed.source !== 'fallback' && !error)
-  const providerConfigured = Boolean(feed?.providerConfigured)
   const statusText = loading
     ? 'Refreshing'
     : error
-    ? 'Provider unavailable'
+    ? 'Desk mode'
     : providerReady
     ? `Updated ${relativeNewsTime(feed.updatedAt)}`
-    : providerConfigured
-    ? 'Provider syncing'
-    : 'Provider pending'
+    : 'Desk mode'
 
   useEffect(() => {
     let cancelled = false
@@ -2681,7 +2678,7 @@ function PolyStreamPanel({
           </div>
           <h2 className="mt-2 text-base font-semibold tracking-tight text-gray-900 dark:text-white">World Cup match hub</h2>
           <p className="mt-1 max-w-2xl text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-            Follow match windows, official viewing access, and Polymarket context before asking LP Scout for paid book checks.
+            Follow World Cup match context, news pressure, and verified viewing access when available before asking LP Scout for paid book checks.
           </p>
         </div>
         <span className={cn(
@@ -2701,9 +2698,9 @@ function PolyStreamPanel({
               <Radio className="h-4 w-4" />
             </span>
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-gray-900 dark:text-white">Official stream access first</p>
+              <p className="text-sm font-semibold text-gray-900 dark:text-white">World Cup context first</p>
               <p className="mt-0.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                Match context comes from the server feed. Watch links only appear when an official or verified provider returns them.
+                This keeps users inside Hash PayLink for market context. Watch links appear only when a verified provider returns them.
               </p>
             </div>
           </div>
@@ -2712,13 +2709,9 @@ function PolyStreamPanel({
               <span className="inline-flex items-center justify-center rounded-lg bg-black px-2.5 py-1.5 text-[11px] font-semibold text-white shadow-sm dark:bg-white dark:text-gray-950">
                 Provider ready
               </span>
-            ) : providerConfigured ? (
-              <span className="inline-flex items-center justify-center rounded-lg bg-amber-50 px-2.5 py-1.5 text-[11px] font-semibold text-amber-700 dark:bg-amber-400/10 dark:text-amber-200">
-                Provider syncing
-              </span>
             ) : (
-              <span className="inline-flex items-center justify-center rounded-lg bg-gray-100 px-2.5 py-1.5 text-[11px] font-semibold text-gray-500 dark:bg-white/[0.08] dark:text-gray-300">
-                Stream API pending
+              <span className="inline-flex items-center justify-center rounded-lg bg-gray-100 px-2.5 py-1.5 text-[11px] font-semibold text-gray-600 dark:bg-white/[0.08] dark:text-gray-300">
+                Desk mode
               </span>
             )}
             <button
