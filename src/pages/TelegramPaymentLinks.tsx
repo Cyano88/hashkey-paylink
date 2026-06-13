@@ -2569,6 +2569,7 @@ type PolyStreamMatch = {
   polymarketTitle?: string
   polymarketLiquidity?: string
   polymarketVolume?: string
+  goalScorers?: string[]
   h2h?: string
   form?: string
   events?: string[]
@@ -2736,7 +2737,10 @@ function kickoffZone(match: PolyStreamMatch) {
 
 function detailItems(match: PolyStreamMatch) {
   const items: Array<{ label: string; value: string }> = []
+  if (hasMatchScore(match)) items.push({ label: 'Score', value: `${splitFixtureTitle(match.title)[0]} ${match.homeScore}-${match.awayScore} ${splitFixtureTitle(match.title)[1]}` })
   if (match.venue && match.venue !== 'World Cup venue') items.push({ label: 'Stadium', value: match.venue })
+  const goals = (match.goalScorers || []).filter(Boolean)
+  if (goals.length) items.push({ label: 'Goals', value: goals.slice(0, 3).join(' | ') })
   if (match.homeCoach && match.awayCoach) items.push({ label: 'Coaches', value: [match.homeCoach, match.awayCoach].join(' vs ') })
   if (match.h2h) items.push({ label: 'H2H', value: match.h2h })
   if (match.probability) items.push({ label: 'Polymarket odds', value: match.probability })
@@ -2744,7 +2748,7 @@ function detailItems(match: PolyStreamMatch) {
   if (match.polymarketVolume) items.push({ label: 'Market volume', value: match.polymarketVolume })
   if (match.form) items.push({ label: 'Form', value: match.form })
   const events = (match.events || []).filter(Boolean)
-  if (events.length) items.push({ label: 'Events', value: events.slice(0, 2).join(' | ') })
+  if (events.length) items.push({ label: goals.length ? 'Key events' : 'Events', value: events.slice(0, 2).join(' | ') })
   const stats = (match.stats || []).filter(Boolean)
   if (stats.length) items.push({ label: 'Stats', value: stats.slice(0, 2).join(' | ') })
   return items

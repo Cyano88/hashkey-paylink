@@ -18,6 +18,7 @@ type ScoreMatch = {
   polymarketTitle?: string
   polymarketLiquidity?: string
   polymarketVolume?: string
+  goalScorers?: string[]
   h2h?: string
   form?: string
   events?: string[]
@@ -69,6 +70,12 @@ function asRecord(value: unknown) {
 
 function asString(value: unknown) {
   return typeof value === 'string' ? value.trim() : ''
+}
+
+function asText(value: unknown) {
+  if (typeof value === 'string') return value.trim()
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value)
+  return ''
 }
 
 function asScore(value: unknown) {
@@ -182,7 +189,13 @@ function sportmonksScore(match: ProviderMatch, location: 'home' | 'away') {
 
 function compactName(value: unknown) {
   const record = asRecord(value)
-  return asString(record.display_name) || asString(record.name) || asString(record.common_name)
+  const nested = asRecord(record.data)
+  return asString(record.display_name)
+    || asString(record.name)
+    || asString(record.common_name)
+    || asString(nested.display_name)
+    || asString(nested.name)
+    || asString(nested.common_name)
 }
 
 function sportmonksCoach(match: ProviderMatch, location: 'home' | 'away') {
@@ -199,12 +212,43 @@ function sportmonksEvents(match: ProviderMatch) {
   const events = Array.isArray(match.events) ? match.events : []
   return events.slice(0, 6).map(item => {
     const record = asRecord(item)
-    const type = asString(asRecord(record.type).name) || asString(record.type) || asString(record.type_name) || 'Event'
-    const minute = asString(record.minute) || asString(record.period_minute)
+    const type = asString(asRecord(record.type).name)
+      || asString(asRecord(record.type).code)
+      || asString(record.type_name)
+      || asString(record.type)
+      || asText(record.info)
+      || (record.type_id !== undefined ? `Type ${asText(record.type_id)}` : 'Event')
+    const minute = asText(record.minute) || asText(record.period_minute)
     const player = compactName(record.player) || asString(record.player_name) || asString(record.related_player_name)
-    const team = asString(record.participant_name) || asString(asRecord(record.participant).name)
+    const team = asString(record.participant_name) || compactName(record.participant) || sportmonksParticipantById(match, record.participant_id)
     return [minute ? `${minute}'` : '', type, player, team].filter(Boolean).join(' ')
   }).filter(Boolean)
+}
+
+function sportmonksParticipantById(match: ProviderMatch, participantId: unknown) {
+  if (participantId === undefined || participantId === null) return ''
+  const participants = Array.isArray(match.participants) ? match.participants : []
+  const found = participants.find(item => String(asRecord(item).id ?? '') === String(participantId))
+  return compactName(found)
+}
+
+function sportmonksGoalScorers(match: ProviderMatch) {
+  const events = Array.isArray(match.events) ? match.events : []
+  return events.map(item => {
+    const record = asRecord(item)
+    const type = [
+      asString(asRecord(record.type).name),
+      asString(asRecord(record.type).code),
+      asString(record.type_name),
+      asString(record.type),
+      asText(record.info),
+    ].join(' ').toLowerCase()
+    if (!/\bgoal\b|own goal|penalty scored/.test(type)) return ''
+    const minute = asText(record.minute) || asText(record.period_minute)
+    const player = compactName(record.player) || asString(record.player_name) || asString(record.related_player_name)
+    const team = asString(record.participant_name) || compactName(record.participant) || sportmonksParticipantById(match, record.participant_id)
+    return [minute ? `${minute}'` : '', player, team].filter(Boolean).join(' ')
+  }).filter(Boolean).slice(0, 8)
 }
 
 function sportmonksStats(match: ProviderMatch) {
@@ -212,8 +256,8 @@ function sportmonksStats(match: ProviderMatch) {
   return stats.slice(0, 6).map(item => {
     const record = asRecord(item)
     const type = asString(asRecord(record.type).name) || asString(record.type) || asString(record.type_name)
-    const value = asString(record.value) || String(record.value ?? '')
-    const team = asString(record.participant_name) || asString(asRecord(record.participant).name)
+    const value = asText(record.value)
+    const team = asString(record.participant_name) || compactName(record.participant)
     return [team, type, value].filter(Boolean).join(' ')
   }).filter(Boolean)
 }
@@ -244,6 +288,7 @@ function normalizeSportmonks(match: ProviderMatch): ScoreMatch | null {
     clock,
     homeCoach: sportmonksCoach(match, 'home'),
     awayCoach: sportmonksCoach(match, 'away'),
+    goalScorers: sportmonksGoalScorers(match),
     events: sportmonksEvents(match),
     stats: sportmonksStats(match),
     marketContext: `${title}. ${status}. Open the exact Polymarket market when mapped, or ask LP Scout to check related match, group, qualification, scorer, and outright books.`,
@@ -314,7 +359,7 @@ function sportmonksUrls(mode: FixtureMode, baseOnly = false) {
   const league = process.env.POLY_STREAM_LEAGUE_ID?.trim() || '732'
   const base = process.env.POLY_STREAM_BASE_URL?.trim() || DEFAULT_SPORTMONKS_BASE
   const baseInclude = 'participants;state;scores;venue;league'
-  const include = baseOnly ? baseInclude : process.env.POLY_STREAM_INCLUDE?.trim() || `${baseInclude};events;statistics;coaches`
+  const include = baseOnly ? baseInclude : process.env.POLY_STREAM_INCLUDE?.trim() || `${baseInclude};events.type;events.player;events.participant;statistics.type;statistics.participant;coaches`
   const withCommonParams = (path: string) => {
     const url = new URL(`${base}${path}`)
     url.searchParams.set('include', include)
@@ -393,6 +438,8 @@ function readPolymarketUrl(candidate: ProviderMatch, kind: 'event' | 'market') {
   const directUrl = asString(record.marketUrl) || asString(record.url)
   if (directUrl.startsWith('https://polymarket.com/')) return directUrl
   const slug = readMarketSlug(candidate)
+  const seriesSlug = asString(record.seriesSlug) || asString(record.series_slug)
+  if (slug && kind === 'event' && seriesSlug === 'soccer-fifwc') return `https://polymarket.com/sports/world-cup/${slug}`
   return slug ? `https://polymarket.com/${kind}/${slug}` : ''
 }
 
@@ -449,6 +496,37 @@ async function fetchPolymarketJson(url: string) {
   }
 }
 
+async function fetchPolymarketWorldCupEvents() {
+  const params = new URLSearchParams({
+    active: 'true',
+    closed: 'false',
+    limit: process.env.POLYMARKET_WORLD_CUP_LIMIT?.trim() || '100',
+    series_slug: 'soccer-fifwc',
+  })
+  return fetchPolymarketJson(`https://gamma-api.polymarket.com/events?${params.toString()}`).catch(() => [])
+}
+
+function polymarketMatchFromCandidates(match: ScoreMatch, candidates: Array<{ kind: 'event' | 'market'; item: ProviderMatch }>) {
+  const [home, away] = splitFixtureTitle(match.title)
+  if (!home || !away) return null
+  const ranked = candidates
+    .map(candidate => ({ ...candidate, score: scorePolymarketCandidate(candidate.item, home, away) }))
+    .filter(candidate => candidate.score >= 50)
+    .sort((a, b) => b.score - a.score)
+  const best = ranked[0]
+  if (!best) return null
+  const record = asRecord(best.item)
+  const marketsForValues = marketArray(best.item)
+  const firstMarket = marketsForValues[0] || {}
+  return {
+    title: asString(record.title) || asString(record.question) || asString(firstMarket.question) || asString(firstMarket.title),
+    url: readPolymarketUrl(best.item, best.kind),
+    probability: formatPolymarketProbability(best.item, home, away),
+    liquidity: formatUsd(record.liquidity ?? record.liquidityNum ?? firstMarket.liquidity ?? firstMarket.liquidityNum),
+    volume: formatUsd(record.volume ?? record.volumeNum ?? record.volume24hr ?? firstMarket.volume ?? firstMarket.volumeNum),
+  }
+}
+
 async function findPolymarketMatch(match: ScoreMatch) {
   const [home, away] = splitFixtureTitle(match.title)
   if (!home || !away) return null
@@ -463,32 +541,19 @@ async function findPolymarketMatch(match: ScoreMatch) {
     fetchPolymarketJson(`https://gamma-api.polymarket.com/events?${params.toString()}`).catch(() => []),
     fetchPolymarketJson(`https://gamma-api.polymarket.com/markets?${params.toString()}`).catch(() => []),
   ])
-  const candidates = [
+  return polymarketMatchFromCandidates(match, [
     ...events.map(item => ({ kind: 'event' as const, item })),
     ...markets.map(item => ({ kind: 'market' as const, item })),
-  ]
-    .map(candidate => ({ ...candidate, score: scorePolymarketCandidate(candidate.item, home, away) }))
-    .filter(candidate => candidate.score >= 50)
-    .sort((a, b) => b.score - a.score)
-  const best = candidates[0]
-  if (!best) return null
-  const record = asRecord(best.item)
-  const marketsForValues = marketArray(best.item)
-  const firstMarket = marketsForValues[0] || {}
-  return {
-    title: asString(record.title) || asString(record.question) || asString(firstMarket.question) || asString(firstMarket.title),
-    url: readPolymarketUrl(best.item, best.kind),
-    probability: formatPolymarketProbability(best.item, home, away),
-    liquidity: formatUsd(record.liquidity ?? record.liquidityNum ?? firstMarket.liquidity ?? firstMarket.liquidityNum),
-    volume: formatUsd(record.volume ?? record.volumeNum ?? record.volume24hr ?? firstMarket.volume ?? firstMarket.volumeNum),
-  }
+  ])
 }
 
 async function enrichMatchesWithPolymarket(matches: ScoreMatch[]) {
   if (process.env.POLYMARKET_MARKET_LOOKUP?.trim() === '0') return matches
+  const worldCupEvents = await fetchPolymarketWorldCupEvents()
+  const worldCupCandidates = worldCupEvents.map(item => ({ kind: 'event' as const, item }))
   const enriched = await Promise.all(matches.map(async match => {
     if (match.polymarketUrl) return match
-    const found = await findPolymarketMatch(match).catch(() => null)
+    const found = polymarketMatchFromCandidates(match, worldCupCandidates) || await findPolymarketMatch(match).catch(() => null)
     if (!found?.url) return match
     return {
       ...match,
