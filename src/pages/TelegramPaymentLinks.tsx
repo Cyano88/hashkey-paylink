@@ -147,8 +147,8 @@ const sectionServices: Record<TelegramSectionId, TelegramService[]> = {
     },
     {
       id: 'poly-stream',
-      title: 'Poly Stream',
-      body: 'Track World Cup match windows and official viewing links for market context.',
+      title: 'World Cup Scores',
+      body: 'Live score widgets with direct Polymarket market routing and LP Scout handoff.',
       icon: Radio,
       status: 'Open',
       active: true,
@@ -2559,8 +2559,12 @@ type PolyStreamMatch = {
   time: string
   venue: string
   status: string
+  homeScore?: number | string
+  awayScore?: number | string
+  clock?: string
   marketContext: string
   sourceUrl: string
+  polymarketUrl?: string
   watchUrl: string
   watchProviders?: Array<{ label: string; url: string }>
 }
@@ -2581,8 +2585,12 @@ const fallbackPolyStreamMatches: PolyStreamMatch[] = [
     time: 'June 12/13',
     venue: 'Los Angeles Stadium',
     status: 'Live/recent',
+    homeScore: 0,
+    awayScore: 0,
+    clock: 'Live',
     marketContext: 'Host-nation Group D opener. Check USA momentum, Paraguay response, group qualification, scorer, and live sentiment markets before asking LP Scout.',
     sourceUrl: 'https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026',
+    polymarketUrl: 'https://polymarket.com/search?query=USA%20Paraguay',
     watchUrl: '',
   },
   {
@@ -2659,7 +2667,6 @@ function PolyStreamPanel({
   const [feed, setFeed] = useState<PolyStreamFeed | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [watchMatch, setWatchMatch] = useState<PolyStreamMatch | null>(null)
   const matches = feed?.matches?.length ? feed.matches : fallbackPolyStreamMatches
   const providerReady = Boolean(feed?.providerConfigured && feed.source !== 'fallback' && !error)
   const statusText = loading
@@ -2700,19 +2707,12 @@ function PolyStreamPanel({
     })
   }
 
-  function watchOptions(match: PolyStreamMatch) {
-    const providers = Array.isArray(match.watchProviders) ? match.watchProviders.filter(provider => provider.label && provider.url) : []
-    if (providers.length) return providers
-    return match.watchUrl ? [{ label: 'Watch provider', url: match.watchUrl }] : []
+  function polymarketUrl(match: PolyStreamMatch) {
+    return match.polymarketUrl || `https://polymarket.com/search?query=${encodeURIComponent(match.title)}`
   }
 
-  function openWatch(match: PolyStreamMatch) {
-    const options = watchOptions(match)
-    if (options.length === 1) {
-      window.open(options[0].url, '_blank', 'noopener,noreferrer')
-      return
-    }
-    if (options.length > 1) setWatchMatch(match)
+  function hasScore(match: PolyStreamMatch) {
+    return match.homeScore !== undefined && match.homeScore !== '' && match.awayScore !== undefined && match.awayScore !== ''
   }
 
   const featuredMatch = matches[0]
@@ -2737,11 +2737,11 @@ function PolyStreamPanel({
             <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.06]">
               <Radio className="h-4 w-4 text-gray-800 dark:text-gray-100" />
             </span>
-            <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Poly Stream</p>
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">World Cup Scores</p>
           </div>
-          <h2 className="mt-2 text-base font-semibold tracking-tight text-gray-900 dark:text-white">World Cup match hub</h2>
+          <h2 className="mt-2 text-base font-semibold tracking-tight text-gray-900 dark:text-white">Live score to market hub</h2>
           <p className="mt-1 max-w-2xl text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-            Follow World Cup match context, news pressure, and verified viewing access when available before asking LP Scout for paid book checks.
+            Track match state, then open the related Polymarket market or ask LP Scout to check book depth before placing human orders.
           </p>
         </div>
         <span className={cn(
@@ -2761,20 +2761,20 @@ function PolyStreamPanel({
               <Radio className="h-4 w-4" />
             </span>
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-gray-900 dark:text-white">World Cup context first</p>
+              <p className="text-sm font-semibold text-gray-900 dark:text-white">Scoreboard first, market second</p>
               <p className="mt-0.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                This keeps users inside Hash PayLink for market context. Watch links appear only when a verified provider returns them.
+                Hash PayLink turns each match row into a fast route to Polymarket, with LP Scout available when users want paid book checks.
               </p>
             </div>
           </div>
           <div className="mt-3 flex flex-wrap gap-1.5">
             {providerReady ? (
               <span className="inline-flex items-center justify-center rounded-lg bg-black px-2.5 py-1.5 text-[11px] font-semibold text-white shadow-sm dark:bg-white dark:text-gray-950">
-                Provider ready
+                Live feed ready
               </span>
             ) : (
               <span className="inline-flex items-center justify-center rounded-lg bg-gray-100 px-2.5 py-1.5 text-[11px] font-semibold text-gray-600 dark:bg-white/[0.08] dark:text-gray-300">
-                Desk mode
+                Curated scores
               </span>
             )}
             <button
@@ -2797,7 +2797,7 @@ function PolyStreamPanel({
                   <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-semibold text-white ring-1 ring-white/15 dark:bg-gray-100 dark:text-gray-700 dark:ring-gray-200">{featuredMatch.time}</span>
                 </div>
                 <span className="rounded-full bg-emerald-400/15 px-2 py-0.5 text-[10px] font-bold text-emerald-100 ring-1 ring-emerald-300/20 dark:bg-emerald-50 dark:text-emerald-700 dark:ring-emerald-100">
-                  Match widget
+                  Market widget
                 </span>
               </div>
               <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
@@ -2805,7 +2805,12 @@ function PolyStreamPanel({
                   <p className="truncate text-sm font-semibold dark:text-gray-950">{featuredHome}</p>
                   <p className="mt-0.5 text-[10px] font-semibold uppercase text-white/50 dark:text-gray-400">Home</p>
                 </div>
-                <span className="text-xs font-bold text-white/50 dark:text-gray-400">vs</span>
+                <div className="min-w-[62px] text-center">
+                  <p className="text-lg font-black tabular-nums text-white dark:text-gray-950">
+                    {hasScore(featuredMatch) ? `${featuredMatch.homeScore}-${featuredMatch.awayScore}` : 'vs'}
+                  </p>
+                  <p className="mt-0.5 text-[10px] font-bold uppercase text-white/50 dark:text-gray-400">{featuredMatch.clock || featuredMatch.status}</p>
+                </div>
                 <div className="min-w-0 rounded-lg bg-white/10 p-2 text-center ring-1 ring-white/10 dark:bg-gray-50 dark:ring-gray-100">
                   <p className="truncate text-sm font-semibold dark:text-gray-950">{featuredAway}</p>
                   <p className="mt-0.5 text-[10px] font-semibold uppercase text-white/50 dark:text-gray-400">Away</p>
@@ -2816,16 +2821,15 @@ function PolyStreamPanel({
                 <p className="mt-1 text-xs leading-relaxed text-white/70 dark:text-gray-500">{featuredMatch.marketContext}</p>
               </div>
               <div className="mt-3 flex flex-wrap gap-1.5">
-                {watchOptions(featuredMatch).length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => openWatch(featuredMatch)}
-                    className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-emerald-400 px-2.5 py-1.5 text-[10px] font-bold text-gray-950 transition-all hover:bg-emerald-300 active:scale-[0.98]"
-                  >
-                    <Radio className="h-3 w-3" />
-                    Watch
-                  </button>
-                )}
+                <a
+                  href={polymarketUrl(featuredMatch)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-emerald-400 px-2.5 py-1.5 text-[10px] font-bold text-gray-950 transition-all hover:bg-emerald-300 active:scale-[0.98]"
+                >
+                  <LineChart className="h-3 w-3" />
+                  Open market
+                </a>
                 {featuredMatch.sourceUrl && (
                   <a
                     href={featuredMatch.sourceUrl}
@@ -2834,7 +2838,7 @@ function PolyStreamPanel({
                     className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-white px-2.5 py-1.5 text-[10px] font-semibold text-gray-950 transition-all hover:bg-gray-100 active:scale-[0.98] dark:bg-gray-950 dark:text-white"
                   >
                     <ExternalLink className="h-3 w-3" />
-                    Official schedule
+                    Match source
                   </a>
                 )}
                 <button
@@ -2861,21 +2865,23 @@ function PolyStreamPanel({
                     <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-gray-500 dark:bg-white/[0.08] dark:text-gray-400">{match.time}</span>
                   </div>
                   <p className="mt-2 text-sm font-semibold text-gray-900 dark:text-white">{match.title}</p>
-                  <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{match.venue}</p>
+                  <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                    {hasScore(match) ? `${match.homeScore}-${match.awayScore}` : match.status}
+                    {match.clock ? ` · ${match.clock}` : ''} · {match.venue}
+                  </p>
                   <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">{match.marketContext}</p>
                 </div>
               </div>
               <div className="mt-2 flex flex-wrap gap-1.5">
-                {watchOptions(match).length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => openWatch(match)}
-                    className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-gray-900 px-2.5 py-1.5 text-[10px] font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950"
-                  >
-                    <Radio className="h-3 w-3" />
-                    Watch
-                  </button>
-                )}
+                <a
+                  href={polymarketUrl(match)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-gray-900 px-2.5 py-1.5 text-[10px] font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950"
+                >
+                  <LineChart className="h-3 w-3" />
+                  Open market
+                </a>
                 {match.sourceUrl && (
                   <a
                     href={match.sourceUrl}
@@ -2884,7 +2890,7 @@ function PolyStreamPanel({
                     className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[10px] font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200"
                   >
                     <ExternalLink className="h-3 w-3" />
-                    Official schedule
+                    Match source
                   </a>
                 )}
                 <button
@@ -2900,38 +2906,6 @@ function PolyStreamPanel({
           ))}
         </div>
       </div>
-
-      {watchMatch && (
-        <div className="rounded-2xl border border-gray-100 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-white/[0.05]">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-gray-900 dark:text-white">Watch {watchMatch.title}</p>
-              <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Choose an official or verified provider.</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setWatchMatch(null)}
-              className="rounded-lg border border-gray-200 px-2 py-1 text-[11px] font-semibold text-gray-500 transition-colors hover:bg-gray-50 dark:border-white/10 dark:text-gray-300 dark:hover:bg-white/[0.06]"
-            >
-              Close
-            </button>
-          </div>
-          <div className="mt-3 grid gap-1.5 sm:grid-cols-2">
-            {watchOptions(watchMatch).map(provider => (
-              <a
-                key={`${watchMatch.title}-${provider.label}`}
-                href={provider.url}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center justify-between gap-2 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-800 transition-colors hover:bg-gray-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-100 dark:hover:bg-white/[0.08]"
-              >
-                <span className="truncate">{provider.label}</span>
-                <ExternalLink className="h-3.5 w-3.5 shrink-0 text-gray-400" />
-              </a>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   )
 }

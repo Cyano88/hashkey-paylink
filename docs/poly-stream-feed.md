@@ -1,10 +1,10 @@
-# Poly Stream Feed
+# World Cup Score Feed
 
-`public/poly-stream-feed.json` is the default match feed for the Polymarket Tools -> Poly Stream section.
+`public/poly-stream-feed.json` is the default match feed for the Polymarket Tools -> World Cup Scores section.
 
-The backend route `/api/poly-stream` reads this file first when `POLY_STREAM_FEED_URL` is not configured. Each match row becomes a Poly Stream match widget or fixture row in the Telegram payment-links UI.
+The backend route `/api/poly-stream` reads this file first when `POLY_STREAM_FEED_URL` is not configured. Each row becomes a compact match widget that can route users into a related Polymarket market/search and then into LP Scout for paid book-depth checks.
 
-Use this feed for curated World Cup match context, official schedule links, and verified watch/provider links. Do not add unofficial stream mirrors.
+This section is not a streaming feature. Do not add unofficial stream mirrors. If a live score provider is added later, map its scoreboard fields into this shape and keep Polymarket links as the primary trading handoff.
 
 ## Match Shape
 
@@ -14,18 +14,20 @@ Use this feed for curated World Cup match context, official schedule links, and 
   "title": "USA vs Paraguay",
   "time": "Now",
   "venue": "Los Angeles Stadium",
-  "status": "Live/recent",
+  "status": "Live",
+  "homeScore": 1,
+  "awayScore": 0,
+  "clock": "23'",
   "marketContext": "Short market context for LP Scout handoff.",
-  "sourceUrl": "https://www.fifa.com/...",
-  "watchUrl": "https://official-provider.example/watch",
-  "watchProviders": [
-    { "label": "United States", "url": "https://official-us-provider.example" },
-    { "label": "Global schedule", "url": "https://www.fifa.com/..." }
-  ]
+  "sourceUrl": "https://official-match-source.example",
+  "polymarketUrl": "https://polymarket.com/event/exact-market-or-event",
+  "watchUrl": ""
 }
 ```
 
-`watchUrl` is optional. `watchProviders` is preferred when a match has more than one legal viewing option by country or platform. Add only official broadcaster, FIFA, or verified provider links. Do not add unofficial stream mirrors.
+`polymarketUrl` should be an exact Polymarket event/market link when available. If it is omitted, the UI falls back to Polymarket search using the match title.
+
+`sourceUrl` should point to an official fixture, federation, tournament, or data-provider page. Use it for verification context, not streaming.
 
 ## Remote Override
 
@@ -36,4 +38,4 @@ POLY_STREAM_FEED_URL=https://example.com/poly-stream.json
 POLY_STREAM_CACHE_MS=600000
 ```
 
-This lets match rows and watch links change without redeploying Hash PayLink.
+This lets scores, clocks, statuses, and Polymarket links change without redeploying Hash PayLink.

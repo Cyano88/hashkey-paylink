@@ -11,8 +11,12 @@ type PolyStreamMatch = {
   time: string
   venue: string
   status: string
+  homeScore?: number | string
+  awayScore?: number | string
+  clock?: string
   marketContext: string
   sourceUrl: string
+  polymarketUrl?: string
   watchUrl: string
   watchProviders?: Array<{ label: string; url: string }>
 }
@@ -42,6 +46,10 @@ function envValue(primary: string, fallback = '') {
 
 function asString(value: unknown) {
   return typeof value === 'string' ? value.trim() : ''
+}
+
+function asScore(value: unknown) {
+  return typeof value === 'number' || typeof value === 'string' ? value : undefined
 }
 
 function asRecord(value: unknown) {
@@ -135,8 +143,12 @@ function normalizeFeedMatch(match: ProviderMatch): PolyStreamMatch | null {
     time: asString(match.time) || 'Schedule pending',
     venue: asString(match.venue) || 'World Cup venue',
     status: asString(match.status) || 'Scheduled',
+    homeScore: asScore(match.homeScore),
+    awayScore: asScore(match.awayScore),
+    clock: asString(match.clock),
     marketContext: asString(match.marketContext) || `${title}. Check related Polymarket books before asking LP Scout.`,
     sourceUrl: asString(match.sourceUrl),
+    polymarketUrl: asString(match.polymarketUrl),
     watchUrl: asString(match.watchUrl),
     watchProviders: normalizeWatchProviders(match.watchProviders),
   }
@@ -226,6 +238,34 @@ function fixtureStatus(match: ProviderMatch) {
   )
 }
 
+function fixtureScore(match: ProviderMatch) {
+  const goals = asRecord(match.goals)
+  const score = asRecord(match.score)
+  const fulltime = asRecord(score.fulltime)
+  const home =
+    match.homeScore
+    ?? match.intHomeScore
+    ?? goals.home
+    ?? fulltime.home
+  const away =
+    match.awayScore
+    ?? match.intAwayScore
+    ?? goals.away
+    ?? fulltime.away
+  return {
+    homeScore: typeof home === 'number' || typeof home === 'string' ? home : undefined,
+    awayScore: typeof away === 'number' || typeof away === 'string' ? away : undefined,
+  }
+}
+
+function fixtureClock(match: ProviderMatch) {
+  const fixture = asRecord(match.fixture)
+  const status = asRecord(fixture.status)
+  const elapsed = status.elapsed
+  if (typeof elapsed === 'number') return `${elapsed}'`
+  return asString(match.clock) || asString(match.strProgress) || asString(match.minute)
+}
+
 function fixtureVenue(match: ProviderMatch) {
   const fixture = asRecord(match.fixture)
   const venue = asRecord(fixture.venue)
@@ -287,8 +327,10 @@ function normalizeMatch(match: ProviderMatch): PolyStreamMatch | null {
 
   const date = fixtureDate(match)
   const status = fixtureStatus(match)
+  const score = fixtureScore(match)
   const venue = fixtureVenue(match)
   const url = fixtureUrl(match)
+  const polymarketUrl = asString(match.polymarketUrl) || asString(match.polymarket_url)
   const competition = asString(asRecord(match.league).name) || asString(asRecord(match.competition).name) || asString(match.strLeague) || 'World Cup'
   const context = `${title}. ${competition}. ${status}. Check related Polymarket team, group, qualification, scorer, and outright markets before asking for paid LP alpha.`
 
@@ -298,8 +340,11 @@ function normalizeMatch(match: ProviderMatch): PolyStreamMatch | null {
     time: readableTime(date),
     venue,
     status,
+    ...score,
+    clock: fixtureClock(match),
     marketContext: context,
     sourceUrl: url,
+    polymarketUrl,
     watchUrl: watchUrlFor(title) || url,
     watchProviders: normalizeWatchProviders(match.watchProviders),
   }
@@ -313,8 +358,12 @@ function fallbackMatches(): PolyStreamMatch[] {
       time: 'June 12/13',
       venue: 'Los Angeles Stadium',
       status: 'Live/recent',
+      homeScore: 0,
+      awayScore: 0,
+      clock: 'Live',
       marketContext: 'Host-nation Group D opener. Check USA momentum, Paraguay response, group qualification, scorer, and live sentiment markets before asking LP Scout.',
       sourceUrl: 'https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026',
+      polymarketUrl: 'https://polymarket.com/search?query=USA%20Paraguay',
       watchUrl: watchUrlFor('USA vs Paraguay'),
     },
     {
@@ -325,6 +374,7 @@ function fallbackMatches(): PolyStreamMatch[] {
       status: 'Desk mode',
       marketContext: 'Group C opener. Check Scotland, Haiti, group qualification, and underdog headline markets before asking LP Scout for paid book depth.',
       sourceUrl: 'https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026',
+      polymarketUrl: 'https://polymarket.com/search?query=Haiti%20Scotland',
       watchUrl: watchUrlFor('Haiti vs Scotland'),
     },
     {
@@ -335,6 +385,7 @@ function fallbackMatches(): PolyStreamMatch[] {
       status: 'Desk mode',
       marketContext: 'Group D match with strong regional interest. Watch team news and early price movement before checking related Polymarket liquidity.',
       sourceUrl: 'https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026',
+      polymarketUrl: 'https://polymarket.com/search?query=Australia%20Turkiye',
       watchUrl: watchUrlFor('Australia vs Turkiye'),
     },
     {
@@ -345,6 +396,7 @@ function fallbackMatches(): PolyStreamMatch[] {
       status: 'Desk mode',
       marketContext: 'High-attention Group C fixture. Watch Brazil outright, Morocco upset, scorer, and group-table markets before asking LP Scout.',
       sourceUrl: 'https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026',
+      polymarketUrl: 'https://polymarket.com/search?query=Brazil%20Morocco',
       watchUrl: watchUrlFor('Brazil vs Morocco'),
     },
     {
@@ -355,6 +407,7 @@ function fallbackMatches(): PolyStreamMatch[] {
       status: 'Desk mode',
       marketContext: 'Group B fixture. Check qualification, match winner, and news-driven pricing before committing to any LP strategy.',
       sourceUrl: 'https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026',
+      polymarketUrl: 'https://polymarket.com/search?query=Qatar%20Switzerland',
       watchUrl: watchUrlFor('Qatar vs Switzerland'),
     },
     {
@@ -365,6 +418,7 @@ function fallbackMatches(): PolyStreamMatch[] {
       status: 'Desk mode',
       marketContext: 'Group E opener. Use early news and lineup context to decide if related Polymarket books deserve a paid scout.',
       sourceUrl: 'https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026',
+      polymarketUrl: 'https://polymarket.com/search?query=Cote%20d%27Ivoire%20Ecuador',
       watchUrl: watchUrlFor("Cote d'Ivoire vs Ecuador"),
     },
     {
@@ -375,6 +429,7 @@ function fallbackMatches(): PolyStreamMatch[] {
       status: 'Desk mode',
       marketContext: 'High-attention Group E fixture. Watch favorite pricing, handicap narratives, and scorer markets before asking LP Scout.',
       sourceUrl: 'https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026',
+      polymarketUrl: 'https://polymarket.com/search?query=Germany%20Curacao',
       watchUrl: watchUrlFor('Germany vs Curacao'),
     },
   ]
