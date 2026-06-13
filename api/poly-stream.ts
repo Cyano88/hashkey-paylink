@@ -109,6 +109,41 @@ function extractMatches(payload: unknown): ProviderMatch[] {
   return []
 }
 
+function normalizeFeedMatch(match: ProviderMatch): PolyStreamMatch | null {
+  const title = asString(match.title)
+  if (!title) return null
+  return {
+    tag: asString(match.tag) || 'Fixture',
+    title,
+    time: asString(match.time) || 'Schedule pending',
+    venue: asString(match.venue) || 'World Cup venue',
+    status: asString(match.status) || 'Scheduled',
+    marketContext: asString(match.marketContext) || `${title}. Check related Polymarket books before asking LP Scout.`,
+    sourceUrl: asString(match.sourceUrl),
+    watchUrl: asString(match.watchUrl),
+  }
+}
+
+async function fetchFeedMatches(): Promise<PolyStreamMatch[]> {
+  const feedUrl = process.env.POLY_STREAM_FEED_URL?.trim()
+  if (!feedUrl) return []
+
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 10_000)
+  try {
+    const response = await fetch(feedUrl, {
+      headers: { Accept: 'application/json' },
+      signal: controller.signal,
+    })
+    const text = await response.text()
+    if (!response.ok) throw new Error(`Poly Stream feed returned ${response.status}: ${safeProviderMessage(text)}`)
+    const payload = JSON.parse(text)
+    return extractMatches(payload).map(normalizeFeedMatch).filter(Boolean).slice(0, 12) as PolyStreamMatch[]
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
 function unwrapTeamName(team: unknown) {
   if (typeof team === 'string') return team.trim()
   const record = asRecord(team)
@@ -266,13 +301,13 @@ function fallbackMatches(): PolyStreamMatch[] {
     },
     {
       tag: 'Today',
-      title: 'Australia vs Türkiye',
+      title: 'Australia vs Turkiye',
       time: 'June 13',
       venue: 'BC Place Vancouver',
       status: 'Desk mode',
       marketContext: 'Group D match with strong regional interest. Watch team news and early price movement before checking related Polymarket liquidity.',
       sourceUrl: 'https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026',
-      watchUrl: watchUrlFor('Australia vs Türkiye') || watchUrlFor('Australia vs Turkiye'),
+      watchUrl: watchUrlFor('Australia vs Turkiye'),
     },
     {
       tag: 'Today',
@@ -369,15 +404,17 @@ export default async function polyStreamHandler(req: Request, res: Response) {
   if (cache && cache.expiresAt > Date.now()) return res.json(cache.feed)
 
   const configuredProvider = providerName()
-  const providerConfigured = Boolean(envValue('POLY_STREAM_API_URL', 'SPORTS_API_URL') || configuredProvider === 'scorebat' || configuredProvider === 'thesportsdb')
+  const feedConfigured = Boolean(process.env.POLY_STREAM_FEED_URL?.trim())
+  const providerConfigured = Boolean(feedConfigured || envValue('POLY_STREAM_API_URL', 'SPORTS_API_URL') || configuredProvider === 'scorebat' || configuredProvider === 'thesportsdb')
   try {
-    const providerMatches = await fetchProviderMatches()
+    const feedMatches = await fetchFeedMatches()
+    const providerMatches = feedMatches.length ? feedMatches : await fetchProviderMatches()
     const matches = providerMatches.length ? providerMatches : fallbackMatches()
     lastProviderError = providerConfigured && !providerMatches.length ? 'Provider returned no normalized matches.' : ''
     const feed = {
       ok: true as const,
       providerConfigured,
-      source: providerMatches.length ? envValue('POLY_STREAM_PROVIDER', 'SPORTS_PROVIDER') || 'provider' : 'fallback',
+      source: feedMatches.length ? 'feed' : providerMatches.length ? envValue('POLY_STREAM_PROVIDER', 'SPORTS_PROVIDER') || 'provider' : 'fallback',
       providerStatus: providerMatches.length ? 'connected' : providerConfigured ? 'empty' : 'not_configured',
       updatedAt: new Date().toISOString(),
       matches,
