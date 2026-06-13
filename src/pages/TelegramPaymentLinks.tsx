@@ -2586,11 +2586,102 @@ function splitFixtureTitle(title: string) {
   return [home.trim(), away.trim()] as const
 }
 
+const WORLD_CUP_TEAM_ISO: Record<string, string> = {
+  algeria: 'dz',
+  argentina: 'ar',
+  australia: 'au',
+  austria: 'at',
+  belgium: 'be',
+  bosnia: 'ba',
+  'bosnia & herz': 'ba',
+  'bosnia and herzegovina': 'ba',
+  brazil: 'br',
+  canada: 'ca',
+  'cape verde': 'cv',
+  colombia: 'co',
+  croatia: 'hr',
+  curacao: 'cw',
+  'curaçao': 'cw',
+  'côte d’ivoire': 'ci',
+  "côte d'ivoire": 'ci',
+  ecuador: 'ec',
+  egypt: 'eg',
+  england: 'gb-eng',
+  france: 'fr',
+  germany: 'de',
+  ghana: 'gh',
+  haiti: 'ht',
+  iran: 'ir',
+  iraq: 'iq',
+  'ivory coast': 'ci',
+  japan: 'jp',
+  jordan: 'jo',
+  mexico: 'mx',
+  morocco: 'ma',
+  netherlands: 'nl',
+  'new zealand': 'nz',
+  norway: 'no',
+  panama: 'pa',
+  paraguay: 'py',
+  portugal: 'pt',
+  qatar: 'qa',
+  'saudi arabia': 'sa',
+  scotland: 'gb-sct',
+  senegal: 'sn',
+  'south africa': 'za',
+  'south korea': 'kr',
+  spain: 'es',
+  sweden: 'se',
+  switzerland: 'ch',
+  tunisia: 'tn',
+  turkey: 'tr',
+  türkiye: 'tr',
+  'united states': 'us',
+  usa: 'us',
+  uruguay: 'uy',
+  uzbekistan: 'uz',
+}
+
+function teamIso(name: string) {
+  const clean = name.toLowerCase().replace(/\./g, '').replace(/\s+/g, ' ').trim()
+  return WORLD_CUP_TEAM_ISO[clean] || ''
+}
+
+function flagUrlForTeam(name: string, size = 640) {
+  const iso = teamIso(name)
+  return iso ? `https://flagcdn.com/w${size}/${iso}.png` : ''
+}
+
+function flagEmojiForTeam(name: string) {
+  const iso = teamIso(name)
+  if (!iso || iso.includes('-')) return '🏆'
+  return iso
+    .toUpperCase()
+    .replace(/./g, char => String.fromCodePoint(127397 + char.charCodeAt(0)))
+}
+
 function scoreTagClass(tag: string) {
   if (tag === 'Live') return 'bg-emerald-50 text-emerald-700 ring-emerald-100 dark:bg-emerald-400/10 dark:text-emerald-200 dark:ring-emerald-400/20'
   if (tag === 'Today') return 'bg-blue-50 text-blue-700 ring-blue-100 dark:bg-blue-400/10 dark:text-blue-200 dark:ring-blue-400/20'
   if (tag === 'Result') return 'bg-gray-100 text-gray-600 ring-gray-200 dark:bg-white/[0.08] dark:text-gray-300 dark:ring-white/10'
   return 'bg-amber-50 text-amber-700 ring-amber-100 dark:bg-amber-400/10 dark:text-amber-200 dark:ring-amber-400/20'
+}
+
+function matchDisplayState(match: PolyStreamMatch) {
+  const status = `${match.status} ${match.tag}`.toLowerCase()
+  const hasScore = hasMatchScore(match)
+  const matchTime = Date.parse(match.time)
+  const isPast = Number.isFinite(matchTime) && matchTime < Date.now() - 90 * 60 * 1000
+  if (/(live|inplay|in play|1h|2h|et)/.test(status)) {
+    return { tag: 'LIVE', center: hasScore ? `${match.homeScore}-${match.awayScore}` : '0-0', sub: match.clock || match.status }
+  }
+  if (/(half|ht)/.test(status)) {
+    return { tag: 'HT', center: hasScore ? `${match.homeScore}-${match.awayScore}` : '0-0', sub: 'Half time' }
+  }
+  if (/(ft|finished|result|complete|ended|after extra time|pen)/.test(status) || (hasScore && isPast)) {
+    return { tag: 'FT', center: `${match.homeScore}-${match.awayScore}`, sub: 'Full time' }
+  }
+  return { tag: 'NS', center: 'vs', sub: match.time }
 }
 
 function HashLiveScoreWidget({
@@ -2607,6 +2698,9 @@ function HashLiveScoreWidget({
   const featured = matches[0]
   const rest = matches.slice(1, 8)
   const [home, away] = featured ? splitFixtureTitle(featured.title) : ['World Cup', 'Scores']
+  const featuredState = featured ? matchDisplayState(featured) : null
+  const homeFlag = flagUrlForTeam(home)
+  const awayFlag = flagUrlForTeam(away)
 
   if (loading) {
     return (
@@ -2641,25 +2735,49 @@ function HashLiveScoreWidget({
   return (
     <div className="overflow-hidden rounded-xl border border-gray-100 bg-white dark:border-white/10 dark:bg-white/[0.04]">
       {featured && (
-        <div className="border-b border-gray-100 bg-gray-950 p-3 text-white dark:border-white/10 dark:bg-white dark:text-gray-950">
-          <div className="flex items-center justify-between gap-2">
-            <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ring-1', scoreTagClass(featured.tag))}>
-              {featured.tag}
+        <div className="relative min-h-[190px] overflow-hidden border-b border-gray-100 bg-gray-950 p-3 text-white dark:border-white/10">
+          {homeFlag && (
+            <div
+              className="absolute inset-0 bg-cover bg-center opacity-100 blur-[1px] transition-opacity duration-1000 [animation:hpFlagSwapA_10s_ease-in-out_infinite]"
+              style={{ backgroundImage: `linear-gradient(rgba(0,0,0,.58), rgba(0,0,0,.84)), url(${homeFlag})` }}
+            />
+          )}
+          {awayFlag && (
+            <div
+              className="absolute inset-0 bg-cover bg-center opacity-0 blur-[1px] transition-opacity duration-1000 [animation:hpFlagSwapB_10s_ease-in-out_infinite]"
+              style={{ backgroundImage: `linear-gradient(rgba(0,0,0,.58), rgba(0,0,0,.84)), url(${awayFlag})` }}
+            />
+          )}
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,.12),transparent_38%),linear-gradient(180deg,rgba(0,0,0,.18),rgba(0,0,0,.62))]" />
+          <div className="relative z-10 flex items-center justify-between gap-2">
+            <span className={cn(
+              'rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ring-1',
+              featuredState?.tag === 'LIVE'
+                ? 'bg-emerald-400/15 text-emerald-100 ring-emerald-300/30'
+                : 'bg-white/12 text-white/85 ring-white/15',
+            )}>
+              {featuredState?.tag}
             </span>
-            <span className="truncate text-[11px] font-semibold text-white/60 dark:text-gray-500">{featured.time}</span>
+            <span className="truncate text-[11px] font-semibold text-white/70">{featured.time}</span>
           </div>
-          <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
-            <div className="min-w-0 rounded-lg bg-white/10 p-2 text-center ring-1 ring-white/10 dark:bg-gray-50 dark:ring-gray-100">
-              <p className="truncate text-sm font-semibold">{home}</p>
+          <div className="relative z-10 mt-5 grid grid-cols-[1fr_auto_1fr] items-end gap-2">
+            <div className="min-w-0 text-center">
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-black/30 text-3xl shadow-xl ring-1 ring-white/15 backdrop-blur-sm">
+                {flagEmojiForTeam(home)}
+              </div>
+              <p className="mt-2 truncate text-sm font-black tracking-wide">{home}</p>
             </div>
-            <div className="min-w-[58px] text-center">
-              <p className="text-xl font-black tabular-nums">
-                {hasMatchScore(featured) ? `${featured.homeScore}-${featured.awayScore}` : 'vs'}
+            <div className="min-w-[76px] rounded-xl border border-white/12 bg-black/35 px-3 py-2 text-center shadow-2xl backdrop-blur-sm">
+              <p className="text-2xl font-black tabular-nums">
+                {featuredState?.center}
               </p>
-              <p className="mt-0.5 text-[10px] font-bold uppercase text-white/50 dark:text-gray-400">{featured.clock || featured.status}</p>
+              <p className="mt-0.5 truncate text-[10px] font-bold uppercase text-white/55">{featuredState?.sub}</p>
             </div>
-            <div className="min-w-0 rounded-lg bg-white/10 p-2 text-center ring-1 ring-white/10 dark:bg-gray-50 dark:ring-gray-100">
-              <p className="truncate text-sm font-semibold">{away || 'Opponent'}</p>
+            <div className="min-w-0 text-center">
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-black/30 text-3xl shadow-xl ring-1 ring-white/15 backdrop-blur-sm">
+                {flagEmojiForTeam(away)}
+              </div>
+              <p className="mt-2 truncate text-sm font-black tracking-wide">{away || 'Opponent'}</p>
             </div>
           </div>
         </div>
@@ -2668,21 +2786,23 @@ function HashLiveScoreWidget({
       <div className="max-h-[280px] divide-y divide-gray-100 overflow-y-auto [scrollbar-color:rgba(148,163,184,0.28)_transparent] [scrollbar-width:thin] dark:divide-white/10 dark:[scrollbar-color:rgba(255,255,255,0.18)_transparent] [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300/40 dark:[&::-webkit-scrollbar-thumb]:bg-white/20">
         {rest.map(match => {
           const [rowHome, rowAway] = splitFixtureTitle(match.title)
+          const state = matchDisplayState(match)
           return (
             <div key={`${match.title}-${match.time}`} className="grid grid-cols-[1fr_auto] items-center gap-2 p-2.5">
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5">
-                  <span className={cn('rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase ring-1', scoreTagClass(match.tag))}>
-                    {match.tag}
+                  <span className={cn('rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase ring-1', scoreTagClass(state.tag === 'FT' ? 'Result' : match.tag))}>
+                    {state.tag}
                   </span>
                   <span className="truncate text-[11px] text-gray-500 dark:text-gray-400">{match.time}</span>
                 </div>
-                <p className="mt-1 truncate text-xs font-semibold text-gray-900 dark:text-white">
-                  {rowHome}{rowAway ? ` vs ${rowAway}` : ''}
-                </p>
+                <div className="mt-1 flex min-w-0 items-center gap-1.5 text-xs font-semibold text-gray-900 dark:text-white">
+                  <span className="shrink-0">{flagEmojiForTeam(rowHome)}</span>
+                  <span className="truncate">{rowHome}{rowAway ? ` vs ${rowAway}` : ''}</span>
+                </div>
               </div>
               <div className="rounded-lg bg-gray-50 px-2 py-1 text-center text-xs font-black tabular-nums text-gray-900 dark:bg-white/[0.07] dark:text-white">
-                {hasMatchScore(match) ? `${match.homeScore}-${match.awayScore}` : 'vs'}
+                {state.center}
               </div>
             </div>
           )

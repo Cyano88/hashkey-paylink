@@ -39,6 +39,32 @@
 }
 
 @layer utilities {
+  @keyframes hpFlagSwapA {
+    0%, 45% {
+      opacity: 1;
+      transform: scale(1.04);
+    }
+    50%, 100% {
+      opacity: 0;
+      transform: scale(1.09);
+    }
+  }
+
+  @keyframes hpFlagSwapB {
+    0%, 45% {
+      opacity: 0;
+      transform: scale(1.09);
+    }
+    50%, 95% {
+      opacity: 1;
+      transform: scale(1.04);
+    }
+    100% {
+      opacity: 0;
+      transform: scale(1.09);
+    }
+  }
+
   .text-balance {
     text-wrap: balance;
   }
