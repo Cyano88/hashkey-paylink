@@ -19,6 +19,7 @@ type ScoreMatch = {
   polymarketLiquidity?: string
   polymarketVolume?: string
   goalScorers?: string[]
+  weather?: string
   h2h?: string
   form?: string
   events?: string[]
@@ -218,7 +219,8 @@ function sportmonksEvents(match: ProviderMatch) {
       || asString(record.type)
       || asText(record.info)
       || (record.type_id !== undefined ? `Type ${asText(record.type_id)}` : 'Event')
-    const minute = asText(record.minute) || asText(record.period_minute)
+    const period = asRecord(record.period)
+    const minute = asText(record.minute) || asText(record.period_minute) || asText(period.minute) || asText(period.minutes)
     const player = compactName(record.player) || asString(record.player_name) || asString(record.related_player_name)
     const team = asString(record.participant_name) || compactName(record.participant) || sportmonksParticipantById(match, record.participant_id)
     return [minute ? `${minute}'` : '', type, player, team].filter(Boolean).join(' ')
@@ -244,7 +246,8 @@ function sportmonksGoalScorers(match: ProviderMatch) {
       asText(record.info),
     ].join(' ').toLowerCase()
     if (!/\bgoal\b|own goal|penalty scored/.test(type)) return ''
-    const minute = asText(record.minute) || asText(record.period_minute)
+    const period = asRecord(record.period)
+    const minute = asText(record.minute) || asText(record.period_minute) || asText(period.minute) || asText(period.minutes)
     const player = compactName(record.player) || asString(record.player_name) || asString(record.related_player_name)
     const team = asString(record.participant_name) || compactName(record.participant) || sportmonksParticipantById(match, record.participant_id)
     return [minute ? `${minute}'` : '', player, team].filter(Boolean).join(' ')
@@ -260,6 +263,13 @@ function sportmonksStats(match: ProviderMatch) {
     const team = asString(record.participant_name) || compactName(record.participant)
     return [team, type, value].filter(Boolean).join(' ')
   }).filter(Boolean)
+}
+
+function sportmonksWeather(match: ProviderMatch) {
+  const weather = asRecord(match.weatherReport ?? match.weather_report ?? match.weather)
+  const description = asString(weather.description) || asString(weather.type) || asString(weather.condition)
+  const temp = asText(weather.temperature ?? weather.temp)
+  return [description, temp ? `${temp}` : ''].filter(Boolean).join(' ')
 }
 
 function normalizeSportmonks(match: ProviderMatch): ScoreMatch | null {
@@ -291,6 +301,7 @@ function normalizeSportmonks(match: ProviderMatch): ScoreMatch | null {
     goalScorers: sportmonksGoalScorers(match),
     events: sportmonksEvents(match),
     stats: sportmonksStats(match),
+    weather: sportmonksWeather(match),
     marketContext: `${title}. ${status}. Open the exact Polymarket market when mapped, or ask LP Scout to check related match, group, qualification, scorer, and outright books.`,
     sourceUrl: fixtureId ? `https://www.sportmonks.com/football/fixtures/${fixtureId}` : '',
     polymarketUrl: exactPolymarketUrl(title, [`sportmonks:${fixtureId}`, `league:${leagueId}:${home}:${away}`]),
@@ -359,7 +370,12 @@ function sportmonksUrls(mode: FixtureMode, baseOnly = false) {
   const league = process.env.POLY_STREAM_LEAGUE_ID?.trim() || '732'
   const base = process.env.POLY_STREAM_BASE_URL?.trim() || DEFAULT_SPORTMONKS_BASE
   const baseInclude = 'participants;state;scores;venue;league'
-  const include = baseOnly ? baseInclude : process.env.POLY_STREAM_INCLUDE?.trim() || `${baseInclude};events.type;events.player;events.participant;statistics.type;statistics.participant;coaches`
+  const liveInclude = process.env.POLY_STREAM_LIVE_INCLUDE?.trim() || 'participants;scores;periods;events;league.country;round'
+  const include = baseOnly
+    ? baseInclude
+    : mode === 'live'
+      ? liveInclude
+      : process.env.POLY_STREAM_INCLUDE?.trim() || baseInclude
   const withCommonParams = (path: string) => {
     const url = new URL(`${base}${path}`)
     url.searchParams.set('include', include)
@@ -372,6 +388,15 @@ function sportmonksUrls(mode: FixtureMode, baseOnly = false) {
     withCommonParams('/fixtures/upcoming'),
     withCommonParams(`/fixtures/between/${isoDate(0)}/${isoDate(21)}`),
   ]
+}
+
+function sportmonksFixtureDetailUrl(fixtureId: string) {
+  const base = process.env.POLY_STREAM_BASE_URL?.trim() || DEFAULT_SPORTMONKS_BASE
+  const include = process.env.POLY_STREAM_DETAIL_INCLUDE?.trim()
+    || 'participants;league;venue;state;scores;events.type;events.period;events.player;statistics.type;sidelined.sideline.player;sidelined.sideline.type;weatherReport'
+  const url = new URL(`${base}/fixtures/${fixtureId}`)
+  url.searchParams.set('include', include)
+  return url.toString()
 }
 
 function normalizeSearchText(value: string) {
@@ -623,6 +648,64 @@ async function fetchProviderUrl(provider: string, apiKey: string, url: string): 
   }
 }
 
+async function fetchSportmonksFixtureDetail(apiKey: string, fixtureId: string) {
+  const requestUrl = new URL(sportmonksFixtureDetailUrl(fixtureId))
+  if (!requestUrl.searchParams.has('api_token')) requestUrl.searchParams.set('api_token', apiKey)
+
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 10_000)
+  try {
+    const response = await fetch(requestUrl, { headers: { Accept: 'application/json' }, signal: controller.signal })
+    const text = await response.text()
+    if (!response.ok) throw new Error(`Score provider returned ${response.status}: ${safeProviderMessage(text)}`)
+    const payload = JSON.parse(text)
+    const data = asRecord(payload).data
+    const detail = Array.isArray(data) ? data[0] : data
+    return normalizeSportmonks(asRecord(detail))
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+function shouldFetchSportmonksDetail(match: ScoreMatch) {
+  const status = match.status.toLowerCase()
+  if (!match.fixtureId) return false
+  if (status.includes('full') || status.includes('after') || status.includes('live') || status.includes('half') || status.includes('progress')) return true
+  if ((match.events?.length || 0) > 0 || (match.stats?.length || 0) > 0) return false
+  return match.tag === 'Today'
+}
+
+async function enrichSportmonksDetails(matches: ScoreMatch[], apiKey: string) {
+  const limit = Number(process.env.POLY_STREAM_DETAIL_LIMIT?.trim() || 6)
+  if (!Number.isFinite(limit) || limit <= 0) return matches
+
+  const ids = matches
+    .filter(shouldFetchSportmonksDetail)
+    .map(match => match.fixtureId)
+    .filter(Boolean)
+    .slice(0, limit) as string[]
+  if (!ids.length) return matches
+
+  const detailPairs = await Promise.all(ids.map(async id => {
+    const detail = await fetchSportmonksFixtureDetail(apiKey, id).catch(() => null)
+    return [id, detail] as const
+  }))
+  const details = new Map(detailPairs.filter(([, detail]) => detail).map(([id, detail]) => [id, detail as ScoreMatch]))
+  return matches.map(match => {
+    const detail = match.fixtureId ? details.get(match.fixtureId) : null
+    if (!detail) return match
+    return {
+      ...match,
+      ...detail,
+      polymarketUrl: match.polymarketUrl || detail.polymarketUrl,
+      polymarketTitle: match.polymarketTitle || detail.polymarketTitle,
+      polymarketLiquidity: match.polymarketLiquidity || detail.polymarketLiquidity,
+      polymarketVolume: match.polymarketVolume || detail.polymarketVolume,
+      probability: match.probability || detail.probability,
+    }
+  })
+}
+
 function dedupeMatches(matches: ScoreMatch[]) {
   const seen = new Set<string>()
   return matches.filter(match => {
@@ -655,7 +738,10 @@ async function fetchProviderMatches(): Promise<ScoreMatch[]> {
   const matches = dedupeMatches(batches.flat())
     .sort((a, b) => matchRank(a) - matchRank(b))
     .slice(0, Number(process.env.POLY_STREAM_LIMIT?.trim() || 12))
-  return enrichMatchesWithPolymarket(matches)
+  const detailedMatches = provider === 'api-football' || provider === 'api-sports'
+    ? matches
+    : await enrichSportmonksDetails(matches, apiKey)
+  return enrichMatchesWithPolymarket(detailedMatches)
 }
 
 export default async function polyStreamHandler(req: Request, res: Response) {

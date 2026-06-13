@@ -2570,6 +2570,7 @@ type PolyStreamMatch = {
   polymarketLiquidity?: string
   polymarketVolume?: string
   goalScorers?: string[]
+  weather?: string
   h2h?: string
   form?: string
   events?: string[]
@@ -2747,6 +2748,7 @@ function detailItems(match: PolyStreamMatch) {
   if (match.polymarketLiquidity) items.push({ label: 'Market liquidity', value: match.polymarketLiquidity })
   if (match.polymarketVolume) items.push({ label: 'Market volume', value: match.polymarketVolume })
   if (match.form) items.push({ label: 'Form', value: match.form })
+  if (match.weather) items.push({ label: 'Weather', value: match.weather })
   const events = (match.events || []).filter(Boolean)
   if (events.length) items.push({ label: goals.length ? 'Key events' : 'Events', value: events.slice(0, 2).join(' | ') })
   const stats = (match.stats || []).filter(Boolean)
