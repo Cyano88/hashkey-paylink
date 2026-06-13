@@ -19,6 +19,7 @@ type CacheEntry = {
     ok: true
     providerConfigured: boolean
     source: string
+    providerStatus: string
     updatedAt: string
     matches: PolyStreamMatch[]
   }
@@ -28,6 +29,7 @@ const DEFAULT_CACHE_MS = 10 * 60 * 1000
 const DEFAULT_QUERY = 'World Cup'
 
 let cache: CacheEntry | null = null
+let lastProviderError = ''
 
 function envValue(primary: string, fallback = '') {
   return process.env[primary]?.trim() || (fallback ? process.env[fallback]?.trim() || '' : '')
@@ -231,7 +233,7 @@ async function fetchProviderMatches(): Promise<PolyStreamMatch[]> {
     url.searchParams.set(limitParam, process.env.POLY_STREAM_LIMIT?.trim() || '8')
   }
 
-  const headers: Record<string, string> = { Accept: 'application/json' }
+  const headers: Record<string, string> = {}
   const apiKey = envValue('POLY_STREAM_API_KEY', 'SPORTS_API_KEY')
   const authHeader = process.env.POLY_STREAM_API_AUTH_HEADER?.trim()
   if (apiKey && authHeader) {
@@ -246,6 +248,10 @@ async function fetchProviderMatches(): Promise<PolyStreamMatch[]> {
     const response = await fetch(url, { headers, signal: controller.signal })
     if (!response.ok) throw new Error(`Poly Stream provider returned ${response.status}`)
     const payload = await response.json()
+    const providerErrors = asRecord(payload).errors
+    if (providerErrors && JSON.stringify(providerErrors) !== '[]' && JSON.stringify(providerErrors) !== '{}') {
+      throw new Error('Poly Stream provider returned an API error')
+    }
     return extractMatches(payload).map(normalizeMatch).filter(Boolean).slice(0, 8) as PolyStreamMatch[]
   } finally {
     clearTimeout(timeout)
@@ -266,24 +272,28 @@ export default async function polyStreamHandler(req: Request, res: Response) {
   try {
     const providerMatches = await fetchProviderMatches()
     const matches = providerMatches.length ? providerMatches : fallbackMatches()
+    lastProviderError = providerConfigured && !providerMatches.length ? 'Provider returned no normalized matches.' : ''
     const feed = {
       ok: true as const,
       providerConfigured,
       source: providerMatches.length ? envValue('POLY_STREAM_PROVIDER', 'SPORTS_PROVIDER') || 'provider' : 'fallback',
+      providerStatus: providerMatches.length ? 'connected' : providerConfigured ? 'empty' : 'not_configured',
       updatedAt: new Date().toISOString(),
       matches,
     }
     cache = { expiresAt: Date.now() + ttl, feed }
-    return res.json(feed)
-  } catch (_err) {
+    return res.json(req.query.debug === '1' ? { ...feed, providerError: lastProviderError } : feed)
+  } catch (err) {
+    lastProviderError = err instanceof Error ? err.message : 'Poly Stream provider failed.'
     const feed = {
       ok: true as const,
       providerConfigured,
       source: 'fallback',
+      providerStatus: providerConfigured ? 'error' : 'not_configured',
       updatedAt: new Date().toISOString(),
       matches: fallbackMatches(),
     }
     cache = { expiresAt: Date.now() + Math.min(ttl, 60_000), feed }
-    return res.json(feed)
+    return res.json(req.query.debug === '1' ? { ...feed, providerError: lastProviderError } : feed)
   }
 }
