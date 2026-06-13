@@ -190,7 +190,7 @@ function tagFor(status: string, date: string) {
 }
 
 function shouldExposeScore(status: string) {
-  return /(live|1h|2h|1st|2nd|first half|second half|half|ht|et|inplay|in play|in-play|break|ft|aet|pen|finished|complete|ended|after extra time)/i.test(status)
+  return /(live|1h|2h|1st|2nd|first half|second half|half|ht|et|inplay|in play|in-play|break|ft|full time|full-time|aet|pen|finished|complete|ended|after extra time)/i.test(status)
 }
 
 function sportmonksParticipantName(match: ProviderMatch, location: 'home' | 'away') {
