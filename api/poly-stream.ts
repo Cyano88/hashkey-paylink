@@ -49,7 +49,7 @@ type CacheEntry = {
 
 type FixtureMode = 'auto' | 'live' | 'next' | 'last'
 
-const DEFAULT_CACHE_MS = 60 * 1000
+const DEFAULT_FIXTURE_LIMIT = 64
 const DEFAULT_SPORTMONKS_BASE = 'https://api.sportmonks.com/v3/football'
 const DEFAULT_API_FOOTBALL_BASE = 'https://v3.football.api-sports.io'
 
@@ -67,6 +67,12 @@ function providerName() {
 function fixtureMode(): FixtureMode {
   const mode = process.env.POLY_STREAM_FIXTURE_MODE?.trim().toLowerCase()
   return mode === 'live' || mode === 'next' || mode === 'last' ? mode : 'auto'
+}
+
+function fixtureLimit() {
+  const configured = Number(process.env.POLY_STREAM_LIMIT?.trim())
+  if (!Number.isFinite(configured) || configured <= 0) return DEFAULT_FIXTURE_LIMIT
+  return Math.max(DEFAULT_FIXTURE_LIMIT, Math.floor(configured))
 }
 
 function asRecord(value: unknown) {
@@ -161,9 +167,17 @@ function readableTime(value: string) {
   }).format(new Date(ts))
 }
 
+function utcDateString(value: unknown) {
+  const text = asString(value)
+  if (!text) return ''
+  if (/[zZ]$|[+-]\d{2}:?\d{2}$/.test(text)) return text
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(text)) return `${text.replace(' ', 'T')}Z`
+  return text
+}
+
 function tagFor(status: string, date: string) {
   const text = status.toLowerCase()
-  if (/(live|1h|2h|ht|et|inplay|in play|in-play|break)/.test(text)) return 'Live'
+  if (/(live|1h|2h|1st|2nd|first half|second half|half|ht|et|inplay|in play|in-play|break)/.test(text)) return 'Live'
   if (/(ft|aet|pen|finished|complete|ended|after extra time)/.test(text)) return 'Result'
   if (date) {
     const ts = Date.parse(date)
@@ -173,6 +187,10 @@ function tagFor(status: string, date: string) {
     }
   }
   return 'Fixture'
+}
+
+function shouldExposeScore(status: string) {
+  return /(live|1h|2h|1st|2nd|first half|second half|half|ht|et|inplay|in play|in-play|break|ft|aet|pen|finished|complete|ended|after extra time)/i.test(status)
 }
 
 function sportmonksParticipantName(match: ProviderMatch, location: 'home' | 'away') {
@@ -189,12 +207,35 @@ function sportmonksScore(match: ProviderMatch, location: 'home' | 'away') {
   const scores = Array.isArray(match.scores) ? match.scores : []
   const current = scores.find(item => {
     const record = asRecord(item)
-    const participant = asString(record.score?.['participant'] as unknown).toLowerCase()
+    const score = asRecord(record.score)
+    const participant = asString(score.participant).toLowerCase()
     const description = asString(record.description).toLowerCase()
-    return participant === location && (!description || description.includes('current'))
-  }) || scores.find(item => asString(asRecord(item).score?.['participant'] as unknown).toLowerCase() === location)
+    return participant === location && description === 'current'
+  }) || scores.find(item => {
+    const record = asRecord(item)
+    const score = asRecord(record.score)
+    return asString(score.participant).toLowerCase() === location
+  })
   const score = asRecord(asRecord(current).score)
   return asScore(score.goals)
+}
+
+function sportmonksEventType(record: ProviderMatch) {
+  const typeId = Number(record.type_id)
+  if (typeId === 14) return 'Goal'
+  if (typeId === 15) return 'Own Goal'
+  if (typeId === 16) return 'Penalty'
+  if (typeId === 18) return 'Substitution'
+  if (typeId === 19) return 'Yellow Card'
+  if (typeId === 20) return 'Red Card'
+  if (typeId === 21) return 'Yellow Red Card'
+  return asString(asRecord(record.type).name)
+    || asString(asRecord(record.type).code)
+    || asString(record.type_name)
+    || asString(record.type)
+    || asText(record.addition)
+    || asText(record.info)
+    || (record.type_id !== undefined ? `Type ${asText(record.type_id)}` : 'Event')
 }
 
 function compactName(value: unknown) {
@@ -222,12 +263,7 @@ function sportmonksEvents(match: ProviderMatch) {
   const events = Array.isArray(match.events) ? match.events : []
   return events.slice(0, 6).map(item => {
     const record = asRecord(item)
-    const type = asString(asRecord(record.type).name)
-      || asString(asRecord(record.type).code)
-      || asString(record.type_name)
-      || asString(record.type)
-      || asText(record.info)
-      || (record.type_id !== undefined ? `Type ${asText(record.type_id)}` : 'Event')
+    const type = sportmonksEventType(record)
     const period = asRecord(record.period)
     const minute = asText(record.minute) || asText(record.period_minute) || asText(period.minute) || asText(period.minutes)
     const player = compactName(record.player) || asString(record.player_name) || asString(record.related_player_name)
@@ -248,13 +284,15 @@ function sportmonksGoalScorers(match: ProviderMatch) {
   return events.map(item => {
     const record = asRecord(item)
     const type = [
+      asText(record.type_id),
       asString(asRecord(record.type).name),
       asString(asRecord(record.type).code),
       asString(record.type_name),
       asString(record.type),
       asText(record.info),
+      asText(record.addition),
     ].join(' ').toLowerCase()
-    if (!/\bgoal\b|own goal|penalty scored/.test(type)) return ''
+    if (!/\b14\b|\b15\b|\bgoal\b|own goal|penalty scored/.test(type)) return ''
     const period = asRecord(record.period)
     const minute = asText(record.minute) || asText(record.period_minute) || asText(period.minute) || asText(period.minutes)
     const player = compactName(record.player) || asString(record.player_name) || asString(record.related_player_name)
@@ -289,7 +327,10 @@ function normalizeSportmonks(match: ProviderMatch): ScoreMatch | null {
 
   const state = asRecord(match.state)
   const status = asString(state.name) || asString(state.short_name) || 'Scheduled'
-  const startingAt = asString(match.starting_at)
+  const timestamp = Number(match.starting_at_timestamp)
+  const startingAt = Number.isFinite(timestamp) && timestamp > 0
+    ? new Date(timestamp * 1000).toISOString()
+    : utcDateString(match.starting_at)
   const venue = asString(asRecord(match.venue).name) || 'World Cup venue'
   const leagueId = String(match.league_id ?? '')
   const fixtureId = String(match.id ?? '')
@@ -300,6 +341,9 @@ function normalizeSportmonks(match: ProviderMatch): ScoreMatch | null {
     || asText(latestPeriod?.minutes)
     || asText(latestPeriod?.minute)
   const clock = clockValue ? `${clockValue}'` : ''
+  const homeScore = sportmonksScore(match, 'home')
+  const awayScore = sportmonksScore(match, 'away')
+  const exposeScore = shouldExposeScore(status)
 
   return {
     fixtureId,
@@ -309,8 +353,8 @@ function normalizeSportmonks(match: ProviderMatch): ScoreMatch | null {
     kickoffAt: startingAt,
     venue,
     status,
-    homeScore: sportmonksScore(match, 'home'),
-    awayScore: sportmonksScore(match, 'away'),
+    homeScore: exposeScore ? homeScore : undefined,
+    awayScore: exposeScore ? awayScore : undefined,
     clock,
     homeCoach: sportmonksCoach(match, 'home'),
     awayCoach: sportmonksCoach(match, 'away'),
@@ -343,6 +387,8 @@ function normalizeApiFootball(match: ProviderMatch): ScoreMatch | null {
   const leagueId = String(league.id ?? '')
   const date = asString(fixture.date)
   const elapsed = status.elapsed
+  const statusText = asString(status.long) || asString(status.short) || 'Scheduled'
+  const exposeScore = shouldExposeScore(statusText)
 
   return {
     fixtureId,
@@ -351,9 +397,9 @@ function normalizeApiFootball(match: ProviderMatch): ScoreMatch | null {
     time: readableTime(date),
     kickoffAt: date,
     venue: asString(asRecord(fixture.venue).name) || 'World Cup venue',
-    status: asString(status.long) || asString(status.short) || 'Scheduled',
-    homeScore: asScore(goals.home),
-    awayScore: asScore(goals.away),
+    status: statusText,
+    homeScore: exposeScore ? asScore(goals.home) : undefined,
+    awayScore: exposeScore ? asScore(goals.away) : undefined,
     clock: typeof elapsed === 'number' ? `${elapsed}'` : '',
     marketContext: `${title}. ${asString(status.long) || 'Scheduled'}. Open the main Polymarket match market when mapped, or ask LP Scout for paid book checks.`,
     sourceUrl: '',
@@ -370,8 +416,8 @@ function apiFootballUrls(mode: FixtureMode) {
   url.searchParams.set('league', league)
   url.searchParams.set('season', season)
   if (mode === 'live' || mode === 'auto') url.searchParams.set('live', 'all')
-  if (mode === 'next') url.searchParams.set('next', process.env.POLY_STREAM_LIMIT?.trim() || '12')
-  if (mode === 'last') url.searchParams.set('last', process.env.POLY_STREAM_LIMIT?.trim() || '12')
+  if (mode === 'next') url.searchParams.set('next', String(fixtureLimit()))
+  if (mode === 'last') url.searchParams.set('last', String(fixtureLimit()))
   return [url.toString()]
 }
 
@@ -386,8 +432,8 @@ function sportmonksUrls(mode: FixtureMode, baseOnly = false) {
   if (explicit) return [explicit]
   const league = process.env.POLY_STREAM_LEAGUE_ID?.trim() || '732'
   const base = process.env.POLY_STREAM_BASE_URL?.trim() || DEFAULT_SPORTMONKS_BASE
-  const baseInclude = 'participants;state;scores;venue;league'
-  const liveInclude = process.env.POLY_STREAM_LIVE_INCLUDE?.trim() || 'participants;scores;periods;events;league.country;round'
+  const baseInclude = 'participants;state;scores;venue;periods;events;league'
+  const liveInclude = process.env.POLY_STREAM_LIVE_INCLUDE?.trim() || baseInclude
   const include = baseOnly
     ? baseInclude
     : mode === 'live'
@@ -396,10 +442,11 @@ function sportmonksUrls(mode: FixtureMode, baseOnly = false) {
   const withCommonParams = (path: string) => {
     const url = new URL(`${base}${path}`)
     url.searchParams.set('include', include)
+    url.searchParams.set('includes', include)
     url.searchParams.set('filters', `fixtureLeagues:${league}`)
     return url.toString()
   }
-  if (mode === 'live') return [withCommonParams('/livescores/inplay')]
+  if (mode === 'live') return [withCommonParams('/livescores')]
   if (mode === 'last') return [withCommonParams('/fixtures/latest')]
   return [
     withCommonParams('/fixtures/upcoming'),
@@ -457,7 +504,10 @@ const TEAM_ALIASES: Record<string, string[]> = {
   turkiye: ['turkey', 'turkiye', 'türkiye'],
   'cote divoire': ['cote divoire', 'cote d ivoire', 'ivory coast'],
   'ivory coast': ['cote divoire', 'cote d ivoire', 'ivory coast'],
-  'cape verde': ['cape verde', 'cape verde islands'],
+  'cape verde': ['cape verde', 'cape verde islands', 'cabo verde', 'cvi'],
+  'cape verde islands': ['cape verde', 'cape verde islands', 'cabo verde', 'cvi'],
+  'cabo verde': ['cape verde', 'cape verde islands', 'cabo verde', 'cvi'],
+  curacao: ['curacao', 'curaçao'],
   germany: ['germany', 'deutschland'],
   netherlands: ['netherlands', 'holland'],
   'south korea': ['south korea', 'korea republic', 'republic of korea'],
@@ -551,23 +601,28 @@ function readMarketOutcomePrice(market: ProviderMatch) {
   return undefined
 }
 
+function formatProbability(price: number) {
+  const percent = price * 100
+  if (percent > 0 && percent < 1) return '<1%'
+  if (percent > 99 && percent < 100) return '>99%'
+  return `${Math.round(percent)}%`
+}
+
 function polymarketPriceSummary(candidate: ProviderMatch, home: string, away: string) {
   const markets = marketArray(candidate)
   const homeTerms = teamSearchTerms(home)
   const awayTerms = teamSearchTerms(away)
   const priceFor = (terms: string[]) => {
     const market = markets.find(item => {
-      const text = normalizeSearchText([
-        asString(item.groupItemTitle),
-        asString(item.group_item_title),
-        asString(item.question),
-        asString(item.title),
-        asString(item.slug),
-      ].filter(Boolean).join(' '))
-      return terms.some(term => text.includes(term))
+      const label = normalizeSearchText(asString(item.groupItemTitle) || asString(item.group_item_title))
+      if (!label || /\bdraw\b|\btie\b/.test(label)) return false
+      return terms.some(term => label === term || label.includes(term))
+    }) || markets.find(item => {
+      const slug = normalizeSearchText(asString(item.slug))
+      return terms.some(term => slug.endsWith(` ${term}`) || slug.includes(` ${term} `))
     })
     const price = market ? readMarketOutcomePrice(market) : undefined
-    return price !== undefined ? `${(price * 100).toFixed(0)}%` : ''
+    return price !== undefined ? formatProbability(price) : ''
   }
   const homePrice = priceFor(homeTerms)
   const awayPrice = priceFor(awayTerms)
@@ -578,7 +633,7 @@ function polymarketPriceSummary(candidate: ProviderMatch, home: string, away: st
     asString(item.title),
   ].filter(Boolean).join(' '))))
   const drawPrice = drawMarket ? readMarketOutcomePrice(drawMarket) : undefined
-  const drawLabel = drawPrice !== undefined ? `${(drawPrice * 100).toFixed(0)}%` : ''
+  const drawLabel = drawPrice !== undefined ? formatProbability(drawPrice) : ''
   const parts = [
     homePrice ? `${home} ${homePrice}` : '',
     drawLabel ? `Draw ${drawLabel}` : '',
@@ -593,11 +648,6 @@ function polymarketPriceSummary(candidate: ProviderMatch, home: string, away: st
     }
   }
 
-  const firstPrice = readMarketOutcomePrice(markets[0] || {})
-  if (firstPrice !== undefined) {
-    const yes = `${(firstPrice * 100).toFixed(0)}%`
-    return { summary: `YES ${yes}`, home: '', away: '', draw: '' }
-  }
   return { summary: '', home: '', away: '', draw: '' }
 }
 
@@ -628,6 +678,7 @@ function polymarketMatchFromCandidates(match: ScoreMatch, candidates: Array<{ ki
   const [home, away] = splitFixtureTitle(match.title)
   if (!home || !away) return null
   const ranked = candidates
+    .filter(candidate => candidate.kind === 'event' && hasWorldCupSeries(candidate.item))
     .map(candidate => ({ ...candidate, score: scorePolymarketCandidate(candidate.item, home, away) }))
     .filter(candidate => candidate.score >= 50)
     .sort((a, b) => b.score - a.score)
@@ -661,13 +712,9 @@ async function findPolymarketMatch(match: ScoreMatch) {
     limit: process.env.POLYMARKET_LOOKUP_LIMIT?.trim() || '20',
     search: query,
   })
-  const [events, markets] = await Promise.all([
-    fetchPolymarketJson(`https://gamma-api.polymarket.com/events?${params.toString()}`).catch(() => []),
-    fetchPolymarketJson(`https://gamma-api.polymarket.com/markets?${params.toString()}`).catch(() => []),
-  ])
+  const events = await fetchPolymarketJson(`https://gamma-api.polymarket.com/events?${params.toString()}`).catch(() => [])
   return polymarketMatchFromCandidates(match, [
     ...events.map(item => ({ kind: 'event' as const, item })),
-    ...markets.map(item => ({ kind: 'market' as const, item })),
   ])
 }
 
@@ -718,7 +765,7 @@ async function fetchProviderMode(provider: string, apiKey: string, mode: Fixture
     }
   }
   if (!results.length && lastError) throw new Error(lastError)
-  return results.slice(0, Number(process.env.POLY_STREAM_LIMIT?.trim() || 12))
+  return results.slice(0, fixtureLimit())
 }
 
 async function fetchProviderUrl(provider: string, apiKey: string, url: string): Promise<ScoreMatch[]> {
@@ -840,7 +887,7 @@ async function fetchProviderMatches(): Promise<ScoreMatch[]> {
   })))
   const matches = dedupeMatches(batches.flat())
     .sort((a, b) => matchRank(a) - matchRank(b))
-    .slice(0, Number(process.env.POLY_STREAM_LIMIT?.trim() || 12))
+    .slice(0, fixtureLimit())
   const detailedMatches = provider === 'api-football' || provider === 'api-sports'
     ? matches
     : await enrichSportmonksDetails(matches, apiKey)
@@ -853,9 +900,8 @@ export default async function polyStreamHandler(req: Request, res: Response) {
     return res.status(405).json({ ok: false, error: 'Method not allowed' })
   }
 
-  const cacheMs = Number(envValue('POLY_STREAM_CACHE_MS', 'SPORTS_CACHE_MS') || DEFAULT_CACHE_MS)
-  const ttl = Number.isFinite(cacheMs) && cacheMs > 0 ? cacheMs : DEFAULT_CACHE_MS
-  if (cache && cache.expiresAt > Date.now()) return res.json(req.query.debug === '1' ? { ...cache.feed, providerError: lastProviderError } : cache.feed)
+  const ttl = 0
+  if (ttl > 0 && cache && cache.expiresAt > Date.now()) return res.json(req.query.debug === '1' ? { ...cache.feed, providerError: lastProviderError } : cache.feed)
 
   const provider = providerName()
   const providerConfigured = Boolean(envValue('POLY_STREAM_API_KEY', 'SPORTS_API_KEY'))
@@ -871,7 +917,7 @@ export default async function polyStreamHandler(req: Request, res: Response) {
       updatedAt: new Date().toISOString(),
       matches,
     }
-    cache = { expiresAt: Date.now() + ttl, feed }
+    cache = ttl > 0 ? { expiresAt: Date.now() + ttl, feed } : null
     return res.json(req.query.debug === '1' ? { ...feed, providerError: lastProviderError } : feed)
   } catch (err) {
     lastProviderError = err instanceof Error ? err.message : 'Score provider failed.'
@@ -883,7 +929,7 @@ export default async function polyStreamHandler(req: Request, res: Response) {
       updatedAt: new Date().toISOString(),
       matches: [],
     }
-    cache = { expiresAt: Date.now() + Math.min(ttl, 60_000), feed }
+    cache = ttl > 0 ? { expiresAt: Date.now() + Math.min(ttl, 15_000), feed } : null
     return res.json(req.query.debug === '1' ? { ...feed, providerError: lastProviderError } : feed)
   }
 }

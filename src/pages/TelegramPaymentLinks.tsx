@@ -2709,13 +2709,13 @@ function TeamFlagMark({ name, size = 'md' }: { name: string; size?: 'sm' | 'md' 
 function matchDisplayState(match: PolyStreamMatch) {
   const status = `${match.status} ${match.tag}`.toLowerCase()
   const hasScore = hasMatchScore(match)
-  const matchTime = Date.parse(match.time)
+  const matchTime = Date.parse(match.kickoffAt || match.time)
   const isPast = Number.isFinite(matchTime) && matchTime < Date.now() - 90 * 60 * 1000
-  if (/(live|inplay|in play|1h|2h|et)/.test(status)) {
-    return { tag: 'LIVE', center: hasScore ? `${match.homeScore}-${match.awayScore}` : '0-0', sub: match.clock || match.status }
+  if (/(live|inplay|in play|1h|2h|1st|2nd|first half|second half|et)/.test(status)) {
+    return { tag: 'LIVE', center: hasScore ? `${match.homeScore}-${match.awayScore}` : 'Live', sub: match.clock || match.status }
   }
   if (/(half|ht)/.test(status)) {
-    return { tag: 'HT', center: hasScore ? `${match.homeScore}-${match.awayScore}` : '0-0', sub: 'Half time' }
+    return { tag: 'HT', center: hasScore ? `${match.homeScore}-${match.awayScore}` : 'HT', sub: 'Half time' }
   }
   if (/(ft|finished|result|complete|ended|after extra time|pen)/.test(status) || (hasScore && isPast)) {
     return { tag: 'FT', center: `${match.homeScore}-${match.awayScore}`, sub: 'Full time' }
