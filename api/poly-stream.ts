@@ -112,12 +112,17 @@ function configuredPolymarketUrls() {
   }
 }
 
+function isExactScoreMarketText(value: string) {
+  const text = normalizeSearchText(value)
+  return /\bexact score\b|\bcorrect score\b|\bexact-score\b|\bcorrect-score\b/.test(text)
+}
+
 function exactPolymarketUrl(title: string, ids: string[] = []) {
   const urls = configuredPolymarketUrls()
   const keys = [title, title.toLowerCase(), ...ids.filter(Boolean)]
   for (const key of keys) {
     const direct = urls[key]
-    if (typeof direct === 'string' && direct.trim()) return direct.trim()
+    if (typeof direct === 'string' && direct.trim() && !isExactScoreMarketText(direct)) return direct.trim()
   }
   return ''
 }
@@ -313,7 +318,7 @@ function normalizeSportmonks(match: ProviderMatch): ScoreMatch | null {
     events: sportmonksEvents(match),
     stats: sportmonksStats(match),
     weather: sportmonksWeather(match),
-    marketContext: `${title}. ${status}. Open the exact Polymarket market when mapped, or ask LP Scout to check related match, group, qualification, scorer, and outright books.`,
+    marketContext: `${title}. ${status}. Open the main Polymarket match market when mapped, or ask LP Scout to check related match, group, qualification, scorer, and outright books.`,
     sourceUrl: fixtureId ? `https://www.sportmonks.com/football/fixtures/${fixtureId}` : '',
     polymarketUrl: exactPolymarketUrl(title, [`sportmonks:${fixtureId}`, `league:${leagueId}:${home}:${away}`]),
   }
@@ -350,7 +355,7 @@ function normalizeApiFootball(match: ProviderMatch): ScoreMatch | null {
     homeScore: asScore(goals.home),
     awayScore: asScore(goals.away),
     clock: typeof elapsed === 'number' ? `${elapsed}'` : '',
-    marketContext: `${title}. ${asString(status.long) || 'Scheduled'}. Open the exact Polymarket market when mapped, or ask LP Scout for paid book checks.`,
+    marketContext: `${title}. ${asString(status.long) || 'Scheduled'}. Open the main Polymarket match market when mapped, or ask LP Scout for paid book checks.`,
     sourceUrl: '',
     polymarketUrl: exactPolymarketUrl(title, [`api-football:${fixtureId}`, `league:${leagueId}:${home}:${away}`]),
   }
@@ -473,7 +478,7 @@ function isClosedMarket(candidate: ProviderMatch) {
 
 function scorePolymarketCandidate(candidate: ProviderMatch, home: string, away: string) {
   const text = normalizeSearchText(candidateText(candidate))
-  if (/\bexact score\b|\bcorrect score\b/.test(text)) return 0
+  if (isExactScoreMarketText(text)) return 0
   const homeTerms = teamSearchTerms(home)
   const awayTerms = teamSearchTerms(away)
   if (!homeTerms.length || !awayTerms.length) return 0
@@ -632,9 +637,11 @@ function polymarketMatchFromCandidates(match: ScoreMatch, candidates: Array<{ ki
   const marketsForValues = marketArray(best.item)
   const firstMarket = marketsForValues[0] || {}
   const prices = polymarketPriceSummary(best.item, home, away)
+  const url = readPolymarketUrl(best.item, best.kind)
+  if (isExactScoreMarketText(url)) return null
   return {
     title: asString(record.title) || asString(record.question) || asString(firstMarket.question) || asString(firstMarket.title),
-    url: readPolymarketUrl(best.item, best.kind),
+    url,
     probability: prices.summary,
     homeMarketPrice: prices.home,
     awayMarketPrice: prices.away,
@@ -669,11 +676,12 @@ async function enrichMatchesWithPolymarket(matches: ScoreMatch[]) {
   const worldCupEvents = await fetchPolymarketWorldCupEvents()
   const worldCupCandidates = worldCupEvents.map(item => ({ kind: 'event' as const, item }))
   const enriched = await Promise.all(matches.map(async match => {
-    if (match.polymarketUrl) return match
+    if (match.polymarketUrl && !isExactScoreMarketText(match.polymarketUrl)) return match
+    const searchableMatch = isExactScoreMarketText(match.polymarketUrl || '') ? { ...match, polymarketUrl: '' } : match
     const found = polymarketMatchFromCandidates(match, worldCupCandidates) || await findPolymarketMatch(match).catch(() => null)
-    if (!found?.url) return match
+    if (!found?.url) return searchableMatch
     return {
-      ...match,
+      ...searchableMatch,
       polymarketUrl: found.url,
       polymarketTitle: found.title,
       probability: found.probability,
