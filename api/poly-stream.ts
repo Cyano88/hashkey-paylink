@@ -1,4 +1,7 @@
 import type { Request, Response } from 'express'
+import { readFile } from 'fs/promises'
+import { dirname, join } from 'path'
+import { fileURLToPath } from 'url'
 
 type ProviderMatch = Record<string, unknown>
 
@@ -30,6 +33,7 @@ const DEFAULT_QUERY = 'World Cup'
 
 let cache: CacheEntry | null = null
 let lastProviderError = ''
+const __dirname = dirname(fileURLToPath(import.meta.url))
 
 function envValue(primary: string, fallback = '') {
   return process.env[primary]?.trim() || (fallback ? process.env[fallback]?.trim() || '' : '')
@@ -126,7 +130,16 @@ function normalizeFeedMatch(match: ProviderMatch): PolyStreamMatch | null {
 
 async function fetchFeedMatches(): Promise<PolyStreamMatch[]> {
   const feedUrl = process.env.POLY_STREAM_FEED_URL?.trim()
-  if (!feedUrl) return []
+  if (!feedUrl) {
+    const localFeedPath = join(__dirname, '..', 'public', 'poly-stream-feed.json')
+    try {
+      const text = await readFile(localFeedPath, 'utf8')
+      const payload = JSON.parse(text)
+      return extractMatches(payload).map(normalizeFeedMatch).filter(Boolean).slice(0, 12) as PolyStreamMatch[]
+    } catch (_err) {
+      return []
+    }
+  }
 
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 10_000)

@@ -1,0 +1,74 @@
+{
+  "matches": [
+    {
+      "tag": "Live now",
+      "title": "USA vs Paraguay",
+      "time": "Now",
+      "venue": "Los Angeles Stadium",
+      "status": "Live/recent",
+      "marketContext": "Host-nation Group D opener. Check USA momentum, Paraguay response, group qualification, scorer, and live sentiment markets before asking LP Scout.",
+      "sourceUrl": "https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026",
+      "watchUrl": ""
+    },
+    {
+      "tag": "Today",
+      "title": "Haiti vs Scotland",
+      "time": "June 13",
+      "venue": "Boston Stadium",
+      "status": "Scheduled",
+      "marketContext": "Group C opener. Check Scotland, Haiti, group qualification, and underdog headline markets before asking LP Scout for paid book depth.",
+      "sourceUrl": "https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026",
+      "watchUrl": ""
+    },
+    {
+      "tag": "Today",
+      "title": "Australia vs Turkiye",
+      "time": "June 13",
+      "venue": "BC Place Vancouver",
+      "status": "Scheduled",
+      "marketContext": "Group D match with strong regional interest. Watch team news and early price movement before checking related Polymarket liquidity.",
+      "sourceUrl": "https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026",
+      "watchUrl": ""
+    },
+    {
+      "tag": "Today",
+      "title": "Brazil vs Morocco",
+      "time": "June 13",
+      "venue": "New York New Jersey Stadium",
+      "status": "Scheduled",
+      "marketContext": "High-attention Group C fixture. Watch Brazil outright, Morocco upset, scorer, and group-table markets before asking LP Scout.",
+      "sourceUrl": "https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026",
+      "watchUrl": ""
+    },
+    {
+      "tag": "Today",
+      "title": "Qatar vs Switzerland",
+      "time": "June 13",
+      "venue": "San Francisco Bay Area Stadium",
+      "status": "Scheduled",
+      "marketContext": "Group B fixture. Check qualification, match winner, and news-driven pricing before committing to any LP strategy.",
+      "sourceUrl": "https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026",
+      "watchUrl": ""
+    },
+    {
+      "tag": "Tomorrow",
+      "title": "Cote d'Ivoire vs Ecuador",
+      "time": "June 14",
+      "venue": "Philadelphia Stadium",
+      "status": "Scheduled",
+      "marketContext": "Group E opener. Use early news and lineup context to decide if related Polymarket books deserve a paid scout.",
+      "sourceUrl": "https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026",
+      "watchUrl": ""
+    },
+    {
+      "tag": "Tomorrow",
+      "title": "Germany vs Curacao",
+      "time": "June 14",
+      "venue": "Houston Stadium",
+      "status": "Scheduled",
+      "marketContext": "High-attention Group E fixture. Watch favorite pricing, handicap narratives, and scorer markets before asking LP Scout.",
+      "sourceUrl": "https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026",
+      "watchUrl": ""
+    }
+  ]
+}
