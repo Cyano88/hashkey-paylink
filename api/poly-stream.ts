@@ -52,6 +52,7 @@ type FixtureMode = 'auto' | 'live' | 'next' | 'last'
 const DEFAULT_FIXTURE_LIMIT = 64
 const DEFAULT_SPORTMONKS_BASE = 'https://api.sportmonks.com/v3/football'
 const DEFAULT_API_FOOTBALL_BASE = 'https://v3.football.api-sports.io'
+const DEFAULT_WORLD_CUP_START_DATE = '2026-06-11'
 
 let cache: CacheEntry | null = null
 let lastProviderError = ''
@@ -178,7 +179,7 @@ function utcDateString(value: unknown) {
 function tagFor(status: string, date: string) {
   const text = status.toLowerCase()
   if (/(live|1h|2h|1st|2nd|first half|second half|half|ht|et|inplay|in play|in-play|break)/.test(text)) return 'Live'
-  if (/(ft|aet|pen|finished|complete|ended|after extra time)/.test(text)) return 'Result'
+  if (/(ft|full time|full-time|aet|pen|finished|complete|ended|after extra time)/.test(text)) return 'Result'
   if (date) {
     const ts = Date.parse(date)
     if (Number.isFinite(ts)) {
@@ -388,6 +389,12 @@ function sportmonksClock(match: ProviderMatch) {
     const elapsed = Math.floor((Date.now() / 1000 - started) / 60) + countsFrom
     if (Number.isFinite(elapsed) && elapsed >= 0 && elapsed <= 140) return `${elapsed}'`
   }
+  const status = [asString(asRecord(match.state).name), asString(asRecord(match.state).short_name)].join(' ').toLowerCase()
+  const kickoff = asNumber(match.starting_at_timestamp) || (Date.parse(utcDateString(match.starting_at)) / 1000)
+  if (/(live|inplay|in play|in-play|1h|2h|1st|2nd|first half|second half)/.test(status) && Number.isFinite(kickoff)) {
+    const elapsed = Math.floor((Date.now() / 1000 - kickoff) / 60)
+    if (elapsed >= 0 && elapsed <= 140) return `${Math.max(1, elapsed)}'`
+  }
   return ''
 }
 
@@ -515,9 +522,10 @@ function sportmonksUrls(mode: FixtureMode, baseOnly = false) {
   }
   if (mode === 'live') return [withCommonParams('/livescores')]
   if (mode === 'last') return [withCommonParams('/fixtures/latest')]
+  const startDate = process.env.POLY_STREAM_START_DATE?.trim() || DEFAULT_WORLD_CUP_START_DATE
   return [
+    withCommonParams(`/fixtures/between/${startDate}/${isoDate(21)}`),
     withCommonParams('/fixtures/upcoming'),
-    withCommonParams(`/fixtures/between/${isoDate(0)}/${isoDate(21)}`),
   ]
 }
 
@@ -964,6 +972,11 @@ function matchRank(match: ScoreMatch) {
   return 4
 }
 
+function matchTimeValue(match: ScoreMatch) {
+  const timestamp = Date.parse(match.kickoffAt || match.time)
+  return Number.isFinite(timestamp) ? timestamp : Number.MAX_SAFE_INTEGER
+}
+
 async function fetchProviderMatches(): Promise<ScoreMatch[]> {
   const provider = providerName()
   const apiKey = envValue('POLY_STREAM_API_KEY', 'SPORTS_API_KEY')
@@ -976,7 +989,7 @@ async function fetchProviderMatches(): Promise<ScoreMatch[]> {
     return [] as ScoreMatch[]
   })))
   const matches = dedupeMatches(batches.flat())
-    .sort((a, b) => matchRank(a) - matchRank(b))
+    .sort((a, b) => matchRank(a) - matchRank(b) || matchTimeValue(a) - matchTimeValue(b))
     .slice(0, fixtureLimit())
   const detailedMatches = provider === 'api-football' || provider === 'api-sports'
     ? matches

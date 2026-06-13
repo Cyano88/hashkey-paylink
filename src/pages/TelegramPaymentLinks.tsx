@@ -2712,21 +2712,32 @@ function matchDisplayState(match: PolyStreamMatch) {
   const hasScore = hasMatchScore(match)
   const matchTime = Date.parse(match.kickoffAt || match.time)
   const isPast = Number.isFinite(matchTime) && matchTime < Date.now() - 90 * 60 * 1000
+  const clock = readableMatchClock(match.clock)
   if (/(live|inplay|in play|1h|2h|1st|2nd|first half|second half|et)/.test(status)) {
     return {
       tag: 'LIVE',
       phase: match.status && !/^live$/i.test(match.status) ? match.status : '',
       center: hasScore ? `${match.homeScore}-${match.awayScore}` : 'Live',
-      sub: match.clock || 'Live',
+      sub: clock || 'Live',
     }
   }
   if (/(half|ht)/.test(status)) {
-    return { tag: 'HT', phase: 'Half time', center: hasScore ? `${match.homeScore}-${match.awayScore}` : 'HT', sub: match.clock || 'Half time' }
+    return { tag: 'HT', phase: 'Half time', center: hasScore ? `${match.homeScore}-${match.awayScore}` : 'HT', sub: clock || 'Half time' }
   }
   if (/(ft|full time|full-time|finished|result|complete|ended|after extra time|pen)/.test(status) || (hasScore && isPast)) {
-    return { tag: 'FT', phase: 'Full time', center: `${match.homeScore}-${match.awayScore}`, sub: match.clock || 'Full time' }
+    return { tag: 'FT', phase: 'Full time', center: `${match.homeScore}-${match.awayScore}`, sub: clock || 'Full time' }
   }
   return { tag: 'NS', phase: '', center: 'vs', sub: matchCountdown(match) }
+}
+
+function readableMatchClock(value?: string) {
+  const text = (value || '').trim()
+  const minute = text.match(/^(\d+)'$/)
+  if (minute) {
+    const count = Number(minute[1])
+    if (Number.isFinite(count)) return `${count} ${count === 1 ? 'min' : 'mins'}`
+  }
+  return text
 }
 
 function rowStateLabel(match: PolyStreamMatch) {
@@ -2770,13 +2781,15 @@ function matchCountdown(match: PolyStreamMatch) {
   if (!Number.isFinite(ts)) return 'Countdown'
   const diffMs = ts - Date.now()
   if (diffMs <= 0) return 'Starting'
-  const totalMinutes = Math.ceil(diffMs / 60_000)
-  const days = Math.floor(totalMinutes / 1440)
-  const hours = Math.floor((totalMinutes % 1440) / 60)
-  const minutes = totalMinutes % 60
-  if (days > 0) return `${days}d ${hours}h`
-  if (hours > 0) return `${hours}h ${minutes}m`
-  return `${minutes}m`
+  const totalSeconds = Math.ceil(diffMs / 1000)
+  const days = Math.floor(totalSeconds / 86_400)
+  const hours = Math.floor((totalSeconds % 86_400) / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+  if (days > 0) return `${days} ${days === 1 ? 'day' : 'days'} ${hours} ${hours === 1 ? 'hr' : 'hrs'}`
+  if (hours > 0) return `${hours} ${hours === 1 ? 'hr' : 'hrs'} ${minutes} ${minutes === 1 ? 'min' : 'mins'}`
+  if (minutes > 0) return `${minutes} ${minutes === 1 ? 'min' : 'mins'}`
+  return `${seconds} ${seconds === 1 ? 'sec' : 'secs'}`
 }
 
 function MarketPricePill({ value }: { value?: string }) {
@@ -2833,7 +2846,7 @@ function HashLiveScoreWidget({
   useEffect(() => {
     const timer = window.setInterval(() => {
       setCountdownTick(current => current + 1)
-    }, 60_000)
+    }, 1000)
     return () => window.clearInterval(timer)
   }, [])
 
