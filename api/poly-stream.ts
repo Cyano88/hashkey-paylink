@@ -618,6 +618,18 @@ function readMarketOutcomePrice(market: ProviderMatch) {
   return undefined
 }
 
+function readMarketOutcomePriceForTerms(market: ProviderMatch, terms: string[]) {
+  const outcomes = parseJsonArray(market.outcomes).map(value => String(value))
+  const prices = parseJsonArray(market.outcomePrices).map(asNumber)
+  if (!outcomes.length || !prices.length) return undefined
+  for (let index = 0; index < outcomes.length; index += 1) {
+    const label = normalizeSearchText(outcomes[index])
+    if (!label) continue
+    if (terms.some(term => label === term)) return prices[index]
+  }
+  return undefined
+}
+
 function formatProbability(price: number) {
   const percent = price * 100
   if (percent > 0 && percent < 1) return '<1%'
@@ -630,6 +642,10 @@ function polymarketPriceSummary(candidate: ProviderMatch, home: string, away: st
   const homeTerms = teamSearchTerms(home)
   const awayTerms = teamSearchTerms(away)
   const priceFor = (terms: string[]) => {
+    const outcomePrice = markets
+      .map(item => readMarketOutcomePriceForTerms(item, terms))
+      .find(price => price !== undefined)
+    if (outcomePrice !== undefined) return formatProbability(outcomePrice)
     const market = markets.find(item => {
       const label = normalizeSearchText(asString(item.groupItemTitle) || asString(item.group_item_title))
       if (!label || /\bdraw\b|\btie\b/.test(label)) return false
@@ -640,13 +656,16 @@ function polymarketPriceSummary(candidate: ProviderMatch, home: string, away: st
   }
   const homePrice = priceFor(homeTerms)
   const awayPrice = priceFor(awayTerms)
+  const directDrawPrice = markets
+    .map(item => readMarketOutcomePriceForTerms(item, ['draw', 'tie']))
+    .find(price => price !== undefined)
   const drawMarket = markets.find(item => /\bdraw\b|\btie\b/.test(normalizeSearchText([
     asString(item.groupItemTitle),
     asString(item.group_item_title),
     asString(item.question),
     asString(item.title),
   ].filter(Boolean).join(' '))))
-  const drawPrice = drawMarket ? readMarketOutcomePrice(drawMarket) : undefined
+  const drawPrice = directDrawPrice !== undefined ? directDrawPrice : drawMarket ? readMarketOutcomePrice(drawMarket) : undefined
   const drawLabel = drawPrice !== undefined ? formatProbability(drawPrice) : ''
   const parts = [
     homePrice ? `${home} ${homePrice}` : '',
