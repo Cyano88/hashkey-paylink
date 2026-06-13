@@ -2615,7 +2615,11 @@ const WORLD_CUP_TEAM_ISO: Record<string, string> = {
   brazil: 'br',
   canada: 'ca',
   'cape verde': 'cv',
+  'cape verde islands': 'cv',
+  'cabo verde': 'cv',
   colombia: 'co',
+  'congo dr': 'cd',
+  'dr congo': 'cd',
   croatia: 'hr',
   curacao: 'cw',
   'cote divoire': 'ci',
@@ -2627,6 +2631,7 @@ const WORLD_CUP_TEAM_ISO: Record<string, string> = {
   ghana: 'gh',
   haiti: 'ht',
   iran: 'ir',
+  'ir iran': 'ir',
   iraq: 'iq',
   'ivory coast': 'ci',
   japan: 'jp',
@@ -2923,19 +2928,19 @@ function HashLiveScoreWidget({
               {featuredState?.tag}
             </span>
           </div>
-          <div className="relative z-10 mt-4 grid min-h-[112px] grid-cols-[1fr_auto_1fr] items-center gap-2">
+          <div className="relative z-10 mt-4 grid min-h-[112px] grid-cols-[minmax(0,1fr)_76px_minmax(0,1fr)] items-center gap-1.5 sm:grid-cols-[minmax(0,1fr)_88px_minmax(0,1fr)] sm:gap-2">
             <div className="min-w-0 text-center">
-              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-black/30 shadow-xl ring-1 ring-white/15 backdrop-blur-sm">
+              <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-black/30 shadow-xl ring-1 ring-white/15 backdrop-blur-sm sm:h-12 sm:w-12">
                 <TeamFlagMark name={home} />
               </div>
-              <p className="mt-2 truncate text-xs font-black tracking-wide">{home}</p>
+              <p className="mx-auto mt-2 max-w-[7.2rem] truncate text-[11px] font-black tracking-wide sm:max-w-[9rem] sm:text-xs">{home}</p>
               <MarketPricePill value={featured.homeMarketPrice} />
             </div>
-            <div className="min-w-[68px] rounded-xl border border-white/12 bg-black/35 px-2.5 py-2 text-center shadow-2xl backdrop-blur-sm">
+            <div className="rounded-xl border border-white/12 bg-black/35 px-2 py-2 text-center shadow-2xl backdrop-blur-sm sm:px-2.5">
               <p className="text-xl font-black tabular-nums">
                 {featuredState?.center}
               </p>
-              <p className="mt-0.5 max-w-[82px] truncate text-[9px] font-bold uppercase text-white/55">
+              <p className="mt-0.5 truncate text-[9px] font-bold uppercase text-white/55">
                 {featuredState?.sub}
               </p>
               {featured.drawMarketPrice && (
@@ -2943,10 +2948,10 @@ function HashLiveScoreWidget({
               )}
             </div>
             <div className="min-w-0 text-center">
-              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-black/30 shadow-xl ring-1 ring-white/15 backdrop-blur-sm">
+              <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-black/30 shadow-xl ring-1 ring-white/15 backdrop-blur-sm sm:h-12 sm:w-12">
                 <TeamFlagMark name={away} />
               </div>
-              <p className="mt-2 truncate text-xs font-black tracking-wide">{away || 'Opponent'}</p>
+              <p className="mx-auto mt-2 max-w-[7.2rem] truncate text-[11px] font-black tracking-wide sm:max-w-[9rem] sm:text-xs">{away || 'Opponent'}</p>
               <MarketPricePill value={featured.awayMarketPrice} />
             </div>
           </div>

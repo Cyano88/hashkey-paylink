@@ -518,9 +518,16 @@ const TEAM_ALIASES: Record<string, string[]> = {
   'cape verde islands': ['cape verde', 'cape verde islands', 'cabo verde', 'cvi'],
   'cabo verde': ['cape verde', 'cape verde islands', 'cabo verde', 'cvi'],
   curacao: ['curacao', 'curaçao'],
+  iran: ['iran', 'ir iran', 'islamic republic of iran'],
+  'ir iran': ['iran', 'ir iran', 'islamic republic of iran'],
   germany: ['germany', 'deutschland'],
   netherlands: ['netherlands', 'holland'],
   'south korea': ['south korea', 'korea republic', 'republic of korea'],
+  'korea republic': ['south korea', 'korea republic', 'republic of korea'],
+  'bosnia and herzegovina': ['bosnia and herzegovina', 'bosnia herzegovina', 'bosnia'],
+  'bosnia herzegovina': ['bosnia and herzegovina', 'bosnia herzegovina', 'bosnia'],
+  'congo dr': ['congo dr', 'dr congo', 'democratic republic of congo'],
+  'dr congo': ['congo dr', 'dr congo', 'democratic republic of congo'],
 }
 
 function teamSearchTerms(name: string) {
