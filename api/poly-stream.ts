@@ -43,6 +43,25 @@ function asRecord(value: unknown) {
   return value && typeof value === 'object' ? value as Record<string, unknown> : {}
 }
 
+function providerName() {
+  return envValue('POLY_STREAM_PROVIDER', 'SPORTS_PROVIDER').toLowerCase()
+}
+
+function defaultProviderUrl(provider: string) {
+  const key = envValue('POLY_STREAM_API_KEY', 'SPORTS_API_KEY')
+  if (provider === 'scorebat') {
+    const url = new URL('https://www.scorebat.com/video-api/v3/feed/')
+    if (key) url.searchParams.set('token', key)
+    return url.toString()
+  }
+  if (provider === 'thesportsdb') {
+    const apiKey = key || '3'
+    const query = encodeURIComponent(process.env.POLY_STREAM_QUERY?.trim() || 'World Cup')
+    return `https://www.thesportsdb.com/api/v1/json/${apiKey}/searchevents.php?e=${query}`
+  }
+  return ''
+}
+
 function safeProviderMessage(value: unknown) {
   const text = typeof value === 'string' ? value : JSON.stringify(value)
   return text
@@ -95,12 +114,16 @@ function fixtureTeams(match: ProviderMatch) {
 
 function fixtureDate(match: ProviderMatch) {
   const fixture = asRecord(match.fixture)
+  const dateEvent = asString(match.dateEvent)
+  const timeEvent = asString(match.strTime)
+  const sportsDbDate = dateEvent ? `${dateEvent}${timeEvent ? `T${timeEvent.replace(/Z$/, '')}` : ''}` : ''
   return (
     asString(fixture.date)
     || asString(match.date)
     || asString(match.utcDate)
     || asString(match.event_date)
     || asString(match.strTimestamp)
+    || sportsDbDate
     || asString(match.publishedAt)
   )
 }
@@ -114,6 +137,7 @@ function fixtureStatus(match: ProviderMatch) {
     || asString(match.status)
     || asString(match.statusShort)
     || asString(match.matchStatus)
+    || asString(match.strStatus)
     || 'Scheduled'
   )
 }
@@ -126,17 +150,22 @@ function fixtureVenue(match: ProviderMatch) {
     || asString(match.venue)
     || asString(match.strVenue)
     || asString(match.location)
+    || asString(match.strCountry)
     || 'World Cup venue'
   )
 }
 
 function fixtureUrl(match: ProviderMatch) {
+  const videos = Array.isArray(match.videos) ? match.videos : []
+  const firstVideo = asRecord(videos[0])
   return (
     asString(match.url)
     || asString(match.link)
     || asString(match.matchviewUrl)
     || asString(match.sourceUrl)
     || asString(match.strVideo)
+    || asString(firstVideo.url)
+    || asString(firstVideo.embed)
   )
 }
 
@@ -169,14 +198,14 @@ function readableTime(date: string) {
 
 function normalizeMatch(match: ProviderMatch): PolyStreamMatch | null {
   const { home, away } = fixtureTeams(match)
-  const title = asString(match.title) || asString(match.name) || (home && away ? `${home} vs ${away}` : '')
+  const title = asString(match.title) || asString(match.name) || asString(match.strEvent) || (home && away ? `${home} vs ${away}` : '')
   if (!title) return null
 
   const date = fixtureDate(match)
   const status = fixtureStatus(match)
   const venue = fixtureVenue(match)
   const url = fixtureUrl(match)
-  const competition = asString(asRecord(match.league).name) || asString(asRecord(match.competition).name) || 'World Cup'
+  const competition = asString(asRecord(match.league).name) || asString(asRecord(match.competition).name) || asString(match.strLeague) || 'World Cup'
   const context = `${title}. ${competition}. ${status}. Check related Polymarket team, group, qualification, scorer, and outright markets before asking for paid LP alpha.`
 
   return {
@@ -227,7 +256,8 @@ function fallbackMatches(): PolyStreamMatch[] {
 }
 
 async function fetchProviderMatches(): Promise<PolyStreamMatch[]> {
-  const apiUrl = envValue('POLY_STREAM_API_URL', 'SPORTS_API_URL')
+  const provider = providerName()
+  const apiUrl = envValue('POLY_STREAM_API_URL', 'SPORTS_API_URL') || defaultProviderUrl(provider)
   if (!apiUrl) return []
 
   const url = new URL(apiUrl)
@@ -245,7 +275,7 @@ async function fetchProviderMatches(): Promise<PolyStreamMatch[]> {
   const authHeader = process.env.POLY_STREAM_API_AUTH_HEADER?.trim()
   if (apiKey && authHeader) {
     headers[authHeader] = apiKey
-  } else if (apiKey) {
+  } else if (apiKey && (provider === 'api-football' || provider === 'api-sports' || provider === '')) {
     headers['x-apisports-key'] = apiKey
   }
 
@@ -257,7 +287,7 @@ async function fetchProviderMatches(): Promise<PolyStreamMatch[]> {
     if (!response.ok) throw new Error(`Poly Stream provider returned ${response.status}: ${safeProviderMessage(text)}`)
     const payload = JSON.parse(text)
     const providerErrors = asRecord(payload).errors
-    if (providerErrors && JSON.stringify(providerErrors) !== '[]' && JSON.stringify(providerErrors) !== '{}') {
+    if ((provider === 'api-football' || provider === 'api-sports' || provider === '') && providerErrors && JSON.stringify(providerErrors) !== '[]' && JSON.stringify(providerErrors) !== '{}') {
       throw new Error(`Poly Stream provider error: ${safeProviderMessage(providerErrors)}`)
     }
     return extractMatches(payload).map(normalizeMatch).filter(Boolean).slice(0, 8) as PolyStreamMatch[]
@@ -276,7 +306,8 @@ export default async function polyStreamHandler(req: Request, res: Response) {
   const ttl = Number.isFinite(cacheMs) && cacheMs > 0 ? cacheMs : DEFAULT_CACHE_MS
   if (cache && cache.expiresAt > Date.now()) return res.json(cache.feed)
 
-  const providerConfigured = Boolean(envValue('POLY_STREAM_API_URL', 'SPORTS_API_URL'))
+  const configuredProvider = providerName()
+  const providerConfigured = Boolean(envValue('POLY_STREAM_API_URL', 'SPORTS_API_URL') || configuredProvider === 'scorebat' || configuredProvider === 'thesportsdb')
   try {
     const providerMatches = await fetchProviderMatches()
     const matches = providerMatches.length ? providerMatches : fallbackMatches()
