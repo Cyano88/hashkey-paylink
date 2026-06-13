@@ -14,7 +14,7 @@ Render env:
 POLY_STREAM_PROVIDER=sportmonks
 POLY_STREAM_API_KEY=your_sportmonks_token
 POLY_STREAM_LEAGUE_ID=732
-POLY_STREAM_FIXTURE_MODE=live
+POLY_STREAM_FIXTURE_MODE=auto
 POLY_STREAM_CACHE_MS=60000
 POLY_STREAM_LIMIT=12
 ```
@@ -22,10 +22,13 @@ POLY_STREAM_LIMIT=12
 Modes:
 
 ```env
+POLY_STREAM_FIXTURE_MODE=auto
 POLY_STREAM_FIXTURE_MODE=live
 POLY_STREAM_FIXTURE_MODE=next
 POLY_STREAM_FIXTURE_MODE=last
 ```
+
+`auto` fetches live matches first and upcoming matches second. Use this for the consumer UI so the section does not go empty before kickoff.
 
 ## API-FOOTBALL Alternative
 
@@ -36,7 +39,7 @@ POLY_STREAM_PROVIDER=api-football
 POLY_STREAM_API_KEY=your_api_football_key
 POLY_STREAM_LEAGUE_ID=1
 POLY_STREAM_SEASON=2026
-POLY_STREAM_FIXTURE_MODE=live
+POLY_STREAM_FIXTURE_MODE=auto
 POLY_STREAM_CACHE_MS=60000
 POLY_STREAM_LIMIT=12
 ```

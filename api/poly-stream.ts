@@ -30,6 +30,8 @@ type CacheEntry = {
   feed: ScoreFeed
 }
 
+type FixtureMode = 'auto' | 'live' | 'next' | 'last'
+
 const DEFAULT_CACHE_MS = 60 * 1000
 const DEFAULT_SPORTMONKS_BASE = 'https://api.sportmonks.com/v3/football'
 const DEFAULT_API_FOOTBALL_BASE = 'https://v3.football.api-sports.io'
@@ -43,6 +45,11 @@ function envValue(primary: string, fallback = '') {
 
 function providerName() {
   return (envValue('POLY_STREAM_PROVIDER', 'SPORTS_PROVIDER') || 'sportmonks').toLowerCase()
+}
+
+function fixtureMode(): FixtureMode {
+  const mode = process.env.POLY_STREAM_FIXTURE_MODE?.trim().toLowerCase()
+  return mode === 'live' || mode === 'next' || mode === 'last' ? mode : 'auto'
 }
 
 function asRecord(value: unknown) {
@@ -206,26 +213,24 @@ function normalizeApiFootball(match: ProviderMatch): ScoreMatch | null {
   }
 }
 
-function apiFootballUrl() {
+function apiFootballUrl(mode: FixtureMode) {
   const explicit = envValue('POLY_STREAM_API_URL', 'SPORTS_API_URL')
   if (explicit) return explicit
   const league = process.env.POLY_STREAM_LEAGUE_ID?.trim() || '1'
   const season = process.env.POLY_STREAM_SEASON?.trim() || '2026'
-  const mode = process.env.POLY_STREAM_FIXTURE_MODE?.trim() || 'live'
   const url = new URL(`${DEFAULT_API_FOOTBALL_BASE}/fixtures`)
   url.searchParams.set('league', league)
   url.searchParams.set('season', season)
-  if (mode === 'live') url.searchParams.set('live', 'all')
+  if (mode === 'live' || mode === 'auto') url.searchParams.set('live', 'all')
   if (mode === 'next') url.searchParams.set('next', process.env.POLY_STREAM_LIMIT?.trim() || '12')
   if (mode === 'last') url.searchParams.set('last', process.env.POLY_STREAM_LIMIT?.trim() || '12')
   return url.toString()
 }
 
-function sportmonksUrl() {
+function sportmonksUrl(mode: FixtureMode) {
   const explicit = envValue('POLY_STREAM_API_URL', 'SPORTS_API_URL')
   if (explicit) return explicit
   const league = process.env.POLY_STREAM_LEAGUE_ID?.trim() || '732'
-  const mode = process.env.POLY_STREAM_FIXTURE_MODE?.trim() || 'live'
   const base = process.env.POLY_STREAM_BASE_URL?.trim() || DEFAULT_SPORTMONKS_BASE
   const path = mode === 'next' ? '/fixtures/upcoming/markets' : mode === 'last' ? '/fixtures/latest' : '/livescores/inplay'
   const url = new URL(`${base}${path}`)
@@ -234,12 +239,8 @@ function sportmonksUrl() {
   return url.toString()
 }
 
-async function fetchProviderMatches(): Promise<ScoreMatch[]> {
-  const provider = providerName()
-  const apiKey = envValue('POLY_STREAM_API_KEY', 'SPORTS_API_KEY')
-  if (!apiKey) return []
-
-  const url = provider === 'api-football' || provider === 'api-sports' ? apiFootballUrl() : sportmonksUrl()
+async function fetchProviderMode(provider: string, apiKey: string, mode: FixtureMode): Promise<ScoreMatch[]> {
+  const url = provider === 'api-football' || provider === 'api-sports' ? apiFootballUrl(mode) : sportmonksUrl(mode)
   const headers: Record<string, string> = { Accept: 'application/json' }
   if (provider === 'api-football' || provider === 'api-sports') headers['x-apisports-key'] = apiKey
 
@@ -269,6 +270,40 @@ async function fetchProviderMatches(): Promise<ScoreMatch[]> {
   }
 }
 
+function dedupeMatches(matches: ScoreMatch[]) {
+  const seen = new Set<string>()
+  return matches.filter(match => {
+    const key = `${match.title.toLowerCase()}|${match.time}|${match.status.toLowerCase()}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
+function matchRank(match: ScoreMatch) {
+  if (match.tag === 'Live') return 0
+  if (match.tag === 'Today') return 1
+  if (match.tag === 'Fixture') return 2
+  if (match.tag === 'Result') return 3
+  return 4
+}
+
+async function fetchProviderMatches(): Promise<ScoreMatch[]> {
+  const provider = providerName()
+  const apiKey = envValue('POLY_STREAM_API_KEY', 'SPORTS_API_KEY')
+  if (!apiKey) return []
+
+  const mode = fixtureMode()
+  const modes: FixtureMode[] = mode === 'auto' ? ['live', 'next'] : [mode]
+  const batches = await Promise.all(modes.map(current => fetchProviderMode(provider, apiKey, current).catch(err => {
+    lastProviderError = err instanceof Error ? err.message : 'Score provider failed.'
+    return [] as ScoreMatch[]
+  })))
+  return dedupeMatches(batches.flat())
+    .sort((a, b) => matchRank(a) - matchRank(b))
+    .slice(0, Number(process.env.POLY_STREAM_LIMIT?.trim() || 12))
+}
+
 export default async function polyStreamHandler(req: Request, res: Response) {
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET')
@@ -284,7 +319,7 @@ export default async function polyStreamHandler(req: Request, res: Response) {
 
   try {
     const matches = providerConfigured ? await fetchProviderMatches() : []
-    lastProviderError = providerConfigured && !matches.length ? 'Provider returned no live World Cup matches for the current mode.' : ''
+    lastProviderError = providerConfigured && !matches.length ? 'Provider returned no live or upcoming World Cup matches.' : ''
     const feed: ScoreFeed = {
       ok: true,
       providerConfigured,

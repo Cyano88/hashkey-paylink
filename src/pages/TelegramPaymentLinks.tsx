@@ -2716,10 +2716,10 @@ function PolyStreamPanel({
           {!loading && matches.length === 0 && (
             <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-4 text-center dark:border-white/10 dark:bg-white/[0.04]">
               <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                {feed?.providerConfigured ? 'No live World Cup matches right now' : 'Live score provider not connected'}
+                {feed?.providerConfigured ? 'No live or upcoming World Cup matches returned' : 'Live score provider not connected'}
               </p>
               <p className="mx-auto mt-1 max-w-sm text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                Connect Sportmonks or API-FOOTBALL in Render to show live scores. Exact Polymarket buttons appear only after a verified market URL is mapped.
+                Connect Sportmonks or API-FOOTBALL in Render to show live and upcoming matches. Exact Polymarket buttons appear only after a verified market URL is mapped.
               </p>
             </div>
           )}
