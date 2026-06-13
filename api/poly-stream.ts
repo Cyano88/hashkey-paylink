@@ -473,6 +473,7 @@ function isClosedMarket(candidate: ProviderMatch) {
 
 function scorePolymarketCandidate(candidate: ProviderMatch, home: string, away: string) {
   const text = normalizeSearchText(candidateText(candidate))
+  if (/\bexact score\b|\bcorrect score\b/.test(text)) return 0
   const homeTerms = teamSearchTerms(home)
   const awayTerms = teamSearchTerms(away)
   if (!homeTerms.length || !awayTerms.length) return 0
