@@ -460,7 +460,7 @@ const TEAM_ALIASES: Record<string, string[]> = {
   'cape verde': ['cape verde', 'cape verde islands'],
   germany: ['germany', 'deutschland'],
   netherlands: ['netherlands', 'holland'],
-  south korea: ['south korea', 'korea republic', 'republic of korea'],
+  'south korea': ['south korea', 'korea republic', 'republic of korea'],
 }
 
 function teamSearchTerms(name: string) {
