@@ -213,9 +213,9 @@ function normalizeApiFootball(match: ProviderMatch): ScoreMatch | null {
   }
 }
 
-function apiFootballUrl(mode: FixtureMode) {
+function apiFootballUrls(mode: FixtureMode) {
   const explicit = envValue('POLY_STREAM_API_URL', 'SPORTS_API_URL')
-  if (explicit) return explicit
+  if (explicit) return [explicit]
   const league = process.env.POLY_STREAM_LEAGUE_ID?.trim() || '1'
   const season = process.env.POLY_STREAM_SEASON?.trim() || '2026'
   const url = new URL(`${DEFAULT_API_FOOTBALL_BASE}/fixtures`)
@@ -224,23 +224,52 @@ function apiFootballUrl(mode: FixtureMode) {
   if (mode === 'live' || mode === 'auto') url.searchParams.set('live', 'all')
   if (mode === 'next') url.searchParams.set('next', process.env.POLY_STREAM_LIMIT?.trim() || '12')
   if (mode === 'last') url.searchParams.set('last', process.env.POLY_STREAM_LIMIT?.trim() || '12')
-  return url.toString()
+  return [url.toString()]
 }
 
-function sportmonksUrl(mode: FixtureMode) {
+function isoDate(offsetDays = 0) {
+  const date = new Date()
+  date.setUTCDate(date.getUTCDate() + offsetDays)
+  return date.toISOString().slice(0, 10)
+}
+
+function sportmonksUrls(mode: FixtureMode) {
   const explicit = envValue('POLY_STREAM_API_URL', 'SPORTS_API_URL')
-  if (explicit) return explicit
+  if (explicit) return [explicit]
   const league = process.env.POLY_STREAM_LEAGUE_ID?.trim() || '732'
   const base = process.env.POLY_STREAM_BASE_URL?.trim() || DEFAULT_SPORTMONKS_BASE
-  const path = mode === 'next' ? '/fixtures/upcoming/markets' : mode === 'last' ? '/fixtures/latest' : '/livescores/inplay'
-  const url = new URL(`${base}${path}`)
-  url.searchParams.set('include', 'participants;state;scores;venue;league')
-  url.searchParams.set('filters', `fixtureLeagues:${league}`)
-  return url.toString()
+  const include = 'participants;state;scores;venue;league'
+  const withCommonParams = (path: string) => {
+    const url = new URL(`${base}${path}`)
+    url.searchParams.set('include', include)
+    url.searchParams.set('filters', `fixtureLeagues:${league}`)
+    return url.toString()
+  }
+  if (mode === 'live') return [withCommonParams('/livescores/inplay')]
+  if (mode === 'last') return [withCommonParams('/fixtures/latest')]
+  return [
+    withCommonParams('/fixtures/upcoming'),
+    withCommonParams(`/fixtures/between/${isoDate(0)}/${isoDate(21)}`),
+  ]
 }
 
 async function fetchProviderMode(provider: string, apiKey: string, mode: FixtureMode): Promise<ScoreMatch[]> {
-  const url = provider === 'api-football' || provider === 'api-sports' ? apiFootballUrl(mode) : sportmonksUrl(mode)
+  const urls = provider === 'api-football' || provider === 'api-sports' ? apiFootballUrls(mode) : sportmonksUrls(mode)
+  const results: ScoreMatch[] = []
+  let lastError = ''
+  for (const url of urls) {
+    try {
+      const matches = await fetchProviderUrl(provider, apiKey, url)
+      if (matches.length) results.push(...matches)
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : 'Score provider failed.'
+    }
+  }
+  if (!results.length && lastError) throw new Error(lastError)
+  return results.slice(0, Number(process.env.POLY_STREAM_LIMIT?.trim() || 12))
+}
+
+async function fetchProviderUrl(provider: string, apiKey: string, url: string): Promise<ScoreMatch[]> {
   const headers: Record<string, string> = { Accept: 'application/json' }
   if (provider === 'api-football' || provider === 'api-sports') headers['x-apisports-key'] = apiKey
 
@@ -264,7 +293,7 @@ async function fetchProviderMode(provider: string, apiKey: string, mode: Fixture
     const normalized = matches
       .map(match => provider === 'api-football' || provider === 'api-sports' ? normalizeApiFootball(match) : normalizeSportmonks(match))
       .filter(Boolean) as ScoreMatch[]
-    return normalized.slice(0, Number(process.env.POLY_STREAM_LIMIT?.trim() || 12))
+    return normalized
   } finally {
     clearTimeout(timeout)
   }

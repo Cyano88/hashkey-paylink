@@ -2597,7 +2597,7 @@ function PolyStreamPanel({
     : providerReady
     ? `Updated ${relativeNewsTime(feed.updatedAt)}`
     : feed?.providerConfigured
-    ? 'No live matches'
+    ? 'No matches'
     : 'Provider needed'
 
   useEffect(() => {
