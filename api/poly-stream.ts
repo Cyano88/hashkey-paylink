@@ -223,6 +223,16 @@ function normalizeMatch(match: ProviderMatch): PolyStreamMatch | null {
 function fallbackMatches(): PolyStreamMatch[] {
   return [
     {
+      tag: 'Live now',
+      title: 'USA vs Paraguay',
+      time: 'June 12/13',
+      venue: 'Los Angeles Stadium',
+      status: 'Live/recent',
+      marketContext: 'Host-nation Group D opener. Check USA momentum, Paraguay response, group qualification, scorer, and live sentiment markets before asking LP Scout.',
+      sourceUrl: 'https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026',
+      watchUrl: '',
+    },
+    {
       tag: 'Today',
       title: 'Haiti vs Scotland',
       time: 'June 13',

@@ -2575,6 +2575,16 @@ type PolyStreamFeed = {
 
 const fallbackPolyStreamMatches: PolyStreamMatch[] = [
   {
+    tag: 'Live now',
+    title: 'USA vs Paraguay',
+    time: 'June 12/13',
+    venue: 'Los Angeles Stadium',
+    status: 'Live/recent',
+    marketContext: 'Host-nation Group D opener. Check USA momentum, Paraguay response, group qualification, scorer, and live sentiment markets before asking LP Scout.',
+    sourceUrl: 'https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026',
+    watchUrl: '',
+  },
+  {
     tag: 'Today',
     title: 'Haiti vs Scotland',
     time: 'June 13',
@@ -2688,6 +2698,12 @@ function PolyStreamPanel({
     })
   }
 
+  const featuredMatch = matches[0]
+  const fixtureMatches = matches.slice(1)
+  const [featuredHome, featuredAway] = featuredMatch?.title.includes(' vs ')
+    ? featuredMatch.title.split(' vs ', 2)
+    : [featuredMatch?.title || 'World Cup', 'Market watch']
+
   return (
     <div className="mt-4 space-y-3">
       <div className="flex flex-col items-start justify-between gap-3 sm:flex-row">
@@ -2755,8 +2771,58 @@ function PolyStreamPanel({
           </div>
         </div>
 
-        <div className="max-h-[330px] space-y-1.5 overflow-y-auto p-2 [scrollbar-color:rgba(148,163,184,0.35)_transparent] [scrollbar-width:thin] dark:[scrollbar-color:rgba(255,255,255,0.22)_transparent] [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300/40 dark:[&::-webkit-scrollbar-thumb]:bg-white/20">
-          {matches.map(match => (
+        <div className="max-h-[420px] space-y-2 overflow-y-auto p-2 [scrollbar-color:rgba(148,163,184,0.35)_transparent] [scrollbar-width:thin] dark:[scrollbar-color:rgba(255,255,255,0.22)_transparent] [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300/40 dark:[&::-webkit-scrollbar-thumb]:bg-white/20">
+          {featuredMatch && (
+            <div className="rounded-xl border border-gray-950 bg-gray-950 p-3 text-white shadow-sm dark:border-white/10 dark:bg-white">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold uppercase text-gray-950">{featuredMatch.tag}</span>
+                  <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-semibold text-white ring-1 ring-white/15 dark:bg-gray-100 dark:text-gray-700 dark:ring-gray-200">{featuredMatch.time}</span>
+                </div>
+                <span className="rounded-full bg-emerald-400/15 px-2 py-0.5 text-[10px] font-bold text-emerald-100 ring-1 ring-emerald-300/20 dark:bg-emerald-50 dark:text-emerald-700 dark:ring-emerald-100">
+                  Match widget
+                </span>
+              </div>
+              <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                <div className="min-w-0 rounded-lg bg-white/10 p-2 text-center ring-1 ring-white/10 dark:bg-gray-50 dark:ring-gray-100">
+                  <p className="truncate text-sm font-semibold dark:text-gray-950">{featuredHome}</p>
+                  <p className="mt-0.5 text-[10px] font-semibold uppercase text-white/50 dark:text-gray-400">Home</p>
+                </div>
+                <span className="text-xs font-bold text-white/50 dark:text-gray-400">vs</span>
+                <div className="min-w-0 rounded-lg bg-white/10 p-2 text-center ring-1 ring-white/10 dark:bg-gray-50 dark:ring-gray-100">
+                  <p className="truncate text-sm font-semibold dark:text-gray-950">{featuredAway}</p>
+                  <p className="mt-0.5 text-[10px] font-semibold uppercase text-white/50 dark:text-gray-400">Away</p>
+                </div>
+              </div>
+              <div className="mt-3 rounded-lg bg-white/10 p-2 ring-1 ring-white/10 dark:bg-gray-50 dark:ring-gray-100">
+                <p className="text-xs font-semibold text-white dark:text-gray-950">{featuredMatch.venue}</p>
+                <p className="mt-1 text-xs leading-relaxed text-white/70 dark:text-gray-500">{featuredMatch.marketContext}</p>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {featuredMatch.sourceUrl && (
+                  <a
+                    href={featuredMatch.sourceUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-white px-2.5 py-1.5 text-[10px] font-semibold text-gray-950 transition-all hover:bg-gray-100 active:scale-[0.98] dark:bg-gray-950 dark:text-white"
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    Official schedule
+                  </a>
+                )}
+                <button
+                  type="button"
+                  onClick={() => askScout(featuredMatch)}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-emerald-400 px-2.5 py-1.5 text-[10px] font-bold text-gray-950 transition-all hover:bg-emerald-300 active:scale-[0.98]"
+                >
+                  <LineChart className="h-3 w-3" />
+                  Ask LP Scout
+                </button>
+              </div>
+            </div>
+          )}
+
+          {fixtureMatches.map(match => (
             <div
               key={match.title}
               className="rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]"
@@ -2766,7 +2832,6 @@ function PolyStreamPanel({
                   <div className="flex flex-wrap items-center gap-1.5">
                     <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold uppercase text-gray-600 dark:bg-white/[0.08] dark:text-gray-300">{match.tag}</span>
                     <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-gray-500 dark:bg-white/[0.08] dark:text-gray-400">{match.time}</span>
-                    <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-gray-500 dark:bg-white/[0.08] dark:text-gray-400">{match.status}</span>
                   </div>
                   <p className="mt-2 text-sm font-semibold text-gray-900 dark:text-white">{match.title}</p>
                   <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{match.venue}</p>
@@ -2774,18 +2839,7 @@ function PolyStreamPanel({
                 </div>
               </div>
               <div className="mt-2 flex flex-wrap gap-1.5">
-                {match.watchUrl && (
-                  <a
-                    href={match.watchUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[10px] font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200"
-                  >
-                    <ExternalLink className="h-3 w-3" />
-                    Watch
-                  </a>
-                )}
-                {match.sourceUrl && match.sourceUrl !== match.watchUrl && (
+                {match.sourceUrl && (
                   <a
                     href={match.sourceUrl}
                     target="_blank"
