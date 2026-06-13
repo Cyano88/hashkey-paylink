@@ -2,7 +2,9 @@
 
 The Polymarket Tools -> World Cup Scores section is provider-only. It does not use committed fixture rows or stale local fallback data.
 
-`/api/poly-stream` returns live score widgets from a sports data provider, then attaches exact Polymarket links only when they are explicitly mapped. If no exact market URL is mapped, the UI shows `Market pending` instead of routing users to a loose Polymarket search page.
+`/api/poly-stream` returns Sportmonks/API-FOOTBALL fixture data for exact Polymarket mapping. The visible match board can use a Sportmonks widget embed, while Hash PayLink controls the Polymarket and LP Scout buttons.
+
+If no exact market URL is mapped, the UI does not route users to a loose Polymarket search page.
 
 ## Recommended Provider
 
@@ -18,6 +20,26 @@ POLY_STREAM_FIXTURE_MODE=auto
 POLY_STREAM_CACHE_MS=60000
 POLY_STREAM_LIMIT=12
 ```
+
+## Sportmonks Widget Embed
+
+Create a live score widget in MySportmonks, authorize the Hash PayLink domain, then copy the embed values into Render.
+
+Use the iframe URL if Sportmonks provides one:
+
+```env
+VITE_SPORTMONKS_WIDGET_URL=https://...
+```
+
+Or use the container/script version:
+
+```env
+VITE_SPORTMONKS_WIDGET_CSS_URL=https://...
+VITE_SPORTMONKS_WIDGET_JS_URL=https://...
+VITE_SPORTMONKS_WIDGET_HTML=<div ...></div>
+```
+
+Do not put the Sportmonks API token in any `VITE_` variable.
 
 Modes:
 
@@ -61,4 +83,4 @@ api-football:<fixtureId>
 league:<leagueId>:<home>:<away>
 ```
 
-The button label remains `Market pending` until one of these keys resolves.
+The Polymarket and LP Scout buttons remain hidden until one of these keys resolves.

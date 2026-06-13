@@ -27,6 +27,10 @@ import { EVM_TREASURY } from '../lib/chains'
 const TELEGRAM_BOT_URL = import.meta.env.VITE_TELEGRAM_AGENT_URL || 'https://t.me/HashPayLinkBot'
 const PUBLIC_PAYLINK_ORIGIN = (import.meta.env.VITE_PUBLIC_PAYLINK_ORIGIN || 'https://hashpaylink.com').replace(/\/+$/, '')
 const POLYMARKET_LOGO = '/brand/polymarket-logo.png'
+const SPORTMONKS_WIDGET_URL = (import.meta.env.VITE_SPORTMONKS_WIDGET_URL || '').trim()
+const SPORTMONKS_WIDGET_CSS_URL = (import.meta.env.VITE_SPORTMONKS_WIDGET_CSS_URL || '').trim()
+const SPORTMONKS_WIDGET_JS_URL = (import.meta.env.VITE_SPORTMONKS_WIDGET_JS_URL || '').trim()
+const SPORTMONKS_WIDGET_HTML = (import.meta.env.VITE_SPORTMONKS_WIDGET_HTML || '').trim()
 const MAX_USER_AGENTS = 3
 
 function displayTelegramName(rawName: string | null, fallback = 'there') {
@@ -148,7 +152,7 @@ const sectionServices: Record<TelegramSectionId, TelegramService[]> = {
     {
       id: 'poly-stream',
       title: 'World Cup Scores',
-      body: 'Live score widgets with direct Polymarket market routing and LP Scout handoff.',
+      body: 'Sportmonks live scores with exact Polymarket fixture routing.',
       icon: Radio,
       status: 'Open',
       active: true,
@@ -2576,6 +2580,61 @@ type PolyStreamFeed = {
   matches: PolyStreamMatch[]
 }
 
+function SportmonksLiveWidget() {
+  useEffect(() => {
+    if (SPORTMONKS_WIDGET_CSS_URL) {
+      const existing = document.querySelector(`link[data-sportmonks-widget-css="${SPORTMONKS_WIDGET_CSS_URL}"]`)
+      if (!existing) {
+        const link = document.createElement('link')
+        link.rel = 'stylesheet'
+        link.href = SPORTMONKS_WIDGET_CSS_URL
+        link.dataset.sportmonksWidgetCss = SPORTMONKS_WIDGET_CSS_URL
+        document.head.appendChild(link)
+      }
+    }
+    if (SPORTMONKS_WIDGET_JS_URL) {
+      const existing = document.querySelector(`script[data-sportmonks-widget-js="${SPORTMONKS_WIDGET_JS_URL}"]`)
+      if (!existing) {
+        const script = document.createElement('script')
+        script.src = SPORTMONKS_WIDGET_JS_URL
+        script.async = true
+        script.dataset.sportmonksWidgetJs = SPORTMONKS_WIDGET_JS_URL
+        document.body.appendChild(script)
+      }
+    }
+  }, [])
+
+  if (SPORTMONKS_WIDGET_URL) {
+    return (
+      <div className="overflow-hidden rounded-xl border border-gray-100 bg-white dark:border-white/10 dark:bg-white/[0.04]">
+        <iframe
+          title="Sportmonks World Cup live scores"
+          src={SPORTMONKS_WIDGET_URL}
+          className="h-[520px] w-full border-0"
+          loading="lazy"
+        />
+      </div>
+    )
+  }
+
+  if (SPORTMONKS_WIDGET_HTML) {
+    return (
+      <div className="overflow-hidden rounded-xl border border-gray-100 bg-white p-2 dark:border-white/10 dark:bg-white/[0.04]">
+        <div dangerouslySetInnerHTML={{ __html: SPORTMONKS_WIDGET_HTML }} />
+      </div>
+    )
+  }
+
+  return (
+    <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-4 text-center dark:border-white/10 dark:bg-white/[0.04]">
+      <p className="text-sm font-semibold text-gray-900 dark:text-white">Sportmonks widget not configured</p>
+      <p className="mx-auto mt-1 max-w-xs text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+        Add the widget embed from MySportmonks to show the live match board here.
+      </p>
+    </div>
+  )
+}
+
 function PolyStreamPanel({
   onBack,
   onOpenLpScout,
@@ -2589,6 +2648,7 @@ function PolyStreamPanel({
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const matches = feed?.matches ?? []
+  const exactMatches = matches.filter(match => polymarketUrl(match))
   const providerReady = Boolean(feed?.providerConfigured && feed.providerStatus === 'connected' && !error)
   const statusText = loading
     ? 'Refreshing'
@@ -2624,26 +2684,17 @@ function PolyStreamPanel({
   }, [])
 
   function askScout(match: PolyStreamMatch) {
+    const exactUrl = polymarketUrl(match)
+    if (!exactUrl) return
     onOpenLpScout({
-      mode: 'theme',
-      query: `World Cup match: ${match.title}. ${match.time}. ${match.status}. ${match.marketContext}`.replace(/\s+/g, ' ').slice(0, 170),
+      mode: 'market',
+      query: exactUrl,
     })
   }
 
   function polymarketUrl(match: PolyStreamMatch) {
     return match.polymarketUrl?.trim() || ''
   }
-
-  function hasScore(match: PolyStreamMatch) {
-    return match.homeScore !== undefined && match.homeScore !== '' && match.awayScore !== undefined && match.awayScore !== ''
-  }
-
-  const featuredMatch = matches[0]
-  const fixtureMatches = matches.slice(1)
-  const [featuredHome, featuredAway] = featuredMatch?.title.includes(' vs ')
-    ? featuredMatch.title.split(' vs ', 2)
-    : [featuredMatch?.title || 'World Cup', 'Market watch']
-  const featuredMarketUrl = featuredMatch ? polymarketUrl(featuredMatch) : ''
 
   return (
     <div className="mt-4 space-y-3">
@@ -2663,10 +2714,7 @@ function PolyStreamPanel({
             </span>
             <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">World Cup Scores</p>
           </div>
-          <h2 className="mt-2 text-base font-semibold tracking-tight text-gray-900 dark:text-white">Live score to market hub</h2>
-          <p className="mt-1 max-w-2xl text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-            Track match state, then open the related Polymarket market or ask LP Scout to check book depth before placing human orders.
-          </p>
+          <h2 className="mt-2 text-base font-semibold tracking-tight text-gray-900 dark:text-white">Live World Cup board</h2>
         </div>
         <span className={cn(
           'shrink-0 rounded-full px-2 py-1 text-[10px] font-bold sm:mt-7',
@@ -2678,29 +2726,17 @@ function PolyStreamPanel({
         </span>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.05]">
-        <div className="border-b border-gray-100 p-3 dark:border-white/10">
-          <div className="flex items-start gap-3">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gray-950 text-white dark:bg-white dark:text-gray-950">
-              <Radio className="h-4 w-4" />
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-gray-900 dark:text-white">Scoreboard first, market second</p>
-              <p className="mt-0.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                Hash PayLink turns each match row into a fast route to Polymarket, with LP Scout available when users want paid book checks.
-              </p>
-            </div>
-          </div>
-          <div className="mt-3 flex flex-wrap gap-1.5">
-            {providerReady ? (
-              <span className="inline-flex items-center justify-center rounded-lg bg-black px-2.5 py-1.5 text-[11px] font-semibold text-white shadow-sm dark:bg-white dark:text-gray-950">
-                Live feed ready
-              </span>
-            ) : (
-              <span className="inline-flex items-center justify-center rounded-lg bg-gray-100 px-2.5 py-1.5 text-[11px] font-semibold text-gray-600 dark:bg-white/[0.08] dark:text-gray-300">
-                Provider needed
-              </span>
-            )}
+      <div className="space-y-2 rounded-2xl border border-gray-100 bg-white p-2 shadow-sm dark:border-white/10 dark:bg-white/[0.05]">
+        <div className="flex items-center justify-between gap-2 px-1">
+          <span className={cn(
+            'inline-flex items-center justify-center rounded-lg px-2.5 py-1.5 text-[11px] font-semibold',
+            providerReady
+              ? 'bg-black text-white dark:bg-white dark:text-gray-950'
+              : 'bg-gray-100 text-gray-600 dark:bg-white/[0.08] dark:text-gray-300',
+          )}>
+            {providerReady ? 'Live feed' : 'Widget'}
+          </span>
+          <div className="flex gap-1.5">
             <button
               type="button"
               onClick={onOpenNews}
@@ -2712,140 +2748,40 @@ function PolyStreamPanel({
           </div>
         </div>
 
-        <div className="max-h-[420px] space-y-2 overflow-y-auto p-2 [scrollbar-color:rgba(148,163,184,0.35)_transparent] [scrollbar-width:thin] dark:[scrollbar-color:rgba(255,255,255,0.22)_transparent] [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300/40 dark:[&::-webkit-scrollbar-thumb]:bg-white/20">
-          {!loading && matches.length === 0 && (
-            <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-4 text-center dark:border-white/10 dark:bg-white/[0.04]">
-              <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                {feed?.providerConfigured ? 'No live or upcoming World Cup matches returned' : 'Live score provider not connected'}
-              </p>
-              <p className="mx-auto mt-1 max-w-sm text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                Connect Sportmonks or API-FOOTBALL in Render to show live and upcoming matches. Exact Polymarket buttons appear only after a verified market URL is mapped.
-              </p>
-            </div>
-          )}
-          {featuredMatch && (
-            <div className="rounded-xl border border-gray-950 bg-gray-950 p-3 text-white shadow-sm dark:border-white/10 dark:bg-white">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold uppercase text-gray-950">{featuredMatch.tag}</span>
-                  <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-semibold text-white ring-1 ring-white/15 dark:bg-gray-100 dark:text-gray-700 dark:ring-gray-200">{featuredMatch.time}</span>
-                </div>
-                <span className="rounded-full bg-emerald-400/15 px-2 py-0.5 text-[10px] font-bold text-emerald-100 ring-1 ring-emerald-300/20 dark:bg-emerald-50 dark:text-emerald-700 dark:ring-emerald-100">
-                  Market widget
-                </span>
-              </div>
-              <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
-                <div className="min-w-0 rounded-lg bg-white/10 p-2 text-center ring-1 ring-white/10 dark:bg-gray-50 dark:ring-gray-100">
-                  <p className="truncate text-sm font-semibold dark:text-gray-950">{featuredHome}</p>
-                  <p className="mt-0.5 text-[10px] font-semibold uppercase text-white/50 dark:text-gray-400">Home</p>
-                </div>
-                <div className="min-w-[62px] text-center">
-                  <p className="text-lg font-black tabular-nums text-white dark:text-gray-950">
-                    {hasScore(featuredMatch) ? `${featuredMatch.homeScore}-${featuredMatch.awayScore}` : 'vs'}
-                  </p>
-                  <p className="mt-0.5 text-[10px] font-bold uppercase text-white/50 dark:text-gray-400">{featuredMatch.clock || featuredMatch.status}</p>
-                </div>
-                <div className="min-w-0 rounded-lg bg-white/10 p-2 text-center ring-1 ring-white/10 dark:bg-gray-50 dark:ring-gray-100">
-                  <p className="truncate text-sm font-semibold dark:text-gray-950">{featuredAway}</p>
-                  <p className="mt-0.5 text-[10px] font-semibold uppercase text-white/50 dark:text-gray-400">Away</p>
-                </div>
-              </div>
-              <div className="mt-3 rounded-lg bg-white/10 p-2 ring-1 ring-white/10 dark:bg-gray-50 dark:ring-gray-100">
-                <p className="text-xs font-semibold text-white dark:text-gray-950">{featuredMatch.venue}</p>
-                <p className="mt-1 text-xs leading-relaxed text-white/70 dark:text-gray-500">{featuredMatch.marketContext}</p>
-              </div>
-              <div className="mt-3 flex flex-wrap gap-1.5">
-                {featuredMarketUrl ? (
-                  <a
-                    href={featuredMarketUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-emerald-400 px-2.5 py-1.5 text-[10px] font-bold text-gray-950 transition-all hover:bg-emerald-300 active:scale-[0.98]"
-                  >
-                    <LineChart className="h-3 w-3" />
-                    Open market
-                  </a>
-                ) : (
-                  <span className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-white/10 px-2.5 py-1.5 text-[10px] font-bold text-white/70 ring-1 ring-white/15 dark:bg-gray-100 dark:text-gray-500 dark:ring-gray-200">
-                    Market pending
-                  </span>
-                )}
-                {featuredMatch.sourceUrl && (
-                  <a
-                    href={featuredMatch.sourceUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-white px-2.5 py-1.5 text-[10px] font-semibold text-gray-950 transition-all hover:bg-gray-100 active:scale-[0.98] dark:bg-gray-950 dark:text-white"
-                  >
-                    <ExternalLink className="h-3 w-3" />
-                    Match source
-                  </a>
-                )}
-                <button
-                  type="button"
-                  onClick={() => askScout(featuredMatch)}
-                  className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-white/10 px-2.5 py-1.5 text-[10px] font-bold text-white ring-1 ring-white/15 transition-all hover:bg-white/20 active:scale-[0.98] dark:bg-gray-950 dark:text-white dark:ring-gray-900"
-                >
-                  <LineChart className="h-3 w-3" />
-                  Ask LP Scout
-                </button>
-              </div>
+        <SportmonksLiveWidget />
+
+        <div className="max-h-[260px] space-y-1.5 overflow-y-auto [scrollbar-color:rgba(148,163,184,0.35)_transparent] [scrollbar-width:thin] dark:[scrollbar-color:rgba(255,255,255,0.22)_transparent] [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300/40 dark:[&::-webkit-scrollbar-thumb]:bg-white/20">
+          {!loading && exactMatches.length === 0 && (
+            <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-3 text-center dark:border-white/10 dark:bg-white/[0.04]">
+              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400">Exact Polymarket links pending</p>
             </div>
           )}
 
-          {fixtureMatches.map(match => (
+          {exactMatches.map(match => (
             <div
               key={match.title}
-              className="rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]"
+              className="flex items-center justify-between gap-2 rounded-xl border border-gray-100 bg-gray-50/70 p-2 dark:border-white/10 dark:bg-white/[0.04]"
             >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold uppercase text-gray-600 dark:bg-white/[0.08] dark:text-gray-300">{match.tag}</span>
-                    <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-gray-500 dark:bg-white/[0.08] dark:text-gray-400">{match.time}</span>
-                  </div>
-                  <p className="mt-2 text-sm font-semibold text-gray-900 dark:text-white">{match.title}</p>
-                  <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                    {hasScore(match) ? `${match.homeScore}-${match.awayScore}` : match.status}
-                    {match.clock ? ` · ${match.clock}` : ''} · {match.venue}
-                  </p>
-                  <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">{match.marketContext}</p>
-                </div>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">{match.title}</p>
+                <p className="mt-0.5 truncate text-[11px] text-gray-500 dark:text-gray-400">{match.tag} · {match.time}</p>
               </div>
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {polymarketUrl(match) ? (
-                  <a
-                    href={polymarketUrl(match)}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-gray-900 px-2.5 py-1.5 text-[10px] font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950"
-                  >
-                    <LineChart className="h-3 w-3" />
-                    Open market
-                  </a>
-                ) : (
-                  <span className="inline-flex items-center justify-center rounded-lg bg-gray-100 px-2.5 py-1.5 text-[10px] font-semibold text-gray-500 dark:bg-white/[0.08] dark:text-gray-400">
-                    Market pending
-                  </span>
-                )}
-                {match.sourceUrl && (
-                  <a
-                    href={match.sourceUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[10px] font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200"
-                  >
-                    <ExternalLink className="h-3 w-3" />
-                    Match source
-                  </a>
-                )}
+              <div className="flex shrink-0 gap-1.5">
+                <a
+                  href={polymarketUrl(match)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-gray-900 px-2.5 py-1.5 text-[10px] font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950"
+                >
+                  <LineChart className="h-3 w-3" />
+                  Market
+                </a>
                 <button
                   type="button"
                   onClick={() => askScout(match)}
-                  className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[10px] font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200"
+                  className="inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[10px] font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200"
                 >
-                  <LineChart className="h-3 w-3" />
-                  Ask LP Scout
+                  LP Scout
                 </button>
               </div>
             </div>
