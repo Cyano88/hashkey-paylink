@@ -3,6 +3,7 @@ import type { Request, Response } from 'express'
 type ProviderMatch = Record<string, unknown>
 
 type ScoreMatch = {
+  fixtureId?: string
   tag: string
   title: string
   time: string
@@ -11,6 +12,13 @@ type ScoreMatch = {
   homeScore?: number | string
   awayScore?: number | string
   clock?: string
+  homeCoach?: string
+  awayCoach?: string
+  probability?: string
+  h2h?: string
+  form?: string
+  events?: string[]
+  stats?: string[]
   marketContext: string
   sourceUrl: string
   polymarketUrl?: string
@@ -149,6 +157,63 @@ function sportmonksScore(match: ProviderMatch, location: 'home' | 'away') {
   return asScore(score.goals)
 }
 
+function compactName(value: unknown) {
+  const record = asRecord(value)
+  return asString(record.display_name) || asString(record.name) || asString(record.common_name)
+}
+
+function sportmonksCoach(match: ProviderMatch, location: 'home' | 'away') {
+  const coaches = Array.isArray(match.coaches) ? match.coaches : []
+  const found = coaches.find(item => {
+    const record = asRecord(item)
+    const meta = asRecord(record.meta)
+    return asString(meta.location).toLowerCase() === location
+  })
+  return compactName(found)
+}
+
+function sportmonksEvents(match: ProviderMatch) {
+  const events = Array.isArray(match.events) ? match.events : []
+  return events.slice(0, 6).map(item => {
+    const record = asRecord(item)
+    const type = asString(asRecord(record.type).name) || asString(record.type) || asString(record.type_name) || 'Event'
+    const minute = asString(record.minute) || asString(record.period_minute)
+    const player = compactName(record.player) || asString(record.player_name) || asString(record.related_player_name)
+    const team = asString(record.participant_name) || asString(asRecord(record.participant).name)
+    return [minute ? `${minute}'` : '', type, player, team].filter(Boolean).join(' ')
+  }).filter(Boolean)
+}
+
+function sportmonksStats(match: ProviderMatch) {
+  const stats = Array.isArray(match.statistics) ? match.statistics : []
+  return stats.slice(0, 6).map(item => {
+    const record = asRecord(item)
+    const type = asString(asRecord(record.type).name) || asString(record.type) || asString(record.type_name)
+    const value = asString(record.value) || String(record.value ?? '')
+    const team = asString(record.participant_name) || asString(asRecord(record.participant).name)
+    return [team, type, value].filter(Boolean).join(' ')
+  }).filter(Boolean)
+}
+
+function sportmonksProbability(match: ProviderMatch) {
+  const predictions = Array.isArray(match.predictions) ? match.predictions : []
+  const probability = predictions.find(item => {
+    const record = asRecord(item)
+    const type = `${asString(record.type)} ${asString(asRecord(record.type).name)}`.toLowerCase()
+    return /prob|winner|result/.test(type)
+  }) || asRecord(match).probability
+  const record = asRecord(probability)
+  const home = record.home ?? record.localteam ?? record.home_win
+  const draw = record.draw
+  const away = record.away ?? record.visitorteam ?? record.away_win
+  const parts = [
+    home !== undefined ? `Home ${home}` : '',
+    draw !== undefined ? `Draw ${draw}` : '',
+    away !== undefined ? `Away ${away}` : '',
+  ].filter(Boolean)
+  return parts.join(' / ')
+}
+
 function normalizeSportmonks(match: ProviderMatch): ScoreMatch | null {
   const home = sportmonksParticipantName(match, 'home')
   const away = sportmonksParticipantName(match, 'away')
@@ -164,6 +229,7 @@ function normalizeSportmonks(match: ProviderMatch): ScoreMatch | null {
   const clock = asString(match.minute) || asString(match.periods) || ''
 
   return {
+    fixtureId,
     tag: tagFor(status, startingAt),
     title,
     time: readableTime(startingAt),
@@ -172,6 +238,11 @@ function normalizeSportmonks(match: ProviderMatch): ScoreMatch | null {
     homeScore: sportmonksScore(match, 'home'),
     awayScore: sportmonksScore(match, 'away'),
     clock,
+    homeCoach: sportmonksCoach(match, 'home'),
+    awayCoach: sportmonksCoach(match, 'away'),
+    probability: sportmonksProbability(match),
+    events: sportmonksEvents(match),
+    stats: sportmonksStats(match),
     marketContext: `${title}. ${status}. Open the exact Polymarket market when mapped, or ask LP Scout to check related match, group, qualification, scorer, and outright books.`,
     sourceUrl: fixtureId ? `https://www.sportmonks.com/football/fixtures/${fixtureId}` : '',
     polymarketUrl: exactPolymarketUrl(title, [`sportmonks:${fixtureId}`, `league:${leagueId}:${home}:${away}`]),
@@ -199,6 +270,7 @@ function normalizeApiFootball(match: ProviderMatch): ScoreMatch | null {
   const elapsed = status.elapsed
 
   return {
+    fixtureId,
     tag: tagFor(asString(status.short) || asString(status.long), date),
     title,
     time: readableTime(date),
@@ -233,12 +305,13 @@ function isoDate(offsetDays = 0) {
   return date.toISOString().slice(0, 10)
 }
 
-function sportmonksUrls(mode: FixtureMode) {
+function sportmonksUrls(mode: FixtureMode, baseOnly = false) {
   const explicit = envValue('POLY_STREAM_API_URL', 'SPORTS_API_URL')
   if (explicit) return [explicit]
   const league = process.env.POLY_STREAM_LEAGUE_ID?.trim() || '732'
   const base = process.env.POLY_STREAM_BASE_URL?.trim() || DEFAULT_SPORTMONKS_BASE
-  const include = 'participants;state;scores;venue;league'
+  const baseInclude = 'participants;state;scores;venue;league'
+  const include = baseOnly ? baseInclude : process.env.POLY_STREAM_INCLUDE?.trim() || `${baseInclude};events;statistics;coaches;predictions`
   const withCommonParams = (path: string) => {
     const url = new URL(`${base}${path}`)
     url.searchParams.set('include', include)
@@ -263,6 +336,16 @@ async function fetchProviderMode(provider: string, apiKey: string, mode: Fixture
       if (matches.length) results.push(...matches)
     } catch (err) {
       lastError = err instanceof Error ? err.message : 'Score provider failed.'
+    }
+  }
+  if (!results.length && lastError && provider !== 'api-football' && provider !== 'api-sports') {
+    for (const url of sportmonksUrls(mode, true)) {
+      try {
+        const matches = await fetchProviderUrl(provider, apiKey, url)
+        if (matches.length) results.push(...matches)
+      } catch (err) {
+        lastError = err instanceof Error ? err.message : 'Score provider failed.'
+      }
     }
   }
   if (!results.length && lastError) throw new Error(lastError)
