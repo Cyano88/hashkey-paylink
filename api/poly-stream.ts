@@ -69,6 +69,28 @@ function safeProviderMessage(value: unknown) {
     .slice(0, 260)
 }
 
+function configuredWatchUrls() {
+  const raw = process.env.POLY_STREAM_WATCH_URLS?.trim()
+  if (!raw) return {}
+  try {
+    const parsed = JSON.parse(raw)
+    return parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : {}
+  } catch (_err) {
+    return {}
+  }
+}
+
+function watchUrlFor(title: string) {
+  const urls = configuredWatchUrls()
+  const direct = urls[title]
+  if (typeof direct === 'string') return direct.trim()
+  const normalizedTitle = title.toLowerCase()
+  for (const [key, value] of Object.entries(urls)) {
+    if (typeof value === 'string' && key.toLowerCase() === normalizedTitle) return value.trim()
+  }
+  return ''
+}
+
 function extractMatches(payload: unknown): ProviderMatch[] {
   if (Array.isArray(payload)) return payload.filter(item => item && typeof item === 'object') as ProviderMatch[]
   const data = asRecord(payload)
@@ -216,7 +238,7 @@ function normalizeMatch(match: ProviderMatch): PolyStreamMatch | null {
     status,
     marketContext: context,
     sourceUrl: url,
-    watchUrl: url,
+    watchUrl: watchUrlFor(title) || url,
   }
 }
 
@@ -230,7 +252,7 @@ function fallbackMatches(): PolyStreamMatch[] {
       status: 'Live/recent',
       marketContext: 'Host-nation Group D opener. Check USA momentum, Paraguay response, group qualification, scorer, and live sentiment markets before asking LP Scout.',
       sourceUrl: 'https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026',
-      watchUrl: '',
+      watchUrl: watchUrlFor('USA vs Paraguay'),
     },
     {
       tag: 'Today',
@@ -240,7 +262,7 @@ function fallbackMatches(): PolyStreamMatch[] {
       status: 'Desk mode',
       marketContext: 'Group C opener. Check Scotland, Haiti, group qualification, and underdog headline markets before asking LP Scout for paid book depth.',
       sourceUrl: 'https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026',
-      watchUrl: '',
+      watchUrl: watchUrlFor('Haiti vs Scotland'),
     },
     {
       tag: 'Today',
@@ -250,7 +272,7 @@ function fallbackMatches(): PolyStreamMatch[] {
       status: 'Desk mode',
       marketContext: 'Group D match with strong regional interest. Watch team news and early price movement before checking related Polymarket liquidity.',
       sourceUrl: 'https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026',
-      watchUrl: '',
+      watchUrl: watchUrlFor('Australia vs Türkiye') || watchUrlFor('Australia vs Turkiye'),
     },
     {
       tag: 'Today',
@@ -260,7 +282,7 @@ function fallbackMatches(): PolyStreamMatch[] {
       status: 'Desk mode',
       marketContext: 'High-attention Group C fixture. Watch Brazil outright, Morocco upset, scorer, and group-table markets before asking LP Scout.',
       sourceUrl: 'https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026',
-      watchUrl: '',
+      watchUrl: watchUrlFor('Brazil vs Morocco'),
     },
     {
       tag: 'Today',
@@ -270,7 +292,7 @@ function fallbackMatches(): PolyStreamMatch[] {
       status: 'Desk mode',
       marketContext: 'Group B fixture. Check qualification, match winner, and news-driven pricing before committing to any LP strategy.',
       sourceUrl: 'https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026',
-      watchUrl: '',
+      watchUrl: watchUrlFor('Qatar vs Switzerland'),
     },
     {
       tag: 'Tomorrow',
@@ -280,7 +302,7 @@ function fallbackMatches(): PolyStreamMatch[] {
       status: 'Desk mode',
       marketContext: 'Group E opener. Use early news and lineup context to decide if related Polymarket books deserve a paid scout.',
       sourceUrl: 'https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026',
-      watchUrl: '',
+      watchUrl: watchUrlFor("Cote d'Ivoire vs Ecuador"),
     },
     {
       tag: 'Tomorrow',
@@ -290,7 +312,7 @@ function fallbackMatches(): PolyStreamMatch[] {
       status: 'Desk mode',
       marketContext: 'High-attention Group E fixture. Watch favorite pricing, handicap narratives, and scorer markets before asking LP Scout.',
       sourceUrl: 'https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026',
-      watchUrl: '',
+      watchUrl: watchUrlFor('Germany vs Curacao'),
     },
   ]
 }
