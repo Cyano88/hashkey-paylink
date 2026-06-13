@@ -2591,7 +2591,13 @@ type PolyStreamFeed = {
 
 type ScoreDetailItem =
   | { type: 'goals'; label: string; goals: string[] }
+  | { type: 'events'; label: string; events: MatchEventDetail[] }
   | { type: 'text'; label: string; value: string }
+
+type MatchEventDetail = {
+  text: string
+  kind: 'sub' | 'yellow' | 'red' | 'yellow-red' | 'event'
+}
 
 function hasMatchScore(match: PolyStreamMatch) {
   return match.homeScore !== undefined && match.homeScore !== '' && match.awayScore !== undefined && match.awayScore !== ''
@@ -2739,7 +2745,10 @@ function readableMatchClock(value?: string) {
   const minute = text.match(/^(\d+)'$/)
   if (minute) {
     const count = Number(minute[1])
-    if (Number.isFinite(count)) return `${count} ${count === 1 ? 'min' : 'mins'}`
+    if (Number.isFinite(count)) {
+      if (count > 90) return `90+${count - 90} mins`
+      return `${count} ${count === 1 ? 'min' : 'mins'}`
+    }
   }
   return text
 }
@@ -2762,7 +2771,6 @@ function compactMatchTime(match: PolyStreamMatch) {
 function detailItems(match: PolyStreamMatch) {
   const items: ScoreDetailItem[] = []
   const [home, away] = splitFixtureTitle(match.title)
-  if (hasMatchScore(match)) items.push({ type: 'text', label: 'Score', value: `${home} ${match.homeScore}-${match.awayScore} ${away}` })
   if (match.venue && match.venue !== 'World Cup venue') items.push({ type: 'text', label: 'Stadium', value: match.venue })
   const goals = (match.goalScorers || []).map(goal => formatGoalScorer(goal, home, away)).filter(Boolean)
   if (goals.length) items.push({ type: 'goals', label: 'Goals', goals })
@@ -2775,25 +2783,54 @@ function detailItems(match: PolyStreamMatch) {
   if (match.weather) items.push({ type: 'text', label: 'Weather', value: match.weather })
   const events = (match.events || []).filter(Boolean)
   const nonGoalEvents = goals.length ? events.filter(event => !/\b(goal|penalty)\b/i.test(event)) : events
-  if (nonGoalEvents.length) items.push({ type: 'text', label: 'Events', value: nonGoalEvents.slice(0, 2).join(' | ') })
+  const keyEvents = nonGoalEvents.map(event => formatMatchEvent(event, home, away)).filter((event): event is MatchEventDetail => Boolean(event))
+  if (keyEvents.length) items.push({ type: 'events', label: 'Events', events: keyEvents })
   const stats = (match.stats || []).filter(Boolean)
   if (stats.length) items.push({ type: 'text', label: 'Stats', value: stats.slice(0, 2).join(' | ') })
   return items
 }
 
 function formatGoalScorer(value: string, home: string, away: string) {
+  let text = stripMatchTeams(value, home, away)
+  text = text.replace(/\s+/g, ' ').trim()
+  return text
+}
+
+function stripMatchTeams(value: string, home: string, away: string) {
   let text = value.trim()
   for (const team of [home, away].filter(Boolean)) {
     const escaped = team.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     text = text.replace(new RegExp(`\\s+${escaped}$`, 'i'), '')
   }
-  text = text.replace(/\s+/g, ' ').trim()
   return text
 }
 
-function goalPages(goals: string[]) {
-  const pages: string[][] = []
-  for (let index = 0; index < goals.length; index += 2) pages.push(goals.slice(index, index + 2))
+function formatMatchEvent(value: string, home: string, away: string): MatchEventDetail | null {
+  let text = stripMatchTeams(value, home, away)
+  const lower = text.toLowerCase()
+  if (/\b(goal|penalty)\b/.test(lower)) return null
+
+  let kind: MatchEventDetail['kind'] = 'event'
+  if (/yellow\s+red/.test(lower)) kind = 'yellow-red'
+  else if (/\bred\b/.test(lower)) kind = 'red'
+  else if (/\byellow\b/.test(lower)) kind = 'yellow'
+  else if (/\bsubstitution\b|\bsub\b/.test(lower)) kind = 'sub'
+
+  text = text
+    .replace(/\bSubstitution\b/i, 'Sub')
+    .replace(/\bYellow Red Card\b/i, '2nd yellow')
+    .replace(/\bYellow Card\b/i, '')
+    .replace(/\bRed Card\b/i, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+  if (!text) return null
+  return { text, kind }
+}
+
+function detailPages<T>(items: T[]) {
+  const pages: T[][] = []
+  for (let index = 0; index < items.length; index += 2) pages.push(items.slice(index, index + 2))
   return pages
 }
 
@@ -2823,6 +2860,24 @@ function MarketPricePill({ value }: { value?: string }) {
   )
 }
 
+function EventMark({ kind }: { kind: MatchEventDetail['kind'] }) {
+  if (kind === 'yellow') {
+    return <span className="h-2.5 w-2 rounded-[2px] bg-yellow-300 shadow-sm ring-1 ring-black/20" aria-label="yellow card" />
+  }
+  if (kind === 'red') {
+    return <span className="h-2.5 w-2 rounded-[2px] bg-red-500 shadow-sm ring-1 ring-black/20" aria-label="red card" />
+  }
+  if (kind === 'yellow-red') {
+    return (
+      <span className="relative inline-flex h-2.5 w-3" aria-label="second yellow red card">
+        <span className="absolute left-0 top-0 h-2.5 w-2 rounded-[2px] bg-yellow-300 shadow-sm ring-1 ring-black/20" />
+        <span className="absolute right-0 top-0 h-2.5 w-2 rounded-[2px] bg-red-500 shadow-sm ring-1 ring-black/20" />
+      </span>
+    )
+  }
+  return null
+}
+
 function HashLiveScoreWidget({
   matches,
   loading,
@@ -2838,7 +2893,7 @@ function HashLiveScoreWidget({
 }) {
   const [selectedMatchKey, setSelectedMatchKey] = useState('')
   const [detailIndex, setDetailIndex] = useState(0)
-  const [goalPageIndex, setGoalPageIndex] = useState(0)
+  const [detailPageIndex, setDetailPageIndex] = useState(0)
   const [, setCountdownTick] = useState(0)
   const featured = matches.find(match => matchKey(match) === selectedMatchKey) || matches[0]
   const rest = featured ? matches.filter(match => matchKey(match) !== matchKey(featured)) : []
@@ -2848,8 +2903,12 @@ function HashLiveScoreWidget({
   const awayFlag = flagUrlForTeam(away)
   const featuredDetails = useMemo(() => featured ? detailItems(featured) : [], [featured])
   const activeDetail = featuredDetails.length ? featuredDetails[detailIndex % featuredDetails.length] : null
-  const activeGoalPages = activeDetail?.type === 'goals' ? goalPages(activeDetail.goals) : []
-  const activeGoalPage = activeGoalPages[goalPageIndex % Math.max(activeGoalPages.length, 1)] || []
+  const activePagedItems = activeDetail?.type === 'goals'
+    ? detailPages(activeDetail.goals)
+    : activeDetail?.type === 'events'
+      ? detailPages(activeDetail.events)
+      : []
+  const activeDetailPage = activePagedItems[detailPageIndex % Math.max(activePagedItems.length, 1)] || []
 
   useEffect(() => {
     if (!matches.length) return
@@ -2858,25 +2917,27 @@ function HashLiveScoreWidget({
 
   useEffect(() => {
     setDetailIndex(0)
-    setGoalPageIndex(0)
+    setDetailPageIndex(0)
   }, [selectedMatchKey])
 
   useEffect(() => {
     const timer = window.setInterval(() => {
       if (!featuredDetails.length) return
       const current = featuredDetails[detailIndex % featuredDetails.length]
-      if (current?.type === 'goals') {
-        const pages = goalPages(current.goals)
-        if (pages.length > 1 && goalPageIndex < pages.length - 1) {
-          setGoalPageIndex(currentPage => currentPage + 1)
+      const pages = current?.type === 'goals'
+        ? detailPages(current.goals)
+        : current?.type === 'events'
+          ? detailPages(current.events)
+          : []
+      if (pages.length > 1 && detailPageIndex < pages.length - 1) {
+          setDetailPageIndex(currentPage => currentPage + 1)
           return
-        }
       }
-      setGoalPageIndex(0)
+      setDetailPageIndex(0)
       setDetailIndex(currentIndex => (currentIndex + 1) % featuredDetails.length)
-    }, activeDetail?.type === 'goals' ? 5_000 : 10_000)
+    }, activeDetail?.type === 'goals' || activeDetail?.type === 'events' ? 5_000 : 10_000)
     return () => window.clearInterval(timer)
-  }, [activeDetail?.type, detailIndex, featuredDetails, goalPageIndex, selectedMatchKey])
+  }, [activeDetail?.type, detailIndex, featuredDetails, detailPageIndex, selectedMatchKey])
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -3009,14 +3070,27 @@ function HashLiveScoreWidget({
               <p className="text-[9px] font-black uppercase tracking-[0.16em] text-white/45">{activeDetail.label}</p>
               {activeDetail.type === 'goals' ? (
                 <div
-                  key={`${selectedMatchKey}-${goalPageIndex}`}
+                  key={`${selectedMatchKey}-${detailPageIndex}`}
                   className="mt-1 flex min-h-[18px] animate-[hpGoalRise_.28s_ease-out] items-center justify-center gap-2 overflow-hidden text-[11px] font-semibold leading-snug text-white/90"
                 >
-                  {activeGoalPage.map((goal, index) => (
+                  {(activeDetailPage as string[]).map((goal, index) => (
                     <span key={`${goal}-${index}`} className="inline-flex min-w-0 items-center gap-1">
                       <span className="truncate">{goal}</span>
-                      <span className="shrink-0 text-[10px]" aria-hidden="true">⚽</span>
-                      {index < activeGoalPage.length - 1 && <span className="ml-1 shrink-0 text-white/35">|</span>}
+                      <span className="shrink-0 text-[10px]" aria-hidden="true">&#9917;</span>
+                      {index < activeDetailPage.length - 1 && <span className="ml-1 shrink-0 text-white/35">|</span>}
+                    </span>
+                  ))}
+                </div>
+              ) : activeDetail.type === 'events' ? (
+                <div
+                  key={`${selectedMatchKey}-${detailPageIndex}`}
+                  className="mt-1 flex min-h-[18px] animate-[hpGoalRise_.28s_ease-out] items-center justify-center gap-2 overflow-hidden text-[11px] font-semibold leading-snug text-white/90"
+                >
+                  {(activeDetailPage as MatchEventDetail[]).map((event, index) => (
+                    <span key={`${event.text}-${index}`} className="inline-flex min-w-0 items-center gap-1">
+                      <span className="truncate">{event.text}</span>
+                      <EventMark kind={event.kind} />
+                      {index < activeDetailPage.length - 1 && <span className="ml-1 shrink-0 text-white/35">|</span>}
                     </span>
                   ))}
                 </div>
