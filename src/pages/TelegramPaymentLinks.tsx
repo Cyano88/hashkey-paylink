@@ -2565,8 +2565,6 @@ type PolyStreamMatch = {
   marketContext: string
   sourceUrl: string
   polymarketUrl?: string
-  watchUrl: string
-  watchProviders?: Array<{ label: string; url: string }>
 }
 
 type PolyStreamFeed = {
@@ -2577,83 +2575,6 @@ type PolyStreamFeed = {
   updatedAt: string
   matches: PolyStreamMatch[]
 }
-
-const fallbackPolyStreamMatches: PolyStreamMatch[] = [
-  {
-    tag: 'Live now',
-    title: 'USA vs Paraguay',
-    time: 'June 12/13',
-    venue: 'Los Angeles Stadium',
-    status: 'Live/recent',
-    homeScore: 0,
-    awayScore: 0,
-    clock: 'Live',
-    marketContext: 'Host-nation Group D opener. Check USA momentum, Paraguay response, group qualification, scorer, and live sentiment markets before asking LP Scout.',
-    sourceUrl: 'https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026',
-    polymarketUrl: 'https://polymarket.com/search?query=USA%20Paraguay',
-    watchUrl: '',
-  },
-  {
-    tag: 'Today',
-    title: 'Haiti vs Scotland',
-    time: 'June 13',
-    venue: 'Boston Stadium',
-    status: 'Desk mode',
-    marketContext: 'Group C opener. Check Scotland, Haiti, group qualification, and underdog headline markets before asking LP Scout for paid book depth.',
-    sourceUrl: 'https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026',
-    watchUrl: '',
-  },
-  {
-    tag: 'Today',
-    title: 'Australia vs Turkiye',
-    time: 'June 13',
-    venue: 'BC Place Vancouver',
-    status: 'Desk mode',
-    marketContext: 'Group D match with strong regional interest. Watch team news and early price movement before checking related Polymarket liquidity.',
-    sourceUrl: 'https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026',
-    watchUrl: '',
-  },
-  {
-    tag: 'Today',
-    title: 'Brazil vs Morocco',
-    time: 'June 13',
-    venue: 'New York New Jersey Stadium',
-    status: 'Desk mode',
-    marketContext: 'High-attention Group C fixture. Watch Brazil outright, Morocco upset, scorer, and group-table markets before asking LP Scout.',
-    sourceUrl: 'https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026',
-    watchUrl: '',
-  },
-  {
-    tag: 'Today',
-    title: 'Qatar vs Switzerland',
-    time: 'June 13',
-    venue: 'San Francisco Bay Area Stadium',
-    status: 'Desk mode',
-    marketContext: 'Group B fixture. Check qualification, match winner, and news-driven pricing before committing to any LP strategy.',
-    sourceUrl: 'https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026',
-    watchUrl: '',
-  },
-  {
-    tag: 'Tomorrow',
-    title: "Cote d'Ivoire vs Ecuador",
-    time: 'June 14',
-    venue: 'Philadelphia Stadium',
-    status: 'Desk mode',
-    marketContext: 'Group E opener. Use early news and lineup context to decide if related Polymarket books deserve a paid scout.',
-    sourceUrl: 'https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026',
-    watchUrl: '',
-  },
-  {
-    tag: 'Tomorrow',
-    title: 'Germany vs Curacao',
-    time: 'June 14',
-    venue: 'Houston Stadium',
-    status: 'Desk mode',
-    marketContext: 'High-attention Group E fixture. Watch favorite pricing, handicap narratives, and scorer markets before asking LP Scout.',
-    sourceUrl: 'https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026',
-    watchUrl: '',
-  },
-]
 
 function PolyStreamPanel({
   onBack,
@@ -2667,15 +2588,17 @@ function PolyStreamPanel({
   const [feed, setFeed] = useState<PolyStreamFeed | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const matches = feed?.matches?.length ? feed.matches : fallbackPolyStreamMatches
-  const providerReady = Boolean(feed?.providerConfigured && feed.source !== 'fallback' && !error)
+  const matches = feed?.matches ?? []
+  const providerReady = Boolean(feed?.providerConfigured && feed.providerStatus === 'connected' && !error)
   const statusText = loading
     ? 'Refreshing'
     : error
-    ? 'Desk mode'
+    ? 'Provider error'
     : providerReady
     ? `Updated ${relativeNewsTime(feed.updatedAt)}`
-    : 'Desk mode'
+    : feed?.providerConfigured
+    ? 'No live matches'
+    : 'Provider needed'
 
   useEffect(() => {
     let cancelled = false
@@ -2708,7 +2631,7 @@ function PolyStreamPanel({
   }
 
   function polymarketUrl(match: PolyStreamMatch) {
-    return match.polymarketUrl || `https://polymarket.com/search?query=${encodeURIComponent(match.title)}`
+    return match.polymarketUrl?.trim() || ''
   }
 
   function hasScore(match: PolyStreamMatch) {
@@ -2720,6 +2643,7 @@ function PolyStreamPanel({
   const [featuredHome, featuredAway] = featuredMatch?.title.includes(' vs ')
     ? featuredMatch.title.split(' vs ', 2)
     : [featuredMatch?.title || 'World Cup', 'Market watch']
+  const featuredMarketUrl = featuredMatch ? polymarketUrl(featuredMatch) : ''
 
   return (
     <div className="mt-4 space-y-3">
@@ -2774,7 +2698,7 @@ function PolyStreamPanel({
               </span>
             ) : (
               <span className="inline-flex items-center justify-center rounded-lg bg-gray-100 px-2.5 py-1.5 text-[11px] font-semibold text-gray-600 dark:bg-white/[0.08] dark:text-gray-300">
-                Curated scores
+                Provider needed
               </span>
             )}
             <button
@@ -2789,6 +2713,16 @@ function PolyStreamPanel({
         </div>
 
         <div className="max-h-[420px] space-y-2 overflow-y-auto p-2 [scrollbar-color:rgba(148,163,184,0.35)_transparent] [scrollbar-width:thin] dark:[scrollbar-color:rgba(255,255,255,0.22)_transparent] [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300/40 dark:[&::-webkit-scrollbar-thumb]:bg-white/20">
+          {!loading && matches.length === 0 && (
+            <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-4 text-center dark:border-white/10 dark:bg-white/[0.04]">
+              <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                {feed?.providerConfigured ? 'No live World Cup matches right now' : 'Live score provider not connected'}
+              </p>
+              <p className="mx-auto mt-1 max-w-sm text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                Connect Sportmonks or API-FOOTBALL in Render to show live scores. Exact Polymarket buttons appear only after a verified market URL is mapped.
+              </p>
+            </div>
+          )}
           {featuredMatch && (
             <div className="rounded-xl border border-gray-950 bg-gray-950 p-3 text-white shadow-sm dark:border-white/10 dark:bg-white">
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -2821,15 +2755,21 @@ function PolyStreamPanel({
                 <p className="mt-1 text-xs leading-relaxed text-white/70 dark:text-gray-500">{featuredMatch.marketContext}</p>
               </div>
               <div className="mt-3 flex flex-wrap gap-1.5">
-                <a
-                  href={polymarketUrl(featuredMatch)}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-emerald-400 px-2.5 py-1.5 text-[10px] font-bold text-gray-950 transition-all hover:bg-emerald-300 active:scale-[0.98]"
-                >
-                  <LineChart className="h-3 w-3" />
-                  Open market
-                </a>
+                {featuredMarketUrl ? (
+                  <a
+                    href={featuredMarketUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-emerald-400 px-2.5 py-1.5 text-[10px] font-bold text-gray-950 transition-all hover:bg-emerald-300 active:scale-[0.98]"
+                  >
+                    <LineChart className="h-3 w-3" />
+                    Open market
+                  </a>
+                ) : (
+                  <span className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-white/10 px-2.5 py-1.5 text-[10px] font-bold text-white/70 ring-1 ring-white/15 dark:bg-gray-100 dark:text-gray-500 dark:ring-gray-200">
+                    Market pending
+                  </span>
+                )}
                 {featuredMatch.sourceUrl && (
                   <a
                     href={featuredMatch.sourceUrl}
@@ -2873,15 +2813,21 @@ function PolyStreamPanel({
                 </div>
               </div>
               <div className="mt-2 flex flex-wrap gap-1.5">
-                <a
-                  href={polymarketUrl(match)}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-gray-900 px-2.5 py-1.5 text-[10px] font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950"
-                >
-                  <LineChart className="h-3 w-3" />
-                  Open market
-                </a>
+                {polymarketUrl(match) ? (
+                  <a
+                    href={polymarketUrl(match)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-gray-900 px-2.5 py-1.5 text-[10px] font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950"
+                  >
+                    <LineChart className="h-3 w-3" />
+                    Open market
+                  </a>
+                ) : (
+                  <span className="inline-flex items-center justify-center rounded-lg bg-gray-100 px-2.5 py-1.5 text-[10px] font-semibold text-gray-500 dark:bg-white/[0.08] dark:text-gray-400">
+                    Market pending
+                  </span>
+                )}
                 {match.sourceUrl && (
                   <a
                     href={match.sourceUrl}
