@@ -46,6 +46,8 @@ services:
         value: "0xBAecf54084A0cB65b77a88cbDEf2b663Be71c61b"
       - key: VITE_STREAM_FACTORY_ADDRESS
         value: "0xBAecf54084A0cB65b77a88cbDEf2b663Be71c61b"
+      - key: VITE_ARENA_ESCROW_ADDRESS
+        sync: false                   # Public Arena escrow address after multiplayer room contract deploy
       - key: BASE_GAS_RECOVERY_USDC
         value: "0.01"
       - key: ARBITRUM_GAS_RECOVERY_USDC

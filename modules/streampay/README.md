@@ -38,6 +38,7 @@ Set in Render → Service → **Environment**.
 | `PRIVATE_RPC_URL_ARC` | Server | Alchemy or private Arc RPC endpoint |
 | `STREAM_FACTORY_ADDRESS` | Server | `StreamVaultFactory` address |
 | `VITE_STREAM_FACTORY_ADDRESS` | Browser | Same — must match server value |
+| `VITE_ARENA_ESCROW_ADDRESS` | Browser | Dedicated multiplayer Arena escrow address. Leave empty until deployed; paid room deposits stay disabled while empty |
 | `ARC_POA_CONTRACT` | Server | `PoASettlement` address |
 | `VITE_POA_CONTRACT` | Browser | Same — must match server value |
 
@@ -48,9 +49,11 @@ Never add `VITE_` to private keys — they would be exposed to the browser.
 
 ### Arena Storage
 
-StreamPay Arena uses Postgres as the durable source of truth for private room settings. Set `DATABASE_URL` on Render. The `/api/arena-room` route stores entry amount, player count, round count, risk curve, timer, start rule, and room status in the `arena_rooms` table. The table is created automatically on first use.
+StreamPay Arena uses Postgres as the durable source of truth for private room settings. Set `DATABASE_URL` on Render. The `/api/arena-room` route stores entry amount, player count, round count, risk curve, timer, start rule, room status, escrow/payment status, deposit asset, and the fixed 0.5% platform fee in the `arena_rooms` table. The table is created or migrated automatically on first use.
 
-0G Storage should be used later for permanent room proofs and final result archives, while Arc contracts handle USDC deposits, stream halts, refunds, and winner claims.
+Postgres does not custody funds. Real-money Arena deposits, stream halts, refunds, platform fee collection, and winner claims must go through the dedicated Arc Arena escrow contract. Until `VITE_ARENA_ESCROW_ADDRESS` points to that contract, the UI keeps paid deposits/start disabled and only saves private lobbies.
+
+0G Storage should be used later for permanent room proofs and final result archives, while Arc contracts handle USDC custody and settlement.
 
 ## Module Structure
 

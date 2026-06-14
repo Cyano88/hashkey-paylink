@@ -7,6 +7,7 @@ type RoomStatus = 'setup' | 'lobby' | 'playing' | 'eliminated' | 'won'
 type ArenaTab = 'room' | 'how' | 'settings'
 type ArenaView = 'games' | 'mode' | 'private'
 type StartRule = 'host' | 'full'
+type PaymentStatus = 'escrow_pending' | 'deposit_open' | 'funded' | 'settled'
 
 type SavedArenaRoom = {
   roomId: string
@@ -17,6 +18,10 @@ type SavedArenaRoom = {
   timer: number
   startRule: StartRule
   status: 'lobby' | 'playing' | 'completed' | 'cancelled'
+  paymentStatus: PaymentStatus
+  escrowAddress: string | null
+  depositAsset: 'USDC'
+  platformFeeBps: number
 }
 
 function readInitialArenaView(): ArenaView {
@@ -39,6 +44,9 @@ const ENTRY_OPTIONS = [10, 50, 200]
 const PLAYER_OPTIONS = [2, 5, 10]
 const ROUND_OPTIONS = [10, 15]
 const TIMER_OPTIONS = [45, 60, 90]
+const PLATFORM_FEE_BPS = 50
+const ARENA_ESCROW_ADDRESS = String(import.meta.env.VITE_ARENA_ESCROW_ADDRESS ?? '').trim()
+const ESCROW_READY = /^0x[a-fA-F0-9]{40}$/.test(ARENA_ESCROW_ADDRESS)
 
 const SAMPLE_QUESTIONS = [
   {
@@ -116,18 +124,23 @@ export function ArenaPage() {
   const [view, setView] = useState<ArenaView>(() => readInitialArenaView())
   const [savedRoomId, setSavedRoomId] = useState(() => readInitialRoomId())
   const [roomSaving, setRoomSaving] = useState(false)
+  const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('escrow_pending')
+  const [escrowAddress, setEscrowAddress] = useState<string | null>(ESCROW_READY ? ARENA_ESCROW_ADDRESS : null)
+  const [platformFeeBps, setPlatformFeeBps] = useState(PLATFORM_FEE_BPS)
 
   const activeQuestion = SAMPLE_QUESTIONS[(round - 1) % SAMPLE_QUESTIONS.length]
   const maxPool = entry * players
+  const platformFee = (maxPool * platformFeeBps) / 10000
+  const netPrize = Math.max(maxPool - platformFee, 0)
   const currentStreamed = streamedThrough(round - 1, rounds, riskMode, entry)
   const nextRoundCost = entry * roundWeight(round, rounds, riskMode)
   const remaining = Math.max(entry - currentStreamed, 0)
   const prizePool = currentStreamed * players
-  const lateRisk = entry * roundWeight(rounds, rounds, riskMode)
   const draftRoomCode = useMemo(() => `SP-${entry}${players}${rounds}-${riskMode.slice(0, 2).toUpperCase()}`, [entry, players, riskMode, rounds])
   const roomCode = savedRoomId || draftRoomCode
   const joinedPlayers = status === 'setup' ? 1 : status === 'lobby' ? Math.min(players, Math.max(2, Math.ceil(players * 0.6))) : players
   const canStartGame = startRule === 'host' || joinedPlayers >= players
+  const canOpenDeposits = Boolean(escrowAddress) && paymentStatus !== 'escrow_pending'
   const riskProgress = Math.min(100, Math.round((currentStreamed / entry) * 100))
   const alivePlayers = status === 'playing' ? Math.max(1, players - Math.floor(round / 4)) : status === 'eliminated' ? players - 1 : players
   const privateUrl = useMemo(() => {
@@ -152,15 +165,6 @@ export function ArenaPage() {
     })
     return `${origin}/arena?${params.toString()}`
   }, [entry, players, riskMode, rounds, savedRoomId])
-
-  const timeline = useMemo(() => {
-    const keyRounds = [1, Math.ceil(rounds / 2), rounds]
-    return keyRounds.map(item => ({
-      round: item,
-      streamed: streamedThrough(item, rounds, riskMode, entry),
-      refund: Math.max(entry - streamedThrough(item, rounds, riskMode, entry), 0),
-    }))
-  }, [entry, riskMode, rounds])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -193,7 +197,9 @@ export function ArenaPage() {
     setSeconds(60)
     setSelected('')
     setSavedRoomId('')
-    setRoomLog('Private room loaded. Share the link or start when players are ready.')
+    setPaymentStatus('escrow_pending')
+    setEscrowAddress(ESCROW_READY ? ARENA_ESCROW_ADDRESS : null)
+    setRoomLog('Private room loaded. Create a saved lobby before deposits open.')
   }, [])
 
   async function loadSavedRoom(roomId: string) {
@@ -209,13 +215,16 @@ export function ArenaPage() {
       setRoomTimer(room.timer)
       setStartRule(room.startRule)
       setSavedRoomId(room.roomId)
+      setPaymentStatus(room.paymentStatus ?? 'escrow_pending')
+      setEscrowAddress(room.escrowAddress ?? (ESCROW_READY ? ARENA_ESCROW_ADDRESS : null))
+      setPlatformFeeBps(Number.isFinite(room.platformFeeBps) ? room.platformFeeBps : PLATFORM_FEE_BPS)
       setView('private')
       setActiveTab('room')
       setStatus('lobby')
       setRound(1)
       setSeconds(room.timer)
       setSelected('')
-      setRoomLog('Private room loaded. Join the lobby or share the link.')
+      setRoomLog('Private room loaded. Deposits open after Arena escrow is configured.')
     } catch (error) {
       setView('private')
       setActiveTab('room')
@@ -253,11 +262,14 @@ export function ArenaPage() {
       if (!response.ok || !data.ok || !data.room) throw new Error(data.error ?? 'Arena room could not be saved.')
 
       setSavedRoomId(data.room.roomId)
+      setPaymentStatus(data.room.paymentStatus ?? 'escrow_pending')
+      setEscrowAddress(data.room.escrowAddress ?? (ESCROW_READY ? ARENA_ESCROW_ADDRESS : null))
+      setPlatformFeeBps(Number.isFinite(data.room.platformFeeBps) ? data.room.platformFeeBps : PLATFORM_FEE_BPS)
       setStatus('lobby')
       setRound(1)
       setSeconds(roomTimer)
       setSelected('')
-      setRoomLog('Private lobby saved. Share the room link, then start when players are in.')
+      setRoomLog('Private lobby saved. Share the room link; USDC deposits unlock after escrow is live.')
     } catch (error) {
       setRoomLog(error instanceof Error ? error.message : 'Arena room could not be saved.')
     } finally {
@@ -266,11 +278,15 @@ export function ArenaPage() {
   }
 
   function startRoom() {
+    if (!canOpenDeposits || !canStartGame) {
+      setRoomLog('Paid rooms require the Arena escrow contract before deposits or live play can start.')
+      return
+    }
     setStatus('playing')
     setRound(1)
     setSeconds(roomTimer)
     setSelected('')
-    setRoomLog('Round 1 live. Your first risk stream has started.')
+    setRoomLog('Round 1 live. Escrowed risk stream has started.')
   }
 
   function resetRoom() {
@@ -279,6 +295,9 @@ export function ArenaPage() {
     setSeconds(roomTimer)
     setSelected('')
     setSavedRoomId('')
+    setPaymentStatus('escrow_pending')
+    setEscrowAddress(ESCROW_READY ? ARENA_ESCROW_ADDRESS : null)
+    setPlatformFeeBps(PLATFORM_FEE_BPS)
     setRoomLog('Room preview ready')
   }
 
@@ -340,7 +359,7 @@ export function ArenaPage() {
               USDC games with recoverable risk.
             </h1>
             <p className="mt-1.5 max-w-[520px] text-[12px] leading-relaxed text-gray-500 dark:text-gray-400">
-              Pick a game, create a room, and only stream risk while you are still playing.
+              Create private USDC rooms with protected risk. Deposits open only through the Arena escrow contract.
             </p>
           </div>
           <div className="hidden rounded-2xl bg-gray-950 px-2.5 py-1.5 text-right text-white dark:bg-white dark:text-gray-950 sm:block">
@@ -368,8 +387,8 @@ export function ArenaPage() {
           <GameCard
             variant="trivia"
             title="Stream Trivia"
-            status="Live demo"
-            body="Answer timed rounds. Risk streams slowly into the pot only while you stay alive."
+            status="Private rooms"
+            body="Create a saved room, invite players, then open USDC deposits when escrow is live."
             action="Play Trivia"
             onClick={openTrivia}
           />
@@ -433,7 +452,7 @@ export function ArenaPage() {
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <p className="text-[13px] font-bold text-gray-950 dark:text-white">Create room</p>
-                    <p className="mt-0.5 text-[11px] text-gray-400">Choose who can join before the game starts.</p>
+                    <p className="mt-0.5 text-[11px] text-gray-400">Choose who can join before deposits open.</p>
                   </div>
                   <span className="rounded-full bg-gray-100 px-2.5 py-1 text-[10px] font-bold text-gray-500 dark:bg-white/10 dark:text-gray-300">
                     Private
@@ -454,9 +473,9 @@ export function ArenaPage() {
 
                 <div className="mt-3 rounded-2xl bg-gray-50 p-2.5 dark:bg-white/[0.04]">
                   <div className="grid grid-cols-3 gap-2">
-                    <Metric label="Prize" value={`$${money(maxPool)}`} compact />
+                    <Metric label="Prize" value={`$${money(netPrize)}`} compact />
                     <Metric label="Start risk" value={`$${money(entry * roundWeight(1, rounds, riskMode))}`} compact />
-                    <Metric label="End risk" value={`$${money(lateRisk)}`} compact />
+                    <Metric label="Fee" value={`${(platformFeeBps / 100).toFixed(1)}%`} compact />
                   </div>
                 </div>
 
@@ -511,7 +530,7 @@ export function ArenaPage() {
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <p className="text-[13px] font-bold text-gray-950 dark:text-white">Room</p>
-                    <p className="mt-0.5 text-[11px] text-gray-400">{roomCode}</p>
+                    <p className="mt-0.5 text-[11px] text-gray-400">{roomCode} · 0.5% fee on completed room</p>
                   </div>
                   <StatusPill status={status} />
                 </div>
@@ -519,8 +538,8 @@ export function ArenaPage() {
                 <div className="mt-4 grid grid-cols-2 gap-2">
                   <Metric label="Entry" value={`${entry} USDC`} compact />
                   <Metric label="Players" value={`${joinedPlayers}/${players}`} compact />
-                  <Metric label="Rounds" value={`${rounds}`} compact />
-                  <Metric label="Curve" value={riskLabel(riskMode)} compact />
+                  <Metric label="Prize" value={`$${money(netPrize)}`} compact />
+                  <Metric label="Escrow" value={escrowAddress ? 'Ready' : 'Pending'} compact />
                 </div>
 
                 <div className="mt-4 rounded-2xl border border-gray-100 bg-gray-50 p-3 dark:border-white/10 dark:bg-white/[0.04]">
@@ -578,12 +597,12 @@ export function ArenaPage() {
                     <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/45 dark:text-gray-500">Room setup</p>
                     <h2 className="mt-1.5 text-[19px] font-black leading-tight">Create a private Trivia lobby.</h2>
                     <p className="mt-1.5 max-w-[390px] text-[11px] leading-relaxed text-white/58 dark:text-gray-500">
-                      Lock the entry, share the invite, then start when players are ready.
+                      Lock the entry and share the invite. USDC deposits stay disabled until escrow is configured.
                     </p>
                     <div className="mt-3 grid grid-cols-3 gap-2">
                       <DarkMetric label="Code" value={roomCode} />
                       <DarkMetric label="Entry" value={`${entry} USDC`} />
-                      <DarkMetric label="Curve" value={riskLabel(riskMode)} />
+                      <DarkMetric label="Fee" value={`${(platformFeeBps / 100).toFixed(1)}%`} />
                     </div>
                   </div>
                 )}
@@ -593,7 +612,7 @@ export function ArenaPage() {
                     <div className="flex items-center justify-between gap-3">
                       <div>
                         <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/45 dark:text-gray-500">Private lobby</p>
-                        <h2 className="mt-1 text-[19px] font-black leading-tight">Waiting for players</h2>
+                        <h2 className="mt-1 text-[19px] font-black leading-tight">Lobby saved</h2>
                       </div>
                       <p className="rounded-full bg-white/10 px-3 py-1.5 text-[11px] font-black dark:bg-gray-100">
                         {joinedPlayers}/{players}
@@ -603,12 +622,15 @@ export function ArenaPage() {
                     <button
                       type="button"
                       onClick={startRoom}
-                      disabled={!canStartGame}
+                      disabled={!canOpenDeposits || !canStartGame}
                       className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-white py-2.5 text-[12px] font-black text-gray-950 transition-transform active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45 dark:bg-gray-950 dark:text-white"
                     >
                       <Play className="h-4 w-4" />
-                      {canStartGame ? 'Start game' : 'Waiting for full room'}
+                      {canOpenDeposits ? (canStartGame ? 'Start paid room' : 'Waiting for full room') : 'Escrow contract required'}
                     </button>
+                    <p className="mt-2 text-center text-[10px] font-semibold text-white/45 dark:text-gray-500">
+                      No platform account required. Players use Circle wallet access when deposits open.
+                    </p>
                   </div>
                 )}
 
@@ -664,7 +686,7 @@ export function ArenaPage() {
               </div>
               <div className="mt-3 grid grid-cols-3 gap-2">
                 <Metric icon={<LockKeyhole className="h-3.5 w-3.5" />} label="Still yours" value={`$${money(remaining)}`} />
-                <Metric icon={<WalletCards className="h-3.5 w-3.5" />} label="Pot" value={`$${money(prizePool)}`} />
+                <Metric icon={<WalletCards className="h-3.5 w-3.5" />} label="Pot preview" value={`$${money(prizePool)}`} />
                 <Metric icon={<Trophy className="h-3.5 w-3.5" />} label="Next risk" value={`$${money(nextRoundCost)}`} />
               </div>
             </div>
@@ -680,7 +702,9 @@ export function ArenaPage() {
                         ? 'Your stream stopped. Only streamed risk stays in the pot.'
                         : status === 'setup'
                           ? 'Room is not live yet. Create the lobby when your settings look right.'
-                          : `${alivePlayers} players active. Unstreamed USDC stays claimable.`}
+                          : status === 'lobby'
+                            ? `Escrow pending. Net prize after 0.5% platform fee: $${money(netPrize)}.`
+                            : `${alivePlayers} players active. Unstreamed USDC stays claimable from escrow.`}
                   </p>
                 </div>
                 {(status === 'eliminated' || status === 'won') && (
@@ -833,10 +857,10 @@ function HowToPlay() {
     <div className="rounded-[22px] border border-gray-100 bg-white p-3.5 shadow-sm dark:border-white/10 dark:bg-[#111216]">
       <p className="text-[13px] font-bold text-gray-950 dark:text-white">How to play</p>
       <div className="mt-3 space-y-2.5">
-        <Step index="1" title="Sign in with wallet" body="Use Circle email wallet access. The room uses USDC on Arc." />
-        <Step index="2" title="Set up a room" body="Pick entry, player count, rounds, and whether the room is private or public." />
-        <Step index="3" title="Answer timed rounds" body="Each round has 60 seconds. Correct answers keep you in the game." />
-        <Step index="4" title="Keep unused USDC" body="If you miss, your stream halts and unstreamed USDC stays claimable." />
+        <Step index="1" title="Create a room" body="Pick entry, player count, rounds, timer, and risk curve." />
+        <Step index="2" title="Invite players" body="Share the private link. No platform account is required." />
+        <Step index="3" title="Deposit with Circle" body="When escrow is live, each player uses wallet access to deposit Arc USDC." />
+        <Step index="4" title="Keep unused USDC" body="If a player misses, escrow halts risk and leaves unstreamed USDC claimable." />
       </div>
     </div>
   )
@@ -872,7 +896,11 @@ function ArenaSettings({ timer, setTimer, startRule, setStartRule }: { timer: nu
           <span className={settingChoice(true)}>Single</span>
           <span className={settingChoice(false)}>Multi soon</span>
         </SettingControl>
-        <SettingControl title="Refund rule" value="Protected" body="Only streamed risk enters the pot. Unstreamed USDC remains claimable.">
+        <SettingControl title="Platform fee" value="0.5%" body="Charged only when a paid room completes successfully.">
+          <span className={settingChoice(true)}>Fixed</span>
+          <span className={settingChoice(false)}>Custom off</span>
+        </SettingControl>
+        <SettingControl title="Refund rule" value="Protected" body="Only streamed risk enters the pot. Unstreamed USDC remains claimable from escrow.">
           <span className={settingChoice(true)}>Protected</span>
           <span className={settingChoice(false)}>All-in off</span>
         </SettingControl>

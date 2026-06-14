@@ -5,6 +5,7 @@ import pg from 'pg'
 type RiskMode = 'linear' | 'climb' | 'finale'
 type StartRule = 'host' | 'full'
 type RoomStatus = 'lobby' | 'playing' | 'completed' | 'cancelled'
+type PaymentStatus = 'escrow_pending' | 'deposit_open' | 'funded' | 'settled'
 
 type ArenaRoom = {
   roomId: string
@@ -17,12 +18,17 @@ type ArenaRoom = {
   timer: number
   startRule: StartRule
   status: RoomStatus
+  paymentStatus: PaymentStatus
+  escrowAddress: string | null
+  depositAsset: 'USDC'
+  platformFeeBps: number
   createdAt: string
   updatedAt: string
 }
 
 const { Pool } = pg
 const DATABASE_URL = (process.env.DATABASE_URL ?? process.env.POSTGRES_URL ?? '').trim()
+const PLATFORM_FEE_BPS = 50
 const pool = DATABASE_URL
   ? new Pool({
       connectionString: DATABASE_URL,
@@ -57,10 +63,18 @@ function ensureSchema() {
         timer integer not null,
         start_rule text not null,
         status text not null,
+        payment_status text not null default 'escrow_pending',
+        escrow_address text,
+        deposit_asset text not null default 'USDC',
+        platform_fee_bps integer not null default 50,
         state jsonb not null default '{}'::jsonb,
         created_at timestamptz not null default now(),
         updated_at timestamptz not null default now()
       );
+      alter table arena_rooms add column if not exists payment_status text not null default 'escrow_pending';
+      alter table arena_rooms add column if not exists escrow_address text;
+      alter table arena_rooms add column if not exists deposit_asset text not null default 'USDC';
+      alter table arena_rooms add column if not exists platform_fee_bps integer not null default 50;
       create index if not exists arena_rooms_created_at_idx on arena_rooms (created_at desc);
     `).then(() => undefined)
   }
@@ -84,6 +98,11 @@ function startRuleChoice(value: unknown): StartRule {
   return value === 'full' ? 'full' : 'host'
 }
 
+function paymentStatusChoice(value: unknown): PaymentStatus {
+  if (value === 'deposit_open' || value === 'funded' || value === 'settled') return value
+  return 'escrow_pending'
+}
+
 function toRoom(row: Record<string, unknown>): ArenaRoom {
   return {
     roomId: String(row.room_id),
@@ -96,6 +115,10 @@ function toRoom(row: Record<string, unknown>): ArenaRoom {
     timer: numberChoice(row.timer, [45, 60, 90], 60),
     startRule: startRuleChoice(row.start_rule),
     status: String(row.status ?? 'lobby') as RoomStatus,
+    paymentStatus: paymentStatusChoice(row.payment_status),
+    escrowAddress: typeof row.escrow_address === 'string' && row.escrow_address ? row.escrow_address : null,
+    depositAsset: 'USDC',
+    platformFeeBps: Number(row.platform_fee_bps ?? PLATFORM_FEE_BPS),
     createdAt: new Date(String(row.created_at)).toISOString(),
     updatedAt: new Date(String(row.updated_at)).toISOString(),
   }
@@ -124,9 +147,9 @@ async function createRoom(req: Request, res: Response) {
 
     const result = await requirePool().query(
       `insert into arena_rooms
-        (room_id, mode, game, entry, players, rounds, risk_mode, timer, start_rule, status, state)
+        (room_id, mode, game, entry, players, rounds, risk_mode, timer, start_rule, status, payment_status, deposit_asset, platform_fee_bps, state)
        values
-        ($1, 'private', 'trivia', $2, $3, $4, $5, $6, $7, 'lobby', $8::jsonb)
+        ($1, 'private', 'trivia', $2, $3, $4, $5, $6, $7, 'lobby', 'escrow_pending', 'USDC', $8, $9::jsonb)
        returning *`,
       [
         room.id,
@@ -136,7 +159,8 @@ async function createRoom(req: Request, res: Response) {
         room.riskMode,
         room.timer,
         room.startRule,
-        JSON.stringify({ joinedPlayers: 1, source: 'streampay-arena-ui' }),
+        PLATFORM_FEE_BPS,
+        JSON.stringify({ joinedPlayers: 1, source: 'streampay-arena-ui', moneyMode: 'escrow_required' }),
       ],
     )
 
