@@ -43,6 +43,13 @@ const APP_ID = import.meta.env.VITE_CIRCLE_USER_WALLET_APP_ID as string | undefi
 const ARC_TESTNET_APP_ID = import.meta.env.VITE_CIRCLE_USER_WALLET_APP_ID_ARC_TESTNET as string | undefined
 const ENABLED = import.meta.env.VITE_CIRCLE_EVM_EMAIL_ENABLED !== 'false'
 const CIRCLE_EMAIL_VERIFICATION_TIMEOUT_MS = 10 * 60 * 1000
+let runtimeConfigPromise: Promise<{
+  circle?: {
+    userWalletAppId?: string
+    arcTestnetUserWalletAppId?: string
+    evmEmailEnabled?: boolean
+  }
+}> | null = null
 
 const CHAIN_CONFIG = {
   base: { blockchain: 'BASE', label: 'Base' },
@@ -51,11 +58,36 @@ const CHAIN_CONFIG = {
 } as const
 
 export function canUseCircleEvmEmailWallet(chain: ChainKey) {
-  return ENABLED && !!appIdForChain(chain) && (chain === 'base' || chain === 'arbitrum' || chain === 'arc')
+  return ENABLED && (chain === 'base' || chain === 'arbitrum' || chain === 'arc')
 }
 
 function appIdForChain(chain: ChainKey) {
   return chain === 'arc' ? (ARC_TESTNET_APP_ID ?? APP_ID) : APP_ID
+}
+
+async function runtimePublicConfig() {
+  if (!runtimeConfigPromise) {
+    runtimeConfigPromise = fetch('/api/public-config', { cache: 'no-store' })
+      .then(async res => {
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok || data?.ok === false) throw new Error('Public wallet config is unavailable.')
+        return data
+      })
+      .catch(error => {
+        runtimeConfigPromise = null
+        throw error
+      })
+  }
+  return runtimeConfigPromise
+}
+
+async function appIdForChainAsync(chain: ChainKey) {
+  const baked = appIdForChain(chain)
+  const config = await runtimePublicConfig().catch(() => null)
+  const circle = config?.circle
+  if (circle?.evmEmailEnabled === false) return ''
+  if (chain === 'arc') return circle?.arcTestnetUserWalletAppId || circle?.userWalletAppId || baked || ''
+  return circle?.userWalletAppId || baked || ''
 }
 
 function apiError(data: { error?: string; message?: string; code?: number; detail?: string }, status?: number, action?: unknown) {
@@ -409,7 +441,7 @@ export async function connectCircleEvmEmailWallet(
   chain: ChainKey,
 ): Promise<CircleEvmEmailSession> {
   if (chain !== 'base' && chain !== 'arbitrum' && chain !== 'arc') throw new Error('Circle email wallet is not enabled for this chain.')
-  const appId = appIdForChain(chain)
+  const appId = await appIdForChainAsync(chain)
   if (!appId) throw new Error('Circle email wallet is not configured.')
   const sdk = new W3SSdk({ appSettings: { appId } })
   applyHashPayLinkCircleUi(sdk, {
