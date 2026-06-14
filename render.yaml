@@ -50,6 +50,8 @@ services:
         sync: false                   # Server-side Arena escrow factory after multiplayer contract deploy
       - key: VITE_ARENA_ESCROW_FACTORY_ADDRESS
         sync: false                   # Browser-visible Arena escrow factory after deploy
+      - key: ARENA_RELAYER_PRIVATE_KEY
+        sync: false                   # Server-side Arena relayer key; must match deployed Arena factory relayer
       - key: BASE_GAS_RECOVERY_USDC
         value: "0.01"
       - key: ARBITRUM_GAS_RECOVERY_USDC

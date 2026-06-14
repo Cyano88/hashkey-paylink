@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express'
 import { randomBytes } from 'node:crypto'
+import { ethers } from 'ethers'
 import pg from 'pg'
 
 type RiskMode = 'linear' | 'climb' | 'finale'
@@ -29,6 +30,22 @@ type ArenaRoom = {
 const { Pool } = pg
 const DATABASE_URL = (process.env.DATABASE_URL ?? process.env.POSTGRES_URL ?? '').trim()
 const PLATFORM_FEE_BPS = 50
+const ARC_RPC_URL = (process.env.PRIVATE_RPC_URL_ARC ?? process.env.VITE_RPC_URL_ARC ?? 'https://rpc.testnet.arc.network').trim()
+const ARENA_ESCROW_FACTORY_ADDRESS = (process.env.ARENA_ESCROW_FACTORY_ADDRESS ?? '').trim()
+const ARENA_RELAYER_KEY = (
+  process.env.ARENA_RELAYER_PRIVATE_KEY
+  ?? process.env.DEPLOYER_PRIVATE_KEY
+  ?? process.env.RELAYER_PRIVATE_KEY_ARC
+  ?? ''
+).trim()
+const ARC_USDC_DECIMALS = 6
+
+const ARENA_FACTORY_ABI = [
+  'function relayer() view returns (address)',
+  'function getEscrowAddress(bytes32 roomId,address host,uint256 entryAmount,uint16 maxPlayers,uint16 rounds,uint8 riskCurve,bytes32 salt) view returns (address)',
+  'function createRoom(bytes32 roomId,uint256 entryAmount,uint16 maxPlayers,uint16 rounds,uint8 riskCurve,bytes32 salt) returns (address)',
+] as const
+
 const pool = DATABASE_URL
   ? new Pool({
       connectionString: DATABASE_URL,
@@ -131,6 +148,54 @@ function storageError(res: Response, error: unknown) {
   return res.status(status).json({ ok: false, error: message })
 }
 
+function normalizePrivateKey(value: string) {
+  if (!value) return ''
+  return value.startsWith('0x') ? value : `0x${value}`
+}
+
+function riskCurveIndex(value: RiskMode) {
+  if (value === 'linear') return 0
+  if (value === 'finale') return 2
+  return 1
+}
+
+function canDeployArenaEscrow() {
+  return /^0x[a-fA-F0-9]{40}$/.test(ARENA_ESCROW_FACTORY_ADDRESS) && !!ARENA_RELAYER_KEY
+}
+
+async function deployRoomEscrow(room: {
+  id: string
+  entry: number
+  players: number
+  rounds: number
+  riskMode: RiskMode
+}) {
+  if (!canDeployArenaEscrow()) return null
+
+  const provider = new ethers.JsonRpcProvider(ARC_RPC_URL)
+  const wallet = new ethers.Wallet(normalizePrivateKey(ARENA_RELAYER_KEY), provider)
+  const factory = new ethers.Contract(ARENA_ESCROW_FACTORY_ADDRESS, ARENA_FACTORY_ABI, wallet)
+  const factoryRelayer = String(await factory.relayer()).toLowerCase()
+
+  if (factoryRelayer !== wallet.address.toLowerCase()) {
+    throw new Error('Arena escrow relayer wallet does not match deployed factory relayer.')
+  }
+
+  const roomHash = ethers.id(room.id)
+  const entryAmount = ethers.parseUnits(String(room.entry), ARC_USDC_DECIMALS)
+  const riskCurve = riskCurveIndex(room.riskMode)
+  const salt = ethers.id(`hashpaylink:arena:${room.id}:${room.entry}:${room.players}:${room.rounds}:${room.riskMode}`)
+  const predicted = await factory.getEscrowAddress(roomHash, wallet.address, entryAmount, room.players, room.rounds, riskCurve, salt)
+  const code = await provider.getCode(predicted)
+
+  if (code === '0x') {
+    const tx = await factory.createRoom(roomHash, entryAmount, room.players, room.rounds, riskCurve, salt)
+    await tx.wait()
+  }
+
+  return String(predicted)
+}
+
 async function createRoom(req: Request, res: Response) {
   try {
     await ensureSchema()
@@ -164,7 +229,32 @@ async function createRoom(req: Request, res: Response) {
       ],
     )
 
-    return res.status(201).json({ ok: true, room: toRoom(result.rows[0]) })
+    let savedRoom = toRoom(result.rows[0])
+
+    try {
+      const escrowAddress = await deployRoomEscrow(room)
+      if (escrowAddress) {
+        const update = await requirePool().query(
+          `update arena_rooms
+             set escrow_address = $2,
+                 payment_status = 'deposit_open',
+                 state = state || $3::jsonb,
+                 updated_at = now()
+           where room_id = $1
+           returning *`,
+          [
+            room.id,
+            escrowAddress,
+            JSON.stringify({ escrowFactory: ARENA_ESCROW_FACTORY_ADDRESS, escrowDeployedAt: new Date().toISOString() }),
+          ],
+        )
+        savedRoom = toRoom(update.rows[0])
+      }
+    } catch (error) {
+      console.error('[arena-room] escrow deploy skipped:', error instanceof Error ? error.message : 'unknown error')
+    }
+
+    return res.status(201).json({ ok: true, room: savedRoom })
   } catch (error) {
     return storageError(res, error)
   }
