@@ -19,6 +19,22 @@ type SavedArenaRoom = {
   status: 'lobby' | 'playing' | 'completed' | 'cancelled'
 }
 
+function readInitialArenaView(): ArenaView {
+  if (typeof window === 'undefined') return 'games'
+  const params = new URLSearchParams(window.location.search)
+  if (params.get('game') !== 'trivia') return 'games'
+  const roomParam = String(params.get('room') ?? '').trim()
+  return roomParam ? 'private' : 'mode'
+}
+
+function readInitialRoomId() {
+  if (typeof window === 'undefined') return ''
+  const params = new URLSearchParams(window.location.search)
+  if (params.get('game') !== 'trivia') return ''
+  const roomParam = String(params.get('room') ?? '').trim().toUpperCase()
+  return /^SP-[A-F0-9]{6}$/.test(roomParam) ? roomParam : ''
+}
+
 const ENTRY_OPTIONS = [10, 50, 200]
 const PLAYER_OPTIONS = [2, 5, 10]
 const ROUND_OPTIONS = [10, 15]
@@ -97,8 +113,8 @@ export function ArenaPage() {
   const [roomLog, setRoomLog] = useState('Room preview ready')
   const [activeTab, setActiveTab] = useState<ArenaTab>('room')
   const [copied, setCopied] = useState(false)
-  const [view, setView] = useState<ArenaView>('games')
-  const [savedRoomId, setSavedRoomId] = useState('')
+  const [view, setView] = useState<ArenaView>(() => readInitialArenaView())
+  const [savedRoomId, setSavedRoomId] = useState(() => readInitialRoomId())
   const [roomSaving, setRoomSaving] = useState(false)
 
   const activeQuestion = SAMPLE_QUESTIONS[(round - 1) % SAMPLE_QUESTIONS.length]
