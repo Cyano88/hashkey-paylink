@@ -45,8 +45,8 @@ const PLAYER_OPTIONS = [2, 5, 10]
 const ROUND_OPTIONS = [10, 15]
 const TIMER_OPTIONS = [45, 60, 90]
 const PLATFORM_FEE_BPS = 50
-const ARENA_ESCROW_ADDRESS = String(import.meta.env.VITE_ARENA_ESCROW_ADDRESS ?? '').trim()
-const ESCROW_READY = /^0x[a-fA-F0-9]{40}$/.test(ARENA_ESCROW_ADDRESS)
+const ARENA_ESCROW_FACTORY_ADDRESS = String(import.meta.env.VITE_ARENA_ESCROW_FACTORY_ADDRESS ?? '').trim()
+const ESCROW_FACTORY_READY = /^0x[a-fA-F0-9]{40}$/.test(ARENA_ESCROW_FACTORY_ADDRESS)
 
 const SAMPLE_QUESTIONS = [
   {
@@ -125,7 +125,7 @@ export function ArenaPage() {
   const [savedRoomId, setSavedRoomId] = useState(() => readInitialRoomId())
   const [roomSaving, setRoomSaving] = useState(false)
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('escrow_pending')
-  const [escrowAddress, setEscrowAddress] = useState<string | null>(ESCROW_READY ? ARENA_ESCROW_ADDRESS : null)
+  const [escrowAddress, setEscrowAddress] = useState<string | null>(null)
   const [platformFeeBps, setPlatformFeeBps] = useState(PLATFORM_FEE_BPS)
 
   const activeQuestion = SAMPLE_QUESTIONS[(round - 1) % SAMPLE_QUESTIONS.length]
@@ -140,7 +140,7 @@ export function ArenaPage() {
   const roomCode = savedRoomId || draftRoomCode
   const joinedPlayers = status === 'setup' ? 1 : status === 'lobby' ? Math.min(players, Math.max(2, Math.ceil(players * 0.6))) : players
   const canStartGame = startRule === 'host' || joinedPlayers >= players
-  const canOpenDeposits = Boolean(escrowAddress) && paymentStatus !== 'escrow_pending'
+  const canOpenDeposits = ESCROW_FACTORY_READY && Boolean(escrowAddress) && paymentStatus !== 'escrow_pending'
   const riskProgress = Math.min(100, Math.round((currentStreamed / entry) * 100))
   const alivePlayers = status === 'playing' ? Math.max(1, players - Math.floor(round / 4)) : status === 'eliminated' ? players - 1 : players
   const privateUrl = useMemo(() => {
@@ -198,7 +198,7 @@ export function ArenaPage() {
     setSelected('')
     setSavedRoomId('')
     setPaymentStatus('escrow_pending')
-    setEscrowAddress(ESCROW_READY ? ARENA_ESCROW_ADDRESS : null)
+    setEscrowAddress(null)
     setRoomLog('Private room loaded. Create a saved lobby before deposits open.')
   }, [])
 
@@ -216,7 +216,7 @@ export function ArenaPage() {
       setStartRule(room.startRule)
       setSavedRoomId(room.roomId)
       setPaymentStatus(room.paymentStatus ?? 'escrow_pending')
-      setEscrowAddress(room.escrowAddress ?? (ESCROW_READY ? ARENA_ESCROW_ADDRESS : null))
+      setEscrowAddress(room.escrowAddress ?? null)
       setPlatformFeeBps(Number.isFinite(room.platformFeeBps) ? room.platformFeeBps : PLATFORM_FEE_BPS)
       setView('private')
       setActiveTab('room')
@@ -263,7 +263,7 @@ export function ArenaPage() {
 
       setSavedRoomId(data.room.roomId)
       setPaymentStatus(data.room.paymentStatus ?? 'escrow_pending')
-      setEscrowAddress(data.room.escrowAddress ?? (ESCROW_READY ? ARENA_ESCROW_ADDRESS : null))
+      setEscrowAddress(data.room.escrowAddress ?? null)
       setPlatformFeeBps(Number.isFinite(data.room.platformFeeBps) ? data.room.platformFeeBps : PLATFORM_FEE_BPS)
       setStatus('lobby')
       setRound(1)
@@ -279,7 +279,7 @@ export function ArenaPage() {
 
   function startRoom() {
     if (!canOpenDeposits || !canStartGame) {
-      setRoomLog('Paid rooms require the Arena escrow contract before deposits or live play can start.')
+      setRoomLog('Paid rooms require the Arena escrow factory and room escrow before deposits or live play can start.')
       return
     }
     setStatus('playing')
@@ -296,7 +296,7 @@ export function ArenaPage() {
     setSelected('')
     setSavedRoomId('')
     setPaymentStatus('escrow_pending')
-    setEscrowAddress(ESCROW_READY ? ARENA_ESCROW_ADDRESS : null)
+    setEscrowAddress(null)
     setPlatformFeeBps(PLATFORM_FEE_BPS)
     setRoomLog('Room preview ready')
   }
@@ -359,7 +359,7 @@ export function ArenaPage() {
               USDC games with recoverable risk.
             </h1>
             <p className="mt-1.5 max-w-[520px] text-[12px] leading-relaxed text-gray-500 dark:text-gray-400">
-              Create private USDC rooms with protected risk. Deposits open only through the Arena escrow contract.
+              Create private USDC rooms with protected risk. Deposits open only through per-room Arena escrow.
             </p>
           </div>
           <div className="hidden rounded-2xl bg-gray-950 px-2.5 py-1.5 text-right text-white dark:bg-white dark:text-gray-950 sm:block">
@@ -388,7 +388,7 @@ export function ArenaPage() {
             variant="trivia"
             title="Stream Trivia"
             status="Private rooms"
-            body="Create a saved room, invite players, then open USDC deposits when escrow is live."
+            body="Create a saved room, invite players, then open USDC deposits when the room escrow is live."
             action="Play Trivia"
             onClick={openTrivia}
           />
@@ -539,7 +539,7 @@ export function ArenaPage() {
                   <Metric label="Entry" value={`${entry} USDC`} compact />
                   <Metric label="Players" value={`${joinedPlayers}/${players}`} compact />
                   <Metric label="Prize" value={`$${money(netPrize)}`} compact />
-                  <Metric label="Escrow" value={escrowAddress ? 'Ready' : 'Pending'} compact />
+                  <Metric label="Escrow" value={escrowAddress ? 'Room ready' : ESCROW_FACTORY_READY ? 'Factory ready' : 'Pending'} compact />
                 </div>
 
                 <div className="mt-4 rounded-2xl border border-gray-100 bg-gray-50 p-3 dark:border-white/10 dark:bg-white/[0.04]">
@@ -597,7 +597,7 @@ export function ArenaPage() {
                     <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/45 dark:text-gray-500">Room setup</p>
                     <h2 className="mt-1.5 text-[19px] font-black leading-tight">Create a private Trivia lobby.</h2>
                     <p className="mt-1.5 max-w-[390px] text-[11px] leading-relaxed text-white/58 dark:text-gray-500">
-                      Lock the entry and share the invite. USDC deposits stay disabled until escrow is configured.
+                      Lock the entry and share the invite. USDC deposits stay disabled until room escrow is created.
                     </p>
                     <div className="mt-3 grid grid-cols-3 gap-2">
                       <DarkMetric label="Code" value={roomCode} />
@@ -626,7 +626,7 @@ export function ArenaPage() {
                       className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-white py-2.5 text-[12px] font-black text-gray-950 transition-transform active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45 dark:bg-gray-950 dark:text-white"
                     >
                       <Play className="h-4 w-4" />
-                      {canOpenDeposits ? (canStartGame ? 'Start paid room' : 'Waiting for full room') : 'Escrow contract required'}
+                      {canOpenDeposits ? (canStartGame ? 'Start paid room' : 'Waiting for full room') : 'Room escrow required'}
                     </button>
                     <p className="mt-2 text-center text-[10px] font-semibold text-white/45 dark:text-gray-500">
                       No platform account required. Players use Circle wallet access when deposits open.

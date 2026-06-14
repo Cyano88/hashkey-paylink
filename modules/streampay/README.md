@@ -38,7 +38,8 @@ Set in Render → Service → **Environment**.
 | `PRIVATE_RPC_URL_ARC` | Server | Alchemy or private Arc RPC endpoint |
 | `STREAM_FACTORY_ADDRESS` | Server | `StreamVaultFactory` address |
 | `VITE_STREAM_FACTORY_ADDRESS` | Browser | Same — must match server value |
-| `VITE_ARENA_ESCROW_ADDRESS` | Browser | Dedicated multiplayer Arena escrow address. Leave empty until deployed; paid room deposits stay disabled while empty |
+| `ARENA_ESCROW_FACTORY_ADDRESS` | Server | Dedicated multiplayer Arena escrow factory. Leave empty until deployed; paid room deposits stay disabled while empty |
+| `VITE_ARENA_ESCROW_FACTORY_ADDRESS` | Browser | Same Arena factory address for client-side room readiness |
 | `ARC_POA_CONTRACT` | Server | `PoASettlement` address |
 | `VITE_POA_CONTRACT` | Browser | Same — must match server value |
 
@@ -51,7 +52,12 @@ Never add `VITE_` to private keys — they would be exposed to the browser.
 
 StreamPay Arena uses Postgres as the durable source of truth for private room settings. Set `DATABASE_URL` on Render. The `/api/arena-room` route stores entry amount, player count, round count, risk curve, timer, start rule, room status, escrow/payment status, deposit asset, and the fixed 0.5% platform fee in the `arena_rooms` table. The table is created or migrated automatically on first use.
 
-Postgres does not custody funds. Real-money Arena deposits, stream halts, refunds, platform fee collection, and winner claims must go through the dedicated Arc Arena escrow contract. Until `VITE_ARENA_ESCROW_ADDRESS` points to that contract, the UI keeps paid deposits/start disabled and only saves private lobbies.
+Postgres does not custody funds. Real-money Arena deposits, stream halts, refunds, platform fee collection, and winner claims go through `ArenaRoomEscrow` contracts deployed by `ArenaRoomEscrowFactory`. Until `ARENA_ESCROW_FACTORY_ADDRESS` and `VITE_ARENA_ESCROW_FACTORY_ADDRESS` point to the deployed factory, the UI keeps paid deposits/start disabled and only saves private lobbies.
+
+Arena contract files:
+
+- `ArenaRoomEscrow.sol` — per-room USDC custody, recoverable refunds, winner settlement, 0.5% platform fee.
+- `ArenaRoomEscrowFactory.sol` — CREATE2 factory for deterministic per-room escrow addresses.
 
 0G Storage should be used later for permanent room proofs and final result archives, while Arc contracts handle USDC custody and settlement.
 
