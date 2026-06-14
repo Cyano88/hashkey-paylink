@@ -63,22 +63,24 @@ function readPrefill() {
   const params = new URLSearchParams(window.location.search)
   const path = window.location.pathname.toLowerCase()
   const isAgenticPath = path.startsWith('/agentic')
+  const rawMode = (params.get('mode') ?? '').trim().toLowerCase()
+  const isAgenticFlow = isAgenticPath || rawMode === 'agentic-streaming'
   const rawDuration = (params.get('duration') ?? '').trim().toLowerCase()
   const amountPerDay = (params.get('amountPerDay') ?? '').trim()
-  const amount = (params.get('amount') ?? (isAgenticPath ? amountPerDay || '0.01' : '')).trim()
-  const recipient = (params.get('recipient') ?? (isAgenticPath ? EVM_TREASURY : '')).trim()
+  const amount = (isAgenticFlow ? amountPerDay || '0.01' : params.get('amount') ?? '').trim()
+  const recipient = (params.get('recipient') ?? (isAgenticFlow ? EVM_TREASURY : '')).trim()
   const rawRecipientEmail = (params.get('recipientEmail') ?? params.get('email') ?? '').trim()
   const recipientEmail = isEmail(rawRecipientEmail) ? cleanEmail(rawRecipientEmail) : ''
   const rawReportEmail = (params.get('reportEmail') ?? '').trim()
   const reportEmail = isEmail(rawReportEmail) ? cleanEmail(rawReportEmail) : ''
-  const mode = (params.get('mode') ?? (isAgenticPath ? 'agentic-streaming' : '')).trim().toLowerCase()
-  const service = (params.get('service') ?? (isAgenticPath ? 'polymarket-lp' : '')).trim().toLowerCase()
+  const mode = rawMode || (isAgenticPath ? 'agentic-streaming' : '')
+  const service = (params.get('service') ?? (isAgenticFlow ? 'polymarket-lp' : '')).trim().toLowerCase()
   const agentSlug = (params.get('agent') ?? params.get('agentSlug') ?? 'hashpaylink-agent').trim().toLowerCase()
-  const reason = (params.get('reason') ?? (isAgenticPath ? 'Agentic LP Research: Best Polymarket LP reward markets' : '')).trim()
+  const reason = (params.get('reason') ?? (isAgenticFlow ? 'Agentic LP Research: Best Polymarket LP reward markets' : '')).trim()
   const source = (params.get('src') ?? '').trim().toLowerCase()
   const wallet = (params.get('wallet') ?? '').trim().toLowerCase()
   const preferCircle = wallet !== 'connected' || source === 'telegram' || wallet === 'circle' || wallet === 'smart'
-  let durationPreset: bigint | null = null
+  let durationPreset: bigint | null = isAgenticFlow && !rawDuration ? 3_600n : null
   let customDays = ''
 
   const match = rawDuration.match(/^(\d+)([dhw])$/)
@@ -985,7 +987,7 @@ export function CreateStreamForm() {
         {circleConfigured && (
           <div className="mx-auto flex w-full max-w-[340px] items-center justify-center gap-1.5 rounded-full border border-gray-100 bg-white px-3 py-1.5 shadow-sm dark:border-white/10 dark:bg-[#111216]">
             <img src="/hash-logo.png" alt="" className="h-3.5 w-3.5 object-contain" />
-            <span className="text-[11px] font-bold text-gray-600 dark:text-gray-300">Privy + Circle on Arc</span>
+            <span className="text-[11px] font-bold text-gray-600 dark:text-gray-300">Powered by Circle · Streaming on Arc</span>
           </div>
         )}
 
@@ -1475,10 +1477,13 @@ export function CreateStreamForm() {
                       <p className="text-center text-[11px] font-semibold text-amber-600 dark:text-amber-300">{privyCircleLinkError}</p>
                     )}
                     <div className="flex justify-center">
-                      <span className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 dark:border-white/10 bg-white dark:bg-[#15151a] px-3 py-1">
-                        <img src="/brand/circle-logo.jpeg" alt="" className="h-3 w-3 rounded-full object-cover" />
-                        <span className="text-[10px] font-semibold text-gray-400 dark:text-gray-500">Powered by Circle</span>
-                      </span>
+                      <div className="inline-flex items-center overflow-hidden rounded-full border border-gray-200 bg-white text-[10px] font-semibold text-gray-400 dark:border-white/10 dark:bg-[#15151a] dark:text-gray-500">
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1">
+                          <img src="/brand/circle-logo.jpeg" alt="" className="h-3 w-3 rounded-full object-cover" />
+                          Powered by Circle
+                        </span>
+                        <span className="border-l border-gray-200 px-2.5 py-1 dark:border-white/10">Streaming on Arc</span>
+                      </div>
                     </div>
                   </div>
                 )}
