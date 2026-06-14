@@ -392,8 +392,9 @@ function sportmonksWeather(match: ProviderMatch) {
 function sportmonksClock(match: ProviderMatch) {
   const status = [asString(asRecord(match.state).name), asString(asRecord(match.state).short_name)].join(' ').toLowerCase()
   const isHalfTime = /\b(ht|half time|half-time|break)\b/.test(status)
-  const isExtraTime = /\b(extra|aet|pen|et\b|after extra time)\b/.test(status)
-  const isLiveRegulation = /(live|inplay|in play|in-play|1h|2h|1st|2nd|first half|second half)/.test(status) && !isExtraTime
+  const isRegulationState = /(live|inplay|in play|in-play|1h|2h|1st|2nd|first half|second half)/.test(status)
+  const isExtraTime = !isRegulationState && (/\b(extra|aet|penalties|penalty shootout|after extra time)\b/.test(status) || /\b(et|aet)\b/.test(status))
+  const isLiveRegulation = isRegulationState && !isExtraTime
   if (isHalfTime) return ''
   const normalizeMinute = (value: string | number) => {
     const minute = asNumber(value)
