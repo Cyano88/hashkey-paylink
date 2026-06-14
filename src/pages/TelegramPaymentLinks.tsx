@@ -2418,7 +2418,7 @@ function PolyWorldCupNewsPanel({
 
   return (
     <div className="mt-4 space-y-3">
-      <div className="flex flex-col items-start justify-between gap-3 sm:flex-row">
+      <div className="flex flex-col items-start justify-between gap-2.5 sm:flex-row">
         <div className="min-w-0">
           <button
             type="button"
@@ -2435,13 +2435,13 @@ function PolyWorldCupNewsPanel({
             <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Polymarket News</p>
           </div>
           <h2 className="mt-2 text-base font-semibold tracking-tight text-gray-900 dark:text-white">World Cup market pulse</h2>
-          <p className="mt-1 max-w-2xl text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+          <p className="mt-1 max-w-xl text-xs leading-relaxed text-gray-500 dark:text-gray-400">
             Track World Cup headlines that can affect Polymarket prices, liquidity, and LP risk before asking the agent for paid alpha.
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-1.5 sm:mt-7">
           <span className={cn(
-            'rounded-full px-2 py-1 text-[10px] font-bold',
+            'rounded-full px-2 py-1 text-[10px] font-bold leading-none',
             hasProviderFeed
               ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-200'
               : 'bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-300',
@@ -2451,7 +2451,7 @@ function PolyWorldCupNewsPanel({
           <button
             type="button"
             onClick={onOpenScores}
-            className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200"
+            className="inline-flex items-center justify-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold leading-none text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200"
           >
             <Radio className="h-3 w-3" />
             Scores
@@ -2460,7 +2460,7 @@ function PolyWorldCupNewsPanel({
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.05]">
-        <div className="relative min-h-[188px]">
+        <div className="relative min-h-[176px]">
           <img
             src={brokenImages[lead.title] ? POLYMARKET_LOGO : lead.image || POLYMARKET_LOGO}
             alt=""
@@ -2471,7 +2471,7 @@ function PolyWorldCupNewsPanel({
             )}
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black via-black/55 to-black/10" />
-          <div className="relative flex min-h-[188px] flex-col justify-end p-3 sm:p-4">
+          <div className="relative flex min-h-[176px] flex-col justify-end p-3 sm:p-4">
             <div className="mb-2 flex flex-wrap items-center gap-1.5">
               <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold uppercase text-gray-950">{lead.tag || 'World Cup'}</span>
               <span className="max-w-[180px] truncate rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-semibold text-white ring-1 ring-white/20">{lead.source}</span>
@@ -2479,20 +2479,20 @@ function PolyWorldCupNewsPanel({
                 <span className="rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-semibold text-white ring-1 ring-white/20">{relativeNewsTime(lead.publishedAt)}</span>
               )}
             </div>
-            <h3 className="max-w-2xl text-base font-semibold leading-snug text-white sm:text-lg">{lead.title}</h3>
+            <h3 className="max-w-2xl text-[15px] font-semibold leading-snug text-white sm:text-lg">{lead.title}</h3>
             <p
               className="mt-1 max-w-2xl overflow-hidden text-xs leading-relaxed text-white/75"
               style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}
             >
               {lead.description}
             </p>
-            <div className="mt-3 flex flex-wrap gap-1.5">
+            <div className="mt-2.5 flex flex-wrap gap-1.5">
               {lead.url ? (
                 <a
                   href={lead.url}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-white/95 px-2.5 py-1.5 text-[11px] font-semibold text-gray-950 shadow-sm ring-1 ring-white/30 transition-all hover:bg-white active:scale-[0.98]"
+                  className="inline-flex items-center justify-center gap-1 rounded-lg bg-white/95 px-2.5 py-1.5 text-[11px] font-semibold leading-none text-gray-950 shadow-sm ring-1 ring-white/30 transition-all hover:bg-white active:scale-[0.98]"
                 >
                   <ExternalLink className="h-3 w-3" />
                   Open source
@@ -2505,7 +2505,7 @@ function PolyWorldCupNewsPanel({
               <button
                 type="button"
                 onClick={askLpScout}
-                className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-white/15 px-2.5 py-1.5 text-[11px] font-semibold text-white ring-1 ring-white/25 transition-all hover:bg-white/25 active:scale-[0.98]"
+                className="inline-flex items-center justify-center gap-1 rounded-lg bg-white/15 px-2.5 py-1.5 text-[11px] font-semibold leading-none text-white ring-1 ring-white/25 transition-all hover:bg-white/25 active:scale-[0.98]"
               >
                 <LineChart className="h-3 w-3" />
                 Ask LP Scout
@@ -2514,7 +2514,7 @@ function PolyWorldCupNewsPanel({
           </div>
         </div>
 
-        <div className="max-h-[280px] space-y-1.5 overflow-y-auto border-t border-gray-100 p-2 [scrollbar-color:rgba(148,163,184,0.35)_transparent] [scrollbar-width:thin] dark:border-white/10 dark:[scrollbar-color:rgba(255,255,255,0.22)_transparent] [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300/40 dark:[&::-webkit-scrollbar-thumb]:bg-white/20">
+        <div className="max-h-[260px] space-y-1.5 overflow-y-auto border-t border-gray-100 p-2 [scrollbar-color:rgba(148,163,184,0.28)_transparent] [scrollbar-width:thin] dark:border-white/10 dark:[scrollbar-color:rgba(255,255,255,0.18)_transparent] [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300/40 dark:[&::-webkit-scrollbar-thumb]:bg-white/20">
           {articles.map((article, index) => {
             const selected = index === active % articles.length
             const imageBroken = brokenImages[article.title]
@@ -2948,7 +2948,7 @@ function HashLiveScoreWidget({
       }
       setDetailPageIndex(0)
       setDetailIndex(currentIndex => (currentIndex + 1) % featuredDetails.length)
-    }, activeDetail?.type === 'goals' || activeDetail?.type === 'events' ? 5_000 : 10_000)
+    }, activeDetail?.type === 'goals' || activeDetail?.type === 'events' ? 5_500 : 9_000)
     return () => window.clearInterval(timer)
   }, [activeDetail?.type, detailIndex, featuredDetails, detailPageIndex, selectedMatchKey])
 
@@ -3011,7 +3011,7 @@ function HashLiveScoreWidget({
   return (
     <div className="overflow-hidden rounded-xl border border-gray-100 bg-white dark:border-white/10 dark:bg-white/[0.04]">
       {featured && (
-        <div className="relative min-h-[190px] overflow-hidden border-b border-gray-100 bg-gray-950 p-3 text-white dark:border-white/10">
+        <div className="relative min-h-[184px] overflow-hidden border-b border-gray-100 bg-gray-950 p-3 text-white dark:border-white/10">
           {homeFlag && (
             <div
               className="absolute inset-0 bg-cover bg-center opacity-100 blur-[1px] transition-opacity duration-1000 [animation:hpFlagSwapA_10s_ease-in-out_infinite]"
@@ -3025,14 +3025,14 @@ function HashLiveScoreWidget({
             />
           )}
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,.12),transparent_38%),linear-gradient(180deg,rgba(0,0,0,.18),rgba(0,0,0,.62))]" />
-          <div className="relative z-10 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+          <div className="relative z-10 grid grid-cols-[1fr_auto_1fr] items-center gap-1.5">
             <span className="truncate text-[10px] font-semibold text-white/65">{compactMatchTime(featured)}</span>
             {featured.polymarketUrl ? (
               <a
                 href={featured.polymarketUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center justify-center gap-1 rounded-full border border-white/15 bg-black/35 px-2 py-1 text-[10px] font-black text-white shadow-sm backdrop-blur-sm transition-all hover:bg-black/50 active:scale-[0.98]"
+                className="inline-flex items-center justify-center gap-1 rounded-full border border-white/15 bg-black/35 px-2 py-1 text-[10px] font-black leading-none text-white shadow-sm backdrop-blur-sm transition-all hover:bg-black/50 active:scale-[0.98]"
               >
                 <img src={POLYMARKET_LOGO} alt="" className="h-3 w-3 invert-0" />
                 Trade
@@ -3043,7 +3043,7 @@ function HashLiveScoreWidget({
               </span>
             )}
             <span className={cn(
-              'justify-self-end rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ring-1',
+              'justify-self-end rounded-full px-2 py-0.5 text-[10px] font-bold uppercase leading-none ring-1',
               featuredState?.tag === 'LIVE'
                 ? 'bg-emerald-400/15 text-emerald-100 ring-emerald-300/30'
                 : 'bg-white/12 text-white/85 ring-white/15',
@@ -3051,16 +3051,16 @@ function HashLiveScoreWidget({
               {featuredState?.phase ? `${featuredState.tag} - ${featuredState.phase}` : featuredState?.tag}
             </span>
           </div>
-          <div className="relative z-10 mt-4 grid min-h-[112px] grid-cols-[minmax(0,1fr)_76px_minmax(0,1fr)] items-center gap-1.5 sm:grid-cols-[minmax(0,1fr)_88px_minmax(0,1fr)] sm:gap-2">
+          <div className="relative z-10 mt-3.5 grid min-h-[106px] grid-cols-[minmax(0,1fr)_72px_minmax(0,1fr)] items-center gap-1.5 sm:grid-cols-[minmax(0,1fr)_84px_minmax(0,1fr)] sm:gap-2">
             <div className="min-w-0 text-center">
-              <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-black/30 shadow-xl ring-1 ring-white/15 backdrop-blur-sm sm:h-12 sm:w-12">
+              <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-black/30 shadow-xl ring-1 ring-white/15 backdrop-blur-sm sm:h-12 sm:w-12">
                 <TeamFlagMark name={home} />
               </div>
-              <p className="mx-auto mt-2 max-w-[7.2rem] truncate text-[11px] font-black tracking-wide sm:max-w-[9rem] sm:text-xs">{home}</p>
+              <p className="mx-auto mt-1.5 max-w-[7.2rem] truncate text-[11px] font-black tracking-wide sm:max-w-[9rem] sm:text-xs">{home}</p>
               <MarketPricePill value={featured.homeMarketPrice} />
             </div>
-            <div className="rounded-xl border border-white/12 bg-black/35 px-2 py-2 text-center shadow-2xl backdrop-blur-sm sm:px-2.5">
-              <p className="text-xl font-black tabular-nums">
+            <div className="rounded-xl border border-white/12 bg-black/35 px-1.5 py-1.5 text-center shadow-2xl backdrop-blur-sm sm:px-2.5 sm:py-2">
+              <p className="text-lg font-black tabular-nums sm:text-xl">
                 {featuredState?.center}
               </p>
               <p className="mt-0.5 truncate text-[9px] font-bold uppercase text-white/55">
@@ -3071,20 +3071,20 @@ function HashLiveScoreWidget({
               )}
             </div>
             <div className="min-w-0 text-center">
-              <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-black/30 shadow-xl ring-1 ring-white/15 backdrop-blur-sm sm:h-12 sm:w-12">
+              <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-black/30 shadow-xl ring-1 ring-white/15 backdrop-blur-sm sm:h-12 sm:w-12">
                 <TeamFlagMark name={away} />
               </div>
-              <p className="mx-auto mt-2 max-w-[7.2rem] truncate text-[11px] font-black tracking-wide sm:max-w-[9rem] sm:text-xs">{away || 'Opponent'}</p>
+              <p className="mx-auto mt-1.5 max-w-[7.2rem] truncate text-[11px] font-black tracking-wide sm:max-w-[9rem] sm:text-xs">{away || 'Opponent'}</p>
               <MarketPricePill value={featured.awayMarketPrice} />
             </div>
           </div>
           {activeDetail && (
-            <div className="relative z-10 mt-2 rounded-lg border border-white/10 bg-black/25 px-2.5 py-2 text-center backdrop-blur-sm">
+            <div className="relative z-10 mt-1.5 rounded-lg border border-white/10 bg-black/25 px-2.5 py-1.5 text-center backdrop-blur-sm">
               <p className="text-[9px] font-black uppercase tracking-[0.16em] text-white/45">{activeDetail.label}</p>
               {activeDetail.type === 'goals' ? (
                 <div
                   key={`${selectedMatchKey}-${detailPageIndex}`}
-                  className="mt-1 flex min-h-[18px] animate-[hpGoalRise_.28s_ease-out] items-center justify-center gap-2 overflow-hidden text-[11px] font-semibold leading-snug text-white/90"
+                  className="mt-0.5 flex min-h-[18px] animate-[hpGoalRise_.28s_ease-out] items-center justify-center gap-1.5 overflow-hidden text-[10.5px] font-semibold leading-snug text-white/90 sm:text-[11px]"
                 >
                   {(activeDetailPage as string[]).map((goal, index) => (
                     <span key={`${goal}-${index}`} className="inline-flex min-w-0 items-center gap-1">
@@ -3097,7 +3097,7 @@ function HashLiveScoreWidget({
               ) : activeDetail.type === 'events' ? (
                 <div
                   key={`${selectedMatchKey}-${detailPageIndex}`}
-                  className="mt-1 flex min-h-[18px] animate-[hpGoalRise_.28s_ease-out] items-center justify-center gap-2 overflow-hidden text-[11px] font-semibold leading-snug text-white/90"
+                  className="mt-0.5 flex min-h-[18px] animate-[hpGoalRise_.28s_ease-out] items-center justify-center gap-1.5 overflow-hidden text-[10.5px] font-semibold leading-snug text-white/90 sm:text-[11px]"
                 >
                   {(activeDetailPage as MatchEventDetail[]).map((event, index) => (
                     <span key={`${event.text}-${index}`} className="inline-flex min-w-0 items-center gap-1">
@@ -3108,14 +3108,14 @@ function HashLiveScoreWidget({
                   ))}
                 </div>
               ) : (
-                <p className="mt-0.5 text-[11px] font-semibold leading-snug text-white/90 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">{activeDetail.value}</p>
+                <p className="mt-0.5 text-[10.5px] font-semibold leading-snug text-white/90 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2] sm:text-[11px]">{activeDetail.value}</p>
               )}
             </div>
           )}
         </div>
       )}
 
-      <div className="max-h-[280px] divide-y divide-gray-100 overflow-y-auto [scrollbar-color:rgba(148,163,184,0.28)_transparent] [scrollbar-width:thin] dark:divide-white/10 dark:[scrollbar-color:rgba(255,255,255,0.18)_transparent] [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300/40 dark:[&::-webkit-scrollbar-thumb]:bg-white/20">
+      <div className="max-h-[268px] divide-y divide-gray-100 overflow-y-auto [scrollbar-color:rgba(148,163,184,0.25)_transparent] [scrollbar-width:thin] dark:divide-white/10 dark:[scrollbar-color:rgba(255,255,255,0.16)_transparent] [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300/40 dark:[&::-webkit-scrollbar-thumb]:bg-white/20">
         {rest.map(match => {
           const [rowHome, rowAway] = splitFixtureTitle(match.title)
           return (
@@ -3123,7 +3123,7 @@ function HashLiveScoreWidget({
               type="button"
               key={matchKey(match)}
               onClick={() => setSelectedMatchKey(matchKey(match))}
-              className="grid w-full grid-cols-[1fr_auto] items-center gap-2 p-2.5 text-left transition-colors hover:bg-gray-50 active:bg-gray-100 dark:hover:bg-white/[0.05] dark:active:bg-white/[0.08]"
+              className="grid w-full grid-cols-[1fr_auto] items-center gap-2 p-2.5 text-left transition-colors hover:bg-gray-50 active:bg-gray-100 dark:hover:bg-white/[0.05] dark:active:bg-white/[0.08] sm:p-2"
             >
               <div className="min-w-0">
                 <div className="truncate text-[11px] text-gray-500 dark:text-gray-400">{compactMatchTime(match)}</div>
@@ -3135,7 +3135,7 @@ function HashLiveScoreWidget({
                   {rowAway && <span className="min-w-0 truncate">{rowAway}</span>}
                 </div>
               </div>
-              <div className="rounded-lg bg-gray-50 px-2 py-1 text-center text-[11px] font-black tabular-nums text-gray-900 dark:bg-white/[0.07] dark:text-white">
+              <div className="rounded-lg bg-gray-50 px-2 py-1 text-center text-[10.5px] font-black tabular-nums text-gray-900 dark:bg-white/[0.07] dark:text-white">
                 {rowStateLabel(match)}
               </div>
             </button>
