@@ -124,12 +124,20 @@ function isExactScoreMarketText(value: string) {
   return /\bexact score\b|\bcorrect score\b|\bexact-score\b|\bcorrect-score\b|\bfirst team to score\b|\bfirst to score\b|\bteam to score first\b|\bgoalscorer\b|\bfirst goalscorer\b|\btotal goals\b|\bboth teams to score\b|\bhandicap\b|\bcorner\b|\bcard market\b/.test(text)
 }
 
+function isAllowedPolymarketMatchUrl(value: string) {
+  const url = value.trim()
+  if (!url.startsWith('https://polymarket.com/')) return false
+  if (isExactScoreMarketText(url)) return false
+  if (process.env.POLYMARKET_ALLOW_GENERIC_URLS?.trim() === '1') return true
+  return /^https:\/\/polymarket\.com\/sports\/world-cup\/[a-z0-9-]+\/?$/i.test(url)
+}
+
 function exactPolymarketUrl(title: string, ids: string[] = []) {
   const urls = configuredPolymarketUrls()
   const keys = [title, title.toLowerCase(), ...ids.filter(Boolean)]
   for (const key of keys) {
     const direct = urls[key]
-    if (typeof direct === 'string' && direct.trim() && !isExactScoreMarketText(direct)) return direct.trim()
+    if (typeof direct === 'string' && isAllowedPolymarketMatchUrl(direct)) return direct.trim()
   }
   return ''
 }
@@ -659,7 +667,7 @@ function readMarketSlug(candidate: ProviderMatch) {
 function readPolymarketUrl(candidate: ProviderMatch, kind: 'event' | 'market') {
   const record = asRecord(candidate)
   const directUrl = asString(record.marketUrl) || asString(record.url)
-  if (directUrl.startsWith('https://polymarket.com/')) return directUrl
+  if (isAllowedPolymarketMatchUrl(directUrl)) return directUrl
   const slug = readMarketSlug(candidate)
   if (slug && kind === 'event' && hasWorldCupSeries(candidate)) return `https://polymarket.com/sports/world-cup/${slug}`
   return slug ? `https://polymarket.com/${kind}/${slug}` : ''
@@ -805,7 +813,7 @@ function polymarketMatchFromCandidates(match: ScoreMatch, candidates: Array<{ ki
   const firstMarket = marketsForValues[0] || {}
   const prices = polymarketPriceSummary(best.item, home, away)
   const url = readPolymarketUrl(best.item, best.kind)
-  if (isExactScoreMarketText(url)) return null
+  if (!isAllowedPolymarketMatchUrl(url)) return null
   return {
     title: asString(record.title) || asString(record.question) || asString(firstMarket.question) || asString(firstMarket.title),
     url,
@@ -847,13 +855,17 @@ async function enrichMatchesWithPolymarket(matches: ScoreMatch[]) {
   const worldCupCandidates = worldCupEvents.map(item => ({ kind: 'event' as const, item }))
   const closedWorldCupCandidates = closedWorldCupEvents.map(item => ({ kind: 'event' as const, item }))
   const enriched = await Promise.all(matches.map(async match => {
-    if (match.polymarketUrl && !isExactScoreMarketText(match.polymarketUrl)) return match
-    const searchableMatch = isExactScoreMarketText(match.polymarketUrl || '') ? { ...match, polymarketUrl: '' } : match
+    const configuredUrl = match.polymarketUrl && isAllowedPolymarketMatchUrl(match.polymarketUrl) ? match.polymarketUrl : ''
+    const searchableMatch = { ...match, polymarketUrl: '' }
     const candidatePool = isResultMatch(match)
       ? [...worldCupCandidates, ...closedWorldCupCandidates]
       : worldCupCandidates
     const found = polymarketMatchFromCandidates(match, candidatePool) || await findPolymarketMatch(match).catch(() => null)
-    if (!found?.url) return searchableMatch
+    if (!found?.url) {
+      return configuredUrl
+        ? { ...searchableMatch, polymarketUrl: configuredUrl }
+        : searchableMatch
+    }
     return {
       ...searchableMatch,
       polymarketUrl: found.url,
