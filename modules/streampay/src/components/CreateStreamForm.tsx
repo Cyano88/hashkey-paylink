@@ -929,22 +929,22 @@ export function CreateStreamForm() {
 
   // ── Form ──────────────────────────────────────────────────────────────────
   return (
-    <div className="w-full max-w-[480px] mx-auto mt-12">
+    <div className="w-full max-w-[520px] mx-auto mt-8 sm:mt-10">
       <div className="space-y-8">
 
         {/* ── Page title (Rule 4: aligned to same 480px) ── */}
-        <div className="text-center space-y-1.5">
-          <h1 className="text-[26px] sm:text-[30px] font-bold tracking-tight text-gray-900 dark:text-gray-100">
+        <div className="text-center space-y-2">
+          <h1 className="text-[25px] sm:text-[30px] font-bold tracking-tight text-gray-900 dark:text-gray-100">
             {isAgenticStreaming ? <>Agentic<span style={{ color: '#3b82f6' }}> Streaming</span></> : <>Pay<span style={{ color: '#3b82f6' }}>roll</span></>}
           </h1>
-          <p className="text-[13px] text-gray-400">
-            {isAgenticStreaming ? 'Stream USDC to Hash PayLink Agent for daily Polymarket LP research' : 'Stream payment in USDC to anyone on Arc'}
+          <p className="mx-auto max-w-[420px] text-[13px] leading-relaxed text-gray-400">
+            {isAgenticStreaming ? 'Stream USDC to Hash PayLink Agent for daily Polymarket LP research. Marketplace coming soon.' : 'Stream payment in USDC to anyone on Arc'}
           </p>
         </div>
 
         {circleConfigured && (
-          <div className="mx-auto flex w-full max-w-[360px] items-center justify-center rounded-xl border border-gray-100 dark:border-white/10 bg-white dark:bg-[#111216] px-3 py-2 shadow-sm">
-            <span className="text-[12px] font-bold text-gray-700 dark:text-gray-200">Privy sign-in + Circle wallet on Arc</span>
+          <div className="mx-auto flex w-full max-w-[380px] items-center justify-center rounded-full border border-gray-100 dark:border-white/10 bg-white dark:bg-[#111216] px-3 py-2 shadow-sm">
+            <span className="text-[11px] font-bold text-gray-600 dark:text-gray-300">Secure email sign-in · Circle wallet on Arc</span>
           </div>
         )}
 
@@ -1090,24 +1090,24 @@ export function CreateStreamForm() {
         {/* ── Vault Card + How It Works ── */}
         <div className={circleAvailable && activeTab === 'running' ? 'hidden' : 'space-y-4'}>
           {/* Vault Card */}
-          <div className="bg-white dark:bg-[#111216] rounded-2xl border border-gray-100 dark:border-white/10 shadow-sm overflow-hidden">
+          <div className="bg-white dark:bg-[#111216] rounded-[24px] border border-gray-100 dark:border-white/10 shadow-sm overflow-hidden">
             <div className="p-5 sm:p-7 space-y-6">
 
               {isAgenticStreaming && (
-                <div className="rounded-2xl border border-emerald-100 dark:border-emerald-900/30 bg-emerald-50/40 dark:bg-emerald-950/20 p-3.5 space-y-3">
+                <div className="rounded-[20px] border border-gray-100 dark:border-white/10 bg-gray-50/80 dark:bg-white/5 p-4 space-y-4">
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="text-[12px] font-bold text-gray-800 dark:text-gray-100">Polymarket LP Research</p>
-                      <p className="text-[11px] text-gray-500 dark:text-gray-400">
-                        {prefill.amountPerDay || '0.01'} USDC/day to Hash PayLink Agent on Arc
+                      <p className="text-[13px] font-bold text-gray-900 dark:text-gray-100">Polymarket LP desk</p>
+                      <p className="text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
+                        Daily LP research delivered by Hash PayLink Agent.
                       </p>
                     </div>
-                    <span className="shrink-0 rounded-full border border-emerald-200 dark:border-emerald-900/40 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-300">
-                      Agentic
+                    <span className="shrink-0 rounded-full border border-gray-200 dark:border-white/10 bg-white dark:bg-[#15151a] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                      {prefill.amountPerDay || '0.01'} USDC/day
                     </span>
                   </div>
                   <div className="space-y-1.5">
-                    <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Report email</span>
+                    <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Delivery email</span>
                     <input
                       type="email"
                       name="streampay-agentic-report-email"
@@ -1116,10 +1116,10 @@ export function CreateStreamForm() {
                       onChange={e => setReportEmail(e.target.value.trim())}
                       disabled={isWorking}
                       placeholder="you@example.com"
-                      className="w-full rounded-xl border-2 border-emerald-100 dark:border-emerald-900/40 bg-white dark:bg-[#15151a] px-4 py-3 text-[13px] text-gray-800 dark:text-gray-100 placeholder:text-gray-300 dark:placeholder:text-gray-600 focus:outline-none focus:border-emerald-300 transition-colors disabled:opacity-50 min-h-[46px]"
+                      className="w-full rounded-xl border-2 border-gray-200 dark:border-white/10 bg-white dark:bg-[#15151a] px-4 py-3 text-[13px] text-gray-800 dark:text-gray-100 placeholder:text-gray-300 dark:placeholder:text-gray-600 focus:outline-none focus:border-gray-400 transition-colors disabled:opacity-50 min-h-[46px]"
                     />
                     {!agenticReportEmailValid && (
-                      <p className="text-[11px] font-semibold text-red-500">Enter a valid email for daily LP research.</p>
+                      <p className="text-[11px] font-semibold text-red-500">Add a valid email for daily LP research.</p>
                     )}
                   </div>
                 </div>
@@ -1314,11 +1314,17 @@ export function CreateStreamForm() {
               {/* ── CTA ── */}
               <div className="space-y-2.5 pt-1">
                 {circleAvailable && (
-                  <div className="rounded-2xl border border-blue-100 dark:border-blue-900/30 bg-blue-50/40 dark:bg-blue-950/20 p-3.5 space-y-3">
+                  <div className="rounded-[20px] border border-gray-100 dark:border-white/10 bg-gray-50/80 dark:bg-white/5 p-4 space-y-3">
                     <div className="flex items-center justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="text-[12px] font-bold text-gray-800 dark:text-gray-100">Circle Smart Wallet on Arc</p>
-                        <p className="text-[11px] text-gray-500 dark:text-gray-400">Default StreamPay wallet for website and Telegram</p>
+                        <p className="text-[13px] font-bold text-gray-900 dark:text-gray-100">
+                          {streamPayPrivyReady ? 'Ready to start' : 'Secure sign-in'}
+                        </p>
+                        <p className="text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
+                          {streamPayPrivyReady
+                            ? 'Circle opens a protected Arc wallet session to start this stream.'
+                            : 'Sign in with email, then Circle opens your Arc wallet session.'}
+                        </p>
                       </div>
                     </div>
 
@@ -1394,7 +1400,7 @@ export function CreateStreamForm() {
                     >
                       {isWorking
                         ? <><Spinner /><span className="text-[13px] font-medium">{statusMsg}</span></>
-                        : streamPayPrivyReady ? 'Start with Circle Smart Wallet' : 'Sign in to start'}
+                        : streamPayPrivyReady ? (isAgenticStreaming ? 'Start agentic stream' : 'Start StreamPay') : 'Continue securely'}
                     </button>
                     {privyCircleLinkError && (
                       <p className="text-center text-[11px] font-semibold text-amber-600 dark:text-amber-300">{privyCircleLinkError}</p>
