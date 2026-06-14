@@ -291,7 +291,37 @@ export function CreateStreamForm() {
   const streamPayPrivyReady = !PRIVY_AUTH_ENABLED || privyAuthenticated
   const circleActionReady = circleAvailable && circleConfigured && circleReady && !isWorking && !circleNeedsFunds
   const circleSignInReady = circleAvailable && PRIVY_AUTH_ENABLED && !privyAuthenticated && !isWorking
-  const circleCtaReady = circleActionReady || circleSignInReady
+  const circleStartReady = circleActionReady && streamPayPrivyReady && !!publicClient
+  const circleCtaReady = circleStartReady || circleSignInReady
+  const circlePanelTitle = !streamPayPrivyReady
+    ? 'Secure sign-in'
+    : circleStartReady
+      ? 'Ready'
+      : 'Complete setup'
+  const circlePanelCopy = !streamPayPrivyReady
+    ? 'Use email to open your Arc wallet.'
+    : circleStartReady
+      ? 'Start the stream from your Circle wallet.'
+      : 'Finish the required fields below.'
+  const circleCtaLabel = isWorking
+    ? statusMsg
+    : !streamPayPrivyReady
+      ? 'Continue securely'
+      : !agenticReportEmailValid
+        ? 'Add delivery email'
+        : !amountValid
+          ? 'Add amount'
+          : !durationValid
+            ? 'Choose duration'
+            : !factoryAddr
+              ? 'StreamPay unavailable'
+              : !publicClient
+                ? 'Network loading'
+                : circleNeedsFunds
+                  ? 'Add USDC to wallet'
+                  : isAgenticStreaming
+                    ? 'Start agentic stream'
+                    : 'Start StreamPay'
   const agenticLinkParams = isAgenticStreaming ? {
     mode: 'agentic-streaming',
     service: agenticService,
@@ -547,7 +577,14 @@ export function CreateStreamForm() {
       loginPrivy()
       return
     }
-    if (!circleActionReady || !publicClient) return
+    if (!publicClient) {
+      setError('Arc network connection is still loading. Try again in a moment.')
+      return
+    }
+    if (!circleActionReady) {
+      setError(circleNeedsFunds ? 'Add USDC to this Circle wallet before starting the stream.' : 'Complete the stream details before continuing.')
+      return
+    }
     const email = cleanEmail(PRIVY_AUTH_ENABLED ? privyEmail : circleEmail)
     if (!email && !circleSession) {
       setError(PRIVY_AUTH_ENABLED ? 'Sign in with a Privy email account to use Circle Smart Wallet.' : 'Enter your email to continue with Circle Smart Wallet.')
@@ -1347,25 +1384,26 @@ export function CreateStreamForm() {
                     <div className="flex items-center justify-between gap-3">
                       <div className="min-w-0">
                         <p className="text-[13px] font-bold text-gray-900 dark:text-gray-100">
-                          {streamPayPrivyReady ? 'Ready to start' : 'Secure sign-in'}
+                          {circlePanelTitle}
                         </p>
                         <p className="text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
-                          {streamPayPrivyReady
-                            ? 'Circle opens a protected Arc wallet session to start this stream.'
-                            : 'Sign in with email, then Circle opens your Arc wallet session.'}
+                          {circlePanelCopy}
                         </p>
                       </div>
                     </div>
 
                     {!circleSession && PRIVY_AUTH_ENABLED && privyAuthenticated && (
-                      <div className="rounded-xl border border-blue-100 dark:border-blue-900/40 bg-white dark:bg-[#15151a] px-4 py-3">
-                        <p className="truncate text-[12px] font-semibold text-gray-700 dark:text-gray-200">{privyEmail || 'Privy account connected'}</p>
-                        <p className="mt-1 text-[11px] text-gray-400">
+                      <div className="flex items-center justify-between gap-3 rounded-xl border border-gray-100 bg-white px-3.5 py-2.5 dark:border-white/10 dark:bg-[#15151a]">
+                        <div className="min-w-0">
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500">Signed in</p>
+                          <p className="truncate text-[12px] font-semibold text-gray-700 dark:text-gray-200">{privyEmail || 'Email connected'}</p>
+                        </div>
+                        <p className="shrink-0 text-right text-[11px] text-gray-400">
                           {privyCircleLinkLoading
-                            ? 'Checking saved Circle wallet...'
+                            ? 'Checking...'
                             : linkedCircleAddress
                               ? `Circle wallet ${shortAddress(linkedCircleAddress)}`
-                              : 'Circle wallet will be mapped after first confirmation'}
+                              : 'Wallet on start'}
                         </p>
                       </div>
                     )}
@@ -1429,10 +1467,8 @@ export function CreateStreamForm() {
                         : { background: '#e5e7eb', color: '#9ca3af', cursor: 'not-allowed' }}
                     >
                       {isWorking
-                        ? <><Spinner /><span className="text-[13px] font-medium">{statusMsg}</span></>
-                        : streamPayPrivyReady
-                          ? <><img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert mix-blend-screen" /> {isAgenticStreaming ? 'Start agentic stream' : 'Start StreamPay'}</>
-                          : <><img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert mix-blend-screen" /> Continue securely</>}
+                        ? <><Spinner /><span className="text-[13px] font-medium">{circleCtaLabel}</span></>
+                        : <><img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert mix-blend-screen" /> {circleCtaLabel}</>}
                     </button>
                     {privyCircleLinkError && (
                       <p className="text-center text-[11px] font-semibold text-amber-600 dark:text-amber-300">{privyCircleLinkError}</p>
