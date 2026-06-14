@@ -79,7 +79,7 @@ function readPrefill() {
   const reason = (params.get('reason') ?? (isAgenticFlow ? 'Agentic LP Research: Best Polymarket LP reward markets' : '')).trim()
   const source = (params.get('src') ?? '').trim().toLowerCase()
   const wallet = (params.get('wallet') ?? '').trim().toLowerCase()
-  const preferCircle = wallet !== 'connected' || source === 'telegram' || wallet === 'circle' || wallet === 'smart'
+  const preferCircle = source === 'telegram' || wallet !== 'connected'
   let durationPreset: bigint | null = isAgenticFlow && !rawDuration ? 3_600n : null
   let customDays = ''
 

@@ -1,62 +1,399 @@
-import { Link, useLocation } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import type { ReactNode } from 'react'
+import { Clock3, LockKeyhole, Play, RotateCcw, Trophy, WalletCards } from 'lucide-react'
 import { HashPayLinkBadge } from './CreateStreamForm'
 
-function useAppPath(path: string): string {
-  const { search } = useLocation()
-  const params = new URLSearchParams(search)
-  const app = params.get('app')
-  return app ? `${path}?app=${app}` : path
+type RiskMode = 'linear' | 'climb' | 'finale'
+type RoomStatus = 'setup' | 'playing' | 'eliminated' | 'won'
+
+const ENTRY_OPTIONS = [10, 50, 200]
+const PLAYER_OPTIONS = [2, 5, 10]
+const ROUND_OPTIONS = [10, 15]
+
+const SAMPLE_QUESTIONS = [
+  {
+    prompt: 'Which asset is used for StreamPay settlement?',
+    options: ['USDC', 'ETH', 'SOL', 'BTC'],
+    answer: 'USDC',
+  },
+  {
+    prompt: 'What happens when a player misses a round?',
+    options: ['Their stream halts', 'They lose all funds', 'Room restarts', 'Timer doubles'],
+    answer: 'Their stream halts',
+  },
+  {
+    prompt: 'Which network is StreamPay Arena designed around?',
+    options: ['Arc', 'Dogecoin', 'Litecoin', 'Ripple'],
+    answer: 'Arc',
+  },
+]
+
+function riskLabel(mode: RiskMode) {
+  if (mode === 'linear') return 'Linear'
+  if (mode === 'climb') return 'Climb'
+  return 'Finale'
+}
+
+function roundWeight(round: number, totalRounds: number, mode: RiskMode) {
+  if (mode === 'linear') return 1 / totalRounds
+  if (mode === 'climb') {
+    const denominator = (totalRounds * (totalRounds + 1)) / 2
+    return round / denominator
+  }
+  const denominator = Array.from({ length: totalRounds }, (_, index) => Math.pow(index + 1, 1.55))
+    .reduce((sum, value) => sum + value, 0)
+  return Math.pow(round, 1.55) / denominator
+}
+
+function streamedThrough(round: number, totalRounds: number, mode: RiskMode, entry: number) {
+  const completed = Math.max(0, Math.min(round, totalRounds))
+  const ratio = Array.from({ length: completed }, (_, index) => roundWeight(index + 1, totalRounds, mode))
+    .reduce((sum, value) => sum + value, 0)
+  return Math.min(entry, entry * ratio)
+}
+
+function money(value: number) {
+  return value.toLocaleString(undefined, { maximumFractionDigits: 2 })
+}
+
+function percent(value: number) {
+  return `${Math.round(value * 100)}%`
 }
 
 export function ArenaPage() {
-  const payrollTo = useAppPath('/')
+  const [entry, setEntry] = useState(10)
+  const [players, setPlayers] = useState(5)
+  const [rounds, setRounds] = useState(15)
+  const [riskMode, setRiskMode] = useState<RiskMode>('climb')
+  const [status, setStatus] = useState<RoomStatus>('setup')
+  const [round, setRound] = useState(1)
+  const [seconds, setSeconds] = useState(60)
+  const [selected, setSelected] = useState('')
+  const [roomLog, setRoomLog] = useState('Room preview ready')
+
+  const activeQuestion = SAMPLE_QUESTIONS[(round - 1) % SAMPLE_QUESTIONS.length]
+  const maxPool = entry * players
+  const currentStreamed = streamedThrough(round - 1, rounds, riskMode, entry)
+  const nextRoundCost = entry * roundWeight(round, rounds, riskMode)
+  const remaining = Math.max(entry - currentStreamed, 0)
+  const prizePool = currentStreamed * players
+  const lateRisk = entry * roundWeight(rounds, rounds, riskMode)
+
+  const timeline = useMemo(() => {
+    const keyRounds = [1, Math.ceil(rounds / 2), rounds]
+    return keyRounds.map(item => ({
+      round: item,
+      streamed: streamedThrough(item, rounds, riskMode, entry),
+      refund: Math.max(entry - streamedThrough(item, rounds, riskMode, entry), 0),
+    }))
+  }, [entry, riskMode, rounds])
+
+  useEffect(() => {
+    if (status !== 'playing') return
+    setSeconds(60)
+    const timer = window.setInterval(() => {
+      setSeconds(value => {
+        if (value <= 1) {
+          window.clearInterval(timer)
+          setStatus('eliminated')
+          setRoomLog('Timer expired. Your stream halted and the remaining balance is claimable.')
+          return 0
+        }
+        return value - 1
+      })
+    }, 1000)
+    return () => window.clearInterval(timer)
+  }, [round, status])
+
+  function startRoom() {
+    setStatus('playing')
+    setRound(1)
+    setSelected('')
+    setRoomLog('Stream started. Answer before the timer ends to stay active.')
+  }
+
+  function resetRoom() {
+    setStatus('setup')
+    setRound(1)
+    setSeconds(60)
+    setSelected('')
+    setRoomLog('Room preview ready')
+  }
+
+  function submitAnswer(option: string) {
+    if (status !== 'playing') return
+    setSelected(option)
+    if (option !== activeQuestion.answer) {
+      setStatus('eliminated')
+      setRoomLog('Wrong answer. Stream halted and unstreamed USDC stays claimable.')
+      return
+    }
+    if (round >= rounds) {
+      setStatus('won')
+      setRoomLog('Board cleared. The winner can claim the accumulated prize pool.')
+      return
+    }
+    setRound(value => value + 1)
+    setSelected('')
+    setRoomLog('Correct. Next round increases the streaming weight.')
+  }
 
   return (
-    <div className="w-full max-w-[520px] mx-auto mt-10">
-      <div className="space-y-5">
-        <div className="text-center space-y-1.5">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">StreamPay Arena</p>
-          <h1 className="text-[26px] sm:text-[30px] font-bold tracking-tight text-gray-900 dark:text-gray-100">
-            Stream-based game rooms
-          </h1>
-          <p className="mx-auto max-w-[420px] text-[13px] leading-relaxed text-gray-500 dark:text-gray-400">
-            Competitive USDC rooms where funds stream into a prize pool only while a player stays active.
-          </p>
-        </div>
+    <div className="mx-auto mt-7 w-full max-w-5xl px-0 pb-8 sm:mt-10">
+      <div className="grid gap-5 lg:grid-cols-[0.92fr_1.08fr]">
+        <section className="space-y-4">
+          <div className="space-y-2">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">StreamPay Arena</p>
+            <h1 className="text-[28px] font-bold tracking-tight text-gray-950 dark:text-white sm:text-[34px]">
+              Recoverable-risk USDC games
+            </h1>
+            <p className="max-w-[520px] text-[13px] leading-relaxed text-gray-500 dark:text-gray-400">
+              Players deposit USDC, stay alive through timed rounds, and only stream risk while they keep playing.
+            </p>
+          </div>
 
-        <div className="rounded-2xl border border-gray-100 dark:border-white/10 bg-white dark:bg-[#111216] shadow-sm overflow-hidden">
-          <div className="p-5 sm:p-7 space-y-5">
-            <div className="grid grid-cols-3 gap-2">
-              {[
-                ['Deposit', 'USDC locked per player'],
-                ['Stream', 'Risk increases by round'],
-                ['Claim', 'Winners and refunds settle on Arc'],
-              ].map(([title, body]) => (
-                <div key={title} className="rounded-xl border border-gray-100 dark:border-white/10 bg-gray-50/80 dark:bg-white/5 p-3 text-center">
-                  <p className="text-[11px] font-bold text-gray-800 dark:text-gray-100">{title}</p>
-                  <p className="mt-1 text-[10px] leading-snug text-gray-400">{body}</p>
+          <div className="grid grid-cols-3 gap-2">
+            {[
+              ['Circle', 'Email wallet access'],
+              ['Arc', 'Streaming settlement'],
+              ['USDC', 'Prize and refunds'],
+            ].map(([title, body]) => (
+              <div key={title} className="rounded-2xl border border-gray-100 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-[#111216]">
+                <p className="text-[11px] font-bold text-gray-900 dark:text-gray-100">{title}</p>
+                <p className="mt-1 text-[10px] leading-snug text-gray-400">{body}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="rounded-[22px] border border-gray-100 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-[#111216]">
+            <div className="grid gap-2 sm:grid-cols-3">
+              <GameTile title="Stream Trivia" body="Active demo" active />
+              <GameTile title="Prediction Rooms" body="Coming soon" />
+              <GameTile title="Creator Rooms" body="Coming soon" />
+            </div>
+          </div>
+
+          <div className="rounded-[22px] border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#111216]">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[13px] font-bold text-gray-950 dark:text-white">Room setup</p>
+                <p className="mt-0.5 text-[11px] text-gray-400">Stream Trivia is the first Arena format.</p>
+              </div>
+              <span className="rounded-full bg-gray-100 px-2.5 py-1 text-[10px] font-bold text-gray-500 dark:bg-white/10 dark:text-gray-300">
+                Demo room
+              </span>
+            </div>
+
+            <div className="mt-4 space-y-4">
+              <Segment label="Entry" value={`${entry} USDC`}>
+                {ENTRY_OPTIONS.map(value => (
+                  <button key={value} type="button" onClick={() => setEntry(value)} className={segmentButton(entry === value)}>
+                    {value}
+                  </button>
+                ))}
+              </Segment>
+
+              <Segment label="Players" value={`${players}`}>
+                {PLAYER_OPTIONS.map(value => (
+                  <button key={value} type="button" onClick={() => setPlayers(value)} className={segmentButton(players === value)}>
+                    {value}
+                  </button>
+                ))}
+              </Segment>
+
+              <Segment label="Rounds" value={`${rounds}`}>
+                {ROUND_OPTIONS.map(value => (
+                  <button key={value} type="button" onClick={() => setRounds(value)} className={segmentButton(rounds === value)}>
+                    {value}
+                  </button>
+                ))}
+              </Segment>
+
+              <Segment label="Risk curve" value={riskLabel(riskMode)}>
+                {(['linear', 'climb', 'finale'] as RiskMode[]).map(value => (
+                  <button key={value} type="button" onClick={() => setRiskMode(value)} className={segmentButton(riskMode === value)}>
+                    {riskLabel(value)}
+                  </button>
+                ))}
+              </Segment>
+            </div>
+
+            <div className="mt-4 grid grid-cols-3 gap-2">
+              <Metric label="Max pool" value={`$${money(maxPool)}`} />
+              <Metric label="First risk" value={`$${money(entry * roundWeight(1, rounds, riskMode))}`} />
+              <Metric label="Final risk" value={`$${money(lateRisk)}`} />
+            </div>
+
+            <button
+              type="button"
+              onClick={startRoom}
+              className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-gray-950 py-3.5 text-[13px] font-bold text-white transition-transform active:scale-[0.98] dark:bg-white dark:text-gray-950"
+            >
+              <Play className="h-4 w-4" />
+              Start demo room
+            </button>
+          </div>
+        </section>
+
+        <section className="rounded-[26px] border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#111216] sm:p-5">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[12px] font-bold text-gray-950 dark:text-white">Stream Trivia</p>
+              <p className="mt-0.5 text-[11px] text-gray-400">Checkpoint streaming preview</p>
+            </div>
+            <StatusPill status={status} />
+          </div>
+
+          <div className="mt-4 rounded-[24px] border border-gray-100 bg-gray-50/80 p-4 dark:border-white/10 dark:bg-white/[0.04]">
+            <div className="flex items-center justify-between text-[11px] font-bold text-gray-400">
+              <span>Round {round} of {rounds}</span>
+              <span className="inline-flex items-center gap-1 text-gray-900 dark:text-white">
+                <Clock3 className="h-3.5 w-3.5" />
+                {seconds}s
+              </span>
+            </div>
+
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-gray-200 dark:bg-white/10">
+              <div
+                className="h-full rounded-full bg-gray-950 transition-all duration-500 dark:bg-white"
+                style={{ width: `${percent(round / rounds)}` }}
+              />
+            </div>
+
+            <div className="mt-5 rounded-2xl bg-white p-4 dark:bg-[#111216]">
+              <p className="text-[13px] font-bold leading-snug text-gray-950 dark:text-white">{activeQuestion.prompt}</p>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                {activeQuestion.options.map(option => (
+                  <button
+                    key={option}
+                    type="button"
+                    disabled={status !== 'playing'}
+                    onClick={() => submitAnswer(option)}
+                    className={[
+                      'min-h-11 rounded-xl border px-3 text-left text-[12px] font-semibold transition-all',
+                      selected === option
+                        ? 'border-gray-950 bg-gray-950 text-white dark:border-white dark:bg-white dark:text-gray-950'
+                        : 'border-gray-100 bg-gray-50 text-gray-600 hover:border-gray-300 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-white/5 dark:text-gray-300',
+                    ].join(' ')}
+                  >
+                    {option}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-4 grid grid-cols-3 gap-2">
+              <Metric icon={<LockKeyhole className="h-3.5 w-3.5" />} label="Remaining" value={`$${money(remaining)}`} />
+              <Metric icon={<WalletCards className="h-3.5 w-3.5" />} label="Prize pool" value={`$${money(prizePool)}`} />
+              <Metric icon={<Trophy className="h-3.5 w-3.5" />} label="Next stream" value={`$${money(nextRoundCost)}`} />
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-gray-100 bg-white p-3 dark:border-white/10 dark:bg-[#111216]">
+              <p className="text-[11px] font-bold text-gray-900 dark:text-gray-100">Room status</p>
+              <p className="mt-1 text-[12px] leading-relaxed text-gray-500 dark:text-gray-400">{roomLog}</p>
+              {(status === 'eliminated' || status === 'won') && (
+                <button
+                  type="button"
+                  onClick={resetRoom}
+                  className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-gray-200 px-3 py-1.5 text-[11px] font-bold text-gray-600 transition-colors hover:bg-gray-50 dark:border-white/10 dark:text-gray-300 dark:hover:bg-white/5"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  Reset demo
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-4 rounded-[22px] border border-gray-100 p-4 dark:border-white/10">
+            <p className="text-[12px] font-bold text-gray-950 dark:text-white">Loss curve</p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-3">
+              {timeline.map(item => (
+                <div key={item.round} className="rounded-2xl bg-gray-50 p-3 dark:bg-white/[0.04]">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-gray-400">Round {item.round}</p>
+                  <p className="mt-1 text-[13px] font-bold text-gray-950 dark:text-white">${money(item.streamed)} streamed</p>
+                  <p className="mt-0.5 text-[11px] text-gray-400">${money(item.refund)} claimable</p>
                 </div>
               ))}
             </div>
+          </div>
 
-            <div className="rounded-2xl border border-blue-100 dark:border-blue-900/30 bg-blue-50/40 dark:bg-blue-950/20 p-4">
-              <p className="text-[12px] font-bold text-gray-800 dark:text-gray-100">Build status</p>
-              <p className="mt-1 text-[12px] leading-relaxed text-gray-500 dark:text-gray-400">
-                Arena is being designed as the next StreamPay mode. Payroll and Agentic Streaming stay live while the room contract, prize math, and refund flow are built.
-              </p>
-            </div>
+          <div className="mt-4 rounded-[22px] border border-amber-100 bg-amber-50/60 p-4 dark:border-amber-500/20 dark:bg-amber-500/10">
+            <p className="text-[12px] font-bold text-gray-950 dark:text-white">Contract phase</p>
+            <p className="mt-1 text-[12px] leading-relaxed text-gray-500 dark:text-gray-400">
+              The public UI is a product simulation. The next phase wires room vaults, signed answers, halted streams, refunds, and winner claims on Arc.
+            </p>
+          </div>
 
-            <Link
-              to={payrollTo}
-              className="flex w-full items-center justify-center rounded-xl bg-gray-900 py-3.5 text-[13px] font-bold text-white transition-transform active:scale-[0.98]"
-            >
-              Back to Payroll
-            </Link>
-
+          <div className="mt-4 flex justify-center">
             <HashPayLinkBadge />
           </div>
-        </div>
+        </section>
       </div>
     </div>
+  )
+}
+
+function GameTile({ title, body, active = false }: { title: string; body: string; active?: boolean }) {
+  return (
+    <div className={[
+      'rounded-2xl border p-3',
+      active
+        ? 'border-gray-950 bg-gray-950 text-white dark:border-white dark:bg-white dark:text-gray-950'
+        : 'border-gray-100 bg-gray-50 text-gray-400 dark:border-white/10 dark:bg-white/5',
+    ].join(' ')}>
+      <p className="text-[11px] font-bold">{title}</p>
+      <p className={['mt-1 text-[10px]', active ? 'text-white/70 dark:text-gray-500' : 'text-gray-400'].join(' ')}>{body}</p>
+    </div>
+  )
+}
+
+function Segment({ label, value, children }: { label: string; value: string; children: ReactNode }) {
+  return (
+    <div>
+      <div className="mb-2 flex items-center justify-between">
+        <p className="text-[11px] font-bold text-gray-500 dark:text-gray-400">{label}</p>
+        <p className="text-[11px] font-bold text-gray-900 dark:text-white">{value}</p>
+      </div>
+      <div className="grid grid-cols-3 gap-1 rounded-2xl border border-gray-100 bg-gray-50 p-1 dark:border-white/10 dark:bg-white/5">
+        {children}
+      </div>
+    </div>
+  )
+}
+
+function segmentButton(active: boolean) {
+  return [
+    'rounded-xl px-2 py-2 text-[11px] font-bold transition-all',
+    active
+      ? 'bg-white text-gray-950 shadow-sm dark:bg-white dark:text-gray-950'
+      : 'text-gray-400 hover:text-gray-700 dark:hover:text-gray-200',
+  ].join(' ')
+}
+
+function Metric({ label, value, icon }: { label: string; value: string; icon?: ReactNode }) {
+  return (
+    <div className="rounded-2xl border border-gray-100 bg-white p-3 dark:border-white/10 dark:bg-[#111216]">
+      <div className="flex items-center gap-1.5 text-gray-400">
+        {icon}
+        <p className="text-[10px] font-bold uppercase tracking-[0.12em]">{label}</p>
+      </div>
+      <p className="mt-1 text-[13px] font-bold text-gray-950 dark:text-white">{value}</p>
+    </div>
+  )
+}
+
+function StatusPill({ status }: { status: RoomStatus }) {
+  const label = status === 'setup' ? 'Ready' : status === 'playing' ? 'Live' : status === 'won' ? 'Won' : 'Halted'
+  return (
+    <span className={[
+      'rounded-full px-2.5 py-1 text-[10px] font-bold',
+      status === 'playing'
+        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300'
+        : status === 'eliminated'
+          ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300'
+          : 'bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-300',
+    ].join(' ')}>
+      {label}
+    </span>
   )
 }

@@ -45,8 +45,8 @@ export function StreamPayHeader() {
     mode: 'agentic-streaming',
     service: 'polymarket-lp',
     recipient: EVM_TREASURY,
-    amount: '5',
-    duration: '7d',
+    amountPerDay: '0.01',
+    duration: '1h',
     wallet: 'circle',
   })
   const arenaTo = useModePath('/arena')
