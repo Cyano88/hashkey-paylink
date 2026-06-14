@@ -22,6 +22,7 @@ import { resolvePrivyCircleLink, savePrivyCircleLink } from '../../../../src/lib
 const ARC_CHAIN_ID = 5042002
 const ARC_USDC     = '0x3600000000000000000000000000000000000000' as const
 const ARC_EXPLORER = 'https://testnet.arcscan.app'
+const DEFAULT_STREAM_FACTORY_ADDRESS = '0xBAecf54084A0cB65b77a88cbDEf2b663Be71c61b' as const
 
 const ERC20_ABI = parseAbi([
   'function balanceOf(address) view returns (uint256)',
@@ -63,7 +64,8 @@ function readPrefill() {
   const path = window.location.pathname.toLowerCase()
   const isAgenticPath = path.startsWith('/agentic')
   const rawDuration = (params.get('duration') ?? '').trim().toLowerCase()
-  const amount = (params.get('amount') ?? (isAgenticPath ? '5' : '')).trim()
+  const amountPerDay = (params.get('amountPerDay') ?? '').trim()
+  const amount = (params.get('amount') ?? (isAgenticPath ? amountPerDay || '0.01' : '')).trim()
   const recipient = (params.get('recipient') ?? (isAgenticPath ? EVM_TREASURY : '')).trim()
   const rawRecipientEmail = (params.get('recipientEmail') ?? params.get('email') ?? '').trim()
   const recipientEmail = isEmail(rawRecipientEmail) ? cleanEmail(rawRecipientEmail) : ''
@@ -72,7 +74,6 @@ function readPrefill() {
   const mode = (params.get('mode') ?? (isAgenticPath ? 'agentic-streaming' : '')).trim().toLowerCase()
   const service = (params.get('service') ?? (isAgenticPath ? 'polymarket-lp' : '')).trim().toLowerCase()
   const agentSlug = (params.get('agent') ?? params.get('agentSlug') ?? 'hashpaylink-agent').trim().toLowerCase()
-  const amountPerDay = (params.get('amountPerDay') ?? '').trim()
   const reason = (params.get('reason') ?? (isAgenticPath ? 'Agentic LP Research: Best Polymarket LP reward markets' : '')).trim()
   const source = (params.get('src') ?? '').trim().toLowerCase()
   const wallet = (params.get('wallet') ?? '').trim().toLowerCase()
@@ -214,7 +215,7 @@ export function CreateStreamForm() {
   const publicClient           = usePublicClient({ chainId: ARC_CHAIN_ID })
 
   const isOnArc     = chainId === ARC_CHAIN_ID
-  const factoryAddr = (import.meta.env.VITE_STREAM_FACTORY_ADDRESS ?? '') as `0x${string}`
+  const factoryAddr = ((import.meta.env.VITE_STREAM_FACTORY_ADDRESS ?? DEFAULT_STREAM_FACTORY_ADDRESS).trim()) as `0x${string}`
 
   const [recipient,      setRecipient]      = useState(prefill.recipient)
   const [amount,         setAmount]         = useState(prefill.amount)
@@ -861,7 +862,7 @@ export function CreateStreamForm() {
               {isAgenticStreaming ? <>Agentic<span style={{ color: '#3b82f6' }}> Streaming</span></> : <>Pay<span style={{ color: '#3b82f6' }}>roll</span></>}
             </h1>
             <p className="text-[13px] text-gray-400">
-              {isAgenticStreaming ? 'Stream USDC to Hash PayLink Agent for daily Polymarket LP research' : 'Stream payment in USDC to anyone on Arc'}
+              {isAgenticStreaming ? 'Daily Polymarket LP research by stream' : 'Stream USDC to anyone on Arc'}
             </p>
           </div>
 
@@ -953,8 +954,8 @@ export function CreateStreamForm() {
   const hint = (() => {
     if (isWorking) return step === 'funding' ? 'Step 1 of 2 — funding vault' : 'Step 2 of 2 — deploying stream'
     if (isAgenticStreaming && !agenticReportEmailValid) return 'Enter the email that should receive daily LP research'
-    if (isAgenticStreaming) return 'Circle Smart Wallet streams Arc USDC to Hash PayLink Agent'
-    if (circleAvailable) return 'Circle Smart Wallet signs and deploys the Arc stream with email'
+    if (isAgenticStreaming) return 'Daily LP research starts after your stream is live'
+    if (circleAvailable) return 'Secure email sign-in starts your Arc stream'
     if (!isConnected) return 'Connect your wallet in the header above to continue'
     if (!isOnArc) return null
     if (insufficientFunds) return null
@@ -977,14 +978,14 @@ export function CreateStreamForm() {
             {isAgenticStreaming ? <>Agentic<span style={{ color: '#3b82f6' }}> Streaming</span></> : <>Pay<span style={{ color: '#3b82f6' }}>roll</span></>}
           </h1>
           <p className="mx-auto max-w-[400px] text-[13px] leading-relaxed text-gray-400">
-            {isAgenticStreaming ? 'Stream USDC to Hash PayLink Agent for daily Polymarket LP research. Marketplace coming soon.' : 'Stream payment in USDC to anyone on Arc'}
+            {isAgenticStreaming ? 'Stream USDC for daily Polymarket LP research.' : 'Stream USDC to anyone on Arc.'}
           </p>
         </div>
 
         {circleConfigured && (
           <div className="mx-auto flex w-full max-w-[340px] items-center justify-center gap-1.5 rounded-full border border-gray-100 bg-white px-3 py-1.5 shadow-sm dark:border-white/10 dark:bg-[#111216]">
             <img src="/hash-logo.png" alt="" className="h-3.5 w-3.5 object-contain" />
-            <span className="text-[11px] font-bold text-gray-600 dark:text-gray-300">Privy sign-in · Circle wallet on Arc</span>
+            <span className="text-[11px] font-bold text-gray-600 dark:text-gray-300">Privy + Circle on Arc</span>
           </div>
         )}
 
@@ -1137,9 +1138,9 @@ export function CreateStreamForm() {
                 <div className="rounded-xl border border-gray-100 bg-gray-50/80 p-3.5 dark:border-white/10 dark:bg-white/5">
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="text-[13px] font-bold text-gray-900 dark:text-gray-100">Polymarket LP desk</p>
+                      <p className="text-[13px] font-bold text-gray-900 dark:text-gray-100">LP research</p>
                       <p className="text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
-                        Daily LP research delivered by Hash PayLink Agent.
+                        Reports delivered to your email.
                       </p>
                     </div>
                     <span className="shrink-0 rounded-full border border-gray-200 dark:border-white/10 bg-white dark:bg-[#15151a] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
@@ -1182,11 +1183,11 @@ export function CreateStreamForm() {
                         <p className="mt-1 truncate font-mono text-[11px] text-gray-400">{shortAddress(recipient)}</p>
                       </div>
                       <span className="shrink-0 rounded-full border border-blue-100 bg-blue-50 px-2.5 py-1 text-[10px] font-bold text-blue-600 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-300">
-                        Access stream
+                        Fixed
                       </span>
                     </div>
                     <p className="mt-2 text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
-                      Your Arc USDC stream pays Hash PayLink Agent for daily Polymarket LP research.
+                      This stream unlocks agentic LP research.
                     </p>
                   </div>
                 </div>
@@ -1533,10 +1534,14 @@ export function CreateStreamForm() {
               How It Works
             </p>
             <div className="grid grid-cols-3 gap-2 sm:gap-3">
-              {([
-                { n: '1', title: 'Fund vault',    desc: 'USDC is pre-loaded into a ghost vault' },
-                { n: '2', title: 'Stream begins', desc: 'Funds unlock linearly to the recipient' },
-                { n: '3', title: 'Claim anytime', desc: 'Recipient withdraws gaslessly on Arc' },
+              {(isAgenticStreaming ? [
+                { n: '1', title: 'Sign in',       desc: 'Open your Arc wallet' },
+                { n: '2', title: 'Start stream',  desc: 'Pay as access runs' },
+                { n: '3', title: 'Get reports',   desc: 'LP research by email' },
+              ] : [
+                { n: '1', title: 'Fund vault',    desc: 'USDC is locked for the stream' },
+                { n: '2', title: 'Stream begins', desc: 'Funds unlock over time' },
+                { n: '3', title: 'Claim anytime', desc: 'Recipient withdraws on Arc' },
               ] as const).map(s => (
                 <div key={s.n} className="rounded-2xl border border-gray-100 dark:border-white/10 bg-white dark:bg-[#111216] p-3 sm:p-4 text-center shadow-sm space-y-1.5">
                   <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-gray-200 text-[11px] font-semibold text-gray-500">
