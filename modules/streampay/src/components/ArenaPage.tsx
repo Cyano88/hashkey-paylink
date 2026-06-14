@@ -1083,7 +1083,7 @@ export function ArenaPage() {
                     <div className="flex items-center justify-between gap-3">
                       <div>
                         <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/45 dark:text-gray-500">Private lobby</p>
-                        <h2 className="mt-1 text-[19px] font-black leading-tight">Lobby saved</h2>
+                        <h2 className="mt-1 text-[19px] font-black leading-tight">{canHostControl ? 'Lobby saved' : 'Lobby live'}</h2>
                       </div>
                       <p className="rounded-full bg-white/10 px-3 py-1.5 text-[11px] font-black dark:bg-gray-100">
                         {joinedPlayers}/{players}
@@ -1228,30 +1228,34 @@ export function ArenaPage() {
                       )}
                     </div>
                     <PlayerSlots total={players} joined={joinedPlayers} />
-                    <button
-                      type="button"
-                      onClick={startRoom}
-                      disabled={!canOpenDeposits || !canStartGame || !canHostControl || Boolean(roomActionBusy)}
-                      className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-white py-2.5 text-[12px] font-black text-gray-950 transition-transform active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45 dark:bg-gray-950 dark:text-white"
-                    >
-                      <Play className="h-4 w-4" />
-                      {roomActionBusy === 'start'
-                        ? 'Starting...'
-                        : !canHostControl
-                          ? 'Host controls locked'
-                          : canStartGame
-                            ? 'Start paid room'
-                            : 'Waiting for players'}
-                    </button>
-                    {canHostControl && (
-                      <button
-                        type="button"
-                        onClick={cancelRoom}
-                        disabled={Boolean(roomActionBusy)}
-                        className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 py-2.5 text-[12px] font-black text-white/70 transition-transform hover:bg-white/10 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45 dark:border-gray-200 dark:text-gray-500 dark:hover:bg-gray-100"
-                      >
-                        {roomActionBusy === 'cancel' ? 'Cancelling...' : 'Cancel room'}
-                      </button>
+                    {canHostControl ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={startRoom}
+                          disabled={!canOpenDeposits || !canStartGame || Boolean(roomActionBusy)}
+                          className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-white py-2.5 text-[12px] font-black text-gray-950 transition-transform active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45 dark:bg-gray-950 dark:text-white"
+                        >
+                          <Play className="h-4 w-4" />
+                          {roomActionBusy === 'start'
+                            ? 'Starting...'
+                            : canStartGame
+                              ? 'Start paid room'
+                              : 'Waiting for players'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={cancelRoom}
+                          disabled={Boolean(roomActionBusy)}
+                          className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 py-2.5 text-[12px] font-black text-white/70 transition-transform hover:bg-white/10 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45 dark:border-gray-200 dark:text-gray-500 dark:hover:bg-gray-100"
+                        >
+                          {roomActionBusy === 'cancel' ? 'Cancelling...' : 'Cancel room'}
+                        </button>
+                      </>
+                    ) : (
+                      <div className="mt-4 flex w-full items-center justify-center rounded-2xl border border-white/10 bg-white/[0.06] py-2.5 text-[11px] font-black uppercase tracking-[0.14em] text-white/65 dark:border-gray-200 dark:bg-gray-100 dark:text-gray-500">
+                        Waiting for host
+                      </div>
                     )}
                     {roomActionTxHash && (
                       <a
