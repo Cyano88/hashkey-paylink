@@ -297,15 +297,16 @@ function sportmonksCoach(match: ProviderMatch, location: 'home' | 'away') {
 
 function sportmonksEvents(match: ProviderMatch) {
   const events = Array.isArray(match.events) ? match.events : []
-  return events.slice(0, 6).map(item => {
+  return events.map(item => {
     const record = asRecord(item)
     const type = sportmonksEventType(record)
+    if (!/(substitution|yellow|red|card)/i.test(type)) return ''
     const period = asRecord(record.period)
     const minute = asText(record.minute) || asText(record.period_minute) || asText(period.minute) || asText(period.minutes)
     const player = compactName(record.player) || asString(record.player_name) || asString(record.related_player_name)
     const team = asString(record.participant_name) || compactName(record.participant) || sportmonksParticipantById(match, record.participant_id)
     return [minute ? `${minute}'` : '', type, player, team].filter(Boolean).join(' ')
-  }).filter(Boolean)
+  }).filter(Boolean).slice(0, 16)
 }
 
 function sportmonksParticipantById(match: ProviderMatch, participantId: unknown) {
@@ -373,27 +374,34 @@ function sportmonksWeather(match: ProviderMatch) {
 }
 
 function sportmonksClock(match: ProviderMatch) {
+  const status = [asString(asRecord(match.state).name), asString(asRecord(match.state).short_name)].join(' ').toLowerCase()
+  const normalizeMinute = (value: string | number) => {
+    const minute = asNumber(value)
+    if (minute === undefined) return ''
+    if (minute > 90 && !/(extra|aet|pen|et\b)/.test(status)) return `105'`
+    if (minute > 140) return ''
+    return `${Math.max(0, minute)}'`
+  }
   const direct = asText(match.minute) || asText(asRecord(match.state).minutes) || asText(asRecord(match.state).minute)
-  if (direct) return `${direct}'`
+  if (direct) return normalizeMinute(direct)
   const periods = Array.isArray(match.periods) ? match.periods.map(asRecord) : []
   const latestPeriod = periods
     .slice()
     .reverse()
     .find(record => asText(record.minutes) || asText(record.minute) || asText(record.started))
   const explicit = asText(latestPeriod?.minutes) || asText(latestPeriod?.minute)
-  if (explicit) return `${explicit}'`
+  if (explicit) return normalizeMinute(explicit)
   const started = asNumber(latestPeriod?.started)
   const countsFrom = asNumber(latestPeriod?.counts_from) ?? 0
   const ticking = latestPeriod?.ticking === true || asString(latestPeriod?.ticking).toLowerCase() === 'true'
   if (ticking && started) {
     const elapsed = Math.floor((Date.now() / 1000 - started) / 60) + countsFrom
-    if (Number.isFinite(elapsed) && elapsed >= 0 && elapsed <= 140) return `${elapsed}'`
+    if (Number.isFinite(elapsed) && elapsed >= 0 && elapsed <= 140) return normalizeMinute(elapsed)
   }
-  const status = [asString(asRecord(match.state).name), asString(asRecord(match.state).short_name)].join(' ').toLowerCase()
   const kickoff = asNumber(match.starting_at_timestamp) || (Date.parse(utcDateString(match.starting_at)) / 1000)
   if (/(live|inplay|in play|in-play|1h|2h|1st|2nd|first half|second half)/.test(status) && Number.isFinite(kickoff)) {
     const elapsed = Math.floor((Date.now() / 1000 - kickoff) / 60)
-    if (elapsed >= 0 && elapsed <= 140) return `${Math.max(1, elapsed)}'`
+    if (elapsed >= 0 && elapsed <= 140) return normalizeMinute(Math.max(1, elapsed))
   }
   return ''
 }
@@ -608,7 +616,7 @@ function isClosedMarket(candidate: ProviderMatch) {
   return false
 }
 
-function scorePolymarketCandidate(candidate: ProviderMatch, home: string, away: string) {
+function scorePolymarketCandidate(candidate: ProviderMatch, home: string, away: string, allowClosed = false) {
   const text = normalizeSearchText(candidateText(candidate))
   if (isExactScoreMarketText(text)) return 0
   const homeTerms = teamSearchTerms(home)
@@ -621,7 +629,7 @@ function scorePolymarketCandidate(candidate: ProviderMatch, home: string, away: 
   if (/\bworld cup\b|\bfifa\b|\b2026\b/.test(text)) score += 18
   if (/\bvs\b|\bv\b|\bversus\b|\bbeat\b|\bwin\b/.test(text)) score += 8
   if (/winner|match|game|group|advance|qualif|score/.test(text)) score += 6
-  if (isClosedMarket(candidate)) score -= 40
+  if (!allowClosed && isClosedMarket(candidate)) score -= 40
   return score
 }
 
@@ -763,9 +771,13 @@ async function fetchPolymarketJson(url: string) {
 }
 
 async function fetchPolymarketWorldCupEvents() {
+  return fetchPolymarketWorldCupEventsByClosed(false)
+}
+
+async function fetchPolymarketWorldCupEventsByClosed(closed: boolean) {
   const params = new URLSearchParams({
     active: 'true',
-    closed: 'false',
+    closed: closed ? 'true' : 'false',
     limit: process.env.POLYMARKET_WORLD_CUP_LIMIT?.trim() || '100',
     series_slug: 'soccer-fifwc',
   })
@@ -775,9 +787,10 @@ async function fetchPolymarketWorldCupEvents() {
 function polymarketMatchFromCandidates(match: ScoreMatch, candidates: Array<{ kind: 'event' | 'market'; item: ProviderMatch }>) {
   const [home, away] = splitFixtureTitle(match.title)
   if (!home || !away) return null
+  const allowClosed = isResultMatch(match)
   const ranked = candidates
     .filter(candidate => candidate.kind === 'event' && hasWorldCupSeries(candidate.item))
-    .map(candidate => ({ ...candidate, score: scorePolymarketCandidate(candidate.item, home, away) }))
+    .map(candidate => ({ ...candidate, score: scorePolymarketCandidate(candidate.item, home, away, allowClosed) }))
     .filter(candidate => candidate.score >= 50)
     .sort((a, b) => b.score - a.score)
   const best = ranked[0]
@@ -816,14 +829,25 @@ async function findPolymarketMatch(match: ScoreMatch) {
   ])
 }
 
+function isResultMatch(match: ScoreMatch) {
+  return match.tag === 'Result' || /(ft|full time|full-time|finished|complete|ended|after extra time|pen)/i.test(match.status)
+}
+
 async function enrichMatchesWithPolymarket(matches: ScoreMatch[]) {
   if (process.env.POLYMARKET_MARKET_LOOKUP?.trim() === '0') return matches
   const worldCupEvents = await fetchPolymarketWorldCupEvents()
+  const closedWorldCupEvents = matches.some(isResultMatch)
+    ? await fetchPolymarketWorldCupEventsByClosed(true)
+    : []
   const worldCupCandidates = worldCupEvents.map(item => ({ kind: 'event' as const, item }))
+  const closedWorldCupCandidates = closedWorldCupEvents.map(item => ({ kind: 'event' as const, item }))
   const enriched = await Promise.all(matches.map(async match => {
     if (match.polymarketUrl && !isExactScoreMarketText(match.polymarketUrl)) return match
     const searchableMatch = isExactScoreMarketText(match.polymarketUrl || '') ? { ...match, polymarketUrl: '' } : match
-    const found = polymarketMatchFromCandidates(match, worldCupCandidates) || await findPolymarketMatch(match).catch(() => null)
+    const candidatePool = isResultMatch(match)
+      ? [...worldCupCandidates, ...closedWorldCupCandidates]
+      : worldCupCandidates
+    const found = polymarketMatchFromCandidates(match, candidatePool) || await findPolymarketMatch(match).catch(() => null)
     if (!found?.url) return searchableMatch
     return {
       ...searchableMatch,
