@@ -2746,7 +2746,7 @@ function readableMatchClock(value?: string) {
   if (minute) {
     const count = Number(minute[1])
     if (Number.isFinite(count)) {
-      if (count > 90) return `90+${count - 90} mins`
+      if (count > 90) return `90+${Math.min(count - 90, 15)} mins`
       return `${count} ${count === 1 ? 'min' : 'mins'}`
     }
   }
