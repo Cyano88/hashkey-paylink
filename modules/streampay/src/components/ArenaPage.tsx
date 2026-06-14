@@ -242,6 +242,7 @@ export function ArenaPage() {
   const [playerRefundable, setPlayerRefundable] = useState<bigint | null>(null)
   const [claimBusy, setClaimBusy] = useState(false)
   const [claimTxHash, setClaimTxHash] = useState('')
+  const [refreshBusy, setRefreshBusy] = useState(false)
 
   const activeQuestion = SAMPLE_QUESTIONS[(round - 1) % SAMPLE_QUESTIONS.length]
   const maxPool = entry * players
@@ -365,9 +366,14 @@ export function ArenaPage() {
   }
 
   async function refreshSavedRoom() {
-    if (!savedRoomId) return
-    await loadSavedRoom(savedRoomId)
-    if (circleSession?.wallet.address) await refreshRoomChainState(circleSession.wallet.address)
+    if (!savedRoomId || refreshBusy) return
+    setRefreshBusy(true)
+    try {
+      await loadSavedRoom(savedRoomId)
+      if (circleSession?.wallet.address) await refreshRoomChainState(circleSession.wallet.address)
+    } finally {
+      setRefreshBusy(false)
+    }
   }
 
   async function refreshRoomChainState(walletAddress = circleSession?.wallet.address) {
@@ -456,7 +462,7 @@ export function ArenaPage() {
       setLinkedCircleAddress(session.wallet.address)
       setPrivyCircleLinkError('')
     } catch (error) {
-      setPrivyCircleLinkError(error instanceof Error ? error.message.slice(0, 160) : 'Circle wallet connected, but the saved link was not updated.')
+      setPrivyCircleLinkError(error instanceof Error ? error.message.slice(0, 160) : 'Wallet connected, but the saved link was not updated.')
     }
   }
 
@@ -473,14 +479,16 @@ export function ArenaPage() {
     setClaimTxHash('')
     setJoinError('')
     setPrivyCircleLinkError('')
+    setJoinBusy(false)
+    setClaimBusy(false)
+    setCircleEmail('')
     if (!PRIVY_AUTH_ENABLED) {
-      setCircleEmail('')
       return
     }
     try {
       await logoutPrivy()
     } catch {
-      setJoinError('Wallet session cleared locally. Refresh if Privy still shows the previous email.')
+      setJoinError('Signed out locally. Refresh if your email sign-in still shows the previous account.')
     }
   }
 
@@ -692,18 +700,18 @@ export function ArenaPage() {
       return
     }
     if (!canUseCircleEvmEmailWallet('arc')) {
-      setJoinError('Circle Arc wallet access is not configured.')
+      setJoinError('Arc wallet access is not configured.')
       return
     }
     if (!privyReady) {
       loginPrivy({ loginMethods: ['email'] })
-      setJoinError('Sign in with Privy email to unlock your Circle wallet.')
+      setJoinError('Sign in with email to unlock your wallet.')
       return
     }
 
     const email = walletEmail
     if (!circleSession && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setJoinError('Enter the email for your Circle wallet.')
+      setJoinError('Enter the email for your wallet.')
       return
     }
 
@@ -723,10 +731,10 @@ export function ArenaPage() {
       })
       setCircleBalance(balance)
       if (balance < entryUnits) {
-        throw new Error(`Add ${entry} USDC on Arc to this Circle wallet before joining.`)
+        throw new Error(`Add ${entry} USDC on Arc to this wallet before joining.`)
       }
 
-      setRoomLog('Circle wallet is funding your room seat.')
+      setRoomLog('Your wallet is funding your room seat.')
       const txHash = await sendCircleArcArenaJoin({
         session,
         escrowAddress: escrowAddress as Address,
@@ -752,18 +760,18 @@ export function ArenaPage() {
       return
     }
     if (!circleAvailable) {
-      setJoinError('Circle Arc wallet access is not configured.')
+      setJoinError('Arc wallet access is not configured.')
       return
     }
     if (!privyReady) {
       loginPrivy({ loginMethods: ['email'] })
-      setJoinError('Sign in with Privy email to claim with your Circle wallet.')
+      setJoinError('Sign in with email to claim from your wallet.')
       return
     }
 
     const email = walletEmail
     if (!circleSession && !isEmail(email)) {
-      setJoinError('Enter the email for your Circle wallet.')
+      setJoinError('Enter the email for your wallet.')
       return
     }
 
@@ -774,7 +782,7 @@ export function ArenaPage() {
       setCircleEmail(email || session.wallet.address)
       void rememberPrivyCircleSession(session, email)
 
-      setRoomLog('Circle wallet is claiming your remaining USDC.')
+      setRoomLog('Your wallet is claiming your remaining USDC.')
       const txHash = await sendCircleArcArenaRefund({
         session,
         escrowAddress: escrowAddress as Address,
@@ -841,7 +849,7 @@ export function ArenaPage() {
 
         <div className="mt-3 grid grid-cols-3 gap-2">
           {[
-            ['Wallet', 'Circle'],
+            ['Wallet', 'Embedded'],
             ['Network', 'Arc'],
             ['Mode', view === 'games' ? 'Lobby' : view === 'mode' ? 'Trivia' : 'Private'],
           ].map(([title, body]) => (
@@ -1098,12 +1106,12 @@ export function ArenaPage() {
                           </p>
                         </div>
                         <span className="rounded-full bg-white/10 px-2 py-1 text-[10px] font-black text-white/65 dark:bg-white dark:text-gray-500">
-                          Privy + Circle
+                          Email + wallet
                         </span>
                       </div>
 
                       <div className="mt-3 grid grid-cols-2 gap-2">
-                        <DarkMetric label="Access" value={privyReady ? (walletEmail || 'Signed in') : 'Privy email'} />
+                        <DarkMetric label="Access" value={privyReady ? (walletEmail || 'Signed in') : 'Email sign-in'} />
                         <DarkMetric
                           label="Wallet"
                           value={
@@ -1122,7 +1130,7 @@ export function ArenaPage() {
                           onClick={disconnectArenaWallet}
                           className="mt-2 inline-flex w-full items-center justify-center rounded-xl border border-white/10 py-2 text-[11px] font-black text-white/62 transition-colors hover:bg-white/10 hover:text-white dark:border-gray-200 dark:text-gray-500 dark:hover:bg-white dark:hover:text-gray-800"
                         >
-                          Disconnect wallet
+                          Sign out
                         </button>
                       )}
 
@@ -1184,7 +1192,7 @@ export function ArenaPage() {
                             : joinBusy
                               ? 'Confirming...'
                               : !privyReady
-                                ? 'Continue with Privy'
+                                ? 'Sign in to play'
                                 : canOpenDeposits
                                   ? 'Deposit & join'
                                   : 'Preparing escrow'}
@@ -1193,10 +1201,11 @@ export function ArenaPage() {
                           <button
                             type="button"
                             onClick={refreshSavedRoom}
-                            disabled={!savedRoomId}
-                            className="flex w-full items-center justify-center rounded-2xl border border-white/10 py-2.5 text-[12px] font-black text-white/70 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-45 dark:border-gray-200 dark:text-gray-600 dark:hover:bg-white"
+                            disabled={!savedRoomId || refreshBusy}
+                            className="flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 py-2.5 text-[12px] font-black text-white/70 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-200 dark:text-gray-600 dark:hover:bg-white"
                           >
-                            Refresh room
+                            <RotateCcw className={`h-3.5 w-3.5 ${refreshBusy ? 'animate-spin' : ''}`} />
+                            {refreshBusy ? 'Refreshing...' : 'Refresh room'}
                           </button>
                         )}
                       </div>
@@ -1268,7 +1277,7 @@ export function ArenaPage() {
                       </a>
                     )}
                     <p className="mt-2 text-center text-[10px] font-semibold text-white/45 dark:text-gray-500">
-                      Privy signs you in. Circle signs the Arc wallet action.
+                      Email signs you in. Your wallet signs the Arc deposit.
                     </p>
                   </div>
                 )}
@@ -1538,8 +1547,8 @@ function HowToPlay() {
       <p className="text-[13px] font-bold text-gray-950 dark:text-white">How to play</p>
       <div className="mt-3 space-y-2.5">
         <Step index="1" title="Create a room" body="Pick entry, player count, rounds, timer, and risk curve." />
-        <Step index="2" title="Invite players" body="Share the private link. Players enter through Privy email access." />
-        <Step index="3" title="Deposit with Circle" body="Circle opens the Arc wallet action when escrow deposits are live." />
+        <Step index="2" title="Invite players" body="Share the private link. Players sign in with email." />
+        <Step index="3" title="Deposit USDC" body="Your wallet sends the entry USDC when escrow is open." />
         <Step index="4" title="Keep unused USDC" body="If a player misses, escrow halts risk and leaves unstreamed USDC claimable." />
       </div>
     </div>
