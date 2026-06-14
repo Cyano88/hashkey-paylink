@@ -679,6 +679,35 @@ export async function sendCircleArcArenaJoin(params: {
   return null
 }
 
+export async function sendCircleArcArenaRefund(params: {
+  session: CircleEvmEmailSession
+  escrowAddress: Address
+}) {
+  if (params.session.chain !== 'arc') throw new Error('StreamPay Arena refunds require an Arc Circle smart wallet.')
+  const sdk = authenticatedSdk(params.session)
+  const challenge = await circleWalletApi<{ challengeId?: string }>({
+    action: 'executeArcArenaRefund',
+    userToken: params.session.userToken,
+    walletId: params.session.wallet.id,
+    walletAddress: params.session.wallet.address,
+    escrowAddress: params.escrowAddress,
+  })
+  if (!challenge.challengeId) throw new Error('Circle did not return an Arena refund challenge.')
+  const result = await executeChallengeWithTimeout(
+    sdk,
+    challenge.challengeId,
+    'Circle Smart Wallet confirmation did not finish. If you approved it, refresh this Arena room in a moment and check your refund.',
+  )
+  const txHash = findTxHash(result)
+  if (txHash) return txHash
+  const transactionId = findTransactionId(result)
+  if (transactionId) {
+    const hash = await pollTransactionHash(params.session, transactionId).catch(() => null)
+    if (hash) return hash
+  }
+  return null
+}
+
 export async function deployCircleEvmEmailWallet(params: {
   session: CircleEvmEmailSession
 }) {

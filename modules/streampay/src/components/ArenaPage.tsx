@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
+import { usePrivy } from '@privy-io/react-auth'
 import { ArrowLeft, Clock3, Crown, LockKeyhole, Play, RotateCcw, Settings, Share2, Shield, Sparkles, Trophy, Users, WalletCards } from 'lucide-react'
 import { createPublicClient, formatUnits, http, parseUnits, type Address } from 'viem'
 import { arcChain, CHAIN_META } from '../../../../src/lib/chains'
@@ -7,8 +8,11 @@ import {
   canUseCircleEvmEmailWallet,
   connectCircleEvmEmailWallet,
   sendCircleArcArenaJoin,
+  sendCircleArcArenaRefund,
   type CircleEvmEmailSession,
 } from '../../../../src/lib/circleEvmEmailWallet'
+import { PRIVY_AUTH_ENABLED } from '../../../../src/lib/authMode'
+import { resolvePrivyCircleLink, savePrivyCircleLink } from '../../../../src/lib/privyCircleLink'
 
 type RiskMode = 'linear' | 'climb' | 'finale'
 type RoomStatus = 'setup' | 'lobby' | 'playing' | 'eliminated' | 'won'
@@ -152,6 +156,32 @@ function money(value: number) {
   return value.toLocaleString(undefined, { maximumFractionDigits: 2 })
 }
 
+function cleanEmail(value: string) {
+  return value.trim().toLowerCase()
+}
+
+function isEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail(value))
+}
+
+function emailFromPrivyUser(user: unknown) {
+  if (!user || typeof user !== 'object') return ''
+  const record = user as Record<string, unknown>
+  const directEmail = record.email
+  if (directEmail && typeof directEmail === 'object') {
+    const address = (directEmail as Record<string, unknown>).address
+    if (typeof address === 'string') return address
+  }
+  for (const key of ['google', 'apple']) {
+    const provider = record[key]
+    if (provider && typeof provider === 'object') {
+      const email = (provider as Record<string, unknown>).email
+      if (typeof email === 'string') return email
+    }
+  }
+  return ''
+}
+
 function shortAddress(value: string) {
   if (!/^0x[a-fA-F0-9]{40}$/.test(value)) return value
   return `${value.slice(0, 6)}...${value.slice(-4)}`
@@ -182,6 +212,8 @@ function percent(value: number) {
 }
 
 export function ArenaPage() {
+  const { authenticated: privyAuthenticated, user: privyUser, login: loginPrivy, getAccessToken } = usePrivy()
+  const privyEmail = cleanEmail(emailFromPrivyUser(privyUser))
   const [entry, setEntry] = useState(10)
   const [players, setPlayers] = useState(5)
   const [rounds, setRounds] = useState(15)
@@ -210,9 +242,17 @@ export function ArenaPage() {
   const [joinBusy, setJoinBusy] = useState(false)
   const [joinTxHash, setJoinTxHash] = useState('')
   const [joinError, setJoinError] = useState('')
+  const [linkedCircleAddress, setLinkedCircleAddress] = useState('')
+  const [privyCircleLinkError, setPrivyCircleLinkError] = useState('')
   const [hostControlToken, setHostControlToken] = useState('')
   const [roomActionBusy, setRoomActionBusy] = useState('')
   const [roomActionTxHash, setRoomActionTxHash] = useState('')
+  const [playerActive, setPlayerActive] = useState(false)
+  const [playerRefunded, setPlayerRefunded] = useState(false)
+  const [playerStreamed, setPlayerStreamed] = useState<bigint | null>(null)
+  const [playerRefundable, setPlayerRefundable] = useState<bigint | null>(null)
+  const [claimBusy, setClaimBusy] = useState(false)
+  const [claimTxHash, setClaimTxHash] = useState('')
 
   const activeQuestion = SAMPLE_QUESTIONS[(round - 1) % SAMPLE_QUESTIONS.length]
   const maxPool = entry * players
@@ -228,6 +268,17 @@ export function ArenaPage() {
   const canStartGame = joinedPlayers >= 2 && (startRule === 'host' || joinedPlayers >= players)
   const canHostControl = Boolean(savedRoomId && hostControlToken)
   const canOpenDeposits = ESCROW_FACTORY_READY && Boolean(escrowAddress) && paymentStatus !== 'escrow_pending'
+  const circleAvailable = canUseCircleEvmEmailWallet('arc')
+  const privyReady = !PRIVY_AUTH_ENABLED || privyAuthenticated
+  const walletEmail = PRIVY_AUTH_ENABLED ? privyEmail : circleEmail.trim()
+  const canClaimRefund = Boolean(
+    playerJoined &&
+    !playerActive &&
+    !playerRefunded &&
+    playerRefundable !== null &&
+    playerRefundable > 0n &&
+    escrowAddress,
+  )
   const riskProgress = Math.min(100, Math.round((currentStreamed / entry) * 100))
   const alivePlayers = status === 'playing' ? Math.max(1, players - Math.floor(round / 4)) : status === 'eliminated' ? players - 1 : players
   const privateUrl = useMemo(() => {
@@ -356,6 +407,10 @@ export function ArenaPage() {
         ])
         setCircleBalance(balanceRaw)
         setPlayerJoined(Boolean(playerRaw[0]))
+        setPlayerActive(Boolean(playerRaw[1]))
+        setPlayerRefunded(Boolean(playerRaw[2]))
+        setPlayerStreamed(playerRaw[3])
+        setPlayerRefundable(playerRaw[4])
       }
     } catch (error) {
       setJoinError(error instanceof Error ? error.message.slice(0, 180) : 'Could not refresh Arena escrow.')
@@ -375,6 +430,64 @@ export function ArenaPage() {
     if (!circleSession?.wallet.address || !escrowAddress) return
     void refreshRoomChainState(circleSession.wallet.address)
   }, [circleSession?.wallet.address, escrowAddress])
+
+  async function rememberPrivyCircleSession(session: CircleEvmEmailSession, email = walletEmail) {
+    if (!PRIVY_AUTH_ENABLED || !privyAuthenticated) return
+    try {
+      const token = await getAccessToken()
+      if (!token) return
+      await savePrivyCircleLink({
+        accessToken: token,
+        chain: 'arc',
+        purpose: 'payment',
+        email: cleanEmail(email),
+        wallet: {
+          id: session.wallet.id,
+          address: session.wallet.address,
+          blockchain: session.wallet.blockchain,
+        },
+      })
+      setLinkedCircleAddress(session.wallet.address)
+      setPrivyCircleLinkError('')
+    } catch (error) {
+      setPrivyCircleLinkError(error instanceof Error ? error.message.slice(0, 160) : 'Circle wallet connected, but the saved link was not updated.')
+    }
+  }
+
+  useEffect(() => {
+    if (!circleAvailable || !PRIVY_AUTH_ENABLED) return
+    if (privyEmail) setCircleEmail(current => current || privyEmail)
+  }, [circleAvailable, privyEmail])
+
+  useEffect(() => {
+    if (!circleAvailable || !PRIVY_AUTH_ENABLED || !privyAuthenticated) return
+    let cancelled = false
+
+    async function restorePrivyCircleLink() {
+      try {
+        const token = await getAccessToken()
+        if (!token) return
+        const data = await resolvePrivyCircleLink({
+          accessToken: token,
+          chain: 'arc',
+          purpose: 'payment',
+        })
+        if (cancelled) return
+        if (data.email) setCircleEmail(current => current || data.email || privyEmail)
+        if (data.link?.circleWalletAddress) setLinkedCircleAddress(data.link.circleWalletAddress)
+      } catch (error) {
+        if (!cancelled) {
+          console.warn('[Arena] Privy Circle wallet link restore failed', error)
+          setPrivyCircleLinkError('')
+        }
+      }
+    }
+
+    void restorePrivyCircleLink()
+    return () => {
+      cancelled = true
+    }
+  }, [circleAvailable, privyAuthenticated, privyEmail, getAccessToken])
 
   useEffect(() => {
     if (status !== 'playing') return
@@ -502,8 +615,13 @@ export function ArenaPage() {
     setChainPlayerCount(null)
     setChainActiveCount(null)
     setPlayerJoined(false)
+    setPlayerActive(false)
+    setPlayerRefunded(false)
+    setPlayerStreamed(null)
+    setPlayerRefundable(null)
     setJoinTxHash('')
     setJoinError('')
+    setClaimTxHash('')
     setHostControlToken('')
     setRoomActionTxHash('')
     setRoomLog('Room preview ready')
@@ -547,8 +665,13 @@ export function ArenaPage() {
       setJoinError('Circle Arc wallet access is not configured.')
       return
     }
+    if (!privyReady) {
+      loginPrivy({ loginMethods: ['email'] })
+      setJoinError('Sign in with Privy email to unlock your Circle wallet.')
+      return
+    }
 
-    const email = circleEmail.trim()
+    const email = walletEmail
     if (!circleSession && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       setJoinError('Enter the email for your Circle wallet.')
       return
@@ -559,6 +682,7 @@ export function ArenaPage() {
       const session = circleSession ?? await connectCircleEvmEmailWallet(email, 'arc')
       setCircleSession(session)
       setCircleEmail(email || session.wallet.address)
+      void rememberPrivyCircleSession(session, email)
 
       const entryUnits = parseUnits(String(entry), ARC_USDC_DECIMALS)
       const balance = await ARC_PUBLIC_CLIENT.readContract({
@@ -586,6 +710,53 @@ export function ArenaPage() {
       setJoinError(error instanceof Error ? error.message : 'Arena deposit failed.')
     } finally {
       setJoinBusy(false)
+    }
+  }
+
+  async function claimRefundWithCircle() {
+    setJoinError('')
+    setClaimTxHash('')
+
+    if (!canClaimRefund || !escrowAddress) {
+      setJoinError('No claimable Arena balance for this wallet.')
+      return
+    }
+    if (!circleAvailable) {
+      setJoinError('Circle Arc wallet access is not configured.')
+      return
+    }
+    if (!privyReady) {
+      loginPrivy({ loginMethods: ['email'] })
+      setJoinError('Sign in with Privy email to claim with your Circle wallet.')
+      return
+    }
+
+    const email = walletEmail
+    if (!circleSession && !isEmail(email)) {
+      setJoinError('Enter the email for your Circle wallet.')
+      return
+    }
+
+    setClaimBusy(true)
+    try {
+      const session = circleSession ?? await connectCircleEvmEmailWallet(email, 'arc')
+      setCircleSession(session)
+      setCircleEmail(email || session.wallet.address)
+      void rememberPrivyCircleSession(session, email)
+
+      setRoomLog('Circle wallet is claiming your remaining USDC.')
+      const txHash = await sendCircleArcArenaRefund({
+        session,
+        escrowAddress: escrowAddress as Address,
+      })
+      if (txHash) setClaimTxHash(txHash)
+      setPlayerRefunded(true)
+      setRoomLog('Remaining USDC claimed from the room escrow.')
+      await refreshRoomChainState(session.wallet.address)
+    } catch (error) {
+      setJoinError(error instanceof Error ? error.message : 'Arena refund failed.')
+    } finally {
+      setClaimBusy(false)
     }
   }
 
@@ -893,15 +1064,29 @@ export function ArenaPage() {
                         <div>
                           <p className="text-[12px] font-black">Deposit seat</p>
                           <p className="mt-0.5 text-[10px] font-semibold text-white/50 dark:text-gray-500">
-                            {playerJoined ? 'You are in this room.' : `${entry} USDC funds your protected Arena seat.`}
+                            {playerJoined ? 'Seat funded. Unused USDC stays claimable.' : `${entry} USDC funds your protected Arena seat.`}
                           </p>
                         </div>
                         <span className="rounded-full bg-white/10 px-2 py-1 text-[10px] font-black text-white/65 dark:bg-white dark:text-gray-500">
-                          Circle
+                          Privy + Circle
                         </span>
                       </div>
 
-                      {!circleSession && (
+                      <div className="mt-3 grid grid-cols-2 gap-2">
+                        <DarkMetric label="Access" value={privyReady ? (walletEmail || 'Signed in') : 'Privy email'} />
+                        <DarkMetric
+                          label="Wallet"
+                          value={
+                            circleSession
+                              ? shortAddress(circleSession.wallet.address)
+                              : linkedCircleAddress
+                                ? shortAddress(linkedCircleAddress)
+                                : 'On action'
+                          }
+                        />
+                      </div>
+
+                      {!PRIVY_AUTH_ENABLED && !circleSession && (
                         <input
                           value={circleEmail}
                           onChange={(event) => setCircleEmail(event.target.value)}
@@ -912,15 +1097,27 @@ export function ArenaPage() {
                       )}
 
                       {circleSession && (
-                        <div className="mt-3 grid grid-cols-2 gap-2">
-                          <DarkMetric label="Wallet" value={shortAddress(circleSession.wallet.address)} />
+                        <div className="mt-2 grid grid-cols-2 gap-2">
                           <DarkMetric label="Balance" value={circleBalance === null ? 'Checking' : `${formatCompactUsdc(circleBalance)} USDC`} />
+                          <DarkMetric label="Escrow" value={playerJoined ? 'Funded' : 'Ready'} />
+                        </div>
+                      )}
+
+                      {playerJoined && (
+                        <div className="mt-2 grid grid-cols-2 gap-2">
+                          <DarkMetric label="Streamed" value={playerStreamed === null ? '-' : `${formatCompactUsdc(playerStreamed)} USDC`} />
+                          <DarkMetric label="Claimable" value={playerRefundable === null ? '-' : `${formatCompactUsdc(playerRefundable)} USDC`} />
                         </div>
                       )}
 
                       {joinError && (
                         <p className="mt-2 rounded-xl bg-amber-400/10 px-3 py-2 text-[10px] font-bold text-amber-100 dark:bg-amber-100 dark:text-amber-700">
                           {joinError}
+                        </p>
+                      )}
+                      {privyCircleLinkError && (
+                        <p className="mt-2 rounded-xl bg-white/10 px-3 py-2 text-[10px] font-bold text-white/55 dark:bg-white dark:text-gray-500">
+                          {privyCircleLinkError}
                         </p>
                       )}
                       {joinTxHash && (
@@ -941,8 +1138,42 @@ export function ArenaPage() {
                         className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-white py-2.5 text-[12px] font-black text-gray-950 transition-transform active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45 dark:bg-gray-950 dark:text-white"
                       >
                         <WalletCards className="h-4 w-4" />
-                        {playerJoined ? 'Seat funded' : joinBusy ? 'Confirming...' : canOpenDeposits ? 'Deposit & join' : 'Escrow pending'}
+                        {playerJoined
+                          ? 'Seat funded'
+                          : joinBusy
+                            ? 'Confirming...'
+                            : !privyReady
+                              ? 'Continue with Privy'
+                              : canOpenDeposits
+                                ? 'Deposit & join'
+                                : 'Escrow pending'}
                       </button>
+                      {canClaimRefund && (
+                        <button
+                          type="button"
+                          onClick={claimRefundWithCircle}
+                          disabled={claimBusy}
+                          className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 py-2.5 text-[12px] font-black text-white/80 transition-transform hover:bg-white/10 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45 dark:border-gray-200 dark:text-gray-700 dark:hover:bg-white"
+                        >
+                          <WalletCards className="h-4 w-4" />
+                          {claimBusy ? 'Claiming...' : 'Claim remaining USDC'}
+                        </button>
+                      )}
+                      {playerRefunded && (
+                        <p className="mt-2 rounded-xl bg-emerald-400/10 px-3 py-2 text-center text-[10px] font-bold text-emerald-100 dark:bg-emerald-100 dark:text-emerald-700">
+                          Remaining USDC claimed.
+                        </p>
+                      )}
+                      {claimTxHash && (
+                        <a
+                          href={`${CHAIN_META.arc.explorerUrl}/tx/${claimTxHash}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mt-2 block truncate rounded-xl bg-white/10 px-3 py-2 text-[10px] font-bold text-white/70 underline decoration-white/20 underline-offset-4 dark:bg-white dark:text-gray-600"
+                        >
+                          View claim transaction
+                        </a>
+                      )}
                     </div>
                     <PlayerSlots total={players} joined={joinedPlayers} />
                     <button
@@ -981,7 +1212,7 @@ export function ArenaPage() {
                       </a>
                     )}
                     <p className="mt-2 text-center text-[10px] font-semibold text-white/45 dark:text-gray-500">
-                      No platform account required. Players use Circle wallet access when deposits open.
+                      Privy signs you in. Circle signs the Arc wallet action.
                     </p>
                   </div>
                 )}
@@ -1070,6 +1301,40 @@ export function ArenaPage() {
                   </button>
                 )}
               </div>
+              {playerJoined && (status === 'playing' || status === 'eliminated' || status === 'won') && (
+                <div className="mt-3 rounded-2xl border border-gray-100 bg-white p-3 dark:border-white/10 dark:bg-white/[0.04]">
+                  <div className="grid grid-cols-2 gap-2">
+                    <Metric icon={<WalletCards className="h-3.5 w-3.5" />} label="Streamed" value={playerStreamed === null ? '-' : `${formatCompactUsdc(playerStreamed)} USDC`} />
+                    <Metric icon={<LockKeyhole className="h-3.5 w-3.5" />} label="Claimable" value={playerRefundable === null ? '-' : `${formatCompactUsdc(playerRefundable)} USDC`} />
+                  </div>
+                  {canClaimRefund && (
+                    <button
+                      type="button"
+                      onClick={claimRefundWithCircle}
+                      disabled={claimBusy}
+                      className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-gray-950 py-2.5 text-[12px] font-black text-white transition-transform active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45 dark:bg-white dark:text-gray-950"
+                    >
+                      <WalletCards className="h-4 w-4" />
+                      {claimBusy ? 'Claiming...' : 'Claim remaining USDC'}
+                    </button>
+                  )}
+                  {playerRefunded && (
+                    <p className="mt-2 rounded-xl bg-emerald-50 px-3 py-2 text-center text-[10px] font-bold text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-100">
+                      Remaining USDC claimed.
+                    </p>
+                  )}
+                  {claimTxHash && (
+                    <a
+                      href={`${CHAIN_META.arc.explorerUrl}/tx/${claimTxHash}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-2 block truncate text-center text-[10px] font-bold text-gray-500 underline decoration-gray-300 underline-offset-4 dark:text-gray-400 dark:decoration-white/20"
+                    >
+                      View claim transaction
+                    </a>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -1210,8 +1475,8 @@ function HowToPlay() {
       <p className="text-[13px] font-bold text-gray-950 dark:text-white">How to play</p>
       <div className="mt-3 space-y-2.5">
         <Step index="1" title="Create a room" body="Pick entry, player count, rounds, timer, and risk curve." />
-        <Step index="2" title="Invite players" body="Share the private link. No platform account is required." />
-        <Step index="3" title="Deposit with Circle" body="When escrow is live, each player uses wallet access to deposit Arc USDC." />
+        <Step index="2" title="Invite players" body="Share the private link. Players enter through Privy email access." />
+        <Step index="3" title="Deposit with Circle" body="Circle opens the Arc wallet action when escrow deposits are live." />
         <Step index="4" title="Keep unused USDC" body="If a player misses, escrow halts risk and leaves unstreamed USDC claimable." />
       </div>
     </div>

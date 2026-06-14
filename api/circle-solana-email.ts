@@ -33,7 +33,7 @@ const SMART_WALLET_BATCH_ABI = parseAbi(['function executeBatch((address target,
 const STREAM_FACTORY_ABI = parseAbi([
   'function createStream(address recipient,uint256 totalAmount,uint64 startTime,uint64 endTime,bytes32 salt) returns (address vault)',
 ])
-const ARENA_ESCROW_ABI = parseAbi(['function join()'])
+const ARENA_ESCROW_ABI = parseAbi(['function join()', 'function refund()'])
 
 type CircleResponse<T = unknown> = {
   data?: T
@@ -453,6 +453,44 @@ export default async function handler(req: Request, res: Response) {
           walletId,
           feeLevel: 'HIGH',
           refId: 'hashpaylink-arc-arena-join',
+          contractAddress: walletAddress,
+          callData: batchCallData,
+        }),
+      })
+      return res.json({ ok: true, escrowAddress, ...data })
+    }
+
+    if (action === 'executeArcArenaRefund') {
+      const { userToken, walletId, walletAddress, escrowAddress } = params
+      if (!userToken || !walletId || !walletAddress || !escrowAddress) {
+        return res.status(400).json({ ok: false, error: 'Missing Arc Arena refund parameters' })
+      }
+      if (!isAddress(walletAddress) || !isAddress(escrowAddress)) {
+        return res.status(400).json({ ok: false, error: 'Invalid Arc Arena wallet or escrow address' })
+      }
+
+      const refundCallData = encodeFunctionData({
+        abi: ARENA_ESCROW_ABI,
+        functionName: 'refund',
+        args: [],
+      })
+      const batchCallData = encodeFunctionData({
+        abi: SMART_WALLET_BATCH_ABI,
+        functionName: 'executeBatch',
+        args: [[
+          { target: escrowAddress as `0x${string}`, value: 0n, data: refundCallData },
+        ]],
+      })
+
+      const data = await circleJson('/v1/w3s/user/transactions/contractExecution', {
+        method: 'POST',
+        userToken,
+        apiKey: circleApiKey({ chain: 'arc' }),
+        body: JSON.stringify({
+          idempotencyKey: crypto.randomUUID(),
+          walletId,
+          feeLevel: 'HIGH',
+          refId: 'hashpaylink-arc-arena-refund',
           contractAddress: walletAddress,
           callData: batchCallData,
         }),
