@@ -1,6 +1,6 @@
 # StreamPay
 
-USDC streaming payments on Arc Network. Two sovereign flows in one platform.
+USDC streaming payments on Arc Network. Payroll, agentic streams, and Arena rooms in one platform.
 
 **Live:** [hashkey-paylink.onrender.com/?app=streampay](https://hashkey-paylink.onrender.com/?app=streampay)  
 **Own domain (pending DNS):** `streampay.xyz`
@@ -12,7 +12,9 @@ USDC streaming payments on Arc Network. Two sovereign flows in one platform.
 | Mode | Flow | Description |
 |---|---|---|
 | **Payroll** | Time-Sovereign | Pre-fund a vault · USDC unlocks linearly to the recipient · gasless withdrawal |
-| **Creator Studio** | Event-Sovereign (PoA) | Gate content behind a drip paywall · viewers pay per second of reading |
+| **Agentic Stream** | Agent-Sovereign | Stream Arc USDC to the Hash PayLink Agent for recurring services such as daily LP research |
+| **StreamPay Arena** | Game-Sovereign | Competitive rooms where player deposits stream into a prize pool while they stay active |
+| **Creator Studio** | Event-Sovereign (PoA) | Direct-route legacy module for gated content and proof-of-attention settlement |
 
 ---
 
@@ -49,14 +51,15 @@ Never add `VITE_` to private keys — they would be exposed to the browser.
 ```
 modules/streampay/
 ├── src/
-│   ├── StreamPayApp.tsx              # Root router (Payroll + Creator routes)
+│   ├── StreamPayApp.tsx              # Root router (Payroll + Agentic + Arena + Creator routes)
 │   ├── components/
-│   │   ├── StreamPayHeader.tsx       # Shared nav (mode toggle, wallet)
+│   │   ├── StreamPayHeader.tsx       # Shared nav (Payroll / Agentic / Arena, wallet)
 │   │   ├── StreamPayLayout.tsx       # Shell (header + footer)
 │   │   ├── CreateStreamForm.tsx      # Payroll: create a stream
 │   │   ├── StreamView.tsx            # Payroll: view + claim/cancel a stream
 │   │   ├── StreamNotFound.tsx        # 404 state for bad vault addresses
 │   │   ├── TriStateBar.tsx           # Progress bar (claimed / unlocked / locked)
+│   │   ├── ArenaPage.tsx             # Arena placeholder while room contracts are designed
 │   │   └── creator/
 │   │       ├── LinkFactory.tsx       # Creator: generate a gate link
 │   │       ├── StreamGate.tsx        # Viewer: 4-step auth + content reveal + HUD

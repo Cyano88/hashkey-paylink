@@ -14,6 +14,7 @@ import {
   signCircleArcStreamCancel,
   type CircleEvmEmailSession,
 } from '../../../../src/lib/circleEvmEmailWallet'
+import { EVM_TREASURY } from '../../../../src/lib/chains'
 
 const ARC_CHAIN_ID = 5042002
 const ARC_USDC     = '0x3600000000000000000000000000000000000000' as const
@@ -56,21 +57,23 @@ type OnchainStream = {
 
 function readPrefill() {
   const params = new URLSearchParams(window.location.search)
+  const path = window.location.pathname.toLowerCase()
+  const isAgenticPath = path.startsWith('/agentic')
   const rawDuration = (params.get('duration') ?? '').trim().toLowerCase()
-  const amount = (params.get('amount') ?? '').trim()
-  const recipient = (params.get('recipient') ?? '').trim()
+  const amount = (params.get('amount') ?? (isAgenticPath ? '5' : '')).trim()
+  const recipient = (params.get('recipient') ?? (isAgenticPath ? EVM_TREASURY : '')).trim()
   const rawRecipientEmail = (params.get('recipientEmail') ?? params.get('email') ?? '').trim()
   const recipientEmail = isEmail(rawRecipientEmail) ? cleanEmail(rawRecipientEmail) : ''
   const rawReportEmail = (params.get('reportEmail') ?? '').trim()
   const reportEmail = isEmail(rawReportEmail) ? cleanEmail(rawReportEmail) : ''
-  const mode = (params.get('mode') ?? '').trim().toLowerCase()
-  const service = (params.get('service') ?? '').trim().toLowerCase()
+  const mode = (params.get('mode') ?? (isAgenticPath ? 'agentic-streaming' : '')).trim().toLowerCase()
+  const service = (params.get('service') ?? (isAgenticPath ? 'polymarket-lp' : '')).trim().toLowerCase()
   const agentSlug = (params.get('agent') ?? params.get('agentSlug') ?? 'hashpaylink-agent').trim().toLowerCase()
   const amountPerDay = (params.get('amountPerDay') ?? '').trim()
-  const reason = (params.get('reason') ?? '').trim()
+  const reason = (params.get('reason') ?? (isAgenticPath ? 'Agentic LP Research: Best Polymarket LP reward markets' : '')).trim()
   const source = (params.get('src') ?? '').trim().toLowerCase()
   const wallet = (params.get('wallet') ?? '').trim().toLowerCase()
-  const preferCircle = source === 'telegram' || wallet === 'circle' || wallet === 'smart'
+  const preferCircle = wallet !== 'connected' || source === 'telegram' || wallet === 'circle' || wallet === 'smart'
   let durationPreset: bigint | null = null
   let customDays = ''
 
@@ -222,6 +225,7 @@ export function CreateStreamForm() {
   const [reportEmail, setReportEmail] = useState(prefill.reportEmail)
   const [agenticStatus, setAgenticStatus] = useState('')
   const [agenticError, setAgenticError] = useState<string | null>(null)
+  const [useCircleWallet, setUseCircleWallet] = useState(prefill.preferCircle)
   const [recentStreams, setRecentStreams] = useState<RecentStream[]>(() => loadRecentStreams(prefill.recipient))
   const [onchainStreams, setOnchainStreams] = useState<OnchainStream[]>([])
   const [onchainStreamsLoading, setOnchainStreamsLoading] = useState(false)
@@ -242,7 +246,7 @@ export function CreateStreamForm() {
   const isFormValid    = recipientValid && amountValid && durationValid && agenticReportEmailValid
                          && isConnected && isOnArc && !!factoryAddr
   const circleConfigured = canUseCircleEvmEmailWallet('arc')
-  const circleAvailable = prefill.preferCircle
+  const circleAvailable = useCircleWallet && circleConfigured
   const recipientLocked = circleAvailable && !!prefill.recipient
   const circleReady = recipientValid && amountValid && durationValid && !!factoryAddr && agenticReportEmailValid
   const circleNeedsFunds = circleBalance !== null && amountValid && circleBalance < amountBn
@@ -807,7 +811,7 @@ export function CreateStreamForm() {
     if (isWorking) return step === 'funding' ? 'Step 1 of 2 — funding vault' : 'Step 2 of 2 — deploying stream'
     if (isAgenticStreaming && !agenticReportEmailValid) return 'Enter the email that should receive daily LP research'
     if (isAgenticStreaming) return 'Circle Smart Wallet streams Arc USDC to Hash PayLink Agent'
-    if (circleAvailable) return 'Circle Smart Wallet signs and deploys the Arc stream from Telegram'
+    if (circleAvailable) return 'Circle Smart Wallet signs and deploys the Arc stream with email'
     if (!isConnected) return 'Connect your wallet in the header above to continue'
     if (!isOnArc) return null
     if (insufficientFunds) return null
@@ -833,6 +837,33 @@ export function CreateStreamForm() {
             {isAgenticStreaming ? 'Stream USDC to Hash PayLink Agent for daily Polymarket LP research' : 'Stream payment in USDC to anyone on Arc'}
           </p>
         </div>
+
+        {circleConfigured && (
+          <div className="mx-auto grid w-full max-w-[360px] grid-cols-2 gap-1 rounded-xl border border-gray-100 dark:border-white/10 bg-white dark:bg-[#111216] p-1 shadow-sm">
+            {([
+              ['circle', 'Email wallet'],
+              ['connected', 'Connected wallet'],
+            ] as const).map(([mode, label]) => {
+              const active = mode === 'circle' ? useCircleWallet : !useCircleWallet
+              return (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setUseCircleWallet(mode === 'circle')}
+                  disabled={isWorking}
+                  className={[
+                    'rounded-lg px-3 py-2 text-[12px] font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-60',
+                    active
+                      ? 'bg-gray-900 text-white shadow-sm'
+                      : 'text-gray-400 hover:text-gray-700 dark:hover:text-gray-200',
+                  ].join(' ')}
+                >
+                  {label}
+                </button>
+              )
+            })}
+          </div>
+        )}
 
         {circleAvailable && (
           <div className="space-y-3">
@@ -1194,7 +1225,7 @@ export function CreateStreamForm() {
                     <div className="flex items-center justify-between gap-3">
                       <div className="min-w-0">
                         <p className="text-[12px] font-bold text-gray-800 dark:text-gray-100">Circle Smart Wallet on Arc</p>
-                        <p className="text-[11px] text-gray-500 dark:text-gray-400">Default for Telegram StreamPay links</p>
+                        <p className="text-[11px] text-gray-500 dark:text-gray-400">Default StreamPay wallet for website and Telegram</p>
                       </div>
                     </div>
 

@@ -4,6 +4,7 @@ import { StreamView }      from './components/StreamView'
 import { RecipientWalletSetup } from './components/RecipientWalletSetup'
 import { CreatorPage }     from './components/creator/CreatorPage'
 import { StreamGate }      from './components/creator/StreamGate'
+import { ArenaPage }       from './components/ArenaPage'
 
 // ── Payroll page — resolves vault from path param OR query string ─────────────
 function StreamPage() {
@@ -23,6 +24,8 @@ export default function StreamPayApp() {
           <Route index                           element={<StreamPage />} />
           <Route path="stream"                   element={<StreamPage />} />
           <Route path="stream/:vaultAddress"     element={<StreamPage />} />
+          <Route path="agentic"                  element={<StreamPage />} />
+          <Route path="arena"                    element={<ArenaPage />} />
           <Route path="recipient"                element={<RecipientWalletSetup />} />
           {/* Creator / Event-Sovereign flows */}
           <Route path="creator"                  element={<CreatorPage />} />

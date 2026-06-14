@@ -6,6 +6,7 @@ import { useTheme }                   from '../../../../src/lib/ThemeContext'
 import { PRIVY_AUTH_ENABLED }          from '../../../../src/lib/authMode'
 import { PrivyConnectButton }          from '../../../../src/lib/PrivyConnectButton'
 import { PrivyDisconnectButton }       from '../../../../src/lib/PrivyDisconnectButton'
+import { EVM_TREASURY }                from '../../../../src/lib/chains'
 
 function fmtAddr(a: string) { return `${a.slice(0, 6)}…${a.slice(-4)}` }
 
@@ -15,6 +16,21 @@ function useAppPath(path: string): string {
   const params = new URLSearchParams(search)
   const app = params.get('app')
   return app ? `${path}?app=${app}` : path
+}
+
+function useModePath(path: string, extras?: Record<string, string>): string {
+  const { search } = useLocation()
+  const params = new URLSearchParams(search)
+  const app = params.get('app')
+  const next = new URLSearchParams()
+  if (app) next.set('app', app)
+  if (extras) {
+    Object.entries(extras).forEach(([key, value]) => {
+      if (value) next.set(key, value)
+    })
+  }
+  const qs = next.toString()
+  return `${path}${qs ? `?${qs}` : ''}`
 }
 
 function isTelegramStreamPay(search: string) {
@@ -32,10 +48,20 @@ export function StreamPayHeader() {
   const { theme, toggle }        = useTheme()
 
   const isCreatorMode = pathname.startsWith('/creator') || pathname.startsWith('/gate')
+  const isAgenticMode = pathname.startsWith('/agentic') || (new URLSearchParams(search).get('mode') ?? '') === 'agentic-streaming'
+  const isArenaMode = pathname.startsWith('/arena')
   const telegramMode = isTelegramStreamPay(search)
 
   const payrollTo = useAppPath('/')
-  const creatorTo = useAppPath('/creator')
+  const agenticTo = useModePath('/agentic', {
+    mode: 'agentic-streaming',
+    service: 'polymarket-lp',
+    recipient: EVM_TREASURY,
+    amount: '5',
+    duration: '7d',
+    wallet: 'circle',
+  })
+  const arenaTo = useModePath('/arena')
 
   return (
     <header className="sticky top-0 z-50 border-b border-white/60 dark:border-white/5 bg-white/80 dark:bg-[#111113]/90 backdrop-blur-xl">
@@ -54,26 +80,24 @@ export function StreamPayHeader() {
 
           {/* Mode toggle: Payroll ↔ Creator — uses Link for SPA navigation (no reload) */}
           {!telegramMode && (
-          <div className="hidden sm:flex items-center rounded-full border border-gray-200 dark:border-white/10 bg-gray-50/80 dark:bg-[#1c1c20] p-0.5">
-            <Link
-              to={payrollTo}
-              className="rounded-full px-3 py-1 text-[11px] font-semibold transition-all"
-              style={!isCreatorMode
-                ? { background: '#ffffff', color: '#111827', boxShadow: '0 1px 2px rgba(0,0,0,0.06)' }
-                : { color: '#9ca3af' }}
-            >
-              Payroll
-            </Link>
-            <Link
-              to={creatorTo}
-              className="rounded-full px-3 py-1 text-[11px] font-semibold transition-all"
-              style={isCreatorMode
-                ? { background: '#ffffff', color: '#111827', boxShadow: '0 1px 2px rgba(0,0,0,0.06)' }
-                : { color: '#9ca3af' }}
-            >
-              Creator
-            </Link>
-          </div>
+            <div className="hidden sm:flex items-center rounded-full border border-gray-200 dark:border-white/10 bg-gray-50/80 dark:bg-[#1c1c20] p-0.5">
+              {([
+                { label: 'Payroll', to: payrollTo, active: !isCreatorMode && !isAgenticMode && !isArenaMode },
+                { label: 'Agentic', to: agenticTo, active: isAgenticMode },
+                { label: 'Arena', to: arenaTo, active: isArenaMode },
+              ] as const).map(item => (
+                <Link
+                  key={item.label}
+                  to={item.to}
+                  className="rounded-full px-3 py-1 text-[11px] font-semibold transition-all"
+                  style={item.active
+                    ? { background: '#ffffff', color: '#111827', boxShadow: '0 1px 2px rgba(0,0,0,0.06)' }
+                    : { color: '#9ca3af' }}
+                >
+                  {item.label}
+                </Link>
+              ))}
+            </div>
           )}
 
           {/* Address pill — plain mono text, hidden on mobile (matches reference) */}
@@ -140,6 +164,30 @@ export function StreamPayHeader() {
 
         </div>
       </div>
+      {!telegramMode && (
+        <div className="mx-auto flex max-w-5xl px-4 pb-3 sm:hidden">
+          <div className="grid w-full grid-cols-3 gap-1 rounded-full border border-gray-200 dark:border-white/10 bg-gray-50/80 dark:bg-[#1c1c20] p-0.5">
+            {([
+              { label: 'Payroll', to: payrollTo, active: !isCreatorMode && !isAgenticMode && !isArenaMode },
+              { label: 'Agentic', to: agenticTo, active: isAgenticMode },
+              { label: 'Arena', to: arenaTo, active: isArenaMode },
+            ] as const).map(item => (
+              <Link
+                key={item.label}
+                to={item.to}
+                className={[
+                  'rounded-full px-2 py-1.5 text-center text-[11px] font-semibold transition-all',
+                  item.active
+                    ? 'bg-white text-gray-900 shadow-sm dark:bg-white dark:text-gray-950'
+                    : 'text-gray-400',
+                ].join(' ')}
+              >
+                {item.label}
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
     </header>
   )
 }
