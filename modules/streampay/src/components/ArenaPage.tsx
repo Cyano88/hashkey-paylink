@@ -163,6 +163,20 @@ function formatCompactUsdc(value: bigint) {
   return formatted.toLocaleString(undefined, { maximumFractionDigits: formatted >= 1 ? 2 : 6 })
 }
 
+function hostStorageKey(roomId: string) {
+  return `hashpaylink:arena:host:${roomId}`
+}
+
+function readHostControlToken(roomId: string) {
+  if (typeof window === 'undefined' || !roomId) return ''
+  return window.localStorage.getItem(hostStorageKey(roomId)) ?? ''
+}
+
+function saveHostControlToken(roomId: string, token: string) {
+  if (typeof window === 'undefined' || !roomId || !token) return
+  window.localStorage.setItem(hostStorageKey(roomId), token)
+}
+
 function percent(value: number) {
   return `${Math.round(value * 100)}%`
 }
@@ -196,6 +210,9 @@ export function ArenaPage() {
   const [joinBusy, setJoinBusy] = useState(false)
   const [joinTxHash, setJoinTxHash] = useState('')
   const [joinError, setJoinError] = useState('')
+  const [hostControlToken, setHostControlToken] = useState('')
+  const [roomActionBusy, setRoomActionBusy] = useState('')
+  const [roomActionTxHash, setRoomActionTxHash] = useState('')
 
   const activeQuestion = SAMPLE_QUESTIONS[(round - 1) % SAMPLE_QUESTIONS.length]
   const maxPool = entry * players
@@ -209,6 +226,7 @@ export function ArenaPage() {
   const roomCode = savedRoomId || draftRoomCode
   const joinedPlayers = chainPlayerCount ?? (status === 'setup' ? 0 : 0)
   const canStartGame = joinedPlayers >= 2 && (startRule === 'host' || joinedPlayers >= players)
+  const canHostControl = Boolean(savedRoomId && hostControlToken)
   const canOpenDeposits = ESCROW_FACTORY_READY && Boolean(escrowAddress) && paymentStatus !== 'escrow_pending'
   const riskProgress = Math.min(100, Math.round((currentStreamed / entry) * 100))
   const alivePlayers = status === 'playing' ? Math.max(1, players - Math.floor(round / 4)) : status === 'eliminated' ? players - 1 : players
@@ -284,6 +302,7 @@ export function ArenaPage() {
       setRoomTimer(room.timer)
       setStartRule(room.startRule)
       setSavedRoomId(room.roomId)
+      setHostControlToken(readHostControlToken(room.roomId))
       setPaymentStatus(room.paymentStatus ?? 'escrow_pending')
       setEscrowAddress(room.escrowAddress ?? null)
       setPlatformFeeBps(Number.isFinite(room.platformFeeBps) ? room.platformFeeBps : PLATFORM_FEE_BPS)
@@ -364,6 +383,10 @@ export function ArenaPage() {
       setSeconds(value => {
         if (value <= 1) {
           window.clearInterval(timer)
+          if (circleSession?.wallet.address && canHostControl) {
+            void controlRoom('eliminate', { player: circleSession.wallet.address, roundNumber: round })
+              .then(() => refreshRoomChainState(circleSession.wallet.address))
+          }
           setStatus('eliminated')
           setRoomLog('Timer expired. Your stream halted and the remaining balance is claimable.')
           return 0
@@ -372,7 +395,7 @@ export function ArenaPage() {
       })
     }, 1000)
     return () => window.clearInterval(timer)
-  }, [roomTimer, round, status])
+  }, [canHostControl, circleSession?.wallet.address, roomTimer, round, status])
 
   async function createLobby() {
     setRoomSaving(true)
@@ -382,10 +405,14 @@ export function ArenaPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ entry, players, rounds, riskMode, timer: roomTimer, startRule }),
       })
-      const data = await response.json() as { ok?: boolean; room?: SavedArenaRoom; error?: string }
+      const data = await response.json() as { ok?: boolean; room?: SavedArenaRoom; hostToken?: string; error?: string }
       if (!response.ok || !data.ok || !data.room) throw new Error(data.error ?? 'Arena room could not be saved.')
 
       setSavedRoomId(data.room.roomId)
+      if (data.hostToken) {
+        saveHostControlToken(data.room.roomId, data.hostToken)
+        setHostControlToken(data.hostToken)
+      }
       setPaymentStatus(data.room.paymentStatus ?? 'escrow_pending')
       setEscrowAddress(data.room.escrowAddress ?? null)
       setPlatformFeeBps(Number.isFinite(data.room.platformFeeBps) ? data.room.platformFeeBps : PLATFORM_FEE_BPS)
@@ -404,16 +431,63 @@ export function ArenaPage() {
     }
   }
 
-  function startRoom() {
+  async function controlRoom(action: 'start' | 'cancel' | 'eliminate' | 'settle', params: Record<string, unknown> = {}) {
+    if (!savedRoomId || !hostControlToken) {
+      setRoomLog('Only the room creator can control this private room.')
+      return null
+    }
+
+    setRoomActionBusy(action)
+    setRoomActionTxHash('')
+    try {
+      const response = await fetch('/api/arena-room', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roomId: savedRoomId, hostToken: hostControlToken, action, ...params }),
+      })
+      const data = await response.json() as {
+        ok?: boolean
+        room?: SavedArenaRoom
+        txHash?: string
+        chain?: { playerCount?: number; activeCount?: number; currentRound?: number }
+        error?: string
+      }
+      if (!response.ok || !data.ok || !data.room) throw new Error(data.error ?? 'Arena room action failed.')
+      setPaymentStatus(data.room.paymentStatus ?? paymentStatus)
+      setRoomActionTxHash(data.txHash ?? '')
+      if (typeof data.chain?.playerCount === 'number') setChainPlayerCount(data.chain.playerCount)
+      if (typeof data.chain?.activeCount === 'number') setChainActiveCount(data.chain.activeCount)
+      if (typeof data.chain?.currentRound === 'number' && data.chain.currentRound > 0) setRound(data.chain.currentRound)
+      return data
+    } catch (error) {
+      setRoomLog(error instanceof Error ? error.message : 'Arena room action failed.')
+      return null
+    } finally {
+      setRoomActionBusy('')
+    }
+  }
+
+  async function startRoom() {
     if (!canOpenDeposits || !canStartGame) {
-      setRoomLog('Paid rooms require the Arena escrow factory and room escrow before deposits or live play can start.')
+      setRoomLog('Start requires room escrow and at least two funded players.')
+      return
+    }
+    const data = await controlRoom('start')
+    if (!data) {
       return
     }
     setStatus('playing')
     setRound(1)
     setSeconds(roomTimer)
     setSelected('')
-    setRoomLog('Round 1 live. Escrowed risk stream has started.')
+    setRoomLog('Round 1 live. Room escrow started on Arc.')
+  }
+
+  async function cancelRoom() {
+    const data = await controlRoom('cancel')
+    if (!data) return
+    setStatus('eliminated')
+    setRoomLog('Room cancelled. Joined players can claim unstreamed USDC from escrow.')
   }
 
   function resetRoom() {
@@ -430,18 +504,28 @@ export function ArenaPage() {
     setPlayerJoined(false)
     setJoinTxHash('')
     setJoinError('')
+    setHostControlToken('')
+    setRoomActionTxHash('')
     setRoomLog('Room preview ready')
   }
 
-  function submitAnswer(option: string) {
+  async function submitAnswer(option: string) {
     if (status !== 'playing') return
     setSelected(option)
     if (option !== activeQuestion.answer) {
+      if (circleSession?.wallet.address && canHostControl) {
+        await controlRoom('eliminate', { player: circleSession.wallet.address, roundNumber: round })
+        await refreshRoomChainState(circleSession.wallet.address)
+      }
       setStatus('eliminated')
       setRoomLog('Stopped. Your remaining USDC is still claimable.')
       return
     }
     if (round >= rounds) {
+      if (circleSession?.wallet.address && canHostControl) {
+        await controlRoom('settle', { winner: circleSession.wallet.address })
+        await refreshRoomChainState(circleSession.wallet.address)
+      }
       setStatus('won')
       setRoomLog('Winner. Prize pool is ready to claim.')
       return
@@ -864,12 +948,38 @@ export function ArenaPage() {
                     <button
                       type="button"
                       onClick={startRoom}
-                      disabled
+                      disabled={!canOpenDeposits || !canStartGame || !canHostControl || Boolean(roomActionBusy)}
                       className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-white py-2.5 text-[12px] font-black text-gray-950 transition-transform active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45 dark:bg-gray-950 dark:text-white"
                     >
                       <Play className="h-4 w-4" />
-                      {canStartGame ? 'Start controls next' : 'Waiting for players'}
+                      {roomActionBusy === 'start'
+                        ? 'Starting...'
+                        : !canHostControl
+                          ? 'Host controls locked'
+                          : canStartGame
+                            ? 'Start paid room'
+                            : 'Waiting for players'}
                     </button>
+                    {canHostControl && (
+                      <button
+                        type="button"
+                        onClick={cancelRoom}
+                        disabled={Boolean(roomActionBusy)}
+                        className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 py-2.5 text-[12px] font-black text-white/70 transition-transform hover:bg-white/10 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45 dark:border-gray-200 dark:text-gray-500 dark:hover:bg-gray-100"
+                      >
+                        {roomActionBusy === 'cancel' ? 'Cancelling...' : 'Cancel room'}
+                      </button>
+                    )}
+                    {roomActionTxHash && (
+                      <a
+                        href={`${CHAIN_META.arc.explorerUrl}/tx/${roomActionTxHash}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-2 block truncate text-center text-[10px] font-bold text-white/50 underline decoration-white/20 underline-offset-4 dark:text-gray-500"
+                      >
+                        View room action
+                      </a>
+                    )}
                     <p className="mt-2 text-center text-[10px] font-semibold text-white/45 dark:text-gray-500">
                       No platform account required. Players use Circle wallet access when deposits open.
                     </p>

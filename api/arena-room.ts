@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express'
-import { randomBytes } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import { ethers } from 'ethers'
 import pg from 'pg'
 
@@ -45,6 +45,13 @@ const ARENA_FACTORY_ABI = [
   'function getEscrowAddress(bytes32 roomId,address host,uint256 entryAmount,uint16 maxPlayers,uint16 rounds,uint8 riskCurve,bytes32 salt) view returns (address)',
   'function createRoom(bytes32 roomId,uint256 entryAmount,uint16 maxPlayers,uint16 rounds,uint8 riskCurve,bytes32 salt) returns (address)',
 ] as const
+const ARENA_ESCROW_ABI = [
+  'function startRoom()',
+  'function eliminate(address player,uint16 roundNumber)',
+  'function cancelRoom()',
+  'function settleWinner(address winner)',
+  'function roomInfo() view returns (uint8 status,uint16 playerCount,uint16 activeCount,uint16 currentRound,uint256 accountedDeposits,uint256 reservedRefunds,uint256 totalStreamed,address winner)',
+] as const
 
 const pool = DATABASE_URL
   ? new Pool({
@@ -84,6 +91,7 @@ function ensureSchema() {
         escrow_address text,
         deposit_asset text not null default 'USDC',
         platform_fee_bps integer not null default 50,
+        host_token_hash text,
         state jsonb not null default '{}'::jsonb,
         created_at timestamptz not null default now(),
         updated_at timestamptz not null default now()
@@ -92,6 +100,7 @@ function ensureSchema() {
       alter table arena_rooms add column if not exists escrow_address text;
       alter table arena_rooms add column if not exists deposit_asset text not null default 'USDC';
       alter table arena_rooms add column if not exists platform_fee_bps integer not null default 50;
+      alter table arena_rooms add column if not exists host_token_hash text;
       create index if not exists arena_rooms_created_at_idx on arena_rooms (created_at desc);
     `).then(() => undefined)
   }
@@ -100,6 +109,14 @@ function ensureSchema() {
 
 function roomId() {
   return `SP-${randomBytes(3).toString('hex').toUpperCase()}`
+}
+
+function hostToken() {
+  return randomBytes(24).toString('base64url')
+}
+
+function tokenHash(value: string) {
+  return createHash('sha256').update(value).digest('hex')
 }
 
 function numberChoice(value: unknown, allowed: number[], fallback: number) {
@@ -163,6 +180,12 @@ function canDeployArenaEscrow() {
   return /^0x[a-fA-F0-9]{40}$/.test(ARENA_ESCROW_FACTORY_ADDRESS) && !!ARENA_RELAYER_KEY
 }
 
+function requireRelayerWallet() {
+  if (!ARENA_RELAYER_KEY) throw new Error('Arena relayer is not configured.')
+  const provider = new ethers.JsonRpcProvider(ARC_RPC_URL)
+  return new ethers.Wallet(normalizePrivateKey(ARENA_RELAYER_KEY), provider)
+}
+
 async function deployRoomEscrow(room: {
   id: string
   entry: number
@@ -209,12 +232,13 @@ async function createRoom(req: Request, res: Response) {
       timer: numberChoice(body.timer, [45, 60, 90], 60),
       startRule: startRuleChoice(body.startRule),
     }
+    const token = hostToken()
 
     const result = await requirePool().query(
       `insert into arena_rooms
-        (room_id, mode, game, entry, players, rounds, risk_mode, timer, start_rule, status, payment_status, deposit_asset, platform_fee_bps, state)
+        (room_id, mode, game, entry, players, rounds, risk_mode, timer, start_rule, status, payment_status, deposit_asset, platform_fee_bps, host_token_hash, state)
        values
-        ($1, 'private', 'trivia', $2, $3, $4, $5, $6, $7, 'lobby', 'escrow_pending', 'USDC', $8, $9::jsonb)
+        ($1, 'private', 'trivia', $2, $3, $4, $5, $6, $7, 'lobby', 'escrow_pending', 'USDC', $8, $9, $10::jsonb)
        returning *`,
       [
         room.id,
@@ -225,6 +249,7 @@ async function createRoom(req: Request, res: Response) {
         room.timer,
         room.startRule,
         PLATFORM_FEE_BPS,
+        tokenHash(token),
         JSON.stringify({ joinedPlayers: 1, source: 'streampay-arena-ui', moneyMode: 'escrow_required' }),
       ],
     )
@@ -254,9 +279,103 @@ async function createRoom(req: Request, res: Response) {
       console.error('[arena-room] escrow deploy skipped:', error instanceof Error ? error.message : 'unknown error')
     }
 
-    return res.status(201).json({ ok: true, room: savedRoom })
+    return res.status(201).json({ ok: true, room: savedRoom, hostToken: token })
   } catch (error) {
     return storageError(res, error)
+  }
+}
+
+async function controlRoom(req: Request, res: Response) {
+  try {
+    await ensureSchema()
+    const body = (req.body ?? {}) as Record<string, unknown>
+    const id = String(body.roomId ?? '').trim().toUpperCase()
+    const action = String(body.action ?? '').trim()
+    const token = String(body.hostToken ?? '').trim()
+
+    if (!/^SP-[A-F0-9]{6}$/.test(id)) {
+      return res.status(400).json({ ok: false, error: 'Invalid Arena room id.' })
+    }
+    if (!token) return res.status(401).json({ ok: false, error: 'Host control token required.' })
+
+    const result = await requirePool().query('select * from arena_rooms where room_id = $1 limit 1', [id])
+    if (!result.rowCount) return res.status(404).json({ ok: false, error: 'Arena room not found.' })
+    const row = result.rows[0] as Record<string, unknown>
+    if (String(row.host_token_hash ?? '') !== tokenHash(token)) {
+      return res.status(403).json({ ok: false, error: 'Invalid host control token.' })
+    }
+
+    const escrowAddress = String(row.escrow_address ?? '')
+    if (!/^0x[a-fA-F0-9]{40}$/.test(escrowAddress)) {
+      return res.status(409).json({ ok: false, error: 'Arena escrow is not deployed yet.' })
+    }
+
+    const wallet = requireRelayerWallet()
+    const escrow = new ethers.Contract(escrowAddress, ARENA_ESCROW_ABI, wallet)
+    let tx
+    let nextStatus: RoomStatus | null = null
+    let nextPaymentStatus: PaymentStatus | null = null
+
+    if (action === 'start') {
+      tx = await escrow.startRoom()
+      nextStatus = 'playing'
+      nextPaymentStatus = 'funded'
+    } else if (action === 'cancel') {
+      tx = await escrow.cancelRoom()
+      nextStatus = 'cancelled'
+    } else if (action === 'eliminate') {
+      const player = String(body.player ?? '')
+      const roundNumber = Number(body.roundNumber)
+      if (!/^0x[a-fA-F0-9]{40}$/.test(player) || !Number.isInteger(roundNumber) || roundNumber < 1) {
+        return res.status(400).json({ ok: false, error: 'Valid player and roundNumber are required.' })
+      }
+      tx = await escrow.eliminate(player, roundNumber)
+      nextStatus = 'playing'
+    } else if (action === 'settle') {
+      const winner = String(body.winner ?? '')
+      if (!/^0x[a-fA-F0-9]{40}$/.test(winner)) {
+        return res.status(400).json({ ok: false, error: 'Valid winner address is required.' })
+      }
+      tx = await escrow.settleWinner(winner)
+      nextStatus = 'completed'
+      nextPaymentStatus = 'settled'
+    } else {
+      return res.status(400).json({ ok: false, error: 'Unsupported Arena room action.' })
+    }
+
+    const receipt = await tx.wait()
+    const roomInfo = await escrow.roomInfo()
+    const statePatch = {
+      lastAction: action,
+      lastActionTx: receipt?.hash ?? tx.hash,
+      lastActionAt: new Date().toISOString(),
+      chainStatus: Number(roomInfo[0]),
+      playerCount: Number(roomInfo[1]),
+      activeCount: Number(roomInfo[2]),
+      currentRound: Number(roomInfo[3]),
+    }
+
+    const update = await requirePool().query(
+      `update arena_rooms
+         set status = coalesce($2, status),
+             payment_status = coalesce($3, payment_status),
+             state = state || $4::jsonb,
+             updated_at = now()
+       where room_id = $1
+       returning *`,
+      [id, nextStatus, nextPaymentStatus, JSON.stringify(statePatch)],
+    )
+
+    return res.json({
+      ok: true,
+      room: toRoom(update.rows[0]),
+      txHash: receipt?.hash ?? tx.hash,
+      chain: statePatch,
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Arena room action failed.'
+    console.error('[arena-room-control]', message)
+    return res.status(500).json({ ok: false, error: message.slice(0, 240) })
   }
 }
 
@@ -278,7 +397,8 @@ async function getRoom(req: Request, res: Response) {
 
 export default async function arenaRoomHandler(req: Request, res: Response) {
   if (req.method === 'POST') return createRoom(req, res)
+  if (req.method === 'PATCH') return controlRoom(req, res)
   if (req.method === 'GET') return getRoom(req, res)
-  res.setHeader('Allow', 'GET, POST')
+  res.setHeader('Allow', 'GET, POST, PATCH')
   return res.status(405).json({ ok: false, error: 'Method not allowed.' })
 }
