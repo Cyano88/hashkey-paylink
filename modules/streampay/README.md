@@ -93,6 +93,13 @@ modules/streampay/
 
 ## Payroll Flow
 
+Active sender wallet path:
+
+- Privy email sign-in is the primary StreamPay identity layer.
+- Circle Smart Wallet on Arc is opened for payroll and agentic stream creation.
+- The Circle wallet is saved through `/api/privy-circle-link` against the Privy user, so returning users can restore the mapped wallet.
+- The old connected-wallet toggle is intentionally hidden from Payroll and Agentic streams.
+
 ```
 Creator                          Arc Network              Recipient
   │                                  │                        │
@@ -161,7 +168,7 @@ The creator never needs the viewer's wallet address — `/api/list-viewers?id=co
 ## Tech Stack
 
 - React 18 + TypeScript + Vite
-- Viem v2, Wagmi v2, RainbowKit, TanStack Query v5
+- Privy email sign-in, Circle Smart Wallet mapping, Viem v2, Wagmi v2, TanStack Query v5
 - Arc Network (chainId 5042002) — standalone `createPublicClient` bypasses wagmi chain management
 - EIP-712 typed signatures for gasless payroll relay and PoA session intents
 - WebAuthn (passkeys) for viewer session authorization

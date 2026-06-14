@@ -1,16 +1,11 @@
-import { useAccount, useDisconnect } from 'wagmi'
-import { useConnectModal }           from '@rainbow-me/rainbowkit'
-import { Link, useLocation }         from 'react-router-dom'
-import { Moon, Sun }                  from 'lucide-react'
-import { useTheme }                   from '../../../../src/lib/ThemeContext'
-import { PRIVY_AUTH_ENABLED }          from '../../../../src/lib/authMode'
-import { PrivyConnectButton }          from '../../../../src/lib/PrivyConnectButton'
-import { PrivyDisconnectButton }       from '../../../../src/lib/PrivyDisconnectButton'
-import { EVM_TREASURY }                from '../../../../src/lib/chains'
+import { usePrivy } from '@privy-io/react-auth'
+import { Link, useLocation } from 'react-router-dom'
+import { Moon, Sun } from 'lucide-react'
+import { useTheme } from '../../../../src/lib/ThemeContext'
+import { PrivyConnectButton } from '../../../../src/lib/PrivyConnectButton'
+import { PrivyDisconnectButton } from '../../../../src/lib/PrivyDisconnectButton'
+import { EVM_TREASURY } from '../../../../src/lib/chains'
 
-function fmtAddr(a: string) { return `${a.slice(0, 6)}…${a.slice(-4)}` }
-
-// Preserve ?app=streampay (and any other query params) across internal navigation
 function useAppPath(path: string): string {
   const { search } = useLocation()
   const params = new URLSearchParams(search)
@@ -40,12 +35,29 @@ function isTelegramStreamPay(search: string) {
   return source === 'telegram' || wallet === 'circle'
 }
 
+function emailFromPrivyUser(user: unknown) {
+  if (!user || typeof user !== 'object') return ''
+  const record = user as Record<string, unknown>
+  const directEmail = record.email
+  if (directEmail && typeof directEmail === 'object') {
+    const address = (directEmail as Record<string, unknown>).address
+    if (typeof address === 'string') return address
+  }
+  for (const key of ['google', 'apple']) {
+    const provider = record[key]
+    if (provider && typeof provider === 'object') {
+      const email = (provider as Record<string, unknown>).email
+      if (typeof email === 'string') return email
+    }
+  }
+  return ''
+}
+
 export function StreamPayHeader() {
-  const { address, isConnected } = useAccount()
-  const { openConnectModal }     = useConnectModal()
-  const { disconnect }           = useDisconnect()
-  const { pathname, search }     = useLocation()
-  const { theme, toggle }        = useTheme()
+  const { authenticated, user } = usePrivy()
+  const { pathname, search } = useLocation()
+  const { theme, toggle } = useTheme()
+  const email = emailFromPrivyUser(user)
 
   const isCreatorMode = pathname.startsWith('/creator') || pathname.startsWith('/gate')
   const isAgenticMode = pathname.startsWith('/agentic') || (new URLSearchParams(search).get('mode') ?? '') === 'agentic-streaming'
@@ -62,12 +74,15 @@ export function StreamPayHeader() {
     wallet: 'circle',
   })
   const arenaTo = useModePath('/arena')
+  const navItems = [
+    { label: 'Payroll', to: payrollTo, active: !isCreatorMode && !isAgenticMode && !isArenaMode },
+    { label: 'Agentic', to: agenticTo, active: isAgenticMode },
+    { label: 'Arena', to: arenaTo, active: isArenaMode },
+  ] as const
 
   return (
     <header className="sticky top-0 z-50 border-b border-white/60 dark:border-white/5 bg-white/80 dark:bg-[#111113]/90 backdrop-blur-xl">
       <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3 sm:px-6">
-
-        {/* ── Left: Geometric O + StreamPay ── */}
         <Link to={payrollTo} className="group flex items-center gap-2.5 focus:outline-none">
           <GeometricO />
           <span className="text-[15px] font-semibold tracking-tight text-gray-900 dark:text-white">
@@ -75,17 +90,10 @@ export function StreamPayHeader() {
           </span>
         </Link>
 
-        {/* ── Right: Mode toggle · X · Address · Connect / Power ── */}
         <div className="flex items-center gap-x-2">
-
-          {/* Mode toggle: Payroll ↔ Creator — uses Link for SPA navigation (no reload) */}
           {!telegramMode && (
             <div className="hidden sm:flex items-center rounded-full border border-gray-200 dark:border-white/10 bg-gray-50/80 dark:bg-[#1c1c20] p-0.5">
-              {([
-                { label: 'Payroll', to: payrollTo, active: !isCreatorMode && !isAgenticMode && !isArenaMode },
-                { label: 'Agentic', to: agenticTo, active: isAgenticMode },
-                { label: 'Arena', to: arenaTo, active: isArenaMode },
-              ] as const).map(item => (
+              {navItems.map(item => (
                 <Link
                   key={item.label}
                   to={item.to}
@@ -100,55 +108,26 @@ export function StreamPayHeader() {
             </div>
           )}
 
-          {/* Address pill — plain mono text, hidden on mobile (matches reference) */}
-          {isConnected && address && (
-            <span className="hidden sm:block select-none font-mono text-[13px] text-gray-500 pointer-events-none">
-              {fmtAddr(address)}
+          {authenticated && email && (
+            <span className="hidden max-w-[180px] truncate sm:block select-none text-[13px] text-gray-500 pointer-events-none">
+              {email}
             </span>
           )}
 
-          {/* Connect Wallet — Deep Ash/Black, rounded-full h-9, matches reference shape */}
-          {!telegramMode && !isConnected && (
-            PRIVY_AUTH_ENABLED ? (
-              <PrivyConnectButton
-                className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[#111827] px-3 text-[13px] font-medium text-white transition-colors disabled:opacity-60"
-              >
-                <span className="h-2 w-2 shrink-0 rounded-full bg-blue-400 animate-pulse" />
-                <span className="hidden sm:inline">Sign in</span>
-                <span className="sm:hidden">Sign in</span>
-              </PrivyConnectButton>
-            ) : (
-              <button
-                onClick={() => openConnectModal?.()}
-                className="inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-[13px] font-medium text-white transition-colors"
-                style={{ background: '#111827' }}
-              >
-                <span className="h-2 w-2 shrink-0 rounded-full bg-blue-400 animate-pulse" />
-                <span className="hidden sm:inline">Connect Wallet</span>
-                <span className="sm:hidden">Connect</span>
-              </button>
-            )
+          {!telegramMode && !authenticated && (
+            <PrivyConnectButton className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[#111827] px-3 text-[13px] font-medium text-white transition-colors disabled:opacity-60">
+              <span className="h-2 w-2 shrink-0 rounded-full bg-blue-400 animate-pulse" />
+              <span>Sign in</span>
+            </PrivyConnectButton>
           )}
 
-          {/* Power / Disconnect — h-9 w-9 rounded-full, matches reference */}
-          {!telegramMode && isConnected && (
-            PRIVY_AUTH_ENABLED ? (
-              <PrivyDisconnectButton
-                onDisconnectWallets={() => disconnect()}
-                title="Disconnect wallet"
-                className="flex h-9 w-9 items-center justify-center rounded-full text-gray-400 transition-colors hover:text-red-500 hover:bg-red-50 disabled:opacity-60"
-              >
-                <PowerIcon />
-              </PrivyDisconnectButton>
-            ) : (
-              <button
-                onClick={() => disconnect()}
-                title="Disconnect wallet"
-                className="flex h-9 w-9 items-center justify-center rounded-full text-gray-400 transition-colors hover:text-red-500 hover:bg-red-50"
-              >
-                <PowerIcon />
-              </button>
-            )
+          {!telegramMode && authenticated && (
+            <PrivyDisconnectButton
+              title="Sign out"
+              className="flex h-9 w-9 items-center justify-center rounded-full text-gray-400 transition-colors hover:text-red-500 hover:bg-red-50 disabled:opacity-60"
+            >
+              <PowerIcon />
+            </PrivyDisconnectButton>
           )}
 
           {telegramMode && (
@@ -161,17 +140,12 @@ export function StreamPayHeader() {
               {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </button>
           )}
-
         </div>
       </div>
       {!telegramMode && (
         <div className="mx-auto flex max-w-5xl px-4 pb-3 sm:hidden">
           <div className="grid w-full grid-cols-3 gap-1 rounded-full border border-gray-200 dark:border-white/10 bg-gray-50/80 dark:bg-[#1c1c20] p-0.5">
-            {([
-              { label: 'Payroll', to: payrollTo, active: !isCreatorMode && !isAgenticMode && !isArenaMode },
-              { label: 'Agentic', to: agenticTo, active: isAgenticMode },
-              { label: 'Arena', to: arenaTo, active: isArenaMode },
-            ] as const).map(item => (
+            {navItems.map(item => (
               <Link
                 key={item.label}
                 to={item.to}
@@ -192,12 +166,9 @@ export function StreamPayHeader() {
   )
 }
 
-// ── Icons ─────────────────────────────────────────────────────────────────────
-
 function GeometricO() {
   return (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
-      className="transition-transform group-hover:scale-105">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" className="transition-transform group-hover:scale-105">
       <circle cx="12" cy="12" r="9.5" stroke="currentColor" strokeWidth="2.5" className="text-gray-900 dark:text-white" />
       <circle cx="12" cy="12" r="3.5" fill="currentColor" className="text-gray-900 dark:text-white" />
     </svg>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { usePrivy } from '@privy-io/react-auth'
 import {
   useAccount, useChainId, useSwitchChain,
   useReadContract, useWriteContract, usePublicClient,
@@ -15,6 +16,8 @@ import {
   type CircleEvmEmailSession,
 } from '../../../../src/lib/circleEvmEmailWallet'
 import { EVM_TREASURY } from '../../../../src/lib/chains'
+import { PRIVY_AUTH_ENABLED } from '../../../../src/lib/authMode'
+import { resolvePrivyCircleLink, savePrivyCircleLink } from '../../../../src/lib/privyCircleLink'
 
 const ARC_CHAIN_ID = 5042002
 const ARC_USDC     = '0x3600000000000000000000000000000000000000' as const
@@ -107,6 +110,24 @@ function isEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail(value))
 }
 
+function emailFromPrivyUser(user: unknown) {
+  if (!user || typeof user !== 'object') return ''
+  const record = user as Record<string, unknown>
+  const directEmail = record.email
+  if (directEmail && typeof directEmail === 'object') {
+    const address = (directEmail as Record<string, unknown>).address
+    if (typeof address === 'string') return address
+  }
+  for (const key of ['google', 'apple']) {
+    const provider = record[key]
+    if (provider && typeof provider === 'object') {
+      const email = (provider as Record<string, unknown>).email
+      if (typeof email === 'string') return email
+    }
+  }
+  return ''
+}
+
 function shortAddress(value: string) {
   return `${value.slice(0, 6)}...${value.slice(-4)}`
 }
@@ -184,6 +205,8 @@ function buildStreamLink(
 
 export function CreateStreamForm() {
   const [prefill] = useState(readPrefill)
+  const { authenticated: privyAuthenticated, user: privyUser, login: loginPrivy, getAccessToken } = usePrivy()
+  const privyEmail = cleanEmail(emailFromPrivyUser(privyUser))
   const { address: connectedAddr, isConnected } = useAccount()
   const chainId                = useChainId()
   const { switchChain }        = useSwitchChain()
@@ -212,6 +235,9 @@ export function CreateStreamForm() {
   const [circleBalance,    setCircleBalance]    = useState<bigint | null>(null)
   const [circleBalanceRefreshing, setCircleBalanceRefreshing] = useState(false)
   const [circleCopied,     setCircleCopied]     = useState(false)
+  const [linkedCircleAddress, setLinkedCircleAddress] = useState('')
+  const [privyCircleLinkLoading, setPrivyCircleLinkLoading] = useState(false)
+  const [privyCircleLinkError, setPrivyCircleLinkError] = useState<string | null>(null)
   const [recipientInviteLink, setRecipientInviteLink] = useState<string | null>(null)
   const [recipientInviteStatus, setRecipientInviteStatus] = useState('')
   const [recipientInviteError, setRecipientInviteError] = useState<string | null>(null)
@@ -225,7 +251,7 @@ export function CreateStreamForm() {
   const [reportEmail, setReportEmail] = useState(prefill.reportEmail)
   const [agenticStatus, setAgenticStatus] = useState('')
   const [agenticError, setAgenticError] = useState<string | null>(null)
-  const [useCircleWallet, setUseCircleWallet] = useState(prefill.preferCircle)
+  const [useCircleWallet] = useState(true)
   const [recentStreams, setRecentStreams] = useState<RecentStream[]>(() => loadRecentStreams(prefill.recipient))
   const [onchainStreams, setOnchainStreams] = useState<OnchainStream[]>([])
   const [onchainStreamsLoading, setOnchainStreamsLoading] = useState(false)
@@ -262,7 +288,8 @@ export function CreateStreamForm() {
 
   const isWorking   = step === 'funding' || step === 'creating'
   const deployReady = isFormValid && !isWorking && !insufficientFunds
-  const circleDeployReady = circleAvailable && circleConfigured && circleReady && !isWorking && !circleNeedsFunds
+  const streamPayPrivyReady = !PRIVY_AUTH_ENABLED || privyAuthenticated
+  const circleActionReady = circleAvailable && circleConfigured && circleReady && !isWorking && !circleNeedsFunds
   const agenticLinkParams = isAgenticStreaming ? {
     mode: 'agentic-streaming',
     service: agenticService,
@@ -341,6 +368,68 @@ export function CreateStreamForm() {
       setAgenticError(err instanceof Error ? err.message.slice(0, 180) : 'Could not register Agentic Streaming.')
     }
   }
+
+  async function rememberPrivyCircleSession(session: CircleEvmEmailSession, email = circleEmail || privyEmail) {
+    if (!PRIVY_AUTH_ENABLED || !privyAuthenticated) return
+    try {
+      const token = await getAccessToken()
+      if (!token) return
+      await savePrivyCircleLink({
+        accessToken: token,
+        chain: 'arc',
+        purpose: 'payment',
+        email: cleanEmail(email),
+        wallet: {
+          id: session.wallet.id,
+          address: session.wallet.address,
+          blockchain: session.wallet.blockchain,
+        },
+      })
+      setLinkedCircleAddress(session.wallet.address)
+      setPrivyCircleLinkError(null)
+    } catch (err) {
+      setPrivyCircleLinkError(err instanceof Error ? err.message.slice(0, 160) : 'Circle wallet connected, but the saved link was not updated.')
+    }
+  }
+
+  useEffect(() => {
+    if (!circleAvailable || !PRIVY_AUTH_ENABLED) return
+    if (privyEmail) setCircleEmail(current => current || privyEmail)
+  }, [circleAvailable, privyEmail])
+
+  useEffect(() => {
+    if (!circleAvailable || !PRIVY_AUTH_ENABLED || !privyAuthenticated) return
+    let cancelled = false
+
+    async function restorePrivyCircleLink() {
+      setPrivyCircleLinkLoading(true)
+      setPrivyCircleLinkError(null)
+      try {
+        const token = await getAccessToken()
+        if (!token) throw new Error('Privy session is not ready yet.')
+        const data = await resolvePrivyCircleLink({
+          accessToken: token,
+          chain: 'arc',
+          purpose: 'payment',
+        })
+        if (cancelled) return
+        if (data.email) setCircleEmail(current => current || data.email || privyEmail)
+        if (data.link?.circleWalletAddress) setLinkedCircleAddress(data.link.circleWalletAddress)
+      } catch (err) {
+        if (!cancelled) {
+          console.warn('[StreamPay] Privy Circle wallet link restore failed', err)
+          setPrivyCircleLinkError(null)
+        }
+      } finally {
+        if (!cancelled) setPrivyCircleLinkLoading(false)
+      }
+    }
+
+    void restorePrivyCircleLink()
+    return () => {
+      cancelled = true
+    }
+  }, [circleAvailable, privyAuthenticated, privyEmail, getAccessToken])
 
   useEffect(() => {
     if (!circleSession?.wallet.address || !publicClient || isWorking) return
@@ -452,10 +541,14 @@ export function CreateStreamForm() {
   }
 
   async function handleCircleDeploy() {
-    if (!circleDeployReady || !publicClient) return
-    const email = circleEmail.trim()
+    if (!circleActionReady || !publicClient) return
+    if (PRIVY_AUTH_ENABLED && !privyAuthenticated) {
+      loginPrivy()
+      return
+    }
+    const email = cleanEmail(PRIVY_AUTH_ENABLED ? privyEmail : circleEmail)
     if (!email && !circleSession) {
-      setError('Enter your email to continue with Circle Smart Wallet.')
+      setError(PRIVY_AUTH_ENABLED ? 'Sign in with a Privy email account to use Circle Smart Wallet.' : 'Enter your email to continue with Circle Smart Wallet.')
       return
     }
 
@@ -467,6 +560,7 @@ export function CreateStreamForm() {
       setStatusMsg(circleSession ? 'Preparing Circle Smart Wallet...' : 'Opening Circle Smart Wallet...')
       const session = circleSession ?? await connectCircleEvmEmailWallet(email, 'arc')
       setCircleSession(session)
+      void rememberPrivyCircleSession(session, email)
 
       const balance = await refreshCircleBalance(session.wallet.address)
       if (balance !== null && balance < amountBn) {
@@ -550,9 +644,13 @@ export function CreateStreamForm() {
   }
 
   async function handleCircleConnectOnly() {
-    const email = circleEmail.trim()
+    if (PRIVY_AUTH_ENABLED && !privyAuthenticated) {
+      loginPrivy()
+      return
+    }
+    const email = cleanEmail(PRIVY_AUTH_ENABLED ? privyEmail : circleEmail)
     if (!email) {
-      setOnchainStreamsError('Enter the sender email.')
+      setOnchainStreamsError(PRIVY_AUTH_ENABLED ? 'Sign in with a Privy email account to continue.' : 'Enter the sender email.')
       return
     }
     setOnchainStreamsError(null)
@@ -560,6 +658,7 @@ export function CreateStreamForm() {
     try {
       const session = await connectCircleEvmEmailWallet(email, 'arc')
       setCircleSession(session)
+      void rememberPrivyCircleSession(session, email)
       void refreshCircleBalance(session.wallet.address)
     } catch (err) {
       setOnchainStreamsError(err instanceof Error ? err.message.slice(0, 180) : 'Could not connect Circle Smart Wallet.')
@@ -573,9 +672,14 @@ export function CreateStreamForm() {
     setOnchainStreamsError(null)
     setEndingVault(stream.vault)
     try {
-      const email = circleEmail.trim()
+      if (PRIVY_AUTH_ENABLED && !privyAuthenticated) {
+        loginPrivy()
+        return
+      }
+      const email = cleanEmail(PRIVY_AUTH_ENABLED ? privyEmail : circleEmail)
       const session = circleSession ?? await connectCircleEvmEmailWallet(email, 'arc')
       setCircleSession(session)
+      void rememberPrivyCircleSession(session, email)
       if (session.wallet.address.toLowerCase() !== stream.sender.toLowerCase()) {
         throw new Error('Use the sender email for this stream.')
       }
@@ -839,29 +943,8 @@ export function CreateStreamForm() {
         </div>
 
         {circleConfigured && (
-          <div className="mx-auto grid w-full max-w-[360px] grid-cols-2 gap-1 rounded-xl border border-gray-100 dark:border-white/10 bg-white dark:bg-[#111216] p-1 shadow-sm">
-            {([
-              ['circle', 'Email wallet'],
-              ['connected', 'Connected wallet'],
-            ] as const).map(([mode, label]) => {
-              const active = mode === 'circle' ? useCircleWallet : !useCircleWallet
-              return (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={() => setUseCircleWallet(mode === 'circle')}
-                  disabled={isWorking}
-                  className={[
-                    'rounded-lg px-3 py-2 text-[12px] font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-60',
-                    active
-                      ? 'bg-gray-900 text-white shadow-sm'
-                      : 'text-gray-400 hover:text-gray-700 dark:hover:text-gray-200',
-                  ].join(' ')}
-                >
-                  {label}
-                </button>
-              )
-            })}
+          <div className="mx-auto flex w-full max-w-[360px] items-center justify-center rounded-xl border border-gray-100 dark:border-white/10 bg-white dark:bg-[#111216] px-3 py-2 shadow-sm">
+            <span className="text-[12px] font-bold text-gray-700 dark:text-gray-200">Privy sign-in + Circle wallet on Arc</span>
           </div>
         )}
 
@@ -908,26 +991,36 @@ export function CreateStreamForm() {
                   {!circleSession ? (
                     <div className="rounded-xl border border-blue-100 dark:border-blue-900/30 bg-blue-50/40 dark:bg-blue-950/20 p-3.5 space-y-3">
                       <div>
-                        <p className="text-[12px] font-bold text-gray-800 dark:text-gray-100">Continue with email</p>
-                        <p className="text-[11px] text-gray-500 dark:text-gray-400">Use the sender email to view and manage streams.</p>
+                        <p className="text-[12px] font-bold text-gray-800 dark:text-gray-100">Continue with Privy</p>
+                        <p className="text-[11px] text-gray-500 dark:text-gray-400">Your Privy email unlocks the mapped Circle wallet for stream management.</p>
                       </div>
-                      <input
-                        type="email"
-                        name="streampay-running-sender-email"
-                        autoComplete="email"
-                        placeholder="Sender wallet email"
-                        value={circleEmail}
-                        onChange={e => setCircleEmail(e.target.value)}
-                        disabled={onchainStreamsLoading}
-                        className="w-full rounded-xl border-2 border-blue-100 dark:border-blue-900/40 bg-white dark:bg-[#15151a] px-4 py-3 text-[13px] text-gray-800 dark:text-gray-100 placeholder:text-gray-300 dark:placeholder:text-gray-600 focus:outline-none focus:border-blue-300 transition-colors disabled:opacity-50 min-h-[46px]"
-                      />
+                      {PRIVY_AUTH_ENABLED && privyAuthenticated && (
+                        <div className="rounded-xl border border-blue-100 dark:border-blue-900/40 bg-white dark:bg-[#15151a] px-4 py-3">
+                          <p className="truncate text-[12px] font-semibold text-gray-700 dark:text-gray-200">{privyEmail || 'Privy account connected'}</p>
+                          {linkedCircleAddress && (
+                            <p className="mt-1 font-mono text-[11px] text-gray-400">{shortAddress(linkedCircleAddress)}</p>
+                          )}
+                        </div>
+                      )}
+                      {!PRIVY_AUTH_ENABLED && (
+                        <input
+                          type="email"
+                          name="streampay-running-sender-email"
+                          autoComplete="email"
+                          placeholder="Sender wallet email"
+                          value={circleEmail}
+                          onChange={e => setCircleEmail(e.target.value)}
+                          disabled={onchainStreamsLoading}
+                          className="w-full rounded-xl border-2 border-blue-100 dark:border-blue-900/40 bg-white dark:bg-[#15151a] px-4 py-3 text-[13px] text-gray-800 dark:text-gray-100 placeholder:text-gray-300 dark:placeholder:text-gray-600 focus:outline-none focus:border-blue-300 transition-colors disabled:opacity-50 min-h-[46px]"
+                        />
+                      )}
                       <button
                         type="button"
                         onClick={handleCircleConnectOnly}
                         disabled={onchainStreamsLoading}
                         className="w-full rounded-xl bg-gray-900 py-3 text-[13px] font-bold text-white transition-transform active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
                       >
-                        {onchainStreamsLoading ? 'Connecting...' : 'Continue with email'}
+                        {onchainStreamsLoading ? 'Connecting...' : privyAuthenticated || !PRIVY_AUTH_ENABLED ? 'Open Circle wallet' : 'Sign in'}
                       </button>
                       {onchainStreamsError && (
                         <p className="text-center text-[11px] font-semibold text-red-500 dark:text-red-400">{onchainStreamsError}</p>
@@ -1229,7 +1322,20 @@ export function CreateStreamForm() {
                       </div>
                     </div>
 
-                    {!circleSession && (
+                    {!circleSession && PRIVY_AUTH_ENABLED && privyAuthenticated && (
+                      <div className="rounded-xl border border-blue-100 dark:border-blue-900/40 bg-white dark:bg-[#15151a] px-4 py-3">
+                        <p className="truncate text-[12px] font-semibold text-gray-700 dark:text-gray-200">{privyEmail || 'Privy account connected'}</p>
+                        <p className="mt-1 text-[11px] text-gray-400">
+                          {privyCircleLinkLoading
+                            ? 'Checking saved Circle wallet...'
+                            : linkedCircleAddress
+                              ? `Circle wallet ${shortAddress(linkedCircleAddress)}`
+                              : 'Circle wallet will be mapped after first confirmation'}
+                        </p>
+                      </div>
+                    )}
+
+                    {!circleSession && !PRIVY_AUTH_ENABLED && (
                       <input
                         type="email"
                         name="streampay-sender-email"
@@ -1279,17 +1385,20 @@ export function CreateStreamForm() {
                     )}
 
                     <button
-                      onClick={circleDeployReady ? handleCircleDeploy : undefined}
-                      disabled={!circleDeployReady}
+                      onClick={circleActionReady ? handleCircleDeploy : undefined}
+                      disabled={!circleActionReady}
                       className="flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-[14px] font-bold transition-all active:scale-[0.98] min-h-[52px]"
-                      style={circleDeployReady
+                      style={circleActionReady
                         ? { background: '#111827', color: '#ffffff', cursor: 'pointer' }
                         : { background: '#e5e7eb', color: '#9ca3af', cursor: 'not-allowed' }}
                     >
                       {isWorking
                         ? <><Spinner /><span className="text-[13px] font-medium">{statusMsg}</span></>
-                        : 'Start with Circle Smart Wallet'}
+                        : streamPayPrivyReady ? 'Start with Circle Smart Wallet' : 'Sign in to start'}
                     </button>
+                    {privyCircleLinkError && (
+                      <p className="text-center text-[11px] font-semibold text-amber-600 dark:text-amber-300">{privyCircleLinkError}</p>
+                    )}
                     <div className="flex justify-center">
                       <span className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 dark:border-white/10 bg-white dark:bg-[#15151a] px-3 py-1">
                         <img src="/brand/circle-logo.jpeg" alt="" className="h-3 w-3 rounded-full object-cover" />
