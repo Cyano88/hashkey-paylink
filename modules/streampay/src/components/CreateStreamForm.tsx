@@ -1125,99 +1125,125 @@ export function CreateStreamForm() {
                 </div>
               )}
 
-              {/* ── Recipient Address capsule ── */}
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5">
-                    <StaticStreamMark />
-                    <span className="text-[13px] font-semibold text-gray-700 dark:text-gray-200">Recipient</span>
+              {/* ── Recipient capsule ── */}
+              {isAgenticStreaming ? (
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <StaticStreamMark />
+                      <span className="text-[13px] font-semibold text-gray-700 dark:text-gray-200">Recipient</span>
+                    </div>
+                    <span className="text-[11px] text-gray-400">Arc Network</span>
                   </div>
-                  <span className="text-[11px] text-gray-400">Arc Network</span>
-                </div>
-
-                <div className="relative">
-                  <input
-                    type="text"
-                    name="streampay-recipient"
-                    autoComplete="off"
-                    data-lpignore="true"
-                    data-1p-ignore="true"
-                    placeholder="0x address or recipient@email.com"
-                    value={recipient}
-                    onChange={e => setRecipient(e.target.value.trim())}
-                    readOnly={recipientLocked}
-                    spellCheck={false}
-                    disabled={isWorking}
-                    className={[
-                      'w-full rounded-xl border-2 px-4 py-3 text-[13px] font-mono min-h-[48px]',
-                      'placeholder:text-gray-300 dark:placeholder:text-gray-600 placeholder:font-sans focus:outline-none transition-colors text-gray-800 dark:text-gray-100',
-                      'disabled:opacity-50 disabled:cursor-not-allowed read-only:cursor-default',
-                      recipient && !recipientValid && !recipientEmailMode
-                        ? 'border-red-200 bg-red-50/30'
-                        : recipientValid || recipientEmailMode
-                        ? 'border-blue-200 bg-blue-50/20'
-                        : 'border-gray-200 dark:border-white/10 dark:bg-[#15151a] focus:border-gray-400',
-                    ].join(' ')}
-                  />
-                  {recipientEmailMode && (
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                      <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 border border-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-600">
-                        <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
-                        Email
+                  <div className="rounded-xl border border-gray-100 dark:border-white/10 bg-gray-50/80 dark:bg-white/5 px-4 py-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-[12px] font-bold text-gray-900 dark:text-gray-100">Hash PayLink Agent</p>
+                        <p className="mt-1 truncate font-mono text-[11px] text-gray-400">{shortAddress(recipient)}</p>
+                      </div>
+                      <span className="shrink-0 rounded-full border border-blue-100 bg-blue-50 px-2.5 py-1 text-[10px] font-bold text-blue-600 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-300">
+                        Access stream
                       </span>
                     </div>
+                    <p className="mt-2 text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
+                      Your Arc USDC stream pays Hash PayLink Agent for daily Polymarket LP research.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <StaticStreamMark />
+                      <span className="text-[13px] font-semibold text-gray-700 dark:text-gray-200">Recipient</span>
+                    </div>
+                    <span className="text-[11px] text-gray-400">Arc Network</span>
+                  </div>
+
+                  <div className="relative">
+                    <input
+                      type="text"
+                      name="streampay-recipient"
+                      autoComplete="off"
+                      data-lpignore="true"
+                      data-1p-ignore="true"
+                      placeholder="0x address or recipient@email.com"
+                      value={recipient}
+                      onChange={e => setRecipient(e.target.value.trim())}
+                      readOnly={recipientLocked}
+                      spellCheck={false}
+                      disabled={isWorking}
+                      className={[
+                        'w-full rounded-xl border-2 px-4 py-3 text-[13px] font-mono min-h-[48px]',
+                        'placeholder:text-gray-300 dark:placeholder:text-gray-600 placeholder:font-sans focus:outline-none transition-colors text-gray-800 dark:text-gray-100',
+                        'disabled:opacity-50 disabled:cursor-not-allowed read-only:cursor-default',
+                        recipient && !recipientValid && !recipientEmailMode
+                          ? 'border-red-200 bg-red-50/30'
+                          : recipientValid || recipientEmailMode
+                          ? 'border-blue-200 bg-blue-50/20'
+                          : 'border-gray-200 dark:border-white/10 dark:bg-[#15151a] focus:border-gray-400',
+                      ].join(' ')}
+                    />
+                    {recipientEmailMode && (
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 border border-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-600">
+                          <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+                          Email
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {recipientValid && (
+                    <p className="text-[11px] text-blue-500 flex items-center gap-1">
+                      <CheckIcon small />
+                      Address valid
+                    </p>
+                  )}
+                  {recipientEmailMode && (
+                    <div className="rounded-2xl border border-blue-100 dark:border-blue-900/30 bg-blue-50/40 dark:bg-blue-950/20 p-3.5 space-y-3">
+                      <div>
+                        <p className="text-[12px] font-bold text-gray-800 dark:text-gray-100">Recipient wallet setup needed</p>
+                        <p className="text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
+                          Send an invite so {recipientEmail} can prepare a Circle wallet. After they finish, check readiness and deploy the stream.
+                        </p>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={handleSendRecipientInvite}
+                          disabled={!amountValid || !durationValid || recipientInviteSending || isWorking}
+                          className="rounded-xl bg-gray-900 px-3 py-2.5 text-[12px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {recipientInviteSending ? 'Sending...' : 'Email invite'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleCheckRecipientReady}
+                          disabled={recipientReadyChecking || isWorking}
+                          className="rounded-xl border-2 border-gray-200 dark:border-white/10 bg-white dark:bg-[#15151a] px-3 py-2.5 text-[12px] font-bold text-gray-700 dark:text-gray-200 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {recipientReadyChecking ? 'Checking...' : 'Check ready'}
+                        </button>
+                      </div>
+                      {recipientInviteLink && (
+                        <button
+                          type="button"
+                          onClick={handleCopyRecipientInvite}
+                          className="w-full rounded-xl border border-blue-100 dark:border-blue-900/40 bg-white dark:bg-[#15151a] px-3 py-2 text-[11px] font-semibold text-blue-600 dark:text-blue-300"
+                        >
+                          {recipientInviteCopied ? 'Setup link copied' : 'Copy setup link'}
+                        </button>
+                      )}
+                      {recipientInviteStatus && <p className="text-[11px] font-semibold text-emerald-600">{recipientInviteStatus}</p>}
+                      {recipientInviteError && <p className="text-[11px] font-semibold text-red-500">{recipientInviteError}</p>}
+                    </div>
+                  )}
+                  {recipient && !recipientValid && !recipientEmailMode && (
+                    <p className="text-[11px] text-red-400">Enter a valid EVM address or recipient email</p>
                   )}
                 </div>
-
-                {recipientValid && (
-                  <p className="text-[11px] text-blue-500 flex items-center gap-1">
-                    <CheckIcon small />
-                    Address valid
-                  </p>
-                )}
-                {recipientEmailMode && (
-                  <div className="rounded-2xl border border-blue-100 dark:border-blue-900/30 bg-blue-50/40 dark:bg-blue-950/20 p-3.5 space-y-3">
-                    <div>
-                      <p className="text-[12px] font-bold text-gray-800 dark:text-gray-100">Recipient wallet setup needed</p>
-                      <p className="text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
-                        Send an invite so {recipientEmail} can prepare a Circle wallet. After they finish, check readiness and deploy the stream.
-                      </p>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        onClick={handleSendRecipientInvite}
-                        disabled={!amountValid || !durationValid || recipientInviteSending || isWorking}
-                        className="rounded-xl bg-gray-900 px-3 py-2.5 text-[12px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {recipientInviteSending ? 'Sending...' : 'Email invite'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleCheckRecipientReady}
-                        disabled={recipientReadyChecking || isWorking}
-                        className="rounded-xl border-2 border-gray-200 dark:border-white/10 bg-white dark:bg-[#15151a] px-3 py-2.5 text-[12px] font-bold text-gray-700 dark:text-gray-200 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {recipientReadyChecking ? 'Checking...' : 'Check ready'}
-                      </button>
-                    </div>
-                    {recipientInviteLink && (
-                      <button
-                        type="button"
-                        onClick={handleCopyRecipientInvite}
-                        className="w-full rounded-xl border border-blue-100 dark:border-blue-900/40 bg-white dark:bg-[#15151a] px-3 py-2 text-[11px] font-semibold text-blue-600 dark:text-blue-300"
-                      >
-                        {recipientInviteCopied ? 'Setup link copied' : 'Copy setup link'}
-                      </button>
-                    )}
-                    {recipientInviteStatus && <p className="text-[11px] font-semibold text-emerald-600">{recipientInviteStatus}</p>}
-                    {recipientInviteError && <p className="text-[11px] font-semibold text-red-500">{recipientInviteError}</p>}
-                  </div>
-                )}
-                {recipient && !recipientValid && !recipientEmailMode && (
-                  <p className="text-[11px] text-red-400">Enter a valid EVM address or recipient email</p>
-                )}
-              </div>
+              )}
 
               {/* ── Amount capsule ── */}
               <div className="space-y-1.5">

@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Route, Routes, useParams, useSearchParams } from 'react-router-dom'
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useParams, useSearchParams } from 'react-router-dom'
 import { StreamPayLayout } from './components/StreamPayLayout'
 import { StreamView }      from './components/StreamView'
 import { RecipientWalletSetup } from './components/RecipientWalletSetup'
@@ -10,8 +10,9 @@ import { ArenaPage }       from './components/ArenaPage'
 function StreamPage() {
   const { vaultAddress } = useParams<{ vaultAddress?: string }>()
   const [params]         = useSearchParams()
+  const location         = useLocation()
   const vault = (vaultAddress ?? params.get('vault') ?? undefined) as `0x${string}` | undefined
-  return <StreamView vaultAddress={vault} />
+  return <StreamView key={`${location.pathname}${location.search}`} vaultAddress={vault} />
 }
 
 // ── App ───────────────────────────────────────────────────────────────────────

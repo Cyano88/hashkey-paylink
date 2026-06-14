@@ -56,12 +56,6 @@ export function StreamPayHeader() {
     { label: 'Arena', to: arenaTo, active: isArenaMode },
   ] as const
 
-  const subtitle = isAgenticMode
-    ? 'Stream USDC to Hash PayLink Agent for daily Polymarket LP research. Marketplace coming soon.'
-    : isArenaMode
-      ? 'Stream Arena is coming soon.'
-      : 'Payroll streaming on Arc with Circle Smart Wallet.'
-
   return (
     <header className="sticky top-0 z-50 border-b border-white/60 dark:border-white/5 bg-white/80 dark:bg-[#111113]/90 backdrop-blur-xl">
       <div className="mx-auto flex max-w-5xl items-center justify-between px-4 pt-3 pb-2 sm:px-6">
@@ -100,11 +94,6 @@ export function StreamPayHeader() {
           </button>
         </div>
       </div>
-      {!telegramMode && (
-        <div className="mx-auto max-w-5xl px-4 pb-3 sm:px-6">
-          <p className="max-w-[620px] text-[11px] leading-relaxed text-gray-400 dark:text-gray-500">{subtitle}</p>
-        </div>
-      )}
       {!telegramMode && (
         <div className="mx-auto flex max-w-5xl px-4 pb-3 sm:hidden">
           <div className="grid w-full grid-cols-3 gap-1 rounded-full border border-gray-200 dark:border-white/10 bg-gray-50/80 dark:bg-[#1c1c20] p-0.5">
