@@ -987,7 +987,7 @@ export function CreateStreamForm() {
         {circleConfigured && (
           <div className="mx-auto flex w-full max-w-[340px] items-center justify-center gap-1.5 rounded-full border border-gray-100 bg-white px-3 py-1.5 shadow-sm dark:border-white/10 dark:bg-[#111216]">
             <img src="/hash-logo.png" alt="" className="h-3.5 w-3.5 object-contain" />
-            <span className="text-[11px] font-bold text-gray-600 dark:text-gray-300">Powered by Circle · Streaming on Arc</span>
+            <span className="text-[11px] font-bold text-gray-600 dark:text-gray-300">Powered by Circle</span>
           </div>
         )}
 
@@ -1477,13 +1477,10 @@ export function CreateStreamForm() {
                       <p className="text-center text-[11px] font-semibold text-amber-600 dark:text-amber-300">{privyCircleLinkError}</p>
                     )}
                     <div className="flex justify-center">
-                      <div className="inline-flex items-center overflow-hidden rounded-full border border-gray-200 bg-white text-[10px] font-semibold text-gray-400 dark:border-white/10 dark:bg-[#15151a] dark:text-gray-500">
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1">
-                          <img src="/brand/circle-logo.jpeg" alt="" className="h-3 w-3 rounded-full object-cover" />
-                          Powered by Circle
-                        </span>
-                        <span className="border-l border-gray-200 px-2.5 py-1 dark:border-white/10">Streaming on Arc</span>
-                      </div>
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1 text-[10px] font-semibold text-gray-400 dark:border-white/10 dark:bg-[#15151a] dark:text-gray-500">
+                        <img src="/brand/circle-logo.jpeg" alt="" className="h-3 w-3 rounded-full object-cover" />
+                        Powered by Circle
+                      </span>
                     </div>
                   </div>
                 )}
