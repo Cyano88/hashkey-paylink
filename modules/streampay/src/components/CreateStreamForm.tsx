@@ -290,6 +290,8 @@ export function CreateStreamForm() {
   const deployReady = isFormValid && !isWorking && !insufficientFunds
   const streamPayPrivyReady = !PRIVY_AUTH_ENABLED || privyAuthenticated
   const circleActionReady = circleAvailable && circleConfigured && circleReady && !isWorking && !circleNeedsFunds
+  const circleSignInReady = circleAvailable && PRIVY_AUTH_ENABLED && !privyAuthenticated && !isWorking
+  const circleCtaReady = circleActionReady || circleSignInReady
   const agenticLinkParams = isAgenticStreaming ? {
     mode: 'agentic-streaming',
     service: agenticService,
@@ -541,11 +543,11 @@ export function CreateStreamForm() {
   }
 
   async function handleCircleDeploy() {
-    if (!circleActionReady || !publicClient) return
     if (PRIVY_AUTH_ENABLED && !privyAuthenticated) {
       loginPrivy()
       return
     }
+    if (!circleActionReady || !publicClient) return
     const email = cleanEmail(PRIVY_AUTH_ENABLED ? privyEmail : circleEmail)
     if (!email && !circleSession) {
       setError(PRIVY_AUTH_ENABLED ? 'Sign in with a Privy email account to use Circle Smart Wallet.' : 'Enter your email to continue with Circle Smart Wallet.')
@@ -1417,10 +1419,11 @@ export function CreateStreamForm() {
                     )}
 
                     <button
-                      onClick={circleActionReady ? handleCircleDeploy : undefined}
-                      disabled={!circleActionReady}
+                      type="button"
+                      onClick={circleCtaReady ? handleCircleDeploy : undefined}
+                      disabled={!circleCtaReady}
                       className="flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-[14px] font-bold transition-all active:scale-[0.98] min-h-[52px]"
-                      style={circleActionReady
+                      style={circleCtaReady
                         ? { background: '#111827', color: '#ffffff', cursor: 'pointer' }
                         : { background: '#e5e7eb', color: '#9ca3af', cursor: 'not-allowed' }}
                     >
