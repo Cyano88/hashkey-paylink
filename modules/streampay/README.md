@@ -46,6 +46,12 @@ Never add `VITE_` to private keys — they would be exposed to the browser.
 
 ---
 
+### Arena Storage
+
+StreamPay Arena uses Postgres as the durable source of truth for private room settings. Set `DATABASE_URL` on Render. The `/api/arena-room` route stores entry amount, player count, round count, risk curve, timer, start rule, and room status in the `arena_rooms` table. The table is created automatically on first use.
+
+0G Storage should be used later for permanent room proofs and final result archives, while Arc contracts handle USDC deposits, stream halts, refunds, and winner claims.
+
 ## Module Structure
 
 ```
@@ -59,7 +65,7 @@ modules/streampay/
 │   │   ├── StreamView.tsx            # Payroll: view + claim/cancel a stream
 │   │   ├── StreamNotFound.tsx        # 404 state for bad vault addresses
 │   │   ├── TriStateBar.tsx           # Progress bar (claimed / unlocked / locked)
-│   │   ├── ArenaPage.tsx             # Arena placeholder while room contracts are designed
+│   │   ├── ArenaPage.tsx             # Arena private rooms and game preview flow
 │   │   └── creator/
 │   │       ├── LinkFactory.tsx       # Creator: generate a gate link
 │   │       ├── StreamGate.tsx        # Viewer: 4-step auth + content reveal + HUD
