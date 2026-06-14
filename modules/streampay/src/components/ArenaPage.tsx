@@ -1,6 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { ArrowLeft, Clock3, Crown, LockKeyhole, Play, RotateCcw, Settings, Share2, Shield, Sparkles, Trophy, Users, WalletCards } from 'lucide-react'
+import { createPublicClient, formatUnits, http, parseUnits, type Address } from 'viem'
+import { arcChain, CHAIN_META } from '../../../../src/lib/chains'
+import {
+  canUseCircleEvmEmailWallet,
+  connectCircleEvmEmailWallet,
+  sendCircleArcArenaJoin,
+  type CircleEvmEmailSession,
+} from '../../../../src/lib/circleEvmEmailWallet'
 
 type RiskMode = 'linear' | 'climb' | 'finale'
 type RoomStatus = 'setup' | 'lobby' | 'playing' | 'eliminated' | 'won'
@@ -47,6 +55,47 @@ const TIMER_OPTIONS = [45, 60, 90]
 const PLATFORM_FEE_BPS = 50
 const ARENA_ESCROW_FACTORY_ADDRESS = String(import.meta.env.VITE_ARENA_ESCROW_FACTORY_ADDRESS ?? '').trim()
 const ESCROW_FACTORY_READY = /^0x[a-fA-F0-9]{40}$/.test(ARENA_ESCROW_FACTORY_ADDRESS)
+const ARC_PUBLIC_CLIENT = createPublicClient({ chain: arcChain, transport: http() })
+const ARC_USDC_ADDRESS = CHAIN_META.arc.tokenAddress
+const ARC_USDC_DECIMALS = CHAIN_META.arc.decimals
+const USDC_BALANCE_ABI = [
+  {
+    name: 'balanceOf',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [{ name: 'account', type: 'address' }],
+    outputs: [{ name: 'balance', type: 'uint256' }],
+  },
+] as const
+const ARENA_ESCROW_ABI = [
+  {
+    name: 'playerCount',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: 'count', type: 'uint16' }],
+  },
+  {
+    name: 'activeCount',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: 'count', type: 'uint16' }],
+  },
+  {
+    name: 'players',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [{ name: 'player', type: 'address' }],
+    outputs: [
+      { name: 'joined', type: 'bool' },
+      { name: 'active', type: 'bool' },
+      { name: 'refunded', type: 'bool' },
+      { name: 'streamed', type: 'uint256' },
+      { name: 'refundable', type: 'uint256' },
+    ],
+  },
+] as const
 
 const SAMPLE_QUESTIONS = [
   {
@@ -103,6 +152,17 @@ function money(value: number) {
   return value.toLocaleString(undefined, { maximumFractionDigits: 2 })
 }
 
+function shortAddress(value: string) {
+  if (!/^0x[a-fA-F0-9]{40}$/.test(value)) return value
+  return `${value.slice(0, 6)}...${value.slice(-4)}`
+}
+
+function formatCompactUsdc(value: bigint) {
+  const formatted = Number(formatUnits(value, ARC_USDC_DECIMALS))
+  if (!Number.isFinite(formatted)) return '0'
+  return formatted.toLocaleString(undefined, { maximumFractionDigits: formatted >= 1 ? 2 : 6 })
+}
+
 function percent(value: number) {
   return `${Math.round(value * 100)}%`
 }
@@ -127,6 +187,15 @@ export function ArenaPage() {
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('escrow_pending')
   const [escrowAddress, setEscrowAddress] = useState<string | null>(null)
   const [platformFeeBps, setPlatformFeeBps] = useState(PLATFORM_FEE_BPS)
+  const [circleEmail, setCircleEmail] = useState('')
+  const [circleSession, setCircleSession] = useState<CircleEvmEmailSession | null>(null)
+  const [circleBalance, setCircleBalance] = useState<bigint | null>(null)
+  const [chainPlayerCount, setChainPlayerCount] = useState<number | null>(null)
+  const [chainActiveCount, setChainActiveCount] = useState<number | null>(null)
+  const [playerJoined, setPlayerJoined] = useState(false)
+  const [joinBusy, setJoinBusy] = useState(false)
+  const [joinTxHash, setJoinTxHash] = useState('')
+  const [joinError, setJoinError] = useState('')
 
   const activeQuestion = SAMPLE_QUESTIONS[(round - 1) % SAMPLE_QUESTIONS.length]
   const maxPool = entry * players
@@ -138,8 +207,8 @@ export function ArenaPage() {
   const prizePool = currentStreamed * players
   const draftRoomCode = useMemo(() => `SP-${entry}${players}${rounds}-${riskMode.slice(0, 2).toUpperCase()}`, [entry, players, riskMode, rounds])
   const roomCode = savedRoomId || draftRoomCode
-  const joinedPlayers = status === 'setup' ? 1 : status === 'lobby' ? Math.min(players, Math.max(2, Math.ceil(players * 0.6))) : players
-  const canStartGame = startRule === 'host' || joinedPlayers >= players
+  const joinedPlayers = chainPlayerCount ?? (status === 'setup' ? 0 : 0)
+  const canStartGame = joinedPlayers >= 2 && (startRule === 'host' || joinedPlayers >= players)
   const canOpenDeposits = ESCROW_FACTORY_READY && Boolean(escrowAddress) && paymentStatus !== 'escrow_pending'
   const riskProgress = Math.min(100, Math.round((currentStreamed / entry) * 100))
   const alivePlayers = status === 'playing' ? Math.max(1, players - Math.floor(round / 4)) : status === 'eliminated' ? players - 1 : players
@@ -224,7 +293,7 @@ export function ArenaPage() {
       setRound(1)
       setSeconds(room.timer)
       setSelected('')
-      setRoomLog('Private room loaded. Deposits open after Arena escrow is configured.')
+      setRoomLog(room.escrowAddress ? 'Private room loaded. Players can deposit into the room escrow.' : 'Private room loaded. Escrow is still pending.')
     } catch (error) {
       setView('private')
       setActiveTab('room')
@@ -232,6 +301,61 @@ export function ArenaPage() {
       setRoomLog(error instanceof Error ? error.message : 'Arena room could not be loaded.')
     }
   }
+
+  async function refreshRoomChainState(walletAddress = circleSession?.wallet.address) {
+    if (!escrowAddress || !/^0x[a-fA-F0-9]{40}$/.test(escrowAddress)) return
+    try {
+      const [playerCountRaw, activeCountRaw] = await Promise.all([
+        ARC_PUBLIC_CLIENT.readContract({
+          address: escrowAddress as Address,
+          abi: ARENA_ESCROW_ABI,
+          functionName: 'playerCount',
+        }),
+        ARC_PUBLIC_CLIENT.readContract({
+          address: escrowAddress as Address,
+          abi: ARENA_ESCROW_ABI,
+          functionName: 'activeCount',
+        }),
+      ])
+      setChainPlayerCount(Number(playerCountRaw))
+      setChainActiveCount(Number(activeCountRaw))
+
+      if (walletAddress && /^0x[a-fA-F0-9]{40}$/.test(walletAddress)) {
+        const [balanceRaw, playerRaw] = await Promise.all([
+          ARC_PUBLIC_CLIENT.readContract({
+            address: ARC_USDC_ADDRESS,
+            abi: USDC_BALANCE_ABI,
+            functionName: 'balanceOf',
+            args: [walletAddress as Address],
+          }),
+          ARC_PUBLIC_CLIENT.readContract({
+            address: escrowAddress as Address,
+            abi: ARENA_ESCROW_ABI,
+            functionName: 'players',
+            args: [walletAddress as Address],
+          }),
+        ])
+        setCircleBalance(balanceRaw)
+        setPlayerJoined(Boolean(playerRaw[0]))
+      }
+    } catch (error) {
+      setJoinError(error instanceof Error ? error.message.slice(0, 180) : 'Could not refresh Arena escrow.')
+    }
+  }
+
+  useEffect(() => {
+    if (!escrowAddress || status === 'setup') return
+    void refreshRoomChainState()
+    const interval = window.setInterval(() => {
+      void refreshRoomChainState()
+    }, 8000)
+    return () => window.clearInterval(interval)
+  }, [escrowAddress, status])
+
+  useEffect(() => {
+    if (!circleSession?.wallet.address || !escrowAddress) return
+    void refreshRoomChainState(circleSession.wallet.address)
+  }, [circleSession?.wallet.address, escrowAddress])
 
   useEffect(() => {
     if (status !== 'playing') return
@@ -269,7 +393,10 @@ export function ArenaPage() {
       setRound(1)
       setSeconds(roomTimer)
       setSelected('')
-      setRoomLog('Private lobby saved. Share the room link; USDC deposits unlock after escrow is live.')
+      setChainPlayerCount(0)
+      setChainActiveCount(0)
+      setPlayerJoined(false)
+      setRoomLog(data.room.escrowAddress ? 'Private lobby saved. Share the room link; deposits are open.' : 'Private lobby saved. Escrow is still being prepared.')
     } catch (error) {
       setRoomLog(error instanceof Error ? error.message : 'Arena room could not be saved.')
     } finally {
@@ -298,6 +425,11 @@ export function ArenaPage() {
     setPaymentStatus('escrow_pending')
     setEscrowAddress(null)
     setPlatformFeeBps(PLATFORM_FEE_BPS)
+    setChainPlayerCount(null)
+    setChainActiveCount(null)
+    setPlayerJoined(false)
+    setJoinTxHash('')
+    setJoinError('')
     setRoomLog('Room preview ready')
   }
 
@@ -317,6 +449,60 @@ export function ArenaPage() {
     setRound(value => value + 1)
     setSelected('')
     setRoomLog(`Correct. Round ${round + 1} unlocks a higher risk stream.`)
+  }
+
+  async function joinRoomWithCircle() {
+    setJoinError('')
+    setJoinTxHash('')
+
+    if (!canOpenDeposits || !escrowAddress) {
+      setJoinError('Room escrow is not open yet.')
+      return
+    }
+    if (!canUseCircleEvmEmailWallet('arc')) {
+      setJoinError('Circle Arc wallet access is not configured.')
+      return
+    }
+
+    const email = circleEmail.trim()
+    if (!circleSession && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setJoinError('Enter the email for your Circle wallet.')
+      return
+    }
+
+    setJoinBusy(true)
+    try {
+      const session = circleSession ?? await connectCircleEvmEmailWallet(email, 'arc')
+      setCircleSession(session)
+      setCircleEmail(email || session.wallet.address)
+
+      const entryUnits = parseUnits(String(entry), ARC_USDC_DECIMALS)
+      const balance = await ARC_PUBLIC_CLIENT.readContract({
+        address: ARC_USDC_ADDRESS,
+        abi: USDC_BALANCE_ABI,
+        functionName: 'balanceOf',
+        args: [session.wallet.address],
+      })
+      setCircleBalance(balance)
+      if (balance < entryUnits) {
+        throw new Error(`Add ${entry} USDC on Arc to this Circle wallet before joining.`)
+      }
+
+      setRoomLog('Circle wallet is funding your room seat.')
+      const txHash = await sendCircleArcArenaJoin({
+        session,
+        escrowAddress: escrowAddress as Address,
+        entryUnits: entryUnits.toString(),
+      })
+      if (txHash) setJoinTxHash(txHash)
+      setPlayerJoined(true)
+      setRoomLog('Seat funded. Waiting for the room to fill.')
+      await refreshRoomChainState(session.wallet.address)
+    } catch (error) {
+      setJoinError(error instanceof Error ? error.message : 'Arena deposit failed.')
+    } finally {
+      setJoinBusy(false)
+    }
   }
 
   async function shareRoomLink() {
@@ -538,8 +724,8 @@ export function ArenaPage() {
                 <div className="mt-4 grid grid-cols-2 gap-2">
                   <Metric label="Entry" value={`${entry} USDC`} compact />
                   <Metric label="Players" value={`${joinedPlayers}/${players}`} compact />
+                  <Metric label="Active" value={`${chainActiveCount ?? joinedPlayers}`} compact />
                   <Metric label="Prize" value={`$${money(netPrize)}`} compact />
-                  <Metric label="Escrow" value={escrowAddress ? 'Room ready' : ESCROW_FACTORY_READY ? 'Factory ready' : 'Pending'} compact />
                 </div>
 
                 <div className="mt-4 rounded-2xl border border-gray-100 bg-gray-50 p-3 dark:border-white/10 dark:bg-white/[0.04]">
@@ -618,15 +804,71 @@ export function ArenaPage() {
                         {joinedPlayers}/{players}
                       </p>
                     </div>
+                    <div className="mt-3 rounded-[20px] border border-white/10 bg-white/[0.07] p-3 dark:border-gray-200 dark:bg-gray-100">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-[12px] font-black">Deposit seat</p>
+                          <p className="mt-0.5 text-[10px] font-semibold text-white/50 dark:text-gray-500">
+                            {playerJoined ? 'You are in this room.' : `${entry} USDC funds your protected Arena seat.`}
+                          </p>
+                        </div>
+                        <span className="rounded-full bg-white/10 px-2 py-1 text-[10px] font-black text-white/65 dark:bg-white dark:text-gray-500">
+                          Circle
+                        </span>
+                      </div>
+
+                      {!circleSession && (
+                        <input
+                          value={circleEmail}
+                          onChange={(event) => setCircleEmail(event.target.value)}
+                          type="email"
+                          placeholder="you@example.com"
+                          className="mt-3 h-9 w-full rounded-xl border border-white/10 bg-white/10 px-3 text-[12px] font-semibold text-white outline-none placeholder:text-white/30 focus:border-white/30 dark:border-gray-200 dark:bg-white dark:text-gray-950 dark:placeholder:text-gray-400"
+                        />
+                      )}
+
+                      {circleSession && (
+                        <div className="mt-3 grid grid-cols-2 gap-2">
+                          <DarkMetric label="Wallet" value={shortAddress(circleSession.wallet.address)} />
+                          <DarkMetric label="Balance" value={circleBalance === null ? 'Checking' : `${formatCompactUsdc(circleBalance)} USDC`} />
+                        </div>
+                      )}
+
+                      {joinError && (
+                        <p className="mt-2 rounded-xl bg-amber-400/10 px-3 py-2 text-[10px] font-bold text-amber-100 dark:bg-amber-100 dark:text-amber-700">
+                          {joinError}
+                        </p>
+                      )}
+                      {joinTxHash && (
+                        <a
+                          href={`${CHAIN_META.arc.explorerUrl}/tx/${joinTxHash}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mt-2 block truncate rounded-xl bg-white/10 px-3 py-2 text-[10px] font-bold text-white/70 underline decoration-white/20 underline-offset-4 dark:bg-white dark:text-gray-600"
+                        >
+                          View deposit transaction
+                        </a>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={joinRoomWithCircle}
+                        disabled={!canOpenDeposits || joinBusy || playerJoined}
+                        className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-white py-2.5 text-[12px] font-black text-gray-950 transition-transform active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45 dark:bg-gray-950 dark:text-white"
+                      >
+                        <WalletCards className="h-4 w-4" />
+                        {playerJoined ? 'Seat funded' : joinBusy ? 'Confirming...' : canOpenDeposits ? 'Deposit & join' : 'Escrow pending'}
+                      </button>
+                    </div>
                     <PlayerSlots total={players} joined={joinedPlayers} />
                     <button
                       type="button"
                       onClick={startRoom}
-                      disabled={!canOpenDeposits || !canStartGame}
+                      disabled
                       className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-white py-2.5 text-[12px] font-black text-gray-950 transition-transform active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45 dark:bg-gray-950 dark:text-white"
                     >
                       <Play className="h-4 w-4" />
-                      {canOpenDeposits ? (canStartGame ? 'Start paid room' : 'Waiting for full room') : 'Room escrow required'}
+                      {canStartGame ? 'Start controls next' : 'Waiting for players'}
                     </button>
                     <p className="mt-2 text-center text-[10px] font-semibold text-white/45 dark:text-gray-500">
                       No platform account required. Players use Circle wallet access when deposits open.
@@ -703,7 +945,7 @@ export function ArenaPage() {
                         : status === 'setup'
                           ? 'Room is not live yet. Create the lobby when your settings look right.'
                           : status === 'lobby'
-                            ? `Escrow pending. Net prize after 0.5% platform fee: $${money(netPrize)}.`
+                            ? `Deposits go into the room escrow. Net prize after 0.5% platform fee: $${money(netPrize)}.`
                             : `${alivePlayers} players active. Unstreamed USDC stays claimable from escrow.`}
                   </p>
                 </div>

@@ -33,6 +33,7 @@ const SMART_WALLET_BATCH_ABI = parseAbi(['function executeBatch((address target,
 const STREAM_FACTORY_ABI = parseAbi([
   'function createStream(address recipient,uint256 totalAmount,uint64 startTime,uint64 endTime,bytes32 salt) returns (address vault)',
 ])
+const ARENA_ESCROW_ABI = parseAbi(['function join()'])
 
 type CircleResponse<T = unknown> = {
   data?: T
@@ -407,6 +408,56 @@ export default async function handler(req: Request, res: Response) {
         }),
       })
       return res.json({ ok: true, vault: predictedVault, ...data })
+    }
+
+    if (action === 'executeArcArenaJoin') {
+      const { userToken, walletId, walletAddress, escrowAddress, entryUnits } = params
+      if (!userToken || !walletId || !walletAddress || !escrowAddress || !entryUnits) {
+        return res.status(400).json({ ok: false, error: 'Missing Arc Arena join parameters' })
+      }
+      if (!isAddress(walletAddress) || !isAddress(escrowAddress)) {
+        return res.status(400).json({ ok: false, error: 'Invalid Arc Arena wallet or escrow address' })
+      }
+
+      const entryAmount = BigInt(entryUnits)
+      if (entryAmount <= 0n) {
+        return res.status(400).json({ ok: false, error: 'Invalid Arena entry amount' })
+      }
+
+      const tokenAddress = EVM_CHAINS.arc.tokenAddress
+      const fundCallData = encodeFunctionData({
+        abi: ERC20_TRANSFER_ABI,
+        functionName: 'transfer',
+        args: [escrowAddress as `0x${string}`, entryAmount],
+      })
+      const joinCallData = encodeFunctionData({
+        abi: ARENA_ESCROW_ABI,
+        functionName: 'join',
+        args: [],
+      })
+      const batchCallData = encodeFunctionData({
+        abi: SMART_WALLET_BATCH_ABI,
+        functionName: 'executeBatch',
+        args: [[
+          { target: tokenAddress as `0x${string}`, value: 0n, data: fundCallData },
+          { target: escrowAddress as `0x${string}`, value: 0n, data: joinCallData },
+        ]],
+      })
+
+      const data = await circleJson('/v1/w3s/user/transactions/contractExecution', {
+        method: 'POST',
+        userToken,
+        apiKey: circleApiKey({ chain: 'arc' }),
+        body: JSON.stringify({
+          idempotencyKey: crypto.randomUUID(),
+          walletId,
+          feeLevel: 'HIGH',
+          refId: 'hashpaylink-arc-arena-join',
+          contractAddress: walletAddress,
+          callData: batchCallData,
+        }),
+      })
+      return res.json({ ok: true, escrowAddress, ...data })
     }
 
     if (action === 'deployEvmWallet') {
