@@ -931,22 +931,23 @@ export function CreateStreamForm() {
 
   // ── Form ──────────────────────────────────────────────────────────────────
   return (
-    <div className="w-full max-w-[520px] mx-auto mt-8 sm:mt-10">
-      <div className="space-y-8">
+    <div className="mx-auto mt-6 w-full max-w-lg sm:mt-8">
+      <div className="space-y-6">
 
         {/* ── Page title (Rule 4: aligned to same 480px) ── */}
         <div className="text-center space-y-2">
-          <h1 className="text-[25px] sm:text-[30px] font-bold tracking-tight text-gray-900 dark:text-gray-100">
+          <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-gray-100 sm:text-[28px]">
             {isAgenticStreaming ? <>Agentic<span style={{ color: '#3b82f6' }}> Streaming</span></> : <>Pay<span style={{ color: '#3b82f6' }}>roll</span></>}
           </h1>
-          <p className="mx-auto max-w-[420px] text-[13px] leading-relaxed text-gray-400">
+          <p className="mx-auto max-w-[400px] text-[13px] leading-relaxed text-gray-400">
             {isAgenticStreaming ? 'Stream USDC to Hash PayLink Agent for daily Polymarket LP research. Marketplace coming soon.' : 'Stream payment in USDC to anyone on Arc'}
           </p>
         </div>
 
         {circleConfigured && (
-          <div className="mx-auto flex w-full max-w-[380px] items-center justify-center rounded-full border border-gray-100 dark:border-white/10 bg-white dark:bg-[#111216] px-3 py-2 shadow-sm">
-            <span className="text-[11px] font-bold text-gray-600 dark:text-gray-300">Secure email sign-in · Circle wallet on Arc</span>
+          <div className="mx-auto flex w-full max-w-[340px] items-center justify-center gap-1.5 rounded-full border border-gray-100 bg-white px-3 py-1.5 shadow-sm dark:border-white/10 dark:bg-[#111216]">
+            <img src="/hash-logo.png" alt="" className="h-3.5 w-3.5 object-contain" />
+            <span className="text-[11px] font-bold text-gray-600 dark:text-gray-300">Privy sign-in · Circle wallet on Arc</span>
           </div>
         )}
 
@@ -1092,11 +1093,11 @@ export function CreateStreamForm() {
         {/* ── Vault Card + How It Works ── */}
         <div className={circleAvailable && activeTab === 'running' ? 'hidden' : 'space-y-4'}>
           {/* Vault Card */}
-          <div className="bg-white dark:bg-[#111216] rounded-[24px] border border-gray-100 dark:border-white/10 shadow-sm overflow-hidden">
-            <div className="p-5 sm:p-7 space-y-6">
+          <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-card dark:border-white/10 dark:bg-[#111216]">
+            <div className="space-y-5 p-5 sm:p-6">
 
               {isAgenticStreaming && (
-                <div className="rounded-[20px] border border-gray-100 dark:border-white/10 bg-gray-50/80 dark:bg-white/5 p-4 space-y-4">
+                <div className="rounded-xl border border-gray-100 bg-gray-50/80 p-3.5 dark:border-white/10 dark:bg-white/5">
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
                       <p className="text-[13px] font-bold text-gray-900 dark:text-gray-100">Polymarket LP desk</p>
@@ -1108,7 +1109,7 @@ export function CreateStreamForm() {
                       {prefill.amountPerDay || '0.01'} USDC/day
                     </span>
                   </div>
-                  <div className="space-y-1.5">
+                  <div className="mt-3 space-y-1.5">
                     <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Delivery email</span>
                     <input
                       type="email"
@@ -1118,7 +1119,7 @@ export function CreateStreamForm() {
                       onChange={e => setReportEmail(e.target.value.trim())}
                       disabled={isWorking}
                       placeholder="you@example.com"
-                      className="w-full rounded-xl border-2 border-gray-200 dark:border-white/10 bg-white dark:bg-[#15151a] px-4 py-3 text-[13px] text-gray-800 dark:text-gray-100 placeholder:text-gray-300 dark:placeholder:text-gray-600 focus:outline-none focus:border-gray-400 transition-colors disabled:opacity-50 min-h-[46px]"
+                      className="min-h-[44px] w-full rounded-xl border border-gray-200 bg-white px-3.5 py-2.5 text-[13px] text-gray-800 placeholder:text-gray-300 transition-colors focus:border-gray-400 focus:outline-none disabled:opacity-50 dark:border-white/10 dark:bg-[#15151a] dark:text-gray-100 dark:placeholder:text-gray-600"
                     />
                     {!agenticReportEmailValid && (
                       <p className="text-[11px] font-semibold text-red-500">Add a valid email for daily LP research.</p>
@@ -1137,7 +1138,7 @@ export function CreateStreamForm() {
                     </div>
                     <span className="text-[11px] text-gray-400">Arc Network</span>
                   </div>
-                  <div className="rounded-xl border border-gray-100 dark:border-white/10 bg-gray-50/80 dark:bg-white/5 px-4 py-3">
+                  <div className="rounded-xl border border-gray-100 bg-gray-50/80 px-3.5 py-3 dark:border-white/10 dark:bg-white/5">
                     <div className="flex items-center justify-between gap-3">
                       <div className="min-w-0">
                         <p className="text-[12px] font-bold text-gray-900 dark:text-gray-100">Hash PayLink Agent</p>
@@ -1253,7 +1254,7 @@ export function CreateStreamForm() {
                   <ChainIcon />
                   <span className="text-[13px] font-semibold text-gray-700 dark:text-gray-200">Amount</span>
                 </div>
-                <div className="flex overflow-hidden rounded-xl border-2 border-gray-200 dark:border-white/10 bg-white dark:bg-[#15151a] transition-colors focus-within:border-gray-400">
+                <div className="flex overflow-hidden rounded-xl border border-gray-200 bg-white transition-colors focus-within:border-gray-400 dark:border-white/10 dark:bg-[#15151a]">
                   <input
                     type="number"
                     placeholder="0.0"
@@ -1261,9 +1262,9 @@ export function CreateStreamForm() {
                     value={amount}
                     onChange={e => setAmount(e.target.value)}
                     disabled={isWorking}
-                    className="min-w-0 flex-1 bg-transparent px-4 py-3 text-[14px] font-semibold text-gray-900 dark:text-gray-100 focus:outline-none disabled:opacity-50 placeholder:text-gray-300 dark:placeholder:text-gray-600 placeholder:font-normal min-h-[48px]"
+                    className="min-h-[44px] min-w-0 flex-1 bg-transparent px-3.5 py-2.5 text-[14px] font-semibold text-gray-900 placeholder:font-normal placeholder:text-gray-300 focus:outline-none disabled:opacity-50 dark:text-gray-100 dark:placeholder:text-gray-600"
                   />
-                  <div className="flex items-center px-4 border-l-2 border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5 shrink-0">
+                  <div className="flex shrink-0 items-center border-l border-gray-200 bg-gray-50 px-3.5 dark:border-white/10 dark:bg-white/5">
                     <span className="text-[12px] font-bold text-gray-500 select-none">USDC</span>
                   </div>
                 </div>
@@ -1295,7 +1296,7 @@ export function CreateStreamForm() {
                         type="button"
                         disabled={isWorking}
                         onClick={() => { setDurationPreset(d.secs); setCustomDays('') }}
-                        className="rounded-xl border-2 px-3.5 py-2.5 text-[12px] font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
+                        className="min-h-[40px] rounded-xl border px-3 py-2 text-[12px] font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-50"
                         style={active
                           ? { background: '#111827', borderColor: '#111827', color: '#ffffff' }
                           : { background: '#ffffff', borderColor: '#e5e7eb', color: '#4b5563' }}
@@ -1305,7 +1306,7 @@ export function CreateStreamForm() {
                     )
                   })}
                 </div>
-                <div className="flex overflow-hidden rounded-xl border-2 border-gray-200 dark:border-white/10 bg-white dark:bg-[#15151a] transition-colors focus-within:border-gray-400">
+                <div className="flex overflow-hidden rounded-xl border border-gray-200 bg-white transition-colors focus-within:border-gray-400 dark:border-white/10 dark:bg-[#15151a]">
                   <input
                     type="number"
                     placeholder="Custom days"
@@ -1313,9 +1314,9 @@ export function CreateStreamForm() {
                     value={customDays}
                     disabled={isWorking}
                     onChange={e => { setCustomDays(e.target.value); setDurationPreset(null) }}
-                    className="min-w-0 flex-1 bg-transparent px-4 py-3 text-[13px] text-gray-900 dark:text-gray-100 focus:outline-none disabled:opacity-50 placeholder:text-gray-300 dark:placeholder:text-gray-600 min-h-[48px]"
+                    className="min-h-[44px] min-w-0 flex-1 bg-transparent px-3.5 py-2.5 text-[13px] text-gray-900 placeholder:text-gray-300 focus:outline-none disabled:opacity-50 dark:text-gray-100 dark:placeholder:text-gray-600"
                   />
-                  <div className="flex items-center px-4 border-l-2 border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5 shrink-0">
+                  <div className="flex shrink-0 items-center border-l border-gray-200 bg-gray-50 px-3.5 dark:border-white/10 dark:bg-white/5">
                     <span className="text-[12px] font-bold text-gray-500 select-none">DAYS</span>
                   </div>
                 </div>
@@ -1335,14 +1336,14 @@ export function CreateStreamForm() {
                   onChange={e => setReason(e.target.value)}
                   disabled={isWorking}
                   maxLength={80}
-                  className="w-full rounded-xl border-2 border-gray-200 dark:border-white/10 bg-white dark:bg-[#15151a] px-4 py-3 text-[13px] text-gray-900 dark:text-gray-100 placeholder:text-gray-300 dark:placeholder:text-gray-600 focus:outline-none focus:border-gray-400 transition-colors disabled:opacity-50 min-h-[48px]"
+                  className="min-h-[44px] w-full rounded-xl border border-gray-200 bg-white px-3.5 py-2.5 text-[13px] text-gray-900 placeholder:text-gray-300 transition-colors focus:border-gray-400 focus:outline-none disabled:opacity-50 dark:border-white/10 dark:bg-[#15151a] dark:text-gray-100 dark:placeholder:text-gray-600"
                 />
               </div>
 
               {/* ── CTA ── */}
               <div className="space-y-2.5 pt-1">
                 {circleAvailable && (
-                  <div className="rounded-[20px] border border-gray-100 dark:border-white/10 bg-gray-50/80 dark:bg-white/5 p-4 space-y-3">
+                  <div className="space-y-3 rounded-xl border border-gray-100 bg-gray-50/80 p-3.5 dark:border-white/10 dark:bg-white/5">
                     <div className="flex items-center justify-between gap-3">
                       <div className="min-w-0">
                         <p className="text-[13px] font-bold text-gray-900 dark:text-gray-100">
@@ -1422,14 +1423,16 @@ export function CreateStreamForm() {
                       type="button"
                       onClick={circleCtaReady ? handleCircleDeploy : undefined}
                       disabled={!circleCtaReady}
-                      className="flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-[14px] font-bold transition-all active:scale-[0.98] min-h-[52px]"
+                      className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold transition-all active:scale-[0.98]"
                       style={circleCtaReady
                         ? { background: '#111827', color: '#ffffff', cursor: 'pointer' }
                         : { background: '#e5e7eb', color: '#9ca3af', cursor: 'not-allowed' }}
                     >
                       {isWorking
                         ? <><Spinner /><span className="text-[13px] font-medium">{statusMsg}</span></>
-                        : streamPayPrivyReady ? (isAgenticStreaming ? 'Start agentic stream' : 'Start StreamPay') : 'Continue securely'}
+                        : streamPayPrivyReady
+                          ? <><img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert mix-blend-screen" /> {isAgenticStreaming ? 'Start agentic stream' : 'Start StreamPay'}</>
+                          : <><img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert mix-blend-screen" /> Continue securely</>}
                     </button>
                     {privyCircleLinkError && (
                       <p className="text-center text-[11px] font-semibold text-amber-600 dark:text-amber-300">{privyCircleLinkError}</p>
