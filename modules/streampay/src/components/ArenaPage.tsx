@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Clock3, LockKeyhole, Play, RotateCcw, Trophy, WalletCards } from 'lucide-react'
-import { HashPayLinkBadge } from './CreateStreamForm'
+import { Clock3, LockKeyhole, Play, RotateCcw, Trophy, WalletCards, Zap } from 'lucide-react'
 
 type RiskMode = 'linear' | 'climb' | 'finale'
 type RoomStatus = 'setup' | 'playing' | 'eliminated' | 'won'
@@ -109,7 +108,7 @@ export function ArenaPage() {
     setStatus('playing')
     setRound(1)
     setSelected('')
-    setRoomLog('Stream started. Answer before the timer ends to stay active.')
+    setRoomLog('Live. Answer before the timer ends.')
   }
 
   function resetRoom() {
@@ -125,63 +124,77 @@ export function ArenaPage() {
     setSelected(option)
     if (option !== activeQuestion.answer) {
       setStatus('eliminated')
-      setRoomLog('Wrong answer. Stream halted and unstreamed USDC stays claimable.')
+      setRoomLog('Stopped. Your remaining USDC is still claimable.')
       return
     }
     if (round >= rounds) {
       setStatus('won')
-      setRoomLog('Board cleared. The winner can claim the accumulated prize pool.')
+      setRoomLog('Winner. Prize pool is ready to claim.')
       return
     }
     setRound(value => value + 1)
     setSelected('')
-    setRoomLog('Correct. Next round increases the streaming weight.')
+    setRoomLog('Correct. Next round is worth more.')
   }
 
   return (
-    <div className="mx-auto mt-7 w-full max-w-5xl px-0 pb-8 sm:mt-10">
-      <div className="grid gap-5 lg:grid-cols-[0.92fr_1.08fr]">
+    <div className="mx-auto mt-6 w-full max-w-5xl px-0 pb-8 sm:mt-8">
+      <div className="grid gap-4 lg:grid-cols-[0.86fr_1.14fr]">
         <section className="space-y-4">
-          <div className="space-y-2">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">StreamPay Arena</p>
-            <h1 className="text-[28px] font-bold tracking-tight text-gray-950 dark:text-white sm:text-[34px]">
-              Recoverable-risk USDC games
+          <div className="space-y-2 rounded-[26px] border border-gray-100 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-[#111216]">
+            <p className="inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-gray-500 dark:bg-white/10 dark:text-gray-300">
+              <Zap className="h-3 w-3" />
+              StreamPay Arena
+            </p>
+            <h1 className="text-[27px] font-bold tracking-tight text-gray-950 dark:text-white sm:text-[32px]">
+              Play with USDC, keep what you do not risk.
             </h1>
             <p className="max-w-[520px] text-[13px] leading-relaxed text-gray-500 dark:text-gray-400">
-              Players deposit USDC, stay alive through timed rounds, and only stream risk while they keep playing.
+              Join timed game rooms where your deposit streams only while you are still in the round.
             </p>
-          </div>
-
-          <div className="grid grid-cols-3 gap-2">
-            {[
-              ['Circle', 'Email wallet access'],
-              ['Arc', 'Streaming settlement'],
-              ['USDC', 'Prize and refunds'],
-            ].map(([title, body]) => (
-              <div key={title} className="rounded-2xl border border-gray-100 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-[#111216]">
-                <p className="text-[11px] font-bold text-gray-900 dark:text-gray-100">{title}</p>
-                <p className="mt-1 text-[10px] leading-snug text-gray-400">{body}</p>
-              </div>
-            ))}
+            <div className="grid grid-cols-3 gap-2 pt-1">
+              {[
+                ['Wallet', 'Circle'],
+                ['Network', 'Arc'],
+                ['Asset', 'USDC'],
+              ].map(([title, body]) => (
+                <div key={title} className="rounded-2xl bg-gray-50 p-3 dark:bg-white/[0.04]">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400">{title}</p>
+                  <p className="mt-1 text-[13px] font-bold text-gray-950 dark:text-white">{body}</p>
+                </div>
+              ))}
+            </div>
           </div>
 
           <div className="rounded-[22px] border border-gray-100 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-[#111216]">
             <div className="grid gap-2 sm:grid-cols-3">
-              <GameTile title="Stream Trivia" body="Active demo" active />
-              <GameTile title="Prediction Rooms" body="Coming soon" />
-              <GameTile title="Creator Rooms" body="Coming soon" />
+              {[
+                { title: 'Trivia', body: 'Live demo', active: true },
+                { title: 'Prediction', body: 'Soon' },
+                { title: 'Creator', body: 'Soon' },
+              ].map(item => (
+                <GameTile key={item.title} title={item.title} body={item.body} active={item.active} />
+              ))}
             </div>
           </div>
 
           <div className="rounded-[22px] border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#111216]">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-[13px] font-bold text-gray-950 dark:text-white">Room setup</p>
-                <p className="mt-0.5 text-[11px] text-gray-400">Stream Trivia is the first Arena format.</p>
+                <p className="text-[13px] font-bold text-gray-950 dark:text-white">Create room</p>
+                <p className="mt-0.5 text-[11px] text-gray-400">Set the stake, players, and risk curve.</p>
               </div>
               <span className="rounded-full bg-gray-100 px-2.5 py-1 text-[10px] font-bold text-gray-500 dark:bg-white/10 dark:text-gray-300">
-                Demo room
+                Preview
               </span>
+            </div>
+
+            <div className="mt-4 rounded-2xl bg-gray-50 p-3 dark:bg-white/[0.04]">
+              <div className="grid grid-cols-3 gap-2">
+                <Metric label="Prize" value={`$${money(maxPool)}`} compact />
+                <Metric label="Start risk" value={`$${money(entry * roundWeight(1, rounds, riskMode))}`} compact />
+                <Metric label="End risk" value={`$${money(lateRisk)}`} compact />
+              </div>
             </div>
 
             <div className="mt-4 space-y-4">
@@ -218,50 +231,44 @@ export function ArenaPage() {
               </Segment>
             </div>
 
-            <div className="mt-4 grid grid-cols-3 gap-2">
-              <Metric label="Max pool" value={`$${money(maxPool)}`} />
-              <Metric label="First risk" value={`$${money(entry * roundWeight(1, rounds, riskMode))}`} />
-              <Metric label="Final risk" value={`$${money(lateRisk)}`} />
-            </div>
-
             <button
               type="button"
               onClick={startRoom}
               className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-gray-950 py-3.5 text-[13px] font-bold text-white transition-transform active:scale-[0.98] dark:bg-white dark:text-gray-950"
             >
               <Play className="h-4 w-4" />
-              Start demo room
+              Play demo room
             </button>
           </div>
         </section>
 
-        <section className="rounded-[26px] border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#111216] sm:p-5">
+        <section className="rounded-[28px] border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#111216] sm:p-5">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-[12px] font-bold text-gray-950 dark:text-white">Stream Trivia</p>
-              <p className="mt-0.5 text-[11px] text-gray-400">Checkpoint streaming preview</p>
+              <p className="text-[12px] font-bold text-gray-950 dark:text-white">Trivia room</p>
+              <p className="mt-0.5 text-[11px] text-gray-400">{entry} USDC entry · {players} players</p>
             </div>
             <StatusPill status={status} />
           </div>
 
-          <div className="mt-4 rounded-[24px] border border-gray-100 bg-gray-50/80 p-4 dark:border-white/10 dark:bg-white/[0.04]">
+          <div className="mt-4 rounded-[26px] bg-gray-950 p-4 text-white dark:bg-white dark:text-gray-950">
             <div className="flex items-center justify-between text-[11px] font-bold text-gray-400">
-              <span>Round {round} of {rounds}</span>
-              <span className="inline-flex items-center gap-1 text-gray-900 dark:text-white">
+              <span className="text-white/60 dark:text-gray-500">Round {round}/{rounds}</span>
+              <span className="inline-flex items-center gap-1 text-white dark:text-gray-950">
                 <Clock3 className="h-3.5 w-3.5" />
                 {seconds}s
               </span>
             </div>
 
-            <div className="mt-3 h-2 overflow-hidden rounded-full bg-gray-200 dark:bg-white/10">
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/15 dark:bg-gray-200">
               <div
-                className="h-full rounded-full bg-gray-950 transition-all duration-500 dark:bg-white"
+                className="h-full rounded-full bg-white transition-all duration-500 dark:bg-gray-950"
                 style={{ width: `${percent(round / rounds)}` }}
               />
             </div>
 
-            <div className="mt-5 rounded-2xl bg-white p-4 dark:bg-[#111216]">
-              <p className="text-[13px] font-bold leading-snug text-gray-950 dark:text-white">{activeQuestion.prompt}</p>
+            <div className="mt-5 rounded-2xl bg-white/10 p-4 dark:bg-gray-100">
+              <p className="text-[17px] font-bold leading-snug text-white dark:text-gray-950">{activeQuestion.prompt}</p>
               <div className="mt-3 grid gap-2 sm:grid-cols-2">
                 {activeQuestion.options.map(option => (
                   <button
@@ -272,8 +279,8 @@ export function ArenaPage() {
                     className={[
                       'min-h-11 rounded-xl border px-3 text-left text-[12px] font-semibold transition-all',
                       selected === option
-                        ? 'border-gray-950 bg-gray-950 text-white dark:border-white dark:bg-white dark:text-gray-950'
-                        : 'border-gray-100 bg-gray-50 text-gray-600 hover:border-gray-300 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-white/5 dark:text-gray-300',
+                        ? 'border-white bg-white text-gray-950 dark:border-gray-950 dark:bg-gray-950 dark:text-white'
+                        : 'border-white/10 bg-white/10 text-white hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-200 dark:bg-white dark:text-gray-700 dark:hover:bg-gray-50',
                     ].join(' ')}
                   >
                     {option}
@@ -281,52 +288,49 @@ export function ArenaPage() {
                 ))}
               </div>
             </div>
+          </div>
 
-            <div className="mt-4 grid grid-cols-3 gap-2">
-              <Metric icon={<LockKeyhole className="h-3.5 w-3.5" />} label="Remaining" value={`$${money(remaining)}`} />
-              <Metric icon={<WalletCards className="h-3.5 w-3.5" />} label="Prize pool" value={`$${money(prizePool)}`} />
-              <Metric icon={<Trophy className="h-3.5 w-3.5" />} label="Next stream" value={`$${money(nextRoundCost)}`} />
-            </div>
+          <div className="mt-4 grid grid-cols-3 gap-2">
+            <Metric icon={<LockKeyhole className="h-3.5 w-3.5" />} label="Yours" value={`$${money(remaining)}`} />
+            <Metric icon={<WalletCards className="h-3.5 w-3.5" />} label="Pot" value={`$${money(prizePool)}`} />
+            <Metric icon={<Trophy className="h-3.5 w-3.5" />} label="Next" value={`$${money(nextRoundCost)}`} />
+          </div>
 
-            <div className="mt-4 rounded-2xl border border-gray-100 bg-white p-3 dark:border-white/10 dark:bg-[#111216]">
-              <p className="text-[11px] font-bold text-gray-900 dark:text-gray-100">Room status</p>
-              <p className="mt-1 text-[12px] leading-relaxed text-gray-500 dark:text-gray-400">{roomLog}</p>
+          <div className="mt-4 rounded-[22px] border border-gray-100 bg-gray-50 p-4 dark:border-white/10 dark:bg-white/[0.04]">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[12px] font-bold text-gray-950 dark:text-white">{roomLog}</p>
+                <p className="mt-1 text-[11px] leading-relaxed text-gray-400">
+                  If you stop now, your unstreamed balance stays yours.
+                </p>
+              </div>
               {(status === 'eliminated' || status === 'won') && (
                 <button
                   type="button"
                   onClick={resetRoom}
-                  className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-gray-200 px-3 py-1.5 text-[11px] font-bold text-gray-600 transition-colors hover:bg-gray-50 dark:border-white/10 dark:text-gray-300 dark:hover:bg-white/5"
+                  className="shrink-0 rounded-full border border-gray-200 px-3 py-1.5 text-[11px] font-bold text-gray-600 transition-colors hover:bg-white dark:border-white/10 dark:text-gray-300 dark:hover:bg-white/5"
                 >
                   <RotateCcw className="h-3.5 w-3.5" />
-                  Reset demo
                 </button>
               )}
             </div>
           </div>
 
           <div className="mt-4 rounded-[22px] border border-gray-100 p-4 dark:border-white/10">
-            <p className="text-[12px] font-bold text-gray-950 dark:text-white">Loss curve</p>
-            <div className="mt-3 grid gap-2 sm:grid-cols-3">
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-[12px] font-bold text-gray-950 dark:text-white">Risk path</p>
+              <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400">{riskLabel(riskMode)}</p>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-3">
               {timeline.map(item => (
                 <div key={item.round} className="rounded-2xl bg-gray-50 p-3 dark:bg-white/[0.04]">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-gray-400">Round {item.round}</p>
-                  <p className="mt-1 text-[13px] font-bold text-gray-950 dark:text-white">${money(item.streamed)} streamed</p>
-                  <p className="mt-0.5 text-[11px] text-gray-400">${money(item.refund)} claimable</p>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-gray-400">R{item.round}</p>
+                  <p className="mt-1 text-[13px] font-bold text-gray-950 dark:text-white">${money(item.refund)} left</p>
                 </div>
               ))}
             </div>
           </div>
 
-          <div className="mt-4 rounded-[22px] border border-amber-100 bg-amber-50/60 p-4 dark:border-amber-500/20 dark:bg-amber-500/10">
-            <p className="text-[12px] font-bold text-gray-950 dark:text-white">Contract phase</p>
-            <p className="mt-1 text-[12px] leading-relaxed text-gray-500 dark:text-gray-400">
-              The public UI is a product simulation. The next phase wires room vaults, signed answers, halted streams, refunds, and winner claims on Arc.
-            </p>
-          </div>
-
-          <div className="mt-4 flex justify-center">
-            <HashPayLinkBadge />
-          </div>
         </section>
       </div>
     </div>
@@ -370,9 +374,9 @@ function segmentButton(active: boolean) {
   ].join(' ')
 }
 
-function Metric({ label, value, icon }: { label: string; value: string; icon?: ReactNode }) {
+function Metric({ label, value, icon, compact = false }: { label: string; value: string; icon?: ReactNode; compact?: boolean }) {
   return (
-    <div className="rounded-2xl border border-gray-100 bg-white p-3 dark:border-white/10 dark:bg-[#111216]">
+    <div className={['rounded-2xl border border-gray-100 bg-white dark:border-white/10 dark:bg-[#111216]', compact ? 'p-2.5' : 'p-3'].join(' ')}>
       <div className="flex items-center gap-1.5 text-gray-400">
         {icon}
         <p className="text-[10px] font-bold uppercase tracking-[0.12em]">{label}</p>
