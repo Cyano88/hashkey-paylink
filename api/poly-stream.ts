@@ -121,7 +121,7 @@ function configuredPolymarketUrls() {
 
 function isExactScoreMarketText(value: string) {
   const text = normalizeSearchText(value)
-  return /\bexact score\b|\bcorrect score\b|\bexact-score\b|\bcorrect-score\b/.test(text)
+  return /\bexact score\b|\bcorrect score\b|\bexact-score\b|\bcorrect-score\b|\bfirst team to score\b|\bfirst to score\b|\bteam to score first\b|\bgoalscorer\b|\bfirst goalscorer\b|\btotal goals\b|\bboth teams to score\b|\bhandicap\b|\bcorner\b|\bcard market\b/.test(text)
 }
 
 function exactPolymarketUrl(title: string, ids: string[] = []) {
@@ -591,6 +591,8 @@ const TEAM_ALIASES: Record<string, string[]> = {
   'cape verde islands': ['cape verde', 'cape verde islands', 'cabo verde', 'cvi'],
   'cabo verde': ['cape verde', 'cape verde islands', 'cabo verde', 'cvi'],
   curacao: ['curacao', 'curaçao'],
+  'czech republic': ['czech republic', 'czechia'],
+  czechia: ['czech republic', 'czechia'],
   iran: ['iran', 'ir iran', 'islamic republic of iran'],
   'ir iran': ['iran', 'ir iran', 'islamic republic of iran'],
   germany: ['germany', 'deutschland'],
@@ -619,6 +621,8 @@ function isClosedMarket(candidate: ProviderMatch) {
 function scorePolymarketCandidate(candidate: ProviderMatch, home: string, away: string, allowClosed = false) {
   const text = normalizeSearchText(candidateText(candidate))
   if (isExactScoreMarketText(text)) return 0
+  const record = asRecord(candidate)
+  const eventTitle = normalizeSearchText(asString(record.title) || asString(record.question))
   const homeTerms = teamSearchTerms(home)
   const awayTerms = teamSearchTerms(away)
   if (!homeTerms.length || !awayTerms.length) return 0
@@ -626,6 +630,7 @@ function scorePolymarketCandidate(candidate: ProviderMatch, home: string, away: 
   const hasAway = awayTerms.some(term => text.includes(term))
   if (!hasHome || !hasAway) return 0
   let score = 50
+  if (eventTitle && homeTerms.some(term => eventTitle.startsWith(term)) && awayTerms.some(term => eventTitle.endsWith(term))) score += 20
   if (/\bworld cup\b|\bfifa\b|\b2026\b/.test(text)) score += 18
   if (/\bvs\b|\bv\b|\bversus\b|\bbeat\b|\bwin\b/.test(text)) score += 8
   if (/winner|match|game|group|advance|qualif|score/.test(text)) score += 6
