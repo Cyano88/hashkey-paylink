@@ -57,8 +57,6 @@ const PLAYER_OPTIONS = [2, 5, 10]
 const ROUND_OPTIONS = [10, 15]
 const TIMER_OPTIONS = [45, 60, 90]
 const PLATFORM_FEE_BPS = 50
-const ARENA_ESCROW_FACTORY_ADDRESS = String(import.meta.env.VITE_ARENA_ESCROW_FACTORY_ADDRESS ?? '').trim()
-const ESCROW_FACTORY_READY = /^0x[a-fA-F0-9]{40}$/.test(ARENA_ESCROW_FACTORY_ADDRESS)
 const ARC_PUBLIC_CLIENT = createPublicClient({ chain: arcChain, transport: http() })
 const ARC_USDC_ADDRESS = CHAIN_META.arc.tokenAddress
 const ARC_USDC_DECIMALS = CHAIN_META.arc.decimals
@@ -203,7 +201,7 @@ function percent(value: number) {
 }
 
 export function ArenaPage() {
-  const { authenticated: privyAuthenticated, user: privyUser, login: loginPrivy, getAccessToken } = usePrivy()
+  const { authenticated: privyAuthenticated, user: privyUser, login: loginPrivy, logout: logoutPrivy, getAccessToken } = usePrivy()
   const privyEmail = cleanEmail(emailFromPrivyUser(privyUser))
   const [entry, setEntry] = useState(10)
   const [players, setPlayers] = useState(5)
@@ -258,7 +256,7 @@ export function ArenaPage() {
   const joinedPlayers = chainPlayerCount ?? (status === 'setup' ? 0 : 0)
   const canStartGame = joinedPlayers >= 2 && (startRule === 'host' || joinedPlayers >= players)
   const canHostControl = Boolean(savedRoomId && hostControlToken)
-  const canOpenDeposits = ESCROW_FACTORY_READY && Boolean(escrowAddress) && paymentStatus !== 'escrow_pending'
+  const canOpenDeposits = Boolean(escrowAddress) && paymentStatus !== 'escrow_pending'
   const circleAvailable = canUseCircleEvmEmailWallet('arc')
   const privyReady = !PRIVY_AUTH_ENABLED || privyAuthenticated
   const walletEmail = PRIVY_AUTH_ENABLED ? privyEmail : circleEmail.trim()
@@ -331,12 +329,13 @@ export function ArenaPage() {
     setRoomLog('Private room loaded. Create a saved lobby before deposits open.')
   }, [])
 
-  async function loadSavedRoom(roomId: string) {
+  async function loadSavedRoom(roomId: string, quiet = false) {
     try {
       const response = await fetch(`/api/arena-room?id=${encodeURIComponent(roomId)}`)
       const data = await response.json() as { ok?: boolean; room?: SavedArenaRoom; error?: string }
       if (!response.ok || !data.ok || !data.room) throw new Error(data.error ?? 'Arena room not found.')
       const room = data.room
+      const hadEscrow = Boolean(escrowAddress)
       setEntry(room.entry)
       setPlayers(room.players)
       setRounds(room.rounds)
@@ -354,13 +353,21 @@ export function ArenaPage() {
       setRound(1)
       setSeconds(room.timer)
       setSelected('')
-      setRoomLog(room.escrowAddress ? 'Private room loaded. Players can deposit into the room escrow.' : 'Private room loaded. Escrow is still pending.')
+      if (!quiet || (!hadEscrow && room.escrowAddress)) {
+        setRoomLog(room.escrowAddress ? 'Private room loaded. Players can deposit into the room escrow.' : 'Private room loaded. Escrow is still pending.')
+      }
     } catch (error) {
       setView('private')
       setActiveTab('room')
       setStatus('setup')
-      setRoomLog(error instanceof Error ? error.message : 'Arena room could not be loaded.')
+      if (!quiet) setRoomLog(error instanceof Error ? error.message : 'Arena room could not be loaded.')
     }
+  }
+
+  async function refreshSavedRoom() {
+    if (!savedRoomId) return
+    await loadSavedRoom(savedRoomId)
+    if (circleSession?.wallet.address) await refreshRoomChainState(circleSession.wallet.address)
   }
 
   async function refreshRoomChainState(walletAddress = circleSession?.wallet.address) {
@@ -418,6 +425,14 @@ export function ArenaPage() {
   }, [escrowAddress, status])
 
   useEffect(() => {
+    if (!savedRoomId || status !== 'lobby' || escrowAddress) return
+    const interval = window.setInterval(() => {
+      void loadSavedRoom(savedRoomId, true)
+    }, 5000)
+    return () => window.clearInterval(interval)
+  }, [savedRoomId, status, escrowAddress])
+
+  useEffect(() => {
     if (!circleSession?.wallet.address || !escrowAddress) return
     void refreshRoomChainState(circleSession.wallet.address)
   }, [circleSession?.wallet.address, escrowAddress])
@@ -442,6 +457,30 @@ export function ArenaPage() {
       setPrivyCircleLinkError('')
     } catch (error) {
       setPrivyCircleLinkError(error instanceof Error ? error.message.slice(0, 160) : 'Circle wallet connected, but the saved link was not updated.')
+    }
+  }
+
+  async function disconnectArenaWallet() {
+    setCircleSession(null)
+    setCircleBalance(null)
+    setLinkedCircleAddress('')
+    setPlayerJoined(false)
+    setPlayerActive(false)
+    setPlayerRefunded(false)
+    setPlayerStreamed(null)
+    setPlayerRefundable(null)
+    setJoinTxHash('')
+    setClaimTxHash('')
+    setJoinError('')
+    setPrivyCircleLinkError('')
+    if (!PRIVY_AUTH_ENABLED) {
+      setCircleEmail('')
+      return
+    }
+    try {
+      await logoutPrivy()
+    } catch {
+      setJoinError('Wallet session cleared locally. Refresh if Privy still shows the previous email.')
     }
   }
 
@@ -1077,6 +1116,16 @@ export function ArenaPage() {
                         />
                       </div>
 
+                      {(Boolean(walletEmail) || circleSession || linkedCircleAddress) && (
+                        <button
+                          type="button"
+                          onClick={disconnectArenaWallet}
+                          className="mt-2 inline-flex w-full items-center justify-center rounded-xl border border-white/10 py-2 text-[11px] font-black text-white/62 transition-colors hover:bg-white/10 hover:text-white dark:border-gray-200 dark:text-gray-500 dark:hover:bg-white dark:hover:text-gray-800"
+                        >
+                          Disconnect wallet
+                        </button>
+                      )}
+
                       {!PRIVY_AUTH_ENABLED && !circleSession && (
                         <input
                           value={circleEmail}
@@ -1122,23 +1171,35 @@ export function ArenaPage() {
                         </a>
                       )}
 
-                      <button
-                        type="button"
-                        onClick={joinRoomWithCircle}
-                        disabled={!canOpenDeposits || joinBusy || playerJoined}
-                        className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-white py-2.5 text-[12px] font-black text-gray-950 transition-transform active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45 dark:bg-gray-950 dark:text-white"
-                      >
-                        <WalletCards className="h-4 w-4" />
-                        {playerJoined
-                          ? 'Seat funded'
-                          : joinBusy
-                            ? 'Confirming...'
-                            : !privyReady
-                              ? 'Continue with Privy'
-                              : canOpenDeposits
-                                ? 'Deposit & join'
-                                : 'Escrow pending'}
-                      </button>
+                      <div className="mt-3 grid gap-2">
+                        <button
+                          type="button"
+                          onClick={joinRoomWithCircle}
+                          disabled={!canOpenDeposits || joinBusy || playerJoined}
+                          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-white py-2.5 text-[12px] font-black text-gray-950 transition-transform active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45 dark:bg-gray-950 dark:text-white"
+                        >
+                          <WalletCards className="h-4 w-4" />
+                          {playerJoined
+                            ? 'Seat funded'
+                            : joinBusy
+                              ? 'Confirming...'
+                              : !privyReady
+                                ? 'Continue with Privy'
+                                : canOpenDeposits
+                                  ? 'Deposit & join'
+                                  : 'Preparing escrow'}
+                        </button>
+                        {!canOpenDeposits && !playerJoined && (
+                          <button
+                            type="button"
+                            onClick={refreshSavedRoom}
+                            disabled={!savedRoomId}
+                            className="flex w-full items-center justify-center rounded-2xl border border-white/10 py-2.5 text-[12px] font-black text-white/70 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-45 dark:border-gray-200 dark:text-gray-600 dark:hover:bg-white"
+                          >
+                            Refresh room
+                          </button>
+                        )}
+                      </div>
                       {canClaimRefund && (
                         <button
                           type="button"
