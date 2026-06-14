@@ -2756,6 +2756,8 @@ function matchDisplayState(match: PolyStreamMatch) {
 
 function readableMatchClock(value?: string) {
   const text = (value || '').trim()
+  const stoppage = text.match(/^90\+(\d+)'$/)
+  if (stoppage) return `90+${stoppage[1]} mins`
   const minute = text.match(/^(\d+)'$/)
   if (minute) {
     const count = Number(minute[1])

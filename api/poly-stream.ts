@@ -391,22 +391,26 @@ function sportmonksWeather(match: ProviderMatch) {
 
 function sportmonksClock(match: ProviderMatch) {
   const status = [asString(asRecord(match.state).name), asString(asRecord(match.state).short_name)].join(' ').toLowerCase()
+  const isHalfTime = /\b(ht|half time|half-time|break)\b/.test(status)
+  const isExtraTime = /\b(extra|aet|pen|et\b|after extra time)\b/.test(status)
+  const isLiveRegulation = /(live|inplay|in play|in-play|1h|2h|1st|2nd|first half|second half)/.test(status) && !isExtraTime
+  if (isHalfTime) return ''
   const normalizeMinute = (value: string | number) => {
     const minute = asNumber(value)
     if (minute === undefined) return ''
-    if (minute > 90 && !/(extra|aet|pen|et\b)/.test(status)) return `105'`
     if (minute > 140) return ''
+    if (minute > 90 && !isExtraTime) return `90+${Math.min(minute - 90, 15)}'`
     return `${Math.max(0, minute)}'`
   }
-  const direct = asText(match.minute) || asText(asRecord(match.state).minutes) || asText(asRecord(match.state).minute)
-  if (direct) return normalizeMinute(direct)
   const periods = Array.isArray(match.periods) ? match.periods.map(asRecord) : []
-  const latestPeriod = periods
+  const tickingPeriod = periods
+    .slice()
+    .reverse()
+    .find(record => record.ticking === true || asString(record.ticking).toLowerCase() === 'true')
+  const latestPeriod = tickingPeriod || periods
     .slice()
     .reverse()
     .find(record => asText(record.minutes) || asText(record.minute) || asText(record.started))
-  const explicit = asText(latestPeriod?.minutes) || asText(latestPeriod?.minute)
-  if (explicit) return normalizeMinute(explicit)
   const started = asNumber(latestPeriod?.started)
   const countsFrom = asNumber(latestPeriod?.counts_from) ?? 0
   const ticking = latestPeriod?.ticking === true || asString(latestPeriod?.ticking).toLowerCase() === 'true'
@@ -414,9 +418,14 @@ function sportmonksClock(match: ProviderMatch) {
     const elapsed = Math.floor((Date.now() / 1000 - started) / 60) + countsFrom
     if (Number.isFinite(elapsed) && elapsed >= 0 && elapsed <= 140) return normalizeMinute(elapsed)
   }
+  const direct = asText(match.minute) || asText(asRecord(match.state).minutes) || asText(asRecord(match.state).minute)
+  if (direct) return normalizeMinute(direct)
+  const explicit = asText(latestPeriod?.minutes) || asText(latestPeriod?.minute)
+  if (explicit) return normalizeMinute(explicit)
   const kickoff = asNumber(match.starting_at_timestamp) || (Date.parse(utcDateString(match.starting_at)) / 1000)
-  if (/(live|inplay|in play|in-play|1h|2h|1st|2nd|first half|second half)/.test(status) && Number.isFinite(kickoff)) {
-    const elapsed = Math.floor((Date.now() / 1000 - kickoff) / 60)
+  if (isLiveRegulation && Number.isFinite(kickoff)) {
+    const rawElapsed = Math.floor((Date.now() / 1000 - kickoff) / 60)
+    const elapsed = rawElapsed > 60 ? rawElapsed - 15 : rawElapsed
     if (elapsed >= 0 && elapsed <= 140) return normalizeMinute(Math.max(1, elapsed))
   }
   return ''
