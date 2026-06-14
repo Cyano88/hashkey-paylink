@@ -119,15 +119,6 @@ const SAMPLE_QUESTIONS = [
   },
 ]
 
-const LEADERBOARD = [
-  { rank: 1, name: 'Dami', handle: '@dami23', score: 1520, status: 'Alive' },
-  { rank: 2, name: 'Athena', handle: '@athena', score: 1410, status: 'Alive' },
-  { rank: 3, name: 'Horus', handle: '@horus4', score: 1355, status: 'Alive' },
-  { rank: 4, name: 'Favour', handle: '@favortech', score: 1180, status: 'Halted' },
-  { rank: 5, name: 'Falcon', handle: '@falcon02', score: 980, status: 'Halted' },
-  { rank: 6, name: 'Gemini', handle: '@gemini', score: 760, status: 'Halted' },
-]
-
 function riskLabel(mode: RiskMode) {
   if (mode === 'linear') return 'Linear'
   if (mode === 'climb') return 'Climb'
@@ -1062,9 +1053,9 @@ export function ArenaPage() {
                     <div className="mt-3 rounded-[20px] border border-white/10 bg-white/[0.07] p-3 dark:border-gray-200 dark:bg-gray-100">
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <p className="text-[12px] font-black">Deposit seat</p>
+                          <p className="text-[12px] font-black">{playerJoined ? 'Seat funded' : 'Deposit seat'}</p>
                           <p className="mt-0.5 text-[10px] font-semibold text-white/50 dark:text-gray-500">
-                            {playerJoined ? 'Seat funded. Unused USDC stays claimable.' : `${entry} USDC funds your protected Arena seat.`}
+                            {playerJoined ? 'You are in this room. Unused USDC stays claimable.' : `${entry} USDC funds your protected Arena seat.`}
                           </p>
                         </div>
                         <span className="rounded-full bg-white/10 px-2 py-1 text-[10px] font-black text-white/65 dark:bg-white dark:text-gray-500">
@@ -1338,7 +1329,14 @@ export function ArenaPage() {
             </div>
           </div>
 
-          <LeaderboardCard />
+          <LeaderboardCard
+            total={players}
+            joined={joinedPlayers}
+            active={chainActiveCount ?? joinedPlayers}
+            status={status}
+            round={round}
+            currentPlayerJoined={playerJoined}
+          />
         </section>
       </div>
       )}
@@ -1526,34 +1524,85 @@ function ArenaSettings({ timer, setTimer, startRule, setStartRule }: { timer: nu
   )
 }
 
-function LeaderboardCard() {
-  const top = LEADERBOARD.slice(0, 3)
-  const rows = LEADERBOARD.slice(3)
+function LeaderboardCard({
+  total,
+  joined,
+  active,
+  status,
+  round,
+  currentPlayerJoined,
+}: {
+  total: number
+  joined: number
+  active: number
+  status: RoomStatus
+  round: number
+  currentPlayerJoined: boolean
+}) {
+  const seats = Array.from({ length: total }, (_, index) => {
+    const filled = index < joined
+    return {
+      seat: index + 1,
+      filled,
+      active: filled && index < active,
+      label: currentPlayerJoined && index === 0 ? 'You' : `P${index + 1}`,
+    }
+  })
+  const showScores = status === 'playing' || status === 'eliminated' || status === 'won'
+
   return (
     <div className="overflow-hidden rounded-[22px] border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-[#111216]">
-      <div className="bg-gray-950 px-3.5 pb-3.5 pt-3 text-white dark:bg-white dark:text-gray-950">
+      <div className="bg-gray-950 px-3.5 pb-3 pt-3 text-white dark:bg-white dark:text-gray-950">
         <div className="flex items-center justify-between">
-          <p className="text-[13px] font-bold">Room leaderboard</p>
-          <p className="rounded-full bg-white/10 px-2.5 py-1 text-[10px] font-bold dark:bg-gray-100">Round 1</p>
+          <p className="text-[13px] font-bold">{showScores ? 'Live leaderboard' : 'Room seats'}</p>
+          <p className="rounded-full bg-white/10 px-2.5 py-1 text-[10px] font-bold dark:bg-gray-100">
+            {showScores ? `Round ${round}` : `${joined}/${total}`}
+          </p>
         </div>
-        <div className="mt-3 grid grid-cols-3 items-end gap-2">
-          <Podium player={top[1]} height="h-14" tone="bg-white/10 dark:bg-gray-100" />
-          <Podium player={top[0]} height="h-20" tone="bg-white text-gray-950 dark:bg-gray-950 dark:text-white" />
-          <Podium player={top[2]} height="h-12" tone="bg-white/10 dark:bg-gray-100" />
+        <div className="mt-2.5 rounded-2xl bg-white/10 p-3 dark:bg-gray-100">
+          <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-[0.12em] text-white/45 dark:text-gray-500">
+            <span>{status === 'lobby' ? 'Waiting room' : 'Game room'}</span>
+            <span>{active} active</span>
+          </div>
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/15 dark:bg-gray-200">
+            <div
+              className="h-full rounded-full bg-white transition-all dark:bg-gray-950"
+              style={{ width: `${percent(total ? joined / total : 0)}` }}
+            />
+          </div>
+          <p className="mt-2 text-[11px] font-semibold leading-relaxed text-white/58 dark:text-gray-500">
+            {showScores
+              ? 'Scores will update from paid trivia rounds. No demo players are shown.'
+              : 'Only funded seats appear here. The leaderboard starts after the room begins.'}
+          </p>
         </div>
       </div>
-      <div className="space-y-1.5 p-2">
-        {rows.map(player => (
-          <div key={player.rank} className="flex items-center gap-2.5 rounded-2xl bg-gray-50 p-2 dark:bg-white/[0.04]">
-            <p className="w-5 text-center text-[12px] font-bold text-gray-400">{player.rank}</p>
-            <Avatar name={player.name} />
+      <div className="space-y-1.5 p-2.5">
+        {seats.map(player => (
+          <div
+            key={player.seat}
+            className={[
+              'flex items-center gap-2.5 rounded-2xl p-2',
+              player.filled ? 'bg-gray-50 dark:bg-white/[0.04]' : 'bg-gray-50/60 opacity-70 dark:bg-white/[0.025]',
+            ].join(' ')}
+          >
+            <p className="w-5 text-center text-[12px] font-bold text-gray-400">{player.seat}</p>
+            <Avatar name={player.filled ? player.label : 'Open'} muted={!player.filled} />
             <div className="min-w-0 flex-1">
-              <p className="truncate text-[12px] font-bold text-gray-950 dark:text-white">{player.name}</p>
-              <p className="truncate text-[10px] font-semibold text-gray-400">{player.handle}</p>
+              <p className="truncate text-[12px] font-bold text-gray-950 dark:text-white">
+                {player.filled ? player.label : 'Open seat'}
+              </p>
+              <p className="truncate text-[10px] font-semibold text-gray-400">
+                {player.filled ? 'Escrow funded' : 'Invite pending'}
+              </p>
             </div>
             <div className="text-right">
-              <p className="text-[12px] font-bold text-gray-950 dark:text-white">{player.score}</p>
-              <p className="text-[10px] font-semibold text-gray-400">{player.status}</p>
+              <p className="text-[12px] font-bold text-gray-950 dark:text-white">
+                {showScores && player.filled ? '0' : player.filled ? 'Ready' : '-'}
+              </p>
+              <p className="text-[10px] font-semibold text-gray-400">
+                {player.filled ? (player.active ? 'Active' : 'Funded') : 'Open'}
+              </p>
             </div>
           </div>
         ))}
@@ -1562,27 +1611,13 @@ function LeaderboardCard() {
   )
 }
 
-function Podium({ player, height, tone }: { player: typeof LEADERBOARD[number]; height: string; tone: string }) {
-  return (
-    <div className="text-center">
-      <div className="mx-auto mb-2 flex flex-col items-center">
-        <Avatar name={player.name} large />
-        <p className="mt-1 truncate text-[11px] font-bold">{player.name}</p>
-        <p className="text-[9px] font-semibold opacity-60">{player.score}</p>
-      </div>
-      <div className={`flex ${height} items-center justify-center rounded-t-2xl ${tone}`}>
-        <span className="text-[19px] font-black">{player.rank}</span>
-      </div>
-    </div>
-  )
-}
-
-function Avatar({ name, large = false }: { name: string; large?: boolean }) {
+function Avatar({ name, large = false, muted = false }: { name: string; large?: boolean; muted?: boolean }) {
   const initials = name.slice(0, 2).toUpperCase()
   return (
     <div className={[
       'grid shrink-0 place-items-center rounded-full border border-white/20 bg-gray-200 font-black text-gray-800 dark:bg-white/10 dark:text-white',
       large ? 'h-9 w-9 text-[11px]' : 'h-8 w-8 text-[10px]',
+      muted ? 'opacity-45' : '',
     ].join(' ')}>
       {initials}
     </div>
