@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { usePrivy } from '@privy-io/react-auth'
-import { ArrowLeft, Clock3, Crown, LockKeyhole, Play, RotateCcw, Settings, Share2, Shield, Sparkles, Trophy, Users, WalletCards } from 'lucide-react'
+import { ArrowLeft, Check, Clock3, Copy, Crown, LockKeyhole, Play, RotateCcw, Settings, Share2, Shield, Sparkles, Trophy, Users, WalletCards } from 'lucide-react'
 import { createPublicClient, formatUnits, http, parseUnits, type Address } from 'viem'
 import { arcChain, CHAIN_META } from '../../../../src/lib/chains'
 import {
@@ -243,6 +243,7 @@ export function ArenaPage() {
   const [claimBusy, setClaimBusy] = useState(false)
   const [claimTxHash, setClaimTxHash] = useState('')
   const [refreshBusy, setRefreshBusy] = useState(false)
+  const [walletCopied, setWalletCopied] = useState(false)
 
   const activeQuestion = SAMPLE_QUESTIONS[(round - 1) % SAMPLE_QUESTIONS.length]
   const maxPool = entry * players
@@ -373,6 +374,18 @@ export function ArenaPage() {
       if (circleSession?.wallet.address) await refreshRoomChainState(circleSession.wallet.address)
     } finally {
       setRefreshBusy(false)
+    }
+  }
+
+  async function copyArenaWalletAddress() {
+    const address = circleSession?.wallet.address || linkedCircleAddress
+    if (!address) return
+    try {
+      await navigator.clipboard.writeText(address)
+      setWalletCopied(true)
+      window.setTimeout(() => setWalletCopied(false), 1600)
+    } catch {
+      setWalletCopied(false)
     }
   }
 
@@ -1086,18 +1099,25 @@ export function ArenaPage() {
                   </div>
                 )}
 
-                {status === 'lobby' && (
+                {status === 'lobby' && (() => {
+                  const walletAddress = circleSession?.wallet.address || linkedCircleAddress || ''
+                  const balanceNumeric = circleBalance === null ? null : Number(formatUnits(circleBalance, ARC_USDC_DECIMALS))
+                  const needsFunding = Boolean(circleSession) && balanceNumeric !== null && balanceNumeric < entry && canOpenDeposits && !playerJoined
+                  const fundingShortfall = needsFunding && balanceNumeric !== null
+                    ? Math.max(0, entry - balanceNumeric).toLocaleString(undefined, { maximumFractionDigits: 2 })
+                    : '0'
+                  return (
                   <div>
                     <div className="flex items-center justify-between gap-3">
                       <div>
                         <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/45 dark:text-gray-500">Private lobby</p>
-                        <h2 className="mt-1 text-[19px] font-black leading-tight">{canHostControl ? 'Lobby saved' : 'Lobby live'}</h2>
+                        <h2 className="mt-1 text-[18px] font-black leading-tight">{canHostControl ? 'Lobby saved' : 'Lobby live'}</h2>
                       </div>
                       <p className="rounded-full bg-white/10 px-3 py-1.5 text-[11px] font-black dark:bg-gray-100">
                         {joinedPlayers}/{players}
                       </p>
                     </div>
-                    <div className="mt-3 rounded-[20px] border border-white/10 bg-white/[0.07] p-3 dark:border-gray-200 dark:bg-gray-100">
+                    <div className="mt-3 rounded-[18px] border border-white/10 bg-white/[0.07] p-2.5 dark:border-gray-200 dark:bg-gray-100">
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <p className="text-[12px] font-black">{playerJoined ? 'Seat funded' : 'Deposit seat'}</p>
@@ -1105,34 +1125,33 @@ export function ArenaPage() {
                             {playerJoined ? 'You are in this room. Unused USDC stays claimable.' : `${entry} USDC funds your protected Arena seat.`}
                           </p>
                         </div>
-                        <span className="rounded-full bg-white/10 px-2 py-1 text-[10px] font-black text-white/65 dark:bg-white dark:text-gray-500">
+                        <span className="shrink-0 rounded-full bg-white/10 px-2 py-1 text-[10px] font-black text-white/65 dark:bg-white dark:text-gray-500">
                           Email + wallet
                         </span>
                       </div>
 
-                      <div className="mt-3 grid grid-cols-2 gap-2">
+                      <div className="mt-2.5 grid grid-cols-2 gap-2">
                         <DarkMetric label="Access" value={privyReady ? (walletEmail || 'Signed in') : 'Email sign-in'} />
-                        <DarkMetric
-                          label="Wallet"
-                          value={
-                            circleSession
-                              ? shortAddress(circleSession.wallet.address)
-                              : linkedCircleAddress
-                                ? shortAddress(linkedCircleAddress)
-                                : 'On action'
-                          }
-                        />
+                        <div className="rounded-xl border border-white/10 bg-white/[0.06] p-2 dark:border-gray-200 dark:bg-white">
+                          <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-white/45 dark:text-gray-500">Wallet</p>
+                          <div className="mt-0.5 flex items-center justify-between gap-1.5">
+                            <p className="truncate text-[12px] font-black text-white dark:text-gray-950">
+                              {walletAddress ? shortAddress(walletAddress) : 'On action'}
+                            </p>
+                            {walletAddress && (
+                              <button
+                                type="button"
+                                onClick={copyArenaWalletAddress}
+                                aria-label="Copy wallet address"
+                                className="inline-flex shrink-0 items-center gap-1 rounded-full bg-white/10 px-1.5 py-0.5 text-[9px] font-black text-white/70 transition-colors hover:bg-white/20 hover:text-white dark:bg-gray-100 dark:text-gray-600 dark:hover:bg-gray-200 dark:hover:text-gray-950"
+                              >
+                                {walletCopied ? <Check className="h-2.5 w-2.5" /> : <Copy className="h-2.5 w-2.5" />}
+                                {walletCopied ? 'Copied' : 'Copy'}
+                              </button>
+                            )}
+                          </div>
+                        </div>
                       </div>
-
-                      {(Boolean(walletEmail) || circleSession || linkedCircleAddress) && (
-                        <button
-                          type="button"
-                          onClick={disconnectArenaWallet}
-                          className="mt-2 inline-flex w-full items-center justify-center rounded-xl border border-white/10 py-2 text-[11px] font-black text-white/62 transition-colors hover:bg-white/10 hover:text-white dark:border-gray-200 dark:text-gray-500 dark:hover:bg-white dark:hover:text-gray-800"
-                        >
-                          Sign out
-                        </button>
-                      )}
 
                       {!PRIVY_AUTH_ENABLED && !circleSession && (
                         <input
@@ -1140,7 +1159,7 @@ export function ArenaPage() {
                           onChange={(event) => setCircleEmail(event.target.value)}
                           type="email"
                           placeholder="you@example.com"
-                          className="mt-3 h-9 w-full rounded-xl border border-white/10 bg-white/10 px-3 text-[12px] font-semibold text-white outline-none placeholder:text-white/30 focus:border-white/30 dark:border-gray-200 dark:bg-white dark:text-gray-950 dark:placeholder:text-gray-400"
+                          className="mt-2 h-9 w-full rounded-xl border border-white/10 bg-white/10 px-3 text-[12px] font-semibold text-white outline-none placeholder:text-white/30 focus:border-white/30 dark:border-gray-200 dark:bg-white dark:text-gray-950 dark:placeholder:text-gray-400"
                         />
                       )}
 
@@ -1148,6 +1167,25 @@ export function ArenaPage() {
                         <div className="mt-2 grid grid-cols-2 gap-2">
                           <DarkMetric label="Balance" value={circleBalance === null ? 'Checking' : `${formatCompactUsdc(circleBalance)} USDC`} />
                           <DarkMetric label="Escrow" value={playerJoined ? 'Funded' : 'Ready'} />
+                        </div>
+                      )}
+
+                      {needsFunding && (
+                        <div className="mt-2 flex items-start justify-between gap-2 rounded-xl border border-amber-300/30 bg-amber-400/10 px-2.5 py-2 dark:border-amber-300/60 dark:bg-amber-100">
+                          <div className="min-w-0">
+                            <p className="text-[10px] font-black uppercase tracking-[0.12em] text-amber-200 dark:text-amber-800">Fund this wallet</p>
+                            <p className="mt-0.5 text-[10px] font-semibold text-amber-100/85 dark:text-amber-800/85">
+                              Send {fundingShortfall} USDC on Arc to your wallet to deposit.
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={copyArenaWalletAddress}
+                            className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-300 px-2.5 py-1 text-[10px] font-black text-amber-900 transition-transform active:scale-[0.98] dark:bg-amber-800 dark:text-amber-50"
+                          >
+                            {walletCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                            {walletCopied ? 'Copied' : 'Copy'}
+                          </button>
                         </div>
                       )}
 
@@ -1179,7 +1217,7 @@ export function ArenaPage() {
                         </a>
                       )}
 
-                      <div className="mt-3 grid gap-2">
+                      <div className="mt-2.5 grid gap-2">
                         <button
                           type="button"
                           onClick={joinRoomWithCircle}
@@ -1202,19 +1240,28 @@ export function ArenaPage() {
                             type="button"
                             onClick={refreshSavedRoom}
                             disabled={!savedRoomId || refreshBusy}
-                            className="flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 py-2.5 text-[12px] font-black text-white/70 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-200 dark:text-gray-600 dark:hover:bg-white"
+                            className="flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 py-2 text-[12px] font-black text-white/70 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-200 dark:text-gray-600 dark:hover:bg-white"
                           >
                             <RotateCcw className={`h-3.5 w-3.5 ${refreshBusy ? 'animate-spin' : ''}`} />
                             {refreshBusy ? 'Refreshing...' : 'Refresh room'}
                           </button>
                         )}
                       </div>
+                      {(Boolean(walletEmail) || circleSession || linkedCircleAddress) && (
+                        <button
+                          type="button"
+                          onClick={disconnectArenaWallet}
+                          className="mt-2 inline-flex w-full items-center justify-center rounded-xl border border-white/10 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-white/55 transition-colors hover:bg-white/10 hover:text-white dark:border-gray-200 dark:text-gray-500 dark:hover:bg-white dark:hover:text-gray-950"
+                        >
+                          Sign out
+                        </button>
+                      )}
                       {canClaimRefund && (
                         <button
                           type="button"
                           onClick={claimRefundWithCircle}
                           disabled={claimBusy}
-                          className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 py-2.5 text-[12px] font-black text-white/80 transition-transform hover:bg-white/10 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45 dark:border-gray-200 dark:text-gray-700 dark:hover:bg-white"
+                          className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 py-2 text-[12px] font-black text-white/80 transition-transform hover:bg-white/10 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45 dark:border-gray-200 dark:text-gray-700 dark:hover:bg-white"
                         >
                           <WalletCards className="h-4 w-4" />
                           {claimBusy ? 'Claiming...' : 'Claim remaining USDC'}
@@ -1243,7 +1290,7 @@ export function ArenaPage() {
                           type="button"
                           onClick={startRoom}
                           disabled={!canOpenDeposits || !canStartGame || Boolean(roomActionBusy)}
-                          className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-white py-2.5 text-[12px] font-black text-gray-950 transition-transform active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45 dark:bg-gray-950 dark:text-white"
+                          className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-white py-2.5 text-[12px] font-black text-gray-950 transition-transform active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45 dark:bg-gray-950 dark:text-white"
                         >
                           <Play className="h-4 w-4" />
                           {roomActionBusy === 'start'
@@ -1256,13 +1303,13 @@ export function ArenaPage() {
                           type="button"
                           onClick={cancelRoom}
                           disabled={Boolean(roomActionBusy)}
-                          className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 py-2.5 text-[12px] font-black text-white/70 transition-transform hover:bg-white/10 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45 dark:border-gray-200 dark:text-gray-500 dark:hover:bg-gray-100"
+                          className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 py-2 text-[12px] font-black text-white/70 transition-transform hover:bg-white/10 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45 dark:border-gray-200 dark:text-gray-500 dark:hover:bg-gray-100"
                         >
                           {roomActionBusy === 'cancel' ? 'Cancelling...' : 'Cancel room'}
                         </button>
                       </>
                     ) : (
-                      <div className="mt-4 flex w-full items-center justify-center rounded-2xl border border-white/10 bg-white/[0.06] py-2.5 text-[11px] font-black uppercase tracking-[0.14em] text-white/65 dark:border-gray-200 dark:bg-gray-100 dark:text-gray-500">
+                      <div className="mt-3 flex w-full items-center justify-center rounded-2xl border border-white/10 bg-white/[0.06] py-2 text-[10px] font-black uppercase tracking-[0.14em] text-white/65 dark:border-gray-200 dark:bg-gray-100 dark:text-gray-500">
                         Waiting for host
                       </div>
                     )}
@@ -1280,7 +1327,8 @@ export function ArenaPage() {
                       Email signs you in. Your wallet signs the Arc deposit.
                     </p>
                   </div>
-                )}
+                  )
+                })()}
 
                 {(status === 'playing' || status === 'eliminated' || status === 'won') && (
                   <div>
@@ -1403,14 +1451,16 @@ export function ArenaPage() {
             </div>
           </div>
 
-          <LeaderboardCard
-            total={players}
-            joined={joinedPlayers}
-            active={chainActiveCount ?? joinedPlayers}
-            status={status}
-            round={round}
-            currentPlayerJoined={playerJoined}
-          />
+          {(status === 'playing' || status === 'eliminated' || status === 'won') && (
+            <LeaderboardCard
+              total={players}
+              joined={joinedPlayers}
+              active={chainActiveCount ?? joinedPlayers}
+              status={status}
+              round={round}
+              currentPlayerJoined={playerJoined}
+            />
+          )}
         </section>
       </div>
       )}
@@ -1508,24 +1558,24 @@ function BackButton({ onClick, children }: { onClick: () => void; children: Reac
 
 function DarkMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-2.5 dark:border-gray-200 dark:bg-gray-100">
+    <div className="rounded-xl border border-white/10 bg-white/[0.06] p-2 dark:border-gray-200 dark:bg-white">
       <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-white/45 dark:text-gray-500">{label}</p>
-      <p className="mt-1 truncate text-[12px] font-black text-white dark:text-gray-950">{value}</p>
+      <p className="mt-0.5 truncate text-[12px] font-black text-white dark:text-gray-950">{value}</p>
     </div>
   )
 }
 
 function PlayerSlots({ total, joined }: { total: number; joined: number }) {
   return (
-    <div className="mt-4">
-      <div className="grid grid-cols-5 gap-2">
+    <div className="mt-3">
+      <div className="grid grid-cols-5 gap-1.5">
         {Array.from({ length: total }, (_, index) => {
           const active = index < joined
           return (
             <div
               key={index}
               className={[
-                'flex min-h-11 flex-col items-center justify-center rounded-2xl border text-center',
+                'flex min-h-10 flex-col items-center justify-center rounded-xl border text-center',
                 active
                   ? 'border-white/15 bg-white text-gray-950 dark:border-gray-200 dark:bg-gray-950 dark:text-white'
                   : 'border-white/10 bg-white/[0.06] text-white/35 dark:border-gray-200 dark:bg-gray-100 dark:text-gray-400',
