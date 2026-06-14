@@ -828,6 +828,7 @@ export default function TelegramPaymentLinks() {
           ) : activeService === 'poly-worldcup-news' ? (
             <PolyWorldCupNewsPanel
               onBack={() => setActiveService('')}
+              onOpenScores={() => setActiveService('poly-stream')}
               onOpenLpScout={prefill => {
                 setLpScoutPrefill(prefill)
                 setActiveService('lp-scout')
@@ -2349,9 +2350,11 @@ function relativeNewsTime(value?: string) {
 
 function PolyWorldCupNewsPanel({
   onBack,
+  onOpenScores,
   onOpenLpScout,
 }: {
   onBack: () => void
+  onOpenScores: () => void
   onOpenLpScout: (prefill: LpScoutPrefill) => void
 }) {
   const [active, setActive] = useState(0)
@@ -2436,14 +2439,24 @@ function PolyWorldCupNewsPanel({
             Track World Cup headlines that can affect Polymarket prices, liquidity, and LP risk before asking the agent for paid alpha.
           </p>
         </div>
-        <span className={cn(
-          'shrink-0 rounded-full px-2 py-1 text-[10px] font-bold sm:mt-7',
-          hasProviderFeed
-            ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-200'
-            : 'bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-300',
-        )}>
-          {statusText}
-        </span>
+        <div className="flex shrink-0 items-center gap-1.5 sm:mt-7">
+          <span className={cn(
+            'rounded-full px-2 py-1 text-[10px] font-bold',
+            hasProviderFeed
+              ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-200'
+              : 'bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-300',
+          )}>
+            {statusText}
+          </span>
+          <button
+            type="button"
+            onClick={onOpenScores}
+            className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200"
+          >
+            <Radio className="h-3 w-3" />
+            Scores
+          </button>
+        </div>
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.05]">
