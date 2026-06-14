@@ -28,6 +28,7 @@ type ScoreMatch = {
   form?: string
   events?: string[]
   stats?: string[]
+  marketStatus?: 'matched' | 'pending'
   marketContext: string
   sourceUrl: string
   polymarketUrl?: string
@@ -372,6 +373,13 @@ function sportmonksStats(match: ProviderMatch) {
 
 function publicMarketContext(title: string, status: string) {
   return `${title}. ${status}. Live scores from Sportmonks with Polymarket prices when the main match market is confidently matched.`
+}
+
+function withMarketStatus(match: ScoreMatch): ScoreMatch {
+  return {
+    ...match,
+    marketStatus: match.polymarketUrl ? 'matched' : 'pending',
+  }
 }
 
 function sportmonksWeather(match: ProviderMatch) {
@@ -862,11 +870,11 @@ async function enrichMatchesWithPolymarket(matches: ScoreMatch[]) {
       : worldCupCandidates
     const found = polymarketMatchFromCandidates(match, candidatePool) || await findPolymarketMatch(match).catch(() => null)
     if (!found?.url) {
-      return configuredUrl
+      return withMarketStatus(configuredUrl
         ? { ...searchableMatch, polymarketUrl: configuredUrl }
-        : searchableMatch
+        : searchableMatch)
     }
-    return {
+    return withMarketStatus({
       ...searchableMatch,
       polymarketUrl: found.url,
       polymarketTitle: found.title,
@@ -876,9 +884,9 @@ async function enrichMatchesWithPolymarket(matches: ScoreMatch[]) {
       drawMarketPrice: found.drawMarketPrice,
       polymarketLiquidity: found.liquidity,
       polymarketVolume: found.volume,
-    }
+    })
   }))
-  return enriched
+  return enriched.map(withMarketStatus)
 }
 
 async function fetchProviderMode(provider: string, apiKey: string, mode: FixtureMode): Promise<ScoreMatch[]> {

@@ -2582,6 +2582,7 @@ type PolyStreamMatch = {
   polymarketTitle?: string
   polymarketLiquidity?: string
   polymarketVolume?: string
+  marketStatus?: 'matched' | 'pending'
   goalScorers?: string[]
   weather?: string
   h2h?: string
@@ -2915,6 +2916,7 @@ function HashLiveScoreWidget({
   const homeFlag = flagUrlForTeam(home)
   const awayFlag = flagUrlForTeam(away)
   const featuredDetails = useMemo(() => featured ? detailItems(featured) : [], [featured])
+  const featuredMarketMatched = featured?.marketStatus === 'matched' && Boolean(featured.polymarketUrl)
   const activeDetail = featuredDetails.length ? featuredDetails[detailIndex % featuredDetails.length] : null
   const activePagedItems = activeDetail?.type === 'goals'
     ? detailPages(activeDetail.goals)
@@ -3027,7 +3029,7 @@ function HashLiveScoreWidget({
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,.12),transparent_38%),linear-gradient(180deg,rgba(0,0,0,.18),rgba(0,0,0,.62))]" />
           <div className="relative z-10 grid grid-cols-[1fr_auto_1fr] items-center gap-1.5">
             <span className="truncate text-[10px] font-semibold text-white/65">{compactMatchTime(featured)}</span>
-            {featured.polymarketUrl ? (
+            {featuredMarketMatched ? (
               <a
                 href={featured.polymarketUrl}
                 target="_blank"
@@ -3039,7 +3041,7 @@ function HashLiveScoreWidget({
               </a>
             ) : (
               <span className="inline-flex items-center justify-center rounded-full border border-white/10 bg-black/20 px-2 py-1 text-[10px] font-black text-white/55 backdrop-blur-sm">
-                Market pending
+                Pending
               </span>
             )}
             <span className={cn(
