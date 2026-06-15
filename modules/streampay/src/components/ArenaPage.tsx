@@ -737,6 +737,8 @@ export function ArenaPage() {
         correct?: boolean
         eliminated?: boolean
         won?: boolean
+        finished?: boolean
+        winner?: string | null
         nextRound?: number
         txHash?: string
         chain?: { playerCount?: number; activeCount?: number; currentRound?: number }
@@ -756,6 +758,9 @@ export function ArenaPage() {
       } else if (data.won) {
         setStatus('won')
         setRoomLog('Winner. Prize pool is ready to claim.')
+      } else if (data.finished) {
+        setStatus('eliminated')
+        setRoomLog('Room finished — another player claimed the prize first.')
       } else if (data.correct && typeof data.nextRound === 'number') {
         setRound(data.nextRound)
         setSelected('')

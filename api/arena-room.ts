@@ -499,6 +499,26 @@ async function controlRoom(req: Request, res: Response) {
       }
       if (!choice) return res.status(400).json({ ok: false, error: 'Choice is required.' })
 
+      const roomStatus = String(row.status ?? '')
+      if (roomStatus === 'lobby') {
+        return res.status(409).json({ ok: false, error: 'Room has not started yet.' })
+      }
+      if (roomStatus === 'cancelled') {
+        return res.status(409).json({ ok: false, error: 'Room was cancelled.' })
+      }
+      if (roomStatus === 'completed') {
+        const winnerInfo = await escrow.roomInfo()
+        const winnerAddr = String(winnerInfo[7])
+        const winnerOk = /^0x[a-fA-F0-9]{40}$/.test(winnerAddr) && winnerAddr !== '0x0000000000000000000000000000000000000000'
+        return res.json({
+          ok: true,
+          correct: false,
+          finished: true,
+          won: winnerOk && winnerAddr.toLowerCase() === selfPlayerAddress.toLowerCase(),
+          winner: winnerOk ? winnerAddr : null,
+        })
+      }
+
       const info = await escrow.players(selfPlayerAddress)
       if (!info[0]) return res.status(409).json({ ok: false, error: 'Linked wallet has not joined this room.' })
       if (!info[1]) return res.status(409).json({ ok: false, error: 'Player is already inactive on-chain.' })
@@ -525,31 +545,60 @@ async function controlRoom(req: Request, res: Response) {
       }
 
       if (roundNumber >= maxRounds) {
-        const txWin = await escrow.settleWinner(selfPlayerAddress)
-        const receiptWin = await txWin.wait()
-        const roomInfoWin = await escrow.roomInfo()
-        await requirePool().query(
-          `update arena_rooms set status = 'completed', payment_status = 'settled', state = state || $2::jsonb, updated_at = now() where room_id = $1`,
-          [id, JSON.stringify({
-            lastAction: 'settle',
-            lastActionTx: receiptWin?.hash ?? txWin.hash,
-            lastActionAt: new Date().toISOString(),
-            chainStatus: Number(roomInfoWin[0]),
-            activeCount: Number(roomInfoWin[2]),
-          })],
+        const claim = await requirePool().query(
+          `update arena_rooms
+             set status = 'completed', payment_status = 'settled', updated_at = now()
+           where room_id = $1 and status = 'playing'
+           returning room_id`,
+          [id],
         )
-        return res.json({
-          ok: true,
-          correct: true,
-          won: true,
-          txHash: receiptWin?.hash ?? txWin.hash,
-          chain: {
-            chainStatus: Number(roomInfoWin[0]),
-            playerCount: Number(roomInfoWin[1]),
-            activeCount: Number(roomInfoWin[2]),
-            currentRound: Number(roomInfoWin[3]),
-          },
-        })
+        if (!claim.rowCount) {
+          const winnerInfo = await escrow.roomInfo()
+          const winnerAddr = String(winnerInfo[7])
+          const winnerOk = /^0x[a-fA-F0-9]{40}$/.test(winnerAddr) && winnerAddr !== '0x0000000000000000000000000000000000000000'
+          return res.json({
+            ok: true,
+            correct: true,
+            finished: true,
+            won: winnerOk && winnerAddr.toLowerCase() === selfPlayerAddress.toLowerCase(),
+            winner: winnerOk ? winnerAddr : null,
+          })
+        }
+
+        try {
+          const txWin = await escrow.settleWinner(selfPlayerAddress)
+          const receiptWin = await txWin.wait()
+          const roomInfoWin = await escrow.roomInfo()
+          await requirePool().query(
+            `update arena_rooms set state = state || $2::jsonb, updated_at = now() where room_id = $1`,
+            [id, JSON.stringify({
+              lastAction: 'settle',
+              lastActionTx: receiptWin?.hash ?? txWin.hash,
+              lastActionAt: new Date().toISOString(),
+              chainStatus: Number(roomInfoWin[0]),
+              activeCount: Number(roomInfoWin[2]),
+              winner: selfPlayerAddress,
+            })],
+          )
+          return res.json({
+            ok: true,
+            correct: true,
+            won: true,
+            txHash: receiptWin?.hash ?? txWin.hash,
+            chain: {
+              chainStatus: Number(roomInfoWin[0]),
+              playerCount: Number(roomInfoWin[1]),
+              activeCount: Number(roomInfoWin[2]),
+              currentRound: Number(roomInfoWin[3]),
+            },
+          })
+        } catch (settleErr) {
+          await requirePool().query(
+            `update arena_rooms set status = 'playing', payment_status = 'funded', updated_at = now() where room_id = $1`,
+            [id],
+          )
+          throw settleErr
+        }
       }
 
       return res.json({ ok: true, correct: true, nextRound: roundNumber + 1 })
