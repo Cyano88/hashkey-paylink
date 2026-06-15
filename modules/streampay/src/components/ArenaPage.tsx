@@ -362,18 +362,29 @@ export function ArenaPage() {
       setPlatformFeeBps(Number.isFinite(room.platformFeeBps) ? room.platformFeeBps : PLATFORM_FEE_BPS)
       setView('private')
       setActiveTab('room')
-      // Map server room status to local status, but never overwrite a player's
-      // in-progress 'playing' / 'won' / 'eliminated' state from a quiet poll.
+      // Map server room status to local status. Terminal states (won /
+      // eliminated) are never reversed. Other transitions:
+      //   server lobby     -> local lobby
+      //   server playing   -> local playing (from lobby/setup)
+      //   server completed -> local eliminated (game ended for everyone; the
+      //                        actual winner already got 'won' from their own
+      //                        submit-answer response, so anyone whose status
+      //                        is still 'playing' here did not win)
+      //   server cancelled -> local eliminated (refund path)
       const serverStatus = room.status
       let transitionedToPlaying = false
+      let transitionedToEnded = false
       setStatus(prev => {
-        if (prev === 'playing' || prev === 'won' || prev === 'eliminated') return prev
+        if (prev === 'won' || prev === 'eliminated') return prev
+        if (serverStatus === 'completed' || serverStatus === 'cancelled') {
+          transitionedToEnded = true
+          return 'eliminated'
+        }
         if (serverStatus === 'playing') {
-          transitionedToPlaying = true
+          if (prev !== 'playing') transitionedToPlaying = true
           return 'playing'
         }
-        if (serverStatus === 'cancelled') return 'eliminated'
-        if (serverStatus === 'completed') return 'eliminated'
+        if (prev === 'playing') return prev
         return 'lobby'
       })
       if (!quiet) {
@@ -384,8 +395,10 @@ export function ArenaPage() {
         setSeconds(room.timer)
       }
       setSelected('')
-      if (serverStatus === 'cancelled' && !quiet) {
-        setRoomLog('Room was cancelled by the host. Claim any remaining USDC.')
+      if (transitionedToEnded && serverStatus === 'cancelled') {
+        setRoomLog('Room cancelled by the host. Claim any remaining USDC.')
+      } else if (transitionedToEnded && serverStatus === 'completed') {
+        setRoomLog('Game over — another player claimed the prize. Claim any remaining USDC.')
       } else if (transitionedToPlaying) {
         setRoomLog('Game started. Loading round question...')
       } else if (!quiet || (!hadEscrow && room.escrowAddress)) {
@@ -493,10 +506,12 @@ export function ArenaPage() {
   }, [escrowAddress, status])
 
   useEffect(() => {
-    if (!savedRoomId || status !== 'lobby') return
-    // Poll while in lobby. Detects escrow deployment AND the host pressing
-    // Start (room.status transitions from 'lobby' to 'playing' server-side,
-    // and loadSavedRoom now mirrors that into local status).
+    if (!savedRoomId) return
+    if (status !== 'lobby' && status !== 'playing') return
+    // Poll while in lobby or playing. In lobby this catches escrow deployment
+    // and the host pressing Start. In playing this catches another player
+    // winning the room (status -> 'completed' server-side) or the host
+    // cancelling. Stops on terminal states (won / eliminated).
     const interval = window.setInterval(() => {
       void loadSavedRoom(savedRoomId, true)
     }, 4000)
