@@ -13,6 +13,7 @@ type PaymentStatus = 'escrow_pending' | 'deposit_open' | 'funded' | 'settled'
 
 type ArenaRoom = {
   roomId: string
+  name: string | null
   mode: 'private'
   game: 'trivia'
   entry: number
@@ -192,7 +193,10 @@ function ensureSchema() {
       alter table arena_rooms add column if not exists deposit_asset text not null default 'USDC';
       alter table arena_rooms add column if not exists platform_fee_bps integer not null default 50;
       alter table arena_rooms add column if not exists host_token_hash text;
+      alter table arena_rooms add column if not exists name text;
+      alter table arena_rooms add column if not exists host_privy_user_id text;
       create index if not exists arena_rooms_created_at_idx on arena_rooms (created_at desc);
+      create index if not exists arena_rooms_host_privy_idx on arena_rooms (host_privy_user_id);
     `).then(() => undefined)
   }
   return schemaReady
@@ -239,9 +243,16 @@ function paymentStatusChoice(value: unknown): PaymentStatus {
   return 'escrow_pending'
 }
 
+function sanitizeRoomName(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim().slice(0, 60)
+  return trimmed || null
+}
+
 function toRoom(row: Record<string, unknown>): ArenaRoom {
   return {
     roomId: String(row.room_id),
+    name: sanitizeRoomName(row.name),
     mode: 'private',
     game: 'trivia',
     entry: Number(row.entry),
@@ -327,6 +338,7 @@ async function createRoom(req: Request, res: Response) {
     const body = (req.body ?? {}) as Record<string, unknown>
     const room = {
       id: roomId(),
+      name: sanitizeRoomName(body.name),
       entry: numberInRange(body.entry, ENTRY_BOUNDS.min, ENTRY_BOUNDS.max, 10),
       players: numberInRange(body.players, PLAYERS_BOUNDS.min, PLAYERS_BOUNDS.max, 5),
       rounds: numberInRange(body.rounds, ROUNDS_BOUNDS.min, ROUNDS_BOUNDS.max, 15),
@@ -335,15 +347,20 @@ async function createRoom(req: Request, res: Response) {
       startRule: startRuleChoice(body.startRule),
     }
     const token = hostToken()
+    let hostPrivyUserId: string | null = null
+    if (bearerToken(req)) {
+      try { hostPrivyUserId = await verifiedPrivyUserId(req) } catch { hostPrivyUserId = null }
+    }
 
     const result = await requirePool().query(
       `insert into arena_rooms
-        (room_id, mode, game, entry, players, rounds, risk_mode, timer, start_rule, status, payment_status, deposit_asset, platform_fee_bps, host_token_hash, state)
+        (room_id, name, mode, game, entry, players, rounds, risk_mode, timer, start_rule, status, payment_status, deposit_asset, platform_fee_bps, host_token_hash, host_privy_user_id, state)
        values
-        ($1, 'private', 'trivia', $2, $3, $4, $5, $6, $7, 'lobby', 'escrow_pending', 'USDC', $8, $9, $10::jsonb)
+        ($1, $2, 'private', 'trivia', $3, $4, $5, $6, $7, $8, 'lobby', 'escrow_pending', 'USDC', $9, $10, $11, $12::jsonb)
        returning *`,
       [
         room.id,
+        room.name,
         room.entry,
         room.players,
         room.rounds,
@@ -352,6 +369,7 @@ async function createRoom(req: Request, res: Response) {
         room.startRule,
         PLATFORM_FEE_BPS,
         tokenHash(token),
+        hostPrivyUserId,
         JSON.stringify({ joinedPlayers: 1, source: 'streampay-arena-ui', moneyMode: 'escrow_required' }),
       ],
     )
@@ -444,10 +462,25 @@ async function controlRoom(req: Request, res: Response) {
       }
       selfPlayerAddress = linked
     } else {
-      const token = String(body.hostToken ?? '').trim()
-      if (!token) return res.status(401).json({ ok: false, error: 'Host control token required.' })
-      if (String(row.host_token_hash ?? '') !== tokenHash(token)) {
-        return res.status(403).json({ ok: false, error: 'Invalid host control token.' })
+      // Host action: accept either Privy bearer matching host_privy_user_id OR the legacy host token.
+      let authorized = false
+      if (bearerToken(req)) {
+        try {
+          const callerUserId = await verifiedPrivyUserId(req)
+          const hostUserId = String(row.host_privy_user_id ?? '')
+          if (hostUserId && hostUserId === callerUserId) {
+            authorized = true
+          }
+        } catch {
+          // Privy verification failed; fall through to host-token check.
+        }
+      }
+      if (!authorized) {
+        const token = String(body.hostToken ?? '').trim()
+        if (!token) return res.status(401).json({ ok: false, error: 'Host authorization required.' })
+        if (String(row.host_token_hash ?? '') !== tokenHash(token)) {
+          return res.status(403).json({ ok: false, error: 'Invalid host control token.' })
+        }
       }
     }
 
@@ -663,7 +696,19 @@ async function getRoom(req: Request, res: Response) {
 
     const result = await requirePool().query('select * from arena_rooms where room_id = $1 limit 1', [id])
     if (!result.rowCount) return res.status(404).json({ ok: false, error: 'Arena room not found.' })
-    return res.json({ ok: true, room: toRoom(result.rows[0]) })
+    const row = result.rows[0]
+
+    let isHost = false
+    if (bearerToken(req)) {
+      try {
+        const callerUserId = await verifiedPrivyUserId(req)
+        const hostUserId = String(row.host_privy_user_id ?? '')
+        if (hostUserId && hostUserId === callerUserId) isHost = true
+      } catch {
+        // not signed in / token invalid — just leave isHost=false
+      }
+    }
+    return res.json({ ok: true, room: toRoom(row), isHost })
   } catch (error) {
     return storageError(res, error)
   }

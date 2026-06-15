@@ -23,6 +23,7 @@ type PaymentStatus = 'escrow_pending' | 'deposit_open' | 'funded' | 'settled'
 
 type SavedArenaRoom = {
   roomId: string
+  name?: string | null
   entry: number
   players: number
   rounds: number
@@ -239,6 +240,10 @@ export function ArenaPage() {
   const [activeQuestion, setActiveQuestion] = useState<ServedQuestion | null>(null)
   const [questionLoading, setQuestionLoading] = useState(false)
   const [answerBusy, setAnswerBusy] = useState(false)
+  const [roomName, setRoomName] = useState('')
+  const [savedRoomName, setSavedRoomName] = useState<string | null>(null)
+  const [isHostFromServer, setIsHostFromServer] = useState(false)
+  const [cancelConfirm, setCancelConfirm] = useState(false)
 
   const maxPool = entry * players
   const platformFee = (maxPool * platformFeeBps) / 10000
@@ -251,7 +256,7 @@ export function ArenaPage() {
   const roomCode = savedRoomId || draftRoomCode
   const joinedPlayers = chainPlayerCount ?? (status === 'setup' ? 0 : 0)
   const canStartGame = joinedPlayers >= 2 && (startRule === 'host' || joinedPlayers >= players)
-  const canHostControl = Boolean(savedRoomId && hostControlToken)
+  const canHostControl = Boolean(savedRoomId) && (isHostFromServer || Boolean(hostControlToken))
   const canOpenDeposits = Boolean(escrowAddress) && paymentStatus !== 'escrow_pending'
   const circleAvailable = canUseCircleEvmEmailWallet('arc')
   const privyReady = !PRIVY_AUTH_ENABLED || privyAuthenticated
@@ -328,8 +333,17 @@ export function ArenaPage() {
 
   async function loadSavedRoom(roomId: string, quiet = false) {
     try {
-      const response = await fetch(`/api/arena-room?id=${encodeURIComponent(roomId)}`)
-      const data = await response.json() as { ok?: boolean; room?: SavedArenaRoom; error?: string }
+      const headers: Record<string, string> = {}
+      if (PRIVY_AUTH_ENABLED) {
+        try {
+          const token = await getAccessToken()
+          if (token) headers.Authorization = `Bearer ${token}`
+        } catch {
+          // best effort
+        }
+      }
+      const response = await fetch(`/api/arena-room?id=${encodeURIComponent(roomId)}`, { headers })
+      const data = await response.json() as { ok?: boolean; room?: SavedArenaRoom; isHost?: boolean; error?: string }
       if (!response.ok || !data.ok || !data.room) throw new Error(data.error ?? 'Arena room not found.')
       const room = data.room
       const hadEscrow = Boolean(escrowAddress)
@@ -340,7 +354,9 @@ export function ArenaPage() {
       setRoomTimer(room.timer)
       setStartRule(room.startRule)
       setSavedRoomId(room.roomId)
+      setSavedRoomName(room.name ?? null)
       setHostControlToken(readHostControlToken(room.roomId))
+      setIsHostFromServer(Boolean(data.isHost))
       setPaymentStatus(room.paymentStatus ?? 'escrow_pending')
       setEscrowAddress(room.escrowAddress ?? null)
       setPlatformFeeBps(Number.isFinite(room.platformFeeBps) ? room.platformFeeBps : PLATFORM_FEE_BPS)
@@ -595,22 +611,41 @@ export function ArenaPage() {
     return () => window.clearInterval(timer)
   }, [roomTimer, round, status])
 
+  useEffect(() => {
+    if (!cancelConfirm) return
+    const t = window.setTimeout(() => setCancelConfirm(false), 4000)
+    return () => window.clearTimeout(t)
+  }, [cancelConfirm])
+
   async function createLobby() {
     setRoomSaving(true)
     try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (PRIVY_AUTH_ENABLED) {
+        try {
+          const accessToken = await getAccessToken()
+          if (accessToken) headers.Authorization = `Bearer ${accessToken}`
+        } catch {
+          // best effort — falls back to legacy hostToken model
+        }
+      }
+      const cleanName = roomName.trim().slice(0, 60)
       const response = await fetch('/api/arena-room', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ entry, players, rounds, riskMode, timer: roomTimer, startRule }),
+        headers,
+        body: JSON.stringify({ entry, players, rounds, riskMode, timer: roomTimer, startRule, name: cleanName || undefined }),
       })
       const data = await response.json() as { ok?: boolean; room?: SavedArenaRoom; hostToken?: string; error?: string }
       if (!response.ok || !data.ok || !data.room) throw new Error(data.error ?? 'Arena room could not be saved.')
 
       setSavedRoomId(data.room.roomId)
+      setSavedRoomName(data.room.name ?? null)
       if (data.hostToken) {
         saveHostControlToken(data.room.roomId, data.hostToken)
         setHostControlToken(data.hostToken)
       }
+      // Privy-bound creators are isHost on the server; mirror locally so canHostControl flips on.
+      if (headers.Authorization) setIsHostFromServer(true)
       setPaymentStatus(data.room.paymentStatus ?? 'escrow_pending')
       setEscrowAddress(data.room.escrowAddress ?? null)
       setPlatformFeeBps(Number.isFinite(data.room.platformFeeBps) ? data.room.platformFeeBps : PLATFORM_FEE_BPS)
@@ -630,7 +665,7 @@ export function ArenaPage() {
   }
 
   async function controlRoom(action: 'start' | 'cancel' | 'eliminate' | 'settle', params: Record<string, unknown> = {}) {
-    if (!savedRoomId || !hostControlToken) {
+    if (!savedRoomId || !canHostControl) {
       setRoomLog('Only the room creator can control this private room.')
       return null
     }
@@ -638,10 +673,19 @@ export function ArenaPage() {
     setRoomActionBusy(action)
     setRoomActionTxHash('')
     try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (PRIVY_AUTH_ENABLED) {
+        try {
+          const accessToken = await getAccessToken()
+          if (accessToken) headers.Authorization = `Bearer ${accessToken}`
+        } catch {
+          // best effort; backend falls back to hostToken
+        }
+      }
       const response = await fetch('/api/arena-room', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ roomId: savedRoomId, hostToken: hostControlToken, action, ...params }),
+        headers,
+        body: JSON.stringify({ roomId: savedRoomId, hostToken: hostControlToken || undefined, action, ...params }),
       })
       const data = await response.json() as {
         ok?: boolean
@@ -906,9 +950,10 @@ export function ArenaPage() {
   async function shareRoomLink() {
     try {
       if (navigator.share) {
+        const label = savedRoomName ? `${savedRoomName} (${roomCode})` : roomCode
         await navigator.share({
           title: 'StreamPay Arena private room',
-          text: `Join my Stream Trivia room ${roomCode}`,
+          text: `Join my Stream Trivia room ${label}`,
           url: privateUrl,
         })
         return
@@ -1064,6 +1109,19 @@ export function ArenaPage() {
                 </div>
 
                 <div className="mt-3 space-y-3">
+                  <div>
+                    <div className="mb-2 flex items-center justify-between">
+                      <p className="text-[10px] font-bold text-gray-500 dark:text-gray-400">Name (optional)</p>
+                      <p className="text-[10px] font-bold text-gray-400">{Math.max(0, 60 - roomName.length)} left</p>
+                    </div>
+                    <input
+                      type="text"
+                      value={roomName}
+                      onChange={(event) => setRoomName(event.target.value.slice(0, 60))}
+                      placeholder="Friday Night Trivia"
+                      className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-[13px] font-semibold text-gray-900 outline-none placeholder:text-gray-400 focus:border-gray-400 dark:border-white/10 dark:bg-white/[0.06] dark:text-white dark:placeholder:text-gray-500 dark:focus:border-white/30"
+                    />
+                  </div>
                   <RangedNumberSegment
                     label="Entry"
                     unit="USDC"
@@ -1113,9 +1171,9 @@ export function ArenaPage() {
             {activeTab === 'room' && status !== 'setup' && (
               <div className="rounded-[22px] border border-gray-100 bg-white p-3.5 shadow-sm dark:border-white/10 dark:bg-[#111216]">
                 <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-[13px] font-bold text-gray-950 dark:text-white">Room</p>
-                    <p className="mt-0.5 text-[11px] text-gray-400">{roomCode} · 0.5% fee on completed room</p>
+                  <div className="min-w-0">
+                    <p className="truncate text-[13px] font-bold text-gray-950 dark:text-white">{savedRoomName || 'Room'}</p>
+                    <p className="mt-0.5 truncate text-[11px] text-gray-400">{roomCode} · 0.5% fee on completed room</p>
                   </div>
                   <StatusPill status={status} />
                 </div>
@@ -1362,11 +1420,28 @@ export function ArenaPage() {
                         </button>
                         <button
                           type="button"
-                          onClick={cancelRoom}
+                          onClick={() => {
+                            if (roomActionBusy) return
+                            if (cancelConfirm) {
+                              setCancelConfirm(false)
+                              void cancelRoom()
+                            } else {
+                              setCancelConfirm(true)
+                            }
+                          }}
                           disabled={Boolean(roomActionBusy)}
-                          className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 py-2 text-[12px] font-black text-white/70 transition-transform hover:bg-white/10 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45 dark:border-gray-200 dark:text-gray-500 dark:hover:bg-gray-100"
+                          className={[
+                            'mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border py-2 text-[12px] font-black transition-transform active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45',
+                            cancelConfirm
+                              ? 'border-rose-400/40 bg-rose-500/10 text-rose-100 hover:bg-rose-500/15 dark:border-rose-300/40 dark:bg-rose-100 dark:text-rose-700 dark:hover:bg-rose-50'
+                              : 'border-white/10 text-white/70 hover:bg-white/10 dark:border-gray-200 dark:text-gray-500 dark:hover:bg-gray-100',
+                          ].join(' ')}
                         >
-                          {roomActionBusy === 'cancel' ? 'Cancelling...' : 'Cancel room'}
+                          {roomActionBusy === 'cancel'
+                            ? 'Cancelling...'
+                            : cancelConfirm
+                              ? 'Tap again to refund everyone'
+                              : 'Cancel room'}
                         </button>
                       </>
                     ) : (
