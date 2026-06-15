@@ -362,11 +362,33 @@ export function ArenaPage() {
       setPlatformFeeBps(Number.isFinite(room.platformFeeBps) ? room.platformFeeBps : PLATFORM_FEE_BPS)
       setView('private')
       setActiveTab('room')
-      setStatus('lobby')
-      setRound(1)
-      setSeconds(room.timer)
+      // Map server room status to local status, but never overwrite a player's
+      // in-progress 'playing' / 'won' / 'eliminated' state from a quiet poll.
+      const serverStatus = room.status
+      let transitionedToPlaying = false
+      setStatus(prev => {
+        if (prev === 'playing' || prev === 'won' || prev === 'eliminated') return prev
+        if (serverStatus === 'playing') {
+          transitionedToPlaying = true
+          return 'playing'
+        }
+        if (serverStatus === 'cancelled') return 'eliminated'
+        if (serverStatus === 'completed') return 'eliminated'
+        return 'lobby'
+      })
+      if (!quiet) {
+        setRound(1)
+        setSeconds(room.timer)
+      } else if (transitionedToPlaying) {
+        setRound(1)
+        setSeconds(room.timer)
+      }
       setSelected('')
-      if (!quiet || (!hadEscrow && room.escrowAddress)) {
+      if (serverStatus === 'cancelled' && !quiet) {
+        setRoomLog('Room was cancelled by the host. Claim any remaining USDC.')
+      } else if (transitionedToPlaying) {
+        setRoomLog('Game started. Loading round question...')
+      } else if (!quiet || (!hadEscrow && room.escrowAddress)) {
         setRoomLog(room.escrowAddress ? 'Private room loaded. Players can deposit into the room escrow.' : 'Private room loaded. Escrow is still pending.')
       }
     } catch (error) {
@@ -471,12 +493,15 @@ export function ArenaPage() {
   }, [escrowAddress, status])
 
   useEffect(() => {
-    if (!savedRoomId || status !== 'lobby' || escrowAddress) return
+    if (!savedRoomId || status !== 'lobby') return
+    // Poll while in lobby. Detects escrow deployment AND the host pressing
+    // Start (room.status transitions from 'lobby' to 'playing' server-side,
+    // and loadSavedRoom now mirrors that into local status).
     const interval = window.setInterval(() => {
       void loadSavedRoom(savedRoomId, true)
-    }, 5000)
+    }, 4000)
     return () => window.clearInterval(interval)
-  }, [savedRoomId, status, escrowAddress])
+  }, [savedRoomId, status])
 
   useEffect(() => {
     if (!circleSession?.wallet.address || !escrowAddress) return
