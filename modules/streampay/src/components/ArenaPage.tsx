@@ -56,6 +56,14 @@ const ENTRY_OPTIONS = [10, 50, 200]
 const PLAYER_OPTIONS = [2, 5, 10]
 const ROUND_OPTIONS = [10, 15]
 const TIMER_OPTIONS = [45, 60, 90]
+
+const ENTRY_BOUNDS = { min: 1, max: 1000 }
+const PLAYERS_BOUNDS = { min: 2, max: 20 }
+const ROUNDS_BOUNDS = { min: 5, max: 30 }
+
+function inRange(n: number, bounds: { min: number; max: number }) {
+  return Number.isFinite(n) && n >= bounds.min && n <= bounds.max
+}
 const PLATFORM_FEE_BPS = 50
 const ARC_PUBLIC_CLIENT = createPublicClient({ chain: arcChain, transport: http() })
 const ARC_USDC_ADDRESS = CHAIN_META.arc.tokenAddress
@@ -258,6 +266,7 @@ export function ArenaPage() {
   )
   const riskProgress = Math.min(100, Math.round((currentStreamed / entry) * 100))
   const alivePlayers = status === 'playing' ? Math.max(1, players - Math.floor(round / 4)) : status === 'eliminated' ? players - 1 : players
+  const lobbySettingsValid = inRange(entry, ENTRY_BOUNDS) && inRange(players, PLAYERS_BOUNDS) && inRange(rounds, ROUNDS_BOUNDS)
   const privateUrl = useMemo(() => {
     const origin = typeof window === 'undefined' ? 'https://hashpaylink.com' : window.location.origin
     if (savedRoomId) {
@@ -300,9 +309,9 @@ export function ArenaPage() {
     const roundsParam = Number(params.get('rounds'))
     const riskParam = params.get('risk') as RiskMode | null
 
-    if (ENTRY_OPTIONS.includes(entryParam)) setEntry(entryParam)
-    if (PLAYER_OPTIONS.includes(playersParam)) setPlayers(playersParam)
-    if (ROUND_OPTIONS.includes(roundsParam)) setRounds(roundsParam)
+    if (inRange(entryParam, ENTRY_BOUNDS)) setEntry(Math.floor(entryParam))
+    if (inRange(playersParam, PLAYERS_BOUNDS)) setPlayers(Math.floor(playersParam))
+    if (inRange(roundsParam, ROUNDS_BOUNDS)) setRounds(Math.floor(roundsParam))
     if (riskParam && ['linear', 'climb', 'finale'].includes(riskParam)) setRiskMode(riskParam)
 
     setView('private')
@@ -1055,29 +1064,30 @@ export function ArenaPage() {
                 </div>
 
                 <div className="mt-3 space-y-3">
-                  <Segment label="Entry" value={`${entry} USDC`}>
-                    {ENTRY_OPTIONS.map(value => (
-                      <button key={value} type="button" onClick={() => setEntry(value)} className={segmentButton(entry === value)}>
-                        {value}
-                      </button>
-                    ))}
-                  </Segment>
+                  <RangedNumberSegment
+                    label="Entry"
+                    unit="USDC"
+                    value={entry}
+                    presets={ENTRY_OPTIONS}
+                    bounds={ENTRY_BOUNDS}
+                    onChange={setEntry}
+                  />
 
-                  <Segment label="Players" value={`${players}`}>
-                    {PLAYER_OPTIONS.map(value => (
-                      <button key={value} type="button" onClick={() => setPlayers(value)} className={segmentButton(players === value)}>
-                        {value}
-                      </button>
-                    ))}
-                  </Segment>
+                  <RangedNumberSegment
+                    label="Players"
+                    value={players}
+                    presets={PLAYER_OPTIONS}
+                    bounds={PLAYERS_BOUNDS}
+                    onChange={setPlayers}
+                  />
 
-                  <Segment label="Rounds" value={`${rounds}`}>
-                    {ROUND_OPTIONS.map(value => (
-                      <button key={value} type="button" onClick={() => setRounds(value)} className={segmentButton(rounds === value)}>
-                        {value}
-                      </button>
-                    ))}
-                  </Segment>
+                  <RangedNumberSegment
+                    label="Rounds"
+                    value={rounds}
+                    presets={ROUND_OPTIONS}
+                    bounds={ROUNDS_BOUNDS}
+                    onChange={setRounds}
+                  />
 
                   <Segment label="Risk curve" value={riskLabel(riskMode)}>
                     {(['linear', 'climb', 'finale'] as RiskMode[]).map(value => (
@@ -1091,11 +1101,11 @@ export function ArenaPage() {
                 <button
                   type="button"
                   onClick={createLobby}
-                  disabled={roomSaving}
+                  disabled={roomSaving || !lobbySettingsValid}
                   className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-gray-950 py-2.5 text-[12px] font-bold text-white transition-transform active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-gray-950"
                 >
                   <Play className="h-4 w-4" />
-                  {roomSaving ? 'Saving lobby...' : 'Create private lobby'}
+                  {roomSaving ? 'Saving lobby...' : !lobbySettingsValid ? 'Adjust settings to continue' : 'Create private lobby'}
                 </button>
               </div>
             )}
@@ -1899,6 +1909,69 @@ function Segment({ label, value, children }: { label: string; value: string; chi
       <div className="grid grid-cols-3 gap-1 rounded-2xl border border-gray-100 bg-gray-50 p-1 dark:border-white/10 dark:bg-white/5">
         {children}
       </div>
+    </div>
+  )
+}
+
+function RangedNumberSegment({ label, unit, value, presets, bounds, onChange }: {
+  label: string
+  unit?: string
+  value: number
+  presets: number[]
+  bounds: { min: number; max: number }
+  onChange: (next: number) => void
+}) {
+  const [input, setInput] = useState(String(value))
+  useEffect(() => { setInput(String(value)) }, [value])
+  const parsed = Math.floor(Number(input))
+  const valid = Number.isFinite(parsed) && parsed >= bounds.min && parsed <= bounds.max
+  return (
+    <div>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <p className="text-[10px] font-bold text-gray-500 dark:text-gray-400">{label}</p>
+        <div className="flex items-center gap-1.5">
+          <input
+            type="number"
+            inputMode="numeric"
+            min={bounds.min}
+            max={bounds.max}
+            value={input}
+            onChange={(event) => {
+              const next = event.target.value.replace(/[^0-9]/g, '')
+              setInput(next)
+              const n = Math.floor(Number(next))
+              if (Number.isFinite(n) && n >= bounds.min && n <= bounds.max) onChange(n)
+            }}
+            onBlur={() => {
+              if (!valid) setInput(String(value))
+            }}
+            className={[
+              'w-20 rounded-full border bg-white px-2.5 py-1 text-right text-[12px] font-black tabular-nums shadow-sm outline-none transition-colors dark:bg-white/10',
+              valid
+                ? 'border-gray-100 text-gray-900 focus:border-gray-300 dark:border-white/10 dark:text-white dark:focus:border-white/30'
+                : 'border-red-300 text-red-600 focus:border-red-400 dark:border-red-400/40 dark:text-red-300',
+            ].join(' ')}
+          />
+          {unit && <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400">{unit}</span>}
+        </div>
+      </div>
+      <div className="grid grid-cols-3 gap-1 rounded-2xl border border-gray-100 bg-gray-50 p-1 dark:border-white/10 dark:bg-white/5">
+        {presets.map(option => (
+          <button
+            key={option}
+            type="button"
+            onClick={() => { onChange(option); setInput(String(option)) }}
+            className={segmentButton(value === option)}
+          >
+            {option}
+          </button>
+        ))}
+      </div>
+      {!valid && (
+        <p className="mt-1 text-[10px] font-semibold text-red-500 dark:text-red-300">
+          Choose {bounds.min}–{bounds.max}{unit ? ` ${unit}` : ''}.
+        </p>
+      )}
     </div>
   )
 }

@@ -215,6 +215,17 @@ function numberChoice(value: unknown, allowed: number[], fallback: number) {
   return allowed.includes(parsed) ? parsed : fallback
 }
 
+const ENTRY_BOUNDS = { min: 1, max: 1000 }
+const PLAYERS_BOUNDS = { min: 2, max: 20 }
+const ROUNDS_BOUNDS = { min: 5, max: 30 }
+const TIMER_BOUNDS = { min: 15, max: 180 }
+
+function numberInRange(value: unknown, min: number, max: number, fallback: number) {
+  const parsed = Math.floor(Number(value))
+  if (!Number.isFinite(parsed) || parsed < min || parsed > max) return fallback
+  return parsed
+}
+
 function riskChoice(value: unknown): RiskMode {
   return value === 'linear' || value === 'finale' ? value : 'climb'
 }
@@ -237,7 +248,7 @@ function toRoom(row: Record<string, unknown>): ArenaRoom {
     players: Number(row.players),
     rounds: Number(row.rounds),
     riskMode: riskChoice(row.risk_mode),
-    timer: numberChoice(row.timer, [45, 60, 90], 60),
+    timer: numberInRange(row.timer, TIMER_BOUNDS.min, TIMER_BOUNDS.max, 60),
     startRule: startRuleChoice(row.start_rule),
     status: String(row.status ?? 'lobby') as RoomStatus,
     paymentStatus: paymentStatusChoice(row.payment_status),
@@ -316,11 +327,11 @@ async function createRoom(req: Request, res: Response) {
     const body = (req.body ?? {}) as Record<string, unknown>
     const room = {
       id: roomId(),
-      entry: numberChoice(body.entry, [10, 50, 200], 10),
-      players: numberChoice(body.players, [2, 5, 10], 5),
-      rounds: numberChoice(body.rounds, [10, 15], 15),
+      entry: numberInRange(body.entry, ENTRY_BOUNDS.min, ENTRY_BOUNDS.max, 10),
+      players: numberInRange(body.players, PLAYERS_BOUNDS.min, PLAYERS_BOUNDS.max, 5),
+      rounds: numberInRange(body.rounds, ROUNDS_BOUNDS.min, ROUNDS_BOUNDS.max, 15),
       riskMode: riskChoice(body.riskMode),
-      timer: numberChoice(body.timer, [45, 60, 90], 60),
+      timer: numberInRange(body.timer, TIMER_BOUNDS.min, TIMER_BOUNDS.max, 60),
       startRule: startRuleChoice(body.startRule),
     }
     const token = hostToken()
