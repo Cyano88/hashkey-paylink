@@ -408,6 +408,7 @@ export default function CreateLink() {
   const [agentUrlStatus, setAgentUrlStatus] = useState<'idle' | 'checking' | 'ok' | 'incompatible'>('idle')
   const [receiveMode,    setReceiveMode]    = useState<ReceiveMode>('paste')
   const [posMode,        setPosMode]        = useState(false)
+  const [streamMode,     setStreamMode]     = useState(false)
   const [posMerchantName, setPosMerchantName] = useState('')
   const [posNetworks,    setPosNetworks]    = useState<PosNetwork[]>(['base'])
   const [posWallet,      setPosWallet]      = useState('')
@@ -588,6 +589,7 @@ export default function CreateLink() {
   // ── Access mode toggle ─────────────────────────────────────────────────────
   function toggleAccessMode(on: boolean) {
     setPosMode(false)
+    setStreamMode(false)
     setAccessMode(on)
     setAgentUrl('')
     setAgentUrlStatus('idle')
@@ -602,6 +604,7 @@ export default function CreateLink() {
   function openPosMode() {
     setPosMode(true)
     setAccessMode(false)
+    setStreamMode(false)
     setGeneratedLink('')
     setCopied(false)
     setVaultStep('idle')
@@ -611,6 +614,19 @@ export default function CreateLink() {
   function closePosMode() {
     setPosMode(false)
     setPosError('')
+  }
+
+  function openStreamMode() {
+    setStreamMode(true)
+    setPosMode(false)
+    setAccessMode(false)
+    setGeneratedLink('')
+    setCopied(false)
+    setVaultStep('idle')
+  }
+
+  function closeStreamMode() {
+    setStreamMode(false)
   }
 
   function handlePosBack() {
@@ -865,7 +881,7 @@ export default function CreateLink() {
         </p>
 
         {/* ── Chain preview toggle — hidden in multi-chain mode (all chains active) */}
-        {!multiChainMode && !posMode && <div className="mt-5 flex flex-col items-center gap-2.5">
+        {!multiChainMode && !posMode && !streamMode && <div className="mt-5 flex flex-col items-center gap-2.5">
           <div className="flex items-center justify-center gap-0.5 sm:gap-1 rounded-xl border border-gray-200 bg-gray-100/80 p-1 overflow-x-auto w-full sm:w-auto sm:inline-flex">
             {VISIBLE_CREATE_CHAINS.map((c) => {
               const m = CHAIN_META[c]
@@ -911,7 +927,7 @@ export default function CreateLink() {
         </div>}
 
         {/* Multi-chain mode active badge */}
-        {multiChainMode && !posMode && (
+        {multiChainMode && !posMode && !streamMode && (
           <div className="mt-5 flex justify-center">
             <span className="inline-flex items-center gap-1.5 rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-[11px] font-semibold text-violet-700">
               <Globe className="h-3 w-3" />
@@ -936,8 +952,8 @@ export default function CreateLink() {
               type="button"
               onClick={() => toggleAccessMode(false)}
               className={cn(
-                'flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold transition-all',
-                !accessMode && !posMode ? 'bg-white text-gray-900 shadow-sm dark:bg-white/10 dark:text-white' : 'text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300',
+                'flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2.5 text-[13px] font-semibold transition-all',
+                !accessMode && !posMode && !streamMode ? 'bg-white text-gray-900 shadow-sm dark:bg-white/10 dark:text-white' : 'text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300',
               )}
             >
               <Coins className="h-4 w-4" />
@@ -947,7 +963,7 @@ export default function CreateLink() {
               type="button"
               onClick={() => toggleAccessMode(true)}
               className={cn(
-                'flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold transition-all',
+                'flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2.5 text-[13px] font-semibold transition-all',
                 accessMode ? 'bg-white text-gray-900 shadow-sm dark:bg-white/10 dark:text-white' : 'text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300',
               )}
             >
@@ -958,16 +974,108 @@ export default function CreateLink() {
               type="button"
               onClick={openPosMode}
               className={cn(
-                'flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold transition-all',
+                'flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2.5 text-[13px] font-semibold transition-all',
                 posMode ? 'bg-white text-gray-900 shadow-sm dark:bg-white/10 dark:text-white' : 'text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300',
               )}
             >
               <Store className="h-4 w-4" />
               POS
             </button>
+            <button
+              type="button"
+              onClick={openStreamMode}
+              className={cn(
+                'flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2.5 text-[13px] font-semibold transition-all',
+                streamMode ? 'bg-white text-gray-900 shadow-sm dark:bg-white/10 dark:text-white' : 'text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300',
+              )}
+            >
+              <Radio className="h-4 w-4" />
+              StreamPay
+            </button>
           </div>
 
-          {posMode ? (
+          {streamMode ? (
+            <div className="space-y-5">
+              <button
+                type="button"
+                onClick={closeStreamMode}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/[0.1]"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" />
+                Back
+              </button>
+
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Real-money USDC on Arc</p>
+                <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">Launch StreamPay</h2>
+                <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
+                  Recoverable-risk USDC games and streams. Same Privy + Circle sign-in, same 0G proof layer.
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <Link
+                  to="/arena?app=streampay&game=trivia"
+                  className="group relative block overflow-hidden rounded-2xl border border-gray-200 bg-gradient-to-br from-gray-950 to-gray-800 p-4 text-left text-white shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-white/10"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-300">Live</p>
+                      <p className="mt-1 text-[15px] font-black">Arena</p>
+                      <p className="mt-1 max-w-[260px] text-[12px] leading-snug text-white/65">
+                        Private USDC trivia rooms on Arc. Per-room escrow, claimable unstreamed deposits.
+                      </p>
+                    </div>
+                    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-white px-2.5 py-1 text-[11px] font-bold text-gray-950">
+                      Open <ArrowRight className="h-3 w-3" />
+                    </span>
+                  </div>
+                </Link>
+
+                <button
+                  type="button"
+                  disabled
+                  className="group relative block w-full overflow-hidden rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-4 text-left opacity-70 dark:border-white/10 dark:bg-white/[0.04]"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-gray-400">Coming soon</p>
+                      <p className="mt-1 text-[15px] font-black text-gray-700 dark:text-gray-200">Streams</p>
+                      <p className="mt-1 max-w-[260px] text-[12px] leading-snug text-gray-500 dark:text-gray-500">
+                        Continuous USDC payouts with on-chain receipts and 0G archive.
+                      </p>
+                    </div>
+                    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-white px-2.5 py-1 text-[11px] font-bold text-gray-400 dark:bg-white/10">
+                      Soon
+                    </span>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  disabled
+                  className="group relative block w-full overflow-hidden rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-4 text-left opacity-70 dark:border-white/10 dark:bg-white/[0.04]"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-gray-400">Coming soon</p>
+                      <p className="mt-1 text-[15px] font-black text-gray-700 dark:text-gray-200">Telegram services</p>
+                      <p className="mt-1 max-w-[260px] text-[12px] leading-snug text-gray-500 dark:text-gray-500">
+                        Spin up paid StreamPay flows directly from a Telegram chat.
+                      </p>
+                    </div>
+                    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-white px-2.5 py-1 text-[11px] font-bold text-gray-400 dark:bg-white/10">
+                      Soon
+                    </span>
+                  </div>
+                </button>
+              </div>
+
+              <p className="text-center text-[11px] text-gray-400">
+                Same Hash PayLink platform. Real-money flows settle through Arena escrow on Arc and archive to 0G.
+              </p>
+            </div>
+          ) : posMode ? (
             <div className="space-y-5">
               <button
                 type="button"
@@ -1902,7 +2010,7 @@ export default function CreateLink() {
       </div>
 
       {/* ── Last event dashboard recovery ────────────────────────────── */}
-      {!generatedLink && !posMode && savedEvent && (
+      {!generatedLink && !posMode && !streamMode && savedEvent && (
         <div className="mt-6 animate-fade-in">
           <div className="flex items-center justify-between gap-3">
             {/* Left — label + event info */}
@@ -1957,7 +2065,7 @@ export default function CreateLink() {
 
 
       {/* ── How it works ─────────────────────────────────────────────── */}
-      {!generatedLink && !posMode && (
+      {!generatedLink && !posMode && !streamMode && (
         <div className="mt-10 animate-fade-in">
           <p className="mb-4 text-center text-[11px] font-semibold uppercase tracking-widest text-gray-400">
             How it works
