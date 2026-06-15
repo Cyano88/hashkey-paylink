@@ -1491,7 +1491,7 @@ export function ArenaPage() {
                   )
                 })()}
 
-                {(status === 'playing' || status === 'eliminated' || status === 'won') && (
+                {status === 'playing' && (
                   <div>
                     <div className="flex items-center justify-between text-[11px] font-bold text-gray-400">
                       <span className="text-white/60 dark:text-gray-500">Round {round}/{rounds}</span>
@@ -1539,6 +1539,25 @@ export function ArenaPage() {
                           {questionLoading ? 'Loading round question...' : 'Waiting for round to start.'}
                         </p>
                       )}
+                    </div>
+                  </div>
+                )}
+
+                {(status === 'eliminated' || status === 'won') && (
+                  <div>
+                    <div className="flex items-center justify-between text-[11px] font-bold text-gray-400">
+                      <span className="text-white/60 dark:text-gray-500">
+                        {status === 'won' ? `Finished ${rounds}/${rounds}` : `Stopped at round ${round}/${rounds}`}
+                      </span>
+                      <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.12em] text-white dark:bg-gray-100 dark:text-gray-700">
+                        {status === 'won' ? 'Winner' : 'Game over'}
+                      </span>
+                    </div>
+                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/15 dark:bg-gray-200">
+                      <div
+                        className="h-full rounded-full bg-white transition-all duration-500 dark:bg-gray-950"
+                        style={{ width: `${percent(round / rounds)}` }}
+                      />
                     </div>
                   </div>
                 )}
