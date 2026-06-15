@@ -57,6 +57,23 @@ const ARENA_ESCROW_ABI = [
   'function players(address) view returns (bool joined,bool active,bool refunded,uint256 streamed,uint256 refundable)',
 ] as const
 
+type TriviaQuestion = { prompt: string; options: string[]; answer: string }
+
+const ARENA_QUESTIONS: TriviaQuestion[] = [
+  { prompt: 'Which asset is used for StreamPay settlement?', options: ['USDC', 'ETH', 'SOL', 'BTC'], answer: 'USDC' },
+  { prompt: 'What happens when a player misses a round?', options: ['Their stream halts', 'They lose all funds', 'Room restarts', 'Timer doubles'], answer: 'Their stream halts' },
+  { prompt: 'Which network is StreamPay Arena designed around?', options: ['Arc', 'Dogecoin', 'Litecoin', 'Ripple'], answer: 'Arc' },
+  { prompt: 'What stays claimable when a player is eliminated?', options: ['Unstreamed USDC', 'Nothing', 'Half the entry', 'Other players\' deposits'], answer: 'Unstreamed USDC' },
+  { prompt: 'Where do per-room deposits live until settlement?', options: ['Arena escrow contract', 'Postgres', 'The host\'s wallet', 'A platform treasury'], answer: 'Arena escrow contract' },
+  { prompt: 'What is the platform fee on a completed Arena room?', options: ['0.5%', '0%', '2%', '5%'], answer: '0.5%' },
+]
+
+function questionForRound(roomId: string, round: number): TriviaQuestion {
+  const seed = createHash('sha256').update(`${roomId}:${round}`).digest()
+  const idx = seed.readUInt32BE(0) % ARENA_QUESTIONS.length
+  return ARENA_QUESTIONS[idx]
+}
+
 const PRIVY_CIRCLE_LINK_STORE = (process.env.PRIVY_CIRCLE_LINK_STORE ?? './data/privy-circle-links.json').trim()
 
 function bearerToken(req: Request): string | undefined {
@@ -85,6 +102,18 @@ async function verifiedPrivyUserId(req: Request): Promise<string> {
 }
 
 async function lookupLinkedArcWallet(privyUserId: string): Promise<string | null> {
+  if (pool) {
+    try {
+      const result = await pool.query(
+        'select circle_wallet_address from privy_circle_links where link_key = $1 limit 1',
+        [`${privyUserId}:arc`],
+      )
+      const addr = result.rows[0]?.circle_wallet_address
+      if (typeof addr === 'string' && /^0x[a-fA-F0-9]{40}$/.test(addr)) return addr
+    } catch {
+      // fall through to file fallback below
+    }
+  }
   try {
     const raw = await readFile(resolvePath(PRIVY_CIRCLE_LINK_STORE), 'utf8')
     const parsed = JSON.parse(raw) as { links?: Record<string, { circleWalletAddress?: string }> }
@@ -358,7 +387,7 @@ async function controlRoom(req: Request, res: Response) {
       return res.status(400).json({ ok: false, error: 'Invalid Arena room id.' })
     }
 
-    const isSelfAction = action === 'self-eliminate' || action === 'self-settle'
+    const isSelfAction = action === 'self-eliminate' || action === 'self-settle' || action === 'submit-answer'
     const isRegister = action === 'register-player'
 
     const result = await requirePool().query('select * from arena_rooms where room_id = $1 limit 1', [id])
@@ -461,6 +490,69 @@ async function controlRoom(req: Request, res: Response) {
       tx = await escrow.settleWinner(selfPlayerAddress)
       nextStatus = 'completed'
       nextPaymentStatus = 'settled'
+    } else if (action === 'submit-answer' && selfPlayerAddress) {
+      const roundNumber = Number(body.roundNumber)
+      const choice = String(body.choice ?? '')
+      const maxRounds = Number(row.rounds)
+      if (!Number.isInteger(roundNumber) || roundNumber < 1 || roundNumber > maxRounds) {
+        return res.status(400).json({ ok: false, error: 'Round number out of range.' })
+      }
+      if (!choice) return res.status(400).json({ ok: false, error: 'Choice is required.' })
+
+      const info = await escrow.players(selfPlayerAddress)
+      if (!info[0]) return res.status(409).json({ ok: false, error: 'Linked wallet has not joined this room.' })
+      if (!info[1]) return res.status(409).json({ ok: false, error: 'Player is already inactive on-chain.' })
+
+      const question = questionForRound(id, roundNumber)
+      const correct = choice === question.answer
+
+      if (!correct) {
+        const txWrong = await escrow.eliminate(selfPlayerAddress, roundNumber)
+        const receiptWrong = await txWrong.wait()
+        const roomInfoWrong = await escrow.roomInfo()
+        return res.json({
+          ok: true,
+          correct: false,
+          eliminated: true,
+          txHash: receiptWrong?.hash ?? txWrong.hash,
+          chain: {
+            chainStatus: Number(roomInfoWrong[0]),
+            playerCount: Number(roomInfoWrong[1]),
+            activeCount: Number(roomInfoWrong[2]),
+            currentRound: Number(roomInfoWrong[3]),
+          },
+        })
+      }
+
+      if (roundNumber >= maxRounds) {
+        const txWin = await escrow.settleWinner(selfPlayerAddress)
+        const receiptWin = await txWin.wait()
+        const roomInfoWin = await escrow.roomInfo()
+        await requirePool().query(
+          `update arena_rooms set status = 'completed', payment_status = 'settled', state = state || $2::jsonb, updated_at = now() where room_id = $1`,
+          [id, JSON.stringify({
+            lastAction: 'settle',
+            lastActionTx: receiptWin?.hash ?? txWin.hash,
+            lastActionAt: new Date().toISOString(),
+            chainStatus: Number(roomInfoWin[0]),
+            activeCount: Number(roomInfoWin[2]),
+          })],
+        )
+        return res.json({
+          ok: true,
+          correct: true,
+          won: true,
+          txHash: receiptWin?.hash ?? txWin.hash,
+          chain: {
+            chainStatus: Number(roomInfoWin[0]),
+            playerCount: Number(roomInfoWin[1]),
+            activeCount: Number(roomInfoWin[2]),
+            currentRound: Number(roomInfoWin[3]),
+          },
+        })
+      }
+
+      return res.json({ ok: true, correct: true, nextRound: roundNumber + 1 })
     } else {
       return res.status(400).json({ ok: false, error: 'Unsupported Arena room action.' })
     }
@@ -517,10 +609,34 @@ async function getRoom(req: Request, res: Response) {
   }
 }
 
+async function getQuestion(req: Request, res: Response) {
+  try {
+    await ensureSchema()
+    const id = String(req.query.id ?? '').trim().toUpperCase()
+    const round = Number(req.query.round)
+    if (!/^SP-[A-F0-9]{6}$/.test(id)) {
+      return res.status(400).json({ ok: false, error: 'Invalid Arena room id.' })
+    }
+    const result = await requirePool().query('select rounds, status from arena_rooms where room_id = $1 limit 1', [id])
+    if (!result.rowCount) return res.status(404).json({ ok: false, error: 'Arena room not found.' })
+    const maxRounds = Number(result.rows[0].rounds)
+    if (!Number.isInteger(round) || round < 1 || round > maxRounds) {
+      return res.status(400).json({ ok: false, error: 'Round number out of range.' })
+    }
+    const q = questionForRound(id, round)
+    return res.json({ ok: true, round, prompt: q.prompt, options: q.options })
+  } catch (error) {
+    return storageError(res, error)
+  }
+}
+
 export default async function arenaRoomHandler(req: Request, res: Response) {
   if (req.method === 'POST') return createRoom(req, res)
   if (req.method === 'PATCH') return controlRoom(req, res)
-  if (req.method === 'GET') return getRoom(req, res)
+  if (req.method === 'GET') {
+    if (typeof req.query.round !== 'undefined') return getQuestion(req, res)
+    return getRoom(req, res)
+  }
   res.setHeader('Allow', 'GET, POST, PATCH')
   return res.status(405).json({ ok: false, error: 'Method not allowed.' })
 }

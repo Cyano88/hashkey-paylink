@@ -99,23 +99,7 @@ const ARENA_ESCROW_ABI = [
   },
 ] as const
 
-const SAMPLE_QUESTIONS = [
-  {
-    prompt: 'Which asset is used for StreamPay settlement?',
-    options: ['USDC', 'ETH', 'SOL', 'BTC'],
-    answer: 'USDC',
-  },
-  {
-    prompt: 'What happens when a player misses a round?',
-    options: ['Their stream halts', 'They lose all funds', 'Room restarts', 'Timer doubles'],
-    answer: 'Their stream halts',
-  },
-  {
-    prompt: 'Which network is StreamPay Arena designed around?',
-    options: ['Arc', 'Dogecoin', 'Litecoin', 'Ripple'],
-    answer: 'Arc',
-  },
-]
+type ServedQuestion = { prompt: string; options: string[] }
 
 function riskLabel(mode: RiskMode) {
   if (mode === 'linear') return 'Linear'
@@ -244,8 +228,10 @@ export function ArenaPage() {
   const [claimTxHash, setClaimTxHash] = useState('')
   const [refreshBusy, setRefreshBusy] = useState(false)
   const [walletCopied, setWalletCopied] = useState(false)
+  const [activeQuestion, setActiveQuestion] = useState<ServedQuestion | null>(null)
+  const [questionLoading, setQuestionLoading] = useState(false)
+  const [answerBusy, setAnswerBusy] = useState(false)
 
-  const activeQuestion = SAMPLE_QUESTIONS[(round - 1) % SAMPLE_QUESTIONS.length]
   const maxPool = entry * players
   const platformFee = (maxPool * platformFeeBps) / 10000
   const netPrize = Math.max(maxPool - platformFee, 0)
@@ -473,6 +459,33 @@ export function ArenaPage() {
     void registerArenaPlayer(circleSession.wallet.address)
   }, [circleSession?.wallet.address, escrowAddress, savedRoomId])
 
+  useEffect(() => {
+    if (status !== 'playing' || !savedRoomId) {
+      setActiveQuestion(null)
+      return
+    }
+    let cancelled = false
+    setQuestionLoading(true)
+    setActiveQuestion(null)
+    void fetch(`/api/arena-room?id=${encodeURIComponent(savedRoomId)}&round=${round}`)
+      .then(r => r.json())
+      .then((data: { ok?: boolean; prompt?: string; options?: string[]; error?: string }) => {
+        if (cancelled) return
+        if (data.ok && data.prompt && Array.isArray(data.options)) {
+          setActiveQuestion({ prompt: data.prompt, options: data.options })
+        } else {
+          setRoomLog(data.error ?? 'Could not load round question.')
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setRoomLog('Could not load round question.')
+      })
+      .finally(() => {
+        if (!cancelled) setQuestionLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [status, round, savedRoomId])
+
   async function rememberPrivyCircleSession(session: CircleEvmEmailSession, email = walletEmail) {
     if (!PRIVY_AUTH_ENABLED || !privyAuthenticated) return
     try {
@@ -564,19 +577,14 @@ export function ArenaPage() {
       setSeconds(value => {
         if (value <= 1) {
           window.clearInterval(timer)
-          if (circleSession?.wallet.address && canHostControl) {
-            void controlRoom('eliminate', { player: circleSession.wallet.address, roundNumber: round })
-              .then(() => refreshRoomChainState(circleSession.wallet.address))
-          }
-          setStatus('eliminated')
-          setRoomLog('Timer expired. Your stream halted and the remaining balance is claimable.')
+          void submitAnswer('__TIMEOUT__')
           return 0
         }
         return value - 1
       })
     }, 1000)
     return () => window.clearInterval(timer)
-  }, [canHostControl, circleSession?.wallet.address, roomTimer, round, status])
+  }, [roomTimer, round, status])
 
   async function createLobby() {
     setRoomSaving(true)
@@ -695,15 +703,21 @@ export function ArenaPage() {
     setRoomLog('Room preview ready')
   }
 
-  async function selfPlayerAction(action: 'self-eliminate' | 'self-settle', extras: Record<string, unknown> = {}) {
-    if (!savedRoomId || !PRIVY_AUTH_ENABLED) return null
-    const walletAddr = circleSession?.wallet.address || linkedCircleAddress
+  async function submitAnswer(option: string) {
+    if (status !== 'playing' || answerBusy || !savedRoomId) return
+    if (!PRIVY_AUTH_ENABLED) {
+      setRoomLog('Sign in with email to record your answer on-chain.')
+      return
+    }
+    setSelected(option)
+    setAnswerBusy(true)
     try {
       const token = await getAccessToken()
       if (!token) {
-        setRoomLog('Sign in with email to record this round on-chain.')
-        return null
+        setRoomLog('Sign in with email to record your answer on-chain.')
+        return
       }
+      const walletAddr = circleSession?.wallet.address || linkedCircleAddress
       if (walletAddr && /^0x[a-fA-F0-9]{40}$/.test(walletAddr)) {
         try {
           await fetch('/api/arena-room', {
@@ -711,68 +725,49 @@ export function ArenaPage() {
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
             body: JSON.stringify({ roomId: savedRoomId, action: 'register-player', wallet: walletAddr }),
           })
-        } catch {
-          // Best-effort; self-eliminate falls back to the privy-link store.
-        }
+        } catch {}
       }
       const response = await fetch('/api/arena-room', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ roomId: savedRoomId, action, ...extras }),
+        body: JSON.stringify({ roomId: savedRoomId, action: 'submit-answer', roundNumber: round, choice: option }),
       })
       const data = await response.json() as {
         ok?: boolean
-        error?: string
+        correct?: boolean
+        eliminated?: boolean
+        won?: boolean
+        nextRound?: number
         txHash?: string
         chain?: { playerCount?: number; activeCount?: number; currentRound?: number }
+        error?: string
       }
       if (!response.ok || !data.ok) {
-        setRoomLog(data.error ?? 'Game action could not be recorded.')
-        return null
+        setRoomLog(data.error ?? 'Could not submit answer.')
+        return
       }
       if (data.txHash) setRoomActionTxHash(data.txHash)
       if (typeof data.chain?.playerCount === 'number') setChainPlayerCount(data.chain.playerCount)
       if (typeof data.chain?.activeCount === 'number') setChainActiveCount(data.chain.activeCount)
-      return data
-    } catch (error) {
-      setRoomLog(error instanceof Error ? error.message : 'Game action failed.')
-      return null
-    }
-  }
 
-  async function submitAnswer(option: string) {
-    if (status !== 'playing') return
-    setSelected(option)
-    const walletAddr = circleSession?.wallet.address
-    if (option !== activeQuestion.answer) {
-      if (walletAddr) {
-        const refresh = () => refreshRoomChainState(walletAddr)
-        if (canHostControl) {
-          void controlRoom('eliminate', { player: walletAddr, roundNumber: round }).then(refresh)
-        } else {
-          void selfPlayerAction('self-eliminate', { roundNumber: round }).then(refresh)
-        }
+      if (data.eliminated) {
+        setStatus('eliminated')
+        setRoomLog('Stopped. Your remaining USDC is still claimable.')
+      } else if (data.won) {
+        setStatus('won')
+        setRoomLog('Winner. Prize pool is ready to claim.')
+      } else if (data.correct && typeof data.nextRound === 'number') {
+        setRound(data.nextRound)
+        setSelected('')
+        setRoomLog(`Correct. Round ${data.nextRound} unlocks a higher risk stream.`)
       }
-      setStatus('eliminated')
-      setRoomLog('Stopped. Your remaining USDC is still claimable.')
-      return
+
+      if (circleSession?.wallet.address) void refreshRoomChainState(circleSession.wallet.address)
+    } catch (error) {
+      setRoomLog(error instanceof Error ? error.message : 'Could not submit answer.')
+    } finally {
+      setAnswerBusy(false)
     }
-    if (round >= rounds) {
-      if (walletAddr) {
-        const refresh = () => refreshRoomChainState(walletAddr)
-        if (canHostControl) {
-          void controlRoom('settle', { winner: walletAddr }).then(refresh)
-        } else {
-          void selfPlayerAction('self-settle').then(refresh)
-        }
-      }
-      setStatus('won')
-      setRoomLog('Winner. Prize pool is ready to claim.')
-      return
-    }
-    setRound(value => value + 1)
-    setSelected('')
-    setRoomLog(`Correct. Round ${round + 1} unlocks a higher risk stream.`)
   }
 
   async function joinRoomWithCircle() {
@@ -1399,25 +1394,36 @@ export function ArenaPage() {
                     </div>
 
                     <div className="mt-3 rounded-[20px] bg-white/10 p-3 dark:bg-gray-100 sm:p-3.5">
-                      <p className="text-[15px] font-bold leading-snug text-white dark:text-gray-950">{activeQuestion.prompt}</p>
-                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                        {activeQuestion.options.map(option => (
-                          <button
-                            key={option}
-                            type="button"
-                            disabled={status !== 'playing'}
-                            onClick={() => submitAnswer(option)}
-                            className={[
-                              'min-h-10 rounded-xl border px-3 text-left text-[12px] font-semibold transition-all',
-                              selected === option
-                                ? 'border-white bg-white text-gray-950 dark:border-gray-950 dark:bg-gray-950 dark:text-white'
-                                : 'border-white/10 bg-white/10 text-white hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-200 dark:bg-white dark:text-gray-700 dark:hover:bg-gray-50',
-                            ].join(' ')}
-                          >
-                            {option}
-                          </button>
-                        ))}
-                      </div>
+                      {activeQuestion ? (
+                        <>
+                          <p className="text-[15px] font-bold leading-snug text-white dark:text-gray-950">{activeQuestion.prompt}</p>
+                          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                            {activeQuestion.options.map(option => (
+                              <button
+                                key={option}
+                                type="button"
+                                disabled={status !== 'playing' || answerBusy}
+                                onClick={() => submitAnswer(option)}
+                                className={[
+                                  'min-h-10 rounded-xl border px-3 text-left text-[12px] font-semibold transition-all',
+                                  selected === option
+                                    ? 'border-white bg-white text-gray-950 dark:border-gray-950 dark:bg-gray-950 dark:text-white'
+                                    : 'border-white/10 bg-white/10 text-white hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-200 dark:bg-white dark:text-gray-700 dark:hover:bg-gray-50',
+                                ].join(' ')}
+                              >
+                                {option}
+                              </button>
+                            ))}
+                          </div>
+                          {answerBusy && (
+                            <p className="mt-2 text-center text-[10px] font-semibold text-white/55 dark:text-gray-500">Submitting answer...</p>
+                          )}
+                        </>
+                      ) : (
+                        <p className="py-4 text-center text-[12px] font-semibold text-white/55 dark:text-gray-500">
+                          {questionLoading ? 'Loading round question...' : 'Waiting for round to start.'}
+                        </p>
+                      )}
                     </div>
                   </div>
                 )}
