@@ -755,7 +755,13 @@ export function ArenaPage() {
       })
       if (txHash) setJoinTxHash(txHash)
       setPlayerJoined(true)
+      setCircleBalance(prev => (prev !== null && prev >= entryUnits ? prev - entryUnits : prev))
       setRoomLog('Seat funded. Waiting for the room to fill.')
+      if (txHash && /^0x[a-fA-F0-9]{64}$/.test(txHash)) {
+        try {
+          await ARC_PUBLIC_CLIENT.waitForTransactionReceipt({ hash: txHash as `0x${string}`, timeout: 30_000 })
+        } catch {}
+      }
       await refreshRoomChainState(session.wallet.address)
     } catch (error) {
       setJoinError(error instanceof Error ? error.message : 'Arena deposit failed.')
@@ -803,6 +809,11 @@ export function ArenaPage() {
       if (txHash) setClaimTxHash(txHash)
       setPlayerRefunded(true)
       setRoomLog('Remaining USDC claimed from the room escrow.')
+      if (txHash && /^0x[a-fA-F0-9]{64}$/.test(txHash)) {
+        try {
+          await ARC_PUBLIC_CLIENT.waitForTransactionReceipt({ hash: txHash as `0x${string}`, timeout: 30_000 })
+        } catch {}
+      }
       await refreshRoomChainState(session.wallet.address)
     } catch (error) {
       setJoinError(error instanceof Error ? error.message : 'Arena refund failed.')
@@ -1075,15 +1086,7 @@ export function ArenaPage() {
 
           <section className="space-y-3">
             <div className="rounded-[24px] border border-gray-100 bg-white p-3.5 shadow-sm dark:border-white/10 dark:bg-[#111216] sm:p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-[12px] font-bold text-gray-950 dark:text-white">Trivia room</p>
-                  <p className="mt-0.5 text-[11px] text-gray-400">{roomCode} - {entry} USDC - {players} players</p>
-                </div>
-                <StatusPill status={status} />
-              </div>
-
-              <div className="mt-3 overflow-hidden rounded-[22px] bg-gray-950 p-4 text-white dark:bg-white dark:text-gray-950 sm:p-4">
+              <div className="overflow-hidden rounded-[22px] bg-gray-950 p-4 text-white dark:bg-white dark:text-gray-950 sm:p-4">
                 {status === 'setup' && (
                   <div>
                     <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/45 dark:text-gray-500">Room setup</p>
@@ -1101,11 +1104,6 @@ export function ArenaPage() {
 
                 {status === 'lobby' && (() => {
                   const walletAddress = circleSession?.wallet.address || linkedCircleAddress || ''
-                  const balanceNumeric = circleBalance === null ? null : Number(formatUnits(circleBalance, ARC_USDC_DECIMALS))
-                  const needsFunding = Boolean(circleSession) && balanceNumeric !== null && balanceNumeric < entry && canOpenDeposits && !playerJoined
-                  const fundingShortfall = needsFunding && balanceNumeric !== null
-                    ? Math.max(0, entry - balanceNumeric).toLocaleString(undefined, { maximumFractionDigits: 2 })
-                    : '0'
                   return (
                   <div>
                     <div className="flex items-center justify-between gap-3">
@@ -1170,25 +1168,6 @@ export function ArenaPage() {
                         </div>
                       )}
 
-                      {needsFunding && (
-                        <div className="mt-2 flex items-start justify-between gap-2 rounded-xl border border-amber-300/30 bg-amber-400/10 px-2.5 py-2 dark:border-amber-300/60 dark:bg-amber-100">
-                          <div className="min-w-0">
-                            <p className="text-[10px] font-black uppercase tracking-[0.12em] text-amber-200 dark:text-amber-800">Fund this wallet</p>
-                            <p className="mt-0.5 text-[10px] font-semibold text-amber-100/85 dark:text-amber-800/85">
-                              Send {fundingShortfall} USDC on Arc to your wallet to deposit.
-                            </p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={copyArenaWalletAddress}
-                            className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-300 px-2.5 py-1 text-[10px] font-black text-amber-900 transition-transform active:scale-[0.98] dark:bg-amber-800 dark:text-amber-50"
-                          >
-                            {walletCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-                            {walletCopied ? 'Copied' : 'Copy'}
-                          </button>
-                        </div>
-                      )}
-
                       {playerJoined && (
                         <div className="mt-2 grid grid-cols-2 gap-2">
                           <DarkMetric label="Streamed" value={playerStreamed === null ? '-' : `${formatCompactUsdc(playerStreamed)} USDC`} />
@@ -1197,7 +1176,7 @@ export function ArenaPage() {
                       )}
 
                       {joinError && (
-                        <p className="mt-2 rounded-xl bg-amber-400/10 px-3 py-2 text-[10px] font-bold text-amber-100 dark:bg-amber-100 dark:text-amber-700">
+                        <p className="mt-2 rounded-xl bg-white/[0.06] px-3 py-2 text-[10px] font-semibold text-white/65 dark:bg-gray-100 dark:text-gray-600">
                           {joinError}
                         </p>
                       )}
@@ -1372,36 +1351,36 @@ export function ArenaPage() {
                 )}
               </div>
 
-            <div className="mt-3 rounded-[20px] border border-gray-100 bg-gray-50 p-3 dark:border-white/10 dark:bg-white/[0.04]">
-              <div className="mb-2 flex items-center justify-between">
-                <p className="text-[11px] font-bold text-gray-500 dark:text-gray-400">Risk meter</p>
-                <p className="text-[11px] font-bold text-gray-400">{riskProgress}% streamed</p>
+            {(status === 'playing' || status === 'eliminated' || status === 'won') && (
+              <div className="mt-3 rounded-[20px] border border-gray-100 bg-gray-50 p-3 dark:border-white/10 dark:bg-white/[0.04]">
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="text-[11px] font-bold text-gray-500 dark:text-gray-400">Risk meter</p>
+                  <p className="text-[11px] font-bold text-gray-400">{riskProgress}% streamed</p>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-gray-200 dark:bg-white/10">
+                  <div className="h-full rounded-full bg-gray-950 transition-all dark:bg-white" style={{ width: `${riskProgress}%` }} />
+                </div>
+                <div className="mt-3 grid grid-cols-3 gap-2">
+                  <Metric icon={<LockKeyhole className="h-3.5 w-3.5" />} label="Still yours" value={`$${money(remaining)}`} />
+                  <Metric icon={<WalletCards className="h-3.5 w-3.5" />} label="Pot preview" value={`$${money(prizePool)}`} />
+                  <Metric icon={<Trophy className="h-3.5 w-3.5" />} label="Next risk" value={`$${money(nextRoundCost)}`} />
+                </div>
               </div>
-              <div className="h-2 overflow-hidden rounded-full bg-gray-200 dark:bg-white/10">
-                <div className="h-full rounded-full bg-gray-950 transition-all dark:bg-white" style={{ width: `${riskProgress}%` }} />
-              </div>
-              <div className="mt-3 grid grid-cols-3 gap-2">
-                <Metric icon={<LockKeyhole className="h-3.5 w-3.5" />} label="Still yours" value={`$${money(remaining)}`} />
-                <Metric icon={<WalletCards className="h-3.5 w-3.5" />} label="Pot preview" value={`$${money(prizePool)}`} />
-                <Metric icon={<Trophy className="h-3.5 w-3.5" />} label="Next risk" value={`$${money(nextRoundCost)}`} />
-              </div>
-            </div>
+            )}
 
             <div className="mt-3 rounded-[20px] border border-gray-100 bg-gray-50 p-3.5 dark:border-white/10 dark:bg-white/[0.04]">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-[12px] font-bold text-gray-950 dark:text-white">{roomLog}</p>
-                  <p className="mt-1 text-[11px] leading-relaxed text-gray-400">
-                    {status === 'won'
-                      ? 'Prize claim will be wired to the Arc room vault.'
-                      : status === 'eliminated'
-                        ? 'Your stream stopped. Only streamed risk stays in the pot.'
-                        : status === 'setup'
-                          ? 'Room is not live yet. Create the lobby when your settings look right.'
-                          : status === 'lobby'
-                            ? `Deposits go into the room escrow. Net prize after 0.5% platform fee: $${money(netPrize)}.`
-                            : `${alivePlayers} players active. Unstreamed USDC stays claimable from escrow.`}
-                  </p>
+                  {(status === 'won' || status === 'eliminated' || status === 'playing') && (
+                    <p className="mt-1 text-[11px] leading-relaxed text-gray-400">
+                      {status === 'won'
+                        ? 'Prize claim will be wired to the Arc room vault.'
+                        : status === 'eliminated'
+                          ? 'Your stream stopped. Only streamed risk stays in the pot.'
+                          : `${alivePlayers} players active. Unstreamed USDC stays claimable from escrow.`}
+                    </p>
+                  )}
                 </div>
                 {(status === 'eliminated' || status === 'won') && (
                   <button
