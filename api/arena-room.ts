@@ -464,11 +464,12 @@ async function controlRoom(req: Request, res: Response) {
     } else {
       // Host action: accept either Privy bearer matching host_privy_user_id OR the legacy host token.
       let authorized = false
+      let callerPrivyUserId: string | null = null
       if (bearerToken(req)) {
         try {
-          const callerUserId = await verifiedPrivyUserId(req)
+          callerPrivyUserId = await verifiedPrivyUserId(req)
           const hostUserId = String(row.host_privy_user_id ?? '')
-          if (hostUserId && hostUserId === callerUserId) {
+          if (hostUserId && hostUserId === callerPrivyUserId) {
             authorized = true
           }
         } catch {
@@ -480,6 +481,20 @@ async function controlRoom(req: Request, res: Response) {
         if (!token) return res.status(401).json({ ok: false, error: 'Host authorization required.' })
         if (String(row.host_token_hash ?? '') !== tokenHash(token)) {
           return res.status(403).json({ ok: false, error: 'Invalid host control token.' })
+        }
+        // Token-based auth succeeded. Opportunistic migration: if the caller also presented a valid
+        // Privy bearer AND the row has no host_privy_user_id yet, claim it now so the host can
+        // control the room from any device signed into the same Privy email.
+        if (callerPrivyUserId && !String(row.host_privy_user_id ?? '')) {
+          try {
+            await requirePool().query(
+              `update arena_rooms set host_privy_user_id = $2, updated_at = now()
+               where room_id = $1 and (host_privy_user_id is null or host_privy_user_id = '')`,
+              [id, callerPrivyUserId],
+            )
+          } catch {
+            // best-effort migration; never block the host action.
+          }
         }
       }
     }
