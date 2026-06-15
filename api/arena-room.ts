@@ -1,7 +1,10 @@
 import type { Request, Response } from 'express'
 import { createHash, randomBytes } from 'node:crypto'
+import { readFile } from 'node:fs/promises'
+import { resolve as resolvePath } from 'node:path'
 import { ethers } from 'ethers'
 import pg from 'pg'
+import { PrivyClient } from '@privy-io/server-auth'
 
 type RiskMode = 'linear' | 'climb' | 'finale'
 type StartRule = 'host' | 'full'
@@ -51,7 +54,66 @@ const ARENA_ESCROW_ABI = [
   'function cancelRoom()',
   'function settleWinner(address winner)',
   'function roomInfo() view returns (uint8 status,uint16 playerCount,uint16 activeCount,uint16 currentRound,uint256 accountedDeposits,uint256 reservedRefunds,uint256 totalStreamed,address winner)',
+  'function players(address) view returns (bool joined,bool active,bool refunded,uint256 streamed,uint256 refundable)',
 ] as const
+
+const PRIVY_CIRCLE_LINK_STORE = (process.env.PRIVY_CIRCLE_LINK_STORE ?? './data/privy-circle-links.json').trim()
+
+function bearerToken(req: Request): string | undefined {
+  const auth = req.headers.authorization ?? ''
+  const match = auth.match(/^Bearer\s+(.+)$/i)
+  return match?.[1]
+}
+
+async function verifiedPrivyUserId(req: Request): Promise<string> {
+  const privyAppId = process.env.PRIVY_APP_ID ?? process.env.VITE_PRIVY_APP_ID
+  const privyAppSecret = process.env.PRIVY_APP_SECRET
+  if (!privyAppId || !privyAppSecret) {
+    const err = new Error('Privy is not configured. Set PRIVY_APP_ID and PRIVY_APP_SECRET on the server.')
+    ;(err as Error & { status?: number }).status = 503
+    throw err
+  }
+  const token = bearerToken(req)
+  if (!token) {
+    const err = new Error('Missing Privy access token.')
+    ;(err as Error & { status?: number }).status = 401
+    throw err
+  }
+  const client = new PrivyClient(privyAppId, privyAppSecret)
+  const claims = await client.verifyAuthToken(token)
+  return claims.userId
+}
+
+async function lookupLinkedArcWallet(privyUserId: string): Promise<string | null> {
+  try {
+    const raw = await readFile(resolvePath(PRIVY_CIRCLE_LINK_STORE), 'utf8')
+    const parsed = JSON.parse(raw) as { links?: Record<string, { circleWalletAddress?: string }> }
+    const record = parsed.links?.[`${privyUserId}:arc`]
+    const addr = record?.circleWalletAddress
+    if (!addr || !/^0x[a-fA-F0-9]{40}$/.test(addr)) return null
+    return addr
+  } catch {
+    return null
+  }
+}
+
+async function lookupRoomPlayerWallet(roomId: string, privyUserId: string): Promise<string | null> {
+  try {
+    const result = await requirePool().query(
+      `select state -> 'players' ->> $2 as wallet from arena_rooms where room_id = $1 limit 1`,
+      [roomId, privyUserId],
+    )
+    const addr = result.rows[0]?.wallet
+    if (typeof addr === 'string' && /^0x[a-fA-F0-9]{40}$/.test(addr)) return addr
+    return null
+  } catch {
+    return null
+  }
+}
+
+async function resolvePlayerWallet(roomId: string, privyUserId: string): Promise<string | null> {
+  return (await lookupRoomPlayerWallet(roomId, privyUserId)) ?? (await lookupLinkedArcWallet(privyUserId))
+}
 
 const pool = DATABASE_URL
   ? new Pool({
@@ -291,18 +353,62 @@ async function controlRoom(req: Request, res: Response) {
     const body = (req.body ?? {}) as Record<string, unknown>
     const id = String(body.roomId ?? '').trim().toUpperCase()
     const action = String(body.action ?? '').trim()
-    const token = String(body.hostToken ?? '').trim()
 
     if (!/^SP-[A-F0-9]{6}$/.test(id)) {
       return res.status(400).json({ ok: false, error: 'Invalid Arena room id.' })
     }
-    if (!token) return res.status(401).json({ ok: false, error: 'Host control token required.' })
+
+    const isSelfAction = action === 'self-eliminate' || action === 'self-settle'
+    const isRegister = action === 'register-player'
 
     const result = await requirePool().query('select * from arena_rooms where room_id = $1 limit 1', [id])
     if (!result.rowCount) return res.status(404).json({ ok: false, error: 'Arena room not found.' })
     const row = result.rows[0] as Record<string, unknown>
-    if (String(row.host_token_hash ?? '') !== tokenHash(token)) {
-      return res.status(403).json({ ok: false, error: 'Invalid host control token.' })
+
+    if (isRegister) {
+      let userId: string
+      try {
+        userId = await verifiedPrivyUserId(req)
+      } catch (err) {
+        const e = err as Error & { status?: number }
+        return res.status(e.status ?? 401).json({ ok: false, error: e.message || 'Privy auth failed.' })
+      }
+      const wallet = String(body.wallet ?? '').trim()
+      if (!/^0x[a-fA-F0-9]{40}$/.test(wallet)) {
+        return res.status(400).json({ ok: false, error: 'Valid wallet address is required to register.' })
+      }
+      const update = await requirePool().query(
+        `update arena_rooms
+           set state = jsonb_set(coalesce(state, '{}'::jsonb), array['players', $2], to_jsonb($3::text), true),
+               updated_at = now()
+         where room_id = $1
+         returning room_id`,
+        [id, userId, wallet],
+      )
+      if (!update.rowCount) return res.status(404).json({ ok: false, error: 'Arena room not found.' })
+      return res.json({ ok: true })
+    }
+
+    let selfPlayerAddress: string | null = null
+    if (isSelfAction) {
+      let userId: string
+      try {
+        userId = await verifiedPrivyUserId(req)
+      } catch (err) {
+        const e = err as Error & { status?: number }
+        return res.status(e.status ?? 401).json({ ok: false, error: e.message || 'Privy auth failed.' })
+      }
+      const linked = await resolvePlayerWallet(id, userId)
+      if (!linked) {
+        return res.status(403).json({ ok: false, error: 'No registered Arc wallet for this Privy account in this room. Deposit again or re-load the room while signed in.' })
+      }
+      selfPlayerAddress = linked
+    } else {
+      const token = String(body.hostToken ?? '').trim()
+      if (!token) return res.status(401).json({ ok: false, error: 'Host control token required.' })
+      if (String(row.host_token_hash ?? '') !== tokenHash(token)) {
+        return res.status(403).json({ ok: false, error: 'Invalid host control token.' })
+      }
     }
 
     const escrowAddress = String(row.escrow_address ?? '')
@@ -337,6 +443,22 @@ async function controlRoom(req: Request, res: Response) {
         return res.status(400).json({ ok: false, error: 'Valid winner address is required.' })
       }
       tx = await escrow.settleWinner(winner)
+      nextStatus = 'completed'
+      nextPaymentStatus = 'settled'
+    } else if (action === 'self-eliminate' && selfPlayerAddress) {
+      const roundNumber = Number(body.roundNumber)
+      if (!Number.isInteger(roundNumber) || roundNumber < 1) {
+        return res.status(400).json({ ok: false, error: 'Valid roundNumber required for self-eliminate.' })
+      }
+      const info = await escrow.players(selfPlayerAddress)
+      if (!info[0]) return res.status(409).json({ ok: false, error: 'Linked wallet has not joined this room.' })
+      if (!info[1]) return res.status(409).json({ ok: false, error: 'Player is already inactive on-chain.' })
+      tx = await escrow.eliminate(selfPlayerAddress, roundNumber)
+      nextStatus = 'playing'
+    } else if (action === 'self-settle' && selfPlayerAddress) {
+      const info = await escrow.players(selfPlayerAddress)
+      if (!info[0] || !info[1]) return res.status(409).json({ ok: false, error: 'Linked wallet is not an active player.' })
+      tx = await escrow.settleWinner(selfPlayerAddress)
       nextStatus = 'completed'
       nextPaymentStatus = 'settled'
     } else {

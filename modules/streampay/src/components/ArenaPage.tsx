@@ -389,6 +389,22 @@ export function ArenaPage() {
     }
   }
 
+  async function registerArenaPlayer(walletAddress: string) {
+    if (!savedRoomId || !PRIVY_AUTH_ENABLED) return
+    if (!/^0x[a-fA-F0-9]{40}$/.test(walletAddress)) return
+    try {
+      const token = await getAccessToken()
+      if (!token) return
+      await fetch('/api/arena-room', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ roomId: savedRoomId, action: 'register-player', wallet: walletAddress }),
+      })
+    } catch {
+      // Best-effort; self-eliminate falls back to the privy-link store.
+    }
+  }
+
   async function refreshRoomChainState(walletAddress = circleSession?.wallet.address) {
     if (!escrowAddress || !/^0x[a-fA-F0-9]{40}$/.test(escrowAddress)) return
     try {
@@ -454,7 +470,8 @@ export function ArenaPage() {
   useEffect(() => {
     if (!circleSession?.wallet.address || !escrowAddress) return
     void refreshRoomChainState(circleSession.wallet.address)
-  }, [circleSession?.wallet.address, escrowAddress])
+    void registerArenaPlayer(circleSession.wallet.address)
+  }, [circleSession?.wallet.address, escrowAddress, savedRoomId])
 
   async function rememberPrivyCircleSession(session: CircleEvmEmailSession, email = walletEmail) {
     if (!PRIVY_AUTH_ENABLED || !privyAuthenticated) return
@@ -678,22 +695,76 @@ export function ArenaPage() {
     setRoomLog('Room preview ready')
   }
 
+  async function selfPlayerAction(action: 'self-eliminate' | 'self-settle', extras: Record<string, unknown> = {}) {
+    if (!savedRoomId || !PRIVY_AUTH_ENABLED) return null
+    const walletAddr = circleSession?.wallet.address || linkedCircleAddress
+    try {
+      const token = await getAccessToken()
+      if (!token) {
+        setRoomLog('Sign in with email to record this round on-chain.')
+        return null
+      }
+      if (walletAddr && /^0x[a-fA-F0-9]{40}$/.test(walletAddr)) {
+        try {
+          await fetch('/api/arena-room', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ roomId: savedRoomId, action: 'register-player', wallet: walletAddr }),
+          })
+        } catch {
+          // Best-effort; self-eliminate falls back to the privy-link store.
+        }
+      }
+      const response = await fetch('/api/arena-room', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ roomId: savedRoomId, action, ...extras }),
+      })
+      const data = await response.json() as {
+        ok?: boolean
+        error?: string
+        txHash?: string
+        chain?: { playerCount?: number; activeCount?: number; currentRound?: number }
+      }
+      if (!response.ok || !data.ok) {
+        setRoomLog(data.error ?? 'Game action could not be recorded.')
+        return null
+      }
+      if (data.txHash) setRoomActionTxHash(data.txHash)
+      if (typeof data.chain?.playerCount === 'number') setChainPlayerCount(data.chain.playerCount)
+      if (typeof data.chain?.activeCount === 'number') setChainActiveCount(data.chain.activeCount)
+      return data
+    } catch (error) {
+      setRoomLog(error instanceof Error ? error.message : 'Game action failed.')
+      return null
+    }
+  }
+
   async function submitAnswer(option: string) {
     if (status !== 'playing') return
     setSelected(option)
+    const walletAddr = circleSession?.wallet.address
     if (option !== activeQuestion.answer) {
-      if (circleSession?.wallet.address && canHostControl) {
-        await controlRoom('eliminate', { player: circleSession.wallet.address, roundNumber: round })
-        await refreshRoomChainState(circleSession.wallet.address)
+      if (walletAddr) {
+        const refresh = () => refreshRoomChainState(walletAddr)
+        if (canHostControl) {
+          void controlRoom('eliminate', { player: walletAddr, roundNumber: round }).then(refresh)
+        } else {
+          void selfPlayerAction('self-eliminate', { roundNumber: round }).then(refresh)
+        }
       }
       setStatus('eliminated')
       setRoomLog('Stopped. Your remaining USDC is still claimable.')
       return
     }
     if (round >= rounds) {
-      if (circleSession?.wallet.address && canHostControl) {
-        await controlRoom('settle', { winner: circleSession.wallet.address })
-        await refreshRoomChainState(circleSession.wallet.address)
+      if (walletAddr) {
+        const refresh = () => refreshRoomChainState(walletAddr)
+        if (canHostControl) {
+          void controlRoom('settle', { winner: walletAddr }).then(refresh)
+        } else {
+          void selfPlayerAction('self-settle').then(refresh)
+        }
       }
       setStatus('won')
       setRoomLog('Winner. Prize pool is ready to claim.')
@@ -757,6 +828,7 @@ export function ArenaPage() {
       setPlayerJoined(true)
       setCircleBalance(prev => (prev !== null && prev >= entryUnits ? prev - entryUnits : prev))
       setRoomLog('Seat funded. Waiting for the room to fill.')
+      void registerArenaPlayer(session.wallet.address)
       if (txHash && /^0x[a-fA-F0-9]{64}$/.test(txHash)) {
         try {
           await ARC_PUBLIC_CLIENT.waitForTransactionReceipt({ hash: txHash as `0x${string}`, timeout: 30_000 })
