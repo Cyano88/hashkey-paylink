@@ -970,7 +970,7 @@ export function ArenaPage() {
         setRoomLog('Stopped. Your remaining USDC is still claimable.')
       } else if (data.won) {
         setStatus('won')
-        setRoomLog('Winner. Prize pool is ready to claim.')
+        setRoomLog('Winner. Prize has been sent to your Arc wallet.')
       } else if (data.finished) {
         setStatus('eliminated')
         setRoomLog('Room finished — another player claimed the prize first.')
@@ -1405,7 +1405,7 @@ export function ArenaPage() {
                   <StatusPill status={status} />
                 </div>
 
-                {chainActiveCount === 0 && status !== 'lobby' && (
+                {chainActiveCount === 0 && status !== 'lobby' && status !== 'won' && (
                   <div className="mt-3 rounded-2xl border border-gray-200 bg-gray-50 p-3 dark:border-white/10 dark:bg-white/[0.04]">
                     <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-gray-500 dark:text-gray-400">Room stalled</p>
                     <p className="mt-1 text-[11px] leading-snug text-gray-500 dark:text-gray-400">
@@ -1419,7 +1419,11 @@ export function ArenaPage() {
                 <div className="mt-4 grid grid-cols-2 gap-2">
                   <Metric label="Entry" value={`${entry} USDC`} compact />
                   <Metric label="Players" value={`${joinedPlayers}/${players}`} compact />
-                  <Metric label="Active" value={`${chainActiveCount ?? joinedPlayers}`} compact />
+                  <Metric
+                    label={status === 'won' ? 'Outcome' : 'Active'}
+                    value={status === 'won' ? 'Settled' : `${chainActiveCount ?? joinedPlayers}`}
+                    compact
+                  />
                   <Metric label="Prize" value={`$${money(netPrize)}`} compact />
                 </div>
 
@@ -1833,9 +1837,11 @@ export function ArenaPage() {
                   {(status === 'won' || status === 'eliminated' || status === 'playing') && (
                     <p className="mt-1 text-[11px] leading-relaxed text-gray-400">
                       {status === 'won'
-                        ? 'Prize claim will be wired to the Arc room vault.'
+                        ? 'Prize sent to your Arc wallet. The settle transfer is on-chain — no further action needed.'
                         : status === 'eliminated'
-                          ? 'Your stream stopped. Only streamed risk stays in the pot.'
+                          ? playerJoined
+                            ? 'Your stream stopped. Only streamed risk stays in the pot.'
+                            : 'Room ended. You were hosting and did not hold a seat here.'
                           : `${alivePlayers} players active. Unstreamed USDC stays claimable from escrow.`}
                     </p>
                   )}
@@ -1851,7 +1857,17 @@ export function ArenaPage() {
                   </button>
                 )}
               </div>
-              {playerJoined && (status === 'playing' || status === 'eliminated' || status === 'won') && (
+              {playerJoined && status === 'won' && roomActionTxHash && (
+                <a
+                  href={`${CHAIN_META.arc.explorerUrl}/tx/${roomActionTxHash}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-3 block truncate rounded-2xl border border-gray-100 bg-white px-3 py-2.5 text-center text-[11px] font-bold text-gray-600 underline decoration-gray-300 underline-offset-4 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-300 dark:decoration-white/20"
+                >
+                  View settle transaction
+                </a>
+              )}
+              {playerJoined && (status === 'playing' || status === 'eliminated') && (
                 <div className="mt-3 rounded-2xl border border-gray-100 bg-white p-3 dark:border-white/10 dark:bg-white/[0.04]">
                   <div className="grid grid-cols-2 gap-2">
                     <Metric icon={<WalletCards className="h-3.5 w-3.5" />} label="Streamed" value={playerStreamed === null ? '-' : `${formatCompactUsdc(playerStreamed)} USDC`} />
