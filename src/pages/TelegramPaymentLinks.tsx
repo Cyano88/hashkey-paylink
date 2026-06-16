@@ -1,22 +1,30 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { usePrivy } from '@privy-io/react-auth'
 import {
   ArrowLeft,
   ArrowRight,
+  Bell,
+  BellRing,
   Bot,
   Building2,
   CheckCircle2,
   Coins,
+  Copy,
   ExternalLink,
   LineChart,
   Loader2,
+  LogOut,
   MessageCircle,
   Newspaper,
   Pencil,
+  PlusCircle,
   Radio,
+  RefreshCw,
   Send,
   ShieldCheck,
   Sparkles,
+  TrendingDown,
   UserRound,
   UsersRound,
   Wallet,
@@ -50,6 +58,8 @@ type TelegramServiceId =
   | 'agent-marketplace'
   | 'agent-dashboard'
   | 'fund-agent-wallet'
+  | 'poly-portfolio'
+  | 'poly-worldcup'
   | 'lp-scout'
   | 'poly-worldcup-news'
   | 'poly-stream'
@@ -121,43 +131,27 @@ const sectionServices: Record<TelegramSectionId, TelegramService[]> = {
   ],
   'market-tools': [
     {
-      id: 'fund-polymarket',
-      title: 'Fund Polymarket',
-      body: 'Fund your account or share a funding request.',
-      icon: Building2,
+      id: 'poly-portfolio',
+      title: 'Portfolio',
+      body: 'Track balances, open positions, claimables, and risk alerts.',
+      icon: Wallet,
       status: 'Open',
       active: true,
       brand: 'polymarket',
     },
     {
-      id: 'lp-scout',
-      title: 'LP Scout',
-      body: 'Scout reward markets, themes, or one Polymarket market from a guided UI.',
-      icon: LineChart,
-      status: 'Open',
-      active: true,
-    },
-    {
-      id: 'poly-worldcup-news',
-      title: 'World Cup News',
-      body: 'Follow World Cup headlines that can move Polymarket prices and LP risk.',
-      icon: Newspaper,
-      status: 'Open',
-      active: true,
-    },
-    {
-      id: 'poly-stream',
-      title: 'World Cup Scores',
-      body: 'Sportmonks live scores with exact Polymarket fixture routing.',
+      id: 'poly-worldcup',
+      title: 'World Cup Markets',
+      body: 'Live scores, market odds, and direct trade routes.',
       icon: Radio,
       status: 'Open',
       active: true,
     },
     {
-      id: 'agentic-lp-research',
-      title: 'Agentic LP Research',
-      body: 'Set up recurring LP research reports with email delivery.',
-      icon: Sparkles,
+      id: 'lp-scout',
+      title: 'LP Scout',
+      body: 'Paid x402 research for LP reward opportunities.',
+      icon: LineChart,
       status: 'Open',
       active: true,
     },
@@ -383,19 +377,17 @@ export default function TelegramPaymentLinks() {
       ? 'create-your-agent'
       : initialServiceParam === 'fund-agent-wallet' || initialServiceParam === 'agent-dashboard'
       ? 'agent-dashboard'
-      : initialServiceParam === 'fund-polymarket'
-      ? 'fund-polymarket'
+      : initialServiceParam === 'fund-polymarket' || initialServiceParam === 'poly-portfolio'
+      ? 'poly-portfolio'
       : initialServiceParam === 'lp-scout'
       ? 'lp-scout'
-      : initialServiceParam === 'poly-worldcup-news'
-      ? 'poly-worldcup-news'
-      : initialServiceParam === 'poly-stream'
-      ? 'poly-stream'
+      : initialServiceParam === 'poly-worldcup-news' || initialServiceParam === 'poly-stream' || initialServiceParam === 'poly-worldcup'
+      ? 'poly-worldcup'
       : initialServiceParam === 'agentic-lp-research'
       ? 'agentic-lp-research'
       : ''
   const initialAgentService = initialService === 'hashpaylink-helper' || initialService === 'create-your-agent' || initialService === 'agent-dashboard'
-  const initialMarketService = initialService === 'fund-polymarket' || initialService === 'lp-scout' || initialService === 'poly-worldcup-news' || initialService === 'poly-stream' || initialService === 'agentic-lp-research'
+  const initialMarketService = initialService === 'poly-portfolio' || initialService === 'lp-scout' || initialService === 'poly-worldcup' || initialService === 'agentic-lp-research'
   const initialPersonTarget = displayTelegramName(searchParams.get('target') ?? searchParams.get('payer') ?? searchParams.get('p'), '')
   const initialGroupTarget = displayTelegramName(searchParams.get('target') ?? searchParams.get('group') ?? searchParams.get('g') ?? searchParams.get('chat'), '')
   const [opened, setOpened] = useState(searchParams.get('open') !== '0')
@@ -813,6 +805,19 @@ export default function TelegramPaymentLinks() {
                 setPolymarketMode('friends')
               }}
             />
+          ) : activeService === 'poly-portfolio' ? (
+            <PolyPortfolioPanel
+              onBack={() => setActiveService('')}
+              onOpenLpScout={() => setActiveService('lp-scout')}
+              onOpenWorldCup={() => setActiveService('poly-worldcup')}
+            />
+          ) : activeService === 'poly-worldcup' ? (
+            <PolyWorldCupHubPanel
+              onBack={() => setActiveService('')}
+              onOpenNews={() => setActiveService('poly-worldcup-news')}
+              onOpenScores={() => setActiveService('poly-stream')}
+              onOpenPortfolio={() => setActiveService('poly-portfolio')}
+            />
           ) : activeService === 'lp-scout' ? (
             <LpScoutPanel
               agents={agentProfiles}
@@ -827,7 +832,7 @@ export default function TelegramPaymentLinks() {
             />
           ) : activeService === 'poly-worldcup-news' ? (
             <PolyWorldCupNewsPanel
-              onBack={() => setActiveService('')}
+              onBack={() => setActiveService('poly-worldcup')}
               onOpenScores={() => setActiveService('poly-stream')}
               onOpenLpScout={prefill => {
                 setLpScoutPrefill(prefill)
@@ -836,7 +841,7 @@ export default function TelegramPaymentLinks() {
             />
           ) : activeService === 'poly-stream' ? (
             <PolyStreamPanel
-              onBack={() => setActiveService('')}
+              onBack={() => setActiveService('poly-worldcup')}
               onOpenNews={() => setActiveService('poly-worldcup-news')}
             />
           ) : activeService === 'agentic-lp-research' ? (
@@ -4033,4 +4038,951 @@ function buildTelegramBotStartUrl(payload: string) {
   const cleanPayload = payload.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64)
   if (base.includes('?')) return `${base}&start=${encodeURIComponent(cleanPayload)}`
   return `${base}?start=${encodeURIComponent(cleanPayload)}`
+}
+
+// ── Polymarket Portfolio + World Cup hub ──────────────────────────────────────
+
+type PolymarketBridgeNetwork = 'base' | 'arbitrum' | 'solana'
+
+type PolymarketProfile = {
+  polymarketAddress: string
+  preferredFundingNetwork: string
+  lastSyncedAt: string | null
+}
+
+type PolymarketAlertSettings = {
+  lossThresholdPercent: number
+  resolvedAlertsEnabled: boolean
+  claimableAlertsEnabled: boolean
+  movementAlertsEnabled: boolean
+}
+
+type PolymarketAlertRecord = {
+  id: number
+  alertType: string
+  marketId: string | null
+  title: string
+  body: string | null
+  severity: string
+  createdAt: string | null
+  readAt: string | null
+}
+
+type PolymarketFundingAttempt = {
+  id: number
+  requestId: string | null
+  network: string
+  amount: string
+  status: string
+  txHash: string | null
+  depositAddress: string | null
+  createdAt: string | null
+}
+
+type PolymarketPortfolioBundle = {
+  profile: PolymarketProfile | null
+  settings: PolymarketAlertSettings | null
+  watchlist: Array<{ id: number; marketId: string; marketSlug: string | null; marketUrl: string | null; label: string | null }>
+  fundingAttempts: PolymarketFundingAttempt[]
+  alerts: PolymarketAlertRecord[]
+}
+
+type PolymarketPosition = {
+  conditionId?: string
+  market?: string
+  asset?: string
+  title?: string
+  slug?: string
+  eventSlug?: string
+  outcome?: string
+  size?: number
+  avgPrice?: number
+  currentValue?: number
+  cashPnl?: number
+  percentPnl?: number
+  redeemable?: boolean
+  endDate?: string
+  curPrice?: number
+  icon?: string
+}
+
+function formatUsd(value: unknown, fallback = '—') {
+  const n = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(n)) return fallback
+  if (Math.abs(n) >= 10_000) return `$${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+  return `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+
+function formatPercent(value: unknown) {
+  const n = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(n)) return '—'
+  const sign = n > 0 ? '+' : ''
+  return `${sign}${n.toFixed(1)}%`
+}
+
+function polymarketEventUrl(position: PolymarketPosition) {
+  const slug = (position.eventSlug ?? position.slug ?? '').trim()
+  return slug ? `https://polymarket.com/event/${slug}` : 'https://polymarket.com'
+}
+
+function shortHex(value: string) {
+  return value.length > 12 ? `${value.slice(0, 6)}...${value.slice(-4)}` : value
+}
+
+function PolyPortfolioPanel({
+  onBack,
+  onOpenLpScout,
+  onOpenWorldCup,
+}: {
+  onBack: () => void
+  onOpenLpScout: () => void
+  onOpenWorldCup: () => void
+}) {
+  const { ready: privyReady, authenticated, login, getAccessToken } = usePrivy()
+
+  const [bundle, setBundle] = useState<PolymarketPortfolioBundle | null>(null)
+  const [bundleLoading, setBundleLoading] = useState(false)
+  const [bundleError, setBundleError] = useState('')
+
+  const [addressInput, setAddressInput] = useState('')
+  const [networkInput, setNetworkInput] = useState<PolymarketBridgeNetwork>('base')
+  const [savingProfile, setSavingProfile] = useState(false)
+  const [profileError, setProfileError] = useState('')
+
+  const [liveValue, setLiveValue] = useState<{ value?: number } | null>(null)
+  const [livePositions, setLivePositions] = useState<PolymarketPosition[]>([])
+  const [liveLoading, setLiveLoading] = useState(false)
+  const [liveError, setLiveError] = useState('')
+
+  const [fundOpen, setFundOpen] = useState(false)
+  const [fundAmount, setFundAmount] = useState('')
+  const [fundBusy, setFundBusy] = useState(false)
+  const [fundError, setFundError] = useState('')
+  const [fundResult, setFundResult] = useState<{
+    depositAddress: string
+    network: PolymarketBridgeNetwork
+    minimumUsdc: number
+    payUrl: string
+    marketUrl: string
+  } | null>(null)
+
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [settingsDraft, setSettingsDraft] = useState<PolymarketAlertSettings | null>(null)
+  const [settingsSaving, setSettingsSaving] = useState(false)
+  const [addressCopied, setAddressCopied] = useState(false)
+
+  const profile = bundle?.profile ?? null
+  const settings = bundle?.settings ?? null
+
+  const claimablePositions = useMemo(
+    () => livePositions.filter(p => p.redeemable === true),
+    [livePositions],
+  )
+
+  const losers = useMemo(() => {
+    if (!settings) return []
+    const threshold = -Math.abs(settings.lossThresholdPercent)
+    return livePositions.filter(p =>
+      typeof p.percentPnl === 'number' && p.percentPnl <= threshold,
+    )
+  }, [livePositions, settings])
+
+  const fetchBundle = useCallback(async () => {
+    if (!authenticated) return
+    setBundleLoading(true)
+    setBundleError('')
+    try {
+      const token = await getAccessToken()
+      if (!token) throw new Error('Sign in required.')
+      const res = await fetch('/api/polymarket-portfolio?action=profile', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json() as { ok?: boolean; error?: string } & PolymarketPortfolioBundle
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Could not load Polymarket portfolio.')
+      setBundle({
+        profile: data.profile,
+        settings: data.settings,
+        watchlist: data.watchlist ?? [],
+        fundingAttempts: data.fundingAttempts ?? [],
+        alerts: data.alerts ?? [],
+      })
+    } catch (err) {
+      setBundleError(err instanceof Error ? err.message : 'Could not load Polymarket portfolio.')
+    } finally {
+      setBundleLoading(false)
+    }
+  }, [authenticated, getAccessToken])
+
+  const fetchLiveData = useCallback(async (address: string) => {
+    setLiveLoading(true)
+    setLiveError('')
+    try {
+      const [valueRes, positionsRes] = await Promise.all([
+        fetch(`/api/polymarket-portfolio?action=value&address=${encodeURIComponent(address)}`),
+        fetch(`/api/polymarket-portfolio?action=positions&address=${encodeURIComponent(address)}&sizeThreshold=1&limit=50`),
+      ])
+      const valueData = await valueRes.json() as { ok?: boolean; value?: { value?: number } | number; error?: string }
+      const positionsData = await positionsRes.json() as { ok?: boolean; positions?: PolymarketPosition[]; error?: string }
+      if (!valueRes.ok || !valueData.ok) throw new Error(valueData.error || 'Could not load portfolio value.')
+      if (!positionsRes.ok || !positionsData.ok) throw new Error(positionsData.error || 'Could not load positions.')
+      const valueObj = typeof valueData.value === 'number'
+        ? { value: valueData.value }
+        : (valueData.value as { value?: number } | undefined ?? null)
+      setLiveValue(valueObj)
+      setLivePositions(Array.isArray(positionsData.positions) ? positionsData.positions : [])
+    } catch (err) {
+      setLiveError(err instanceof Error ? err.message : 'Could not load live portfolio data.')
+    } finally {
+      setLiveLoading(false)
+    }
+  }, [])
+
+  const evaluateAlerts = useCallback(async () => {
+    if (!authenticated) return
+    try {
+      const token = await getAccessToken()
+      if (!token) return
+      const res = await fetch('/api/polymarket-portfolio', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: 'evaluate-alerts' }),
+      })
+      const data = await res.json() as { ok?: boolean; alerts?: PolymarketAlertRecord[] }
+      if (res.ok && data.ok && Array.isArray(data.alerts)) {
+        setBundle(prev => prev ? { ...prev, alerts: data.alerts ?? [] } : prev)
+      }
+    } catch {
+      /* alert evaluation is best-effort */
+    }
+  }, [authenticated, getAccessToken])
+
+  useEffect(() => {
+    if (privyReady && authenticated) void fetchBundle()
+  }, [privyReady, authenticated, fetchBundle])
+
+  useEffect(() => {
+    if (profile?.polymarketAddress) {
+      void fetchLiveData(profile.polymarketAddress)
+    }
+  }, [profile?.polymarketAddress, fetchLiveData])
+
+  useEffect(() => {
+    if (profile?.polymarketAddress && livePositions.length >= 0 && !liveLoading) {
+      void evaluateAlerts()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.polymarketAddress, livePositions.length])
+
+  useEffect(() => {
+    if (settings) setSettingsDraft(settings)
+  }, [settings])
+
+  async function saveProfile() {
+    const address = addressInput.trim()
+    if (!/^0x[a-fA-F0-9]{40}$/.test(address)) {
+      setProfileError('Enter a valid 0x Polymarket profile address.')
+      return
+    }
+    setProfileError('')
+    setSavingProfile(true)
+    try {
+      const token = await getAccessToken()
+      if (!token) throw new Error('Sign in required.')
+      const res = await fetch('/api/polymarket-portfolio', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: 'save-profile', address, fundingNetwork: networkInput }),
+      })
+      const data = await res.json() as { ok?: boolean; error?: string } & PolymarketPortfolioBundle
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Could not save profile.')
+      setBundle({
+        profile: data.profile,
+        settings: data.settings,
+        watchlist: data.watchlist ?? [],
+        fundingAttempts: data.fundingAttempts ?? [],
+        alerts: data.alerts ?? [],
+      })
+      setAddressInput('')
+    } catch (err) {
+      setProfileError(err instanceof Error ? err.message : 'Could not save profile.')
+    } finally {
+      setSavingProfile(false)
+    }
+  }
+
+  async function disconnectProfile() {
+    setSavingProfile(true)
+    try {
+      const token = await getAccessToken()
+      if (!token) throw new Error('Sign in required.')
+      const res = await fetch('/api/polymarket-portfolio', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: 'disconnect' }),
+      })
+      const data = await res.json() as { ok?: boolean; error?: string }
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Could not disconnect.')
+      setBundle({ profile: null, settings: null, watchlist: [], fundingAttempts: [], alerts: [] })
+      setLiveValue(null)
+      setLivePositions([])
+      setFundResult(null)
+      setFundOpen(false)
+    } catch (err) {
+      setBundleError(err instanceof Error ? err.message : 'Could not disconnect.')
+    } finally {
+      setSavingProfile(false)
+    }
+  }
+
+  async function startFund(marketUrlForCta = '') {
+    if (!profile) return
+    setFundError('')
+    const amt = fundAmount.trim()
+    if (!/^\d+(?:\.\d{1,6})?$/.test(amt) || Number(amt) < 3) {
+      setFundError('Enter at least 3 USDC.')
+      return
+    }
+    setFundBusy(true)
+    try {
+      const network = (profile.preferredFundingNetwork as PolymarketBridgeNetwork) || 'base'
+      const bridgeRes = await fetch('/api/polymarket-bridge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          polymarketWallet: profile.polymarketAddress,
+          network,
+        }),
+      })
+      const bridgeData = await bridgeRes.json() as {
+        ok?: boolean
+        depositAddress?: string
+        network?: PolymarketBridgeNetwork
+        minimumUsdc?: number
+        error?: string
+      }
+      if (!bridgeRes.ok || !bridgeData.ok || !bridgeData.depositAddress) {
+        throw new Error(bridgeData.error || 'Could not prepare bridge address.')
+      }
+      const token = await getAccessToken()
+      if (token) {
+        await fetch('/api/polymarket-portfolio', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            action: 'log-funding',
+            network: bridgeData.network ?? network,
+            amount: amt,
+            status: 'pending',
+            depositAddress: bridgeData.depositAddress,
+          }),
+        }).catch(() => undefined)
+      }
+      const payUrl = buildPolymarketPayLink({
+        wallet: bridgeData.depositAddress,
+        amount: amt,
+        funding: 'Polymarket portfolio',
+        network: (bridgeData.network ?? network) as RequestNetwork,
+        polymarketWallet: profile.polymarketAddress,
+      })
+      setFundResult({
+        depositAddress: bridgeData.depositAddress,
+        network: (bridgeData.network ?? network) as PolymarketBridgeNetwork,
+        minimumUsdc: bridgeData.minimumUsdc ?? 3,
+        payUrl,
+        marketUrl: marketUrlForCta || 'https://polymarket.com',
+      })
+      void fetchBundle()
+    } catch (err) {
+      setFundError(err instanceof Error ? err.message : 'Could not prepare funding.')
+    } finally {
+      setFundBusy(false)
+    }
+  }
+
+  async function saveAlertSettings() {
+    if (!settingsDraft) return
+    setSettingsSaving(true)
+    try {
+      const token = await getAccessToken()
+      if (!token) throw new Error('Sign in required.')
+      const res = await fetch('/api/polymarket-portfolio', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: 'save-alert-settings', ...settingsDraft }),
+      })
+      const data = await res.json() as { ok?: boolean; settings?: PolymarketAlertSettings; error?: string }
+      if (!res.ok || !data.ok || !data.settings) throw new Error(data.error || 'Could not save alert settings.')
+      setBundle(prev => prev ? { ...prev, settings: data.settings ?? null } : prev)
+      setSettingsOpen(false)
+      void evaluateAlerts()
+    } catch (err) {
+      setBundleError(err instanceof Error ? err.message : 'Could not save alert settings.')
+    } finally {
+      setSettingsSaving(false)
+    }
+  }
+
+  async function markAlertRead(alertId: number) {
+    try {
+      const token = await getAccessToken()
+      if (!token) return
+      await fetch('/api/polymarket-portfolio', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: 'mark-alert-read', alertId }),
+      })
+      setBundle(prev => prev ? {
+        ...prev,
+        alerts: prev.alerts.map(a => a.id === alertId ? { ...a, readAt: new Date().toISOString() } : a),
+      } : prev)
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function copyAddress() {
+    if (!profile) return
+    if (typeof navigator === 'undefined' || !navigator.clipboard) return
+    navigator.clipboard.writeText(profile.polymarketAddress).then(() => {
+      setAddressCopied(true)
+      window.setTimeout(() => setAddressCopied(false), 1500)
+    }).catch(() => undefined)
+  }
+
+  // ── Render ────────────────────────────────────────────────────────────
+  if (!privyReady) {
+    return (
+      <div className="mt-4 flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+        <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+      </div>
+    )
+  }
+
+  if (!authenticated) {
+    return (
+      <div className="mt-4">
+        <button type="button" onClick={onBack} className="mb-2 inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200">
+          <ArrowLeft className="h-3.5 w-3.5" /> Back
+        </button>
+        <div className="flex items-center gap-2">
+          <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.06]">
+            <img src={POLYMARKET_LOGO} alt="" className="h-4 w-4 invert dark:invert-0" />
+          </span>
+          <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Polymarket</p>
+        </div>
+        <h2 className="mt-2 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Portfolio</h2>
+        <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
+          Sign in to bind a Polymarket profile address to your Hash PayLink session. Your live positions, claimables, and alerts stay tied to your sign-in across devices.
+        </p>
+        <button
+          type="button"
+          onClick={() => login()}
+          className="mt-4 inline-flex items-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+        >
+          <ShieldCheck className="h-4 w-4" /> Sign in to continue
+        </button>
+      </div>
+    )
+  }
+
+  if (bundleLoading && !bundle) {
+    return (
+      <div className="mt-4 flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+        <Loader2 className="h-4 w-4 animate-spin" /> Loading portfolio…
+      </div>
+    )
+  }
+
+  // Connect screen — no saved profile yet
+  if (!profile) {
+    return (
+      <div className="mt-4">
+        <button type="button" onClick={onBack} className="mb-2 inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200">
+          <ArrowLeft className="h-3.5 w-3.5" /> Back
+        </button>
+        <div className="flex items-center gap-2">
+          <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.06]">
+            <img src={POLYMARKET_LOGO} alt="" className="h-4 w-4 invert dark:invert-0" />
+          </span>
+          <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Polymarket</p>
+        </div>
+        <h2 className="mt-2 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Connect Polymarket profile</h2>
+        <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
+          Paste your Polymarket profile address (the 0x address shown on your Polymarket account panel). We store the address against your Hash PayLink session — never a key, signature, or cookie.
+        </p>
+        <div className="mt-4 space-y-3">
+          <InputBlock
+            label="Profile address"
+            value={addressInput}
+            onChange={setAddressInput}
+            placeholder="0x... profile address"
+          />
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Preferred funding network</p>
+            <NetworkChipGroup
+              value={networkInput}
+              onChange={value => {
+                if (value === 'base' || value === 'arbitrum' || value === 'solana') setNetworkInput(value)
+              }}
+              options={polymarketBridgeNetworks}
+            />
+          </div>
+          {profileError && <p className="text-xs text-red-500 dark:text-red-300">{profileError}</p>}
+          {bundleError && <p className="text-xs text-red-500 dark:text-red-300">{bundleError}</p>}
+          <button
+            type="button"
+            onClick={saveProfile}
+            disabled={savingProfile}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+          >
+            {savingProfile ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+            Save profile
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  const totalValue = liveValue?.value
+  const unreadAlerts = bundle?.alerts.filter(a => !a.readAt) ?? []
+
+  return (
+    <div className="mt-4 space-y-4">
+      <button type="button" onClick={onBack} className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200">
+        <ArrowLeft className="h-3.5 w-3.5" /> Back
+      </button>
+
+      {/* Profile / balance card */}
+      <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#0f1014]">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.06]">
+                <img src={POLYMARKET_LOGO} alt="" className="h-4 w-4 invert dark:invert-0" />
+              </span>
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Polymarket portfolio</p>
+            </div>
+            <button
+              type="button"
+              onClick={copyAddress}
+              className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-gray-50 px-2.5 py-1 text-[11px] font-semibold text-gray-700 hover:bg-gray-100 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:bg-white/[0.08]"
+            >
+              <span className="font-mono tabular-nums">{shortHex(profile.polymarketAddress)}</span>
+              {addressCopied ? <CheckCircle2 className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3 opacity-60" />}
+            </button>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => profile && void fetchLiveData(profile.polymarketAddress)}
+              disabled={liveLoading}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 dark:border-white/10 dark:text-gray-300 dark:hover:bg-white/[0.04]"
+              aria-label="Refresh"
+            >
+              <RefreshCw className={cn('h-3.5 w-3.5', liveLoading && 'animate-spin')} />
+            </button>
+            <button
+              type="button"
+              onClick={disconnectProfile}
+              disabled={savingProfile}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 dark:border-white/10 dark:text-gray-300 dark:hover:bg-white/[0.04]"
+              aria-label="Disconnect"
+            >
+              <LogOut className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-4 grid grid-cols-2 gap-3">
+          <div className="rounded-xl bg-gray-50 px-3 py-2.5 dark:bg-white/[0.04]">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">Portfolio value</p>
+            <p className="mt-1 text-base font-semibold tabular-nums text-gray-900 dark:text-white">
+              {liveLoading ? <Loader2 className="inline h-3.5 w-3.5 animate-spin" /> : formatUsd(totalValue)}
+            </p>
+          </div>
+          <div className="rounded-xl bg-gray-50 px-3 py-2.5 dark:bg-white/[0.04]">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">Open positions</p>
+            <p className="mt-1 text-base font-semibold tabular-nums text-gray-900 dark:text-white">
+              {liveLoading ? <Loader2 className="inline h-3.5 w-3.5 animate-spin" /> : livePositions.length}
+            </p>
+          </div>
+        </div>
+
+        {liveError && <p className="mt-3 text-xs text-red-500 dark:text-red-300">{liveError}</p>}
+
+        <button
+          type="button"
+          onClick={() => { setFundOpen(open => !open); setFundResult(null); setFundError('') }}
+          className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-2.5 text-sm font-semibold text-white hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+        >
+          <Send className="h-4 w-4" /> Fund Polymarket
+        </button>
+
+        {fundOpen && (
+          <div className="mt-3 rounded-xl border border-gray-100 bg-gray-50 p-3 dark:border-white/10 dark:bg-white/[0.04]">
+            {!fundResult ? (
+              <div className="space-y-3">
+                <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">
+                  Bridge checkout · {profile.preferredFundingNetwork || 'base'}
+                </p>
+                <InputBlock
+                  label="Amount USDC"
+                  value={fundAmount}
+                  onChange={setFundAmount}
+                  placeholder="0.00"
+                />
+                <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                  Funded address is your saved Polymarket profile. Minimum bridge amount is 3 USDC.
+                </p>
+                {fundError && <p className="text-xs text-red-500 dark:text-red-300">{fundError}</p>}
+                <button
+                  type="button"
+                  onClick={() => startFund()}
+                  disabled={fundBusy}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-2.5 text-sm font-semibold text-white hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+                >
+                  {fundBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
+                  Open bridge checkout
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-[11px] font-semibold uppercase tracking-widest text-emerald-600 dark:text-emerald-300">Bridge prepared</p>
+                <p className="text-sm text-gray-700 dark:text-gray-200">
+                  Send <span className="font-semibold tabular-nums">{fundAmount} USDC</span> via {fundResult.network.toUpperCase()} to the bridge address. Min {fundResult.minimumUsdc} USDC.
+                </p>
+                <a
+                  href={fundResult.payUrl}
+                  className="block truncate rounded-lg bg-white px-3 py-2 font-mono text-xs text-gray-800 shadow-sm dark:bg-white/[0.06] dark:text-gray-200"
+                  rel="noreferrer"
+                >
+                  {fundResult.depositAddress}
+                </a>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <a
+                    href={fundResult.payUrl}
+                    className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-black px-5 py-2.5 text-sm font-semibold text-white hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+                  >
+                    <ExternalLink className="h-4 w-4" /> Open Hash PayLink checkout
+                  </a>
+                  <a
+                    href={fundResult.marketUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-gray-200 px-5 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:border-white/10 dark:text-gray-200 dark:hover:bg-white/[0.04]"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                    {fundResult.marketUrl === 'https://polymarket.com' ? 'Sign in and trade on Polymarket' : 'Sign in and trade this market'}
+                  </a>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Alerts card */}
+      <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#0f1014]">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Alerts</p>
+            <p className="mt-0.5 text-sm font-semibold text-gray-900 dark:text-white">
+              {unreadAlerts.length > 0 ? `${unreadAlerts.length} active` : 'No active alerts'}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSettingsOpen(open => !open)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 py-1.5 text-[11px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-white/10 dark:text-gray-300 dark:hover:bg-white/[0.04]"
+          >
+            <Bell className="h-3.5 w-3.5" /> Settings
+          </button>
+        </div>
+
+        {settingsOpen && settingsDraft && (
+          <div className="mt-3 space-y-3 rounded-xl border border-gray-100 bg-gray-50 p-3 dark:border-white/10 dark:bg-white/[0.04]">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Loss threshold</p>
+              <div className="mt-1 flex items-center gap-2">
+                <input
+                  type="number"
+                  min={1}
+                  max={95}
+                  step={1}
+                  value={settingsDraft.lossThresholdPercent}
+                  onChange={e => setSettingsDraft(d => d ? { ...d, lossThresholdPercent: Number(e.target.value) || 0 } : d)}
+                  className="w-20 rounded-lg border border-gray-200 bg-white px-2 py-1 text-sm tabular-nums dark:border-white/10 dark:bg-white/[0.04] dark:text-white"
+                />
+                <span className="text-xs text-gray-500 dark:text-gray-400">% drop triggers an alert</span>
+              </div>
+            </div>
+            <AlertToggle
+              label="Resolved markets"
+              hint="Notify when a market closes."
+              value={settingsDraft.resolvedAlertsEnabled}
+              onChange={v => setSettingsDraft(d => d ? { ...d, resolvedAlertsEnabled: v } : d)}
+            />
+            <AlertToggle
+              label="Claimable balance"
+              hint="Notify when a position is redeemable."
+              value={settingsDraft.claimableAlertsEnabled}
+              onChange={v => setSettingsDraft(d => d ? { ...d, claimableAlertsEnabled: v } : d)}
+            />
+            <AlertToggle
+              label="Live market movement"
+              hint="Notify on intraday price swings (coming online)."
+              value={settingsDraft.movementAlertsEnabled}
+              onChange={v => setSettingsDraft(d => d ? { ...d, movementAlertsEnabled: v } : d)}
+            />
+            <button
+              type="button"
+              onClick={saveAlertSettings}
+              disabled={settingsSaving}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-2.5 text-sm font-semibold text-white hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+            >
+              {settingsSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+              Save settings
+            </button>
+          </div>
+        )}
+
+        {unreadAlerts.length > 0 ? (
+          <ul className="mt-3 space-y-2">
+            {unreadAlerts.slice(0, 8).map(alert => (
+              <li key={alert.id} className="flex items-start gap-2 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.04]">
+                <span className={cn(
+                  'mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md',
+                  alert.severity === 'warning' ? 'bg-amber-100 text-amber-700 dark:bg-amber-400/10 dark:text-amber-300' :
+                  alert.severity === 'success' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-300' :
+                  'bg-gray-100 text-gray-600 dark:bg-white/[0.06] dark:text-gray-300',
+                )}>
+                  {alert.alertType === 'claimable' ? <CheckCircle2 className="h-3.5 w-3.5" />
+                    : alert.alertType === 'loss-threshold' ? <TrendingDown className="h-3.5 w-3.5" />
+                    : <BellRing className="h-3.5 w-3.5" />}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">{alert.title}</p>
+                  {alert.body && <p className="mt-0.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">{alert.body}</p>}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void markAlertRead(alert.id)}
+                  className="text-[11px] font-semibold text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+                >
+                  Mark read
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+            No active alerts. We watch your saved positions against your alert settings each time you open Portfolio.
+          </p>
+        )}
+      </div>
+
+      {/* Claimables card */}
+      {claimablePositions.length > 0 && (
+        <div className="rounded-2xl border border-emerald-100 bg-emerald-50/40 p-4 shadow-sm dark:border-emerald-300/20 dark:bg-emerald-400/[0.04]">
+          <p className="text-[11px] font-semibold uppercase tracking-widest text-emerald-700 dark:text-emerald-300">Claimable on Polymarket</p>
+          <ul className="mt-2 space-y-2">
+            {claimablePositions.map(position => (
+              <li key={position.conditionId ?? position.asset ?? position.title} className="flex items-center justify-between gap-3 rounded-xl bg-white/70 px-3 py-2 dark:bg-white/[0.04]">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">{position.title ?? 'Polymarket position'}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">{formatUsd(position.currentValue)} redeemable</p>
+                </div>
+                <a
+                  href={polymarketEventUrl(position)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-black px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+                >
+                  Claim <ExternalLink className="h-3 w-3" />
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Open positions card */}
+      <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#0f1014]">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Open positions</p>
+          {livePositions.length > 0 && <p className="text-xs text-gray-500 dark:text-gray-400">{livePositions.length}</p>}
+        </div>
+        {liveLoading && livePositions.length === 0 ? (
+          <div className="mt-3 flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+            <Loader2 className="h-4 w-4 animate-spin" /> Fetching positions…
+          </div>
+        ) : livePositions.length === 0 ? (
+          <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">No open positions on this address.</p>
+        ) : (
+          <ul className="mt-3 space-y-2">
+            {livePositions.slice(0, 12).map(position => {
+              const pnl = position.percentPnl
+              const tone = typeof pnl === 'number'
+                ? pnl >= 0 ? 'text-emerald-600 dark:text-emerald-300' : 'text-red-500 dark:text-red-300'
+                : 'text-gray-400'
+              const isLoser = losers.some(p => (p.conditionId ?? p.asset) === (position.conditionId ?? position.asset))
+              return (
+                <li key={position.conditionId ?? position.asset ?? position.title} className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.04]">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">{position.title ?? 'Polymarket position'}</p>
+                      <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                        {position.outcome ?? '—'} · {formatUsd(position.currentValue)}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className={cn('text-sm font-semibold tabular-nums', tone)}>{formatPercent(pnl)}</p>
+                      {isLoser && <p className="text-[10px] font-semibold uppercase tracking-widest text-amber-600 dark:text-amber-300">Below threshold</p>}
+                    </div>
+                  </div>
+                  <div className="mt-2 flex items-center justify-end">
+                    <a
+                      href={polymarketEventUrl(position)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-500 hover:text-gray-800 dark:text-gray-300 dark:hover:text-white"
+                    >
+                      Open <ExternalLink className="h-3 w-3" />
+                    </a>
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </div>
+
+      {/* Quick links */}
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          onClick={onOpenWorldCup}
+          className="flex items-center gap-2 rounded-xl border border-gray-100 bg-white px-3 py-2.5 text-left text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:border-white/10 dark:bg-[#0f1014] dark:text-gray-200 dark:hover:bg-white/[0.04]"
+        >
+          <Radio className="h-4 w-4 text-gray-400" /> World Cup
+        </button>
+        <button
+          type="button"
+          onClick={onOpenLpScout}
+          className="flex items-center gap-2 rounded-xl border border-gray-100 bg-white px-3 py-2.5 text-left text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:border-white/10 dark:bg-[#0f1014] dark:text-gray-200 dark:hover:bg-white/[0.04]"
+        >
+          <LineChart className="h-4 w-4 text-gray-400" /> LP Scout
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function AlertToggle({ label, hint, value, onChange }: { label: string; hint: string; value: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <label className="flex items-start gap-3">
+      <input
+        type="checkbox"
+        checked={value}
+        onChange={e => onChange(e.target.checked)}
+        className="mt-1 h-4 w-4 rounded border-gray-300 text-black focus:ring-black dark:border-white/20 dark:bg-white/[0.06] dark:checked:bg-white"
+      />
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-semibold text-gray-900 dark:text-white">{label}</p>
+        <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">{hint}</p>
+      </div>
+    </label>
+  )
+}
+
+function PolyWorldCupHubPanel({
+  onBack,
+  onOpenNews,
+  onOpenScores,
+  onOpenPortfolio,
+}: {
+  onBack: () => void
+  onOpenNews: () => void
+  onOpenScores: () => void
+  onOpenPortfolio: () => void
+}) {
+  const { authenticated, getAccessToken } = usePrivy()
+  const [hasProfile, setHasProfile] = useState<boolean>(false)
+
+  useEffect(() => {
+    let cancelled = false
+    async function probe() {
+      if (!authenticated) return
+      try {
+        const token = await getAccessToken()
+        if (!token) return
+        const res = await fetch('/api/polymarket-portfolio?action=profile', {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        const data = await res.json() as { ok?: boolean; profile?: PolymarketProfile | null }
+        if (!cancelled && res.ok && data.ok) setHasProfile(Boolean(data.profile?.polymarketAddress))
+      } catch { /* silent */ }
+    }
+    void probe()
+    return () => { cancelled = true }
+  }, [authenticated, getAccessToken])
+
+  return (
+    <div className="mt-4">
+      <button type="button" onClick={onBack} className="mb-2 inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200">
+        <ArrowLeft className="h-3.5 w-3.5" /> Back
+      </button>
+      <div className="flex items-center gap-2">
+        <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.06]">
+          <Radio className="h-4 w-4 text-gray-500" />
+        </span>
+        <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">World Cup Markets</p>
+      </div>
+      <h2 className="mt-2 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Live scores, market odds, direct trade routes.</h2>
+      <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
+        Live scores come from Sportmonks. Market odds and trade routes come from Polymarket. No stale fallbacks.
+      </p>
+
+      {hasProfile && (
+        <button
+          type="button"
+          onClick={onOpenPortfolio}
+          className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-gray-50 px-3 py-1.5 text-[11px] font-semibold text-gray-700 hover:bg-gray-100 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:bg-white/[0.08]"
+        >
+          <Wallet className="h-3 w-3" /> Check portfolio exposure
+        </button>
+      )}
+
+      <div className="mt-4 space-y-2">
+        <button
+          type="button"
+          onClick={onOpenScores}
+          className="flex w-full items-start gap-3 rounded-xl border border-gray-100 bg-white p-3 text-left shadow-sm hover:bg-gray-50 dark:border-white/10 dark:bg-[#0f1014] dark:hover:bg-white/[0.04]"
+        >
+          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-gray-100 text-gray-600 dark:bg-white/[0.06] dark:text-gray-200">
+            <Radio className="h-4 w-4" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-gray-900 dark:text-white">Live Scores</p>
+            <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">Sportmonks match centre with exact Polymarket fixture routing.</p>
+          </div>
+          <ArrowRight className="mt-1 h-4 w-4 text-gray-400" />
+        </button>
+        <button
+          type="button"
+          onClick={onOpenNews}
+          className="flex w-full items-start gap-3 rounded-xl border border-gray-100 bg-white p-3 text-left shadow-sm hover:bg-gray-50 dark:border-white/10 dark:bg-[#0f1014] dark:hover:bg-white/[0.04]"
+        >
+          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-gray-100 text-gray-600 dark:bg-white/[0.06] dark:text-gray-200">
+            <Newspaper className="h-4 w-4" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-gray-900 dark:text-white">News &amp; market signals</p>
+            <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">Headlines that move Polymarket prices and LP risk.</p>
+          </div>
+          <ArrowRight className="mt-1 h-4 w-4 text-gray-400" />
+        </button>
+      </div>
+    </div>
+  )
 }

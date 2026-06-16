@@ -39,6 +39,7 @@ import privyCircleLinkHandler from './api/privy-circle-link.js'
 import circleRecipientWalletHandler from './api/circle-recipient-wallet.js'
 import telegramRequestHandler from './api/telegram-request.js'
 import polymarketBridgeHandler from './api/polymarket-bridge.js'
+import polymarketPortfolioHandler from './api/polymarket-portfolio.js'
 import ngPosHandler from './api/ng-pos.js'
 import streamRecipientInviteHandler from './api/stream-recipient-invite.js'
 import streamHistoryHandler from './api/stream-history.js'
@@ -131,6 +132,7 @@ app.post('/api/privy-circle-link',     strictLimiter, privyCircleLinkHandler)
 app.all('/api/circle-recipient-wallet', strictLimiter, circleRecipientWalletHandler)
 app.all('/api/telegram-request',        strictLimiter, telegramRequestHandler)
 app.all('/api/polymarket-bridge',       strictLimiter, polymarketBridgeHandler)
+app.all('/api/polymarket-portfolio',    readLimiter,   polymarketPortfolioHandler)
 app.all('/api/ng-pos',                  strictLimiter, ngPosHandler)
 app.post('/api/stream-recipient-invite', strictLimiter, streamRecipientInviteHandler)
 app.get('/api/stream-history',         readLimiter, streamHistoryHandler)
