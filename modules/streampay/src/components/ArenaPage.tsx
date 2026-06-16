@@ -405,10 +405,16 @@ export function ArenaPage() {
         setRoomLog(room.escrowAddress ? 'Private room loaded. Players can deposit into the room escrow.' : 'Private room loaded. Escrow is still pending.')
       }
     } catch (error) {
-      setView('private')
-      setActiveTab('room')
-      setStatus('setup')
-      if (!quiet) setRoomLog(error instanceof Error ? error.message : 'Arena room could not be loaded.')
+      // Quiet polls must never destroy in-flight lobby/play state. A single
+      // transient backend hiccup (cold start, 5xx, network blip) would
+      // otherwise yank the user back to the setup form and discard their
+      // saved room id.
+      if (!quiet) {
+        setView('private')
+        setActiveTab('room')
+        setStatus('setup')
+        setRoomLog(error instanceof Error ? error.message : 'Arena room could not be loaded.')
+      }
     }
   }
 
@@ -663,7 +669,13 @@ export function ArenaPage() {
       const headers: Record<string, string> = { 'Content-Type': 'application/json' }
       if (PRIVY_AUTH_ENABLED) {
         try {
-          const accessToken = await getAccessToken()
+          // Privy's getAccessToken can hang silently when the session is in
+          // an in-between state. Cap it at 3s so the Create button can never
+          // freeze the room creation flow waiting on auth metadata.
+          const accessToken = await Promise.race<string | null>([
+            getAccessToken(),
+            new Promise<null>(resolve => window.setTimeout(() => resolve(null), 3000)),
+          ])
           if (accessToken) headers.Authorization = `Bearer ${accessToken}`
         } catch {
           // best effort — falls back to legacy hostToken model
@@ -697,6 +709,24 @@ export function ArenaPage() {
       setChainActiveCount(0)
       setPlayerJoined(false)
       setRoomLog(data.room.escrowAddress ? 'Private lobby saved. Share the room link; deposits are open.' : 'Private lobby saved. Escrow is still being prepared.')
+
+      // Persist the room id into the URL so a refresh / back / tab reload
+      // re-mounts directly into the saved room instead of the setup form.
+      if (typeof window !== 'undefined') {
+        try {
+          const url = new URL(window.location.href)
+          url.searchParams.set('app', 'streampay')
+          url.searchParams.set('game', 'trivia')
+          url.searchParams.set('room', data.room.roomId)
+          url.searchParams.delete('entry')
+          url.searchParams.delete('players')
+          url.searchParams.delete('rounds')
+          url.searchParams.delete('risk')
+          window.history.replaceState(null, '', url.toString())
+        } catch {
+          // non-fatal; the saved room id stays in component state
+        }
+      }
     } catch (error) {
       setRoomLog(error instanceof Error ? error.message : 'Arena room could not be saved.')
     } finally {
