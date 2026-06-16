@@ -381,13 +381,17 @@ export default function TelegramPaymentLinks() {
       ? 'poly-portfolio'
       : initialServiceParam === 'lp-scout'
       ? 'lp-scout'
-      : initialServiceParam === 'poly-worldcup-news' || initialServiceParam === 'poly-stream' || initialServiceParam === 'poly-worldcup'
+      : initialServiceParam === 'poly-worldcup-news'
+      ? 'poly-worldcup-news'
+      : initialServiceParam === 'poly-stream'
+      ? 'poly-stream'
+      : initialServiceParam === 'poly-worldcup'
       ? 'poly-worldcup'
       : initialServiceParam === 'agentic-lp-research'
       ? 'agentic-lp-research'
       : ''
   const initialAgentService = initialService === 'hashpaylink-helper' || initialService === 'create-your-agent' || initialService === 'agent-dashboard'
-  const initialMarketService = initialService === 'poly-portfolio' || initialService === 'lp-scout' || initialService === 'poly-worldcup' || initialService === 'agentic-lp-research'
+  const initialMarketService = initialService === 'poly-portfolio' || initialService === 'lp-scout' || initialService === 'poly-worldcup' || initialService === 'poly-worldcup-news' || initialService === 'poly-stream' || initialService === 'agentic-lp-research'
   const initialPersonTarget = displayTelegramName(searchParams.get('target') ?? searchParams.get('payer') ?? searchParams.get('p'), '')
   const initialGroupTarget = displayTelegramName(searchParams.get('target') ?? searchParams.get('group') ?? searchParams.get('g') ?? searchParams.get('chat'), '')
   const [opened, setOpened] = useState(searchParams.get('open') !== '0')
@@ -4113,6 +4117,23 @@ function formatUsd(value: unknown, fallback = '—') {
   return `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
+function normalizePortfolioValue(value: unknown) {
+  if (typeof value === 'number') return { value }
+  if (Array.isArray(value)) {
+    const total = value.reduce((sum, item) => {
+      const row = item && typeof item === 'object' ? item as { value?: unknown } : null
+      const n = Number(row?.value)
+      return Number.isFinite(n) ? sum + n : sum
+    }, 0)
+    return { value: total }
+  }
+  if (value && typeof value === 'object') {
+    const n = Number((value as { value?: unknown }).value)
+    if (Number.isFinite(n)) return { value: n }
+  }
+  return null
+}
+
 function formatPercent(value: unknown) {
   const n = typeof value === 'number' ? value : Number(value)
   if (!Number.isFinite(n)) return '—'
@@ -4221,14 +4242,11 @@ function PolyPortfolioPanel({
         fetch(`/api/polymarket-portfolio?action=value&address=${encodeURIComponent(address)}`),
         fetch(`/api/polymarket-portfolio?action=positions&address=${encodeURIComponent(address)}&sizeThreshold=1&limit=50`),
       ])
-      const valueData = await valueRes.json() as { ok?: boolean; value?: { value?: number } | number; error?: string }
+      const valueData = await valueRes.json() as { ok?: boolean; value?: unknown; error?: string }
       const positionsData = await positionsRes.json() as { ok?: boolean; positions?: PolymarketPosition[]; error?: string }
       if (!valueRes.ok || !valueData.ok) throw new Error(valueData.error || 'Could not load portfolio value.')
       if (!positionsRes.ok || !positionsData.ok) throw new Error(positionsData.error || 'Could not load positions.')
-      const valueObj = typeof valueData.value === 'number'
-        ? { value: valueData.value }
-        : (valueData.value as { value?: number } | undefined ?? null)
-      setLiveValue(valueObj)
+      setLiveValue(normalizePortfolioValue(valueData.value))
       setLivePositions(Array.isArray(positionsData.positions) ? positionsData.positions : [])
     } catch (err) {
       setLiveError(err instanceof Error ? err.message : 'Could not load live portfolio data.')
