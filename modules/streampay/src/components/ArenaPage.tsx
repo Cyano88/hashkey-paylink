@@ -1405,13 +1405,22 @@ export function ArenaPage() {
                   <StatusPill status={status} />
                 </div>
 
-                {chainActiveCount === 0 && status !== 'lobby' && status !== 'won' && (
+                {chainActiveCount === 0 && status !== 'lobby' && status !== 'won' && paymentStatus !== 'settled' && (
                   <div className="mt-3 rounded-2xl border border-gray-200 bg-gray-50 p-3 dark:border-white/10 dark:bg-white/[0.04]">
                     <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-gray-500 dark:text-gray-400">Room stalled</p>
                     <p className="mt-1 text-[11px] leading-snug text-gray-500 dark:text-gray-400">
                       {canHostControl
                         ? 'No players are still streaming. Refund everyone with Cancel stuck room below.'
                         : 'No players are still streaming. Your remaining USDC is claimable from escrow.'}
+                    </p>
+                  </div>
+                )}
+
+                {chainActiveCount === 0 && paymentStatus === 'settled' && status === 'eliminated' && (
+                  <div className="mt-3 rounded-2xl border border-gray-200 bg-gray-50 p-3 dark:border-white/10 dark:bg-white/[0.04]">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-gray-500 dark:text-gray-400">Room finished</p>
+                    <p className="mt-1 text-[11px] leading-snug text-gray-500 dark:text-gray-400">
+                      Another player won the pot. Your remaining USDC is still claimable from escrow.
                     </p>
                   </div>
                 )}
@@ -1776,7 +1785,7 @@ export function ArenaPage() {
                         style={{ width: `${percent(round / rounds)}` }}
                       />
                     </div>
-                    {canHostControl && status === 'eliminated' && chainActiveCount === 0 && (
+                    {canHostControl && status === 'eliminated' && chainActiveCount === 0 && paymentStatus !== 'settled' && (
                       <div className="mt-3 rounded-2xl border border-white/10 bg-white/[0.04] p-3 dark:border-gray-200 dark:bg-gray-100">
                         <p className="text-[11px] font-black uppercase tracking-[0.14em] text-white/65 dark:text-gray-700">Stuck room</p>
                         <p className="mt-1 text-[11px] leading-snug text-white/55 dark:text-gray-500">
