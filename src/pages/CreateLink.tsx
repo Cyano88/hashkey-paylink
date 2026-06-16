@@ -86,6 +86,8 @@ const POS_NETWORK_OPTIONS: Array<{ key: PosNetwork; label: string; badge?: strin
   { key: 'solana', label: 'Solana' },
 ]
 
+const SPENDA_POS_NETWORK_OPTIONS = POS_NETWORK_OPTIONS.filter((network) => network.key !== 'arc')
+
 const POS_COUNTRIES: Array<{ key: PosCountry; name: string; label: string; status: 'live' | 'soon'; copy: string }> = [
   { key: 'NG', name: 'Nigeria', label: 'Live', status: 'live', copy: 'USDC checkout with optional Spenda deposit wallet path.' },
   { key: 'KE', name: 'Kenya', label: 'Coming soon', status: 'soon', copy: 'Pending a verified local wallet or payout partner.' },
@@ -103,7 +105,7 @@ const POS_SETTLEMENT_PATHS: Array<{ key: PosSettlementPath; title: string; label
     key: 'SPENDA_NAIRA',
     title: 'USDC to Naira via Spenda',
     label: 'Partner wallet',
-    copy: 'Use a Spenda crypto deposit wallet. Spenda handles crypto-to-naira spending and KYC inside its app.',
+    copy: 'Use a supported Spenda crypto deposit wallet. Spenda handles crypto-to-naira spending and KYC inside its app.',
   },
 ]
 
@@ -685,6 +687,7 @@ export default function CreateLink() {
   const posNeedsEvmWallet = posNetworks.some((network) => network !== 'solana')
   const posNeedsSolanaWallet = posNetworks.includes('solana')
   const posIsSpendaFlow = posSettlementPath === 'SPENDA_NAIRA'
+  const posNetworkOptions = posIsSpendaFlow ? SPENDA_POS_NETWORK_OPTIONS : POS_NETWORK_OPTIONS
   const posMerchantNetworks = posMerchant?.supported_networks?.length ? posMerchant.supported_networks : ['base']
   const posDashboardNetwork = posMerchantNetworks.find((network) => network !== 'solana') ?? 'solana'
   const posDashboardAddressParam = posDashboardNetwork === 'solana' ? 's' : 'e'
@@ -694,6 +697,7 @@ export default function CreateLink() {
     : ''
 
   function togglePosNetwork(network: PosNetwork) {
+    if (posIsSpendaFlow && network === 'arc') return
     setPosNetworks((current) => {
       if (current.includes(network)) {
         return current.length === 1 ? current : current.filter((item) => item !== network)
@@ -702,6 +706,14 @@ export default function CreateLink() {
     })
     setPosError('')
   }
+
+  useEffect(() => {
+    if (!posIsSpendaFlow) return
+    setPosNetworks((current) => {
+      const supported = current.filter((network) => network !== 'arc')
+      return supported.length ? supported : ['base']
+    })
+  }, [posIsSpendaFlow])
 
   async function createPosMerchant() {
     setPosBusy(true)
@@ -1242,9 +1254,11 @@ export default function CreateLink() {
                       />
                     </label>
                     <div>
-                      <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">Supported networks</span>
+                      <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">
+                        {posIsSpendaFlow ? 'Supported Spenda networks' : 'Supported networks'}
+                      </span>
                       <div className="mt-1.5 grid grid-cols-2 gap-2">
-                        {POS_NETWORK_OPTIONS.map((network) => {
+                        {posNetworkOptions.map((network) => {
                           const active = posNetworks.includes(network.key)
                           return (
                             <button
@@ -1264,7 +1278,11 @@ export default function CreateLink() {
                           )
                         })}
                       </div>
-                      <p className="mt-1.5 text-xs text-gray-400 dark:text-gray-500">Payers will only see selected networks.</p>
+                      <p className="mt-1.5 text-xs text-gray-400 dark:text-gray-500">
+                        {posIsSpendaFlow
+                          ? 'Arc is hidden here until Spenda supports Arc deposits.'
+                          : 'Payers will only see selected networks.'}
+                      </p>
                     </div>
                     {posNeedsEvmWallet && (
                       <label className="block">
