@@ -926,10 +926,16 @@ export default function CreateLink() {
           Multi-Chain PayFi
         </span>
         <h1 className="text-3xl font-bold tracking-tight text-gray-900 sm:text-[2.25rem]">
-          {posMode ? 'Retail POS' : 'Create a Hash PayLink'}
+          {posMode ? 'Retail POS' : streamMode ? 'StreamPay' : accessMode ? 'Agent Commerce' : 'Create and Request USDC'}
         </h1>
         <p className="mt-2 text-[15px] text-gray-500 text-balance">
-          {posMode ? 'Choose a country, select settlement, and create one static QR.' : 'Create and request USDC payments.'}
+          {posMode
+            ? 'Choose a country, select settlement, and create one static QR.'
+            : streamMode
+              ? 'Stream USDC for payroll, agent services, and Arena games.'
+              : accessMode
+                ? 'Tip, fund, and authorize agents to pay for services.'
+                : 'Create links and request USDC payments.'}
         </p>
 
         {/* ── Chain preview toggle — hidden in multi-chain mode (all chains active) */}
@@ -1058,10 +1064,10 @@ export default function CreateLink() {
               </button>
 
               <div>
-                <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Real-money USDC on Arc</p>
-                <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">Launch StreamPay</h2>
+                <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">USDC on Arc</p>
+                <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">Choose a StreamPay flow</h2>
                 <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-                  Recoverable-risk USDC games and streams. Same Privy + Circle sign-in, same 0G proof layer.
+                  Start with Arena rooms today. Payroll, agent streams, and Telegram services follow the same wallet flow.
                 </p>
               </div>
 
