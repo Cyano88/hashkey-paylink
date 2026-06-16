@@ -939,6 +939,7 @@ export function ArenaPage() {
         correct?: boolean
         eliminated?: boolean
         won?: boolean
+        lastStanding?: boolean
         finished?: boolean
         winner?: string | null
         nextRound?: number
@@ -970,7 +971,9 @@ export function ArenaPage() {
         setRoomLog('Stopped. Your remaining USDC is still claimable.')
       } else if (data.won) {
         setStatus('won')
-        setRoomLog('Winner. Prize has been sent to your Arc wallet.')
+        setRoomLog(data.lastStanding
+          ? 'Winner by attrition — you were the last active player. Prize has been sent to your Arc wallet.'
+          : 'Winner. Prize has been sent to your Arc wallet.')
       } else if (data.finished) {
         setStatus('eliminated')
         setRoomLog('Room finished — another player claimed the prize first.')
