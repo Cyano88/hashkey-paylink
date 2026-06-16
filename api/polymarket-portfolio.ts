@@ -196,7 +196,11 @@ async function loadProfileBundle(privyUserId: string) {
   return {
     profile: {
       polymarketAddress: profile.polymarket_address as string,
-      preferredFundingNetwork: profile.preferred_funding_network as string,
+      // Clamp to a known network so a stale/corrupt value doesn't reach the
+      // bridge call with a confusing 502.
+      preferredFundingNetwork: SUPPORTED_NETWORKS.has(String(profile.preferred_funding_network))
+        ? String(profile.preferred_funding_network)
+        : 'base',
       lastSyncedAt: profile.last_synced_at instanceof Date ? profile.last_synced_at.toISOString() : null,
       createdAt: profile.created_at instanceof Date ? profile.created_at.toISOString() : null,
     },
@@ -249,6 +253,9 @@ async function evaluateAlerts(privyUserId: string, address: string) {
   const lossThreshold = Number(settingsRow.loss_threshold_percent)
   const claimableEnabled = Boolean(settingsRow.claimable_alerts_enabled)
   const resolvedEnabled = Boolean(settingsRow.resolved_alerts_enabled)
+  // Treat threshold = 0 as "loss alerts disabled" so users have an off switch
+  // without needing a separate flag column.
+  const lossAlertsEnabled = Number.isFinite(lossThreshold) && lossThreshold > 0
 
   let positions: PolymarketPosition[] = []
   try {
@@ -281,7 +288,7 @@ async function evaluateAlerts(privyUserId: string, address: string) {
     }
 
     const percentPnl = typeof position.percentPnl === 'number' ? position.percentPnl : null
-    if (percentPnl !== null && percentPnl <= -Math.abs(lossThreshold)) {
+    if (lossAlertsEnabled && percentPnl !== null && percentPnl <= -Math.abs(lossThreshold)) {
       const insert = await requirePool().query(
         `insert into polymarket_alert_history (privy_user_id, alert_type, market_id, title, body, severity, source_snapshot)
          select $1,'loss-threshold',$2,$3,$4,'warning',$5::jsonb
@@ -418,7 +425,9 @@ export default async function handler(req: Request, res: Response) {
     }
 
     if (action === 'save-alert-settings') {
-      const loss = Math.max(1, Math.min(95, Math.round(Number(body.lossThresholdPercent ?? 20))))
+      // 0 means "loss alerts disabled" — see evaluateAlerts. 95 is the
+      // generous upper bound (anything beyond is effectively the same as off).
+      const loss = Math.max(0, Math.min(95, Math.round(Number(body.lossThresholdPercent ?? 20))))
       const resolved = Boolean(body.resolvedAlertsEnabled)
       const claimable = Boolean(body.claimableAlertsEnabled)
       const movement = Boolean(body.movementAlertsEnabled)

@@ -3810,11 +3810,13 @@ function InputBlock({
   value,
   onChange,
   placeholder,
+  inputMode,
 }: {
   label: string
   value: string
   onChange: (value: string) => void
   placeholder: string
+  inputMode?: 'text' | 'numeric' | 'decimal' | 'tel' | 'search' | 'email' | 'url'
 }) {
   return (
     <label className="block rounded-xl border border-gray-100 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.05]">
@@ -3823,6 +3825,7 @@ function InputBlock({
         value={value}
         onChange={event => onChange(event.target.value)}
         placeholder={placeholder}
+        inputMode={inputMode}
         className="mt-1 w-full bg-transparent text-sm font-medium text-gray-900 outline-none placeholder:text-gray-400 dark:text-white dark:placeholder:text-gray-500"
       />
     </label>
@@ -4343,8 +4346,15 @@ function PolyPortfolioPanel({
       setBundle({ profile: null, settings: null, watchlist: [], fundingAttempts: [], alerts: [] })
       setLiveValue(null)
       setLivePositions([])
+      setLiveError('')
       setFundResult(null)
       setFundOpen(false)
+      setFundAmount('')
+      setFundError('')
+      setAddressInput('')
+      setSettingsOpen(false)
+      setSettingsDraft(null)
+      setBundleError('')
     } catch (err) {
       setBundleError(err instanceof Error ? err.message : 'Could not disconnect.')
     } finally {
@@ -4648,6 +4658,7 @@ function PolyPortfolioPanel({
                   value={fundAmount}
                   onChange={setFundAmount}
                   placeholder="0.00"
+                  inputMode="decimal"
                 />
                 <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">
                   Funded address is your saved Polymarket profile. Minimum bridge amount is 3 USDC.
@@ -4724,14 +4735,17 @@ function PolyPortfolioPanel({
               <div className="mt-1 flex items-center gap-2">
                 <input
                   type="number"
-                  min={1}
+                  inputMode="numeric"
+                  min={0}
                   max={95}
                   step={1}
                   value={settingsDraft.lossThresholdPercent}
-                  onChange={e => setSettingsDraft(d => d ? { ...d, lossThresholdPercent: Number(e.target.value) || 0 } : d)}
+                  onChange={e => setSettingsDraft(d => d ? { ...d, lossThresholdPercent: Math.max(0, Math.min(95, Math.floor(Number(e.target.value) || 0))) } : d)}
                   className="w-20 rounded-lg border border-gray-200 bg-white px-2 py-1 text-sm tabular-nums dark:border-white/10 dark:bg-white/[0.04] dark:text-white"
                 />
-                <span className="text-xs text-gray-500 dark:text-gray-400">% drop triggers an alert</span>
+                <span className="text-xs text-gray-500 dark:text-gray-400">
+                  {settingsDraft.lossThresholdPercent === 0 ? 'Loss alerts off — set above 0 to enable' : '% drop triggers an alert'}
+                </span>
               </div>
             </div>
             <AlertToggle
