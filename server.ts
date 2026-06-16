@@ -95,6 +95,9 @@ app.use(express.json({ limit: '64kb' }))
 const strictLimiter = rateLimit({ name: 'strict', windowMs: 60_000, max: 20 })
 const relayLimiter = rateLimit({ name: 'relay', windowMs: 60_000, max: 30 })
 const readLimiter = rateLimit({ name: 'read', windowMs: 60_000, max: 120 })
+// Arena: 4s polling + question fetches + actions, often multiple players sharing a NAT IP.
+// Auth-gated per-room, so a generous bucket is fine.
+const arenaLimiter = rateLimit({ name: 'arena', windowMs: 60_000, max: 240 })
 
 // ── API routes ────────────────────────────────────────────────────────────────
 app.post('/api/relay-v2',              relayLimiter, relayV2Handler)
@@ -133,7 +136,7 @@ app.post('/api/stream-recipient-invite', strictLimiter, streamRecipientInviteHan
 app.get('/api/stream-history',         readLimiter, streamHistoryHandler)
 app.all('/api/agentic-streaming-subscription', strictLimiter, agenticStreamingSubscriptionHandler)
 app.post('/api/agentic-streaming-report', strictLimiter, agenticStreamingReportHandler)
-app.all('/api/arena-room',             strictLimiter, arenaRoomHandler)
+app.all('/api/arena-room',             arenaLimiter, arenaRoomHandler)
 // ── Agentic Economy — 0G payment verification primitives ─────────────────────
 app.all('/api/agent-verify',           strictLimiter, agentVerifyHandler)
 app.post('/api/agent-ask',             strictLimiter, agentAskHandler)

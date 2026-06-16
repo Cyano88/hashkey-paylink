@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { usePrivy } from '@privy-io/react-auth'
-import { ArrowLeft, Check, Clock3, Copy, Crown, LockKeyhole, Play, RotateCcw, Settings, Share2, Shield, Sparkles, Trophy, Users, WalletCards } from 'lucide-react'
+import { ArrowLeft, Check, Clock3, Copy, Crown, LockKeyhole, Play, RotateCcw, Settings, Share2, Sparkles, Trophy, Users, WalletCards } from 'lucide-react'
 import { createPublicClient, formatUnits, http, parseUnits, type Address } from 'viem'
 import { arcChain, CHAIN_META } from '../../../../src/lib/chains'
 import {
@@ -17,7 +17,7 @@ import { resolvePrivyCircleLink, savePrivyCircleLink } from '../../../../src/lib
 type RiskMode = 'linear' | 'climb' | 'finale'
 type RoomStatus = 'setup' | 'lobby' | 'playing' | 'eliminated' | 'won'
 type ArenaTab = 'room' | 'how' | 'settings'
-type ArenaView = 'games' | 'mode' | 'list' | 'private'
+type ArenaView = 'games' | 'list' | 'private'
 type MyRoomSummary = SavedArenaRoom & { role: 'host' | 'player' }
 type StartRule = 'host' | 'full'
 type PaymentStatus = 'escrow_pending' | 'deposit_open' | 'funded' | 'settled'
@@ -73,6 +73,7 @@ const TIMER_OPTIONS = [45, 60, 90]
 const ENTRY_BOUNDS = { min: 1, max: 1000 }
 const PLAYERS_BOUNDS = { min: 2, max: 20 }
 const ROUNDS_BOUNDS = { min: 5, max: 30 }
+const TIMER_BOUNDS = { min: 15, max: 180 }
 
 function inRange(n: number, bounds: { min: number; max: number }) {
   return Number.isFinite(n) && n >= bounds.min && n <= bounds.max
@@ -286,7 +287,7 @@ export function ArenaPage() {
   )
   const riskProgress = Math.min(100, Math.round((currentStreamed / entry) * 100))
   const alivePlayers = status === 'playing' ? Math.max(1, players - Math.floor(round / 4)) : status === 'eliminated' ? players - 1 : players
-  const lobbySettingsValid = inRange(entry, ENTRY_BOUNDS) && inRange(players, PLAYERS_BOUNDS) && inRange(rounds, ROUNDS_BOUNDS)
+  const lobbySettingsValid = inRange(entry, ENTRY_BOUNDS) && inRange(players, PLAYERS_BOUNDS) && inRange(rounds, ROUNDS_BOUNDS) && inRange(roomTimer, TIMER_BOUNDS)
   const privateUrl = useMemo(() => {
     const origin = typeof window === 'undefined' ? 'https://hashpaylink.com' : window.location.origin
     if (savedRoomId) {
@@ -1181,7 +1182,7 @@ export function ArenaPage() {
           {[
             ['Wallet', 'Embedded'],
             ['Network', 'Arc'],
-            ['Mode', view === 'games' ? 'Lobby' : view === 'mode' ? 'Trivia' : 'Private'],
+            ['Mode', view === 'games' ? 'Lobby' : view === 'list' ? 'My rooms' : 'Private'],
           ].map(([title, body]) => (
             <div key={title} className="rounded-2xl bg-gray-50 p-2.5 dark:bg-white/[0.04]">
               <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400">{title}</p>
@@ -1217,32 +1218,6 @@ export function ArenaPage() {
             action="Coming soon"
             disabled
           />
-        </div>
-      )}
-
-      {view === 'mode' && (
-        <div className="space-y-3">
-          <BackButton onClick={() => setView('games')}>Games</BackButton>
-          <div className="rounded-[22px] border border-gray-100 bg-white p-3.5 shadow-sm dark:border-white/10 dark:bg-[#111216]">
-            <p className="text-[13px] font-bold text-gray-950 dark:text-white">Choose room type</p>
-            <div className="mt-3 grid max-w-lg gap-2">
-              <RoomModeButton
-                active
-                icon={<Shield className="h-4 w-4" />}
-                title="Private room"
-                body="Create a link and invite close friends."
-                onClick={openPrivateRoom}
-              />
-              <RoomModeButton
-                active={false}
-                icon={<Users className="h-4 w-4" />}
-                title="Public room"
-                body="Open matchmaking is coming soon."
-                onClick={() => undefined}
-                disabled
-              />
-            </div>
-          </div>
         </div>
       )}
 
@@ -1429,6 +1404,17 @@ export function ArenaPage() {
                   </div>
                   <StatusPill status={status} />
                 </div>
+
+                {chainActiveCount === 0 && status !== 'lobby' && (
+                  <div className="mt-3 rounded-2xl border border-gray-200 bg-gray-50 p-3 dark:border-white/10 dark:bg-white/[0.04]">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-gray-500 dark:text-gray-400">Room stalled</p>
+                    <p className="mt-1 text-[11px] leading-snug text-gray-500 dark:text-gray-400">
+                      {canHostControl
+                        ? 'No players are still streaming. Refund everyone with Cancel stuck room below.'
+                        : 'No players are still streaming. Your remaining USDC is claimable from escrow.'}
+                    </p>
+                  </div>
+                )}
 
                 <div className="mt-4 grid grid-cols-2 gap-2">
                   <Metric label="Entry" value={`${entry} USDC`} compact />
@@ -2067,13 +2053,14 @@ function ArenaSettings({ timer, setTimer, startRule, setStartRule }: { timer: nu
         These rules shape how tense the room feels before funds stream.
       </p>
       <div className="mt-3 space-y-2.5">
-        <SettingControl title="Timer" value={`${timer}s`} body="Controls how long each question stays open.">
-          {TIMER_OPTIONS.map(option => (
-            <button key={option} type="button" onClick={() => setTimer(option)} className={settingChoice(timer === option)}>
-              {option}s
-            </button>
-          ))}
-        </SettingControl>
+        <RangedNumberSegment
+          label="Timer"
+          unit="sec"
+          value={timer}
+          presets={TIMER_OPTIONS}
+          bounds={TIMER_BOUNDS}
+          onChange={setTimer}
+        />
         <SettingControl title="Start rule" value={startRule === 'host' ? 'Host' : 'Full room'} body="Controls when the private game can begin.">
           <button type="button" onClick={() => setStartRule('host')} className={settingChoice(startRule === 'host')}>
             Host
@@ -2235,30 +2222,6 @@ function settingChoice(active: boolean) {
       ? 'bg-gray-950 text-white shadow-sm dark:bg-white dark:text-gray-950'
       : 'text-gray-400 hover:text-gray-700 dark:hover:text-gray-200',
   ].join(' ')
-}
-
-function RoomModeButton({ active, icon, title, body, onClick, disabled = false }: { active: boolean; icon: ReactNode; title: string; body: string; onClick: () => void; disabled?: boolean }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={[
-        'rounded-2xl border p-2.5 text-left transition-all disabled:cursor-not-allowed',
-        active
-          ? 'border-gray-950 bg-gray-950 text-white dark:border-white dark:bg-white dark:text-gray-950'
-          : disabled
-            ? 'border-gray-100 bg-gray-50 text-gray-300 dark:border-white/10 dark:bg-white/[0.03] dark:text-gray-500'
-            : 'border-gray-100 bg-gray-50 text-gray-500 hover:border-gray-200 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-300',
-      ].join(' ')}
-    >
-      <div className="flex items-center gap-2">
-        {icon}
-        <p className="text-[12px] font-bold">{title}</p>
-      </div>
-      <p className={['mt-1 text-[10px] leading-snug', active ? 'text-white/65 dark:text-gray-500' : 'text-gray-400'].join(' ')}>{body}</p>
-    </button>
-  )
 }
 
 function TabButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
