@@ -839,7 +839,18 @@ export function ArenaPage() {
       if (typeof data.chain?.currentRound === 'number' && data.chain.currentRound > 0) setRound(data.chain.currentRound)
       return data
     } catch (error) {
-      setRoomLog(error instanceof Error ? error.message : 'Arena room action failed.')
+      const raw = error instanceof Error ? error.message : 'Arena room action failed.'
+      // Surface a friendly message when the on-chain cancel is rejected
+      // mid-game. The escrow contract only permits cancelRoom() from the
+      // lobby state, so once any round has started the room cannot be
+      // room-level cancelled. Each player still recovers their unstreamed
+      // USDC individually via the existing Claim affordance.
+      if (action === 'cancel' && /execution reverted|reverted|estimateGas/i.test(raw)) {
+        setRoomLog('On-chain cancel is only allowed before the room starts. Each player can still Claim remaining USDC from escrow individually.')
+      } else {
+        setRoomLog(raw)
+      }
+      setCancelConfirm(false)
       return null
     } finally {
       setRoomActionBusy('')
