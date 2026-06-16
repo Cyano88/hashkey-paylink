@@ -929,7 +929,7 @@ export default function CreateLink() {
           {posMode ? 'Retail POS' : 'Create a Hash PayLink'}
         </h1>
         <p className="mt-2 text-[15px] text-gray-500 text-balance">
-          {posMode ? 'Choose a country, select settlement, and create one static QR.' : 'Request USDC from anyone — no app, no signup, just a link.'}
+          {posMode ? 'Choose a country, select settlement, and create one static QR.' : 'Create and request USDC payments.'}
         </p>
 
         {/* ── Chain preview toggle — hidden in multi-chain mode (all chains active) */}
