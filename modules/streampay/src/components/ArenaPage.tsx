@@ -17,7 +17,8 @@ import { resolvePrivyCircleLink, savePrivyCircleLink } from '../../../../src/lib
 type RiskMode = 'linear' | 'climb' | 'finale'
 type RoomStatus = 'setup' | 'lobby' | 'playing' | 'eliminated' | 'won'
 type ArenaTab = 'room' | 'how' | 'settings'
-type ArenaView = 'games' | 'mode' | 'private'
+type ArenaView = 'games' | 'mode' | 'list' | 'private'
+type MyRoomSummary = SavedArenaRoom & { role: 'host' | 'player' }
 type StartRule = 'host' | 'full'
 type PaymentStatus = 'escrow_pending' | 'deposit_open' | 'funded' | 'settled'
 
@@ -42,7 +43,7 @@ function readInitialArenaView(): ArenaView {
   const params = new URLSearchParams(window.location.search)
   if (params.get('game') !== 'trivia') return 'games'
   const roomParam = String(params.get('room') ?? '').trim()
-  return roomParam ? 'private' : 'mode'
+  return roomParam ? 'private' : 'list'
 }
 
 function readInitialRoomId() {
@@ -51,6 +52,17 @@ function readInitialRoomId() {
   if (params.get('game') !== 'trivia') return ''
   const roomParam = String(params.get('room') ?? '').trim().toUpperCase()
   return /^SP-[A-F0-9]{6}$/.test(roomParam) ? roomParam : ''
+}
+
+function readInitialRoomStatus(): RoomStatus {
+  // If the URL points at a saved room id, render the lobby card on the very
+  // first paint so we never flash the create-form before loadSavedRoom
+  // resolves. Real status is reconciled once the GET response arrives.
+  if (typeof window === 'undefined') return 'setup'
+  const params = new URLSearchParams(window.location.search)
+  if (params.get('game') !== 'trivia') return 'setup'
+  const roomParam = String(params.get('room') ?? '').trim().toUpperCase()
+  return /^SP-[A-F0-9]{6}$/.test(roomParam) ? 'lobby' : 'setup'
 }
 
 const ENTRY_OPTIONS = [10, 50, 200]
@@ -200,7 +212,7 @@ export function ArenaPage() {
   const [players, setPlayers] = useState(5)
   const [rounds, setRounds] = useState(15)
   const [riskMode, setRiskMode] = useState<RiskMode>('climb')
-  const [status, setStatus] = useState<RoomStatus>('setup')
+  const [status, setStatus] = useState<RoomStatus>(() => readInitialRoomStatus())
   const [round, setRound] = useState(1)
   const [seconds, setSeconds] = useState(60)
   const [roomTimer, setRoomTimer] = useState(60)
@@ -244,6 +256,9 @@ export function ArenaPage() {
   const [savedRoomName, setSavedRoomName] = useState<string | null>(null)
   const [isHostFromServer, setIsHostFromServer] = useState(false)
   const [cancelConfirm, setCancelConfirm] = useState(false)
+  const [myRooms, setMyRooms] = useState<MyRoomSummary[]>([])
+  const [myRoomsLoading, setMyRoomsLoading] = useState(false)
+  const [myRoomsError, setMyRoomsError] = useState('')
 
   const maxPool = entry * players
   const platformFee = (maxPool * platformFeeBps) / 10000
@@ -417,6 +432,48 @@ export function ArenaPage() {
       }
     }
   }
+
+  async function fetchMyRooms() {
+    if (!PRIVY_AUTH_ENABLED || !privyAuthenticated) {
+      setMyRooms([])
+      return
+    }
+    setMyRoomsLoading(true)
+    setMyRoomsError('')
+    try {
+      const token = await Promise.race<string | null>([
+        getAccessToken(),
+        new Promise<null>(resolve => window.setTimeout(() => resolve(null), 3000)),
+      ])
+      if (!token) {
+        setMyRooms([])
+        return
+      }
+      const response = await fetch('/api/arena-room?mine=true', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await response.json() as { ok?: boolean; rooms?: MyRoomSummary[]; error?: string }
+      if (!response.ok || !data.ok || !Array.isArray(data.rooms)) {
+        setMyRoomsError(data.error ?? 'Could not load your rooms.')
+        return
+      }
+      setMyRooms(data.rooms)
+    } catch (error) {
+      setMyRoomsError(error instanceof Error ? error.message.slice(0, 180) : 'Could not load your rooms.')
+    } finally {
+      setMyRoomsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (view !== 'list') return
+    void fetchMyRooms()
+    // Poll my-rooms while on the list so a room state change (started /
+    // completed / cancelled) reflects without manual refresh.
+    const interval = window.setInterval(() => { void fetchMyRooms() }, 5000)
+    return () => window.clearInterval(interval)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, privyAuthenticated])
 
   async function refreshSavedRoom() {
     if (!savedRoomId || refreshBusy) return
@@ -1037,7 +1094,7 @@ export function ArenaPage() {
   }
 
   function openTrivia() {
-    setView('mode')
+    setView('list')
     setActiveTab('room')
     resetRoom()
   }
@@ -1046,6 +1103,27 @@ export function ArenaPage() {
     setView('private')
     setActiveTab('room')
     resetRoom()
+  }
+
+  function backToList() {
+    setView('list')
+    setActiveTab('room')
+    resetRoom()
+    // Strip the room id from the URL so a refresh lands on the list, not the
+    // room they just left.
+    if (typeof window !== 'undefined') {
+      try {
+        const url = new URL(window.location.href)
+        url.searchParams.delete('room')
+        url.searchParams.delete('entry')
+        url.searchParams.delete('players')
+        url.searchParams.delete('rounds')
+        url.searchParams.delete('risk')
+        window.history.replaceState(null, '', url.toString())
+      } catch {
+        // non-fatal
+      }
+    }
   }
 
   return (
@@ -1136,10 +1214,82 @@ export function ArenaPage() {
         </div>
       )}
 
+      {view === 'list' && (
+        <div className="space-y-3">
+          <BackButton onClick={() => setView('games')}>Games</BackButton>
+          <div className="rounded-[22px] border border-gray-100 bg-white p-3.5 shadow-sm dark:border-white/10 dark:bg-[#111216]">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[13px] font-bold text-gray-950 dark:text-white">My trivia rooms</p>
+                <p className="mt-0.5 text-[11px] text-gray-400">Hosted or joined, still in lobby or live.</p>
+              </div>
+              <button
+                type="button"
+                onClick={openPrivateRoom}
+                className="inline-flex items-center gap-1.5 rounded-full bg-gray-950 px-3 py-1.5 text-[11px] font-black text-white transition-transform active:scale-[0.98] dark:bg-white dark:text-gray-950"
+              >
+                + New room
+              </button>
+            </div>
+
+            {!privyAuthenticated && PRIVY_AUTH_ENABLED ? (
+              <div className="mt-3 rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-3 py-4 text-center text-[12px] font-semibold text-gray-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-400">
+                Sign in with email to see your saved rooms.
+              </div>
+            ) : myRoomsLoading && myRooms.length === 0 ? (
+              <div className="mt-3 rounded-2xl border border-gray-100 bg-gray-50 px-3 py-4 text-center text-[12px] font-semibold text-gray-400 dark:border-white/10 dark:bg-white/[0.04]">
+                Loading your rooms...
+              </div>
+            ) : myRoomsError ? (
+              <div className="mt-3 rounded-2xl border border-gray-100 bg-gray-50 px-3 py-3 text-[11px] font-semibold text-gray-500 dark:border-white/10 dark:bg-white/[0.04]">
+                {myRoomsError}
+              </div>
+            ) : myRooms.length === 0 ? (
+              <div className="mt-3 rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-3 py-4 text-center text-[12px] font-semibold text-gray-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-400">
+                No active rooms yet. Tap + New room to create one.
+              </div>
+            ) : (
+              <div className="mt-3 space-y-2">
+                {myRooms.map(room => (
+                  <button
+                    key={room.roomId}
+                    type="button"
+                    onClick={() => { void loadSavedRoom(room.roomId) }}
+                    className="block w-full rounded-2xl border border-gray-100 bg-gray-50 p-3 text-left transition-all hover:-translate-y-0.5 hover:border-gray-200 hover:shadow-sm dark:border-white/10 dark:bg-white/[0.04] dark:hover:border-white/20"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-[13px] font-black text-gray-950 dark:text-white">{room.name || room.roomId}</p>
+                        <p className="mt-0.5 truncate text-[11px] font-semibold text-gray-500 dark:text-gray-400">
+                          {room.name ? `${room.roomId} · ` : ''}{room.entry} USDC · {room.players} seats
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 flex-col items-end gap-1">
+                        <span className={[
+                          'rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.12em]',
+                          room.status === 'playing'
+                            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-400/15 dark:text-emerald-200'
+                            : 'bg-gray-200 text-gray-700 dark:bg-white/10 dark:text-gray-200',
+                        ].join(' ')}>
+                          {room.status === 'playing' ? 'Live' : 'Lobby'}
+                        </span>
+                        <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400">
+                          {room.role === 'host' ? 'Host' : 'Player'}
+                        </span>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {view === 'private' && (
         <div className="grid gap-3 lg:grid-cols-[minmax(250px,0.68fr)_minmax(460px,1.32fr)]">
           <section className="space-y-3">
-            <BackButton onClick={() => setView('mode')}>Trivia rooms</BackButton>
+            <BackButton onClick={backToList}>My trivia rooms</BackButton>
             <div className="grid grid-cols-3 gap-1 rounded-2xl border border-gray-100 bg-gray-50 p-1 dark:border-white/10 dark:bg-white/5">
               <TabButton active={activeTab === 'room'} onClick={() => setActiveTab('room')}>Room</TabButton>
               <TabButton active={activeTab === 'how'} onClick={() => setActiveTab('how')}>How to play</TabButton>

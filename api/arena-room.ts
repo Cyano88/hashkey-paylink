@@ -729,6 +729,36 @@ async function getRoom(req: Request, res: Response) {
   }
 }
 
+async function getMyRooms(req: Request, res: Response) {
+  try {
+    await ensureSchema()
+    let userId: string
+    try {
+      userId = await verifiedPrivyUserId(req)
+    } catch (err) {
+      const e = err as Error & { status?: number }
+      return res.status(e.status ?? 401).json({ ok: false, error: e.message || 'Privy auth required.' })
+    }
+    const result = await requirePool().query(
+      `select *,
+              (case when host_privy_user_id = $1 then 'host' else 'player' end) as caller_role
+         from arena_rooms
+        where (host_privy_user_id = $1 or state -> 'players' -> $1 is not null)
+          and status in ('lobby', 'playing')
+        order by updated_at desc
+        limit 50`,
+      [userId],
+    )
+    const rooms = result.rows.map(row => ({
+      ...toRoom(row),
+      role: row.caller_role === 'host' ? 'host' : 'player' as const,
+    }))
+    return res.json({ ok: true, rooms })
+  } catch (error) {
+    return storageError(res, error)
+  }
+}
+
 async function getQuestion(req: Request, res: Response) {
   try {
     await ensureSchema()
@@ -754,6 +784,7 @@ export default async function arenaRoomHandler(req: Request, res: Response) {
   if (req.method === 'POST') return createRoom(req, res)
   if (req.method === 'PATCH') return controlRoom(req, res)
   if (req.method === 'GET') {
+    if (req.query.mine === 'true' || req.query.mine === '1') return getMyRooms(req, res)
     if (typeof req.query.round !== 'undefined') return getQuestion(req, res)
     return getRoom(req, res)
   }
