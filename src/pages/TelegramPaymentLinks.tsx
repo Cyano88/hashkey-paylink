@@ -566,6 +566,14 @@ export default function TelegramPaymentLinks() {
       window.location.href = '/?app=streampay&src=telegram'
       return
     }
+    if (service.id === 'poly-portfolio') {
+      setActiveService('poly-portfolio')
+      return
+    }
+    if (service.id === 'poly-worldcup') {
+      setActiveService('poly-worldcup')
+      return
+    }
     if (service.id === 'lp-scout') {
       setActiveService('lp-scout')
       return
