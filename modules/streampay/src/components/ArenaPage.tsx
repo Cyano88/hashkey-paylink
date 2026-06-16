@@ -548,11 +548,21 @@ export function ArenaPage() {
           }),
         ])
         setCircleBalance(balanceRaw)
-        setPlayerJoined(Boolean(playerRaw[0]))
-        setPlayerActive(Boolean(playerRaw[1]))
+        const onChainJoined = Boolean(playerRaw[0])
+        const onChainActive = Boolean(playerRaw[1])
+        setPlayerJoined(onChainJoined)
+        setPlayerActive(onChainActive)
         setPlayerRefunded(Boolean(playerRaw[2]))
         setPlayerStreamed(playerRaw[3])
         setPlayerRefundable(playerRaw[4])
+        // If the chain says this wallet is no longer active but local UI is
+        // still in 'playing' mode (round timer / question card), the player
+        // was eliminated in an earlier round we missed. Flip them to the
+        // eliminated end-state so they see Claim instead of the dead
+        // question card.
+        if (onChainJoined && !onChainActive) {
+          setStatus(prev => (prev === 'playing' ? 'eliminated' : prev))
+        }
       }
     } catch (error) {
       setJoinError(error instanceof Error ? error.message.slice(0, 180) : 'Could not refresh Arena escrow.')
@@ -925,7 +935,18 @@ export function ArenaPage() {
         error?: string
       }
       if (!response.ok || !data.ok) {
-        setRoomLog(data.error ?? 'Could not submit answer.')
+        const message = data.error ?? 'Could not submit answer.'
+        // Backend rejects when escrow.players(addr).active is false. The user
+        // was already eliminated by an earlier round timer or eliminate call.
+        // Surface the right end-state so they see Claim instead of a dead
+        // question card.
+        if (/already inactive/i.test(message) || /has not joined/i.test(message)) {
+          setStatus('eliminated')
+          setRoomLog('You were eliminated in an earlier round. Claim any remaining USDC.')
+          if (circleSession?.wallet.address) void refreshRoomChainState(circleSession.wallet.address)
+        } else {
+          setRoomLog(message)
+        }
         return
       }
       if (data.txHash) setRoomActionTxHash(data.txHash)
@@ -1754,6 +1775,39 @@ export function ArenaPage() {
                         style={{ width: `${percent(round / rounds)}` }}
                       />
                     </div>
+                    {canHostControl && status === 'eliminated' && chainActiveCount === 0 && (
+                      <div className="mt-3 rounded-2xl border border-white/10 bg-white/[0.04] p-3 dark:border-gray-200 dark:bg-gray-100">
+                        <p className="text-[11px] font-black uppercase tracking-[0.14em] text-white/65 dark:text-gray-700">Stuck room</p>
+                        <p className="mt-1 text-[11px] leading-snug text-white/55 dark:text-gray-500">
+                          All players have stopped streaming. Cancel to refund every player's remaining USDC from escrow.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (roomActionBusy) return
+                            if (cancelConfirm) {
+                              setCancelConfirm(false)
+                              void cancelRoom()
+                            } else {
+                              setCancelConfirm(true)
+                            }
+                          }}
+                          disabled={Boolean(roomActionBusy)}
+                          className={[
+                            'mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border py-2 text-[12px] font-black transition-transform active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45',
+                            cancelConfirm
+                              ? 'border-rose-400/40 bg-rose-500/10 text-rose-100 hover:bg-rose-500/15 dark:border-rose-300/40 dark:bg-rose-100 dark:text-rose-700 dark:hover:bg-rose-50'
+                              : 'border-white/10 text-white/70 hover:bg-white/10 dark:border-gray-200 dark:text-gray-500 dark:hover:bg-gray-100',
+                          ].join(' ')}
+                        >
+                          {roomActionBusy === 'cancel'
+                            ? 'Cancelling...'
+                            : cancelConfirm
+                              ? 'Tap again to refund everyone'
+                              : 'Cancel stuck room'}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
