@@ -69,6 +69,8 @@ const TELEGRAM_AGENT_URL = import.meta.env.VITE_TELEGRAM_AGENT_URL || 'https://t
 type VaultStep = 'idle' | 'ready'
 type ReceiveMode = 'email' | 'paste'
 type PosNetwork = 'base' | 'arbitrum' | 'arc' | 'solana'
+type PosCountry = 'NG' | 'KE' | 'GH'
+type PosSettlementPath = 'USDC_WALLET' | 'SPENDA_NAIRA'
 type PosMerchant = {
   merchant_id: string
   display_name: string
@@ -82,6 +84,27 @@ const POS_NETWORK_OPTIONS: Array<{ key: PosNetwork; label: string; badge?: strin
   { key: 'arbitrum', label: 'Arbitrum' },
   { key: 'arc', label: 'Arc', badge: 'Testnet' },
   { key: 'solana', label: 'Solana' },
+]
+
+const POS_COUNTRIES: Array<{ key: PosCountry; name: string; label: string; status: 'live' | 'soon'; copy: string }> = [
+  { key: 'NG', name: 'Nigeria', label: 'Live', status: 'live', copy: 'USDC checkout with optional Spenda deposit wallet path.' },
+  { key: 'KE', name: 'Kenya', label: 'Coming soon', status: 'soon', copy: 'Pending a verified local wallet or payout partner.' },
+  { key: 'GH', name: 'Ghana', label: 'Coming soon', status: 'soon', copy: 'Pending a verified local wallet or payout partner.' },
+]
+
+const POS_SETTLEMENT_PATHS: Array<{ key: PosSettlementPath; title: string; label: string; copy: string }> = [
+  {
+    key: 'USDC_WALLET',
+    title: 'USDC to USDC',
+    label: 'Live',
+    copy: 'Customers pay USDC directly to the merchant wallet. Hash PayLink verifies and receipts the payment.',
+  },
+  {
+    key: 'SPENDA_NAIRA',
+    title: 'USDC to Naira via Spenda',
+    label: 'Partner wallet',
+    copy: 'Use a Spenda crypto deposit wallet. Spenda handles crypto-to-naira spending and KYC inside its app.',
+  },
 ]
 
 function emailFromPrivyUser(user: unknown) {
@@ -409,6 +432,8 @@ export default function CreateLink() {
   const [receiveMode,    setReceiveMode]    = useState<ReceiveMode>('paste')
   const [posMode,        setPosMode]        = useState(false)
   const [streamMode,     setStreamMode]     = useState(false)
+  const [posCountry,     setPosCountry]     = useState<PosCountry | null>(null)
+  const [posSettlementPath, setPosSettlementPath] = useState<PosSettlementPath | null>(null)
   const [posMerchantName, setPosMerchantName] = useState('')
   const [posNetworks,    setPosNetworks]    = useState<PosNetwork[]>(['base'])
   const [posWallet,      setPosWallet]      = useState('')
@@ -613,6 +638,10 @@ export default function CreateLink() {
 
   function closePosMode() {
     setPosMode(false)
+    setPosCountry(null)
+    setPosSettlementPath(null)
+    setPosMerchant(null)
+    setPosCopied(false)
     setPosError('')
   }
 
@@ -636,6 +665,16 @@ export default function CreateLink() {
       setPosError('')
       return
     }
+    if (posSettlementPath) {
+      setPosSettlementPath(null)
+      setPosError('')
+      return
+    }
+    if (posCountry) {
+      setPosCountry(null)
+      setPosError('')
+      return
+    }
     closePosMode()
   }
 
@@ -645,6 +684,7 @@ export default function CreateLink() {
 
   const posNeedsEvmWallet = posNetworks.some((network) => network !== 'solana')
   const posNeedsSolanaWallet = posNetworks.includes('solana')
+  const posIsSpendaFlow = posSettlementPath === 'SPENDA_NAIRA'
   const posMerchantNetworks = posMerchant?.supported_networks?.length ? posMerchant.supported_networks : ['base']
   const posDashboardNetwork = posMerchantNetworks.find((network) => network !== 'solana') ?? 'solana'
   const posDashboardAddressParam = posDashboardNetwork === 'solana' ? 's' : 'e'
@@ -874,10 +914,10 @@ export default function CreateLink() {
           Multi-Chain PayFi
         </span>
         <h1 className="text-3xl font-bold tracking-tight text-gray-900 sm:text-[2.25rem]">
-          {posMode ? 'Create POS QR' : 'Create a Hash PayLink'}
+          {posMode ? 'Retail POS' : 'Create a Hash PayLink'}
         </h1>
         <p className="mt-2 text-[15px] text-gray-500 text-balance">
-          {posMode ? 'Set up one static QR for local in-person payments.' : 'Request USDC from anyone — no app, no signup, just a link.'}
+          {posMode ? 'Choose a country, select settlement, and create one static QR.' : 'Request USDC from anyone — no app, no signup, just a link.'}
         </p>
 
         {/* ── Chain preview toggle — hidden in multi-chain mode (all chains active) */}
@@ -1086,13 +1126,105 @@ export default function CreateLink() {
                 Back
               </button>
 
-              {!posMerchant ? (
+              {!posCountry ? (
                 <div className="space-y-4">
                   <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Nigerian Retail Mode</p>
-                    <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">Create POS QR</h2>
+                    <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Retail POS</p>
+                    <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">Choose country</h2>
                     <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-                      One static QR for local in-person payments.
+                      Start with live USDC checkout, then add local wallet partners country by country.
+                    </p>
+                  </div>
+
+                  <div className="grid gap-2">
+                    {POS_COUNTRIES.map((country) => {
+                      const live = country.status === 'live'
+                      return (
+                        <button
+                          key={country.key}
+                          type="button"
+                          disabled={!live}
+                          onClick={() => {
+                            setPosCountry(country.key)
+                            setPosSettlementPath(null)
+                            setPosError('')
+                          }}
+                          className={cn(
+                            'group flex items-center justify-between gap-4 rounded-2xl border p-4 text-left transition-all',
+                            live
+                              ? 'border-gray-200 bg-gray-50 hover:-translate-y-0.5 hover:border-gray-300 hover:bg-white hover:shadow-sm dark:border-white/10 dark:bg-white/[0.04] dark:hover:border-white/20 dark:hover:bg-white/[0.07]'
+                              : 'cursor-not-allowed border-dashed border-gray-200 bg-gray-50/70 opacity-70 dark:border-white/10 dark:bg-white/[0.03]',
+                          )}
+                        >
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white text-[11px] font-black text-gray-900 shadow-sm dark:bg-white/10 dark:text-white">
+                                {country.key}
+                              </span>
+                              <div>
+                                <p className="text-sm font-black text-gray-900 dark:text-white">{country.name}</p>
+                                <p className="mt-0.5 text-xs leading-snug text-gray-500 dark:text-gray-400">{country.copy}</p>
+                              </div>
+                            </div>
+                          </div>
+                          <span className={cn(
+                            'shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold',
+                            live
+                              ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-950'
+                              : 'border border-gray-200 bg-white text-gray-400 dark:border-white/10 dark:bg-white/[0.06]',
+                          )}>
+                            {country.label}
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              ) : !posSettlementPath ? (
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Nigeria Retail Mode</p>
+                    <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">Choose settlement path</h2>
+                    <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
+                      Keep Hash PayLink as the checkout layer. Local naira spending stays with the wallet partner.
+                    </p>
+                  </div>
+
+                  <div className="grid gap-2">
+                    {POS_SETTLEMENT_PATHS.map((path) => (
+                      <button
+                        key={path.key}
+                        type="button"
+                        onClick={() => {
+                          setPosSettlementPath(path.key)
+                          setPosError('')
+                        }}
+                        className="flex items-center justify-between gap-4 rounded-2xl border border-gray-200 bg-gray-50 p-4 text-left transition-all hover:-translate-y-0.5 hover:border-gray-300 hover:bg-white hover:shadow-sm dark:border-white/10 dark:bg-white/[0.04] dark:hover:border-white/20 dark:hover:bg-white/[0.07]"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-sm font-black text-gray-900 dark:text-white">{path.title}</p>
+                          <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">{path.copy}</p>
+                        </div>
+                        <span className="shrink-0 rounded-full border border-gray-200 bg-white px-2.5 py-1 text-[11px] font-bold text-gray-600 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300">
+                          {path.label}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : !posMerchant ? (
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">
+                      {posIsSpendaFlow ? 'Nigeria Spenda Mode' : 'Nigerian Retail Mode'}
+                    </p>
+                    <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">
+                      {posIsSpendaFlow ? 'Create Spenda POS QR' : 'Create POS QR'}
+                    </h2>
+                    <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
+                      {posIsSpendaFlow
+                        ? 'One static QR that sends USDC to your Spenda deposit wallet for naira spending inside Spenda.'
+                        : 'One static QR for local in-person USDC payments.'}
                     </p>
                   </div>
 
@@ -1136,21 +1268,25 @@ export default function CreateLink() {
                     </div>
                     {posNeedsEvmWallet && (
                       <label className="block">
-                        <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">EVM Circle wallet</span>
+                        <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">
+                          {posIsSpendaFlow ? 'Spenda EVM deposit wallet' : 'EVM Circle wallet'}
+                        </span>
                         <input
                           value={posWallet}
                           onChange={(event) => {
                             setPosWallet(event.target.value.trim())
                             setPosError('')
                           }}
-                          placeholder="0x..."
+                          placeholder={posIsSpendaFlow ? '0x... Spenda wallet address' : '0x...'}
                           className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 font-mono text-sm font-medium text-gray-950 outline-none placeholder:text-gray-300 focus:border-gray-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-gray-600 dark:focus:border-white/25"
                         />
                       </label>
                     )}
                     {posNeedsSolanaWallet && (
                       <label className="block">
-                        <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">Solana Circle wallet</span>
+                        <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">
+                          {posIsSpendaFlow ? 'Spenda Solana deposit wallet' : 'Solana Circle wallet'}
+                        </span>
                         <input
                           value={posSolanaWallet}
                           onChange={(event) => {
@@ -1167,11 +1303,20 @@ export default function CreateLink() {
                   <div className="rounded-xl border border-gray-200 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <p className="text-sm font-semibold text-gray-900 dark:text-white">Naira bank settlement</p>
-                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Coming soon after licensed payout partner setup.</p>
+                        <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                          {posIsSpendaFlow ? 'Naira spending via Spenda' : 'Wallet settlement'}
+                        </p>
+                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                          {posIsSpendaFlow
+                            ? 'Hash PayLink verifies the USDC payment. Spenda handles KYC, conversion, and naira spending in its app.'
+                            : 'Merchant receives USDC directly. Bank settlement stays off until a licensed payout partner is connected.'}
+                        </p>
                       </div>
-                      <span className="shrink-0 rounded-full border border-gray-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-gray-400 dark:border-white/10 dark:bg-white/[0.06]">
-                        Soon
+                      <span className={cn(
+                        'shrink-0 rounded-full border border-gray-200 bg-white px-2.5 py-1 text-[11px] font-semibold dark:border-white/10 dark:bg-white/[0.06]',
+                        posIsSpendaFlow ? 'text-gray-700 dark:text-gray-200' : 'text-gray-400',
+                      )}>
+                        {posIsSpendaFlow ? 'Partner wallet' : 'No bank custody'}
                       </span>
                     </div>
                   </div>
@@ -1189,7 +1334,7 @@ export default function CreateLink() {
                     className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
                   >
                     {posBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Store className="h-4 w-4" />}
-                    Generate POS QR
+                    {posIsSpendaFlow ? 'Generate Spenda POS QR' : 'Generate POS QR'}
                   </button>
                 </div>
               ) : (
