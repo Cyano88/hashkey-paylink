@@ -1128,10 +1128,10 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                     <img src={POLYMARKET_LOGO} alt="" className="h-[18px] w-[18px] invert dark:invert-0" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Telegram</p>
-                    <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">Hash PayLink on Telegram</h2>
+                    <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Polymarket</p>
+                    <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">Open from chat</h2>
                     <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-                      Create payment links, fund Polymarket, manage agents, and open StreamPay from chat.
+                      Best for saved alerts, LP Scout memory, and quick funding from chat.
                     </p>
                   </div>
                 </div>
@@ -1143,17 +1143,19 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                   className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
                 >
                   <MessageCircle className="h-4 w-4" />
-                  Open Telegram Dashboard
+                  Open in Telegram
                 </a>
                 <p className="mt-2 text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
-                  Saved context, alerts, quick funding, and agent actions work best from Telegram.
+                  WhatsApp support coming soon.
                 </p>
 
                 <div className="mt-4 divide-y divide-gray-100 rounded-lg border border-gray-100 bg-white px-3 dark:divide-white/10 dark:border-white/10 dark:bg-white/[0.05]">
                   {[
-                    { icon: Link2, title: 'Create requests', body: 'Payment links, group collections, and POS QR.' },
-                    { icon: Bot, title: 'Use agents', body: 'Agent wallets, helper memory, and x402 service actions.' },
-                    { icon: LayoutDashboard, title: 'Track markets', body: 'Polymarket funding, portfolio alerts, World Cup markets, and LP Scout.' },
+                    { icon: Wallet, title: 'Fund Polymarket', body: 'Add USDC without copying deposit addresses.' },
+                    { icon: LayoutDashboard, title: 'Portfolio', body: 'Track open positions and claimable markets.' },
+                    { icon: AlertTriangle, title: 'Alerts', body: 'Get notified when a position needs attention.' },
+                    { icon: Radio, title: 'World Cup', body: 'Follow live scores and open related markets.' },
+                    { icon: Bot, title: 'LP Scout', body: 'Ask the agent to check market depth and LP rewards.' },
                   ].map(({ icon: Icon, title, body }) => (
                     <div key={title} className="flex items-center gap-3 py-3">
                       <Icon className="h-4 w-4 shrink-0 text-gray-400" />
