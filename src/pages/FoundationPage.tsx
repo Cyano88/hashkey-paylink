@@ -49,18 +49,23 @@ const products = [
 
 const stack = ['Circle USDC', 'Privy', 'Base', 'Arbitrum', 'Arc', 'Solana', '0G Storage', 'Postgres']
 
-const proof = [
-  ['0.2%', 'payment fee'],
-  ['0.5%', 'Arena fee'],
-  ['24/7', 'Telegram workflows'],
-  ['0G', 'proof archive'],
+const partnerRail = [
+  { name: 'Circle', logo: '/brand/circle-logo.jpeg' },
+  { name: 'Privy' },
+  { name: 'Base' },
+  { name: 'Arbitrum' },
+  { name: 'Arc' },
+  { name: 'Solana' },
+  { name: '0G' },
+  { name: 'Polymarket', logo: '/brand/polymarket-logo.png' },
+  { name: 'Telegram' },
 ]
 
 function HashMark({ className = '' }: { className?: string }) {
   return <img src="/hash-logo-transparent.png" alt="Hash PayLink" className={className} />
 }
 
-function GlobeAnnotation({
+function ProductSignal({
   label,
   value,
   className,
@@ -84,14 +89,28 @@ export default function FoundationPage() {
   return (
     <main className="min-h-screen bg-[#f3f1ea] text-[#0d1117]">
       <style>{`
-        @keyframes hpl-globe-pan {
-          0% { transform: translate3d(-2.25%, 0, 0) scale(1.2) rotate(-6deg); }
-          50% { transform: translate3d(2.25%, -1%, 0) scale(1.24) rotate(5deg); }
-          100% { transform: translate3d(-2.25%, 0, 0) scale(1.2) rotate(-6deg); }
+        @keyframes hpl-globe-drift {
+          0% { transform: translate3d(-50%, -50%, 0) scale(1.04) rotate(-1deg); }
+          50% { transform: translate3d(-49%, -51%, 0) scale(1.08) rotate(1deg); }
+          100% { transform: translate3d(-50%, -50%, 0) scale(1.04) rotate(-1deg); }
         }
         @keyframes hpl-orbit {
           from { transform: rotate(0deg); }
           to { transform: rotate(360deg); }
+        }
+        @keyframes hpl-logo-sphere {
+          0% {
+            transform: rotateY(0deg) rotateX(9deg);
+            background-position: 0% 50%;
+          }
+          100% {
+            transform: rotateY(360deg) rotateX(9deg);
+            background-position: 220% 50%;
+          }
+        }
+        @keyframes hpl-rail {
+          from { transform: translate3d(0, 0, 0); }
+          to { transform: translate3d(-50%, 0, 0); }
         }
         @keyframes hpl-scan {
           0%, 100% { opacity: .28; transform: translateX(-10%); }
@@ -110,8 +129,10 @@ export default function FoundationPage() {
         }
         @media (prefers-reduced-motion: reduce) {
           .hpl-reveal,
-          [data-motion="globe"],
+          [data-motion="globe-bg"],
+          [data-motion="logo-sphere"],
           [data-motion="orbit"],
+          [data-motion="rail"],
           [data-motion="scan"] {
             animation: none !important;
             opacity: 1 !important;
@@ -122,10 +143,16 @@ export default function FoundationPage() {
 
       <section className="relative overflow-hidden bg-[#06090d] text-white">
         <div className="absolute inset-0 isolate">
-          <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,.04)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.035)_1px,transparent_1px)] bg-[size:76px_76px] opacity-70" />
-          <div className="absolute inset-x-0 top-0 h-[520px] bg-[radial-gradient(circle_at_50%_0%,rgba(34,211,238,.24),transparent_58%)]" />
-          <div className="absolute left-1/2 top-[43%] h-[920px] w-[920px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-cyan-300/[.06] blur-3xl" />
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_44%,transparent_0,rgba(0,0,0,.22)_43%,rgba(0,0,0,.82)_100%)]" />
+          <img
+            src="/brand/world-globe.png"
+            alt=""
+            data-motion="globe-bg"
+            className="absolute left-1/2 top-[45%] h-[980px] w-[980px] max-w-none rounded-full object-cover opacity-34 saturate-[.78]"
+            style={{ animation: 'hpl-globe-drift 36s ease-in-out infinite', filter: 'blur(5px) brightness(0.55)' }}
+          />
+          <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.025)_1px,transparent_1px)] bg-[size:84px_84px] opacity-50" />
+          <div className="absolute inset-x-0 top-0 h-[540px] bg-[radial-gradient(circle_at_50%_0%,rgba(34,211,238,.16),transparent_60%)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_43%,rgba(6,182,212,.08)_0,rgba(0,0,0,.12)_36%,rgba(0,0,0,.86)_100%)]" />
         </div>
 
         <div className="relative mx-auto flex min-h-screen w-full max-w-7xl flex-col px-5 py-5 sm:px-8 lg:px-10">
@@ -150,30 +177,31 @@ export default function FoundationPage() {
           </header>
 
           <div className="relative flex flex-1 flex-col items-center justify-center pb-14 pt-12 text-center">
-            <div className="absolute left-1/2 top-[45%] h-[min(86vw,760px)] w-[min(86vw,760px)] -translate-x-1/2 -translate-y-1/2">
+            <div className="pointer-events-none absolute left-1/2 top-[44%] h-[min(58vw,460px)] w-[min(58vw,460px)] -translate-x-1/2 -translate-y-1/2">
               <div className="absolute inset-0 rounded-full bg-cyan-300/10 blur-3xl" />
-              <div data-motion="orbit" className="absolute inset-[9%] rounded-full border border-cyan-200/16" style={{ animation: 'hpl-orbit 34s linear infinite' }} />
-              <div data-motion="orbit" className="absolute inset-[4%] rounded-full border border-white/8" style={{ animation: 'hpl-orbit 54s linear infinite reverse' }} />
-              <div data-motion="orbit" className="absolute inset-[17%] rounded-full border border-cyan-100/10" style={{ animation: 'hpl-orbit 72s linear infinite' }} />
-              <div className="absolute inset-[12%] overflow-hidden rounded-full border border-cyan-100/10 bg-black shadow-[0_0_140px_rgba(8,145,178,.34)]">
-                <img
-                  src="/brand/world-globe.png"
-                  alt=""
-                  data-motion="globe"
-                  className="h-full w-full object-cover opacity-55 saturate-[.76] contrast-[1.05] will-change-transform"
-                  loading="eager"
-                  style={{ animation: 'hpl-globe-pan 28s ease-in-out infinite', filter: 'blur(4px) brightness(0.85)' }}
+              <div data-motion="orbit" className="absolute inset-[10%] rounded-full border border-cyan-200/14" style={{ animation: 'hpl-orbit 34s linear infinite' }} />
+              <div data-motion="orbit" className="absolute inset-[2%] rounded-full border border-white/7" style={{ animation: 'hpl-orbit 58s linear infinite reverse' }} />
+              <div className="absolute left-1/2 top-1/2 h-48 w-48 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/12 bg-[#071014] shadow-[inset_-24px_-28px_54px_rgba(0,0,0,.72),inset_14px_14px_34px_rgba(255,255,255,.08),0_0_90px_rgba(34,211,238,.26)] sm:h-60 sm:w-60">
+                <div
+                  data-motion="logo-sphere"
+                  className="absolute inset-0 rounded-full opacity-90"
+                  style={{
+                    animation: 'hpl-logo-sphere 18s linear infinite',
+                    backgroundImage: 'url(/hash-logo-modal-light.png)',
+                    backgroundSize: '82px 82px',
+                    backgroundRepeat: 'repeat',
+                    boxShadow: 'inset 24px 0 42px rgba(255,255,255,.08), inset -42px -10px 62px rgba(0,0,0,.72)',
+                  }}
                 />
-                <div className="absolute inset-0 backdrop-blur-[1px]" />
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_48%_42%,rgba(255,255,255,.07),rgba(0,0,0,.28)_42%,rgba(0,0,0,.90)_78%)]" />
-                <div data-motion="scan" className="absolute left-[8%] right-[8%] top-[47%] h-px rotate-[-8deg] bg-cyan-200/55 shadow-[0_0_22px_rgba(103,232,249,.72)]" style={{ animation: 'hpl-scan 8s ease-in-out infinite' }} />
+                <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle_at_32%_26%,rgba(255,255,255,.20),transparent_26%),radial-gradient(circle_at_70%_78%,rgba(8,145,178,.18),transparent_35%)]" />
+                <div data-motion="scan" className="absolute left-[18%] right-[18%] top-[49%] h-px rotate-[-7deg] bg-cyan-200/55 shadow-[0_0_18px_rgba(103,232,249,.70)]" style={{ animation: 'hpl-scan 8s ease-in-out infinite' }} />
               </div>
             </div>
 
-            <GlobeAnnotation label="Checkout" value="USDC link created" className="left-0 top-[30%] hidden lg:block" lineClassName="-right-28 w-28" />
-            <GlobeAnnotation label="Agent" value="x402 receipt issued" className="right-2 top-[34%] hidden lg:block" lineClassName="-left-28 w-28" />
-            <GlobeAnnotation label="Proof" value="0G record archived" className="bottom-[20%] left-[9%] hidden lg:block" lineClassName="-right-24 w-24" />
-            <GlobeAnnotation label="PolyDesk" value="Portfolio alerts saved" className="bottom-[24%] right-[6%] hidden lg:block" lineClassName="-left-24 w-24" />
+            <ProductSignal label="Checkout" value="USDC link created" className="left-[6%] top-[32%] hidden lg:block" lineClassName="-right-24 w-24" />
+            <ProductSignal label="Agent" value="x402 receipt issued" className="right-[7%] top-[34%] hidden lg:block" lineClassName="-left-24 w-24" />
+            <ProductSignal label="Proof" value="0G record archived" className="bottom-[25%] left-[14%] hidden lg:block" lineClassName="-right-20 w-20" />
+            <ProductSignal label="PolyDesk" value="Portfolio alerts saved" className="bottom-[27%] right-[12%] hidden lg:block" lineClassName="-left-20 w-20" />
 
             <div className="hpl-reveal relative z-10 mx-auto max-w-4xl pt-28 sm:pt-36 lg:pt-28">
               <p className="text-[11px] font-semibold uppercase tracking-[0.36em] text-cyan-100/80">
@@ -204,13 +232,21 @@ export default function FoundationPage() {
             </div>
           </div>
 
-          <div className="relative z-10 grid gap-3 border-t border-white/10 py-5 sm:grid-cols-2 lg:grid-cols-4">
-            {proof.map(([value, label], index) => (
-              <div key={label} className="hpl-reveal rounded-lg border border-white/8 bg-white/[.035] px-4 py-3 backdrop-blur-md" style={{ '--delay': `${120 + index * 70}ms` } as CSSProperties}>
-                <p className="text-2xl font-semibold tracking-tight text-white">{value}</p>
-                <p className="mt-1 text-xs text-white/50">{label}</p>
-              </div>
-            ))}
+          <div className="relative z-10 overflow-hidden border-y border-white/10 py-4">
+            <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-20 bg-gradient-to-r from-[#06090d] to-transparent" />
+            <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-20 bg-gradient-to-l from-[#06090d] to-transparent" />
+            <div data-motion="rail" className="flex w-max items-center gap-10 opacity-80" style={{ animation: 'hpl-rail 32s linear infinite' }}>
+              {[...partnerRail, ...partnerRail].map((partner, index) => (
+                <div key={`${partner.name}-${index}`} className="flex min-w-max items-center gap-2 text-xs font-semibold uppercase tracking-[0.22em] text-white/48">
+                  {partner.logo ? (
+                    <img src={partner.logo} alt="" className="h-5 w-5 rounded-full object-contain opacity-80 grayscale" />
+                  ) : (
+                    <span className="h-2 w-2 rounded-full bg-cyan-200/40" />
+                  )}
+                  <span>{partner.name}</span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </section>
