@@ -976,7 +976,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
           Multi-Chain PayFi
         </span>
         <h1 className="text-3xl font-bold tracking-tight text-gray-900 sm:text-[2.25rem]">
-          {polymarketMode ? 'Polymarket Chat Layer' : posMode ? 'Retail POS' : streamMode ? 'StreamPay' : accessMode ? 'Hash PayLink Agent' : 'Create a Hash PayLink'}
+          {polymarketMode ? 'PolyDesk' : posMode ? 'Retail POS' : streamMode ? 'StreamPay' : accessMode ? 'Hash PayLink Agent' : 'Create a Hash PayLink'}
         </h1>
         <p className="mt-2 text-[15px] text-gray-500 text-balance">
           {polymarketMode
@@ -1109,8 +1109,8 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
             <button
               type="button"
               onClick={openPolymarketMode}
-              aria-label="Polymarket"
-              title="Polymarket"
+              aria-label="PolyDesk"
+              title="PolyDesk"
               className={cn(
                 'flex h-11 items-center justify-center rounded-lg transition-all',
                 polymarketMode ? 'bg-white text-gray-900 shadow-sm dark:bg-white/10 dark:text-white' : 'text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300',
@@ -1128,10 +1128,10 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                     <img src={POLYMARKET_LOGO} alt="" className="h-[18px] w-[18px] invert dark:invert-0" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Polymarket</p>
-                    <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">Open from chat</h2>
+                    <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">PolyDesk</p>
+                    <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">Polymarket desk in chat</h2>
                     <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-                      Best for saved alerts, LP Scout memory, and quick funding from chat.
+                      Best for saved alerts, portfolio tracking, quick funding, and LP Scout memory.
                     </p>
                   </div>
                 </div>
@@ -1143,7 +1143,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                   className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
                 >
                   <MessageCircle className="h-4 w-4" />
-                  Open in Telegram
+                  Open PolyDesk in Telegram
                 </a>
                 <p className="mt-2 text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
                   WhatsApp support coming soon.

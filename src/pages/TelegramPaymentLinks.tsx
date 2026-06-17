@@ -180,14 +180,14 @@ const sectionServices: Record<TelegramSectionId, TelegramService[]> = {
 const sectionDescriptions: Record<TelegramSectionId, string> = {
   'payment-links': 'Create normal USDC requests and share them into Telegram.',
   'agent-wallets': 'Open the helper, manage wallets, and keep Marketplace marked Soon.',
-  'market-tools': 'Polymarket funding, LP Scout, market inspection, and daily research.',
+  'market-tools': 'PolyDesk for Polymarket funding, portfolio alerts, LP Scout, and live market context.',
   streampay: 'Arc USDC streams for recipients, services, and ongoing retainers.',
 }
 
 const telegramSections: Array<{ id: TelegramSectionId; title: string; icon: typeof Coins }> = [
   { id: 'payment-links', title: 'Payment Links', icon: Coins },
   { id: 'agent-wallets', title: 'Agent Wallets', icon: Bot },
-  { id: 'market-tools', title: 'Polymarket Tools', icon: LineChart },
+  { id: 'market-tools', title: 'PolyDesk', icon: LineChart },
   { id: 'streampay', title: 'StreamPay', icon: Radio },
 ]
 
@@ -996,9 +996,9 @@ function ConnectTelegramPanel({ onBack }: { onBack: () => void }) {
             <MessageCircle className="h-5 w-5" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-base font-semibold text-gray-900 dark:text-white">Open Hash PayLink in Telegram</p>
+            <p className="text-base font-semibold text-gray-900 dark:text-white">Open PolyDesk in Telegram</p>
             <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-              Create payment requests, fund Polymarket, manage agents, and open StreamPay from chat.
+              Fund Polymarket, track positions, get alerts, and ask LP Scout from chat.
             </p>
           </div>
         </div>
@@ -1007,10 +1007,10 @@ function ConnectTelegramPanel({ onBack }: { onBack: () => void }) {
           className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
         >
           <MessageCircle className="h-4 w-4" />
-          Open Telegram Dashboard
+          Open PolyDesk in Telegram
         </a>
         <p className="mt-2 text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
-          Best for saved alerts, helper memory, quick funding, and agent actions.
+          Best for saved alerts, portfolio tracking, quick funding, and LP Scout memory.
         </p>
       </div>
     </div>
@@ -2163,7 +2163,7 @@ function LpScoutPanel({
               <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.06]">
                 <img src={POLYMARKET_LOGO} alt="" className="h-4 w-4 invert dark:invert-0" />
               </span>
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">LP Scout</p>
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">PolyDesk LP Scout</p>
             </div>
             <h2 className="mt-2 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Choose how LP Scout should work</h2>
             <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
@@ -4612,9 +4612,9 @@ function PolyPortfolioPanel({
           <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.06]">
             <img src={POLYMARKET_LOGO} alt="" className="h-4 w-4 invert dark:invert-0" />
           </span>
-          <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Polymarket</p>
+          <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">PolyDesk</p>
         </div>
-        <h2 className="mt-2 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Portfolio</h2>
+        <h2 className="mt-2 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">PolyDesk Portfolio</h2>
         <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
           Sign in to bind a Polymarket profile address to your Hash PayLink session. Your live positions, claimables, and alerts stay tied to your sign-in across devices.
         </p>
@@ -4648,7 +4648,7 @@ function PolyPortfolioPanel({
           <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.06]">
             <img src={POLYMARKET_LOGO} alt="" className="h-4 w-4 invert dark:invert-0" />
           </span>
-          <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Polymarket</p>
+          <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">PolyDesk</p>
         </div>
         <h2 className="mt-2 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Connect Polymarket profile</h2>
         <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
@@ -4705,7 +4705,7 @@ function PolyPortfolioPanel({
               <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.06]">
                 <img src={POLYMARKET_LOGO} alt="" className="h-4 w-4 invert dark:invert-0" />
               </span>
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Polymarket portfolio</p>
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">PolyDesk Portfolio</p>
             </div>
             <button
               type="button"
@@ -5119,7 +5119,7 @@ function PolyWorldCupHubPanel({
         <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.06]">
           <Radio className="h-4 w-4 text-gray-500" />
         </span>
-        <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">World Cup Markets</p>
+        <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">PolyDesk World Cup</p>
       </div>
       <h2 className="mt-2 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Live scores, market odds, direct trade routes.</h2>
       <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
