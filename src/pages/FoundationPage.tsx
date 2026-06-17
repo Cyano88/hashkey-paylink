@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { ArrowRight } from 'lucide-react'
+import type { CSSProperties } from 'react'
 
 const products = [
   {
@@ -63,13 +64,16 @@ function GlobeAnnotation({
   label,
   value,
   className,
+  lineClassName = '',
 }: {
   label: string
   value: string
   className: string
+  lineClassName?: string
 }) {
   return (
     <div className={`absolute rounded-xl border border-white/10 bg-black/42 px-3 py-2 text-left shadow-[0_18px_60px_rgba(0,0,0,.32)] backdrop-blur-xl ${className}`}>
+      <span className={`pointer-events-none absolute top-1/2 hidden h-px bg-gradient-to-r from-transparent via-cyan-200/45 to-transparent lg:block ${lineClassName}`} />
       <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-200/75">{label}</p>
       <p className="mt-1 text-xs font-medium text-white/86">{value}</p>
     </div>
@@ -81,9 +85,9 @@ export default function FoundationPage() {
     <main className="min-h-screen bg-[#f3f1ea] text-[#0d1117]">
       <style>{`
         @keyframes hpl-globe-pan {
-          0% { transform: scale(1.16) rotate(-5deg) translate3d(-2.5%, 0, 0); }
-          50% { transform: scale(1.2) rotate(4deg) translate3d(2.5%, -1%, 0); }
-          100% { transform: scale(1.16) rotate(-5deg) translate3d(-2.5%, 0, 0); }
+          0% { transform: translate3d(-2.25%, 0, 0) scale(1.2) rotate(-6deg); }
+          50% { transform: translate3d(2.25%, -1%, 0) scale(1.24) rotate(5deg); }
+          100% { transform: translate3d(-2.25%, 0, 0) scale(1.2) rotate(-6deg); }
         }
         @keyframes hpl-orbit {
           from { transform: rotate(0deg); }
@@ -93,13 +97,35 @@ export default function FoundationPage() {
           0%, 100% { opacity: .28; transform: translateX(-10%); }
           50% { opacity: .68; transform: translateX(10%); }
         }
+        @keyframes hpl-float-in {
+          from { opacity: 0; transform: translate3d(0, 18px, 0) scale(.985); }
+          to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+        }
+        .hpl-reveal {
+          opacity: 0;
+          transform: translate3d(0, 18px, 0) scale(.985);
+          animation: hpl-float-in .78s cubic-bezier(.22, 1, .36, 1) forwards;
+          animation-delay: var(--delay, 0ms);
+          will-change: transform, opacity;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .hpl-reveal,
+          [data-motion="globe"],
+          [data-motion="orbit"],
+          [data-motion="scan"] {
+            animation: none !important;
+            opacity: 1 !important;
+            transform: none !important;
+          }
+        }
       `}</style>
 
       <section className="relative overflow-hidden bg-[#06090d] text-white">
-        <div className="absolute inset-0">
+        <div className="absolute inset-0 isolate">
           <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,.04)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.035)_1px,transparent_1px)] bg-[size:76px_76px] opacity-70" />
           <div className="absolute inset-x-0 top-0 h-[520px] bg-[radial-gradient(circle_at_50%_0%,rgba(34,211,238,.24),transparent_58%)]" />
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_45%,transparent_0,rgba(0,0,0,.16)_45%,rgba(0,0,0,.72)_100%)]" />
+          <div className="absolute left-1/2 top-[43%] h-[920px] w-[920px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-cyan-300/[.06] blur-3xl" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_44%,transparent_0,rgba(0,0,0,.22)_43%,rgba(0,0,0,.82)_100%)]" />
         </div>
 
         <div className="relative mx-auto flex min-h-screen w-full max-w-7xl flex-col px-5 py-5 sm:px-8 lg:px-10">
@@ -124,28 +150,32 @@ export default function FoundationPage() {
           </header>
 
           <div className="relative flex flex-1 flex-col items-center justify-center pb-14 pt-12 text-center">
-            <div className="absolute left-1/2 top-[45%] h-[min(78vw,720px)] w-[min(78vw,720px)] -translate-x-1/2 -translate-y-1/2">
+            <div className="absolute left-1/2 top-[45%] h-[min(86vw,760px)] w-[min(86vw,760px)] -translate-x-1/2 -translate-y-1/2">
               <div className="absolute inset-0 rounded-full bg-cyan-300/10 blur-3xl" />
-              <div className="absolute inset-[9%] rounded-full border border-cyan-200/14" style={{ animation: 'hpl-orbit 34s linear infinite' }} />
-              <div className="absolute inset-[4%] rounded-full border border-white/8" style={{ animation: 'hpl-orbit 54s linear infinite reverse' }} />
-              <div className="absolute inset-[13%] overflow-hidden rounded-full border border-cyan-100/10 bg-black shadow-[0_0_120px_rgba(8,145,178,.30)]">
+              <div data-motion="orbit" className="absolute inset-[9%] rounded-full border border-cyan-200/16" style={{ animation: 'hpl-orbit 34s linear infinite' }} />
+              <div data-motion="orbit" className="absolute inset-[4%] rounded-full border border-white/8" style={{ animation: 'hpl-orbit 54s linear infinite reverse' }} />
+              <div data-motion="orbit" className="absolute inset-[17%] rounded-full border border-cyan-100/10" style={{ animation: 'hpl-orbit 72s linear infinite' }} />
+              <div className="absolute inset-[12%] overflow-hidden rounded-full border border-cyan-100/10 bg-black shadow-[0_0_140px_rgba(8,145,178,.34)]">
                 <img
                   src="/brand/world-globe.png"
                   alt=""
-                  className="h-full w-full object-cover opacity-58 saturate-[.78] contrast-[1.04]"
-                  style={{ animation: 'hpl-globe-pan 28s ease-in-out infinite' }}
+                  data-motion="globe"
+                  className="h-full w-full object-cover opacity-55 saturate-[.76] contrast-[1.05] will-change-transform"
+                  loading="eager"
+                  style={{ animation: 'hpl-globe-pan 28s ease-in-out infinite', filter: 'blur(4px) brightness(0.85)' }}
                 />
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_48%_42%,rgba(255,255,255,.08),rgba(0,0,0,.22)_42%,rgba(0,0,0,.86)_78%)]" />
-                <div className="absolute left-[8%] right-[8%] top-[47%] h-px rotate-[-8deg] bg-cyan-200/55 shadow-[0_0_22px_rgba(103,232,249,.72)]" style={{ animation: 'hpl-scan 8s ease-in-out infinite' }} />
+                <div className="absolute inset-0 backdrop-blur-[1px]" />
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_48%_42%,rgba(255,255,255,.07),rgba(0,0,0,.28)_42%,rgba(0,0,0,.90)_78%)]" />
+                <div data-motion="scan" className="absolute left-[8%] right-[8%] top-[47%] h-px rotate-[-8deg] bg-cyan-200/55 shadow-[0_0_22px_rgba(103,232,249,.72)]" style={{ animation: 'hpl-scan 8s ease-in-out infinite' }} />
               </div>
             </div>
 
-            <GlobeAnnotation label="Checkout" value="USDC link created" className="left-0 top-[30%] hidden lg:block" />
-            <GlobeAnnotation label="Agent" value="x402 receipt issued" className="right-2 top-[34%] hidden lg:block" />
-            <GlobeAnnotation label="Proof" value="0G record archived" className="bottom-[20%] left-[9%] hidden lg:block" />
-            <GlobeAnnotation label="PolyDesk" value="Portfolio alerts saved" className="bottom-[24%] right-[6%] hidden lg:block" />
+            <GlobeAnnotation label="Checkout" value="USDC link created" className="left-0 top-[30%] hidden lg:block" lineClassName="-right-28 w-28" />
+            <GlobeAnnotation label="Agent" value="x402 receipt issued" className="right-2 top-[34%] hidden lg:block" lineClassName="-left-28 w-28" />
+            <GlobeAnnotation label="Proof" value="0G record archived" className="bottom-[20%] left-[9%] hidden lg:block" lineClassName="-right-24 w-24" />
+            <GlobeAnnotation label="PolyDesk" value="Portfolio alerts saved" className="bottom-[24%] right-[6%] hidden lg:block" lineClassName="-left-24 w-24" />
 
-            <div className="relative z-10 mx-auto max-w-4xl pt-28 sm:pt-36 lg:pt-28">
+            <div className="hpl-reveal relative z-10 mx-auto max-w-4xl pt-28 sm:pt-36 lg:pt-28">
               <p className="text-[11px] font-semibold uppercase tracking-[0.36em] text-cyan-100/80">
                 Stablecoin payment infrastructure
               </p>
@@ -175,8 +205,8 @@ export default function FoundationPage() {
           </div>
 
           <div className="relative z-10 grid gap-3 border-t border-white/10 py-5 sm:grid-cols-2 lg:grid-cols-4">
-            {proof.map(([value, label]) => (
-              <div key={label} className="rounded-lg border border-white/8 bg-white/[.035] px-4 py-3 backdrop-blur-md">
+            {proof.map(([value, label], index) => (
+              <div key={label} className="hpl-reveal rounded-lg border border-white/8 bg-white/[.035] px-4 py-3 backdrop-blur-md" style={{ '--delay': `${120 + index * 70}ms` } as CSSProperties}>
                 <p className="text-2xl font-semibold tracking-tight text-white">{value}</p>
                 <p className="mt-1 text-xs text-white/50">{label}</p>
               </div>
@@ -186,7 +216,7 @@ export default function FoundationPage() {
       </section>
 
       <section id="products" className="mx-auto w-full max-w-7xl px-5 py-20 sm:px-8 lg:px-10">
-        <div className="mx-auto max-w-2xl text-center">
+        <div className="hpl-reveal mx-auto max-w-2xl text-center">
           <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-cyan-700">Product surface</p>
           <h2 className="mt-3 text-4xl font-semibold tracking-[-0.04em] text-gray-950 sm:text-5xl">
             One platform for USDC workflows.
@@ -197,11 +227,12 @@ export default function FoundationPage() {
         </div>
 
         <div className="mt-12 grid overflow-hidden rounded-2xl border border-black/10 bg-white shadow-[0_22px_90px_rgba(15,23,42,.08)] md:grid-cols-2 lg:grid-cols-3">
-          {products.map(({ index, title, copy, href, status }) => (
+          {products.map(({ index, title, copy, href, status }, cardIndex) => (
             <Link
               key={title}
               to={href}
-              className="group min-h-[230px] border-b border-black/10 p-6 transition hover:bg-cyan-50/55 md:border-r lg:[&:nth-child(3n)]:border-r-0 [&:nth-last-child(-n+3)]:lg:border-b-0"
+              className="hpl-reveal group min-h-[230px] border-b border-black/10 p-6 transition duration-300 hover:-translate-y-1 hover:bg-cyan-50/55 hover:shadow-[0_24px_70px_rgba(8,145,178,.10)] md:border-r lg:[&:nth-child(3n)]:border-r-0 [&:nth-last-child(-n+3)]:lg:border-b-0"
+              style={{ '--delay': `${cardIndex * 80}ms` } as CSSProperties}
             >
               <div className="flex items-start justify-between gap-4">
                 <span className="text-xs font-semibold tracking-[0.22em] text-gray-400">{index}</span>
@@ -232,8 +263,8 @@ export default function FoundationPage() {
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
-            {stack.map((item) => (
-              <div key={item} className="rounded-xl border border-white/10 bg-white/[.04] px-5 py-4">
+            {stack.map((item, index) => (
+              <div key={item} className="hpl-reveal rounded-xl border border-white/10 bg-white/[.04] px-5 py-4 transition duration-300 hover:-translate-y-0.5 hover:border-cyan-200/28 hover:bg-white/[.065]" style={{ '--delay': `${index * 55}ms` } as CSSProperties}>
                 <p className="text-sm font-semibold text-white">{item}</p>
                 <p className="mt-2 text-xs leading-5 text-white/48">Used only where it belongs in the product flow.</p>
               </div>
