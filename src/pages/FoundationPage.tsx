@@ -1,146 +1,164 @@
 import { Link } from 'react-router-dom'
-import {
-  ArrowRight,
-  Bot,
-  Code2,
-  Database,
-  Link2,
-  MessageCircle,
-  Radio,
-  ShieldCheck,
-  Store,
-  WalletCards,
-  Zap,
-} from 'lucide-react'
+import { ArrowRight } from 'lucide-react'
 
 const products = [
   {
-    icon: Link2,
+    index: '01',
     title: 'Payment Links',
     copy: 'Create and request USDC payments with hosted checkout, QR codes, and live dashboards.',
     href: '/app',
     status: 'Live',
   },
   {
-    icon: Store,
+    index: '02',
     title: 'Retail POS',
-    copy: 'Country-aware POS flows for static QR checkout, starting with Nigeria and USDC settlement paths.',
+    copy: 'Country-aware static QR checkout for local retail, starting with Nigeria.',
     href: '/app',
     status: 'Live',
   },
   {
-    icon: MessageCircle,
+    index: '03',
     title: 'PolyDesk',
     copy: 'Fund Polymarket, track positions, receive alerts, and ask LP Scout from Telegram.',
     href: '/polymarket',
     status: 'Live',
   },
   {
-    icon: Radio,
+    index: '04',
     title: 'StreamPay',
     copy: 'Stream USDC on Arc for payroll, agentic services, and recoverable-risk Arena rooms.',
     href: '/?app=streampay',
     status: 'Live',
   },
   {
-    icon: Bot,
+    index: '05',
     title: 'Agent Commerce',
     copy: 'Agent wallets, x402 receipts, paid service access, and 0G-verifiable activity records.',
     href: '/agent',
     status: 'Live',
   },
   {
-    icon: Code2,
+    index: '06',
     title: 'Developer SDK',
-    copy: 'Hosted checkout URLs and React buttons for teams that want Hash PayLink inside their own product.',
+    copy: 'Hosted checkout URLs and React buttons for teams integrating Hash PayLink.',
     href: '/docs/sdk',
     status: 'Docs',
   },
 ]
 
-const stack = ['Circle USDC', 'Privy sign-in', 'Arc Network', '0G Storage', 'Polymarket APIs', 'Postgres state']
+const stack = ['Circle USDC', 'Privy', 'Base', 'Arbitrum', 'Arc', 'Solana', '0G Storage', 'Postgres']
 
-const metrics = [
-  ['0.2%', 'standard payment fee'],
-  ['0.5%', 'Arena room fee'],
-  ['6', 'supported payment rails'],
-  ['24/7', 'Telegram-first workflows'],
-]
-
-const proofCards = [
-  {
-    icon: WalletCards,
-    title: 'Consumer checkout',
-    copy: 'Payers can use hosted checkout, QR codes, or send-via-address flows without learning payment infrastructure.',
-  },
-  {
-    icon: ShieldCheck,
-    title: 'Non-custodial settlement',
-    copy: 'Funds route to recipient wallets or dedicated escrow contracts; Hash PayLink does not custody merchant funds.',
-  },
-  {
-    icon: Database,
-    title: '0G proof layer',
-    copy: 'Payment and agent activity records can be archived to 0G for verifiable receipts and agent-readable memory.',
-  },
+const proof = [
+  ['0.2%', 'payment fee'],
+  ['0.5%', 'Arena fee'],
+  ['24/7', 'Telegram workflows'],
+  ['0G', 'proof archive'],
 ]
 
 function HashMark({ className = '' }: { className?: string }) {
+  return <img src="/hash-logo-transparent.png" alt="Hash PayLink" className={className} />
+}
+
+function GlobeAnnotation({
+  label,
+  value,
+  className,
+}: {
+  label: string
+  value: string
+  className: string
+}) {
   return (
-    <img
-      src="/hash-logo-transparent.png"
-      alt="Hash PayLink"
-      className={className}
-    />
+    <div className={`absolute rounded-xl border border-white/10 bg-black/42 px-3 py-2 text-left shadow-[0_18px_60px_rgba(0,0,0,.32)] backdrop-blur-xl ${className}`}>
+      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-200/75">{label}</p>
+      <p className="mt-1 text-xs font-medium text-white/86">{value}</p>
+    </div>
   )
 }
 
 export default function FoundationPage() {
   return (
-    <main className="min-h-screen bg-[#f4f2ec] text-[#0d1117]">
-      <section className="relative overflow-hidden bg-[#070b0f] text-white">
-        <div className="absolute inset-0 opacity-70">
-          <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,.045)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.045)_1px,transparent_1px)] bg-[size:72px_72px]" />
-          <div className="absolute inset-x-0 top-0 h-80 bg-[radial-gradient(circle_at_50%_20%,rgba(14,165,233,.32),transparent_54%)]" />
-          <div className="absolute inset-x-0 bottom-0 h-72 bg-[linear-gradient(180deg,transparent,rgba(20,184,166,.12))]" />
+    <main className="min-h-screen bg-[#f3f1ea] text-[#0d1117]">
+      <style>{`
+        @keyframes hpl-globe-pan {
+          0% { transform: scale(1.16) rotate(-5deg) translate3d(-2.5%, 0, 0); }
+          50% { transform: scale(1.2) rotate(4deg) translate3d(2.5%, -1%, 0); }
+          100% { transform: scale(1.16) rotate(-5deg) translate3d(-2.5%, 0, 0); }
+        }
+        @keyframes hpl-orbit {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        @keyframes hpl-scan {
+          0%, 100% { opacity: .28; transform: translateX(-10%); }
+          50% { opacity: .68; transform: translateX(10%); }
+        }
+      `}</style>
+
+      <section className="relative overflow-hidden bg-[#06090d] text-white">
+        <div className="absolute inset-0">
+          <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,.04)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.035)_1px,transparent_1px)] bg-[size:76px_76px] opacity-70" />
+          <div className="absolute inset-x-0 top-0 h-[520px] bg-[radial-gradient(circle_at_50%_0%,rgba(34,211,238,.24),transparent_58%)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_45%,transparent_0,rgba(0,0,0,.16)_45%,rgba(0,0,0,.72)_100%)]" />
         </div>
 
-        <div className="relative mx-auto flex min-h-[88vh] w-full max-w-7xl flex-col px-5 py-5 sm:px-8 lg:px-10">
-          <header className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[.04] px-4 py-3 backdrop-blur-md">
+        <div className="relative mx-auto flex min-h-screen w-full max-w-7xl flex-col px-5 py-5 sm:px-8 lg:px-10">
+          <header className="mx-auto flex w-full max-w-5xl items-center justify-between rounded-xl border border-white/10 bg-white/[.045] px-3 py-2.5 backdrop-blur-xl">
             <Link to="/" className="flex items-center gap-2.5">
               <span className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/[.06]">
                 <HashMark className="h-5 w-5 object-contain" />
               </span>
               <span className="text-sm font-semibold tracking-tight">Hash PayLink</span>
             </Link>
-            <nav className="hidden items-center gap-6 text-xs font-medium text-white/62 md:flex">
-              <a href="#products" className="transition hover:text-white">Products</a>
-              <a href="#stack" className="transition hover:text-white">Stack</a>
-              <Link to="/docs" className="transition hover:text-white">Developers</Link>
+            <nav className="hidden items-center gap-1 rounded-lg border border-white/8 bg-black/18 p-1 text-[11px] font-medium text-white/58 md:flex">
+              <a href="#products" className="rounded-md px-3 py-1.5 transition hover:bg-white/8 hover:text-white">Products</a>
+              <a href="#stack" className="rounded-md px-3 py-1.5 transition hover:bg-white/8 hover:text-white">Stack</a>
+              <Link to="/docs" className="rounded-md px-3 py-1.5 transition hover:bg-white/8 hover:text-white">Developers</Link>
             </nav>
             <Link
               to="/app"
-              className="inline-flex h-9 items-center justify-center rounded-lg border border-cyan-300/35 bg-cyan-300/10 px-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-cyan-200 transition hover:bg-cyan-300/18"
+              className="inline-flex h-9 items-center justify-center rounded-lg border border-cyan-300/35 bg-cyan-300/10 px-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-cyan-100 transition hover:bg-cyan-300/18"
             >
-              Open App
+              Launch App
             </Link>
           </header>
 
-          <div className="grid flex-1 items-center gap-10 py-16 lg:grid-cols-[1.02fr_.98fr] lg:py-20">
-            <div className="mx-auto max-w-3xl text-center lg:mx-0 lg:text-left">
-              <p className="mb-5 text-[11px] font-semibold uppercase tracking-[0.34em] text-cyan-200/80">
-                Programmable USDC payments
+          <div className="relative flex flex-1 flex-col items-center justify-center pb-14 pt-12 text-center">
+            <div className="absolute left-1/2 top-[45%] h-[min(78vw,720px)] w-[min(78vw,720px)] -translate-x-1/2 -translate-y-1/2">
+              <div className="absolute inset-0 rounded-full bg-cyan-300/10 blur-3xl" />
+              <div className="absolute inset-[9%] rounded-full border border-cyan-200/14" style={{ animation: 'hpl-orbit 34s linear infinite' }} />
+              <div className="absolute inset-[4%] rounded-full border border-white/8" style={{ animation: 'hpl-orbit 54s linear infinite reverse' }} />
+              <div className="absolute inset-[13%] overflow-hidden rounded-full border border-cyan-100/10 bg-black shadow-[0_0_120px_rgba(8,145,178,.30)]">
+                <img
+                  src="/brand/world-globe.png"
+                  alt=""
+                  className="h-full w-full object-cover opacity-58 saturate-[.78] contrast-[1.04]"
+                  style={{ animation: 'hpl-globe-pan 28s ease-in-out infinite' }}
+                />
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_48%_42%,rgba(255,255,255,.08),rgba(0,0,0,.22)_42%,rgba(0,0,0,.86)_78%)]" />
+                <div className="absolute left-[8%] right-[8%] top-[47%] h-px rotate-[-8deg] bg-cyan-200/55 shadow-[0_0_22px_rgba(103,232,249,.72)]" style={{ animation: 'hpl-scan 8s ease-in-out infinite' }} />
+              </div>
+            </div>
+
+            <GlobeAnnotation label="Checkout" value="USDC link created" className="left-0 top-[30%] hidden lg:block" />
+            <GlobeAnnotation label="Agent" value="x402 receipt issued" className="right-2 top-[34%] hidden lg:block" />
+            <GlobeAnnotation label="Proof" value="0G record archived" className="bottom-[20%] left-[9%] hidden lg:block" />
+            <GlobeAnnotation label="PolyDesk" value="Portfolio alerts saved" className="bottom-[24%] right-[6%] hidden lg:block" />
+
+            <div className="relative z-10 mx-auto max-w-4xl pt-28 sm:pt-36 lg:pt-28">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.36em] text-cyan-100/80">
+                Stablecoin payment infrastructure
               </p>
-              <h1 className="text-balance text-5xl font-semibold leading-[0.95] tracking-[-0.04em] sm:text-6xl lg:text-7xl">
-                Stablecoin payments for real product workflows.
+              <h1 className="mt-5 text-balance text-5xl font-semibold leading-[0.94] tracking-[-0.055em] sm:text-7xl lg:text-[92px]">
+                Moving USDC at product speed.
               </h1>
-              <p className="mx-auto mt-6 max-w-2xl text-base leading-7 text-white/66 lg:mx-0">
+              <p className="mx-auto mt-6 max-w-2xl text-[15px] leading-7 text-white/68">
                 Hash PayLink powers payment links, retail POS, PolyDesk, StreamPay, and agent commerce from one non-custodial USDC platform.
               </p>
-              <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row lg:justify-start">
+              <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
                 <Link
                   to="/app"
-                  className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-cyan-300 px-5 text-sm font-semibold text-[#061014] shadow-[0_0_34px_rgba(34,211,238,.26)] transition hover:bg-cyan-200 sm:w-auto"
+                  className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-cyan-300 px-5 text-sm font-semibold text-[#061014] shadow-[0_0_42px_rgba(34,211,238,.26)] transition hover:bg-cyan-200 sm:w-auto"
                 >
                   Open App <ArrowRight className="h-4 w-4" />
                 </Link>
@@ -148,37 +166,17 @@ export default function FoundationPage() {
                   href="https://t.me/HashPayLinkBot?start=polydesk"
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex h-12 w-full items-center justify-center rounded-lg border border-white/12 bg-white/[.04] px-5 text-sm font-semibold text-white/86 transition hover:bg-white/[.07] sm:w-auto"
+                  className="inline-flex h-12 w-full items-center justify-center rounded-lg border border-white/12 bg-white/[.045] px-5 text-sm font-semibold text-white/86 transition hover:bg-white/[.08] sm:w-auto"
                 >
                   Open PolyDesk in Telegram
                 </a>
               </div>
             </div>
-
-            <div className="relative mx-auto aspect-square w-full max-w-[560px]">
-              <div className="absolute inset-6 rounded-full border border-cyan-200/10 bg-[radial-gradient(circle_at_45%_35%,rgba(103,232,249,.28),rgba(8,47,73,.28)_34%,rgba(2,6,23,.96)_68%)] shadow-[0_0_90px_rgba(8,145,178,.32)]" />
-              <div className="absolute inset-[17%] rounded-full border border-cyan-200/20" />
-              <div className="absolute left-[6%] right-[4%] top-[38%] h-px rotate-[-8deg] bg-cyan-200/60 shadow-[0_0_18px_rgba(103,232,249,.8)]" />
-              <div className="absolute left-[18%] top-[28%] rounded-xl border border-white/10 bg-white/[.06] px-3 py-2 text-xs text-white/70 backdrop-blur-md">
-                USDC link created
-              </div>
-              <div className="absolute bottom-[21%] right-[7%] rounded-xl border border-cyan-200/20 bg-cyan-200/10 px-3 py-2 text-xs text-cyan-100 backdrop-blur-md">
-                0G proof archived
-              </div>
-              <div className="absolute bottom-[13%] left-[12%] rounded-xl border border-white/10 bg-white/[.06] px-3 py-2 text-xs text-white/70 backdrop-blur-md">
-                x402 receipt
-              </div>
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="flex h-24 w-24 items-center justify-center rounded-2xl border border-white/12 bg-black/30 backdrop-blur-md">
-                  <HashMark className="h-12 w-12 object-contain" />
-                </div>
-              </div>
-            </div>
           </div>
 
-          <div className="grid gap-3 border-t border-white/10 py-5 sm:grid-cols-2 lg:grid-cols-4">
-            {metrics.map(([value, label]) => (
-              <div key={label} className="rounded-lg border border-white/8 bg-white/[.035] px-4 py-3">
+          <div className="relative z-10 grid gap-3 border-t border-white/10 py-5 sm:grid-cols-2 lg:grid-cols-4">
+            {proof.map(([value, label]) => (
+              <div key={label} className="rounded-lg border border-white/8 bg-white/[.035] px-4 py-3 backdrop-blur-md">
                 <p className="text-2xl font-semibold tracking-tight text-white">{value}</p>
                 <p className="mt-1 text-xs text-white/50">{label}</p>
               </div>
@@ -190,32 +188,30 @@ export default function FoundationPage() {
       <section id="products" className="mx-auto w-full max-w-7xl px-5 py-20 sm:px-8 lg:px-10">
         <div className="mx-auto max-w-2xl text-center">
           <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-cyan-700">Product surface</p>
-          <h2 className="mt-3 text-4xl font-semibold tracking-[-0.035em] text-gray-950 sm:text-5xl">
-            One platform. Several payment workflows.
+          <h2 className="mt-3 text-4xl font-semibold tracking-[-0.04em] text-gray-950 sm:text-5xl">
+            One platform for USDC workflows.
           </h2>
           <p className="mt-4 text-sm leading-6 text-gray-600">
-            Each module is designed to feel simple for consumers while keeping the settlement path verifiable and infrastructure-grade.
+            Consumer-simple interfaces on top of verifiable settlement, agent activity, and durable payment state.
           </p>
         </div>
 
-        <div className="mt-12 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-          {products.map(({ icon: Icon, title, copy, href, status }) => (
+        <div className="mt-12 grid overflow-hidden rounded-2xl border border-black/10 bg-white shadow-[0_22px_90px_rgba(15,23,42,.08)] md:grid-cols-2 lg:grid-cols-3">
+          {products.map(({ index, title, copy, href, status }) => (
             <Link
               key={title}
               to={href}
-              className="group min-h-[210px] rounded-xl border border-black/10 bg-white p-5 shadow-[0_18px_60px_rgba(15,23,42,.06)] transition hover:-translate-y-0.5 hover:border-cyan-700/30 hover:shadow-[0_24px_80px_rgba(15,23,42,.10)]"
+              className="group min-h-[230px] border-b border-black/10 p-6 transition hover:bg-cyan-50/55 md:border-r lg:[&:nth-child(3n)]:border-r-0 [&:nth-last-child(-n+3)]:lg:border-b-0"
             >
               <div className="flex items-start justify-between gap-4">
-                <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-gray-950 text-white">
-                  <Icon className="h-4 w-4" />
-                </span>
+                <span className="text-xs font-semibold tracking-[0.22em] text-gray-400">{index}</span>
                 <span className="rounded-full border border-gray-200 px-2.5 py-1 text-[11px] font-semibold text-gray-500">
                   {status}
                 </span>
               </div>
-              <h3 className="mt-8 text-xl font-semibold tracking-[-0.02em] text-gray-950">{title}</h3>
-              <p className="mt-3 text-sm leading-6 text-gray-600">{copy}</p>
-              <div className="mt-5 inline-flex items-center gap-1.5 text-xs font-semibold text-cyan-700">
+              <h3 className="mt-10 text-xl font-semibold tracking-[-0.025em] text-gray-950">{title}</h3>
+              <p className="mt-3 max-w-sm text-sm leading-6 text-gray-600">{copy}</p>
+              <div className="mt-6 inline-flex items-center gap-1.5 text-xs font-semibold text-cyan-700">
                 Open <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
               </div>
             </Link>
@@ -224,42 +220,34 @@ export default function FoundationPage() {
       </section>
 
       <section id="stack" className="bg-[#0b0e12] px-5 py-20 text-white sm:px-8 lg:px-10">
-        <div className="mx-auto grid w-full max-w-7xl gap-10 lg:grid-cols-[.85fr_1.15fr]">
+        <div className="mx-auto grid w-full max-w-7xl gap-12 lg:grid-cols-[.82fr_1.18fr]">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-cyan-200/80">Infrastructure stack</p>
-            <h2 className="mt-3 max-w-xl text-4xl font-semibold tracking-[-0.035em] sm:text-5xl">
-              Built on proven rails, exposed through simple flows.
+            <h2 className="mt-3 max-w-xl text-4xl font-semibold tracking-[-0.04em] sm:text-5xl">
+              Built on rails people already trust.
             </h2>
             <p className="mt-5 max-w-xl text-sm leading-6 text-white/58">
-              Hash PayLink uses ecosystem infrastructure where it belongs: Circle for USDC and wallets, Privy for sign-in, Arc for streaming settlement, 0G for durable proofs, and Polymarket public APIs for PolyDesk context.
+              Circle handles USDC and wallet infrastructure, Privy handles email-first sessions, Arc supports StreamPay settlement, 0G archives proofs, and Polymarket public APIs power PolyDesk context.
             </p>
-            <div className="mt-8 flex flex-wrap gap-2">
-              {stack.map((item) => (
-                <span key={item} className="rounded-full border border-white/10 bg-white/[.04] px-3 py-1.5 text-xs text-white/70">
-                  {item}
-                </span>
-              ))}
-            </div>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-3">
-            {proofCards.map(({ icon: Icon, title, copy }) => (
-              <div key={title} className="rounded-xl border border-white/10 bg-white/[.04] p-5">
-                <Icon className="h-5 w-5 text-cyan-200" />
-                <h3 className="mt-7 text-base font-semibold">{title}</h3>
-                <p className="mt-3 text-xs leading-5 text-white/52">{copy}</p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {stack.map((item) => (
+              <div key={item} className="rounded-xl border border-white/10 bg-white/[.04] px-5 py-4">
+                <p className="text-sm font-semibold text-white">{item}</p>
+                <p className="mt-2 text-xs leading-5 text-white/48">Used only where it belongs in the product flow.</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      <section className="mx-auto grid w-full max-w-7xl gap-6 px-5 py-20 sm:px-8 lg:grid-cols-[1fr_.8fr] lg:px-10">
+      <section className="mx-auto grid w-full max-w-7xl gap-6 px-5 py-20 sm:px-8 lg:grid-cols-[1fr_.82fr] lg:px-10">
         <div className="rounded-2xl border border-black/10 bg-white p-7 shadow-[0_18px_60px_rgba(15,23,42,.06)]">
           <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-cyan-700">Developer path</p>
-          <h2 className="mt-3 text-3xl font-semibold tracking-[-0.03em] text-gray-950">Integrate hosted checkout first.</h2>
+          <h2 className="mt-3 text-3xl font-semibold tracking-[-0.035em] text-gray-950">Integrate hosted checkout first.</h2>
           <p className="mt-4 max-w-2xl text-sm leading-6 text-gray-600">
-            The SDK currently focuses on hosted Hash PayLink checkout URLs and React buttons. Wallet execution remains inside the hosted app so integrators do not duplicate relayers, smart-wallet sessions, or 0G archive logic.
+            The SDK builds Hash PayLink checkout URLs and React buttons. Wallet execution stays inside the hosted app so integrators do not duplicate relayers, smart-wallet sessions, or 0G archive logic.
           </p>
           <Link
             to="/docs/sdk"
@@ -270,10 +258,10 @@ export default function FoundationPage() {
         </div>
 
         <div className="rounded-2xl border border-cyan-900/15 bg-cyan-50 p-7">
-          <Zap className="h-5 w-5 text-cyan-700" />
-          <h3 className="mt-7 text-2xl font-semibold tracking-[-0.03em] text-gray-950">Start with the app.</h3>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-cyan-700">Start here</p>
+          <h3 className="mt-3 text-2xl font-semibold tracking-[-0.035em] text-gray-950">Open the working app.</h3>
           <p className="mt-3 text-sm leading-6 text-gray-600">
-            Create payment links, open POS, enter PolyDesk, or launch StreamPay from the working app surface.
+            Create payment links, open POS, enter PolyDesk, or launch StreamPay from the app surface.
           </p>
           <Link
             to="/app"

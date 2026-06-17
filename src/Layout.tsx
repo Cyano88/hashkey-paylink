@@ -312,7 +312,7 @@ function DashboardRecipientDropdown({ recipients }: { recipients: DashboardRecip
 export default function Layout() {
   const { pathname } = useLocation()
   const [searchParams] = useSearchParams()
-  const isCreatePage = pathname === '/'
+  const isCreatePage = pathname === '/' || pathname === '/app'
   const isPayPage  = pathname === '/pay'
   const isNgPosPage = pathname === '/pos/ng'
   const isTelegramPaymentLinksPage = pathname === '/telegram/payment-links'
