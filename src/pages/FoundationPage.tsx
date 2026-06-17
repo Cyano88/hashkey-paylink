@@ -51,18 +51,20 @@ const stack = ['Circle USDC', 'Privy', 'Base', 'Arbitrum', 'Arc', 'Solana', '0G 
 
 const partnerRail = [
   { name: 'Circle', logo: '/brand/circle-logo.jpeg' },
-  { name: 'Privy' },
-  { name: 'Base' },
-  { name: 'Arbitrum' },
-  { name: 'Arc' },
-  { name: 'Solana' },
-  { name: '0G' },
+  { name: 'Privy', logo: '/brand/privy-logo.jpeg' },
+  { name: 'Base', logo: '/brand/base-logo.jpeg' },
+  { name: 'Arbitrum', logo: '/brand/arbitrum-logo.jpeg' },
+  { name: 'Arc', logo: '/brand/arc-logo.jpeg' },
+  { name: 'Solana', logo: '/brand/solana-logo.jpeg' },
+  { name: '0G', logo: '/brand/0g-logo.jpeg' },
   { name: 'Polymarket', logo: '/brand/polymarket-logo.png' },
-  { name: 'Telegram' },
+  { name: 'Telegram', logo: '/brand/telegram-logo.jpeg' },
+  { name: 'WhatsApp', logo: '/brand/whatsapp-logo.jpeg' },
+  { name: 'Meta', logo: '/brand/meta-logo.jpeg' },
 ]
 
 function HashMark({ className = '' }: { className?: string }) {
-  return <img src="/hash-logo-transparent.png" alt="Hash PayLink" className={className} />
+  return <img src="/hash-logo.png" alt="Hash PayLink" className={className} />
 }
 
 function ProductSignal({
@@ -94,27 +96,9 @@ export default function FoundationPage() {
           50% { transform: translate3d(-49%, -51%, 0) scale(1.08) rotate(1deg); }
           100% { transform: translate3d(-50%, -50%, 0) scale(1.04) rotate(-1deg); }
         }
-        @keyframes hpl-orbit {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-        @keyframes hpl-logo-sphere {
-          0% {
-            transform: rotateY(0deg) rotateX(9deg);
-            background-position: 0% 50%;
-          }
-          100% {
-            transform: rotateY(360deg) rotateX(9deg);
-            background-position: 220% 50%;
-          }
-        }
         @keyframes hpl-rail {
           from { transform: translate3d(0, 0, 0); }
           to { transform: translate3d(-50%, 0, 0); }
-        }
-        @keyframes hpl-scan {
-          0%, 100% { opacity: .28; transform: translateX(-10%); }
-          50% { opacity: .68; transform: translateX(10%); }
         }
         @keyframes hpl-float-in {
           from { opacity: 0; transform: translate3d(0, 18px, 0) scale(.985); }
@@ -130,10 +114,7 @@ export default function FoundationPage() {
         @media (prefers-reduced-motion: reduce) {
           .hpl-reveal,
           [data-motion="globe-bg"],
-          [data-motion="logo-sphere"],
-          [data-motion="orbit"],
-          [data-motion="rail"],
-          [data-motion="scan"] {
+          [data-motion="rail"] {
             animation: none !important;
             opacity: 1 !important;
             transform: none !important;
@@ -156,64 +137,40 @@ export default function FoundationPage() {
         </div>
 
         <div className="relative mx-auto flex min-h-screen w-full max-w-7xl flex-col px-5 py-5 sm:px-8 lg:px-10">
-          <header className="mx-auto flex w-full max-w-5xl items-center justify-between rounded-xl border border-white/10 bg-white/[.045] px-3 py-2.5 backdrop-blur-xl">
+          <header className="sticky top-5 z-30 mx-auto grid w-full max-w-6xl grid-cols-[1fr_auto] items-center gap-3 rounded-xl border border-white/10 bg-[#070b10]/80 px-3 py-2.5 shadow-[0_18px_80px_rgba(0,0,0,.24)] backdrop-blur-xl md:grid-cols-[1fr_auto_1fr]">
             <Link to="/" className="flex items-center gap-2.5">
               <span className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/[.06]">
-                <HashMark className="h-5 w-5 object-contain" />
+                <HashMark className="h-5 w-5 object-contain invert mix-blend-screen" />
               </span>
               <span className="text-sm font-semibold tracking-tight">Hash PayLink</span>
             </Link>
-            <nav className="hidden items-center gap-1 rounded-lg border border-white/8 bg-black/18 p-1 text-[11px] font-medium text-white/58 md:flex">
+            <nav className="order-3 col-span-2 flex items-center justify-center gap-1 overflow-x-auto rounded-lg border border-white/8 bg-black/18 p-1 text-[11px] font-medium text-white/58 md:order-none md:col-span-1">
               <a href="#products" className="rounded-md px-3 py-1.5 transition hover:bg-white/8 hover:text-white">Products</a>
               <a href="#stack" className="rounded-md px-3 py-1.5 transition hover:bg-white/8 hover:text-white">Stack</a>
               <Link to="/docs" className="rounded-md px-3 py-1.5 transition hover:bg-white/8 hover:text-white">Developers</Link>
+              <a href="#about" className="rounded-md px-3 py-1.5 transition hover:bg-white/8 hover:text-white">About</a>
+              <a href="#contact" className="rounded-md px-3 py-1.5 transition hover:bg-white/8 hover:text-white">Contact</a>
             </nav>
             <Link
               to="/app"
-              className="inline-flex h-9 items-center justify-center rounded-lg border border-cyan-300/35 bg-cyan-300/10 px-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-cyan-100 transition hover:bg-cyan-300/18"
+              className="justify-self-end inline-flex h-9 items-center justify-center rounded-lg border border-cyan-300/35 bg-cyan-300/10 px-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-cyan-100 transition hover:bg-cyan-300/18"
             >
               Launch App
             </Link>
           </header>
 
-          <div className="relative flex flex-1 flex-col items-center justify-center pb-14 pt-12 text-center">
-            <div className="pointer-events-none absolute left-1/2 top-[44%] h-[min(58vw,460px)] w-[min(58vw,460px)] -translate-x-1/2 -translate-y-1/2">
-              <div className="absolute inset-0 rounded-full bg-cyan-300/10 blur-3xl" />
-              <div data-motion="orbit" className="absolute inset-[10%] rounded-full border border-cyan-200/14" style={{ animation: 'hpl-orbit 34s linear infinite' }} />
-              <div data-motion="orbit" className="absolute inset-[2%] rounded-full border border-white/7" style={{ animation: 'hpl-orbit 58s linear infinite reverse' }} />
-              <div className="absolute left-1/2 top-1/2 h-48 w-48 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/12 bg-[#071014] shadow-[inset_-24px_-28px_54px_rgba(0,0,0,.72),inset_14px_14px_34px_rgba(255,255,255,.08),0_0_90px_rgba(34,211,238,.26)] sm:h-60 sm:w-60">
-                <div
-                  data-motion="logo-sphere"
-                  className="absolute inset-0 rounded-full opacity-90"
-                  style={{
-                    animation: 'hpl-logo-sphere 18s linear infinite',
-                    backgroundImage: 'url(/hash-logo-modal-light.png)',
-                    backgroundSize: '82px 82px',
-                    backgroundRepeat: 'repeat',
-                    boxShadow: 'inset 24px 0 42px rgba(255,255,255,.08), inset -42px -10px 62px rgba(0,0,0,.72)',
-                  }}
-                />
-                <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle_at_32%_26%,rgba(255,255,255,.20),transparent_26%),radial-gradient(circle_at_70%_78%,rgba(8,145,178,.18),transparent_35%)]" />
-                <div data-motion="scan" className="absolute left-[18%] right-[18%] top-[49%] h-px rotate-[-7deg] bg-cyan-200/55 shadow-[0_0_18px_rgba(103,232,249,.70)]" style={{ animation: 'hpl-scan 8s ease-in-out infinite' }} />
-              </div>
-            </div>
-
-            <ProductSignal label="Checkout" value="USDC link created" className="left-[6%] top-[32%] hidden lg:block" lineClassName="-right-24 w-24" />
-            <ProductSignal label="Agent" value="x402 receipt issued" className="right-[7%] top-[34%] hidden lg:block" lineClassName="-left-24 w-24" />
-            <ProductSignal label="Proof" value="0G record archived" className="bottom-[25%] left-[14%] hidden lg:block" lineClassName="-right-20 w-20" />
-            <ProductSignal label="PolyDesk" value="Portfolio alerts saved" className="bottom-[27%] right-[12%] hidden lg:block" lineClassName="-left-20 w-20" />
-
-            <div className="hpl-reveal relative z-10 mx-auto max-w-4xl pt-28 sm:pt-36 lg:pt-28">
+          <div className="relative grid flex-1 items-center gap-10 pb-14 pt-12 lg:grid-cols-[minmax(0,1fr)_minmax(420px,540px)] lg:pt-16">
+            <div className="hpl-reveal relative z-10 max-w-2xl text-left">
               <p className="text-[11px] font-semibold uppercase tracking-[0.36em] text-cyan-100/80">
                 Stablecoin payment infrastructure
               </p>
-              <h1 className="mt-5 text-balance text-5xl font-semibold leading-[0.94] tracking-[-0.055em] sm:text-7xl lg:text-[92px]">
+              <h1 className="mt-5 text-balance text-5xl font-semibold leading-[0.94] tracking-[-0.055em] sm:text-7xl lg:text-[86px]">
                 Moving USDC at product speed.
               </h1>
-              <p className="mx-auto mt-6 max-w-2xl text-[15px] leading-7 text-white/68">
+              <p className="mt-6 max-w-xl text-[15px] leading-7 text-white/68">
                 Hash PayLink powers payment links, retail POS, PolyDesk, StreamPay, and agent commerce from one non-custodial USDC platform.
               </p>
-              <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
+              <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                 <Link
                   to="/app"
                   className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-cyan-300 px-5 text-sm font-semibold text-[#061014] shadow-[0_0_42px_rgba(34,211,238,.26)] transition hover:bg-cyan-200 sm:w-auto"
@@ -230,6 +187,32 @@ export default function FoundationPage() {
                 </a>
               </div>
             </div>
+
+            <div className="relative mx-auto h-[430px] w-full max-w-[540px] lg:h-[520px]">
+              <div className="pointer-events-none absolute left-1/2 top-1/2 h-[min(78vw,460px)] w-[min(78vw,460px)] -translate-x-1/2 -translate-y-1/2">
+              <div className="absolute inset-0 rounded-full bg-cyan-300/10 blur-3xl" />
+              <div className="absolute inset-[12%] rounded-full border border-cyan-200/14" />
+              <div className="absolute inset-[2%] rounded-full border border-white/7" />
+              <div className="absolute left-1/2 top-1/2 h-44 w-44 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/12 bg-[#071014] shadow-[inset_-24px_-28px_54px_rgba(0,0,0,.72),inset_14px_14px_34px_rgba(255,255,255,.08),0_0_90px_rgba(34,211,238,.26)] sm:h-56 sm:w-56">
+                <div
+                  className="absolute inset-0 rounded-full opacity-90"
+                  style={{
+                    backgroundImage: 'url(/hash-logo-modal-light.png)',
+                    backgroundSize: '82px 82px',
+                    backgroundRepeat: 'repeat',
+                    boxShadow: 'inset 24px 0 42px rgba(255,255,255,.08), inset -42px -10px 62px rgba(0,0,0,.72)',
+                  }}
+                />
+                <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle_at_32%_26%,rgba(255,255,255,.20),transparent_26%),radial-gradient(circle_at_70%_78%,rgba(8,145,178,.18),transparent_35%)]" />
+                <div className="absolute left-[18%] right-[18%] top-[49%] h-px rotate-[-7deg] bg-cyan-200/45 shadow-[0_0_18px_rgba(103,232,249,.55)]" />
+              </div>
+            </div>
+
+              <ProductSignal label="Checkout" value="USDC link created" className="left-0 top-[18%] hidden sm:block" lineClassName="-right-16 w-16" />
+              <ProductSignal label="Agent" value="x402 receipt issued" className="right-0 top-[22%] hidden sm:block" lineClassName="-left-16 w-16" />
+              <ProductSignal label="Proof" value="0G record archived" className="bottom-[18%] left-[6%] hidden sm:block" lineClassName="-right-14 w-14" />
+              <ProductSignal label="PolyDesk" value="Portfolio alerts saved" className="bottom-[20%] right-[4%] hidden sm:block" lineClassName="-left-14 w-14" />
+            </div>
           </div>
 
           <div className="relative z-10 overflow-hidden border-y border-white/10 py-4">
@@ -237,12 +220,10 @@ export default function FoundationPage() {
             <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-20 bg-gradient-to-l from-[#06090d] to-transparent" />
             <div data-motion="rail" className="flex w-max items-center gap-10 opacity-80" style={{ animation: 'hpl-rail 32s linear infinite' }}>
               {[...partnerRail, ...partnerRail].map((partner, index) => (
-                <div key={`${partner.name}-${index}`} className="flex min-w-max items-center gap-2 text-xs font-semibold uppercase tracking-[0.22em] text-white/48">
-                  {partner.logo ? (
-                    <img src={partner.logo} alt="" className="h-5 w-5 rounded-full object-contain opacity-80 grayscale" />
-                  ) : (
-                    <span className="h-2 w-2 rounded-full bg-cyan-200/40" />
-                  )}
+                <div key={`${partner.name}-${index}`} className="flex min-w-max items-center gap-2 text-xs font-semibold uppercase tracking-[0.22em] text-white/50">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-full border border-white/10 bg-white/[.045]">
+                    <img src={partner.logo} alt="" className="h-5 w-5 rounded-full object-contain opacity-85" />
+                  </span>
                   <span>{partner.name}</span>
                 </div>
               ))}
@@ -309,7 +290,7 @@ export default function FoundationPage() {
         </div>
       </section>
 
-      <section className="mx-auto grid w-full max-w-7xl gap-6 px-5 py-20 sm:px-8 lg:grid-cols-[1fr_.82fr] lg:px-10">
+      <section id="about" className="mx-auto grid w-full max-w-7xl gap-6 px-5 py-20 sm:px-8 lg:grid-cols-[1fr_.82fr] lg:px-10">
         <div className="rounded-2xl border border-black/10 bg-white p-7 shadow-[0_18px_60px_rgba(15,23,42,.06)]">
           <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-cyan-700">Developer path</p>
           <h2 className="mt-3 text-3xl font-semibold tracking-[-0.035em] text-gray-950">Integrate hosted checkout first.</h2>
@@ -339,7 +320,7 @@ export default function FoundationPage() {
         </div>
       </section>
 
-      <footer className="border-t border-black/10 px-5 py-8 sm:px-8 lg:px-10">
+      <footer id="contact" className="border-t border-black/10 px-5 py-8 sm:px-8 lg:px-10">
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 text-xs text-gray-500 sm:flex-row sm:items-center sm:justify-between">
           <p>Hash PayLink | Programmable USDC payment workflows.</p>
           <div className="flex gap-4">
