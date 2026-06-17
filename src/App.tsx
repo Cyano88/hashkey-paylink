@@ -78,6 +78,7 @@ export default function App() {
         </Route>
         <Route element={<Layout />}>
           <Route index element={<CreateLink />} />
+          <Route path="polymarket" element={<CreateLink initialProduct="polymarket" />} />
           <Route path="pay" element={<PaymentPage />} />
           <Route path="p/:network/:amount/:recipient/:memo" element={<ShortPayRedirect />} />
           <Route path="dashboard" element={<Dashboard />} />

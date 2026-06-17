@@ -296,6 +296,19 @@ function telegramWebAppUser(): TelegramWebAppUser | null {
   return telegram?.WebApp?.initDataUnsafe?.user ?? null
 }
 
+function telegramWebAppStartParam() {
+  const telegram = (window as unknown as {
+    Telegram?: {
+      WebApp?: {
+        initDataUnsafe?: {
+          start_param?: string
+        }
+      }
+    }
+  }).Telegram
+  return telegram?.WebApp?.initDataUnsafe?.start_param ?? ''
+}
+
 function telegramOwnerFromContext(searchParams: URLSearchParams, displayName: string) {
   const webAppUser = telegramWebAppUser()
   const urlUserId = searchParams.get('telegramId') ?? searchParams.get('tgid') ?? searchParams.get('tid') ?? searchParams.get('userId')
@@ -364,15 +377,28 @@ function AgentProfileAvatar({ agent, className = 'h-8 w-8 rounded-lg text-[11px]
 export default function TelegramPaymentLinks() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
+  const startPayload = (searchParams.get('start') ?? searchParams.get('tgWebAppStartParam') ?? telegramWebAppStartParam()).trim().toLowerCase()
   const initialMode: RequestMode | '' = searchParams.get('mode') === 'group' ? 'group' : searchParams.get('mode') === 'person' ? 'person' : ''
   const initialSectionParam = searchParams.get('section')
   const initialSection: TelegramSectionId =
-    initialSectionParam === 'agent-wallets' || initialSectionParam === 'market-tools' || initialSectionParam === 'streampay'
+    startPayload === 'polymarket' || startPayload === 'poly'
+      ? 'market-tools'
+      : initialSectionParam === 'agent-wallets' || initialSectionParam === 'market-tools' || initialSectionParam === 'streampay'
       ? initialSectionParam
       : 'payment-links'
   const initialServiceParam = searchParams.get('service')
   const initialService: TelegramServiceId | '' =
-    initialServiceParam === 'hashpaylink-agent' || initialServiceParam === 'hashpaylink-helper'
+    startPayload === 'polymarket' || startPayload === 'poly'
+      ? 'poly-portfolio'
+      : startPayload === 'poly_fund'
+      ? 'fund-polymarket'
+      : startPayload === 'poly_worldcup'
+      ? 'poly-worldcup'
+      : startPayload === 'poly_alerts'
+      ? 'poly-portfolio'
+      : startPayload === 'lp_scout'
+      ? 'lp-scout'
+      : initialServiceParam === 'hashpaylink-agent' || initialServiceParam === 'hashpaylink-helper'
       ? 'hashpaylink-helper'
       : initialServiceParam === 'create-your-agent'
       ? 'create-your-agent'

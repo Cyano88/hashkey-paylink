@@ -64,7 +64,8 @@ const isValidSolanaAddr = isValidSolanaAddress
 
 const VISIBLE_CREATE_CHAINS: ChainKey[] = ['base', 'arc', 'solana', 'arbitrum']
 const SHOW_STARKNET_CREATE_UI = false
-const TELEGRAM_AGENT_URL = import.meta.env.VITE_TELEGRAM_AGENT_URL || 'https://t.me/hashpaylinkbot'
+const TELEGRAM_AGENT_URL = import.meta.env.VITE_TELEGRAM_AGENT_URL || 'https://t.me/HashPayLinkBot'
+const POLYMARKET_LOGO = '/brand/polymarket-logo.png'
 
 type VaultStep = 'idle' | 'ready'
 type ReceiveMode = 'email' | 'paste'
@@ -77,6 +78,12 @@ type PosMerchant = {
   circle_smart_wallet_address: string
   solana_wallet_address?: string
   supported_networks?: PosNetwork[]
+}
+
+function telegramStartUrl(payload: string) {
+  const base = TELEGRAM_AGENT_URL.trim().replace(/\/+$/, '') || 'https://t.me/HashPayLinkBot'
+  const cleanPayload = payload.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64) || 'start'
+  return base.includes('?') ? `${base}&start=${encodeURIComponent(cleanPayload)}` : `${base}?start=${encodeURIComponent(cleanPayload)}`
 }
 
 const POS_NETWORK_OPTIONS: Array<{ key: PosNetwork; label: string; badge?: string }> = [
@@ -413,7 +420,7 @@ function CircleReceiveSelector({
   )
 }
 
-export default function CreateLink() {
+export default function CreateLink({ initialProduct = 'payment' }: { initialProduct?: 'payment' | 'polymarket' } = {}) {
   const { authenticated: privyAuthenticated, logout: logoutPrivy } = usePrivy()
   const [evmAddr,       setEvmAddr]       = useState('')
   const [starkAddr,     setStarkAddr]     = useState('')
@@ -434,6 +441,7 @@ export default function CreateLink() {
   const [receiveMode,    setReceiveMode]    = useState<ReceiveMode>('paste')
   const [posMode,        setPosMode]        = useState(false)
   const [streamMode,     setStreamMode]     = useState(false)
+  const [polymarketMode, setPolymarketMode] = useState(initialProduct === 'polymarket' || window.location.pathname === '/polymarket')
   const [posCountry,     setPosCountry]     = useState<PosCountry | null>(null)
   const [posSettlementPath, setPosSettlementPath] = useState<PosSettlementPath | null>(null)
   const [posMerchantName, setPosMerchantName] = useState('')
@@ -617,6 +625,7 @@ export default function CreateLink() {
   function toggleAccessMode(on: boolean) {
     setPosMode(false)
     setStreamMode(false)
+    setPolymarketMode(false)
     setAccessMode(on)
     setAgentUrl('')
     setAgentUrlStatus('idle')
@@ -632,6 +641,7 @@ export default function CreateLink() {
     setPosMode(true)
     setAccessMode(false)
     setStreamMode(false)
+    setPolymarketMode(false)
     setGeneratedLink('')
     setCopied(false)
     setVaultStep('idle')
@@ -651,6 +661,7 @@ export default function CreateLink() {
     setStreamMode(true)
     setPosMode(false)
     setAccessMode(false)
+    setPolymarketMode(false)
     setGeneratedLink('')
     setCopied(false)
     setVaultStep('idle')
@@ -658,6 +669,16 @@ export default function CreateLink() {
 
   function closeStreamMode() {
     setStreamMode(false)
+  }
+
+  function openPolymarketMode() {
+    setPolymarketMode(true)
+    setStreamMode(false)
+    setPosMode(false)
+    setAccessMode(false)
+    setGeneratedLink('')
+    setCopied(false)
+    setVaultStep('idle')
   }
 
   function handlePosBack() {
@@ -912,10 +933,39 @@ export default function CreateLink() {
     setEvmAddr(''); setStarkAddr(''); setSolanaAddr(''); setAmt(''); setMemo('')
     setGeneratedLink(''); setCopied(false); setMultiChainMode(false); setFlexAmount(false)
     setVaultStep('idle')
-    setAccessMode(false); setAgentUrl(''); setAgentUrlStatus('idle')
+    setAccessMode(false); setPolymarketMode(false); setAgentUrl(''); setAgentUrlStatus('idle')
   }
 
   const linkReady = generatedLink !== ''
+  const howItWorksSteps = polymarketMode
+    ? [
+        { n: '1', title: 'Open Telegram', body: 'Start Hash PayLink inside chat' },
+        { n: '2', title: 'Save address', body: 'Link your Polymarket profile' },
+        { n: '3', title: 'Fund and track', body: 'Add USDC and watch positions' },
+      ]
+    : posMode
+    ? [
+        { n: '1', title: 'Choose country', body: 'Pick the local POS flow' },
+        { n: '2', title: 'Add wallet', body: 'Select supported networks' },
+        { n: '3', title: 'Show QR', body: 'Customers scan and pay USDC' },
+      ]
+    : streamMode
+    ? [
+        { n: '1', title: 'Sign in', body: 'Open your Circle wallet' },
+        { n: '2', title: 'Start stream', body: 'Lock USDC over time' },
+        { n: '3', title: 'Claim anytime', body: 'Recipient withdraws on Arc' },
+      ]
+    : accessMode
+    ? [
+        { n: '1', title: 'Open Telegram', body: 'Start the Hash PayLink bot' },
+        { n: '2', title: 'Choose flow', body: 'Wallet, market, or service' },
+        { n: '3', title: 'Confirm action', body: 'Track funds from dashboard' },
+      ]
+    : [
+        { n: '1', title: 'Enter details', body: 'Your wallet address' },
+        { n: '2', title: 'Enter amount', body: 'USDC' },
+        { n: '3', title: 'Get paid', body: 'Anyone pays from any wallet' },
+      ]
 
   return (
     <div className="mx-auto max-w-lg animate-fade-in">
@@ -926,10 +976,12 @@ export default function CreateLink() {
           Multi-Chain PayFi
         </span>
         <h1 className="text-3xl font-bold tracking-tight text-gray-900 sm:text-[2.25rem]">
-          {posMode ? 'Retail POS' : streamMode ? 'StreamPay' : accessMode ? 'Agent Commerce' : 'Create and Request USDC'}
+          {polymarketMode ? 'Polymarket Chat Layer' : posMode ? 'Retail POS' : streamMode ? 'StreamPay' : accessMode ? 'Hash PayLink Agent' : 'Create a Hash PayLink'}
         </h1>
         <p className="mt-2 text-[15px] text-gray-500 text-balance">
-          {posMode
+          {polymarketMode
+            ? 'Fund Polymarket, track positions, get alerts, and ask LP Scout from Telegram.'
+            : posMode
             ? 'Choose a country, select settlement, and create one static QR.'
             : streamMode
               ? 'Stream USDC for payroll, agent services, and Arena games.'
@@ -939,7 +991,7 @@ export default function CreateLink() {
         </p>
 
         {/* ── Chain preview toggle — hidden in multi-chain mode (all chains active) */}
-        {!multiChainMode && !posMode && !streamMode && <div className="mt-5 flex flex-col items-center gap-2.5">
+        {!multiChainMode && !posMode && !streamMode && !polymarketMode && <div className="mt-5 flex flex-col items-center gap-2.5">
           <div className="flex items-center justify-center gap-0.5 sm:gap-1 rounded-xl border border-gray-200 bg-gray-100/80 p-1 overflow-x-auto w-full sm:w-auto sm:inline-flex">
             {VISIBLE_CREATE_CHAINS.map((c) => {
               const m = CHAIN_META[c]
@@ -985,7 +1037,7 @@ export default function CreateLink() {
         </div>}
 
         {/* Multi-chain mode active badge */}
-        {multiChainMode && !posMode && !streamMode && (
+        {multiChainMode && !posMode && !streamMode && !polymarketMode && (
           <div className="mt-5 flex justify-center">
             <span className="inline-flex items-center gap-1.5 rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-[11px] font-semibold text-violet-700">
               <Globe className="h-3 w-3" />
@@ -1005,54 +1057,118 @@ export default function CreateLink() {
           </div>
 
           {/* ── Payment / Access toggle ───────────────────────────────── */}
-          <div className="flex rounded-xl border border-gray-200 bg-gray-50 p-1 dark:border-white/10 dark:bg-white/[0.04]">
+          <div className="grid grid-cols-5 rounded-xl border border-gray-200 bg-gray-50 p-1 dark:border-white/10 dark:bg-white/[0.04]">
             <button
               type="button"
               onClick={() => toggleAccessMode(false)}
+              aria-label="Payment"
+              title="Payment"
               className={cn(
-                'flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2.5 text-[13px] font-semibold transition-all',
-                !accessMode && !posMode && !streamMode ? 'bg-white text-gray-900 shadow-sm dark:bg-white/10 dark:text-white' : 'text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300',
+                'flex h-11 items-center justify-center rounded-lg transition-all',
+                !accessMode && !posMode && !streamMode && !polymarketMode ? 'bg-white text-gray-900 shadow-sm dark:bg-white/10 dark:text-white' : 'text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300',
               )}
             >
-              <Coins className="h-4 w-4" />
-              Payment
+              <Coins className="h-5 w-5" />
             </button>
             <button
               type="button"
               onClick={() => toggleAccessMode(true)}
+              aria-label="Agent"
+              title="Agent"
               className={cn(
-                'flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2.5 text-[13px] font-semibold transition-all',
+                'flex h-11 items-center justify-center rounded-lg transition-all',
                 accessMode ? 'bg-white text-gray-900 shadow-sm dark:bg-white/10 dark:text-white' : 'text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300',
               )}
             >
-              <Bot className="h-4 w-4" />
-              Agent
+              <Bot className="h-5 w-5" />
             </button>
             <button
               type="button"
               onClick={openPosMode}
+              aria-label="Retail POS"
+              title="Retail POS"
               className={cn(
-                'flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2.5 text-[13px] font-semibold transition-all',
+                'flex h-11 items-center justify-center rounded-lg transition-all',
                 posMode ? 'bg-white text-gray-900 shadow-sm dark:bg-white/10 dark:text-white' : 'text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300',
               )}
             >
-              <Store className="h-4 w-4" />
-              POS
+              <Store className="h-5 w-5" />
             </button>
             <button
               type="button"
               onClick={openStreamMode}
+              aria-label="StreamPay"
+              title="StreamPay"
               className={cn(
-                'flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2.5 text-[13px] font-semibold transition-all',
+                'flex h-11 items-center justify-center rounded-lg transition-all',
                 streamMode ? 'bg-white text-gray-900 shadow-sm dark:bg-white/10 dark:text-white' : 'text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300',
               )}
             >
-              <Radio className="h-4 w-4" />
-              StreamPay
+              <Radio className="h-5 w-5" />
+            </button>
+            <button
+              type="button"
+              onClick={openPolymarketMode}
+              aria-label="Polymarket"
+              title="Polymarket"
+              className={cn(
+                'flex h-11 items-center justify-center rounded-lg transition-all',
+                polymarketMode ? 'bg-white text-gray-900 shadow-sm dark:bg-white/10 dark:text-white' : 'text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300',
+              )}
+            >
+              <img src={POLYMARKET_LOGO} alt="" className="h-5 w-5 invert dark:invert-0" />
             </button>
           </div>
 
-          {streamMode ? (
+          {polymarketMode ? (
+            <div className="space-y-5">
+              <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-4 dark:border-white/10 dark:bg-white/[0.04]">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white dark:border-white/10 dark:bg-white/[0.06]">
+                    <img src={POLYMARKET_LOGO} alt="" className="h-[18px] w-[18px] invert dark:invert-0" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Polymarket</p>
+                    <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">Open from chat</h2>
+                    <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
+                      Best for saved alerts, LP Scout memory, and quick funding from chat.
+                    </p>
+                  </div>
+                </div>
+
+                <a
+                  href={telegramStartUrl('polymarket')}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+                >
+                  <MessageCircle className="h-4 w-4" />
+                  Open in Telegram
+                </a>
+                <p className="mt-2 text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
+                  WhatsApp support coming soon.
+                </p>
+
+                <div className="mt-4 divide-y divide-gray-100 rounded-lg border border-gray-100 bg-white px-3 dark:divide-white/10 dark:border-white/10 dark:bg-white/[0.05]">
+                  {[
+                    { icon: Wallet, title: 'Fund Polymarket', body: 'Add USDC without copying deposit addresses.' },
+                    { icon: LayoutDashboard, title: 'Portfolio', body: 'Track open positions and claimable markets.' },
+                    { icon: AlertTriangle, title: 'Alerts', body: 'Get notified when a position needs attention.' },
+                    { icon: Radio, title: 'World Cup', body: 'Follow live scores and open related markets.' },
+                    { icon: Bot, title: 'LP Scout', body: 'Ask the agent to check market depth and LP rewards.' },
+                  ].map(({ icon: Icon, title, body }) => (
+                    <div key={title} className="flex items-center gap-3 py-3">
+                      <Icon className="h-4 w-4 shrink-0 text-gray-400" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">{title}</p>
+                        <p className="mt-0.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">{body}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : streamMode ? (
             <div className="space-y-5">
               <button
                 type="button"
@@ -2234,21 +2350,13 @@ export default function CreateLink() {
 
 
       {/* ── How it works ─────────────────────────────────────────────── */}
-      {!generatedLink && !posMode && !streamMode && (
+      {!generatedLink && (
         <div className="mt-10 animate-fade-in">
           <p className="mb-4 text-center text-[11px] font-semibold uppercase tracking-widest text-gray-400">
             How it works
           </p>
           <div className="grid grid-cols-3 gap-3">
-            {(!accessMode ? [
-              { n: '1', title: 'Enter details',   body: 'Your wallet address' },
-              { n: '2', title: 'Enter amount',    body: 'USDC' },
-              { n: '3', title: 'Get paid',        body: 'Anyone pays from any wallet or exchange' },
-            ] : [
-              { n: '1', title: 'Open Telegram',   body: 'Start the Hash PayLink bot' },
-              { n: '2', title: 'Choose a flow',   body: 'Payment link, wallet, or market tool' },
-              { n: '3', title: 'Confirm action',  body: 'Track funds from the dashboard' },
-            ]).map(({ n, title, body }) => (
+            {howItWorksSteps.map(({ n, title, body }) => (
               <div key={n} className="rounded-xl border border-gray-100 bg-white p-4 text-center shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
                 <div className="mx-auto mb-2.5 flex h-7 w-7 items-center justify-center rounded-full bg-gray-100 text-xs font-bold text-gray-600 dark:bg-white/[0.08] dark:text-gray-300">
                   {n}

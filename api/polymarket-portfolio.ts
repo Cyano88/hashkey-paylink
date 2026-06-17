@@ -2,9 +2,15 @@ import type { Request, Response } from 'express'
 import pg from 'pg'
 import { isAddress } from 'viem'
 import { PrivyClient } from '@privy-io/server-auth'
+import { sendTransactionalEmail } from './email-provider.js'
 
 const DATA_API_ORIGIN = 'https://data-api.polymarket.com'
 const REQUEST_TIMEOUT_MS = 10_000
+const ALERT_FROM_EMAIL = process.env.POLYMARKET_ALERT_FROM_EMAIL
+  ?? process.env.ALERT_FROM_EMAIL
+  ?? process.env.AGENTIC_STREAMING_FROM_EMAIL
+  ?? process.env.STREAM_INVITE_FROM_EMAIL
+const ALERT_FROM_NAME = process.env.POLYMARKET_ALERT_FROM_NAME ?? 'Hash PayLink Polymarket'
 
 const { Pool } = pg
 const DATABASE_URL = (process.env.DATABASE_URL ?? process.env.POSTGRES_URL ?? '').trim()
@@ -195,6 +201,64 @@ type PolymarketPosition = {
   curPrice?: number
 }
 
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
+}
+
+async function sendPolymarketAlertEmail(input: {
+  to: string | null
+  title: string
+  body: string
+  severity: string
+  address: string
+}) {
+  if (!input.to) return
+  const subject = input.severity === 'warning'
+    ? `Polymarket alert: ${input.title}`
+    : `Polymarket update: ${input.title}`
+  const text = [
+    input.title,
+    '',
+    input.body,
+    '',
+    `Profile: ${input.address}`,
+    '',
+    'Open Hash PayLink from Telegram to review your portfolio, alerts, and LP Scout context.',
+    '',
+    'Hash PayLink',
+  ].join('\n')
+  const html = `
+    <div style="font-family:Arial,sans-serif;line-height:1.5;color:#111827;max-width:620px">
+      <p style="margin:0 0 8px;font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#6b7280">Hash PayLink for Polymarket</p>
+      <h2 style="margin:0 0 10px;font-size:20px">${escapeHtml(input.title)}</h2>
+      <p style="margin:0 0 14px;color:#4b5563">${escapeHtml(input.body)}</p>
+      <div style="border:1px solid #e5e7eb;border-radius:12px;padding:12px;margin:14px 0;background:#f9fafb">
+        <div style="font-size:12px;color:#6b7280">Profile</div>
+        <div style="font-family:monospace;font-size:13px;color:#111827">${escapeHtml(input.address)}</div>
+      </div>
+      <p style="margin:0;color:#6b7280;font-size:13px">Open Hash PayLink from Telegram to review your portfolio, alerts, and LP Scout context.</p>
+    </div>
+  `
+  try {
+    await sendTransactionalEmail({
+      to: input.to,
+      fromEmail: ALERT_FROM_EMAIL,
+      fromName: ALERT_FROM_NAME,
+      subject,
+      text,
+      html,
+      context: 'Polymarket alert',
+    })
+  } catch (err) {
+    console.warn('[polymarket-alert] email skipped:', err instanceof Error ? err.message : err)
+  }
+}
+
 async function loadProfileBundle(privyUserId: string) {
   await ensureSchema()
   const profile = (await requirePool().query(
@@ -273,6 +337,7 @@ async function evaluateAlerts(privyUserId: string, address: string) {
   const lossThreshold = Number(settingsRow.loss_threshold_percent)
   const claimableEnabled = Boolean(settingsRow.claimable_alerts_enabled)
   const resolvedEnabled = Boolean(settingsRow.resolved_alerts_enabled)
+  const alertEmail = settingsRow.alert_email ? String(settingsRow.alert_email) : null
   // Treat threshold = 0 as "loss alerts disabled" so users have an off switch
   // without needing a separate flag column.
   const lossAlertsEnabled = Number.isFinite(lossThreshold) && lossThreshold > 0
@@ -293,6 +358,8 @@ async function evaluateAlerts(privyUserId: string, address: string) {
 
     const currentValue = typeof position.currentValue === 'number' ? position.currentValue : Number(position.currentValue)
     if (claimableEnabled && position.redeemable && Number.isFinite(currentValue) && currentValue > 0) {
+      const alertTitle = `Claimable: ${title}`
+      const alertBody = `This position is redeemable on Polymarket.`
       const insert = await requirePool().query(
         `insert into polymarket_alert_history (privy_user_id, alert_type, market_id, title, body, severity, source_snapshot)
          select $1,'claimable',$2,$3,$4,'success',$5::jsonb
@@ -301,15 +368,18 @@ async function evaluateAlerts(privyUserId: string, address: string) {
            where privy_user_id = $1 and alert_type = 'claimable' and market_id = $2 and read_at is null
          )
          returning id`,
-        [privyUserId, marketId, `Claimable: ${title}`,
-          `This position is redeemable on Polymarket.`,
-          JSON.stringify(position)],
+        [privyUserId, marketId, alertTitle, alertBody, JSON.stringify(position)],
       )
       inserted += insert.rowCount ?? 0
+      if ((insert.rowCount ?? 0) > 0) {
+        await sendPolymarketAlertEmail({ to: alertEmail, title: alertTitle, body: alertBody, severity: 'success', address })
+      }
     }
 
     const percentPnl = typeof position.percentPnl === 'number' ? position.percentPnl : null
     if (lossAlertsEnabled && percentPnl !== null && percentPnl <= -Math.abs(lossThreshold)) {
+      const alertTitle = `Down ${Math.round(percentPnl)}%: ${title}`
+      const alertBody = `Position dropped below your ${lossThreshold}% loss threshold.`
       const insert = await requirePool().query(
         `insert into polymarket_alert_history (privy_user_id, alert_type, market_id, title, body, severity, source_snapshot)
          select $1,'loss-threshold',$2,$3,$4,'warning',$5::jsonb
@@ -319,16 +389,19 @@ async function evaluateAlerts(privyUserId: string, address: string) {
            and created_at > now() - interval '24 hours'
          )
          returning id`,
-        [privyUserId, marketId, `Down ${Math.round(percentPnl)}%: ${title}`,
-          `Position dropped below your ${lossThreshold}% loss threshold.`,
-          JSON.stringify(position)],
+        [privyUserId, marketId, alertTitle, alertBody, JSON.stringify(position)],
       )
       inserted += insert.rowCount ?? 0
+      if ((insert.rowCount ?? 0) > 0) {
+        await sendPolymarketAlertEmail({ to: alertEmail, title: alertTitle, body: alertBody, severity: 'warning', address })
+      }
     }
 
     if (resolvedEnabled && typeof position.endDate === 'string' && position.endDate) {
       const ended = new Date(position.endDate).getTime()
       if (Number.isFinite(ended) && ended < Date.now() && !position.redeemable) {
+        const alertTitle = `Market resolved: ${title}`
+        const alertBody = `This market closed and your position is no longer redeemable.`
         const insert = await requirePool().query(
           `insert into polymarket_alert_history (privy_user_id, alert_type, market_id, title, body, severity, source_snapshot)
            select $1,'resolved',$2,$3,$4,'info',$5::jsonb
@@ -337,11 +410,12 @@ async function evaluateAlerts(privyUserId: string, address: string) {
              where privy_user_id = $1 and alert_type = 'resolved' and market_id = $2
            )
            returning id`,
-          [privyUserId, marketId, `Market resolved: ${title}`,
-            `This market closed and your position is no longer redeemable.`,
-            JSON.stringify(position)],
+          [privyUserId, marketId, alertTitle, alertBody, JSON.stringify(position)],
         )
         inserted += insert.rowCount ?? 0
+        if ((insert.rowCount ?? 0) > 0) {
+          await sendPolymarketAlertEmail({ to: alertEmail, title: alertTitle, body: alertBody, severity: 'info', address })
+        }
       }
     }
   }
