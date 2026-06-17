@@ -5,119 +5,103 @@ export default function EnvironmentDocs() {
     <DocPage>
       <DocHeader
         title="Environment Variables"
-        description="Complete reference for all required and optional environment variables. Copy .env.example from the repository root and fill in your values."
+        description="Current production configuration for the Render-hosted Hash PayLink app."
       />
 
-      <InfoBox type="warning">Never commit private keys to version control. Use your hosting provider's secret manager (Render environment variables, Vercel env, etc.).</InfoBox>
+      <InfoBox type="warning">Never commit private keys, API keys, handoff files, or local environment files. Use Render environment variables for production secrets.</InfoBox>
+
+      <Section title="Core app">
+        <Table
+          headers={['Variable', 'Required', 'Description']}
+          rows={[
+            ['DATABASE_URL', 'Yes', 'Render Postgres URL for Telegram state, PolyDesk profiles, Privy/Circle mappings, and Arena rooms.'],
+            ['ADMIN_SECRET', 'Yes', 'Long random secret for protected maintenance endpoints.'],
+            ['CRON_SECRET', 'Optional', 'Secret for authenticated cron or background jobs.'],
+            ['TREASURY_ADDRESS', 'Optional', 'EVM treasury wallet for platform fees.'],
+          ]}
+        />
+      </Section>
+
+      <Section title="Privy and Circle">
+        <Table
+          headers={['Variable', 'Required', 'Description']}
+          rows={[
+            ['PRIVY_APP_ID', 'Yes', 'Privy app ID for email-first user sessions.'],
+            ['PRIVY_APP_SECRET', 'Yes', 'Server-side Privy secret for authenticated API actions.'],
+            ['VITE_PRIVY_APP_ID', 'Yes', 'Public Privy app ID used by the browser.'],
+            ['CIRCLE_API_KEY', 'Required for mainnet Circle flows', 'Server-side Circle API key. Never expose with VITE_.'],
+            ['CIRCLE_TEST_API_KEY', 'Required for Arc Testnet Circle flows', 'Server-side Circle testnet API key. Never expose with VITE_.'],
+            ['CIRCLE_BASE_URL', 'Optional', 'Circle API base URL. Defaults to https://api.circle.com.'],
+            ['VITE_CIRCLE_USER_WALLET_APP_ID', 'Optional', 'Public Circle wallet app ID for browser wallet sessions.'],
+            ['VITE_CIRCLE_USER_WALLET_APP_ID_ARC_TESTNET', 'Optional', 'Arc Testnet-specific Circle wallet app ID.'],
+          ]}
+        />
+      </Section>
+
+      <Section title="EVM payments">
+        <Table
+          headers={['Variable', 'Required', 'Description']}
+          rows={[
+            ['RELAYER_PRIVATE_KEY', 'Yes', 'Base relayer key and fallback EVM relayer.'],
+            ['RELAYER_PRIVATE_KEY_ARC', 'Arc flows', 'Arc-specific relayer key. Falls back to RELAYER_PRIVATE_KEY.'],
+            ['RELAYER_PRIVATE_KEY_ARB', 'Arbitrum flows', 'Arbitrum-specific relayer key. Falls back to RELAYER_PRIVATE_KEY.'],
+            ['PAYLINK_FACTORY_V2', 'Yes', 'Base PayLinkFactoryV2 address.'],
+            ['PAYLINK_FACTORY_V2_ARC', 'Arc flows', 'Arc factory address.'],
+            ['PAYLINK_FACTORY_V2_ARB', 'Arbitrum flows', 'Arbitrum factory address.'],
+            ['VITE_FACTORY_V2', 'Yes', 'Browser-visible Base factory address.'],
+            ['VITE_FACTORY_V2_ARC', 'Arc flows', 'Browser-visible Arc factory address.'],
+            ['VITE_FACTORY_V2_ARB', 'Arbitrum flows', 'Browser-visible Arbitrum factory address.'],
+            ['PRIVATE_RPC_URL', 'Optional', 'Server-side Base RPC endpoint.'],
+            ['PRIVATE_RPC_URL_ARC', 'Optional', 'Server-side Arc RPC endpoint.'],
+            ['PRIVATE_RPC_URL_ARB', 'Optional', 'Server-side Arbitrum RPC endpoint.'],
+          ]}
+        />
+      </Section>
+
+      <Section title="Solana">
+        <Table
+          headers={['Variable', 'Required', 'Description']}
+          rows={[
+            ['RELAYER_PRIVATE_KEY_SOLANA', 'Solana flows', 'Solana relayer keypair. Accepts base58, JSON array, or base64.'],
+            ['SOLANA_RPC_URL', 'Optional', 'Solana RPC endpoint.'],
+            ['SOLANA_TREASURY', 'Optional', 'Solana treasury wallet for fee collection.'],
+            ['SOLANA_GAS_RECOVERY_USDC', 'Optional', 'USDC amount routed to treasury to offset sponsored SOL fees.'],
+          ]}
+        />
+      </Section>
 
       <Section title="0G Storage">
         <Table
           headers={['Variable', 'Required', 'Description']}
           rows={[
-            ['OG_STORAGE_KEY',      'Yes', 'Private key of wallet holding OG tokens for gas on 0G Mainnet. Used to sign archive transactions.'],
-            ['OG_ARCHIVE_ADDRESS',  'Yes', 'Deployed PayLinkArchive contract address on 0G Mainnet. Default: 0x79a804C49e1E5EBC279A228Ab73a7570A0D0819a'],
-            ['OG_FROM_BLOCK',       'No',  'Block number to start scanning PaymentArchived events from. Default: 32498000. Set to the block of contract deployment.'],
+            ['OG_STORAGE_KEY', '0G archiving', 'Private key for 0G storage/archive transactions.'],
+            ['OG_ARCHIVE_ADDRESS', '0G archiving', 'PayLinkArchive contract address on 0G.'],
+            ['OG_FROM_BLOCK', 'Optional', 'Block number to start scanning archive events.'],
           ]}
         />
       </Section>
 
-      <Section title="EVM Relay (Base, Arc, HashKey, Arbitrum)">
+      <Section title="PolyDesk">
         <Table
           headers={['Variable', 'Required', 'Description']}
           rows={[
-            ['RELAYER_PRIVATE_KEY',          'Yes', 'Master EVM relayer key. Used for Base relay and as fallback for other chains.'],
-            ['RELAYER_PRIVATE_KEY_ARC',       'No',  'Arc-specific relayer key. Falls back to RELAYER_PRIVATE_KEY.'],
-            ['RELAYER_PRIVATE_KEY_HASHKEY',   'No',  'HashKey-specific relayer key. Falls back to RELAYER_PRIVATE_KEY.'],
-            ['RELAYER_PRIVATE_KEY_ARB',       'No',  'Arbitrum-specific relayer key. Falls back to RELAYER_PRIVATE_KEY.'],
-            ['TREASURY_ADDRESS',              'No',  'EVM treasury wallet that receives platform fees.'],
-            ['ADMIN_SECRET',                   'Yes', 'Long random secret for protected maintenance endpoints. Keep separate from public VITE_ variables.'],
-            ['CRON_SECRET',                    'No',  'Optional long random secret for authenticated cron/maintenance calls.'],
-            ['PAYLINK_FACTORY_V2',            'Yes', 'PayLinkFactoryV2 contract address on Base.'],
-            ['PAYLINK_FACTORY_V2_ARC',        'No',  'Factory address on Arc.'],
-            ['PAYLINK_FACTORY_V2_HASHKEY',    'No',  'Factory address on HashKey.'],
-            ['PAYLINK_FACTORY_V2_ARB',        'No',  'Factory address on Arbitrum.'],
-            ['VITE_FACTORY_V2',               'Yes', 'Browser-accessible factory address (Base). Used by frontend to compute vault addresses.'],
-            ['VITE_FACTORY_V2_ARC',           'No',  'Browser-accessible Arc factory.'],
-            ['VITE_FACTORY_V2_ARB',           'No',  'Browser-accessible Arbitrum factory.'],
-            ['CDP_PAYMASTER_URL',             'No',  'Server-side Coinbase/CDP Base Paymaster URL used by /api/base-paymaster.'],
-            ['VITE_BASE_PAYMASTER_URL',       'No',  'Browser-visible paymaster proxy path. Use /api/base-paymaster.'],
-            ['VITE_CIRCLE_PAYMASTER_ENABLED', 'No',  'Feature flag for Circle Paymaster on supported Base and Arbitrum smart-wallet paths.'],
-            ['VITE_CIRCLE_BUNDLER_URL_BASE',  'No',  'ERC-4337 bundler RPC used by Circle Paymaster on Base. Default: public Pimlico Base endpoint.'],
-            ['VITE_CIRCLE_BUNDLER_URL_ARB',   'No',  'ERC-4337 bundler RPC used by Circle Paymaster on Arbitrum. Default: public Pimlico Arbitrum endpoint.'],
-            ['VITE_CIRCLE_PAYMASTER_V08_BASE','No',  'Circle Paymaster v0.8 address for Base. Override only if Circle rotates the address.'],
-            ['VITE_CIRCLE_PAYMASTER_V08_ARB', 'No',  'Circle Paymaster v0.8 address for Arbitrum. Override only if Circle rotates the address.'],
-            ['VITE_CLIENT_KEY',               'No',  'Circle Modular Wallets public client key. Required for the Continue with email gasless payment path.'],
-            ['VITE_CLIENT_URL',               'No',  'Circle Modular Wallets client URL. Required for passkey login and gasless user operations.'],
-            ['VITE_CIRCLE_EVM_EMAIL_ENABLED', 'No',  'Feature flag for Base/Arbitrum Circle User-Controlled SCA email wallet payments. Defaults to enabled unless explicitly false.'],
-            ['VITE_CIRCLE_USER_WALLET_APP_ID','No', 'Public Circle Wallet App ID used by Circle User-Controlled Wallet email flows.'],
-            ['VITE_CIRCLE_USER_WALLET_APP_ID_ARC_TESTNET','No', 'Public Circle testnet Wallet App ID for Arc Testnet email wallets. Falls back to VITE_CIRCLE_USER_WALLET_APP_ID if unset.'],
-            ['CIRCLE_API_KEY',                'No',  'Server-side Circle API key for mainnet User-Controlled Wallet OTP, wallet, and signing calls. Never expose with VITE_.'],
-            ['CIRCLE_TEST_API_KEY',           'No',  'Server-side Circle testnet API key required for Arc Testnet email wallets. Never expose with VITE_.'],
-            ['CIRCLE_BASE_URL',               'No',  'Circle API base URL. Defaults to https://api.circle.com.'],
-            ['CIRCLE_SOLANA_BLOCKCHAIN',      'No',  'Circle blockchain identifier for Solana wallets. Defaults to SOL.'],
-            ['VITE_BASE_GAS_RECOVERY_USDC',   'No',  'USDC amount routed to treasury on sponsored Base payments to offset gas sponsorship. Default: 0.01.'],
-            ['VITE_ARBITRUM_GAS_RECOVERY_USDC','No', 'USDC amount routed to treasury on sponsored Arbitrum payments to offset gas sponsorship. Default: 0.03.'],
-            ['BASE_GAS_RECOVERY_USDC',        'No',  'Server-side Base gas recovery amount for Circle User-Controlled EVM email payments. Default: 0.01.'],
-            ['ARBITRUM_GAS_RECOVERY_USDC',    'No',  'Server-side Arbitrum gas recovery amount for Circle User-Controlled EVM email payments. Default: 0.03.'],
-            ['PRIVATE_RPC_URL',               'No',  'Server-side Base RPC endpoint used by relays and dashboard event indexing.'],
-            ['PRIVATE_RPC_URL_ARC',           'No',  'Arc RPC endpoint.'],
-            ['PRIVATE_RPC_URL_HASHKEY',       'No',  'HashKey RPC endpoint.'],
-            ['PRIVATE_RPC_URL_ARB',           'No',  'Arbitrum RPC endpoint.'],
-            ['VITE_RPC_URL',                  'No',  'Frontend Base RPC fallback for wallet clients and lightweight reads.'],
-            ['VITE_RPC_URL_BASE',             'No',  'Frontend Base RPC. Prefer a browser-safe restricted key. Falls back to VITE_RPC_URL, then public Base RPC.'],
-            ['VITE_RPC_URL_ARC',              'No',  'Frontend Arc RPC for wallet clients and lightweight reads.'],
-            ['VITE_RPC_URL_ARB',              'No',  'Frontend Arbitrum RPC for wallet clients and lightweight reads.'],
-            ['VITE_RPC_URL_HASHKEY',          'No',  'Frontend HashKey RPC for wallet clients and lightweight reads.'],
-            ['FACTORY_FROM_BLOCK',            'No',  'Server-side Base block from which to scan dashboard/factory events. Default: 45786000.'],
+            ['POLYMARKET_BUILDER_CODE', 'Optional', 'Builder attribution code for Polymarket bridge calls.'],
+            ['SPORTMONKS_API_KEY', 'World Cup board', 'Sportmonks API key for live fixtures and scores.'],
+            ['NEWS_API_KEY', 'News feed', 'News provider API key.'],
+            ['RESEND_API_KEY', 'Email alerts', 'Resend API key for portfolio and LP Scout email notifications.'],
           ]}
         />
       </Section>
 
-      <Section title="Solana Relay">
+      <Section title="StreamPay and Arena">
         <Table
           headers={['Variable', 'Required', 'Description']}
           rows={[
-            ['RELAYER_PRIVATE_KEY_SOLANA', 'Yes', 'Solana relayer keypair. Accepts base58 string, JSON array, or base64 encoded.'],
-            ['SOLANA_RPC_URL',             'No',  'Solana RPC endpoint. Falls back to mainnet-beta public RPC.'],
-            ['SOLANA_TREASURY',            'No',  'Solana treasury wallet address for fee collection.'],
-            ['SOLANA_GAS_RECOVERY_USDC',   'No',  'Server-side base USDC amount routed to Solana treasury to offset sponsored SOL fees. Default: 0.01.'],
-            ['SOLANA_ATA_RECOVERY_USDC',   'No',  'Extra server-side USDC recovery when the relayer creates a first-time recipient USDC ATA. Default: 0.40.'],
-            ['SOLANA_MIN_RECIPIENT_USDC',  'No',  'Minimum recipient payout after Solana fee/recovery deductions. First-time recipient payments below this threshold are rejected instead of being drained by ATA recovery. Default: 0.10.'],
-          ]}
-        />
-      </Section>
-
-      <Section title="Starknet Relay">
-        <Table
-          headers={['Variable', 'Required', 'Description']}
-          rows={[
-            ['STARKNET_RELAYER_ADDRESS',     'Yes', 'OZ Account address of the Starknet relayer on Starknet Mainnet.'],
-            ['STARKNET_RELAYER_PRIVATE_KEY', 'Yes', 'Starknet relayer private key (hex, Stark curve).'],
-            ['STARKNET_OZ_CLASS_HASH',       'No',  'OZ Account v0.8.1 class hash. Default: standard OZ class.'],
-            ['STARKNET_RPC_URL',             'No',  'Starknet RPC endpoint. Falls back to public Starknet RPC.'],
-            ['AVNU_API_KEY',                 'No',  'AVNU Paymaster API key for gas sponsorship. Optional — works without key on free tier.'],
-          ]}
-        />
-      </Section>
-
-      <Section title="Frontend">
-        <Table
-          headers={['Variable', 'Required', 'Description']}
-          rows={[
-            ['VITE_WALLETCONNECT_PROJECT_ID', 'Yes', 'WalletConnect project ID from cloud.walletconnect.com. Required for WalletConnect support.'],
-            ['FIXER_API_KEY',                 'No',  'Fixer.io API key for live FX rates (NGN, GHS, KES, SGD). Optional — FX display disabled without it.'],
-          ]}
-        />
-      </Section>
-
-      <Section title="StreamPay">
-        <Table
-          headers={['Variable', 'Required', 'Description']}
-          rows={[
-            ['STREAM_FACTORY_ADDRESS',      'StreamPay only', 'StreamVaultFactory contract on Arc.'],
-            ['VITE_STREAM_FACTORY_ADDRESS', 'StreamPay only', 'Browser-accessible StreamVaultFactory address.'],
-            ['ARC_POA_CONTRACT',            'StreamPay only', 'PoASettlement contract on Arc.'],
-            ['VITE_POA_CONTRACT',           'StreamPay only', 'Browser-accessible PoASettlement address.'],
+            ['STREAM_FACTORY_ADDRESS', 'StreamPay', 'StreamVaultFactory contract on Arc.'],
+            ['VITE_STREAM_FACTORY_ADDRESS', 'StreamPay', 'Browser-visible StreamVaultFactory address.'],
+            ['ARENA_ESCROW_FACTORY_ADDRESS', 'Arena', 'Arena escrow factory address.'],
+            ['VITE_ARENA_ESCROW_FACTORY_ADDRESS', 'Arena', 'Browser-visible Arena escrow factory address.'],
+            ['ARENA_RELAYER_PRIVATE_KEY', 'Arena', 'Server-side relayer key for Arena escrow actions.'],
           ]}
         />
       </Section>

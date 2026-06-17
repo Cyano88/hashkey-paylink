@@ -5,16 +5,18 @@ export default function SDKDocs() {
     <DocPage>
       <DocHeader
         title="@hashpaylink/sdk"
-        description="Drop a payment button into any React app, or use the URL API with zero dependencies."
+        description="A thin helper for building hosted Hash PayLink checkout URLs and buttons."
       />
 
-      <Section title="Installation">
+      <Section title="Positioning">
+        <InfoBox type="info">The SDK does not ask integrators to install wallet providers, Wagmi, or RainbowKit. Wallet and session execution stay inside the hosted Hash PayLink checkout.</InfoBox>
+      </Section>
+
+      <Section title="Install">
         <CodeBlock lang="bash">{`npm install @hashpaylink/sdk`}</CodeBlock>
-        <InfoBox type="info">The SDK is intentionally thin: it builds current hosted Hash PayLink checkout URLs and renders React payment buttons. Wallet execution stays inside the hosted checkout.</InfoBox>
       </Section>
 
       <Section title="PayLinkButton">
-        <p>The <Code>{'<PayLinkButton>'}</Code> component is the primary SDK export. It renders a payment button that opens the Hash PayLink checkout.</p>
         <CodeBlock lang="typescript">{`import { PayLinkButton } from '@hashpaylink/sdk'
 
 <PayLinkButton
@@ -25,54 +27,19 @@ export default function SDKDocs() {
 />`}</CodeBlock>
       </Section>
 
-      <Section title="Props reference">
+      <Section title="Props">
         <Table
-          headers={['Prop', 'Type', 'Required', 'Description']}
+          headers={['Prop', 'Type', 'Description']}
           rows={[
-            ['recipientEVM',     'string',   'one of',  'EVM (Base / HashKey / Arc / Arbitrum) recipient address'],
-            ['recipientStark',   'string',   'one of',  'Starknet recipient address (66 chars)'],
-            ['recipientSolana',  'string',   'one of',  'Solana recipient address (base58)'],
-            ['network',          'string',   'no',      'base | arbitrum | solana | starknet | arc | hashkey. Defaults to base.'],
-            ['amount',           'string',   'no',      'Fixed USDC amount. Required unless flexibleAmount is true.'],
-            ['memo',             'string',   'no',      'Payment memo shown to payer'],
-            ['flexibleAmount',   'boolean',  'no',      'Allow payer to enter any amount'],
-            ['multiChain',       'boolean',  'no',      'Show all chain options simultaneously'],
-            ['eventId',          'string',   'no',      'Optional multi-payer dashboard/event ID'],
-            ['mode',             'string',   'no',      'wallet | direct. Defaults to wallet.'],
-            ['platformFeeBps',   'number',   'no',      'Additional platform fee in basis points (20 bps default)'],
-            ['hosted',           'boolean',  'no',      'true = compact link button. false = embedded card that opens hosted checkout.'],
-            ['label',            'string',   'no',      'Custom button label text'],
-            ['onPaymentSuccess', 'function', 'no',      'Callback: ({ txHash, chain }) => void'],
-            ['onPaymentError',   'function', 'no',      'Callback: (error: Error) => void'],
+            ['recipientEVM', 'string', 'EVM recipient address for Base, Arbitrum, or Arc'],
+            ['recipientSolana', 'string', 'Solana recipient address'],
+            ['network', 'string', 'base | arbitrum | solana | arc'],
+            ['amount', 'string', 'Fixed USDC amount'],
+            ['memo', 'string', 'Payment memo shown to the payer'],
+            ['flexibleAmount', 'boolean', 'Let the payer enter the amount'],
+            ['eventId', 'string', 'Optional multi-payer dashboard ID'],
           ]}
         />
-      </Section>
-
-      <Section title="Hosted mode (default)">
-        <p>In hosted mode (default), clicking the button opens the Hash PayLink checkout in a new tab. Zero configuration needed beyond the recipient address.</p>
-        <CodeBlock lang="typescript">{`<PayLinkButton
-  recipientEVM="0xABC..."
-  amount="10"
-  memo="Premium Access"
-/>
-// Opens: https://hashpaylink.com/pay?e=0xABC...&a=10&m=Premium+Access`}</CodeBlock>
-      </Section>
-
-      <Section title="Embedded card">
-        <p>Set <Code>hosted={false}</Code> to render a compact checkout card inside your page. It still opens the hosted checkout for wallet execution, which avoids duplicating wallet and relayer logic inside merchant apps.</p>
-        <CodeBlock lang="typescript">{`import { PayLinkButton } from '@hashpaylink/sdk'
-
-function App() {
-  return (
-    <PayLinkButton
-      recipientEVM="0xABC..."
-      recipientSolana="BASE58..."
-      amount="10"
-      multiChain
-      hosted={false}
-    />
-  )
-}`}</CodeBlock>
       </Section>
 
       <Section title="URL helper">
@@ -82,61 +49,44 @@ const url = buildPayLinkUrl({
   recipientEVM: '0xABC...',
   recipientSolana: 'BASE58...',
   amount: '10',
-  multiChain: true,
   memo: 'Invoice #042',
 })`}</CodeBlock>
       </Section>
 
-      <Section title="URL API (no SDK required)">
-        <p>Every Hash PayLink feature is accessible via direct URL construction — no npm package, no React, no installation.</p>
-
+      <Section title="URL API">
         <SubSection title="Single payer">
           <CodeBlock lang="url">{`https://hashpaylink.com/pay?e=0xABC...&a=25&m=Invoice+042`}</CodeBlock>
         </SubSection>
-
-        <SubSection title="Multi-chain link">
-          <CodeBlock lang="url">{`https://hashpaylink.com/pay?e=0xABC...&s=BASE58...&k=0x064...&a=10&x=1`}</CodeBlock>
+        <SubSection title="Multi-chain">
+          <CodeBlock lang="url">{`https://hashpaylink.com/pay?e=0xABC...&s=BASE58...&a=10&x=1`}</CodeBlock>
         </SubSection>
-
-        <SubSection title="Multi-payer event">
-          <CodeBlock lang="url">{`https://hashpaylink.com/pay?e=0xABC...&a=10&v=1&id=my-workshop-2025`}</CodeBlock>
-        </SubSection>
-
         <SubSection title="Flexible amount">
           <CodeBlock lang="url">{`https://hashpaylink.com/pay?e=0xABC...&f=1&m=Tip+Jar`}</CodeBlock>
         </SubSection>
-
-        <SubSection title="Chain-locked">
-          <CodeBlock lang="url">{`https://hashpaylink.com/pay?e=0xABC...&a=5&n=base`}</CodeBlock>
-        </SubSection>
       </Section>
 
-      <Section title="URL parameter reference">
+      <Section title="Parameters">
         <Table
           headers={['Parameter', 'Description']}
           rows={[
-            ['e',       'EVM recipient address (Base / HashKey / Arc / Arbitrum)'],
-            ['s',       'Solana recipient address (base58)'],
-            ['k',       'Starknet recipient address'],
-            ['a',       'Fixed USDC amount. Omit for flexible.'],
-            ['m',       'URL-encoded payment memo'],
-            ['f',       '1 = flexible amount mode'],
-            ['v',       '1 = multi-payer collection mode'],
-            ['id',      'Event ID for multi-payer dashboard'],
-            ['n',       'Lock to chain: base | arbitrum | solana | starknet | arc | hashkey'],
-            ['fx',      'Show local currency FX: ngn | ghs | kes | sgd'],
-            ['xr',      'Custom exchange rate if fx param is set'],
+            ['e', 'EVM recipient address'],
+            ['s', 'Solana recipient address'],
+            ['a', 'Fixed USDC amount'],
+            ['m', 'Payment memo'],
+            ['f', '1 = flexible amount'],
+            ['v', '1 = multi-payer collection'],
+            ['id', 'Event ID for dashboard'],
+            ['n', 'base | arbitrum | solana | arc'],
           ]}
         />
       </Section>
 
-      <Section title="Validation helpers">
-        <p>The SDK exports small helpers for URL construction and input validation.</p>
+      <Section title="Helpers">
+        <p>The SDK exports helpers for hosted URL construction and lightweight input validation.</p>
         <CodeBlock lang="typescript">{`import {
   buildPayLinkUrl,
   isValidEvmAddress,
   isLikelySolanaAddress,
-  isValidStarknetAddress,
   SUPPORTED_NETWORKS,
 } from '@hashpaylink/sdk'`}</CodeBlock>
       </Section>

@@ -3,7 +3,7 @@
 USDC streaming payments on Arc Network. Payroll, agentic streams, and Arena rooms in one platform.
 
 **Live:** [hashkey-paylink.onrender.com/?app=streampay](https://hashkey-paylink.onrender.com/?app=streampay)  
-**Own domain (pending DNS):** `streampay.xyz`
+**Primary route:** `https://hashpaylink.com/?app=streampay`
 
 ---
 
@@ -14,7 +14,7 @@ USDC streaming payments on Arc Network. Payroll, agentic streams, and Arena room
 | **Payroll** | Time-Sovereign | Pre-fund a vault · USDC unlocks linearly to the recipient · gasless withdrawal |
 | **Agentic Stream** | Agent-Sovereign | Stream Arc USDC to the Hash PayLink Agent for recurring services such as daily LP research |
 | **StreamPay Arena** | Game-Sovereign | Competitive rooms where player deposits stream into a prize pool while they stay active |
-| **Creator Studio** | Event-Sovereign (PoA) | Direct-route legacy module for gated content and proof-of-attention settlement |
+| **Creator Studio** | Legacy direct route | Existing creator/gate code remains in the module, but it is not the primary public StreamPay nav |
 
 ---
 
@@ -23,7 +23,9 @@ USDC streaming payments on Arc Network. Payroll, agentic streams, and Arena room
 | Contract | Address | Purpose |
 |---|---|---|
 | `StreamVaultFactory` | `0xBAecf54084A0cB65b77a88cbDEf2b663Be71c61b` | CREATE2 factory — deploys one `StreamVault` per stream |
-| `PoASettlement` | `0x91DbDb49c8C68e5775554D42A1B5ce15C89C814B` | Settles Proof-of-Attention ghost-vault signatures |
+| `ArenaRoomEscrowFactory` | `0x82D313F193BE77cba64BEc046CCcb82154941D58` | Deploys deterministic per-room Arena escrows |
+| `ArenaRoomEscrow` | Per room | Holds deposits, refunds unstreamed risk, settles winners, and collects the 0.5% platform fee |
+| `PoASettlement` | `0x91DbDb49c8C68e5775554D42A1B5ce15C89C814B` | Legacy direct-route proof-of-attention settlement |
 | USDC (Arc precompile) | `0x3600000000000000000000000000000000000000` | Native USDC on Arc |
 
 ---

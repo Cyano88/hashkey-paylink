@@ -25,11 +25,9 @@ const NAV = [
     group: 'Supported Chains',
     items: [
       { label: 'Base',          path: '/docs/chains/base' },
-      { label: 'HashKey Chain', path: '/docs/chains/hashkey' },
-      { label: 'Arc',           path: '/docs/chains/arc' },
-      { label: 'Starknet',      path: '/docs/chains/starknet' },
-      { label: 'Solana',        path: '/docs/chains/solana' },
       { label: 'Arbitrum',      path: '/docs/chains/arbitrum' },
+      { label: 'Arc Testnet',   path: '/docs/chains/arc' },
+      { label: 'Solana',        path: '/docs/chains/solana' },
     ],
   },
   {
@@ -58,7 +56,8 @@ const NAV = [
     items: [
       { label: 'Overview',        path: '/docs/streampay' },
       { label: 'Payroll',         path: '/docs/streampay/payroll' },
-      { label: 'Creator Studio',  path: '/docs/streampay/creator' },
+      { label: 'Agentic Streams', path: '/docs/streampay/agentic' },
+      { label: 'Arena',           path: '/docs/streampay/arena' },
     ],
   },
   {

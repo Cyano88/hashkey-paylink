@@ -31,7 +31,7 @@ const url = buildPayLinkUrl({
 })
 ```
 
-Supported networks: `base`, `arbitrum`, `solana`, `starknet`, `arc`, and `hashkey`.
+Current public networks: `base`, `arbitrum`, `solana`, and `arc`.
 
 Useful exports:
 
@@ -41,5 +41,4 @@ Useful exports:
 - `CHAIN_META`
 - `isValidEvmAddress`
 - `isLikelySolanaAddress`
-- `isValidStarknetAddress`
 - `isValidUsdcAmount`

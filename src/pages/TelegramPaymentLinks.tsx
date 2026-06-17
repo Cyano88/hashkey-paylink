@@ -694,7 +694,7 @@ export default function TelegramPaymentLinks() {
       navigate(-1)
       return
     }
-    navigate('/')
+    navigate('/app')
   }
 
   return (

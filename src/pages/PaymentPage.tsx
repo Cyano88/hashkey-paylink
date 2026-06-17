@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useSearchParams, Link, useOutletContext } from 'react-router-dom'
+import { useSearchParams, Link, useOutletContext, useNavigate } from 'react-router-dom'
 import type { LayoutOutletContext } from '../Layout'
 import {
   useAccount,
@@ -286,6 +286,7 @@ function telegramReturnUrl(params: URLSearchParams) {
 
 export default function PaymentPage() {
   const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
   const { onPayChainChange, onPayWalletStateChange } = useOutletContext<LayoutOutletContext>()
 
   const evmParam    = getPaylinkParam(searchParams, 'evm', 'e') || searchParams.get('to') || ''

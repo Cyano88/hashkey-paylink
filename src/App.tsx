@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom'
 import Layout from './Layout'
+import FoundationPage from './pages/FoundationPage'
 import CreateLink from './pages/CreateLink'
 import PaymentPage from './pages/PaymentPage'
 import Dashboard from './pages/Dashboard'
@@ -76,8 +77,9 @@ export default function App() {
           <Route path="terms"              element={<TermsDocs />} />
           <Route path="privacy"            element={<PrivacyDocs />} />
         </Route>
+        <Route index element={<FoundationPage />} />
         <Route element={<Layout />}>
-          <Route index element={<CreateLink />} />
+          <Route path="app" element={<CreateLink />} />
           <Route path="polymarket" element={<CreateLink initialProduct="polymarket" />} />
           <Route path="pay" element={<PaymentPage />} />
           <Route path="p/:network/:amount/:recipient/:memo" element={<ShortPayRedirect />} />
