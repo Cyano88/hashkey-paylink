@@ -996,9 +996,9 @@ function ConnectTelegramPanel({ onBack }: { onBack: () => void }) {
             <MessageCircle className="h-5 w-5" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-base font-semibold text-gray-900 dark:text-white">Connect Telegram to continue</p>
+            <p className="text-base font-semibold text-gray-900 dark:text-white">Open Hash PayLink in Telegram</p>
             <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-              Open Hash PayLink from Telegram to load your saved agents, helper access, and funding tools.
+              Create payment requests, fund Polymarket, manage agents, and open StreamPay from chat.
             </p>
           </div>
         </div>
@@ -1007,8 +1007,11 @@ function ConnectTelegramPanel({ onBack }: { onBack: () => void }) {
           className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
         >
           <MessageCircle className="h-4 w-4" />
-          Open in Telegram
+          Open Telegram Dashboard
         </a>
+        <p className="mt-2 text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
+          Best for saved alerts, helper memory, quick funding, and agent actions.
+        </p>
       </div>
     </div>
   )
