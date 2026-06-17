@@ -35,6 +35,8 @@ function ensureSchema() {
         privy_user_id text primary key,
         polymarket_address text not null,
         preferred_funding_network text not null default 'base',
+        telegram_owner text,
+        telegram_id text,
         last_synced_at timestamptz,
         created_at timestamptz not null default now(),
         updated_at timestamptz not null default now()
@@ -46,8 +48,16 @@ function ensureSchema() {
         resolved_alerts_enabled boolean not null default true,
         claimable_alerts_enabled boolean not null default true,
         movement_alerts_enabled boolean not null default false,
+        alert_email text,
         updated_at timestamptz not null default now()
       );
+
+      alter table polymarket_profiles
+        add column if not exists telegram_owner text,
+        add column if not exists telegram_id text;
+
+      alter table polymarket_alert_settings
+        add column if not exists alert_email text;
 
       create table if not exists polymarket_watchlist (
         id serial primary key,
@@ -134,6 +144,13 @@ function cleanAmount(value: unknown) {
   return raw
 }
 
+function cleanEmail(value: unknown) {
+  const raw = String(value ?? '').trim().toLowerCase()
+  if (!raw) return null
+  if (raw.length > 160 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw)) return ''
+  return raw
+}
+
 const SUPPORTED_NETWORKS = new Set(['base', 'arbitrum', 'solana'])
 
 async function dataApiFetch<T>(path: string): Promise<T> {
@@ -201,6 +218,8 @@ async function loadProfileBundle(privyUserId: string) {
       preferredFundingNetwork: SUPPORTED_NETWORKS.has(String(profile.preferred_funding_network))
         ? String(profile.preferred_funding_network)
         : 'base',
+      telegramOwner: profile.telegram_owner ? String(profile.telegram_owner) : null,
+      telegramId: profile.telegram_id ? String(profile.telegram_id) : null,
       lastSyncedAt: profile.last_synced_at instanceof Date ? profile.last_synced_at.toISOString() : null,
       createdAt: profile.created_at instanceof Date ? profile.created_at.toISOString() : null,
     },
@@ -210,8 +229,9 @@ async function loadProfileBundle(privyUserId: string) {
           resolvedAlertsEnabled: Boolean(settingsRes.rows[0].resolved_alerts_enabled),
           claimableAlertsEnabled: Boolean(settingsRes.rows[0].claimable_alerts_enabled),
           movementAlertsEnabled: Boolean(settingsRes.rows[0].movement_alerts_enabled),
+          alertEmail: settingsRes.rows[0].alert_email ? String(settingsRes.rows[0].alert_email) : '',
         }
-      : { lossThresholdPercent: 20, resolvedAlertsEnabled: true, claimableAlertsEnabled: true, movementAlertsEnabled: false },
+      : { lossThresholdPercent: 20, resolvedAlertsEnabled: true, claimableAlertsEnabled: true, movementAlertsEnabled: false, alertEmail: '' },
     watchlist: watchRes.rows.map(row => ({
       id: Number(row.id),
       marketId: String(row.market_id),
@@ -396,16 +416,20 @@ export default async function handler(req: Request, res: Response) {
     if (action === 'save-profile') {
       const address = cleanString(body.address, 64)
       const network = cleanString(body.fundingNetwork, 12) || 'base'
+      const telegramOwner = cleanString(body.telegramOwner, 96) || null
+      const telegramId = cleanString(body.telegramId, 48) || null
       if (!isAddress(address)) return res.status(400).json({ ok: false, error: 'Provide a valid 0x Polymarket address.' })
       if (!SUPPORTED_NETWORKS.has(network)) return res.status(400).json({ ok: false, error: 'Unsupported funding network.' })
       await requirePool().query(
-        `insert into polymarket_profiles (privy_user_id, polymarket_address, preferred_funding_network)
-         values ($1,$2,$3)
+        `insert into polymarket_profiles (privy_user_id, polymarket_address, preferred_funding_network, telegram_owner, telegram_id)
+         values ($1,$2,$3,$4,$5)
          on conflict (privy_user_id) do update set
            polymarket_address = excluded.polymarket_address,
            preferred_funding_network = excluded.preferred_funding_network,
+           telegram_owner = coalesce(excluded.telegram_owner, polymarket_profiles.telegram_owner),
+           telegram_id = coalesce(excluded.telegram_id, polymarket_profiles.telegram_id),
            updated_at = now()`,
-        [privyUserId, address, network],
+        [privyUserId, address, network, telegramOwner, telegramId],
       )
       await requirePool().query(
         `insert into polymarket_alert_settings (privy_user_id) values ($1)
@@ -431,19 +455,22 @@ export default async function handler(req: Request, res: Response) {
       const resolved = Boolean(body.resolvedAlertsEnabled)
       const claimable = Boolean(body.claimableAlertsEnabled)
       const movement = Boolean(body.movementAlertsEnabled)
+      const alertEmail = cleanEmail(body.alertEmail)
+      if (alertEmail === '') return res.status(400).json({ ok: false, error: 'Enter a valid alert email or leave it blank.' })
       const profileExists = (await requirePool().query('select 1 from polymarket_profiles where privy_user_id = $1', [privyUserId])).rowCount
       if (!profileExists) return res.status(409).json({ ok: false, error: 'Save a Polymarket profile address first.' })
       await requirePool().query(
         `insert into polymarket_alert_settings
-          (privy_user_id, loss_threshold_percent, resolved_alerts_enabled, claimable_alerts_enabled, movement_alerts_enabled)
-         values ($1,$2,$3,$4,$5)
+          (privy_user_id, loss_threshold_percent, resolved_alerts_enabled, claimable_alerts_enabled, movement_alerts_enabled, alert_email)
+         values ($1,$2,$3,$4,$5,$6)
          on conflict (privy_user_id) do update set
            loss_threshold_percent = excluded.loss_threshold_percent,
            resolved_alerts_enabled = excluded.resolved_alerts_enabled,
            claimable_alerts_enabled = excluded.claimable_alerts_enabled,
            movement_alerts_enabled = excluded.movement_alerts_enabled,
+           alert_email = excluded.alert_email,
            updated_at = now()`,
-        [privyUserId, loss, resolved, claimable, movement],
+        [privyUserId, loss, resolved, claimable, movement, alertEmail],
       )
       return res.json({
         ok: true,
@@ -452,6 +479,7 @@ export default async function handler(req: Request, res: Response) {
           resolvedAlertsEnabled: resolved,
           claimableAlertsEnabled: claimable,
           movementAlertsEnabled: movement,
+          alertEmail: alertEmail ?? '',
         },
       })
     }

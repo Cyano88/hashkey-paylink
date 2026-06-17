@@ -15,6 +15,7 @@ import {
   LineChart,
   Loader2,
   LogOut,
+  Mail,
   MessageCircle,
   Newspaper,
   Pencil,
@@ -822,6 +823,8 @@ export default function TelegramPaymentLinks() {
               onBack={() => setActiveService('')}
               onOpenLpScout={() => setActiveService('lp-scout')}
               onOpenWorldCup={() => setActiveService('poly-worldcup')}
+              telegramOwner={telegramIdentity.isStable ? telegramIdentity.owner : ''}
+              telegramId={telegramIdentity.isStable ? telegramIdentity.owner.replace(/^telegram:/, '') : ''}
             />
           ) : activeService === 'poly-worldcup' ? (
             <PolyWorldCupHubPanel
@@ -3953,12 +3956,14 @@ function buildPolymarketPayLink({
   funding,
   network,
   polymarketWallet,
+  returnToPortfolio,
 }: {
   wallet: string
   amount: string
   funding?: string
   network: RequestNetwork
   polymarketWallet: string
+  returnToPortfolio?: boolean
 }) {
   const params = new URLSearchParams()
   params.set('a', amount)
@@ -3971,6 +3976,7 @@ function buildPolymarketPayLink({
   params.set('pm', '1')
   params.set('bridge', 'polymarket')
   params.set('pmw', polymarketWallet)
+  if (returnToPortfolio) params.set('return', 'poly-portfolio')
   if (funding) params.set('funding', funding)
   return `${window.location.origin}/pay?${params.toString()}`
 }
@@ -4062,6 +4068,8 @@ type PolymarketBridgeNetwork = 'base' | 'arbitrum' | 'solana'
 type PolymarketProfile = {
   polymarketAddress: string
   preferredFundingNetwork: string
+  telegramOwner?: string | null
+  telegramId?: string | null
   lastSyncedAt: string | null
 }
 
@@ -4070,6 +4078,7 @@ type PolymarketAlertSettings = {
   resolvedAlertsEnabled: boolean
   claimableAlertsEnabled: boolean
   movementAlertsEnabled: boolean
+  alertEmail: string
 }
 
 type PolymarketAlertRecord = {
@@ -4119,6 +4128,10 @@ type PolymarketPosition = {
   endDate?: string
   curPrice?: number
   icon?: string
+  closed?: boolean
+  archived?: boolean
+  status?: string
+  marketStatus?: string
 }
 
 function formatUsd(value: unknown, fallback = '—') {
@@ -4157,6 +4170,38 @@ function polymarketEventUrl(position: PolymarketPosition) {
   return slug ? `https://polymarket.com/event/${slug}` : 'https://polymarket.com'
 }
 
+function polymarketPositionKey(position: PolymarketPosition) {
+  return position.conditionId ?? position.asset ?? position.slug ?? position.title ?? ''
+}
+
+function numberOrNull(value: unknown) {
+  const n = typeof value === 'number' ? value : Number(value)
+  return Number.isFinite(n) ? n : null
+}
+
+function isClaimablePosition(position: PolymarketPosition) {
+  if (position.redeemable !== true) return false
+  const value = numberOrNull(position.currentValue)
+  const size = numberOrNull(position.size)
+  return value === null && size === null ? true : (value ?? 0) > 0 || (size ?? 0) > 0
+}
+
+function isActiveOpenPosition(position: PolymarketPosition) {
+  if (isClaimablePosition(position)) return false
+  if (position.redeemable === true) return false
+  if (position.closed === true || position.archived === true) return false
+  const status = `${position.status ?? ''} ${position.marketStatus ?? ''}`.toLowerCase()
+  if (/(resolved|closed|settled|final|ended|archived)/.test(status)) return false
+  if (position.endDate) {
+    const endedAt = new Date(position.endDate).getTime()
+    if (Number.isFinite(endedAt) && endedAt < Date.now()) return false
+  }
+  const value = numberOrNull(position.currentValue)
+  const size = numberOrNull(position.size)
+  if (value !== null || size !== null) return (value ?? 0) > 0 || (size ?? 0) > 0
+  return true
+}
+
 function shortHex(value: string) {
   return value.length > 12 ? `${value.slice(0, 6)}...${value.slice(-4)}` : value
 }
@@ -4165,10 +4210,14 @@ function PolyPortfolioPanel({
   onBack,
   onOpenLpScout,
   onOpenWorldCup,
+  telegramOwner,
+  telegramId,
 }: {
   onBack: () => void
   onOpenLpScout: () => void
   onOpenWorldCup: () => void
+  telegramOwner?: string
+  telegramId?: string
 }) {
   const { ready: privyReady, authenticated, login, getAccessToken } = usePrivy()
 
@@ -4207,17 +4256,22 @@ function PolyPortfolioPanel({
   const settings = bundle?.settings ?? null
 
   const claimablePositions = useMemo(
-    () => livePositions.filter(p => p.redeemable === true),
+    () => livePositions.filter(isClaimablePosition),
+    [livePositions],
+  )
+
+  const activeOpenPositions = useMemo(
+    () => livePositions.filter(isActiveOpenPosition),
     [livePositions],
   )
 
   const losers = useMemo(() => {
     if (!settings) return []
     const threshold = -Math.abs(settings.lossThresholdPercent)
-    return livePositions.filter(p =>
+    return activeOpenPositions.filter(p =>
       typeof p.percentPnl === 'number' && p.percentPnl <= threshold,
     )
-  }, [livePositions, settings])
+  }, [activeOpenPositions, settings])
 
   const fetchBundle = useCallback(async () => {
     if (!authenticated) return
@@ -4296,6 +4350,22 @@ function PolyPortfolioPanel({
   }, [profile?.polymarketAddress, fetchLiveData])
 
   useEffect(() => {
+    if (!profile?.polymarketAddress) return
+    const refreshOnReturn = () => {
+      if (document.visibilityState === 'visible') {
+        void fetchLiveData(profile.polymarketAddress)
+        void fetchBundle()
+      }
+    }
+    window.addEventListener('focus', refreshOnReturn)
+    document.addEventListener('visibilitychange', refreshOnReturn)
+    return () => {
+      window.removeEventListener('focus', refreshOnReturn)
+      document.removeEventListener('visibilitychange', refreshOnReturn)
+    }
+  }, [profile?.polymarketAddress, fetchLiveData, fetchBundle])
+
+  useEffect(() => {
     if (profile?.polymarketAddress && livePositions.length >= 0 && !liveLoading) {
       void evaluateAlerts()
     }
@@ -4320,7 +4390,13 @@ function PolyPortfolioPanel({
       const res = await fetch('/api/polymarket-portfolio', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ action: 'save-profile', address, fundingNetwork: networkInput }),
+        body: JSON.stringify({
+          action: 'save-profile',
+          address,
+          fundingNetwork: networkInput,
+          telegramOwner,
+          telegramId,
+        }),
       })
       const data = await res.json() as { ok?: boolean; error?: string } & PolymarketPortfolioBundle
       if (!res.ok || !data.ok) throw new Error(data.error || 'Could not save profile.')
@@ -4419,6 +4495,7 @@ function PolyPortfolioPanel({
         funding: 'Polymarket portfolio',
         network: (bridgeData.network ?? network) as RequestNetwork,
         polymarketWallet: profile.polymarketAddress,
+        returnToPortfolio: true,
       })
       setFundResult({
         depositAddress: bridgeData.depositAddress,
@@ -4639,7 +4716,7 @@ function PolyPortfolioPanel({
           <div className="rounded-xl bg-gray-50 px-3 py-2.5 dark:bg-white/[0.04]">
             <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">Open positions</p>
             <p className="mt-1 text-base font-semibold tabular-nums text-gray-900 dark:text-white">
-              {liveLoading ? <Loader2 className="inline h-3.5 w-3.5 animate-spin" /> : livePositions.length}
+              {liveLoading ? <Loader2 className="inline h-3.5 w-3.5 animate-spin" /> : activeOpenPositions.length}
             </p>
           </div>
         </div>
@@ -4774,6 +4851,20 @@ function PolyPortfolioPanel({
               value={settingsDraft.movementAlertsEnabled}
               onChange={v => setSettingsDraft(d => d ? { ...d, movementAlertsEnabled: v } : d)}
             />
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Delivery email</p>
+              <div className="mt-1 flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">
+                <Mail className="h-3.5 w-3.5 text-gray-400" />
+                <input
+                  type="email"
+                  value={settingsDraft.alertEmail ?? ''}
+                  onChange={e => setSettingsDraft(d => d ? { ...d, alertEmail: e.target.value } : d)}
+                  placeholder="you@example.com"
+                  className="min-w-0 flex-1 bg-transparent text-sm text-gray-900 outline-none placeholder:text-gray-400 dark:text-white"
+                />
+              </div>
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Saved for portfolio alert delivery.</p>
+            </div>
             <button
               type="button"
               onClick={saveAlertSettings}
@@ -4787,8 +4878,8 @@ function PolyPortfolioPanel({
         )}
 
         {unreadAlerts.length > 0 ? (
-          <ul className="mt-3 space-y-2">
-            {unreadAlerts.slice(0, 8).map(alert => (
+          <ul className="mt-3 max-h-[252px] space-y-2 overflow-y-auto pr-1 [scrollbar-width:thin] [scrollbar-color:rgba(156,163,175,0.35)_transparent]">
+            {unreadAlerts.map(alert => (
               <li key={alert.id} className="flex items-start gap-2 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.04]">
                 <span className={cn(
                   'mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md',
@@ -4824,10 +4915,13 @@ function PolyPortfolioPanel({
       {/* Claimables card */}
       {claimablePositions.length > 0 && (
         <div className="rounded-2xl border border-emerald-100 bg-emerald-50/40 p-4 shadow-sm dark:border-emerald-300/20 dark:bg-emerald-400/[0.04]">
-          <p className="text-[11px] font-semibold uppercase tracking-widest text-emerald-700 dark:text-emerald-300">Claimable on Polymarket</p>
-          <ul className="mt-2 space-y-2">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-emerald-700 dark:text-emerald-300">Claimable on Polymarket</p>
+            <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">{claimablePositions.length}</span>
+          </div>
+          <ul className="mt-2 max-h-[216px] space-y-2 overflow-y-auto pr-1 [scrollbar-width:thin] [scrollbar-color:rgba(16,185,129,0.35)_transparent]">
             {claimablePositions.map(position => (
-              <li key={position.conditionId ?? position.asset ?? position.title} className="flex items-center justify-between gap-3 rounded-xl bg-white/70 px-3 py-2 dark:bg-white/[0.04]">
+              <li key={polymarketPositionKey(position)} className="flex items-center justify-between gap-3 rounded-xl bg-white/70 px-3 py-2 dark:bg-white/[0.04]">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">{position.title ?? 'Polymarket position'}</p>
                   <p className="text-xs text-gray-500 dark:text-gray-400">{formatUsd(position.currentValue)} redeemable</p>
@@ -4836,6 +4930,9 @@ function PolyPortfolioPanel({
                   href={polymarketEventUrl(position)}
                   target="_blank"
                   rel="noreferrer"
+                  onClick={() => {
+                    if (profile?.polymarketAddress) window.setTimeout(() => void fetchLiveData(profile.polymarketAddress), 4000)
+                  }}
                   className="inline-flex items-center gap-1.5 rounded-lg bg-black px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
                 >
                   Claim <ExternalLink className="h-3 w-3" />
@@ -4850,24 +4947,24 @@ function PolyPortfolioPanel({
       <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#0f1014]">
         <div className="flex items-center justify-between gap-3">
           <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Open positions</p>
-          {livePositions.length > 0 && <p className="text-xs text-gray-500 dark:text-gray-400">{livePositions.length}</p>}
+          {activeOpenPositions.length > 0 && <p className="text-xs text-gray-500 dark:text-gray-400">{activeOpenPositions.length}</p>}
         </div>
         {liveLoading && livePositions.length === 0 ? (
           <div className="mt-3 flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
             <Loader2 className="h-4 w-4 animate-spin" /> Fetching positions…
           </div>
-        ) : livePositions.length === 0 ? (
+        ) : activeOpenPositions.length === 0 ? (
           <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">No open positions on this address.</p>
         ) : (
-          <ul className="mt-3 space-y-2">
-            {livePositions.slice(0, 12).map(position => {
+          <ul className="mt-3 max-h-[258px] space-y-2 overflow-y-auto pr-1 [scrollbar-width:thin] [scrollbar-color:rgba(156,163,175,0.35)_transparent]">
+            {activeOpenPositions.map(position => {
               const pnl = position.percentPnl
               const tone = typeof pnl === 'number'
                 ? pnl >= 0 ? 'text-emerald-600 dark:text-emerald-300' : 'text-red-500 dark:text-red-300'
                 : 'text-gray-400'
-              const isLoser = losers.some(p => (p.conditionId ?? p.asset) === (position.conditionId ?? position.asset))
+              const isLoser = losers.some(p => polymarketPositionKey(p) === polymarketPositionKey(position))
               return (
-                <li key={position.conditionId ?? position.asset ?? position.title} className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.04]">
+                <li key={polymarketPositionKey(position)} className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.04]">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">{position.title ?? 'Polymarket position'}</p>
