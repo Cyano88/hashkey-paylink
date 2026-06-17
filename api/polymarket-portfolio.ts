@@ -279,7 +279,7 @@ async function evaluateAlerts(privyUserId: string, address: string) {
 
   let positions: PolymarketPosition[] = []
   try {
-    positions = await dataApiFetch<PolymarketPosition[]>(`/positions?user=${encodeURIComponent(address)}&sizeThreshold=1&limit=100`)
+    positions = await dataApiFetch<PolymarketPosition[]>(`/positions?user=${encodeURIComponent(address)}&sizeThreshold=0&limit=100`)
     if (!Array.isArray(positions)) positions = []
   } catch {
     return 0
@@ -291,7 +291,8 @@ async function evaluateAlerts(privyUserId: string, address: string) {
     if (!marketId) continue
     const title = cleanString(position.title ?? position.slug ?? 'Polymarket position', 160)
 
-    if (claimableEnabled && position.redeemable) {
+    const currentValue = typeof position.currentValue === 'number' ? position.currentValue : Number(position.currentValue)
+    if (claimableEnabled && position.redeemable && Number.isFinite(currentValue) && currentValue > 0) {
       const insert = await requirePool().query(
         `insert into polymarket_alert_history (privy_user_id, alert_type, market_id, title, body, severity, source_snapshot)
          select $1,'claimable',$2,$3,$4,'success',$5::jsonb

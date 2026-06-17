@@ -4182,8 +4182,9 @@ function numberOrNull(value: unknown) {
 function isClaimablePosition(position: PolymarketPosition) {
   if (position.redeemable !== true) return false
   const value = numberOrNull(position.currentValue)
+  if (value !== null) return value > 0
   const size = numberOrNull(position.size)
-  return value === null && size === null ? true : (value ?? 0) > 0 || (size ?? 0) > 0
+  return size === null ? true : size > 0
 }
 
 function isActiveOpenPosition(position: PolymarketPosition) {
@@ -4192,12 +4193,13 @@ function isActiveOpenPosition(position: PolymarketPosition) {
   if (position.closed === true || position.archived === true) return false
   const status = `${position.status ?? ''} ${position.marketStatus ?? ''}`.toLowerCase()
   if (/(resolved|closed|settled|final|ended|archived)/.test(status)) return false
+  const value = numberOrNull(position.currentValue)
+  const size = numberOrNull(position.size)
+  if ((value ?? 0) > 0 || (size ?? 0) > 0) return true
   if (position.endDate) {
     const endedAt = new Date(position.endDate).getTime()
     if (Number.isFinite(endedAt) && endedAt < Date.now()) return false
   }
-  const value = numberOrNull(position.currentValue)
-  const size = numberOrNull(position.size)
   if (value !== null || size !== null) return (value ?? 0) > 0 || (size ?? 0) > 0
   return true
 }
@@ -4305,7 +4307,7 @@ function PolyPortfolioPanel({
     try {
       const [valueRes, positionsRes] = await Promise.all([
         fetch(`/api/polymarket-portfolio?action=value&address=${encodeURIComponent(address)}`),
-        fetch(`/api/polymarket-portfolio?action=positions&address=${encodeURIComponent(address)}&sizeThreshold=1&limit=50`),
+        fetch(`/api/polymarket-portfolio?action=positions&address=${encodeURIComponent(address)}&sizeThreshold=0&limit=100`),
       ])
       const valueData = await valueRes.json() as { ok?: boolean; value?: unknown; error?: string }
       const positionsData = await positionsRes.json() as { ok?: boolean; positions?: PolymarketPosition[]; error?: string }
@@ -4658,6 +4660,7 @@ function PolyPortfolioPanel({
 
   const totalValue = liveValue?.value
   const unreadAlerts = bundle?.alerts.filter(a => !a.readAt) ?? []
+  const latestFunding = bundle?.fundingAttempts?.[0] ?? null
 
   return (
     <div className="mt-4 space-y-4">
@@ -4708,7 +4711,7 @@ function PolyPortfolioPanel({
 
         <div className="mt-4 grid grid-cols-2 gap-3">
           <div className="rounded-xl bg-gray-50 px-3 py-2.5 dark:bg-white/[0.04]">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">Portfolio value</p>
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">Position value</p>
             <p className="mt-1 text-base font-semibold tabular-nums text-gray-900 dark:text-white">
               {liveLoading ? <Loader2 className="inline h-3.5 w-3.5 animate-spin" /> : formatUsd(totalValue)}
             </p>
@@ -4720,6 +4723,20 @@ function PolyPortfolioPanel({
             </p>
           </div>
         </div>
+
+        {latestFunding && (
+          <div className="mt-3 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.04]">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">Recent bridge funding</p>
+              <p className="text-xs font-semibold tabular-nums text-gray-800 dark:text-gray-100">
+                {latestFunding.amount} USDC
+              </p>
+            </div>
+            <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+              Cash balance is confirmed inside Polymarket after Bridge credit. Hash PayLink shows live positions, claimables, alerts, and recent funding attempts from this profile.
+            </p>
+          </div>
+        )}
 
         {liveError && <p className="mt-3 text-xs text-red-500 dark:text-red-300">{liveError}</p>}
 
