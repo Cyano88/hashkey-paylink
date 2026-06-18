@@ -79,7 +79,7 @@ export default function App() {
           <Route path="terms"              element={<TermsDocs />} />
           <Route path="privacy"            element={<PrivacyDocs />} />
         </Route>
-        <Route index element={IS_APP_HOST ? <CreateLink /> : <FoundationPage />} />
+        <Route index element={IS_APP_HOST ? <Navigate to={`/app${search}`} replace /> : <FoundationPage />} />
         <Route element={<Layout />}>
           <Route path="app" element={<CreateLink />} />
           <Route path="polymarket" element={<CreateLink initialProduct="polymarket" />} />
