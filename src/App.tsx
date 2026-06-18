@@ -34,6 +34,7 @@ import PrivacyDocs      from './pages/docs/PrivacyDocs'
 // which React app is mounted. Add ?app=streampay to any localhost URL for
 // local Streampay development without changing DNS.
 const { hostname, pathname, search } = window.location
+const IS_APP_HOST = hostname === 'app.hashpaylink.com'
 const isStreamPayRoute =
   pathname === '/stream' ||
   pathname.startsWith('/stream/') ||
@@ -78,7 +79,7 @@ export default function App() {
           <Route path="terms"              element={<TermsDocs />} />
           <Route path="privacy"            element={<PrivacyDocs />} />
         </Route>
-        <Route index element={<FoundationPage />} />
+        <Route index element={IS_APP_HOST ? <CreateLink /> : <FoundationPage />} />
         <Route element={<Layout />}>
           <Route path="app" element={<CreateLink />} />
           <Route path="polymarket" element={<CreateLink initialProduct="polymarket" />} />
