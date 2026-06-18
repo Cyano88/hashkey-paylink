@@ -37,6 +37,7 @@ export default async function handler(req: Request, res: Response) {
         payer: receipt.payer,
         memo: receipt.memo,
         amount: receipt.amount,
+        requestedAmount: receipt.requestedAmount,
         asset: 'USDC',
         createdAt: receipt.ts,
         source: receipt.source,

@@ -421,6 +421,7 @@ export default function PaymentPage() {
   const [attendeeName,   setAttendeeName]   = useState(() => initParams.get('payer') ?? '')
   const [eventRegStatus, setEventRegStatus] = useState<'idle' | 'pending' | 'ok' | 'error'>('idle')
   const eventRegistered  = useRef(false)
+  const ordinaryReceiptRegistered = useRef(false)
   const accessRedirected = useRef(false)
   const ngPosRegistered  = useRef(false)
   const requiresAttendeeName = (isEventMode || isNgPosPayment) && !isPolymarketFunding && !isAgentFunding && !isHelperAccess
@@ -1587,6 +1588,7 @@ export default function PaymentPage() {
     setCircleSolanaSession(null); setCircleSolanaAddress(''); setCircleSolanaCopied(false)
     setManualPayDetected(false); setManualTxHash(null); setReceivedAmount(null)
     setPaymentReceiptUrl(''); setReceiptLinkCopied(false)
+    ordinaryReceiptRegistered.current = false
     setCirclePaymasterPending(false); setCirclePaymasterTxHash(null); setCirclePaymasterError(null)
     setCirclePasskeyPending(false); setCirclePasskeyError(null); setCircleSmartAccount(null); setCircleEvmEmailSession(null); setCircleEvmPaymentProcessing(false); setCircleEvmAcceptedPending(false); setCircleWalletCopied(false)
     setShowCheckButton(false)
@@ -2859,6 +2861,40 @@ export default function PaymentPage() {
     }
   }
 
+  async function registerOrdinaryReceipt() {
+    if (!txHash || txHash.startsWith('manual_')) return
+    const payer = chain === 'starknet' ? (argentStarkSession?.address ?? starkAccount ?? '')
+      : chain === 'solana' ? (circleSolanaSession?.wallet.address ?? solanaWalletAddr ?? solanaVaultAddr ?? '')
+      : (address ?? circleEvmEmailSession?.wallet.address ?? circleSmartAccount ?? directVault ?? '')
+    const actualAmt = receivedAmount != null
+      ? (Number(receivedAmount) / Math.pow(10, meta.decimals)).toFixed(meta.decimals <= 6 ? 6 : 8)
+      : effectiveAmt
+    try {
+      const res = await fetch('/api/event-register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: `paylink-${chain}-${txHash}`,
+          txHash,
+          chain,
+          payer: payer || activeRecipient || 'Hash PayLink payer',
+          memo: memo || 'Hash PayLink payment',
+          amount: actualAmt,
+          requestedAmount: effectiveAmt,
+          source: 'paylink',
+          merchantId: activeRecipient,
+          settlementType: 'payment',
+        }),
+      })
+      const data = await res.json().catch(() => undefined) as { ok?: boolean; receiptUrl?: string } | undefined
+      if (data?.ok && data.receiptUrl) {
+        setPaymentReceiptUrl(new URL(data.receiptUrl, window.location.origin).toString())
+      }
+    } catch {
+      // Receipt registration is non-blocking; the payment success state is already confirmed.
+    }
+  }
+
   useEffect(() => {
     if (!isConfirmed || !isEventMode || !eventId || eventRegistered.current) return
     const name = isAgentFunding ? (memo || 'Agent wallet funding') : attendeeName.trim()
@@ -2898,6 +2934,14 @@ export default function PaymentPage() {
     void doRegister(name)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [solanaDirectStatus, attendeeName])
+
+  useEffect(() => {
+    if (!isConfirmed || !txHash || ordinaryReceiptRegistered.current) return
+    if (!isMainHashPaylinkPayment || isEventMode || isNgPosPayment || isPolymarketFunding || isAgentFunding || isHelperAccess) return
+    ordinaryReceiptRegistered.current = true
+    void registerOrdinaryReceipt()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isConfirmed, txHash])
 
   // ── openConnectModal unused lint suppression ──────────────────────────────
   useEffect(() => {

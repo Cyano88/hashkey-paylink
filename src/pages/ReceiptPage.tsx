@@ -19,6 +19,7 @@ type ReceiptResponse = {
     payer: string
     memo: string
     amount: string
+    requestedAmount?: string
     asset: string
     createdAt: number
     source?: string
@@ -52,19 +53,44 @@ function fmtTime(value?: number) {
 }
 
 function receiptFile(receipt: NonNullable<ReceiptResponse['receipt']>, receiptUrl: string) {
+  const labels = receiptLabels(receipt)
   return [
-    'Hash PayLink Receipt',
+    labels.heading,
     '',
     `Status: ${receipt.status}`,
     `Amount: ${receipt.amount} ${receipt.asset}`,
+    receipt.requestedAmount ? `Requested: ${receipt.requestedAmount} ${receipt.asset}` : '',
     `Network: ${CHAIN_META[chainKey(receipt.chain)].label}`,
-    `Payer: ${receipt.payer}`,
-    `Recipient context: ${receipt.memo || receipt.eventId}`,
+    `${labels.payer}: ${receipt.payer}`,
+    `${labels.context}: ${labels.contextValue}`,
     `Transaction: ${receipt.txHash}`,
     `Receipt hash: ${receipt.receiptHash}`,
     receipt.proof?.ogTxHash ? `0G tx: ${receipt.proof.ogTxHash}` : '0G tx: pending',
     `Receipt URL: ${receiptUrl}`,
-  ].join('\n')
+  ].filter(Boolean).join('\n')
+}
+
+function receiptLabels(receipt?: NonNullable<ReceiptResponse['receipt']>) {
+  const isStream = receipt?.source === 'streampay' || receipt?.settlementType === 'stream-created'
+  const isPos = receipt?.source === 'ngpos'
+  const heading = isStream ? 'StreamPay Receipt' : isPos ? 'Retail POS Receipt' : 'Hash PayLink Receipt'
+  const title = isStream ? 'Stream created' : isPos ? 'Retail payment confirmed' : 'Payment confirmed'
+  const description = isStream
+    ? 'Public confirmation for an Arc USDC stream creation.'
+    : isPos
+    ? 'Public confirmation for a retail USDC checkout.'
+    : 'Public confirmation for a completed USDC payment.'
+  const amountLabel = isStream ? 'Stream amount' : 'Amount paid'
+  const payer = isStream ? 'Sender' : isPos ? 'Customer wallet' : 'Payer'
+  const context = isStream ? 'Stream memo' : isPos ? 'Customer' : 'Memo'
+  const contextValue = isStream
+    ? (receipt?.memo || receipt?.merchantId || receipt?.eventId || '-')
+    : isPos
+    ? (receipt?.memo || receipt?.eventId || '-')
+    : (receipt?.memo || receipt?.merchantId || receipt?.eventId || '-')
+  const merchantLabel = isStream ? 'Stream vault' : isPos ? 'Merchant' : 'Recipient'
+  const merchantValue = receipt?.merchantId || ''
+  return { heading, title, description, amountLabel, payer, context, contextValue, merchantLabel, merchantValue }
 }
 
 export default function ReceiptPage() {
@@ -93,6 +119,7 @@ export default function ReceiptPage() {
 
   const receipt = data?.receipt
   const meta = CHAIN_META[chainKey(receipt?.chain)]
+  const labels = receiptLabels(receipt)
   const txExplorer = receipt?.txHash && !receipt.txHash.startsWith('manual_')
     ? `${meta.explorerUrl}/tx/${receipt.txHash}`
     : ''
@@ -149,12 +176,12 @@ export default function ReceiptPage() {
             <img src="/hash-logo-transparent.png" alt="" className="h-full w-full object-contain invert dark:invert-0" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Hash PayLink Receipt</p>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">{labels.heading}</p>
             <h1 className="mt-1 truncate text-lg font-semibold tracking-tight text-gray-900 dark:text-white">
-              {receipt?.title ?? 'Receipt'}
+              {receipt ? labels.title : 'Receipt'}
             </h1>
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              Public confirmation for a completed USDC payment.
+              {labels.description}
             </p>
           </div>
           {receipt && (
@@ -172,10 +199,15 @@ export default function ReceiptPage() {
         ) : receipt ? (
           <>
             <div className="mt-5 rounded-2xl border border-gray-100 bg-gray-50/70 p-4 text-center dark:border-white/10 dark:bg-white/[0.04]">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Amount paid</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">{labels.amountLabel}</p>
               <p className="mt-1 font-mono text-3xl font-bold tracking-tight text-gray-950 dark:text-white">
                 {receipt.amount} {receipt.asset}
               </p>
+              {receipt.requestedAmount && receipt.requestedAmount !== receipt.amount && (
+                <p className="mt-1 text-xs font-semibold text-gray-500 dark:text-gray-400">
+                  Requested {receipt.requestedAmount} {receipt.asset}
+                </p>
+              )}
               {receipt.amountNgn && (
                 <p className="mt-1 text-xs font-semibold text-gray-500 dark:text-gray-400">{receipt.amountNgn}</p>
               )}
@@ -184,8 +216,10 @@ export default function ReceiptPage() {
             <div className="mt-4 grid gap-2 rounded-xl border border-gray-100 bg-white p-3 text-xs dark:border-white/10 dark:bg-white/[0.03]">
               {[
                 ['Network', meta.label],
-                ['Payer', receipt.payer],
-                [receipt.source === 'ngpos' ? 'Customer' : 'For', receipt.memo || receipt.eventId],
+                [labels.payer, receipt.payer],
+                [labels.context, labels.contextValue],
+                ...(labels.merchantValue ? [[labels.merchantLabel, labels.merchantValue]] : []),
+                ...(receipt.settlementType ? [['Type', receipt.settlementType.replace(/-/g, ' ')]] : []),
                 ['Time', fmtTime(receipt.createdAt)],
                 ['Tx hash', receipt.txHash],
                 ['Receipt hash', receipt.receiptHash],
