@@ -5,7 +5,7 @@ import {
   useReadContract, useWriteContract, usePublicClient,
 } from 'wagmi'
 import { encodeFunctionData, isAddress, parseAbi, parseEventLogs, stringToHex } from 'viem'
-import { Mail, RefreshCw, X as XIcon } from 'lucide-react'
+import { ChevronDown, Mail, RefreshCw, X as XIcon } from 'lucide-react'
 import { STREAM_VAULT_ABI, STREAM_VAULT_FACTORY_ABI } from '../lib/streamVaultAbi'
 import { formatUsdcFull } from './TriStateBar'
 import {
@@ -299,6 +299,7 @@ export function CreateStreamForm() {
   const circleConfigured = canUseCircleEvmEmailWallet('arc')
   const circleAvailable = useCircleWallet && circleConfigured
   const recipientLocked = circleAvailable && !!prefill.recipient
+  const usingCircleWalletFlow = circleAvailable
   const circleReady = recipientValid && amountValid && durationValid && !!factoryAddr && agenticReportEmailValid
   const circleFundingAddress = circleSession?.wallet.address ?? linkedCircleAddress
   const circleNeedsFunds = circleBalance !== null && amountValid && circleBalance < amountBn
@@ -312,7 +313,8 @@ export function CreateStreamForm() {
     args:         [connectedAddr ?? '0x0000000000000000000000000000000000000000'],
     query:        { enabled: !!connectedAddr && isOnArc, refetchInterval: 10_000 },
   })
-  const insufficientFunds = usdcBalance !== undefined && amountValid && usdcBalance < amountBn
+  const connectedWalletNeedsFunds = usdcBalance !== undefined && amountValid && usdcBalance < amountBn
+  const insufficientFunds = !usingCircleWalletFlow && connectedWalletNeedsFunds
 
   const isWorking   = step === 'funding' || step === 'creating'
   const deployReady = isFormValid && !isWorking && !insufficientFunds
@@ -1394,7 +1396,15 @@ export function CreateStreamForm() {
                     <span className="text-[12px] font-bold text-gray-500 select-none">USDC</span>
                   </div>
                 </div>
-                {isConnected && isOnArc && usdcBalance !== undefined ? (
+                {usingCircleWalletFlow ? (
+                  <p className="text-[11px] text-gray-400">
+                    Circle wallet:{' '}
+                    <span className={`font-semibold ${circleNeedsFunds ? 'text-red-500' : 'text-gray-600 dark:text-gray-300'}`}>
+                      {circleBalance === null ? 'checking...' : `${formatWalletUsdc(circleBalance)} USDC`}
+                    </span>
+                    {circleNeedsFunds && <span className="ml-1.5 font-semibold text-red-500">- insufficient</span>}
+                  </p>
+                ) : isConnected && isOnArc && usdcBalance !== undefined ? (
                   <p className="text-[11px] text-gray-400">
                     Balance:{' '}
                     <span className={`font-semibold ${insufficientFunds ? 'text-red-500' : 'text-gray-600'}`}>
@@ -1507,109 +1517,124 @@ export function CreateStreamForm() {
                     )}
 
                     {circleFundingAddress && (
-                      <div className="rounded-xl border border-blue-100 bg-white px-3 py-2.5 dark:border-blue-900/40 dark:bg-[#15151a]">
-                        <div className="mb-2 grid grid-cols-2 rounded-lg bg-gray-100 p-0.5 text-[10px] font-semibold dark:bg-white/[0.06]">
-                          {(['fund', 'withdraw'] as const).map((mode) => (
-                            <button
-                              key={mode}
-                              type="button"
-                              onClick={() => setCircleWalletPanel(mode)}
-                              className={`rounded-md px-2 py-1 capitalize transition-colors ${
-                                circleWalletPanel === mode
-                                  ? 'bg-white text-gray-900 shadow-sm dark:bg-white/15 dark:text-white'
-                                  : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
-                              }`}
-                            >
-                              {mode}
-                            </button>
-                          ))}
-                        </div>
+                      <details className="group rounded-lg border border-blue-100 bg-white/70 px-3 py-2 dark:border-blue-900/40 dark:bg-[#15151a]">
+                        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[11px] font-medium text-gray-500 transition-colors hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 [&::-webkit-details-marker]:hidden">
+                          <span className="min-w-0 truncate">{circleNeedsFunds ? 'Add Arc USDC to continue' : 'Circle Arc wallet ready'}</span>
+                          <span className="ml-auto flex shrink-0 items-center gap-2">
+                            <span className="font-mono font-semibold text-gray-600 dark:text-gray-200">
+                              {circleBalance === null ? 'Checking...' : `${formatWalletUsdc(circleBalance)} USDC`}
+                            </span>
+                            <ChevronDown className="h-3.5 w-3.5 text-gray-400 transition-transform group-open:rotate-180 dark:text-gray-500" />
+                          </span>
+                        </summary>
+                        <div className="mt-2 border-t border-gray-100 pt-2 dark:border-white/10">
+                          <div className="mb-2 grid grid-cols-2 rounded-md bg-gray-100 p-0.5 text-[10px] font-semibold dark:bg-white/[0.06]">
+                            {(['fund', 'withdraw'] as const).map((mode) => (
+                              <button
+                                key={mode}
+                                type="button"
+                                onClick={() => setCircleWalletPanel(mode)}
+                                className={`rounded px-2 py-1 capitalize transition-colors ${
+                                  circleWalletPanel === mode
+                                    ? 'bg-white text-gray-900 shadow-sm dark:bg-white/15 dark:text-white'
+                                    : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+                                }`}
+                              >
+                                {mode}
+                              </button>
+                            ))}
+                          </div>
 
-                        {circleWalletPanel === 'fund' ? (
-                          <div className="space-y-2">
-                            <div className="flex items-center justify-between gap-3">
-                              <div className="min-w-0">
-                                <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500">Fund this Arc wallet</p>
-                                <p className="truncate font-mono text-[11px] text-gray-600 dark:text-gray-300">{circleFundingAddress}</p>
+                          {circleWalletPanel === 'fund' ? (
+                            <>
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="min-w-0">
+                                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">Circle wallet</p>
+                                  <p className="truncate text-[11px] text-gray-500 dark:text-gray-300">
+                                    {circleNeedsFunds ? 'Fund with Arc USDC' : 'Arc USDC ready'}
+                                  </p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={handleCopyCircleWallet}
+                                  className="shrink-0 rounded-md border border-gray-200 bg-white px-2 py-1 text-[10px] font-semibold text-gray-600 transition-all hover:bg-gray-50 active:scale-95 dark:border-white/10 dark:bg-white/[0.08] dark:text-gray-200 dark:hover:bg-white/[0.14]"
+                                >
+                                  {circleCopied ? 'Copied' : 'Copy address'}
+                                </button>
                               </div>
-                              <button
-                                type="button"
-                                onClick={handleCopyCircleWallet}
-                                className="shrink-0 rounded-lg border border-gray-200 px-2.5 py-1.5 text-[11px] font-semibold text-gray-600 dark:border-white/10 dark:text-gray-300"
-                              >
-                                {circleCopied ? 'Copied' : 'Copy address'}
-                              </button>
+                              <div className="mt-2 flex items-center justify-between gap-2 text-[11px]">
+                                <span className="min-w-0 truncate font-mono text-gray-400 dark:text-gray-500">{circleFundingAddress}</span>
+                                <div className="flex shrink-0 items-center gap-2">
+                                  <span className={`font-mono font-semibold ${circleNeedsFunds ? 'text-red-500' : 'text-gray-700 dark:text-gray-100'}`}>
+                                    {circleBalance === null ? 'Checking...' : `${formatWalletUsdc(circleBalance)} USDC`}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => refreshCircleBalance(circleFundingAddress)}
+                                    disabled={circleBalanceRefreshing || isWorking}
+                                    aria-label="Refresh Circle wallet balance"
+                                    title="Refresh balance"
+                                    className="rounded-md p-1 text-gray-400 transition-all hover:bg-gray-100 hover:text-gray-700 active:scale-95 disabled:opacity-50 dark:text-gray-500 dark:hover:bg-white/10 dark:hover:text-gray-200"
+                                  >
+                                    <RefreshCw className={`h-3 w-3 ${circleBalanceRefreshing ? 'animate-spin' : ''}`} />
+                                  </button>
+                                </div>
+                              </div>
+                            </>
+                          ) : (
+                            <div className="space-y-2">
+                              <div className="grid grid-cols-[1fr_72px] gap-2">
+                                <input
+                                  value={circleWithdrawAddress}
+                                  onChange={e => setCircleWithdrawAddress(e.target.value)}
+                                  placeholder="Wallet or exchange address"
+                                  disabled={circleWithdrawPending || isWorking}
+                                  className="h-8 min-w-0 rounded-md border border-gray-200 bg-white px-2 text-[11px] text-gray-900 outline-none transition-colors placeholder:text-gray-400 focus:border-gray-400 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.05] dark:text-white dark:placeholder:text-gray-500"
+                                />
+                                <input
+                                  value={circleWithdrawAmount}
+                                  onChange={e => setCircleWithdrawAmount(e.target.value)}
+                                  placeholder="0.00"
+                                  inputMode="decimal"
+                                  disabled={circleWithdrawPending || isWorking}
+                                  className="h-8 min-w-0 rounded-md border border-gray-200 bg-white px-2 text-right text-[11px] font-semibold text-gray-900 outline-none transition-colors placeholder:text-gray-400 focus:border-gray-400 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.05] dark:text-white dark:placeholder:text-gray-500"
+                                />
+                              </div>
+                              <div className="flex items-center justify-between gap-2 text-[10px]">
+                                <button
+                                  type="button"
+                                  onClick={handleCircleWithdrawMax}
+                                  className="font-semibold text-gray-500 transition-colors hover:text-gray-800 dark:text-gray-400 dark:hover:text-white"
+                                >
+                                  Max {circleBalance === null ? '' : `${formatWalletUsdc(circleBalance)} USDC`}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={handleCircleWithdraw}
+                                  disabled={!circleWithdrawReady || isWorking}
+                                  className="rounded-md bg-gray-900 px-3 py-1.5 font-semibold text-white transition-all hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+                                >
+                                  {circleWithdrawPending ? 'Working...' : circleSession ? 'Withdraw' : 'Unlock'}
+                                </button>
+                              </div>
+                              {!circleSession && (
+                                <p className="text-[10px] font-medium text-amber-600 dark:text-amber-300">Unlock wallet to withdraw.</p>
+                              )}
+                              {circleWithdrawError && (
+                                <p className="text-[10px] font-medium text-red-600 dark:text-red-300">{circleWithdrawError}</p>
+                              )}
+                              {circleWithdrawNotice && (
+                                <p className="text-[10px] font-medium text-emerald-600 dark:text-emerald-300">{circleWithdrawNotice}</p>
+                              )}
+                              {circleWithdrawTxHash && (
+                                <p className="truncate text-[10px] font-medium text-emerald-600 dark:text-emerald-300">
+                                  Withdraw sent: {shortAddress(circleWithdrawTxHash)}
+                                </p>
+                              )}
                             </div>
-                            <div className="flex items-center justify-between gap-2">
-                              <p className={`min-w-0 text-[11px] font-semibold ${circleNeedsFunds ? 'text-red-500' : 'text-gray-500 dark:text-gray-400'}`}>
-                                Balance: {circleBalance === null ? 'checking...' : `${formatWalletUsdc(circleBalance)} USDC`}
-                                {circleNeedsFunds ? ' - fund wallet first' : ''}
-                              </p>
-                              <button
-                                type="button"
-                                onClick={() => refreshCircleBalance(circleFundingAddress)}
-                                disabled={circleBalanceRefreshing || isWorking}
-                                aria-label="Refresh Circle wallet balance"
-                                title="Refresh balance"
-                                className="shrink-0 rounded-md p-1 text-gray-400 transition-colors hover:text-gray-700 disabled:opacity-50 dark:text-gray-500 dark:hover:text-gray-200"
-                              >
-                                <RefreshCw className={`h-3 w-3 ${circleBalanceRefreshing ? 'animate-spin' : ''}`} />
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="space-y-2">
-                            <div className="grid grid-cols-[1fr_86px] gap-2">
-                              <input
-                                value={circleWithdrawAddress}
-                                onChange={e => setCircleWithdrawAddress(e.target.value)}
-                                placeholder="Wallet or exchange address"
-                                disabled={circleWithdrawPending || isWorking}
-                                className="h-9 min-w-0 rounded-lg border border-gray-200 bg-white px-2.5 text-[11px] text-gray-900 outline-none transition-colors placeholder:text-gray-400 focus:border-gray-400 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.05] dark:text-white dark:placeholder:text-gray-500"
-                              />
-                              <input
-                                value={circleWithdrawAmount}
-                                onChange={e => setCircleWithdrawAmount(e.target.value)}
-                                placeholder="0.00"
-                                inputMode="decimal"
-                                disabled={circleWithdrawPending || isWorking}
-                                className="h-9 min-w-0 rounded-lg border border-gray-200 bg-white px-2.5 text-right text-[11px] font-semibold text-gray-900 outline-none transition-colors placeholder:text-gray-400 focus:border-gray-400 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.05] dark:text-white dark:placeholder:text-gray-500"
-                              />
-                            </div>
-                            <div className="flex items-center justify-between gap-2 text-[10px]">
-                              <button
-                                type="button"
-                                onClick={handleCircleWithdrawMax}
-                                className="font-semibold text-gray-500 transition-colors hover:text-gray-800 dark:text-gray-400 dark:hover:text-white"
-                              >
-                                Max {circleBalance === null ? '' : `${formatWalletUsdc(circleBalance)} USDC`}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={handleCircleWithdraw}
-                                disabled={!circleWithdrawReady || isWorking}
-                                className="rounded-md bg-gray-900 px-3 py-1.5 font-semibold text-white transition-all hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
-                              >
-                                {circleWithdrawPending ? 'Working...' : circleSession ? 'Withdraw' : 'Unlock'}
-                              </button>
-                            </div>
-                            {!circleSession && (
-                              <p className="text-[10px] font-medium text-amber-600 dark:text-amber-300">Unlock wallet to withdraw.</p>
-                            )}
-                            {circleWithdrawError && (
-                              <p className="text-[10px] font-medium text-red-600 dark:text-red-300">{circleWithdrawError}</p>
-                            )}
-                            {circleWithdrawNotice && (
-                              <p className="text-[10px] font-medium text-emerald-600 dark:text-emerald-300">{circleWithdrawNotice}</p>
-                            )}
-                            {circleWithdrawTxHash && (
-                              <p className="truncate text-[10px] font-medium text-emerald-600 dark:text-emerald-300">
-                                Withdraw sent: {shortAddress(circleWithdrawTxHash)}
-                              </p>
-                            )}
-                          </div>
-                        )}
-                      </div>
+                          )}
+                        </div>
+                      </details>
                     )}
 
                     <button
@@ -1638,7 +1663,7 @@ export function CreateStreamForm() {
                 )}
 
                 {/* Wrong network — replace primary button */}
-                {isConnected && !isOnArc && (
+                {!usingCircleWalletFlow && isConnected && !isOnArc && (
                   <button
                     onClick={() => switchChain({ chainId: ARC_CHAIN_ID })}
                     className="flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-[14px] font-semibold transition-colors active:scale-[0.98] min-h-[52px]"
@@ -1664,12 +1689,12 @@ export function CreateStreamForm() {
                   </button>
                 )}
 
-                {insufficientFunds && !isWorking && !circleNeedsFunds && (
+                {!usingCircleWalletFlow && insufficientFunds && !isWorking && (
                   <p className="text-center text-[12px] font-semibold text-red-500">
                     Insufficient USDC — fund your Arc wallet first
                   </p>
                 )}
-                {hint && !insufficientFunds && !circleNeedsFunds && (
+                {!usingCircleWalletFlow && hint && !insufficientFunds && (
                   <p className="text-center text-[12px] text-gray-400">{hint}</p>
                 )}
                 {error && (

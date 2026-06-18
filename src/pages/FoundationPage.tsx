@@ -5,36 +5,38 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 
+const APP_URL = 'https://app.hashpaylink.com'
+
 const products = [
   {
     index: '01',
     title: 'Payment Links',
     copy: 'Create a USDC link, share it anywhere, and track every payment in one place.',
-    href: '/app?product=payment',
+    href: `${APP_URL}?product=payment`,
   },
   {
     index: '02',
     title: 'Retail POS',
     copy: 'Turn any shop counter into a simple USDC checkout with one reusable QR.',
-    href: '/app?product=pos',
+    href: `${APP_URL}?product=pos`,
   },
   {
     index: '03',
     title: 'PolyDesk',
     copy: 'Fund Polymarket, watch your positions, and get helpful alerts from Telegram.',
-    href: '/app?product=polymarket',
+    href: `${APP_URL}?product=polymarket`,
   },
   {
     index: '04',
     title: 'StreamPay',
     copy: 'Stream USDC on Arc for work, agent access, and recoverable-risk Arena games.',
-    href: '/app?product=streampay',
+    href: `${APP_URL}?product=streampay`,
   },
   {
     index: '05',
     title: 'Agent Commerce',
     copy: 'Let agents pay, receive, unlock services, and keep clear proof of every action.',
-    href: '/app?product=agent',
+    href: `${APP_URL}?product=agent`,
   },
   {
     index: '06',
@@ -88,7 +90,7 @@ const proofStats = [
   {
     label: 'Live surfaces',
     value: '6 workflows',
-    href: '/app',
+    href: APP_URL,
   },
   {
     label: 'Proof archive',
@@ -107,7 +109,7 @@ const demoFlows = [
     stack: 'Circle',
     title: 'USDC checkout and wallet sessions',
     copy: 'Email-first wallet access, USDC checkout, receipts, and agent payment flows.',
-    href: '/app?product=payment',
+    href: `${APP_URL}?product=payment`,
     videoUrl: '',
   },
   {
@@ -121,14 +123,14 @@ const demoFlows = [
     stack: 'Arc',
     title: 'StreamPay and Arena settlement',
     copy: 'USDC streams and recoverable-risk game rooms use Arc as the streaming settlement layer.',
-    href: '/app?product=streampay',
+    href: `${APP_URL}?product=streampay`,
     videoUrl: '',
   },
   {
     stack: 'Polymarket',
     title: 'PolyDesk from Telegram',
     copy: 'Fund accounts, track positions, receive alerts, and ask LP Scout from one chat surface.',
-    href: '/app?product=polymarket',
+    href: `${APP_URL}?product=polymarket`,
     videoUrl: '',
   },
   {
@@ -142,7 +144,7 @@ const demoFlows = [
     stack: 'Retail POS',
     title: 'Static QR checkout for stores',
     copy: 'Country-aware merchant QR flows start in Africa and expand by verified local partners.',
-    href: '/app?product=pos',
+    href: `${APP_URL}?product=pos`,
     videoUrl: '',
   },
 ]
@@ -986,12 +988,12 @@ export default function FoundationPage() {
               <a href="#contact" className="rounded-full px-3.5 py-1.5 transition hover:bg-white/8 hover:text-white">Contact</a>
             </nav>
             <div className="flex items-center gap-2">
-              <Link
-                to="/app"
+              <a
+                href={APP_URL}
                 className="inline-flex h-10 min-w-max items-center justify-center rounded-lg border border-white/14 bg-white/[.07] px-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/86 transition hover:border-white/28 hover:bg-white/[.10] hover:text-white sm:px-4"
               >
                 Launch App
-              </Link>
+              </a>
               <button
                 type="button"
                 onClick={() => setMobileNavOpen(true)}
@@ -1050,12 +1052,12 @@ export default function FoundationPage() {
                 Hash PayLink powers payment links, retail POS, PolyDesk, StreamPay, and agent commerce on Circle USDC, Arc settlement, and 0G proof rails.
               </p>
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-                <Link
-                  to="/app"
+                <a
+                  href={APP_URL}
                   className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg !bg-white px-5 text-sm font-semibold !text-[#08090b] shadow-[0_18px_48px_rgba(0,0,0,.26)] transition hover:!bg-zinc-100 sm:w-auto"
                 >
                   Open App <ArrowRight className="h-4 w-4" />
-                </Link>
+                </a>
                 <a
                   href="https://t.me/HashPayLinkBot?start=polydesk"
                   target="_blank"
@@ -1163,18 +1165,29 @@ export default function FoundationPage() {
           </div>
 
           <div className="foundation-mobile-product-grid mt-14 grid gap-x-16 gap-y-9 md:grid-cols-2 lg:grid-cols-3">
-            {products.map(({ index, title, copy, href }) => (
-              <Link key={title} to={href} className="foundation-mobile-product-card group max-w-[330px] text-left max-sm:max-w-none">
-                <span className="text-[11px] font-semibold tracking-[0.22em] text-gray-400">{index}</span>
-                <div>
-                  <h3 className="mt-4 text-xl font-semibold tracking-[-0.025em] text-gray-950 max-sm:mt-0 max-sm:text-sm">{title}</h3>
-                  <p className="mt-3 text-sm leading-6 text-gray-600 max-sm:mt-1 max-sm:text-[11px] max-sm:leading-4">{copy}</p>
-                </div>
-                <div className="mt-5 inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 opacity-80 transition group-hover:gap-2 group-hover:opacity-100 max-sm:mt-0 max-sm:justify-self-end">
-                  Open <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
-                </div>
-              </Link>
-            ))}
+            {products.map(({ index, title, copy, href }) => {
+              const content = (
+                <>
+                  <span className="text-[11px] font-semibold tracking-[0.22em] text-gray-400">{index}</span>
+                  <div>
+                    <h3 className="mt-4 text-xl font-semibold tracking-[-0.025em] text-gray-950 max-sm:mt-0 max-sm:text-sm">{title}</h3>
+                    <p className="mt-3 text-sm leading-6 text-gray-600 max-sm:mt-1 max-sm:text-[11px] max-sm:leading-4">{copy}</p>
+                  </div>
+                  <div className="mt-5 inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 opacity-80 transition group-hover:gap-2 group-hover:opacity-100 max-sm:mt-0 max-sm:justify-self-end">
+                    Open <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
+                  </div>
+                </>
+              )
+              return href.startsWith('http') ? (
+                <a key={title} href={href} className="foundation-mobile-product-card group max-w-[330px] text-left max-sm:max-w-none">
+                  {content}
+                </a>
+              ) : (
+                <Link key={title} to={href} className="foundation-mobile-product-card group max-w-[330px] text-left max-sm:max-w-none">
+                  {content}
+                </Link>
+              )
+            })}
           </div>
         </div>
       </section>
@@ -1290,12 +1303,12 @@ export default function FoundationPage() {
               })}
             </div>
 
-            <Link
-              to="/app"
+            <a
+              href={APP_URL}
               className="mt-8 inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-gray-950 px-4 text-sm font-semibold text-white shadow-[0_18px_50px_rgba(15,23,42,.16)] transition hover:bg-gray-800 max-sm:hidden"
             >
               Open App <ArrowRight className="h-4 w-4" />
-            </Link>
+            </a>
           </div>
 
           <div className="phone-stage relative flex items-center justify-center">
@@ -1459,12 +1472,12 @@ export default function FoundationPage() {
               <p className="mt-3 text-sm leading-6 text-gray-600">
                 Create payment links, open POS, enter PolyDesk, or launch StreamPay from the app surface.
               </p>
-              <Link
-                to="/app"
+              <a
+                href={APP_URL}
                 className="mt-7 inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-black/10 bg-white/75 px-4 text-sm font-semibold text-gray-950 shadow-[0_14px_44px_rgba(15,23,42,.08)] transition hover:bg-white"
               >
                 Open App <ArrowRight className="h-4 w-4" />
-              </Link>
+              </a>
             </div>
           </div>
         </div>
@@ -1482,12 +1495,12 @@ export default function FoundationPage() {
               A concise view of how Hash PayLink turns trusted infrastructure into live payment, retail, agent, and market workflows.
             </p>
             <div className="mt-8 flex flex-col gap-3 max-sm:hidden sm:flex-row">
-              <Link
-                to="/app"
+              <a
+                href={APP_URL}
                 className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-gray-950 px-4 text-sm font-semibold text-white shadow-[0_18px_50px_rgba(15,23,42,.12)] transition hover:bg-gray-800"
               >
                 Open App <ArrowRight className="h-4 w-4" />
-              </Link>
+              </a>
               <a
                 href="mailto:support@hashpaylink.com"
                 className="inline-flex h-11 items-center justify-center rounded-lg border border-black/10 bg-white/70 px-4 text-sm font-semibold text-gray-950 shadow-[0_14px_44px_rgba(15,23,42,.06)] transition hover:bg-white"
