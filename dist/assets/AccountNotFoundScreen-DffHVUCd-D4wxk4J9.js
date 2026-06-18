@@ -1,0 +1,6 @@
+import{dp as l,dq as s,dr as u,di as c}from"./index-ChuZseJv.js";import{n as p}from"./ScreenLayout-Dmp7r6fS-DS5HJr4i.js";import{c as g}from"./createLucideIcon-C3fKVrsd.js";import"./ModalHeader-rFKqcgRs-Df8rzdz2.js";import"./Screen-DXLhhfU3-C-7cH2Tc.js";import"./index-Dq_xe9dz-DLdyjPuQ.js";/**
+ * @license lucide-react v0.554.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */const m=[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["path",{d:"M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3",key:"1u773s"}],["path",{d:"M12 17h.01",key:"p32p05"}]],d=g("circle-question-mark",m),y=({title:o="Account not found",subtitle:n,appName:t="this app",ctaText:a="Try logging in again",onRetry:i})=>c.jsx(p,{title:o,subtitle:n||`Please try logging in again or go to ${t} to create an account.`,icon:d,iconVariant:"warning",primaryCta:{label:a,onClick:i},watermark:!0}),M={component:()=>{let{navigate:o,setModalData:n,data:t}=l(),a=s(),{getAuthMeta:i,client:e}=u();return c.jsx(y,{appName:a==null?void 0:a.name,onRetry:()=>{let r=i();n({...t,login:{...t==null?void 0:t.login,...r!=null&&r.disableSignup?{disableSignup:!0}:{}}}),e!=null&&e.authFlow&&(e.authFlow=void 0),o("LandingScreen")}})}};export{M as AccountNotFoundScreen,y as AccountNotFoundScreenView,M as default};

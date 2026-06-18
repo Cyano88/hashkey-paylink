@@ -347,6 +347,53 @@ export default function FoundationPage() {
   }, [])
 
   useEffect(() => {
+    const page = pageRef.current
+    if (!page) return
+
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const isMobile = window.matchMedia('(max-width: 640px)').matches
+    if (reduceMotion || !isMobile) return
+
+    const scroller = page.querySelector('.hpl-snap-shell')
+    const targets = Array.from(
+      page.querySelectorAll<HTMLElement>(
+        '.foundation-mobile-section h2, .foundation-mobile-section > div > div > p, .foundation-mobile-product-card, .retail-motion, .foundation-mobile-retail-card, #stack .hpl-reveal, .faq-item',
+      ),
+    ).filter((element) => !element.closest('.phone-screen'))
+
+    targets.forEach((element, index) => {
+      element.classList.add('foundation-mobile-scroll-effect')
+      element.style.setProperty('--mobile-effect-delay', `${Math.min(index % 8, 6) * 42}ms`)
+    })
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('is-visible')
+            observer.unobserve(entry.target)
+          }
+        })
+      },
+      {
+        root: scroller,
+        threshold: 0.18,
+        rootMargin: '0px 0px -8% 0px',
+      },
+    )
+
+    targets.forEach((element) => observer.observe(element))
+
+    return () => {
+      observer.disconnect()
+      targets.forEach((element) => {
+        element.classList.remove('foundation-mobile-scroll-effect', 'is-visible')
+        element.style.removeProperty('--mobile-effect-delay')
+      })
+    }
+  }, [])
+
+  useEffect(() => {
     const section = modernAppSectionRef.current
     if (!section) return
 
@@ -392,7 +439,7 @@ export default function FoundationPage() {
         scrollTrigger: {
           trigger: section,
           scroller,
-          start: 'top 72%',
+          start: isMobile ? 'top 88%' : 'top 72%',
           toggleActions: 'play none none reverse',
         },
       })
@@ -401,15 +448,15 @@ export default function FoundationPage() {
         .to(primary, {
           opacity: 1,
           transform: finalPrimary,
-          duration: 1.55,
+          duration: isMobile ? 1.05 : 1.55,
           ease: 'power4.out',
         }, 0)
         .to(secondary, {
           opacity: 0.86,
           transform: finalSecondary,
-          duration: 1.55,
+          duration: isMobile ? 1.05 : 1.55,
           ease: 'power4.out',
-        }, 0.28)
+        }, isMobile ? 0.12 : 0.28)
     }, section)
 
     ScrollTrigger.refresh()
@@ -422,6 +469,7 @@ export default function FoundationPage() {
 
     const scroller = section.closest('.hpl-snap-shell')
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const isMobile = window.matchMedia('(max-width: 640px)').matches
 
     const ctx = gsap.context(() => {
       const items = section.querySelectorAll('.retail-motion')
@@ -445,15 +493,15 @@ export default function FoundationPage() {
           scrollTrigger: {
             trigger: section,
             scroller,
-            start: 'top 72%',
+            start: isMobile ? 'top 88%' : 'top 72%',
             toggleActions: 'play none none reverse',
           },
           opacity: 1,
           y: 0,
           scale: 1,
           filter: 'blur(0px)',
-          duration: 1.45,
-          stagger: 0.16,
+          duration: isMobile ? 1.02 : 1.45,
+          stagger: isMobile ? 0.08 : 0.16,
           ease: 'power4.out',
           force3D: true,
         },
@@ -630,6 +678,10 @@ export default function FoundationPage() {
           transform: rotate(45deg);
           color: #2563eb;
         }
+        .foundation-mobile-scroll-effect {
+          opacity: 1;
+          transform: none;
+        }
         .phone-primary {
           z-index: 3;
           transform: rotate(-8deg) translate3d(36px, 2px, 72px);
@@ -804,6 +856,22 @@ export default function FoundationPage() {
             box-shadow: 0 14px 34px rgba(15,23,42,.055);
             backdrop-filter: blur(10px);
           }
+          .foundation-mobile-scroll-effect {
+            opacity: 0;
+            transform: translate3d(0, 18px, 0) scale(.985);
+            filter: blur(7px);
+            transition:
+              opacity .72s cubic-bezier(.22, 1, .36, 1),
+              transform .72s cubic-bezier(.22, 1, .36, 1),
+              filter .72s cubic-bezier(.22, 1, .36, 1);
+            transition-delay: var(--mobile-effect-delay, 0ms);
+            will-change: transform, opacity, filter;
+          }
+          .foundation-mobile-scroll-effect.is-visible {
+            opacity: 1;
+            transform: translate3d(0, 0, 0) scale(1);
+            filter: blur(0);
+          }
           .foundation-mobile-retail-card {
             min-height: 262px;
           }
@@ -844,12 +912,10 @@ export default function FoundationPage() {
           }
           .phone-primary {
             order: 1;
-            transform: none !important;
           }
           .phone-secondary {
             order: 2;
             opacity: 1;
-            transform: none !important;
           }
           .retail-photo-card {
             border-radius: 24px;
@@ -1015,12 +1081,13 @@ export default function FoundationPage() {
                 <img
                   src="/brand/usdc-circle-logo.png"
                   alt="USDC"
+                  decoding="async"
                   className="h-[88px] w-[88px] rounded-full object-contain shadow-[0_18px_42px_rgba(0,0,0,.30)]"
                 />
                 <div className="flex items-center gap-4">
-                  <img src="/brand/0g-logo.jpeg" alt="0G" className="h-11 w-11 rounded-full object-contain opacity-95" />
-                  <img src="/brand/circle-logo.jpeg" alt="Circle" className="h-11 w-11 rounded-full object-contain opacity-95" />
-                  <img src="/brand/arc-logo.jpeg" alt="Arc" className="h-11 w-11 rounded-full object-contain opacity-95" />
+                  <img src="/brand/0g-logo.jpeg" alt="0G" decoding="async" className="h-11 w-11 rounded-full object-contain opacity-95" />
+                  <img src="/brand/circle-logo.jpeg" alt="Circle" decoding="async" className="h-11 w-11 rounded-full object-contain opacity-95" />
+                  <img src="/brand/arc-logo.jpeg" alt="Arc" decoding="async" className="h-11 w-11 rounded-full object-contain opacity-95" />
                 </div>
               </div>
 
@@ -1054,7 +1121,7 @@ export default function FoundationPage() {
                         animationDelay: item.delay,
                       } as CSSProperties}
                     >
-                      <img src={item.logo} alt={item.name} className="h-full w-full rounded-full object-contain opacity-90" />
+                      <img src={item.logo} alt={item.name} decoding="async" className="h-full w-full rounded-full object-contain opacity-90" />
                     </div>
                   ))}
                 </div>
@@ -1069,7 +1136,7 @@ export default function FoundationPage() {
               {[...partnerRail, ...partnerRail].map((partner, index) => (
                 <div key={`${partner.name}-${index}`} className="flex min-w-max items-center gap-2 text-xs font-semibold uppercase tracking-[0.22em] text-white/50">
                   <span className="flex h-7 w-7 items-center justify-center rounded-full border border-white/10 bg-white/[.045]">
-                    <img src={partner.logo} alt="" className="h-5 w-5 rounded-full object-contain opacity-85" />
+                    <img src={partner.logo} alt="" loading="lazy" decoding="async" className="h-5 w-5 rounded-full object-contain opacity-85" />
                   </span>
                   <span>{partner.name}</span>
                 </div>
@@ -1085,6 +1152,7 @@ export default function FoundationPage() {
             src="/brand/usdc-css.jpeg"
             alt=""
             data-motion="usdc-wave"
+            decoding="async"
             className="h-full w-[122%] max-w-none object-cover object-center opacity-95"
             style={{ animation: 'hpl-usdc-wave 24s ease-in-out infinite alternate', filter: 'blur(1.5px) saturate(1.08) brightness(1.035)', willChange: 'transform' }}
           />
@@ -1134,6 +1202,8 @@ export default function FoundationPage() {
           <img
             src="/brand/africa-business-bg.jpeg"
             alt=""
+            loading="lazy"
+            decoding="async"
             className="h-full w-full scale-110 object-cover object-center opacity-52 blur-[5px] saturate-[.86]"
           />
         </div>
@@ -1185,6 +1255,8 @@ export default function FoundationPage() {
                   <img
                     src={image.src}
                     alt={image.alt}
+                    loading="lazy"
+                    decoding="async"
                     className={`${image.imageClass} w-full rounded-[22px] object-cover object-center max-sm:h-[210px]`}
                   />
                   <div className="flex items-center justify-between px-3 py-3 max-sm:py-2">
@@ -1316,6 +1388,8 @@ export default function FoundationPage() {
           <img
             src="/brand/usdc-footer.png"
             alt=""
+            loading="lazy"
+            decoding="async"
             className="h-full w-full object-cover object-center opacity-72"
           />
           <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(250,249,246,.98)_0%,rgba(250,249,246,.90)_44%,rgba(250,249,246,.64)_100%)]" />
@@ -1344,6 +1418,8 @@ export default function FoundationPage() {
                 src="/brand/usdc-circle-logo.png"
                 alt=""
                 data-motion="stack-coin"
+                loading="lazy"
+                decoding="async"
                 className="absolute rounded-full object-cover opacity-[.055] blur-[1px]"
                 style={{
                   width: `${[150, 92, 128, 72][item]}px`,
