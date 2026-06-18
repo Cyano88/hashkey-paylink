@@ -769,14 +769,19 @@ export default function FoundationPage() {
           .foundation-retail-deck > button {
             position: absolute;
             left: 50%;
-            top: 0;
+            /* Top padding inside the deck so the peek above the active card
+               stays inside the container without clipping. */
+            top: 32px;
             width: 88%;
             max-width: 320px;
-            transform-origin: 50% 8%;
+            transform-origin: 50% 100%;
+            /* Behind cards peek above the active card. Negative Y means each
+               next card is offset upward; lower z keeps the active card on
+               top so only the upper edge of behind cards is visible. */
             transform:
-              translate(-50%, calc(var(--slot, 0) * 18px))
-              scale(calc(1 - var(--slot, 0) * 0.05));
-            opacity: calc(1 - var(--slot, 0) * 0.18);
+              translate(-50%, calc(var(--slot, 0) * -14px))
+              scale(calc(1 - var(--slot, 0) * 0.04));
+            opacity: calc(1 - var(--slot, 0) * 0.15);
             z-index: calc(30 - var(--slot, 0) * 10);
             transition:
               transform 380ms cubic-bezier(.4, 0, .2, 1),
@@ -796,12 +801,12 @@ export default function FoundationPage() {
               opacity: 1;
             }
             48% {
-              transform: translate(-50%, 220px) scale(0.92) rotate(-6deg);
-              opacity: 0.4;
+              transform: translate(-50%, 200px) scale(0.92) rotate(-4deg);
+              opacity: 0.35;
             }
             100% {
-              transform: translate(-50%, 36px) scale(0.9) rotate(0deg);
-              opacity: 0.64;
+              transform: translate(-50%, -28px) scale(0.92) rotate(0deg);
+              opacity: 0.7;
             }
           }
           .foundation-retail-deck > button .foundation-mobile-retail-card {
