@@ -217,6 +217,14 @@ export default function FoundationPage() {
   const [faqHeights, setFaqHeights] = useState<number[]>([])
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [activeRetailImage, setActiveRetailImage] = useState(0)
+  const [flippingRetailIndex, setFlippingRetailIndex] = useState<number | null>(null)
+  function advanceRetailDeck() {
+    if (flippingRetailIndex !== null) return
+    const outgoing = activeRetailImage
+    setFlippingRetailIndex(outgoing)
+    setActiveRetailImage((current) => (current + 1) % retailImages.length)
+    window.setTimeout(() => setFlippingRetailIndex(null), 460)
+  }
   const retailImages = [
     {
       src: '/brand/africa-terminal-payment.jpeg',
@@ -749,6 +757,56 @@ export default function FoundationPage() {
             max-width: 340px;
             margin-top: .35rem;
           }
+          /* ── Retail image stack: book-flip deck on mobile ────────────── */
+          .foundation-retail-deck {
+            position: relative;
+            height: 320px;
+            max-width: 360px;
+            margin-left: auto;
+            margin-right: auto;
+            width: 100%;
+          }
+          .foundation-retail-deck > button {
+            position: absolute;
+            left: 50%;
+            top: 0;
+            width: 88%;
+            max-width: 320px;
+            transform-origin: 50% 8%;
+            transform:
+              translate(-50%, calc(var(--slot, 0) * 18px))
+              scale(calc(1 - var(--slot, 0) * 0.05));
+            opacity: calc(1 - var(--slot, 0) * 0.18);
+            z-index: calc(30 - var(--slot, 0) * 10);
+            transition:
+              transform 380ms cubic-bezier(.4, 0, .2, 1),
+              opacity 380ms cubic-bezier(.4, 0, .2, 1);
+            will-change: transform, opacity;
+          }
+          .foundation-retail-deck > button[data-active="false"] {
+            pointer-events: none;
+          }
+          .foundation-retail-deck > button[data-flipping="true"] {
+            z-index: 40;
+            animation: hpl-card-flip-out 460ms cubic-bezier(.4, 0, .2, 1) forwards;
+          }
+          @keyframes hpl-card-flip-out {
+            0% {
+              transform: translate(-50%, 0) scale(1) rotate(0deg);
+              opacity: 1;
+            }
+            48% {
+              transform: translate(-50%, 220px) scale(0.92) rotate(-6deg);
+              opacity: 0.4;
+            }
+            100% {
+              transform: translate(-50%, 36px) scale(0.9) rotate(0deg);
+              opacity: 0.64;
+            }
+          }
+          .foundation-retail-deck > button .foundation-mobile-retail-card {
+            min-height: auto;
+          }
           .foundation-mobile-asset-stage {
             inset: 0 auto auto 0;
             height: 138px;
@@ -1011,8 +1069,8 @@ export default function FoundationPage() {
                   sm+ so the desktop orb stage below is the source of truth. */}
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 sm:hidden">
                 <img
-                  src="/brand/circle-logo.jpeg"
-                  alt="Circle"
+                  src="/brand/usdc-circle-logo.png"
+                  alt="USDC"
                   className="h-[88px] w-[88px] rounded-full object-contain shadow-[0_18px_42px_rgba(0,0,0,.30)]"
                 />
                 <div className="flex items-center gap-4">
@@ -1159,31 +1217,37 @@ export default function FoundationPage() {
             </p>
           </div>
 
-          <div className="space-y-4 sm:relative sm:min-h-[620px] sm:space-y-0 lg:min-h-[680px]">
-            {retailImages.map((image, index) => (
-              <button
-                key={image.title}
-                type="button"
-                onClick={() => setActiveRetailImage((current) => (current + 1) % retailImages.length)}
-                className={`${image.wrapperClass} ${activeRetailImage === index ? 'max-sm:block' : 'max-sm:hidden'} appearance-none border-0 bg-transparent p-0 text-left`}
-                aria-label="Show next retail image"
-              >
-                <div className={`${image.cardClass} foundation-mobile-retail-card`} style={{ '--shine-delay': image.shineDelay } as CSSProperties}>
-                  <img
-                    src={image.src}
-                    alt={image.alt}
-                    className={`${image.imageClass} w-full rounded-[22px] object-cover object-center max-sm:h-[210px]`}
-                  />
-                  <div className="flex items-center justify-between px-3 py-3 max-sm:py-2">
-                    <p className="text-xs font-semibold text-white/84">{image.title}</p>
-                    <p className="text-[10px] uppercase tracking-[0.18em] text-cyan-100/42">{image.meta}</p>
+          <div className="foundation-retail-deck sm:relative sm:min-h-[620px] sm:space-y-0 lg:min-h-[680px]">
+            {retailImages.map((image, index) => {
+              const slot = (index - activeRetailImage + retailImages.length) % retailImages.length
+              const isActive = slot === 0
+              const isFlipping = flippingRetailIndex === index
+              return (
+                <button
+                  key={image.title}
+                  type="button"
+                  onClick={advanceRetailDeck}
+                  data-active={isActive ? 'true' : 'false'}
+                  data-flipping={isFlipping ? 'true' : 'false'}
+                  className={`${image.wrapperClass} appearance-none border-0 bg-transparent p-0 text-left`}
+                  style={{ '--slot': slot } as CSSProperties}
+                  aria-label={isActive ? `Show next retail image (${activeRetailImage + 1}/${retailImages.length})` : image.alt}
+                  tabIndex={isActive ? 0 : -1}
+                >
+                  <div className={`${image.cardClass} foundation-mobile-retail-card`} style={{ '--shine-delay': image.shineDelay } as CSSProperties}>
+                    <img
+                      src={image.src}
+                      alt={image.alt}
+                      className={`${image.imageClass} w-full rounded-[22px] object-cover object-center max-sm:h-[220px]`}
+                    />
+                    <div className="flex items-center justify-between px-3 py-3 max-sm:py-2">
+                      <p className="text-xs font-semibold text-white/84">{image.title}</p>
+                      <p className="text-[10px] uppercase tracking-[0.18em] text-cyan-100/42">{image.meta}</p>
+                    </div>
                   </div>
-                  <div className="hidden px-3 pb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/36 max-sm:block">
-                    Tap to switch {activeRetailImage + 1}/{retailImages.length}
-                  </div>
-                </div>
-              </button>
-            ))}
+                </button>
+              )
+            })}
           </div>
         </div>
       </section>
