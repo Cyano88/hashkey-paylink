@@ -1,6 +1,18 @@
 import type { Request, Response } from 'express'
 import { findRegisteredPaymentReceipt } from './event-registry.js'
 
+function receiptType(source?: string) {
+  if (source === 'ngpos') return 'hashpaylink_pos_receipt'
+  if (source === 'streampay') return 'hashpaylink_streampay_receipt'
+  return 'hashpaylink_payment_receipt'
+}
+
+function receiptTitle(source?: string) {
+  if (source === 'ngpos') return 'Retail POS receipt'
+  if (source === 'streampay') return 'StreamPay receipt'
+  return 'Hash PayLink receipt'
+}
+
 export default async function handler(req: Request, res: Response) {
   if (req.method !== 'GET') return res.status(405).json({ ok: false, error: 'Method not allowed' })
 
@@ -14,10 +26,10 @@ export default async function handler(req: Request, res: Response) {
     return res.json({
       ok: true,
       receipt: {
-        type: receipt.source === 'ngpos' ? 'hashpaylink_pos_receipt' : 'hashpaylink_payment_receipt',
+        type: receiptType(receipt.source),
         receiptId: receipt.receiptId,
         receiptHash: receipt.receiptHash,
-        title: receipt.source === 'ngpos' ? 'Retail POS receipt' : 'Hash PayLink receipt',
+        title: receiptTitle(receipt.source),
         status: 'confirmed',
         eventId: receipt.eventId,
         txHash: receipt.txHash,

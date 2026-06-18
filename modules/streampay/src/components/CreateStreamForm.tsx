@@ -221,6 +221,14 @@ function buildStreamLink(
   return `${origin}/stream/${vault}${qs ? `?${qs}` : ''}`
 }
 
+function receiptOrigin() {
+  const { hostname, origin } = window.location
+  if (hostname === 'streampay.xyz' || hostname.endsWith('.streampay.xyz') || hostname.includes('streampay')) {
+    return 'https://hashpaylink.com'
+  }
+  return origin
+}
+
 export function CreateStreamForm() {
   const [prefill] = useState(readPrefill)
   const { authenticated: privyAuthenticated, user: privyUser, login: loginPrivy, getAccessToken } = usePrivy()
@@ -246,8 +254,10 @@ export function CreateStreamForm() {
   const [statusMsg,    setStatusMsg]    = useState('')
   const [error,        setError]        = useState<string | null>(null)
   const [streamLink,   setStreamLink]   = useState<string | null>(null)
+  const [streamReceiptUrl, setStreamReceiptUrl] = useState<string | null>(null)
   const [deployTxHash, setDeployTxHash] = useState<string | null>(null)
   const [copied,       setCopied]       = useState(false)
+  const [receiptCopied, setReceiptCopied] = useState(false)
   const [circleEmail,      setCircleEmail]      = useState('')
   const [circleSession,    setCircleSession]    = useState<CircleEvmEmailSession | null>(null)
   const [circleBalance,    setCircleBalance]    = useState<bigint | null>(null)
@@ -372,15 +382,16 @@ export function CreateStreamForm() {
     setRecentStreams(loadRecentStreams(recipient))
   }
 
-  async function refreshCircleBalance(walletAddress = circleSession?.wallet.address) {
-    if (!walletAddress || !publicClient) return null
+  async function refreshCircleBalance(walletAddress: string | undefined = circleSession?.wallet.address) {
+    if (!walletAddress || !isAddress(walletAddress) || !publicClient) return null
+    const address = walletAddress as `0x${string}`
     setCircleBalanceRefreshing(true)
     try {
       const balance = await publicClient.readContract({
         address: ARC_USDC,
         abi: ERC20_ABI,
         functionName: 'balanceOf',
-        args: [walletAddress],
+        args: [address],
       }) as bigint
       setCircleBalance(balance)
       return balance
@@ -428,6 +439,33 @@ export function CreateStreamForm() {
       setAgenticStatus('Registered. 0G proof appears in Agent activity after archive.')
     } catch (err) {
       setAgenticError(err instanceof Error ? err.message.slice(0, 180) : 'Could not register Agentic Streaming.')
+    }
+  }
+
+  async function registerStreamReceipt(vault: `0x${string}`, txHash: `0x${string}`, senderWallet: string) {
+    try {
+      const res = await fetch('/api/event-register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: `streampay-${vault.toLowerCase()}`,
+          txHash,
+          chain: 'arc',
+          payer: senderWallet,
+          memo: reason.trim() || 'StreamPay payroll stream',
+          amount: formatUsdcFull(amountBn),
+          requestedAmount: formatUsdcFull(amountBn),
+          source: 'streampay',
+          merchantId: vault,
+          settlementType: 'stream-created',
+        }),
+      })
+      const data = await res.json().catch(() => ({})) as { ok?: boolean; receiptUrl?: string }
+      if (res.ok && data.ok && data.receiptUrl) {
+        setStreamReceiptUrl(new URL(data.receiptUrl, receiptOrigin()).toString())
+      }
+    } catch {
+      // Receipt registration is non-blocking; the stream itself is already on-chain.
     }
   }
 
@@ -603,6 +641,7 @@ export function CreateStreamForm() {
       const nextStreamLink = buildStreamLink(vault, reason, false, '', agenticLinkParams)
       setStreamLink(nextStreamLink)
       rememberStream(nextStreamLink)
+      await registerStreamReceipt(vault, deployTx, connectedAddr)
       await registerAgenticSubscription(vault, nextStreamLink, connectedAddr)
       setStep('success'); setStatusMsg('')
     } catch (err: unknown) {
@@ -695,6 +734,7 @@ export function CreateStreamForm() {
       const nextStreamLink = buildStreamLink(vault, reason, true, streamRecipientEmail, agenticLinkParams)
       setStreamLink(nextStreamLink)
       rememberStream(nextStreamLink)
+      await registerStreamReceipt(vault, txHash, session.wallet.address)
       await registerAgenticSubscription(vault, nextStreamLink, session.wallet.address)
       void refreshCircleBalance(session.wallet.address)
       setStep('success')
@@ -715,6 +755,13 @@ export function CreateStreamForm() {
     navigator.clipboard.writeText(streamLink)
     setCopied(true)
     setTimeout(() => setCopied(false), 3000)
+  }
+
+  function handleCopyReceipt() {
+    if (!streamReceiptUrl) return
+    navigator.clipboard.writeText(streamReceiptUrl)
+    setReceiptCopied(true)
+    setTimeout(() => setReceiptCopied(false), 3000)
   }
 
   async function handleCopyCircleWallet() {
@@ -1021,6 +1068,30 @@ export function CreateStreamForm() {
               {agenticStatus && <p className="text-center text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">{agenticStatus}</p>}
               {agenticError && <p className="text-center text-[11px] font-semibold text-red-500 dark:text-red-400">{agenticError}</p>}
             </div>
+
+            {streamReceiptUrl && (
+              <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 p-3 text-left dark:border-emerald-900/40 dark:bg-emerald-950/20">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-300">Shareable receipt</p>
+                <p className="mt-1 truncate font-mono text-[11px] text-emerald-700 dark:text-emerald-200">{streamReceiptUrl}</p>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <a
+                    href={streamReceiptUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center rounded-xl bg-emerald-600 py-2.5 text-[12px] font-semibold text-white transition-colors hover:bg-emerald-700"
+                  >
+                    Open receipt
+                  </a>
+                  <button
+                    type="button"
+                    onClick={handleCopyReceipt}
+                    className="flex items-center justify-center rounded-xl border border-emerald-200 bg-white py-2.5 text-[12px] font-semibold text-emerald-700 transition-colors hover:bg-emerald-50 dark:border-emerald-800 dark:bg-[#15151a] dark:text-emerald-200 dark:hover:bg-emerald-950/30"
+                  >
+                    {receiptCopied ? 'Copied' : 'Copy receipt'}
+                  </button>
+                </div>
+              </div>
+            )}
 
             {deployTxHash && (
               <a
