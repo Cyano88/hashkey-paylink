@@ -357,13 +357,13 @@ export default function FoundationPage() {
     const scroller = page.querySelector('.hpl-snap-shell')
     const targets = Array.from(
       page.querySelectorAll<HTMLElement>(
-        '.foundation-mobile-section h2, .foundation-mobile-section > div > div > p, .foundation-mobile-product-card, .retail-motion, .foundation-mobile-retail-card, #stack .hpl-reveal, .faq-item',
+        '.foundation-mobile-section h2, .foundation-mobile-product-card, .retail-motion, #stack .hpl-reveal, .faq-item',
       ),
     ).filter((element) => !element.closest('.phone-screen'))
 
     targets.forEach((element, index) => {
       element.classList.add('foundation-mobile-scroll-effect')
-      element.style.setProperty('--mobile-effect-delay', `${Math.min(index % 8, 6) * 42}ms`)
+      element.style.setProperty('--mobile-effect-delay', `${Math.min(index % 4, 3) * 36}ms`)
     })
 
     const observer = new IntersectionObserver(
@@ -484,9 +484,9 @@ export default function FoundationPage() {
         items,
         {
           opacity: 0,
-          y: 86,
-          scale: 0.94,
-          filter: 'blur(10px)',
+          y: isMobile ? 28 : 86,
+          scale: isMobile ? 0.985 : 0.94,
+          filter: isMobile ? 'none' : 'blur(10px)',
           force3D: true,
         },
         {
@@ -499,9 +499,9 @@ export default function FoundationPage() {
           opacity: 1,
           y: 0,
           scale: 1,
-          filter: 'blur(0px)',
-          duration: isMobile ? 1.02 : 1.45,
-          stagger: isMobile ? 0.08 : 0.16,
+          filter: isMobile ? 'none' : 'blur(0px)',
+          duration: isMobile ? 0.62 : 1.45,
+          stagger: isMobile ? 0.045 : 0.16,
           ease: 'power4.out',
           force3D: true,
         },
@@ -858,19 +858,17 @@ export default function FoundationPage() {
           }
           .foundation-mobile-scroll-effect {
             opacity: 0;
-            transform: translate3d(0, 18px, 0) scale(.985);
-            filter: blur(7px);
+            transform: translate3d(0, 14px, 0);
             transition:
-              opacity .72s cubic-bezier(.22, 1, .36, 1),
-              transform .72s cubic-bezier(.22, 1, .36, 1),
-              filter .72s cubic-bezier(.22, 1, .36, 1);
+              opacity .54s cubic-bezier(.22, 1, .36, 1),
+              transform .54s cubic-bezier(.22, 1, .36, 1);
             transition-delay: var(--mobile-effect-delay, 0ms);
-            will-change: transform, opacity, filter;
+            will-change: transform, opacity;
           }
           .foundation-mobile-scroll-effect.is-visible {
             opacity: 1;
-            transform: translate3d(0, 0, 0) scale(1);
-            filter: blur(0);
+            transform: translate3d(0, 0, 0);
+            will-change: auto;
           }
           .foundation-mobile-retail-card {
             min-height: 262px;
