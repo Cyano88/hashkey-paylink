@@ -328,7 +328,7 @@ export default async function handler(req: Request, res: Response) {
       if (!userToken || !walletId || !walletAddress || !chain || !recipient || !totalUnits) {
         return res.status(400).json({ ok: false, error: 'Missing userToken, walletId, walletAddress, chain, recipient, or totalUnits' })
       }
-      if (chain !== 'base' && chain !== 'arbitrum') {
+      if (chain !== 'base' && chain !== 'arbitrum' && chain !== 'arc') {
         return res.status(400).json({ ok: false, error: 'Unsupported EVM withdraw chain' })
       }
       if (!isAddress(walletAddress) || !isAddress(recipient)) {
