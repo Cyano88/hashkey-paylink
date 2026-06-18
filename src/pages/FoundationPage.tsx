@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { ArrowRight } from 'lucide-react'
+import { ArrowRight, Menu, X } from 'lucide-react'
 import { gsap } from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import { useEffect, useRef, useState } from 'react'
@@ -215,6 +215,7 @@ export default function FoundationPage() {
   const faqAnswerRefs = useRef<Array<HTMLDivElement | null>>([])
   const [openFaq, setOpenFaq] = useState(0)
   const [faqHeights, setFaqHeights] = useState<number[]>([])
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
 
   useEffect(() => {
     gsap.registerPlugin(ScrollTrigger)
@@ -441,7 +442,7 @@ export default function FoundationPage() {
   }, [])
 
   return (
-    <main ref={pageRef} className="min-h-screen bg-[#f7f6f2] text-[#0d1117]">
+    <main ref={pageRef} className="min-h-[100dvh] bg-[#f7f6f2] text-[#0d1117]">
       <style>{`
         @keyframes hpl-globe-drift {
           0%, 100% { transform: translate3d(-50%, -50%, 0) scale(1.04); }
@@ -509,7 +510,7 @@ export default function FoundationPage() {
           backface-visibility: hidden;
         }
         .hpl-snap-shell {
-          height: 100vh;
+          height: 100dvh;
           overflow-y: auto;
           scroll-behavior: smooth;
           scroll-snap-type: y mandatory;
@@ -519,7 +520,7 @@ export default function FoundationPage() {
           display: none;
         }
         .hpl-snap-section {
-          min-height: 100vh;
+          min-height: 100dvh;
           scroll-snap-align: start;
           scroll-snap-stop: always;
         }
@@ -649,6 +650,12 @@ export default function FoundationPage() {
           }
         }
         @media (max-width: 640px) {
+          .hpl-snap-shell {
+            scroll-snap-type: y proximity;
+          }
+          .hpl-snap-section {
+            scroll-snap-stop: normal;
+          }
           .phone-stage {
             min-height: 410px;
           }
@@ -750,22 +757,65 @@ export default function FoundationPage() {
               <a href="#about" className="rounded-full px-3.5 py-1.5 transition hover:bg-white/8 hover:text-white">About</a>
               <a href="#contact" className="rounded-full px-3.5 py-1.5 transition hover:bg-white/8 hover:text-white">Contact</a>
             </nav>
-            <Link
-              to="/app"
-              className="hidden h-10 min-w-max items-center justify-center rounded-lg border border-white/14 bg-white/[.07] px-4 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/86 transition hover:border-white/28 hover:bg-white/[.10] hover:text-white sm:inline-flex"
-            >
-              Launch App
-            </Link>
+            <div className="flex items-center gap-2">
+              <Link
+                to="/app"
+                className="inline-flex h-10 min-w-max items-center justify-center rounded-lg border border-white/14 bg-white/[.07] px-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/86 transition hover:border-white/28 hover:bg-white/[.10] hover:text-white sm:px-4"
+              >
+                Launch App
+              </Link>
+              <button
+                type="button"
+                onClick={() => setMobileNavOpen(true)}
+                aria-label="Open menu"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-white/14 bg-white/[.07] text-white/86 transition hover:border-white/28 hover:bg-white/[.10] hover:text-white md:hidden"
+              >
+                <Menu className="h-5 w-5" />
+              </button>
+            </div>
           </div>
         </header>
 
-        <div className="relative mx-auto flex min-h-screen w-full max-w-7xl flex-col px-4 py-5 pt-24 sm:px-8 lg:px-10">
+        {mobileNavOpen && (
+          <div className="fixed inset-0 z-[60] md:hidden" role="dialog" aria-modal="true">
+            <div
+              className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+              onClick={() => setMobileNavOpen(false)}
+            />
+            <div className="absolute inset-x-0 top-0 max-h-[100dvh] overflow-y-auto bg-[#050506] px-5 pb-8 pt-3 shadow-[0_18px_70px_rgba(0,0,0,.46)]">
+              <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-3">
+                <Link to="/" onClick={() => setMobileNavOpen(false)} className="flex min-w-max items-center gap-2.5">
+                  <HashMark className="h-7 w-7 object-contain invert mix-blend-screen" />
+                  <span className="text-sm font-semibold tracking-tight">Hash <span className="text-cyan-300">PayLink</span></span>
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => setMobileNavOpen(false)}
+                  aria-label="Close menu"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-white/14 bg-white/[.07] text-white/86 hover:border-white/28 hover:bg-white/[.10] hover:text-white"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <nav className="mx-auto mt-7 grid w-full max-w-7xl gap-1.5 text-sm font-medium text-white/86">
+                <a href="#products" onClick={() => setMobileNavOpen(false)} className="rounded-lg border border-white/8 bg-white/[.035] px-4 py-3 hover:border-white/16 hover:bg-white/[.06]">Products</a>
+                <a href="#traction" onClick={() => setMobileNavOpen(false)} className="rounded-lg border border-white/8 bg-white/[.035] px-4 py-3 hover:border-white/16 hover:bg-white/[.06]">Traction</a>
+                <a href="https://defillama.com/protocol/hash-paylink" target="_blank" rel="noreferrer" onClick={() => setMobileNavOpen(false)} className="rounded-lg border border-white/8 bg-white/[.035] px-4 py-3 hover:border-white/16 hover:bg-white/[.06]">DeFiLlama</a>
+                <Link to="/docs/sdk" onClick={() => setMobileNavOpen(false)} className="rounded-lg border border-white/8 bg-white/[.035] px-4 py-3 hover:border-white/16 hover:bg-white/[.06]">Developers</Link>
+                <a href="#about" onClick={() => setMobileNavOpen(false)} className="rounded-lg border border-white/8 bg-white/[.035] px-4 py-3 hover:border-white/16 hover:bg-white/[.06]">About</a>
+                <a href="#contact" onClick={() => setMobileNavOpen(false)} className="rounded-lg border border-white/8 bg-white/[.035] px-4 py-3 hover:border-white/16 hover:bg-white/[.06]">Contact</a>
+              </nav>
+            </div>
+          </div>
+        )}
+
+        <div className="relative mx-auto flex min-h-[100dvh] w-full max-w-7xl flex-col px-4 py-5 pt-24 sm:px-8 lg:px-10">
           <div className="relative grid flex-1 items-center gap-10 pb-14 pt-12 lg:grid-cols-[minmax(0,1fr)_minmax(420px,540px)] lg:pt-16">
             <div className="hpl-reveal relative z-10 max-w-2xl text-left">
               <p className="max-w-[18rem] text-[10px] font-semibold uppercase tracking-[0.26em] text-white/54 sm:max-w-none sm:text-[11px] sm:tracking-[0.36em]">
                 Stablecoin payment infrastructure
               </p>
-              <h1 className="mt-5 max-w-[18rem] text-balance text-[40px] font-semibold leading-[0.94] tracking-[-0.055em] sm:max-w-none sm:text-7xl lg:text-[86px]">
+              <h1 className="mt-5 max-w-[18rem] text-balance text-[40px] font-semibold leading-[1] tracking-[-0.055em] sm:max-w-none sm:text-7xl sm:leading-[0.94] lg:text-[86px]">
                 Moving USDC at product speed.
               </h1>
               <p className="mt-6 max-w-[18rem] text-sm leading-7 text-white/68 sm:max-w-xl sm:text-[15px]">
@@ -856,7 +906,7 @@ export default function FoundationPage() {
           />
         </div>
         <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(250,249,246,.96)_0%,rgba(250,249,246,.74)_30%,rgba(250,249,246,.36)_50%,rgba(250,249,246,.74)_70%,rgba(250,249,246,.96)_100%)]" />
-        <div className="relative z-10 mx-auto flex min-h-screen max-w-7xl flex-col justify-center px-5 py-20 sm:px-8 lg:px-10">
+        <div className="relative z-10 mx-auto flex min-h-[100dvh] max-w-7xl flex-col justify-center px-5 py-20 sm:px-8 lg:px-10">
           <div className="max-w-2xl">
             <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-500">Product surface</p>
             <h2 className="mt-3 text-4xl font-semibold tracking-[-0.04em] text-gray-950 sm:text-5xl">
@@ -895,7 +945,7 @@ export default function FoundationPage() {
         <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(3,5,10,.70)_0%,rgba(4,5,8,.80)_52%,rgba(3,4,7,.92)_100%)]" />
         <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-[#030407] to-transparent" />
 
-        <div className="relative z-10 mx-auto grid min-h-[calc(100vh-12rem)] w-full max-w-7xl items-center gap-12 lg:grid-cols-[.76fr_1.24fr]">
+        <div className="relative z-10 mx-auto grid min-h-[calc(100dvh-12rem)] w-full max-w-7xl items-center gap-12 lg:grid-cols-[.76fr_1.24fr]">
           <div className="retail-motion max-w-xl">
             <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-cyan-200/75">Retail settlement layer</p>
             <h2 className="mt-3 text-4xl font-semibold tracking-[-0.045em] text-white sm:text-5xl">
@@ -927,13 +977,13 @@ export default function FoundationPage() {
             </p>
           </div>
 
-          <div className="relative min-h-[620px] lg:min-h-[680px]">
-            <div className="retail-motion absolute left-[1%] top-[5%] z-30 w-[86%] sm:w-[70%] lg:w-[62%]">
-              <div className="retail-photo-card -rotate-[2.5deg] p-2" style={{ '--shine-delay': '-1.2s' } as CSSProperties}>
+          <div className="space-y-4 sm:relative sm:min-h-[620px] sm:space-y-0 lg:min-h-[680px]">
+            <div className="retail-motion w-full sm:absolute sm:left-[1%] sm:top-[5%] sm:z-30 sm:w-[70%] lg:w-[62%]">
+              <div className="retail-photo-card p-2 sm:-rotate-[2.5deg]" style={{ '--shine-delay': '-1.2s' } as CSSProperties}>
                 <img
                   src="/brand/africa-terminal-payment.jpeg"
                   alt="Customer paying with Hash PayLink USDC QR terminal"
-                  className="h-[270px] w-full rounded-[22px] object-cover object-center sm:h-[340px] lg:h-[360px]"
+                  className="h-[230px] w-full rounded-[22px] object-cover object-center sm:h-[340px] lg:h-[360px]"
                 />
                 <div className="flex items-center justify-between px-3 py-3">
                   <p className="text-xs font-semibold text-white/84">Phone-to-QR checkout</p>
@@ -942,12 +992,12 @@ export default function FoundationPage() {
               </div>
             </div>
 
-            <div className="retail-motion absolute right-0 top-[30%] z-20 w-[58%] sm:w-[43%] lg:w-[38%]">
-              <div className="retail-photo-card rotate-[5deg] p-2" style={{ '--shine-delay': '-3s' } as CSSProperties}>
+            <div className="retail-motion w-full sm:absolute sm:right-0 sm:top-[30%] sm:z-20 sm:w-[43%] lg:w-[38%]">
+              <div className="retail-photo-card p-2 sm:rotate-[5deg]" style={{ '--shine-delay': '-3s' } as CSSProperties}>
                 <img
                   src="/brand/africa-terminal-units.jpeg"
                   alt="Hash PayLink physical QR terminal units"
-                  className="h-[250px] w-full rounded-[22px] object-cover object-center sm:h-[330px] lg:h-[360px]"
+                  className="h-[220px] w-full rounded-[22px] object-cover object-center sm:h-[330px] lg:h-[360px]"
                 />
                 <div className="flex items-center justify-between px-3 py-3">
                   <p className="text-xs font-semibold text-white/84">Reusable POS QR</p>
@@ -956,12 +1006,12 @@ export default function FoundationPage() {
               </div>
             </div>
 
-            <div className="retail-motion absolute bottom-[2%] left-[9%] z-10 w-[72%] sm:w-[55%] lg:w-[48%]">
-              <div className="retail-photo-card rotate-[2deg] p-2" style={{ '--shine-delay': '-4.6s' } as CSSProperties}>
+            <div className="retail-motion w-full sm:absolute sm:bottom-[2%] sm:left-[9%] sm:z-10 sm:w-[55%] lg:w-[48%]">
+              <div className="retail-photo-card p-2 sm:rotate-[2deg]" style={{ '--shine-delay': '-4.6s' } as CSSProperties}>
                 <img
                   src="/brand/africa-terminal-live.jpeg"
                   alt="Hash PayLink QR terminal at a retail checkout"
-                  className="h-[230px] w-full rounded-[22px] object-cover object-center sm:h-[290px] lg:h-[310px]"
+                  className="h-[210px] w-full rounded-[22px] object-cover object-center sm:h-[290px] lg:h-[310px]"
                 />
                 <div className="flex items-center justify-between px-3 py-3">
                   <p className="text-xs font-semibold text-white/84">Retail-ready flow</p>
@@ -976,7 +1026,7 @@ export default function FoundationPage() {
       <section ref={modernAppSectionRef} className="modern-app-section hpl-snap-section relative overflow-hidden bg-[#f7f6f2] px-5 py-24 text-gray-950 sm:px-8 lg:px-10">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_18%,rgba(59,130,246,.12),transparent_30%),radial-gradient(circle_at_78%_18%,rgba(6,182,212,.10),transparent_28%),linear-gradient(180deg,#f9f8f4_0%,#f3f1ea_100%)]" />
         <div className="absolute left-1/2 top-1/2 h-[620px] w-[620px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/50 blur-3xl" />
-        <div className="relative z-10 mx-auto grid min-h-[calc(100vh-12rem)] w-full max-w-7xl items-center gap-14 lg:grid-cols-[.82fr_1.18fr]">
+        <div className="relative z-10 mx-auto grid min-h-[calc(100dvh-12rem)] w-full max-w-7xl items-center gap-14 lg:grid-cols-[.82fr_1.18fr]">
           <div className="max-w-xl">
             <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-blue-700">Mobile command layer</p>
             <h2 className="mt-3 text-4xl font-semibold tracking-[-0.045em] text-gray-950 sm:text-5xl">
@@ -1188,7 +1238,7 @@ export default function FoundationPage() {
 
       <section className="hpl-snap-section relative overflow-hidden bg-[#f7f6f2] px-5 py-24 text-gray-950 sm:px-8 lg:px-10">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_18%,rgba(37,99,235,.08),transparent_30%),radial-gradient(circle_at_86%_72%,rgba(14,165,233,.08),transparent_32%)]" />
-        <div className="relative z-10 mx-auto grid min-h-[calc(100vh-12rem)] w-full max-w-7xl items-center gap-12 lg:grid-cols-[.78fr_1.22fr]">
+        <div className="relative z-10 mx-auto grid min-h-[calc(100dvh-12rem)] w-full max-w-7xl items-center gap-12 lg:grid-cols-[.78fr_1.22fr]">
           <div className="max-w-xl">
             <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-blue-700">FAQs</p>
             <h2 className="mt-3 text-4xl font-semibold tracking-[-0.045em] text-gray-950 sm:text-5xl">
