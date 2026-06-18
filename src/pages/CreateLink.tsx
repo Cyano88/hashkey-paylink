@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react'
-import { useOutletContext, Link } from 'react-router-dom'
+import { useOutletContext, Link, useSearchParams } from 'react-router-dom'
 import { usePrivy } from '@privy-io/react-auth'
 import type { LayoutOutletContext } from '../Layout'
 import {
@@ -72,6 +72,7 @@ type ReceiveMode = 'email' | 'paste'
 type PosNetwork = 'base' | 'arbitrum' | 'arc' | 'solana'
 type PosCountry = 'NG' | 'KE' | 'GH'
 type PosSettlementPath = 'USDC_WALLET' | 'SPENDA_NAIRA'
+type CreateProduct = 'payment' | 'agent' | 'pos' | 'streampay' | 'polymarket'
 type PosMerchant = {
   merchant_id: string
   display_name: string
@@ -421,6 +422,8 @@ function CircleReceiveSelector({
 }
 
 export default function CreateLink({ initialProduct = 'payment' }: { initialProduct?: 'payment' | 'polymarket' } = {}) {
+  const [searchParams] = useSearchParams()
+  const productParam = searchParams.get('product')
   const { authenticated: privyAuthenticated, logout: logoutPrivy } = usePrivy()
   const [evmAddr,       setEvmAddr]       = useState('')
   const [starkAddr,     setStarkAddr]     = useState('')
@@ -680,6 +683,41 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     setCopied(false)
     setVaultStep('idle')
   }
+
+  useEffect(() => {
+    const product = (productParam ?? '').toLowerCase() as CreateProduct | ''
+    if (!product) return
+
+    if (product === 'payment') {
+      setAccessMode(false)
+      setPosMode(false)
+      setStreamMode(false)
+      setPolymarketMode(false)
+      setGeneratedLink('')
+      setCopied(false)
+      setVaultStep('idle')
+      return
+    }
+
+    if (product === 'agent') {
+      toggleAccessMode(true)
+      return
+    }
+
+    if (product === 'pos') {
+      openPosMode()
+      return
+    }
+
+    if (product === 'streampay') {
+      openStreamMode()
+      return
+    }
+
+    if (product === 'polymarket') {
+      openPolymarketMode()
+    }
+  }, [productParam]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function handlePosBack() {
     if (posMerchant) {

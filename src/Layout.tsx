@@ -655,21 +655,22 @@ export default function Layout() {
         <footer className="border-t border-gray-100 dark:border-white/5 bg-white/50 dark:bg-[#111113]/50 py-5">
           <div className="mx-auto max-w-5xl px-4 sm:px-6">
             <p className="text-center text-xs text-gray-400">
-              {isAgentProfilePage ? 'Agent payments on ' : 'Built with Circle USDC on '}
-              {(isAgentProfilePage ? agentNetworks : [
-                CHAIN_META.base,
-                CHAIN_META.arbitrum,
-                { label: 'Arc Testnet', explorerUrl: CHAIN_META.arc.explorerUrl },
-                CHAIN_META.solana,
-              ]).map((item, i, arr) => (
-                <span key={item.label}>
-                  <a href={item.explorerUrl} target="_blank" rel="noopener noreferrer"
-                    className="font-medium text-gray-500 underline-offset-2 hover:underline transition-colors">
-                    {item.label}
-                  </a>
-                  {i < arr.length - 1 && ' · '}
-                </span>
-              ))}
+              {isAgentProfilePage ? (
+                <>
+                  Agent payments on{' '}
+                  {agentNetworks.map((item, i, arr) => (
+                    <span key={item.label}>
+                      <a href={item.explorerUrl} target="_blank" rel="noopener noreferrer"
+                        className="font-medium text-gray-500 underline-offset-2 hover:underline transition-colors">
+                        {item.label}
+                      </a>
+                      {i < arr.length - 1 && ' · '}
+                    </span>
+                  ))}
+                </>
+              ) : (
+                'Powered by Circle USDC'
+              )}
             </p>
           </div>
         </footer>

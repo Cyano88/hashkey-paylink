@@ -4533,7 +4533,7 @@ export default function PaymentPage() {
         </div>
 
         <p className="mt-6 text-center text-xs text-gray-400">
-          {isHelperAccess ? 'Helper access on ' : isPolymarketFunding ? 'Polymarket Funding on ' : isAgentFunding ? 'Agent payments on ' : 'Built with Circle USDC on '}
+          {isHelperAccess ? 'Helper access on ' : isPolymarketFunding ? 'Polymarket Funding on ' : isAgentFunding ? 'Agent payments on ' : 'Powered by Circle USDC · '}
           {(isPolymarketFunding ? [
             { label: 'Base',      href: 'https://basescan.org' },
             { label: 'Solana',   href: 'https://solscan.io' },
