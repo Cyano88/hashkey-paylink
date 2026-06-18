@@ -306,7 +306,6 @@ export default function FoundationPage() {
           {
             opacity: 0,
             y: 18,
-            filter: 'blur(7px)',
             force3D: true,
           },
           {
@@ -319,9 +318,8 @@ export default function FoundationPage() {
             },
             opacity: 1,
             y: 0,
-            filter: 'blur(0px)',
-            stagger: 0.035,
-            duration: 0.88,
+            stagger: 0.028,
+            duration: 0.62,
             ease: 'power3.out',
             force3D: true,
           },
@@ -484,9 +482,9 @@ export default function FoundationPage() {
         items,
         {
           opacity: 0,
-          y: isMobile ? 28 : 86,
-          scale: isMobile ? 0.985 : 0.94,
-          filter: isMobile ? 'none' : 'blur(10px)',
+          y: isMobile ? 28 : 48,
+          scale: isMobile ? 0.985 : 0.975,
+          filter: 'none',
           force3D: true,
         },
         {
@@ -499,9 +497,9 @@ export default function FoundationPage() {
           opacity: 1,
           y: 0,
           scale: 1,
-          filter: isMobile ? 'none' : 'blur(0px)',
-          duration: isMobile ? 0.62 : 1.45,
-          stagger: isMobile ? 0.045 : 0.16,
+          filter: 'none',
+          duration: isMobile ? 0.62 : 0.86,
+          stagger: isMobile ? 0.045 : 0.085,
           ease: 'power4.out',
           force3D: true,
         },
@@ -591,7 +589,7 @@ export default function FoundationPage() {
         .scroll-reveal-word {
           display: inline-block;
           white-space: normal;
-          will-change: transform, opacity, filter;
+          will-change: transform, opacity;
           transform: translateZ(0);
           backface-visibility: hidden;
         }
