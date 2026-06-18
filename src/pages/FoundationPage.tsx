@@ -216,9 +216,45 @@ export default function FoundationPage() {
   const [openFaq, setOpenFaq] = useState(0)
   const [faqHeights, setFaqHeights] = useState<number[]>([])
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const [activeRetailImage, setActiveRetailImage] = useState(0)
+  const retailImages = [
+    {
+      src: '/brand/africa-terminal-payment.jpeg',
+      alt: 'Customer paying with Hash PayLink USDC QR terminal',
+      title: 'Phone-to-QR checkout',
+      meta: 'Africa',
+      imageClass: 'h-[230px] sm:h-[340px] lg:h-[360px]',
+      wrapperClass: 'retail-motion w-full sm:absolute sm:left-[1%] sm:top-[5%] sm:z-30 sm:w-[70%] lg:w-[62%]',
+      cardClass: 'retail-photo-card p-2 sm:-rotate-[2.5deg]',
+      shineDelay: '-1.2s',
+    },
+    {
+      src: '/brand/africa-terminal-units.jpeg',
+      alt: 'Hash PayLink physical QR terminal units',
+      title: 'Reusable POS QR',
+      meta: 'USDC',
+      imageClass: 'h-[220px] sm:h-[330px] lg:h-[360px]',
+      wrapperClass: 'retail-motion w-full sm:absolute sm:right-0 sm:top-[30%] sm:z-20 sm:w-[43%] lg:w-[38%]',
+      cardClass: 'retail-photo-card p-2 sm:rotate-[5deg]',
+      shineDelay: '-3s',
+    },
+    {
+      src: '/brand/africa-terminal-live.jpeg',
+      alt: 'Hash PayLink QR terminal at a retail checkout',
+      title: 'Retail-ready flow',
+      meta: 'Circle + 0G',
+      imageClass: 'h-[210px] sm:h-[290px] lg:h-[310px]',
+      wrapperClass: 'retail-motion w-full sm:absolute sm:bottom-[2%] sm:left-[9%] sm:z-10 sm:w-[55%] lg:w-[48%]',
+      cardClass: 'retail-photo-card p-2 sm:rotate-[2deg]',
+      shineDelay: '-4.6s',
+    },
+  ]
 
   useEffect(() => {
     gsap.registerPlugin(ScrollTrigger)
+    if (window.matchMedia('(max-width: 640px)').matches) {
+      setOpenFaq(-1)
+    }
   }, [])
 
   useEffect(() => {
@@ -651,32 +687,43 @@ export default function FoundationPage() {
         }
         @media (max-width: 640px) {
           .hpl-snap-shell {
-            height: auto;
+            height: 100dvh;
             min-height: 100dvh;
-            overflow-y: visible;
-            scroll-snap-type: none;
+            overflow-y: auto;
+            scroll-snap-type: y mandatory;
           }
           .hpl-snap-section {
-            min-height: auto;
-            scroll-snap-stop: normal;
+            min-height: 100dvh;
+            scroll-snap-stop: always;
           }
           .hpl-snap-section h2 {
-            font-size: 2rem;
+            font-size: 1.85rem;
             line-height: 1.05;
             letter-spacing: -.035em;
           }
+          .foundation-mobile-section {
+            display: flex;
+            align-items: center;
+            min-height: 100dvh;
+            padding-top: 4.75rem;
+            padding-bottom: 1.25rem;
+          }
+          .foundation-mobile-section-tight {
+            padding-top: 4.25rem;
+            padding-bottom: 1rem;
+          }
           .foundation-mobile-hero {
-            min-height: auto;
-            padding-top: 5.75rem;
-            padding-bottom: 1.5rem;
+            min-height: 100dvh;
+            padding-top: 4.75rem;
+            padding-bottom: 1rem;
           }
           .foundation-mobile-hero-grid {
             display: flex;
             flex-direction: column;
             align-items: stretch;
-            gap: 1.75rem;
-            padding-top: 1.5rem;
-            padding-bottom: 1.75rem;
+            gap: 1rem;
+            padding-top: .85rem;
+            padding-bottom: 1rem;
           }
           .foundation-mobile-hero .hpl-reveal,
           .foundation-mobile-hero h1,
@@ -684,35 +731,94 @@ export default function FoundationPage() {
             max-width: 100%;
           }
           .foundation-mobile-hero-art {
-            height: 260px;
+            height: 118px;
             max-width: 300px;
+          }
+          .foundation-mobile-asset-stage {
+            inset: 0 auto auto 0;
+            height: 118px;
+            width: 100%;
+            transform: none;
+          }
+          .foundation-mobile-asset-rings {
+            inset: 8px auto auto 6px;
+            height: 96px;
+            width: 96px;
+            transform: none;
+          }
+          .foundation-mobile-usdc-mark {
+            height: 76px;
+            width: 76px;
+            transform: translate(-50%, -50%);
+          }
+          .foundation-mobile-core-rail {
+            left: 158px;
+            top: 34px;
+            height: 44px;
+            width: 104px;
+            transform: none;
+          }
+          .foundation-mobile-core-rail .core-rail-logo {
+            height: 38px;
+            width: 38px;
+            padding: 7px;
+            --x-start: 0px !important;
+            --x-mid: 34px !important;
+            --x-end: 68px !important;
+          }
+          .foundation-mobile-product-grid {
+            margin-top: 1.25rem;
+            gap: .65rem;
+          }
+          .foundation-mobile-product-card {
+            display: grid;
+            grid-template-columns: 32px 1fr auto;
+            align-items: center;
+            gap: .75rem;
+            padding: .7rem .75rem;
+            border: 1px solid rgba(15,23,42,.10);
+            border-radius: 14px;
+            background: rgba(255,255,255,.70);
+            box-shadow: 0 14px 34px rgba(15,23,42,.055);
+            backdrop-filter: blur(10px);
+          }
+          .foundation-mobile-retail-card {
+            min-height: 262px;
+          }
+          .foundation-mobile-command-copy {
+            display: none;
+          }
+          .phone-stage {
+            grid-template-columns: 1fr 1fr;
+            gap: .6rem;
+            align-items: center;
           }
           .phone-stage {
             min-height: auto;
             display: grid;
-            gap: 1rem;
             justify-items: center;
           }
           .phone-mockup {
             position: relative !important;
             inset: auto !important;
-            width: min(220px, 72vw);
-            height: min(440px, 144vw);
+            width: min(138px, 42vw);
+            height: min(276px, 84vw);
             min-width: 0;
             min-height: 0;
-            border-radius: 32px;
-            padding: 8px;
+            border-radius: 24px;
+            padding: 6px;
           }
           .phone-screen {
-            border-radius: 25px;
+            border-radius: 19px;
           }
           .phone-mockup::before {
-            top: 15px;
-            width: 58px;
-            height: 17px;
+            top: 11px;
+            width: 42px;
+            height: 12px;
           }
           .phone-mockup::after {
-            border-radius: 28px;
+            inset: 5px;
+            border-radius: 21px;
           }
           .phone-primary {
             order: 1;
@@ -799,7 +905,7 @@ export default function FoundationPage() {
             <div className="flex items-center gap-2">
               <Link
                 to="/app"
-                className="hidden h-10 min-w-max items-center justify-center rounded-lg border border-white/14 bg-white/[.07] px-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/86 transition hover:border-white/28 hover:bg-white/[.10] hover:text-white sm:inline-flex sm:px-4"
+                className="inline-flex h-10 min-w-max items-center justify-center rounded-lg border border-white/14 bg-white/[.07] px-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/86 transition hover:border-white/28 hover:bg-white/[.10] hover:text-white sm:px-4"
               >
                 Launch App
               </Link>
@@ -860,7 +966,7 @@ export default function FoundationPage() {
               <p className="mt-6 max-w-[18rem] text-sm leading-7 text-white/68 sm:max-w-xl sm:text-[15px]">
                 Hash PayLink powers payment links, retail POS, PolyDesk, StreamPay, and agent commerce on Circle USDC, Arc settlement, and 0G proof rails.
               </p>
-              <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+              <div className="mt-8 hidden flex-col gap-3 sm:flex sm:flex-row">
                 <Link
                   to="/app"
                   className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg !bg-white px-5 text-sm font-semibold !text-[#08090b] shadow-[0_18px_48px_rgba(0,0,0,.26)] transition hover:!bg-zinc-100 sm:w-auto"
@@ -880,11 +986,12 @@ export default function FoundationPage() {
             </div>
 
             <div className="foundation-mobile-hero-art relative mx-auto h-[430px] w-full max-w-[540px] lg:h-[520px]">
-              <div className="pointer-events-none absolute left-1/2 top-1/2 h-[min(66vw,360px)] w-[min(66vw,360px)] -translate-x-1/2 -translate-y-1/2">
+              <div className="foundation-mobile-asset-stage pointer-events-none absolute left-1/2 top-1/2 h-[min(66vw,360px)] w-[min(66vw,360px)] -translate-x-1/2 -translate-y-1/2">
                 <div className="absolute inset-0 rounded-full bg-white/[.035] blur-3xl" />
                 <div className="absolute inset-[12%] rounded-full border border-white/10" />
                 <div className="absolute inset-[2%] rounded-full border border-white/7" />
-                <div className="absolute left-1/2 top-1/2 h-44 w-44 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/12 bg-[#090a0c] shadow-[inset_-24px_-28px_54px_rgba(0,0,0,.72),inset_14px_14px_34px_rgba(255,255,255,.08),0_0_80px_rgba(255,255,255,.08)] sm:h-56 sm:w-56">
+                <div className="foundation-mobile-asset-rings absolute inset-0 rounded-full border border-white/10 sm:inset-[12%]" />
+                <div className="foundation-mobile-usdc-mark absolute left-1/2 top-1/2 h-44 w-44 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/12 bg-[#090a0c] shadow-[inset_-24px_-28px_54px_rgba(0,0,0,.72),inset_14px_14px_34px_rgba(255,255,255,.08),0_0_80px_rgba(255,255,255,.08)] sm:h-56 sm:w-56">
                   <img
                     src="/brand/usdc-circle-logo.png"
                     alt=""
@@ -893,7 +1000,7 @@ export default function FoundationPage() {
                   <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle_at_32%_26%,rgba(255,255,255,.18),transparent_26%),radial-gradient(circle_at_70%_78%,rgba(255,255,255,.08),transparent_35%)]" />
                   <div className="absolute left-[18%] right-[18%] top-[49%] h-px rotate-[-7deg] bg-white/28 shadow-[0_0_16px_rgba(255,255,255,.22)]" />
                 </div>
-                <div className="absolute left-1/2 top-[calc(50%+150px)] h-14 w-[210px] -translate-x-1/2 sm:top-[calc(50%+185px)] sm:w-[250px]">
+                <div className="foundation-mobile-core-rail absolute left-1/2 top-[calc(50%+150px)] h-14 w-[210px] -translate-x-1/2 sm:top-[calc(50%+185px)] sm:w-[250px]">
                   {[
                     { name: 'Circle', logo: '/brand/circle-logo.jpeg', xStart: '-86px', xMid: '0px', xEnd: '86px', delay: '0s' },
                     { name: 'Arc', logo: '/brand/arc-logo.jpeg', xStart: '0px', xMid: '86px', xEnd: '-86px', delay: '-4.33s' },
@@ -934,7 +1041,7 @@ export default function FoundationPage() {
         </div>
       </section>
 
-      <section id="products" className="hpl-snap-section relative overflow-hidden bg-[#FAF9F6]">
+      <section id="products" className="foundation-mobile-section hpl-snap-section relative overflow-hidden bg-[#FAF9F6]">
         <div className="absolute inset-0 overflow-hidden bg-[#FAF9F6]">
           <img
             src="/brand/usdc-css.jpeg"
@@ -945,26 +1052,26 @@ export default function FoundationPage() {
           />
         </div>
         <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(250,249,246,.96)_0%,rgba(250,249,246,.74)_30%,rgba(250,249,246,.36)_50%,rgba(250,249,246,.74)_70%,rgba(250,249,246,.96)_100%)]" />
-        <div className="relative z-10 mx-auto flex min-h-[100dvh] max-w-7xl flex-col justify-center px-5 py-20 sm:px-8 lg:px-10">
+        <div className="relative z-10 mx-auto flex min-h-[100dvh] max-w-7xl flex-col justify-center px-5 py-20 max-sm:min-h-0 max-sm:py-0 sm:px-8 lg:px-10">
           <div className="max-w-2xl">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-500">Product surface</p>
-            <h2 className="mt-3 text-4xl font-semibold tracking-[-0.04em] text-gray-950 sm:text-5xl">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-500 max-sm:text-[10px] max-sm:tracking-[0.22em]">Product surface</p>
+            <h2 className="mt-3 text-4xl font-semibold tracking-[-0.04em] text-gray-950 max-sm:mt-2 sm:text-5xl">
               One platform for USDC workflows.
             </h2>
-            <p className="mt-4 max-w-xl text-sm leading-6 text-gray-600">
+            <p className="mt-4 max-w-xl text-sm leading-6 text-gray-600 max-sm:mt-2 max-sm:text-xs max-sm:leading-5">
               Consumer-simple interfaces on top of verifiable settlement, agent activity, and durable payment state.
             </p>
           </div>
 
-          <div className="mt-14 grid gap-x-16 gap-y-9 md:grid-cols-2 lg:grid-cols-3">
+          <div className="foundation-mobile-product-grid mt-14 grid gap-x-16 gap-y-9 md:grid-cols-2 lg:grid-cols-3">
             {products.map(({ index, title, copy, href }) => (
-              <Link key={title} to={href} className="group max-w-[330px] text-left max-sm:max-w-none">
-                <div className="flex items-center gap-3">
-                  <span className="text-[11px] font-semibold tracking-[0.22em] text-gray-400">{index}</span>
+              <Link key={title} to={href} className="foundation-mobile-product-card group max-w-[330px] text-left max-sm:max-w-none">
+                <span className="text-[11px] font-semibold tracking-[0.22em] text-gray-400">{index}</span>
+                <div>
+                  <h3 className="mt-4 text-xl font-semibold tracking-[-0.025em] text-gray-950 max-sm:mt-0 max-sm:text-sm">{title}</h3>
+                  <p className="mt-3 text-sm leading-6 text-gray-600 max-sm:hidden">{copy}</p>
                 </div>
-                <h3 className="mt-4 text-xl font-semibold tracking-[-0.025em] text-gray-950">{title}</h3>
-                <p className="mt-3 text-sm leading-6 text-gray-600">{copy}</p>
-                <div className="mt-5 inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 opacity-80 transition group-hover:gap-2 group-hover:opacity-100">
+                <div className="mt-5 inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 opacity-80 transition group-hover:gap-2 group-hover:opacity-100 max-sm:mt-0 max-sm:justify-self-end">
                   Open <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
                 </div>
               </Link>
@@ -973,7 +1080,7 @@ export default function FoundationPage() {
         </div>
       </section>
 
-      <section id="traction" ref={retailSectionRef} className="hpl-snap-section relative overflow-hidden bg-[#050609] px-5 py-24 text-white sm:px-8 lg:px-10">
+      <section id="traction" ref={retailSectionRef} className="foundation-mobile-section hpl-snap-section relative overflow-hidden bg-[#050609] px-5 py-24 text-white sm:px-8 lg:px-10">
         <div className="absolute inset-0">
           <img
             src="/brand/africa-business-bg.jpeg"
@@ -984,98 +1091,81 @@ export default function FoundationPage() {
         <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(3,5,10,.70)_0%,rgba(4,5,8,.80)_52%,rgba(3,4,7,.92)_100%)]" />
         <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-[#030407] to-transparent" />
 
-        <div className="relative z-10 mx-auto grid min-h-[calc(100dvh-12rem)] w-full max-w-7xl items-center gap-12 lg:grid-cols-[.76fr_1.24fr]">
+        <div className="relative z-10 mx-auto grid min-h-[calc(100dvh-12rem)] w-full max-w-7xl items-center gap-12 max-sm:min-h-0 max-sm:gap-4 lg:grid-cols-[.76fr_1.24fr]">
           <div className="retail-motion max-w-xl">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-cyan-200/75">Retail settlement layer</p>
-            <h2 className="mt-3 text-4xl font-semibold tracking-[-0.045em] text-white sm:text-5xl">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-cyan-200/75 max-sm:text-[10px] max-sm:tracking-[0.22em]">Retail settlement layer</p>
+            <h2 className="mt-3 text-4xl font-semibold tracking-[-0.045em] text-white max-sm:mt-2 sm:text-5xl">
               USDC checkout for real-world counters.
             </h2>
-            <p className="mt-5 text-sm leading-6 text-white/68">
+            <p className="mt-5 text-sm leading-6 text-white/68 max-sm:mt-2 max-sm:text-xs max-sm:leading-5">
               Hash PayLink turns a merchant counter into a clean stablecoin checkout surface: one QR, familiar phone payment flow, gasless Circle wallet support, and a 0G-backed record after payment.
             </p>
 
-            <div className="mt-9 space-y-5">
+            <div className="mt-9 space-y-5 max-sm:mt-3 max-sm:grid max-sm:grid-cols-2 max-sm:gap-2 max-sm:space-y-0">
               {[
                 ['01', 'Scan and pay', 'Customers pay from the wallet or exchange they already use.'],
                 ['02', 'Settle in USDC', 'Merchants receive stablecoin value without rebuilding their store workflow.'],
                 ['03', 'Onboard with Circle', 'Over 100 users have been natively onboarded into Circle smart-wallet USDC checkout flows.'],
                 ['04', 'Verify the receipt', 'Important payment records can be archived through 0G for durable proof.'],
               ].map(([index, title, value]) => (
-                <div key={title} className="grid grid-cols-[42px_1fr] gap-4 border-t border-white/10 pt-4">
-                  <p className="text-xs font-semibold text-cyan-200/55">{index}</p>
+                <div key={title} className="grid grid-cols-[42px_1fr] gap-4 border-t border-white/10 pt-4 max-sm:grid-cols-[24px_1fr] max-sm:gap-2 max-sm:pt-2">
+                  <p className="text-xs font-semibold text-cyan-200/55 max-sm:text-[10px]">{index}</p>
                   <div>
-                    <p className="text-sm font-semibold tracking-[-0.01em] text-white">{title}</p>
-                    <p className="mt-1 text-xs leading-5 text-white/52">{value}</p>
+                    <p className="text-sm font-semibold tracking-[-0.01em] text-white max-sm:text-xs">{title}</p>
+                    <p className="mt-1 text-xs leading-5 text-white/52 max-sm:hidden">{value}</p>
                   </div>
                 </div>
               ))}
             </div>
 
-            <p className="mt-8 max-w-lg text-xs leading-5 text-white/42">
+            <p className="mt-8 max-w-lg text-xs leading-5 text-white/42 max-sm:hidden">
               Built for storefronts, events, pop-ups, and agent-assisted commerce where the payment must feel simple before the infrastructure becomes visible.
             </p>
           </div>
 
           <div className="space-y-4 sm:relative sm:min-h-[620px] sm:space-y-0 lg:min-h-[680px]">
-            <div className="retail-motion w-full sm:absolute sm:left-[1%] sm:top-[5%] sm:z-30 sm:w-[70%] lg:w-[62%]">
-              <div className="retail-photo-card p-2 sm:-rotate-[2.5deg]" style={{ '--shine-delay': '-1.2s' } as CSSProperties}>
-                <img
-                  src="/brand/africa-terminal-payment.jpeg"
-                  alt="Customer paying with Hash PayLink USDC QR terminal"
-                  className="h-[230px] w-full rounded-[22px] object-cover object-center sm:h-[340px] lg:h-[360px]"
-                />
-                <div className="flex items-center justify-between px-3 py-3">
-                  <p className="text-xs font-semibold text-white/84">Phone-to-QR checkout</p>
-                  <p className="text-[10px] uppercase tracking-[0.18em] text-cyan-100/42">Africa</p>
+            {retailImages.map((image, index) => (
+              <button
+                key={image.title}
+                type="button"
+                onClick={() => setActiveRetailImage((current) => (current + 1) % retailImages.length)}
+                className={`${image.wrapperClass} ${activeRetailImage === index ? 'max-sm:block' : 'max-sm:hidden'} appearance-none border-0 bg-transparent p-0 text-left`}
+                aria-label="Show next retail image"
+              >
+                <div className={`${image.cardClass} foundation-mobile-retail-card`} style={{ '--shine-delay': image.shineDelay } as CSSProperties}>
+                  <img
+                    src={image.src}
+                    alt={image.alt}
+                    className={`${image.imageClass} w-full rounded-[22px] object-cover object-center max-sm:h-[210px]`}
+                  />
+                  <div className="flex items-center justify-between px-3 py-3 max-sm:py-2">
+                    <p className="text-xs font-semibold text-white/84">{image.title}</p>
+                    <p className="text-[10px] uppercase tracking-[0.18em] text-cyan-100/42">{image.meta}</p>
+                  </div>
+                  <div className="hidden px-3 pb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/36 max-sm:block">
+                    Tap to switch {activeRetailImage + 1}/{retailImages.length}
+                  </div>
                 </div>
-              </div>
-            </div>
-
-            <div className="retail-motion w-full sm:absolute sm:right-0 sm:top-[30%] sm:z-20 sm:w-[43%] lg:w-[38%]">
-              <div className="retail-photo-card p-2 sm:rotate-[5deg]" style={{ '--shine-delay': '-3s' } as CSSProperties}>
-                <img
-                  src="/brand/africa-terminal-units.jpeg"
-                  alt="Hash PayLink physical QR terminal units"
-                  className="h-[220px] w-full rounded-[22px] object-cover object-center sm:h-[330px] lg:h-[360px]"
-                />
-                <div className="flex items-center justify-between px-3 py-3">
-                  <p className="text-xs font-semibold text-white/84">Reusable POS QR</p>
-                  <p className="text-[10px] uppercase tracking-[0.18em] text-cyan-100/42">USDC</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="retail-motion w-full sm:absolute sm:bottom-[2%] sm:left-[9%] sm:z-10 sm:w-[55%] lg:w-[48%]">
-              <div className="retail-photo-card p-2 sm:rotate-[2deg]" style={{ '--shine-delay': '-4.6s' } as CSSProperties}>
-                <img
-                  src="/brand/africa-terminal-live.jpeg"
-                  alt="Hash PayLink QR terminal at a retail checkout"
-                  className="h-[210px] w-full rounded-[22px] object-cover object-center sm:h-[290px] lg:h-[310px]"
-                />
-                <div className="flex items-center justify-between px-3 py-3">
-                  <p className="text-xs font-semibold text-white/84">Retail-ready flow</p>
-                  <p className="text-[10px] uppercase tracking-[0.18em] text-cyan-100/42">Circle + 0G</p>
-                </div>
-              </div>
-            </div>
+              </button>
+            ))}
           </div>
         </div>
       </section>
 
-      <section ref={modernAppSectionRef} className="modern-app-section hpl-snap-section relative overflow-hidden bg-[#f7f6f2] px-5 py-24 text-gray-950 sm:px-8 lg:px-10">
+      <section ref={modernAppSectionRef} className="foundation-mobile-section modern-app-section hpl-snap-section relative overflow-hidden bg-[#f7f6f2] px-5 py-24 text-gray-950 sm:px-8 lg:px-10">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_18%,rgba(59,130,246,.12),transparent_30%),radial-gradient(circle_at_78%_18%,rgba(6,182,212,.10),transparent_28%),linear-gradient(180deg,#f9f8f4_0%,#f3f1ea_100%)]" />
         <div className="absolute left-1/2 top-1/2 h-[620px] w-[620px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/50 blur-3xl" />
-        <div className="relative z-10 mx-auto grid min-h-[calc(100dvh-12rem)] w-full max-w-7xl items-center gap-14 lg:grid-cols-[.82fr_1.18fr]">
+        <div className="relative z-10 mx-auto grid min-h-[calc(100dvh-12rem)] w-full max-w-7xl items-center gap-14 max-sm:min-h-0 max-sm:gap-4 lg:grid-cols-[.82fr_1.18fr]">
           <div className="max-w-xl">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-blue-700">Mobile command layer</p>
-            <h2 className="mt-3 text-4xl font-semibold tracking-[-0.045em] text-gray-950 sm:text-5xl">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-blue-700 max-sm:text-[10px] max-sm:tracking-[0.22em]">Mobile command layer</p>
+            <h2 className="mt-3 text-4xl font-semibold tracking-[-0.045em] text-gray-950 max-sm:mt-2 sm:text-5xl">
               Built for the screen users already trust.
             </h2>
-            <p className="mt-5 text-sm leading-6 text-gray-600">
+            <p className="foundation-mobile-command-copy mt-5 text-sm leading-6 text-gray-600">
               Hash PayLink turns payment links, PolyDesk alerts, StreamPay, and agent receipts into clean mobile workflows that feel simple enough for chat and strong enough for fintech teams.
             </p>
 
-            <div className="mt-9 grid max-w-lg grid-cols-2 gap-3 max-sm:grid-cols-1">
+            <div className="mt-9 grid max-w-lg grid-cols-2 gap-3 max-sm:hidden">
               {proofStats.map((item) => {
                 const content = (
                   <div className="rounded-2xl border border-black/10 bg-white/64 p-4 shadow-[0_18px_56px_rgba(15,23,42,.06)] backdrop-blur-sm transition hover:border-blue-200 hover:bg-white/85">
@@ -1097,7 +1187,7 @@ export default function FoundationPage() {
 
             <Link
               to="/app"
-              className="mt-8 inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-gray-950 px-4 text-sm font-semibold text-white shadow-[0_18px_50px_rgba(15,23,42,.16)] transition hover:bg-gray-800"
+              className="mt-8 inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-gray-950 px-4 text-sm font-semibold text-white shadow-[0_18px_50px_rgba(15,23,42,.16)] transition hover:bg-gray-800 max-sm:hidden"
             >
               Open App <ArrowRight className="h-4 w-4" />
             </Link>
@@ -1106,23 +1196,23 @@ export default function FoundationPage() {
           <div className="phone-stage relative flex items-center justify-center">
             <div className="phone-mockup phone-secondary absolute">
               <div className="phone-screen bg-[#eef6ff]">
-                <div className="h-full px-5 pb-5 pt-14 text-gray-950">
-                  <div className="rounded-[28px] bg-white/86 p-4 shadow-[0_18px_44px_rgba(15,23,42,.10)]">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-blue-700">PolyDesk</p>
-                    <h3 className="mt-3 text-2xl font-semibold tracking-[-0.05em]">Portfolio alerts</h3>
-                    <p className="mt-2 text-xs leading-5 text-gray-500">Positions, funding, and LP Scout memory from Telegram.</p>
-                    <div className="mt-5 space-y-2">
+                <div className="h-full px-5 pb-5 pt-14 text-gray-950 max-sm:px-3 max-sm:pb-3 max-sm:pt-9">
+                  <div className="rounded-[28px] bg-white/86 p-4 shadow-[0_18px_44px_rgba(15,23,42,.10)] max-sm:rounded-[18px] max-sm:p-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-blue-700 max-sm:text-[8px]">PolyDesk</p>
+                    <h3 className="mt-3 text-2xl font-semibold tracking-[-0.05em] max-sm:mt-1 max-sm:text-base">Portfolio alerts</h3>
+                    <p className="mt-2 text-xs leading-5 text-gray-500 max-sm:hidden">Positions, funding, and LP Scout memory from Telegram.</p>
+                    <div className="mt-5 space-y-2 max-sm:mt-3 max-sm:space-y-1.5">
                       {['Position risk below 12%', 'LP Scout result saved', 'Funding route ready'].map((item) => (
-                        <div key={item} className="flex items-center justify-between rounded-2xl bg-gray-950/[.035] px-3 py-2">
-                          <span className="text-[11px] font-medium text-gray-700">{item}</span>
-                          <span className="h-2 w-2 rounded-full bg-blue-600" />
+                        <div key={item} className="flex items-center justify-between rounded-2xl bg-gray-950/[.035] px-3 py-2 max-sm:rounded-xl max-sm:px-2 max-sm:py-1.5">
+                          <span className="text-[11px] font-medium text-gray-700 max-sm:text-[9px]">{item}</span>
+                          <span className="h-2 w-2 rounded-full bg-blue-600 max-sm:h-1.5 max-sm:w-1.5" />
                         </div>
                       ))}
                     </div>
                   </div>
-                  <div className="mt-4 rounded-[26px] bg-gray-950 p-4 text-white shadow-[0_18px_50px_rgba(15,23,42,.16)]">
-                    <p className="text-[10px] uppercase tracking-[0.2em] text-white/45">USDC balance</p>
-                    <p className="mt-2 text-3xl font-semibold tracking-[-0.06em]">$1,284.20</p>
+                  <div className="mt-4 rounded-[26px] bg-gray-950 p-4 text-white shadow-[0_18px_50px_rgba(15,23,42,.16)] max-sm:mt-3 max-sm:rounded-[18px] max-sm:p-3">
+                    <p className="text-[10px] uppercase tracking-[0.2em] text-white/45 max-sm:text-[8px]">USDC balance</p>
+                    <p className="mt-2 text-3xl font-semibold tracking-[-0.06em] max-sm:text-xl">$1,284.20</p>
                   </div>
                 </div>
               </div>
@@ -1130,27 +1220,27 @@ export default function FoundationPage() {
 
             <div className="phone-mockup phone-primary absolute">
               <div className="phone-screen bg-[#f9fafb]">
-                <div className="flex h-full flex-col px-5 pb-5 pt-14 text-gray-950">
+                <div className="flex h-full flex-col px-5 pb-5 pt-14 text-gray-950 max-sm:px-3 max-sm:pb-3 max-sm:pt-9">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-gray-400">Hash PayLink</p>
-                      <h3 className="mt-1 text-2xl font-semibold tracking-[-0.055em]">Payment ready</h3>
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-gray-400 max-sm:text-[8px]">Hash PayLink</p>
+                      <h3 className="mt-1 text-2xl font-semibold tracking-[-0.055em] max-sm:text-base">Payment ready</h3>
                     </div>
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 shadow-[0_14px_36px_rgba(37,99,235,.32)]">
-                      <HashMark className="h-5 w-5 object-contain" />
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 shadow-[0_14px_36px_rgba(37,99,235,.32)] max-sm:h-7 max-sm:w-7">
+                      <HashMark className="h-5 w-5 object-contain max-sm:h-3.5 max-sm:w-3.5" />
                     </div>
                   </div>
 
-                  <div className="mt-6 rounded-[30px] bg-gray-950 p-5 text-white shadow-[0_26px_70px_rgba(15,23,42,.22)]">
-                    <p className="text-[10px] uppercase tracking-[0.2em] text-white/45">Checkout</p>
-                    <p className="mt-4 text-4xl font-semibold tracking-[-0.07em]">$125.00</p>
-                    <p className="mt-2 text-xs text-white/55">USDC on Base</p>
-                    <div className="mt-6 h-11 rounded-2xl bg-white text-center text-xs font-semibold leading-[44px] text-gray-950">
+                  <div className="mt-6 rounded-[30px] bg-gray-950 p-5 text-white shadow-[0_26px_70px_rgba(15,23,42,.22)] max-sm:mt-4 max-sm:rounded-[20px] max-sm:p-3">
+                    <p className="text-[10px] uppercase tracking-[0.2em] text-white/45 max-sm:text-[8px]">Checkout</p>
+                    <p className="mt-4 text-4xl font-semibold tracking-[-0.07em] max-sm:mt-2 max-sm:text-2xl">$125.00</p>
+                    <p className="mt-2 text-xs text-white/55 max-sm:text-[10px]">USDC on Base</p>
+                    <div className="mt-6 h-11 rounded-2xl bg-white text-center text-xs font-semibold leading-[44px] text-gray-950 max-sm:mt-3 max-sm:h-8 max-sm:rounded-xl max-sm:text-[10px] max-sm:leading-8">
                       Pay with wallet
                     </div>
                   </div>
 
-                  <div className="mt-4 grid grid-cols-2 gap-3">
+                  <div className="mt-4 grid grid-cols-2 gap-3 max-sm:hidden">
                     <div className="rounded-3xl bg-white p-4 shadow-[0_14px_38px_rgba(15,23,42,.08)]">
                       <p className="text-[10px] uppercase tracking-[0.18em] text-gray-400">Proof</p>
                       <p className="mt-2 text-sm font-semibold">0G archived</p>
@@ -1161,7 +1251,7 @@ export default function FoundationPage() {
                     </div>
                   </div>
 
-                  <div className="mt-auto rounded-[26px] border border-black/10 bg-white p-4">
+                  <div className="mt-auto rounded-[26px] border border-black/10 bg-white p-4 max-sm:hidden">
                     <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-blue-700">Live workflow</p>
                     <p className="mt-2 text-xs leading-5 text-gray-500">Receipts, balances, and payment state stay readable on mobile.</p>
                   </div>
@@ -1172,7 +1262,7 @@ export default function FoundationPage() {
         </div>
       </section>
 
-      <section id="stack" className="hpl-snap-section relative overflow-hidden bg-[#faf9f6] px-5 py-24 text-gray-950 sm:px-8 lg:px-10">
+      <section id="stack" className="foundation-mobile-section foundation-mobile-section-tight hpl-snap-section relative overflow-hidden bg-[#faf9f6] px-5 py-24 text-gray-950 sm:px-8 lg:px-10">
         <div className="absolute inset-0">
           <img
             src="/brand/usdc-footer.png"
@@ -1222,43 +1312,43 @@ export default function FoundationPage() {
         </div>
 
         <div className="relative z-10 mx-auto w-full max-w-7xl">
-          <div className="grid gap-12 lg:grid-cols-[.86fr_1.14fr]">
+          <div className="grid gap-12 max-sm:gap-4 lg:grid-cols-[.86fr_1.14fr]">
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-blue-700">Infrastructure stack</p>
-              <h2 className="mt-3 max-w-xl text-4xl font-semibold tracking-[-0.04em] sm:text-5xl">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-blue-700 max-sm:text-[10px] max-sm:tracking-[0.22em]">Infrastructure stack</p>
+              <h2 className="mt-3 max-w-xl text-4xl font-semibold tracking-[-0.04em] max-sm:mt-2 sm:text-5xl">
                 Built on rails people already trust.
               </h2>
-              <p className="mt-5 max-w-xl text-sm leading-6 text-gray-600">
+              <p className="mt-5 max-w-xl text-sm leading-6 text-gray-600 max-sm:mt-2 max-sm:text-xs max-sm:leading-5">
                 Circle, Arc, and 0G make Hash PayLink possible: Circle powers USDC checkout and smart-wallet sessions, Arc supports programmable StreamPay settlement, and 0G keeps payment and agent records verifiable. The rest of the stack extends distribution, networks, and product context.
               </p>
             </div>
 
-            <div className="grid gap-x-10 gap-y-7 sm:grid-cols-2">
+            <div className="grid gap-x-10 gap-y-7 max-sm:grid-cols-2 max-sm:gap-2 sm:grid-cols-2">
               {stack.map((item, index) => (
-                <div key={item.name} className="hpl-reveal border-t border-black/10 pt-4" style={{ '--delay': `${index * 55}ms` } as CSSProperties}>
-                  <p className="text-sm font-semibold tracking-[-0.01em] text-gray-950">{item.name}</p>
-                  <p className="mt-2 text-xs leading-5 text-gray-500">{item.copy}</p>
+                <div key={item.name} className="hpl-reveal border-t border-black/10 pt-4 max-sm:rounded-xl max-sm:border max-sm:bg-white/60 max-sm:p-2.5 max-sm:shadow-[0_12px_32px_rgba(15,23,42,.055)]" style={{ '--delay': `${index * 55}ms` } as CSSProperties}>
+                  <p className="text-sm font-semibold tracking-[-0.01em] text-gray-950 max-sm:text-xs">{item.name}</p>
+                  <p className="mt-2 text-xs leading-5 text-gray-500 max-sm:hidden">{item.copy}</p>
                 </div>
               ))}
             </div>
           </div>
 
-          <div id="about" className="mt-20 grid gap-10 border-t border-black/10 pt-12 lg:grid-cols-[1fr_.82fr]">
+          <div id="about" className="mt-20 grid gap-10 border-t border-black/10 pt-12 max-sm:mt-4 max-sm:pt-4 lg:grid-cols-[1fr_.82fr]">
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-500">Developer path</p>
-              <h2 className="mt-3 max-w-2xl text-3xl font-semibold tracking-[-0.035em] text-gray-950">Integrate hosted checkout first.</h2>
-              <p className="mt-4 max-w-2xl text-sm leading-6 text-gray-600">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-500 max-sm:text-[10px] max-sm:tracking-[0.22em]">Developer path</p>
+              <h2 className="mt-3 max-w-2xl text-3xl font-semibold tracking-[-0.035em] text-gray-950 max-sm:mt-2 max-sm:text-lg">Integrate hosted checkout first.</h2>
+              <p className="mt-4 max-w-2xl text-sm leading-6 text-gray-600 max-sm:mt-2 max-sm:text-xs max-sm:leading-5">
                 The SDK builds Hash PayLink checkout URLs and React buttons. Wallet execution stays inside the hosted app so integrators do not duplicate relayers, smart-wallet sessions, or 0G archive logic.
               </p>
               <Link
                 to="/docs/sdk"
-                className="mt-7 inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-gray-950 px-4 text-sm font-semibold text-white transition hover:bg-gray-800"
+                className="mt-7 inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-gray-950 px-4 text-sm font-semibold text-white transition hover:bg-gray-800 max-sm:mt-3 max-sm:h-9 max-sm:text-xs"
               >
                 Developer docs <ArrowRight className="h-4 w-4" />
               </Link>
             </div>
 
-            <div>
+            <div className="max-sm:hidden">
               <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-500">Start here</p>
               <h3 className="mt-3 text-2xl font-semibold tracking-[-0.035em] text-gray-950">Open the working app.</h3>
               <p className="mt-3 text-sm leading-6 text-gray-600">
@@ -1275,18 +1365,18 @@ export default function FoundationPage() {
         </div>
       </section>
 
-      <section className="hpl-snap-section relative overflow-hidden bg-[#f7f6f2] px-5 py-24 text-gray-950 sm:px-8 lg:px-10">
+      <section className="foundation-mobile-section foundation-mobile-section-tight hpl-snap-section relative overflow-hidden bg-[#f7f6f2] px-5 py-24 text-gray-950 sm:px-8 lg:px-10">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_18%,rgba(37,99,235,.08),transparent_30%),radial-gradient(circle_at_86%_72%,rgba(14,165,233,.08),transparent_32%)]" />
-        <div className="relative z-10 mx-auto grid min-h-[calc(100dvh-12rem)] w-full max-w-7xl items-center gap-12 lg:grid-cols-[.78fr_1.22fr]">
+        <div className="relative z-10 mx-auto grid min-h-[calc(100dvh-12rem)] w-full max-w-7xl items-center gap-12 max-sm:min-h-0 max-sm:gap-4 lg:grid-cols-[.78fr_1.22fr]">
           <div className="max-w-xl">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-blue-700">FAQs</p>
-            <h2 className="mt-3 text-4xl font-semibold tracking-[-0.045em] text-gray-950 sm:text-5xl">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-blue-700 max-sm:text-[10px] max-sm:tracking-[0.22em]">FAQs</p>
+            <h2 className="mt-3 text-4xl font-semibold tracking-[-0.045em] text-gray-950 max-sm:mt-2 sm:text-5xl">
               Questions ecosystem teams ask first.
             </h2>
-            <p className="mt-5 text-sm leading-6 text-gray-600">
+            <p className="mt-5 text-sm leading-6 text-gray-600 max-sm:mt-2 max-sm:text-xs max-sm:leading-5">
               A concise view of how Hash PayLink turns trusted infrastructure into live payment, retail, agent, and market workflows.
             </p>
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+            <div className="mt-8 flex flex-col gap-3 max-sm:hidden sm:flex-row">
               <Link
                 to="/app"
                 className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-gray-950 px-4 text-sm font-semibold text-white shadow-[0_18px_50px_rgba(15,23,42,.12)] transition hover:bg-gray-800"
@@ -1302,19 +1392,19 @@ export default function FoundationPage() {
             </div>
           </div>
 
-          <div className="rounded-[2rem] border border-black/10 bg-white/64 px-5 py-2 shadow-[0_28px_90px_rgba(15,23,42,.08)] backdrop-blur-xl sm:px-7">
+          <div className="rounded-[2rem] border border-black/10 bg-white/64 px-5 py-2 shadow-[0_28px_90px_rgba(15,23,42,.08)] backdrop-blur-xl max-sm:rounded-2xl max-sm:px-3 max-sm:py-0 sm:px-7">
             {faqs.map((faq, index) => {
               const isOpen = openFaq === index
               return (
                 <div key={faq.question} className={`faq-item border-b border-black/10 last:border-b-0 ${isOpen ? 'active' : ''}`}>
                   <button
                     type="button"
-                    className="faq-header flex w-full items-center justify-between gap-5 py-6 text-left"
+                    className="faq-header flex w-full items-center justify-between gap-5 py-6 text-left max-sm:gap-3 max-sm:py-3"
                     aria-expanded={isOpen}
                     onClick={() => setOpenFaq(isOpen ? -1 : index)}
                   >
-                    <span className="text-base font-semibold tracking-[-0.02em] text-gray-950 sm:text-lg">{faq.question}</span>
-                    <span className="faq-icon flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-black/10 bg-white text-xl font-light leading-none text-gray-500 shadow-[0_10px_28px_rgba(15,23,42,.06)]">
+                    <span className="text-base font-semibold tracking-[-0.02em] text-gray-950 max-sm:text-xs sm:text-lg">{faq.question}</span>
+                    <span className="faq-icon flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-black/10 bg-white text-xl font-light leading-none text-gray-500 shadow-[0_10px_28px_rgba(15,23,42,.06)] max-sm:h-6 max-sm:w-6 max-sm:text-base">
                       +
                     </span>
                   </button>
@@ -1325,7 +1415,7 @@ export default function FoundationPage() {
                     className="faq-answer"
                     style={{ maxHeight: isOpen ? `${faqHeights[index] || 0}px` : '0px' }}
                   >
-                    <p className="max-w-2xl pb-6 text-sm leading-6 text-gray-600">{faq.answer}</p>
+                    <p className="max-w-2xl pb-6 text-sm leading-6 text-gray-600 max-sm:pb-3 max-sm:text-xs max-sm:leading-5">{faq.answer}</p>
                   </div>
                 </div>
               )
@@ -1335,9 +1425,9 @@ export default function FoundationPage() {
       </section>
 
       <footer id="contact" className="border-t border-black/10 px-5 py-8 sm:px-8 lg:px-10" style={{ scrollSnapAlign: 'end' }}>
-        <div className="mx-auto grid w-full max-w-7xl gap-4 text-xs text-gray-500 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
+        <div className="mx-auto grid w-full max-w-7xl gap-3 text-xs text-gray-500 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
           <div className="hidden sm:block" />
-          <p className="text-center text-gray-400">Powered by Circle USDC. Built with Arc settlement and 0G proof records.</p>
+          <p className="text-center text-gray-400">Powered by Circle USDC</p>
           <div className="flex justify-center gap-4 sm:justify-end">
             <a href="mailto:support@hashpaylink.com" className="hover:text-gray-900">Email</a>
             <a href="https://x.com/Hash_PayLink" target="_blank" rel="noreferrer" className="hover:text-gray-900">X</a>
