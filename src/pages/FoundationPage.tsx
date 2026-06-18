@@ -734,11 +734,20 @@ export default function FoundationPage() {
             opacity: 1;
             transform: none;
             animation: none;
+            will-change: auto;
+            backface-visibility: visible;
+          }
+          /* Drop the promoted compositing layer on mobile so iOS Safari
+             does not lose the globe and hero text when scroll-snap returns
+             the user to the hero section. */
+          [data-motion="globe-bg"] {
+            will-change: auto;
+            backface-visibility: visible;
           }
           .foundation-mobile-hero-art {
-            height: 138px;
-            max-width: 330px;
-            margin-top: .15rem;
+            height: 220px;
+            max-width: 340px;
+            margin-top: .35rem;
           }
           .foundation-mobile-asset-stage {
             inset: 0 auto auto 0;
@@ -977,7 +986,7 @@ export default function FoundationPage() {
               <p className="mt-6 max-w-[18rem] text-sm leading-7 text-white/68 sm:max-w-xl sm:text-[15px]">
                 Hash PayLink powers payment links, retail POS, PolyDesk, StreamPay, and agent commerce on Circle USDC, Arc settlement, and 0G proof rails.
               </p>
-              <div className="mt-8 hidden flex-col gap-3 sm:flex sm:flex-row">
+              <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                 <Link
                   to="/app"
                   className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg !bg-white px-5 text-sm font-semibold !text-[#08090b] shadow-[0_18px_48px_rgba(0,0,0,.26)] transition hover:!bg-zinc-100 sm:w-auto"
@@ -997,7 +1006,23 @@ export default function FoundationPage() {
             </div>
 
             <div className="foundation-mobile-hero-art relative mx-auto h-[430px] w-full max-w-[540px] lg:h-[520px]">
-              <div className="foundation-mobile-asset-stage pointer-events-none absolute left-1/2 top-1/2 h-[min(66vw,360px)] w-[min(66vw,360px)] -translate-x-1/2 -translate-y-1/2">
+              {/* Mobile-only hero visual: plain Circle logo with three partner
+                  logos beneath. No orbit rings, no swap animation. Hidden at
+                  sm+ so the desktop orb stage below is the source of truth. */}
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 sm:hidden">
+                <img
+                  src="/brand/circle-logo.jpeg"
+                  alt="Circle"
+                  className="h-[88px] w-[88px] rounded-full object-contain shadow-[0_18px_42px_rgba(0,0,0,.30)]"
+                />
+                <div className="flex items-center gap-4">
+                  <img src="/brand/0g-logo.jpeg" alt="0G" className="h-11 w-11 rounded-full object-contain opacity-95" />
+                  <img src="/brand/circle-logo.jpeg" alt="Circle" className="h-11 w-11 rounded-full object-contain opacity-95" />
+                  <img src="/brand/arc-logo.jpeg" alt="Arc" className="h-11 w-11 rounded-full object-contain opacity-95" />
+                </div>
+              </div>
+
+              <div className="foundation-mobile-asset-stage pointer-events-none absolute left-1/2 top-1/2 hidden h-[min(66vw,360px)] w-[min(66vw,360px)] -translate-x-1/2 -translate-y-1/2 sm:block">
                 <div className="absolute inset-0 rounded-full bg-white/[.035] blur-3xl" />
                 <div className="absolute inset-[12%] rounded-full border border-white/10" />
                 <div className="absolute inset-[2%] rounded-full border border-white/7" />
