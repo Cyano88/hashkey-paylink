@@ -50,6 +50,25 @@ export default function App() {
   // Streampay domain → mount the Streampay sub-app (full separate router)
   if (IS_STREAMPAY) return <StreamPayApp />
 
+  const appShellRoutes = (
+    <Route element={<Layout />}>
+      {IS_APP_HOST && <Route index element={<CreateLink />} />}
+      <Route path="app" element={<CreateLink />} />
+      <Route path="polymarket" element={<CreateLink initialProduct="polymarket" />} />
+      <Route path="pay" element={<PaymentPage />} />
+      <Route path="p/:network/:amount/:recipient/:memo" element={<ShortPayRedirect />} />
+      <Route path="dashboard" element={<Dashboard />} />
+      <Route path="event" element={<EventDashboard />} />
+      <Route path="agent" element={<AgentDemo />} />
+      <Route path="telegram/payment-links" element={<TelegramPaymentLinks />} />
+      <Route path="pos/ng" element={<NigerianPos />} />
+      <Route path="agent-terms" element={<AgentTerms />} />
+      <Route path="receipt/:activityId" element={<X402Receipt />} />
+      <Route path="r/:receiptId" element={<ReceiptPage />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Route>
+  )
+
   // Default → Hash PayLink
   return (
     <SolanaProvider>
@@ -79,22 +98,8 @@ export default function App() {
           <Route path="terms"              element={<TermsDocs />} />
           <Route path="privacy"            element={<PrivacyDocs />} />
         </Route>
-        <Route index element={IS_APP_HOST ? <Navigate to={`/app${search}`} replace /> : <FoundationPage />} />
-        <Route element={<Layout />}>
-          <Route path="app" element={<CreateLink />} />
-          <Route path="polymarket" element={<CreateLink initialProduct="polymarket" />} />
-          <Route path="pay" element={<PaymentPage />} />
-          <Route path="p/:network/:amount/:recipient/:memo" element={<ShortPayRedirect />} />
-          <Route path="dashboard" element={<Dashboard />} />
-          <Route path="event" element={<EventDashboard />} />
-          <Route path="agent" element={<AgentDemo />} />
-          <Route path="telegram/payment-links" element={<TelegramPaymentLinks />} />
-          <Route path="pos/ng" element={<NigerianPos />} />
-          <Route path="agent-terms" element={<AgentTerms />} />
-          <Route path="receipt/:activityId" element={<X402Receipt />} />
-          <Route path="r/:receiptId" element={<ReceiptPage />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Route>
+        {!IS_APP_HOST && <Route index element={<FoundationPage />} />}
+        {appShellRoutes}
       </Routes>
     </BrowserRouter>
     </SolanaProvider>
