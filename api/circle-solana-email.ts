@@ -1,9 +1,10 @@
 import type { Request, Response } from 'express'
 import crypto from 'crypto'
 import { PublicKey } from '@solana/web3.js'
-import { encodeFunctionData, isAddress, parseAbi } from 'viem'
+import { encodeFunctionData, isAddress, parseAbi, stringToHex } from 'viem'
 
 const EVM_TREASURY = '0xcE5dF9e1115F81a2Fc2F65941B20B820d508e753'
+const ARC_MEMO = '0x5294E9927c3306DcBaDb03fe70b92e01cCede505'
 const PLATFORM_FEE_BPS = 20n
 const BPS_DENOMINATOR = 10_000n
 
@@ -29,6 +30,7 @@ const EVM_CHAINS = {
 } as const
 
 const ERC20_TRANSFER_ABI = parseAbi(['function transfer(address to, uint256 amount) returns (bool)'])
+const ARC_MEMO_ABI = parseAbi(['function memo(address target, bytes data, bytes32 memoId, bytes memoData)'])
 const SMART_WALLET_BATCH_ABI = parseAbi(['function executeBatch((address target,uint256 value,bytes data)[] calls)'])
 const STREAM_FACTORY_ABI = parseAbi([
   'function createStream(address recipient,uint256 totalAmount,uint64 startTime,uint64 endTime,bytes32 salt) returns (address vault)',
@@ -164,6 +166,15 @@ function evmWallet(wallets: Array<{ id: string; address: string; blockchain: str
 
 function isBytes32(value: string | undefined): value is `0x${string}` {
   return typeof value === 'string' && /^0x[a-fA-F0-9]{64}$/.test(value)
+}
+
+function streamMemoData(operation: 'fund' | 'create', vault: `0x${string}`, salt: `0x${string}`) {
+  return stringToHex(JSON.stringify({
+    app: 'streampay',
+    operation,
+    streamId: salt,
+    vault,
+  }))
 }
 
 function parseUsdcUnits(value: string | undefined, fallback: bigint) {
@@ -385,12 +396,32 @@ export default async function handler(req: Request, res: Response) {
         functionName: 'createStream',
         args: [recipient as `0x${string}`, totalAmount, start, end, salt],
       })
+      const memoFundCallData = encodeFunctionData({
+        abi: ARC_MEMO_ABI,
+        functionName: 'memo',
+        args: [
+          tokenAddress as `0x${string}`,
+          fundCallData,
+          salt,
+          streamMemoData('fund', predictedVault as `0x${string}`, salt),
+        ],
+      })
+      const memoCreateCallData = encodeFunctionData({
+        abi: ARC_MEMO_ABI,
+        functionName: 'memo',
+        args: [
+          factoryAddress as `0x${string}`,
+          createCallData,
+          salt,
+          streamMemoData('create', predictedVault as `0x${string}`, salt),
+        ],
+      })
       const batchCallData = encodeFunctionData({
         abi: SMART_WALLET_BATCH_ABI,
         functionName: 'executeBatch',
         args: [[
-          { target: tokenAddress as `0x${string}`, value: 0n, data: fundCallData },
-          { target: factoryAddress as `0x${string}`, value: 0n, data: createCallData },
+          { target: ARC_MEMO as `0x${string}`, value: 0n, data: memoFundCallData },
+          { target: ARC_MEMO as `0x${string}`, value: 0n, data: memoCreateCallData },
         ]],
       })
 

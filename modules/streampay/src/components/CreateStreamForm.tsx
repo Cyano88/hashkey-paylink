@@ -4,7 +4,7 @@ import {
   useAccount, useChainId, useSwitchChain,
   useReadContract, useWriteContract, usePublicClient,
 } from 'wagmi'
-import { isAddress, parseAbi, parseEventLogs } from 'viem'
+import { encodeFunctionData, isAddress, parseAbi, parseEventLogs, stringToHex } from 'viem'
 import { Mail, RefreshCw, X as XIcon } from 'lucide-react'
 import { STREAM_VAULT_ABI, STREAM_VAULT_FACTORY_ABI } from '../lib/streamVaultAbi'
 import { formatUsdcFull } from './TriStateBar'
@@ -22,11 +22,15 @@ import { resolvePrivyCircleLink, savePrivyCircleLink } from '../../../../src/lib
 const ARC_CHAIN_ID = 5042002
 const ARC_USDC     = '0x3600000000000000000000000000000000000000' as const
 const ARC_EXPLORER = 'https://testnet.arcscan.app'
+const ARC_MEMO     = '0x5294E9927c3306DcBaDb03fe70b92e01cCede505' as const
 const DEFAULT_STREAM_FACTORY_ADDRESS = '0xBAecf54084A0cB65b77a88cbDEf2b663Be71c61b' as const
 
 const ERC20_ABI = parseAbi([
   'function balanceOf(address) view returns (uint256)',
   'function transfer(address to, uint256 amount) returns (bool)',
+])
+const ARC_MEMO_ABI = parseAbi([
+  'function memo(address target, bytes data, bytes32 memoId, bytes memoData)',
 ])
 
 const DURATIONS = [
@@ -145,6 +149,15 @@ function genSalt(): `0x${string}` {
   const arr = new Uint8Array(32)
   crypto.getRandomValues(arr)
   return `0x${[...arr].map(b => b.toString(16).padStart(2, '0')).join('')}` as `0x${string}`
+}
+
+function streamMemoData(operation: 'fund' | 'create', vault: `0x${string}`, salt: `0x${string}`) {
+  return stringToHex(JSON.stringify({
+    app: 'streampay',
+    operation,
+    streamId: salt,
+    vault,
+  }))
 }
 
 function sleep(ms: number) {
@@ -539,19 +552,31 @@ export function CreateStreamForm() {
       }) as `0x${string}`
 
       setStep('funding'); setStatusMsg('Sign to fund vault…')
+      const fundCallData = encodeFunctionData({
+        abi: ERC20_ABI,
+        functionName: 'transfer',
+        args: [predicted, amountBn],
+      })
       const fundTx = await writeContractAsync({
-        address: ARC_USDC, abi: ERC20_ABI,
-        functionName: 'transfer', args: [predicted, amountBn], gas: 100_000n,
+        address: ARC_MEMO, abi: ARC_MEMO_ABI,
+        functionName: 'memo',
+        args: [ARC_USDC, fundCallData, salt, streamMemoData('fund', predicted, salt)],
+        gas: 180_000n,
       })
       setStatusMsg('Confirming on Arc…')
       await publicClient.waitForTransactionReceipt({ hash: fundTx })
 
       setStep('creating'); setStatusMsg('Sign to deploy vault…')
-      const deployTx = await writeContractAsync({
-        address: factoryAddr, abi: STREAM_VAULT_FACTORY_ABI,
+      const createCallData = encodeFunctionData({
+        abi: STREAM_VAULT_FACTORY_ABI,
         functionName: 'createStream',
         args: [recipient as `0x${string}`, amountBn, startTime, endTime, salt],
-        gas: 2_000_000n,
+      })
+      const deployTx = await writeContractAsync({
+        address: ARC_MEMO, abi: ARC_MEMO_ABI,
+        functionName: 'memo',
+        args: [factoryAddr, createCallData, salt, streamMemoData('create', predicted, salt)],
+        gas: 2_100_000n,
       })
       setDeployTxHash(deployTx); setStatusMsg('Deploying on Arc…')
       const receipt = await publicClient.waitForTransactionReceipt({ hash: deployTx })
