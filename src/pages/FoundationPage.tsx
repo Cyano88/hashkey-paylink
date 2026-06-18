@@ -721,7 +721,7 @@ export default function FoundationPage() {
             display: flex;
             flex-direction: column;
             align-items: stretch;
-            gap: 1rem;
+            gap: 1.25rem;
             padding-top: .85rem;
             padding-bottom: 1rem;
           }
@@ -730,41 +730,52 @@ export default function FoundationPage() {
           .foundation-mobile-hero p {
             max-width: 100%;
           }
+          .foundation-mobile-hero .hpl-reveal {
+            opacity: 1;
+            transform: none;
+            animation: none;
+          }
           .foundation-mobile-hero-art {
-            height: 118px;
-            max-width: 300px;
+            height: 138px;
+            max-width: 330px;
+            margin-top: .15rem;
           }
           .foundation-mobile-asset-stage {
             inset: 0 auto auto 0;
-            height: 118px;
+            height: 138px;
             width: 100%;
             transform: none;
           }
           .foundation-mobile-asset-rings {
-            inset: 8px auto auto 6px;
-            height: 96px;
+            display: none;
+          }
+          .foundation-mobile-usdc-mark {
+            left: 58px;
+            top: 50%;
+            height: 104px;
+            width: 104px;
+            border: 0;
+            background: transparent;
+            box-shadow: none;
+            transform: translateY(-50%);
+          }
+          .foundation-mobile-usdc-mark > div {
+            display: none;
+          }
+          .foundation-mobile-core-rail {
+            left: 178px;
+            top: 47px;
+            height: 36px;
             width: 96px;
             transform: none;
           }
-          .foundation-mobile-usdc-mark {
-            height: 76px;
-            width: 76px;
-            transform: translate(-50%, -50%);
-          }
-          .foundation-mobile-core-rail {
-            left: 158px;
-            top: 34px;
-            height: 44px;
-            width: 104px;
-            transform: none;
-          }
           .foundation-mobile-core-rail .core-rail-logo {
-            height: 38px;
-            width: 38px;
-            padding: 7px;
+            height: 32px;
+            width: 32px;
+            padding: 6px;
             --x-start: 0px !important;
-            --x-mid: 34px !important;
-            --x-end: 68px !important;
+            --x-mid: 32px !important;
+            --x-end: 64px !important;
           }
           .foundation-mobile-product-grid {
             margin-top: 1.25rem;
@@ -786,7 +797,7 @@ export default function FoundationPage() {
             min-height: 262px;
           }
           .foundation-mobile-command-copy {
-            display: none;
+            display: block;
           }
           .phone-stage {
             grid-template-columns: 1fr 1fr;
@@ -1069,7 +1080,7 @@ export default function FoundationPage() {
                 <span className="text-[11px] font-semibold tracking-[0.22em] text-gray-400">{index}</span>
                 <div>
                   <h3 className="mt-4 text-xl font-semibold tracking-[-0.025em] text-gray-950 max-sm:mt-0 max-sm:text-sm">{title}</h3>
-                  <p className="mt-3 text-sm leading-6 text-gray-600 max-sm:hidden">{copy}</p>
+                  <p className="mt-3 text-sm leading-6 text-gray-600 max-sm:mt-1 max-sm:text-[11px] max-sm:leading-4">{copy}</p>
                 </div>
                 <div className="mt-5 inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 opacity-80 transition group-hover:gap-2 group-hover:opacity-100 max-sm:mt-0 max-sm:justify-self-end">
                   Open <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
@@ -1112,13 +1123,13 @@ export default function FoundationPage() {
                   <p className="text-xs font-semibold text-cyan-200/55 max-sm:text-[10px]">{index}</p>
                   <div>
                     <p className="text-sm font-semibold tracking-[-0.01em] text-white max-sm:text-xs">{title}</p>
-                    <p className="mt-1 text-xs leading-5 text-white/52 max-sm:hidden">{value}</p>
+                    <p className="mt-1 text-xs leading-5 text-white/52 max-sm:mt-0.5 max-sm:text-[10px] max-sm:leading-4 max-sm:text-white/48">{value}</p>
                   </div>
                 </div>
               ))}
             </div>
 
-            <p className="mt-8 max-w-lg text-xs leading-5 text-white/42 max-sm:hidden">
+            <p className="mt-8 max-w-lg text-xs leading-5 text-white/42 max-sm:mt-3 max-sm:text-[10px] max-sm:leading-4 max-sm:text-white/38">
               Built for storefronts, events, pop-ups, and agent-assisted commerce where the payment must feel simple before the infrastructure becomes visible.
             </p>
           </div>
@@ -1161,7 +1172,7 @@ export default function FoundationPage() {
             <h2 className="mt-3 text-4xl font-semibold tracking-[-0.045em] text-gray-950 max-sm:mt-2 sm:text-5xl">
               Built for the screen users already trust.
             </h2>
-            <p className="foundation-mobile-command-copy mt-5 text-sm leading-6 text-gray-600">
+            <p className="foundation-mobile-command-copy mt-5 text-sm leading-6 text-gray-600 max-sm:mt-2 max-sm:text-xs max-sm:leading-5">
               Hash PayLink turns payment links, PolyDesk alerts, StreamPay, and agent receipts into clean mobile workflows that feel simple enough for chat and strong enough for fintech teams.
             </p>
 
@@ -1200,7 +1211,7 @@ export default function FoundationPage() {
                   <div className="rounded-[28px] bg-white/86 p-4 shadow-[0_18px_44px_rgba(15,23,42,.10)] max-sm:rounded-[18px] max-sm:p-3">
                     <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-blue-700 max-sm:text-[8px]">PolyDesk</p>
                     <h3 className="mt-3 text-2xl font-semibold tracking-[-0.05em] max-sm:mt-1 max-sm:text-base">Portfolio alerts</h3>
-                    <p className="mt-2 text-xs leading-5 text-gray-500 max-sm:hidden">Positions, funding, and LP Scout memory from Telegram.</p>
+                    <p className="mt-2 text-xs leading-5 text-gray-500 max-sm:mt-1 max-sm:text-[9px] max-sm:leading-[14px]">Positions, funding, and LP Scout memory from Telegram.</p>
                     <div className="mt-5 space-y-2 max-sm:mt-3 max-sm:space-y-1.5">
                       {['Position risk below 12%', 'LP Scout result saved', 'Funding route ready'].map((item) => (
                         <div key={item} className="flex items-center justify-between rounded-2xl bg-gray-950/[.035] px-3 py-2 max-sm:rounded-xl max-sm:px-2 max-sm:py-1.5">
@@ -1327,7 +1338,7 @@ export default function FoundationPage() {
               {stack.map((item, index) => (
                 <div key={item.name} className="hpl-reveal border-t border-black/10 pt-4 max-sm:rounded-xl max-sm:border max-sm:bg-white/60 max-sm:p-2.5 max-sm:shadow-[0_12px_32px_rgba(15,23,42,.055)]" style={{ '--delay': `${index * 55}ms` } as CSSProperties}>
                   <p className="text-sm font-semibold tracking-[-0.01em] text-gray-950 max-sm:text-xs">{item.name}</p>
-                  <p className="mt-2 text-xs leading-5 text-gray-500 max-sm:hidden">{item.copy}</p>
+                  <p className="mt-2 text-xs leading-5 text-gray-500 max-sm:mt-1 max-sm:text-[10px] max-sm:leading-4">{item.copy}</p>
                 </div>
               ))}
             </div>
