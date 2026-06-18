@@ -651,19 +651,55 @@ export default function FoundationPage() {
         }
         @media (max-width: 640px) {
           .hpl-snap-shell {
-            scroll-snap-type: y proximity;
+            height: auto;
+            min-height: 100dvh;
+            overflow-y: visible;
+            scroll-snap-type: none;
           }
           .hpl-snap-section {
+            min-height: auto;
             scroll-snap-stop: normal;
           }
+          .hpl-snap-section h2 {
+            font-size: 2rem;
+            line-height: 1.05;
+            letter-spacing: -.035em;
+          }
+          .foundation-mobile-hero {
+            min-height: auto;
+            padding-top: 5.75rem;
+            padding-bottom: 1.5rem;
+          }
+          .foundation-mobile-hero-grid {
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+            gap: 1.75rem;
+            padding-top: 1.5rem;
+            padding-bottom: 1.75rem;
+          }
+          .foundation-mobile-hero .hpl-reveal,
+          .foundation-mobile-hero h1,
+          .foundation-mobile-hero p {
+            max-width: 100%;
+          }
+          .foundation-mobile-hero-art {
+            height: 260px;
+            max-width: 300px;
+          }
           .phone-stage {
-            min-height: 410px;
+            min-height: auto;
+            display: grid;
+            gap: 1rem;
+            justify-items: center;
           }
           .phone-mockup {
-            width: 178px;
-            height: 356px;
-            min-width: 178px;
-            min-height: 356px;
+            position: relative !important;
+            inset: auto !important;
+            width: min(220px, 72vw);
+            height: min(440px, 144vw);
+            min-width: 0;
+            min-height: 0;
             border-radius: 32px;
             padding: 8px;
           }
@@ -679,10 +715,13 @@ export default function FoundationPage() {
             border-radius: 28px;
           }
           .phone-primary {
-            transform: rotate(-6deg) translate3d(42px, 0, 56px);
+            order: 1;
+            transform: none !important;
           }
           .phone-secondary {
-            transform: rotate(8deg) translate3d(-46px, 34px, 0) scale(.86);
+            order: 2;
+            opacity: 1;
+            transform: none !important;
           }
           .retail-photo-card {
             border-radius: 24px;
@@ -760,7 +799,7 @@ export default function FoundationPage() {
             <div className="flex items-center gap-2">
               <Link
                 to="/app"
-                className="inline-flex h-10 min-w-max items-center justify-center rounded-lg border border-white/14 bg-white/[.07] px-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/86 transition hover:border-white/28 hover:bg-white/[.10] hover:text-white sm:px-4"
+                className="hidden h-10 min-w-max items-center justify-center rounded-lg border border-white/14 bg-white/[.07] px-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/86 transition hover:border-white/28 hover:bg-white/[.10] hover:text-white sm:inline-flex sm:px-4"
               >
                 Launch App
               </Link>
@@ -809,8 +848,8 @@ export default function FoundationPage() {
           </div>
         )}
 
-        <div className="relative mx-auto flex min-h-[100dvh] w-full max-w-7xl flex-col px-4 py-5 pt-24 sm:px-8 lg:px-10">
-          <div className="relative grid flex-1 items-center gap-10 pb-14 pt-12 lg:grid-cols-[minmax(0,1fr)_minmax(420px,540px)] lg:pt-16">
+        <div className="foundation-mobile-hero relative mx-auto flex min-h-[100dvh] w-full max-w-7xl flex-col px-4 py-5 pt-24 sm:px-8 lg:px-10">
+          <div className="foundation-mobile-hero-grid relative grid flex-1 items-center gap-10 pb-14 pt-12 lg:grid-cols-[minmax(0,1fr)_minmax(420px,540px)] lg:pt-16">
             <div className="hpl-reveal relative z-10 max-w-2xl text-left">
               <p className="max-w-[18rem] text-[10px] font-semibold uppercase tracking-[0.26em] text-white/54 sm:max-w-none sm:text-[11px] sm:tracking-[0.36em]">
                 Stablecoin payment infrastructure
@@ -840,7 +879,7 @@ export default function FoundationPage() {
               </div>
             </div>
 
-            <div className="relative mx-auto h-[430px] w-full max-w-[540px] lg:h-[520px]">
+            <div className="foundation-mobile-hero-art relative mx-auto h-[430px] w-full max-w-[540px] lg:h-[520px]">
               <div className="pointer-events-none absolute left-1/2 top-1/2 h-[min(66vw,360px)] w-[min(66vw,360px)] -translate-x-1/2 -translate-y-1/2">
                 <div className="absolute inset-0 rounded-full bg-white/[.035] blur-3xl" />
                 <div className="absolute inset-[12%] rounded-full border border-white/10" />
@@ -919,7 +958,7 @@ export default function FoundationPage() {
 
           <div className="mt-14 grid gap-x-16 gap-y-9 md:grid-cols-2 lg:grid-cols-3">
             {products.map(({ index, title, copy, href }) => (
-              <Link key={title} to={href} className="group max-w-[330px] text-left">
+              <Link key={title} to={href} className="group max-w-[330px] text-left max-sm:max-w-none">
                 <div className="flex items-center gap-3">
                   <span className="text-[11px] font-semibold tracking-[0.22em] text-gray-400">{index}</span>
                 </div>
@@ -1036,7 +1075,7 @@ export default function FoundationPage() {
               Hash PayLink turns payment links, PolyDesk alerts, StreamPay, and agent receipts into clean mobile workflows that feel simple enough for chat and strong enough for fintech teams.
             </p>
 
-            <div className="mt-9 grid max-w-lg grid-cols-2 gap-3">
+            <div className="mt-9 grid max-w-lg grid-cols-2 gap-3 max-sm:grid-cols-1">
               {proofStats.map((item) => {
                 const content = (
                   <div className="rounded-2xl border border-black/10 bg-white/64 p-4 shadow-[0_18px_56px_rgba(15,23,42,.06)] backdrop-blur-sm transition hover:border-blue-200 hover:bg-white/85">
@@ -1299,7 +1338,7 @@ export default function FoundationPage() {
         <div className="mx-auto grid w-full max-w-7xl gap-4 text-xs text-gray-500 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
           <div className="hidden sm:block" />
           <p className="text-center text-gray-400">Powered by Circle USDC. Built with Arc settlement and 0G proof records.</p>
-          <div className="flex gap-4 sm:justify-end">
+          <div className="flex justify-center gap-4 sm:justify-end">
             <a href="mailto:support@hashpaylink.com" className="hover:text-gray-900">Email</a>
             <a href="https://x.com/Hash_PayLink" target="_blank" rel="noreferrer" className="hover:text-gray-900">X</a>
           </div>
