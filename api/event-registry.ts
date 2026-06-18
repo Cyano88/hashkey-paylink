@@ -3,6 +3,7 @@ import { archivePayment }          from './og-storage.js'
 import { appendAgentActivity, normalizeActivitySlug } from './agent-activity.js'
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs'
 import { dirname }                 from 'path'
+import crypto from 'crypto'
 
 type PaymentEntry = {
   eventId:     string
@@ -19,6 +20,11 @@ type PaymentEntry = {
   amountNgn?:  string
   ogRootHash?: string
   ogTxHash?:   string
+}
+
+export type RegisteredPaymentReceipt = PaymentEntry & {
+  receiptId: string
+  receiptHash: string
 }
 
 const MAX_EVENT_ID_LENGTH = 128
@@ -103,6 +109,58 @@ async function persistRegistry(): Promise<void> {
 
 const registry = loadRegistry()
 
+function encodeReceiptId(eventId: string, txHash: string) {
+  return Buffer.from(JSON.stringify({ eventId, txHash }), 'utf8')
+    .toString('base64url')
+}
+
+function decodeReceiptId(receiptId: string) {
+  try {
+    const parsed = JSON.parse(Buffer.from(receiptId, 'base64url').toString('utf8')) as {
+      eventId?: unknown
+      txHash?: unknown
+    }
+    const eventId = typeof parsed.eventId === 'string' ? parsed.eventId.trim() : ''
+    const txHash = typeof parsed.txHash === 'string' ? parsed.txHash.trim() : ''
+    return eventId && txHash ? { eventId, txHash } : null
+  } catch {
+    return null
+  }
+}
+
+function receiptHash(entry: PaymentEntry) {
+  return crypto.createHash('sha256').update(JSON.stringify({
+    type: 'hashpaylink_payment_receipt',
+    eventId: entry.eventId,
+    txHash: entry.txHash,
+    chain: entry.chain,
+    payer: entry.payer,
+    memo: entry.memo,
+    amount: entry.amount,
+    ts: entry.ts,
+    source: entry.source,
+    merchantId: entry.merchantId,
+    settlementType: entry.settlementType,
+  })).digest('hex')
+}
+
+export function paymentReceiptId(eventId: string, txHash: string) {
+  return encodeReceiptId(eventId, txHash)
+}
+
+export async function findRegisteredPaymentReceipt(receiptId: string): Promise<RegisteredPaymentReceipt | undefined> {
+  const decoded = decodeReceiptId(String(receiptId ?? '').trim())
+  if (!decoded) return undefined
+  await hydrateRegistry()
+  const entry = (registry.get(decoded.eventId) ?? []).find(item => item.txHash === decoded.txHash)
+  if (!entry) return undefined
+  return {
+    ...entry,
+    receiptId,
+    receiptHash: receiptHash(entry),
+  }
+}
+
 export async function registerEventPayment(req: Request, res: Response): Promise<void> {
   let eventId: string
   let txHash: string
@@ -173,7 +231,12 @@ export async function registerEventPayment(req: Request, res: Response): Promise
       }
       registry.set(eventId, entries)
       await persistRegistry()
-      res.json({ ok: true, upgraded: true })
+      res.json({
+        ok: true,
+        upgraded: true,
+        receiptId: paymentReceiptId(eventId, txHash),
+        receiptUrl: `/r/${paymentReceiptId(eventId, txHash)}`,
+      })
       return
     }
   }
@@ -182,7 +245,12 @@ export async function registerEventPayment(req: Request, res: Response): Promise
     ? entries.some(e => e.payer.toLowerCase() === payer.toLowerCase())
     : entries.some(e => e.txHash.toLowerCase() === txHash.toLowerCase())
   if (isDupe) {
-    res.json({ ok: true, duplicate: true })
+    res.json({
+      ok: true,
+      duplicate: true,
+      receiptId: paymentReceiptId(eventId, txHash),
+      receiptUrl: `/r/${paymentReceiptId(eventId, txHash)}`,
+    })
     return
   }
   const entry: PaymentEntry = { eventId, txHash, chain, payer, memo, amount, ts: Date.now() }
@@ -194,7 +262,11 @@ export async function registerEventPayment(req: Request, res: Response): Promise
   entries.push(entry)
   registry.set(eventId, entries)
   await persistRegistry()
-  res.json({ ok: true })
+  res.json({
+    ok: true,
+    receiptId: paymentReceiptId(eventId, txHash),
+    receiptUrl: `/r/${paymentReceiptId(eventId, txHash)}`,
+  })
   if (agentSlug) {
     void appendAgentActivity({
       agentSlug,

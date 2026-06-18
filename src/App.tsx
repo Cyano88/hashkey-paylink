@@ -9,6 +9,7 @@ import AgentDemo     from './pages/AgentDemo'
 import TelegramPaymentLinks from './pages/TelegramPaymentLinks'
 import NigerianPos from './pages/NigerianPos'
 import X402Receipt   from './pages/X402Receipt'
+import ReceiptPage   from './pages/ReceiptPage'
 import AgentTerms    from './pages/AgentTerms'
 import { SolanaProvider } from './lib/SolanaContext'
 import StreamPayApp from '../modules/streampay/src/StreamPayApp'
@@ -90,6 +91,7 @@ export default function App() {
           <Route path="pos/ng" element={<NigerianPos />} />
           <Route path="agent-terms" element={<AgentTerms />} />
           <Route path="receipt/:activityId" element={<X402Receipt />} />
+          <Route path="r/:receiptId" element={<ReceiptPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

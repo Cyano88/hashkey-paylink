@@ -33,7 +33,7 @@ const BASE_PAYMASTER_URL = import.meta.env.VITE_BASE_PAYMASTER_URL as string | u
 import {
   ArrowLeft, ArrowRight, CheckCircle2, ExternalLink, AlertCircle, Loader2, ArrowLeftRight,
   RefreshCw, ShieldCheck, Zap, Copy, CheckCheck, Wallet, ChevronDown,
-  AlertTriangle, Radio, Mail, X, Bot,
+  AlertTriangle, Radio, Mail, X, Bot, Share2,
 } from 'lucide-react'
 import {
   CHAIN_META, PLATFORM_FEE_BPS, EVM_TREASURY, STARK_TREASURY, type ChainKey,
@@ -372,6 +372,8 @@ export default function PaymentPage() {
   const [hashCopied,        setHashCopied]       = useState(false)
   const [addrCopied,        setAddrCopied]        = useState(false)
   const [agentLinkCopied,   setAgentLinkCopied]   = useState(false)
+  const [receiptLinkCopied, setReceiptLinkCopied] = useState(false)
+  const [paymentReceiptUrl, setPaymentReceiptUrl] = useState('')
   const [manualPayDetected, setManualPayDetected] = useState(false)
   const [manualTxHash,      setManualTxHash]      = useState<`0x${string}` | null>(null)
   const [receivedAmount,    setReceivedAmount]    = useState<bigint | null>(null)
@@ -1584,6 +1586,7 @@ export default function PaymentPage() {
     setCircleSolanaPending(false); setCircleSolanaError(null); setCircleSolanaBalance(null); setCircleSolanaBalanceError(false)
     setCircleSolanaSession(null); setCircleSolanaAddress(''); setCircleSolanaCopied(false)
     setManualPayDetected(false); setManualTxHash(null); setReceivedAmount(null)
+    setPaymentReceiptUrl(''); setReceiptLinkCopied(false)
     setCirclePaymasterPending(false); setCirclePaymasterTxHash(null); setCirclePaymasterError(null)
     setCirclePasskeyPending(false); setCirclePasskeyError(null); setCircleSmartAccount(null); setCircleEvmEmailSession(null); setCircleEvmPaymentProcessing(false); setCircleEvmAcceptedPending(false); setCircleWalletCopied(false)
     setShowCheckButton(false)
@@ -1623,6 +1626,13 @@ export default function PaymentPage() {
     await copyToClipboard(circleSmartAccount)
     setCircleWalletCopied(true)
     setTimeout(() => setCircleWalletCopied(false), 2200)
+  }
+
+  async function handleCopyReceiptLink() {
+    if (!paymentReceiptUrl) return
+    await copyToClipboard(paymentReceiptUrl)
+    setReceiptLinkCopied(true)
+    setTimeout(() => setReceiptLinkCopied(false), 2200)
   }
 
   function handleCircleWithdrawMax() {
@@ -2769,8 +2779,9 @@ export default function PaymentPage() {
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify(payload),
       })
-      const data = await res.json() as { ok: boolean; error?: string }
+      const data = await res.json() as { ok: boolean; error?: string; receiptUrl?: string }
       console.log('[EventReg] response:', data)
+      if (data.ok && data.receiptUrl) setPaymentReceiptUrl(new URL(data.receiptUrl, window.location.origin).toString())
       setEventRegStatus(data.ok ? 'ok' : 'error')
     } catch (err) {
       console.error('[EventReg] fetch failed:', err)
@@ -2836,11 +2847,13 @@ export default function PaymentPage() {
       requestedAmount: expectedSettlementAmt,
     }
     try {
-      await fetch('/api/event-register', {
+      const res = await fetch('/api/event-register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       })
+      const data = await res.json().catch(() => undefined) as { ok?: boolean; receiptUrl?: string } | undefined
+      if (data?.ok && data.receiptUrl) setPaymentReceiptUrl(new URL(data.receiptUrl, window.location.origin).toString())
     } catch (err) {
       console.error('[NgPosReg] fetch failed:', err)
     }
@@ -3139,6 +3152,28 @@ export default function PaymentPage() {
                 <ExternalLink className="h-4 w-4" />
                 View on {meta.explorerName}
               </a>
+            )}
+
+            {paymentReceiptUrl && (
+              <div className="grid gap-2 sm:grid-cols-2">
+                <a
+                  href={paymentReceiptUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-gray-900 px-5 py-2.5 text-sm font-medium text-white transition-all hover:bg-gray-800 active:scale-[0.98]"
+                >
+                  <Share2 className="h-4 w-4" />
+                  Open receipt
+                </a>
+                <button
+                  type="button"
+                  onClick={handleCopyReceiptLink}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98]"
+                >
+                  {receiptLinkCopied ? <CheckCheck className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
+                  {receiptLinkCopied ? 'Copied' : 'Copy receipt'}
+                </button>
+              </div>
             )}
 
             {/* Only surface registration errors — success/pending/idle are silent */}

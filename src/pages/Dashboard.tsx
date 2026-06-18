@@ -120,6 +120,12 @@ function eventPaymentToRow(row: EventPaymentRow, index: number): PaymentRow {
   }
 }
 
+function paymentReceiptPath(eventId: string, txHash: string) {
+  if (!eventId || !txHash) return ''
+  const payload = JSON.stringify({ eventId, txHash })
+  return `/r/${btoa(payload).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')}`
+}
+
 type DateFilter = 'today' | 'yesterday' | 'last7' | 'custom' | 'all'
 type PosNetwork = 'base' | 'arbitrum' | 'arc' | 'solana'
 
@@ -543,6 +549,11 @@ export default function Dashboard() {
   }
   function ogExplorerHref(row: PaymentRow) {
     return row.ogTxHash ? `https://chainscan.0g.ai/tx/${row.ogTxHash}` : ''
+  }
+  function receiptHref(row: PaymentRow) {
+    return row.flow === 'registry' && row.merchantId
+      ? paymentReceiptPath(`ngpos-${row.merchantId}`, row.txHash)
+      : ''
   }
 
   // No address
@@ -1099,6 +1110,18 @@ export default function Dashboard() {
                 )}
               </div>
             </div>
+
+            {receiptHref(activeReceipt) && (
+              <a
+                href={receiptHref(activeReceipt)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-gray-900 px-4 py-3 text-sm font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950"
+              >
+                <Link2 className="h-4 w-4" />
+                Open shareable receipt
+              </a>
+            )}
           </div>
         </div>
       )}
