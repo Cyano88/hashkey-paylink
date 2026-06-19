@@ -11,13 +11,20 @@ import { useSearchParams, Link } from 'react-router-dom'
 import { isAddress } from 'viem'
 import {
   CheckCircle2, ExternalLink, Loader2, Link2,
-  RefreshCw, TrendingUp, Wallet, Info, AlertCircle, ChevronDown, ChevronUp, X,
+  RefreshCw, TrendingUp, Wallet, Info, AlertCircle, ChevronDown, ChevronUp, X, Share2, Printer,
 } from 'lucide-react'
 import { CHAIN_META } from '../lib/chains'
 import { cn, truncateAddress } from '../lib/utils'
 import { queryBalances, type UnifiedBalanceBreakdown, type UnifiedBalanceChainKey } from '../lib/unifiedBalance'
 import { isValidSolanaAddress } from '../lib/solanaAddress'
 import { getPaylinkParam, hasPaylinkFlag, isTelegramSourceParam } from '../lib/paylinkParams'
+import { ReceiptIcon } from '../components/ReceiptIcon'
+import {
+  createPaymentReceiptPdf,
+  paymentReceiptFileName,
+  type PaylinkReceipt,
+  type ReceiptLookupResponse,
+} from '../lib/paymentReceiptPdf'
 
 const OG_GLOBAL_ARCHIVE_URL = 'https://chainscan.0g.ai/address/0x79a804C49e1E5EBC279A228Ab73a7570A0D0819a#events'
 
@@ -120,10 +127,10 @@ function eventPaymentToRow(row: EventPaymentRow, index: number): PaymentRow {
   }
 }
 
-function paymentReceiptPath(eventId: string, txHash: string) {
+function paymentReceiptId(eventId: string, txHash: string) {
   if (!eventId || !txHash) return ''
   const payload = JSON.stringify({ eventId, txHash })
-  return `/r/${btoa(payload).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')}`
+  return btoa(payload).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
 }
 
 type DateFilter = 'today' | 'yesterday' | 'last7' | 'custom' | 'all'
@@ -244,6 +251,9 @@ export default function Dashboard() {
   const [posNetworks,   setPosNetworks]   = useState<PosNetwork[]>([])
   const [posMerchantName, setPosMerchantName] = useState('')
   const [activeReceipt, setActiveReceipt] = useState<PaymentRow | null>(null)
+  const [posReceiptBusy, setPosReceiptBusy] = useState(false)
+  const [posReceiptError, setPosReceiptError] = useState('')
+  const [posReceiptCopied, setPosReceiptCopied] = useState(false)
   const [visibleReceiptCount, setVisibleReceiptCount] = useState(POS_RECEIPT_PAGE_SIZE)
   const lastReceiptCount = useRef<number | null>(null)
 
@@ -550,10 +560,173 @@ export default function Dashboard() {
   function ogExplorerHref(row: PaymentRow) {
     return row.ogTxHash ? `https://chainscan.0g.ai/tx/${row.ogTxHash}` : ''
   }
-  function receiptHref(row: PaymentRow) {
-    return row.flow === 'registry' && row.merchantId
-      ? paymentReceiptPath(`ngpos-${row.merchantId}`, row.txHash)
+  function rowReceiptId(row: PaymentRow) {
+    return row.flow === 'registry' && row.merchantId && row.txHash && !row.txHash.startsWith('manual_')
+      ? paymentReceiptId(`ngpos-${row.merchantId}`, row.txHash)
       : ''
+  }
+  async function loadPosReceipt(row: PaymentRow): Promise<PaylinkReceipt | null> {
+    const id = rowReceiptId(row)
+    if (!id) return null
+    const res = await fetch(`/api/receipt?id=${encodeURIComponent(id)}`)
+    const data = await res.json().catch(() => undefined) as ReceiptLookupResponse | undefined
+    if (!res.ok || !data?.ok || !data.receipt) {
+      throw new Error(data?.error || 'Receipt is not ready yet.')
+    }
+    return data.receipt
+  }
+  async function posReceiptPdfBlob(row: PaymentRow) {
+    const receipt = await loadPosReceipt(row)
+    if (!receipt) return null
+    return {
+      receipt,
+      blob: await createPaymentReceiptPdf(receipt),
+    }
+  }
+  async function handleOpenPosReceipt(row: PaymentRow) {
+    setPosReceiptBusy(true)
+    setPosReceiptError('')
+    const pdfWindow = window.open('', '_blank', 'noopener,noreferrer')
+    if (pdfWindow) {
+      pdfWindow.document.write('<!doctype html><title>Loading receipt</title><body style="font-family:Arial,sans-serif;padding:24px;color:#111827">Preparing receipt...</body>')
+      pdfWindow.document.close()
+    }
+    try {
+      const result = await posReceiptPdfBlob(row)
+      if (!result) throw new Error('Receipt is not ready yet.')
+      const url = URL.createObjectURL(result.blob)
+      if (pdfWindow) {
+        pdfWindow.location.href = url
+      } else {
+        window.open(url, '_blank', 'noopener,noreferrer')
+      }
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not open receipt.'
+      setPosReceiptError(message)
+      if (pdfWindow) {
+        pdfWindow.document.open()
+        pdfWindow.document.write(`<!doctype html><title>Receipt unavailable</title><body style="font-family:Arial,sans-serif;padding:24px;color:#111827">${message}</body>`)
+        pdfWindow.document.close()
+      }
+    } finally {
+      setPosReceiptBusy(false)
+    }
+  }
+  async function handleSharePosReceipt(row: PaymentRow) {
+    setPosReceiptBusy(true)
+    setPosReceiptError('')
+    try {
+      const result = await posReceiptPdfBlob(row)
+      if (!result) throw new Error('Receipt is not ready yet.')
+      const file = new File([result.blob], paymentReceiptFileName(result.receipt), { type: 'application/pdf' })
+      if (navigator.canShare?.({ files: [file] })) {
+        await navigator.share({
+          title: 'Hash PayLink POS receipt',
+          text: `${result.receipt.amount} USDC POS payment receipt`,
+          files: [file],
+        })
+      } else {
+        const url = URL.createObjectURL(result.blob)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = paymentReceiptFileName(result.receipt)
+        link.click()
+        URL.revokeObjectURL(url)
+        setPosReceiptCopied(true)
+        window.setTimeout(() => setPosReceiptCopied(false), 1800)
+      }
+    } catch (error) {
+      setPosReceiptError(error instanceof Error ? error.message : 'Could not share receipt.')
+    } finally {
+      setPosReceiptBusy(false)
+    }
+  }
+  async function handlePrintPosReceipt(row: PaymentRow) {
+    setPosReceiptBusy(true)
+    setPosReceiptError('')
+    const printWindow = window.open('', '_blank', 'width=420,height=720')
+    if (printWindow) {
+      printWindow.document.write('<!doctype html><title>Loading receipt</title><body style="font-family:Arial,sans-serif;padding:24px;color:#111827">Preparing POS receipt...</body>')
+      printWindow.document.close()
+    }
+    try {
+      const receipt = await loadPosReceipt(row)
+      if (!receipt) throw new Error('Receipt is not ready yet.')
+      if (!printWindow) throw new Error('Popup blocked. Allow popups to print the POS receipt.')
+      const chainLabel = CHAIN_META[chainKey(receipt.chain)]?.label ?? receipt.chain
+      const amountNgn = receipt.amountNgn ? `NGN ${Number(receipt.amountNgn).toLocaleString('en-NG', { maximumFractionDigits: 2 })}` : ''
+      const short = (value = '') => value.length > 18 ? `${value.slice(0, 8)}...${value.slice(-6)}` : value
+      const escapeHtml = (value = '') => value
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;')
+      printWindow.document.write(`<!doctype html>
+<html>
+<head>
+  <title>Hash PayLink POS receipt</title>
+  <style>
+    @page { size: 80mm auto; margin: 4mm; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #fff; color: #111827; font-family: Arial, Helvetica, sans-serif; }
+    .receipt { width: 72mm; margin: 0 auto; padding: 2mm 0; }
+    .center { text-align: center; }
+    .brand { font-size: 16px; font-weight: 800; letter-spacing: 0; }
+    .brand span { color: #2563eb; }
+    .sub { margin-top: 2px; font-size: 10px; color: #4b5563; font-weight: 700; text-transform: uppercase; }
+    .line { border-top: 1px dashed #9ca3af; margin: 10px 0; }
+    .amount { font-size: 22px; font-weight: 900; margin: 8px 0 2px; }
+    .ngn { font-size: 11px; color: #374151; font-weight: 700; }
+    .row { display: flex; justify-content: space-between; gap: 8px; margin: 7px 0; font-size: 11px; }
+    .label { color: #6b7280; white-space: nowrap; }
+    .value { text-align: right; font-weight: 700; overflow-wrap: anywhere; }
+    .proof { margin-top: 10px; padding: 7px; border: 1px solid #e9d5ff; border-radius: 6px; font-size: 10px; color: #6b21a8; font-weight: 800; text-align: center; }
+    .foot { margin-top: 10px; text-align: center; font-size: 9px; color: #6b7280; line-height: 1.35; }
+    @media print { body { width: 80mm; } .receipt { width: 72mm; } }
+  </style>
+</head>
+<body>
+  <main class="receipt">
+    <div class="center">
+      <div class="brand">Hash <span>PayLink</span></div>
+      <div class="sub">Retail POS receipt</div>
+      <div class="amount">${escapeHtml(receipt.amount)} ${escapeHtml(receipt.asset)}</div>
+      ${amountNgn ? `<div class="ngn">${escapeHtml(amountNgn)}</div>` : ''}
+    </div>
+    <div class="line"></div>
+    <div class="row"><span class="label">Status</span><span class="value">Confirmed</span></div>
+    <div class="row"><span class="label">Customer</span><span class="value">${escapeHtml(short(receipt.payer))}</span></div>
+    <div class="row"><span class="label">Network</span><span class="value">${escapeHtml(chainLabel)}</span></div>
+    <div class="row"><span class="label">Settlement</span><span class="value">${escapeHtml(receipt.settlementType === 'instant_fiat' ? 'Naira bank' : 'USDC wallet')}</span></div>
+    <div class="row"><span class="label">Time</span><span class="value">${escapeHtml(new Date(receipt.createdAt).toLocaleString())}</span></div>
+    <div class="row"><span class="label">Tx</span><span class="value">${escapeHtml(short(receipt.txHash))}</span></div>
+    <div class="row"><span class="label">Receipt</span><span class="value">${escapeHtml(short(receipt.receiptHash))}</span></div>
+    <div class="proof">${receipt.proof?.ogTxHash ? `0G archived ${escapeHtml(short(receipt.proof.ogTxHash))}` : '0G archive pending'}</div>
+    <div class="line"></div>
+    <div class="foot">Powered by Circle USDC<br />Keep this receipt for store verification.</div>
+  </main>
+  <script>
+    window.addEventListener('load', () => {
+      window.focus();
+      window.print();
+    });
+  </script>
+</body>
+</html>`)
+      printWindow.document.close()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not print receipt.'
+      setPosReceiptError(message)
+      if (printWindow) {
+        printWindow.document.open()
+        printWindow.document.write(`<!doctype html><title>Receipt unavailable</title><body style="font-family:Arial,sans-serif;padding:24px;color:#111827">${message}</body>`)
+        printWindow.document.close()
+      }
+    } finally {
+      setPosReceiptBusy(false)
+    }
   }
 
   // No address
@@ -842,12 +1015,16 @@ export default function Dashboard() {
                     role={isNgPosDashboard ? 'button' : undefined}
                     tabIndex={isNgPosDashboard ? 0 : undefined}
                     onClick={() => {
-                      if (isNgPosDashboard) setActiveReceipt(row)
+                      if (isNgPosDashboard) {
+                        setPosReceiptError('')
+                        setActiveReceipt(row)
+                      }
                     }}
                     onKeyDown={event => {
                       if (!isNgPosDashboard) return
                       if (event.key === 'Enter' || event.key === ' ') {
                         event.preventDefault()
+                        setPosReceiptError('')
                         setActiveReceipt(row)
                       }
                     }}
@@ -880,6 +1057,21 @@ export default function Dashboard() {
                     </div>
 
                     <div className="flex items-center gap-2 sm:justify-end">
+                      {rowReceiptId(row) && (
+                        <button
+                          type="button"
+                          onClick={event => {
+                            event.stopPropagation()
+                            void handlePrintPosReceipt(row)
+                          }}
+                          disabled={posReceiptBusy}
+                          title="Print POS receipt"
+                          aria-label="Print POS receipt"
+                          className="inline-flex items-center rounded border border-gray-100 bg-white px-1.5 py-0.5 text-gray-500 transition-colors hover:border-gray-200 hover:bg-gray-50 hover:text-gray-800 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.03] dark:text-gray-400 dark:hover:border-white/15 dark:hover:bg-white/[0.07] dark:hover:text-gray-100"
+                        >
+                          <Printer className="h-3 w-3" />
+                        </button>
+                      )}
                       {ogHref ? (
                         <a
                           href={ogHref}
@@ -1027,7 +1219,10 @@ export default function Dashboard() {
       {isNgPosDashboard && activeReceipt && (
         <div
           className="fixed inset-0 z-50 flex items-end justify-center bg-black/35 px-3 py-4 backdrop-blur-sm sm:items-center"
-          onClick={() => setActiveReceipt(null)}
+          onClick={() => {
+            setPosReceiptError('')
+            setActiveReceipt(null)
+          }}
         >
           <div
             className="w-full max-w-md rounded-2xl border border-gray-100 bg-white p-4 shadow-2xl dark:border-white/10 dark:bg-gray-950"
@@ -1038,14 +1233,29 @@ export default function Dashboard() {
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">POS receipt</p>
                 <h3 className="mt-1 text-base font-semibold text-gray-950 dark:text-white">{customerLabel(activeReceipt)}</h3>
               </div>
-              <button
-                type="button"
-                onClick={() => setActiveReceipt(null)}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-100 text-gray-400 transition-colors hover:bg-gray-50 hover:text-gray-700 dark:border-white/10 dark:text-gray-500 dark:hover:bg-white/10 dark:hover:text-gray-200"
-                aria-label="Close receipt"
-              >
-                <X className="h-4 w-4" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handlePrintPosReceipt(activeReceipt)}
+                  disabled={posReceiptBusy || !rowReceiptId(activeReceipt)}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-100 text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-800 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:text-gray-400 dark:hover:bg-white/10 dark:hover:text-gray-100"
+                  aria-label="Print POS receipt"
+                  title="Print POS receipt"
+                >
+                  {posReceiptBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPosReceiptError('')
+                    setActiveReceipt(null)
+                  }}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-100 text-gray-400 transition-colors hover:bg-gray-50 hover:text-gray-700 dark:border-white/10 dark:text-gray-500 dark:hover:bg-white/10 dark:hover:text-gray-200"
+                  aria-label="Close receipt"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
             </div>
 
             <div className="mt-4 rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.03]">
@@ -1111,16 +1321,32 @@ export default function Dashboard() {
               </div>
             </div>
 
-            {receiptHref(activeReceipt) && (
-              <a
-                href={receiptHref(activeReceipt)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-gray-900 px-4 py-3 text-sm font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950"
-              >
-                <Link2 className="h-4 w-4" />
-                Open shareable receipt
-              </a>
+            {rowReceiptId(activeReceipt) && (
+              <div className="mt-4 space-y-2">
+                <button
+                  type="button"
+                  onClick={() => handleOpenPosReceipt(activeReceipt)}
+                  disabled={posReceiptBusy}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-gray-900 px-4 py-3 text-sm font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+                >
+                  {posReceiptBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ReceiptIcon className="h-4 w-4" />}
+                  View receipt
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSharePosReceipt(activeReceipt)}
+                  disabled={posReceiptBusy}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-800 transition-all hover:border-gray-300 hover:bg-gray-50 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-100 dark:hover:bg-white/[0.08]"
+                >
+                  <Share2 className="h-4 w-4" />
+                  {posReceiptCopied ? 'Downloaded' : 'Share receipt'}
+                </button>
+                {posReceiptError && (
+                  <p className="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
+                    {posReceiptError}
+                  </p>
+                )}
+              </div>
             )}
           </div>
         </div>
