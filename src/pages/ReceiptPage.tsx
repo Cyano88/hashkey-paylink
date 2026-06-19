@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, CheckCircle2, Copy, ExternalLink, Loader2, Share2, ShieldCheck } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, ExternalLink, Loader2, Share2, ShieldCheck } from 'lucide-react'
 import { CHAIN_META, type ChainKey } from '../lib/chains'
-import { cn, copyToClipboard, truncateAddress } from '../lib/utils'
+import { cn } from '../lib/utils'
 
 type ReceiptResponse = {
   ok?: boolean
@@ -52,24 +52,6 @@ function fmtTime(value?: number) {
   })
 }
 
-function receiptFile(receipt: NonNullable<ReceiptResponse['receipt']>, receiptUrl: string) {
-  const labels = receiptLabels(receipt)
-  return [
-    labels.heading,
-    '',
-    `Status: ${receipt.status}`,
-    `Amount: ${receipt.amount} ${receipt.asset}`,
-    receipt.requestedAmount ? `Requested: ${receipt.requestedAmount} ${receipt.asset}` : '',
-    `Network: ${CHAIN_META[chainKey(receipt.chain)].label}`,
-    `${labels.payer}: ${receipt.payer}`,
-    `${labels.context}: ${labels.contextValue}`,
-    `Transaction: ${receipt.txHash}`,
-    `Receipt hash: ${receipt.receiptHash}`,
-    receipt.proof?.ogTxHash ? `0G tx: ${receipt.proof.ogTxHash}` : '0G tx: pending',
-    `Receipt URL: ${receiptUrl}`,
-  ].filter(Boolean).join('\n')
-}
-
 function receiptLabels(receipt?: NonNullable<ReceiptResponse['receipt']>) {
   const isStream = receipt?.source === 'streampay' || receipt?.settlementType === 'stream-created'
   const isPos = receipt?.source === 'ngpos'
@@ -97,7 +79,6 @@ export default function ReceiptPage() {
   const { receiptId = '' } = useParams()
   const [data, setData] = useState<ReceiptResponse | null>(null)
   const [busy, setBusy] = useState(true)
-  const [copied, setCopied] = useState(false)
   const [shared, setShared] = useState(false)
 
   useEffect(() => {
@@ -125,39 +106,50 @@ export default function ReceiptPage() {
     : ''
   const receiptUrl = useMemo(() => window.location.href, [])
 
-  async function copyReceiptLink() {
-    await copyToClipboard(receiptUrl)
-    setCopied(true)
-    window.setTimeout(() => setCopied(false), 1800)
+  async function receiptPdfBlob() {
+    if (!receipt) return new Blob([], { type: 'application/pdf' })
+    return createReceiptImagePdf({ receipt, labels, metaLabel: meta.label, receiptUrl })
   }
 
-  async function shareReceipt() {
-    if (!receipt) return
-    const nav = navigator as Navigator & { share?: (data: ShareData) => Promise<void> }
-    if (nav.share) {
-      await nav.share({
-        title: 'Hash PayLink receipt',
-        text: `${receipt.amount} ${receipt.asset} confirmed on ${meta.label}`,
-        url: receiptUrl,
-      })
-      return
-    }
-    await copyReceiptLink()
-    setShared(true)
-    window.setTimeout(() => setShared(false), 1800)
+  function receiptPdfName() {
+    const prefix = receipt?.source === 'streampay' ? 'streampay'
+      : receipt?.source === 'ngpos' ? 'pos'
+      : 'paylink'
+    return `hashpaylink-${prefix}-receipt-${receipt?.receiptId.slice(0, 10) || 'receipt'}.pdf`
   }
 
-  function downloadReceipt() {
+  async function downloadReceiptPdf() {
     if (!receipt) return
-    const blob = new Blob([receiptFile(receipt, receiptUrl)], { type: 'text/plain;charset=utf-8' })
+    const blob = await receiptPdfBlob()
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = `hashpaylink-receipt-${receipt.receiptId.slice(0, 10)}.txt`
+    link.download = receiptPdfName()
     document.body.appendChild(link)
     link.click()
     link.remove()
     URL.revokeObjectURL(url)
+  }
+
+  async function shareReceipt() {
+    if (!receipt) return
+    const pdf = await receiptPdfBlob()
+    const file = new File([pdf], receiptPdfName(), { type: 'application/pdf' })
+    const nav = navigator as Navigator & {
+      canShare?: (data: ShareData) => boolean
+      share?: (data: ShareData) => Promise<void>
+    }
+    if (nav.share && (!nav.canShare || nav.canShare({ files: [file] }))) {
+      await nav.share({
+        title: labels.heading,
+        text: `${receipt.amount} ${receipt.asset} confirmed on ${meta.label}`,
+        files: [file],
+      })
+      return
+    }
+    await downloadReceiptPdf()
+    setShared(true)
+    window.setTimeout(() => setShared(false), 1800)
   }
 
   return (
@@ -273,22 +265,7 @@ export default function ReceiptPage() {
                 className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-800 transition-all hover:bg-gray-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-100"
               >
                 <Share2 className="h-4 w-4" />
-                {shared ? 'Copied' : 'Share receipt'}
-              </button>
-              <button
-                type="button"
-                onClick={copyReceiptLink}
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-800 transition-all hover:bg-gray-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-100"
-              >
-                <Copy className="h-4 w-4" />
-                {copied ? 'Copied' : 'Copy link'}
-              </button>
-              <button
-                type="button"
-                onClick={downloadReceipt}
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-800 transition-all hover:bg-gray-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-100"
-              >
-                Download record
+                {shared ? 'Downloaded' : 'Share receipt'}
               </button>
             </div>
           </>
@@ -300,4 +277,181 @@ export default function ReceiptPage() {
       </section>
     </main>
   )
+}
+
+type VisualReceiptInput = {
+  receipt: NonNullable<ReceiptResponse['receipt']>
+  labels: ReturnType<typeof receiptLabels>
+  metaLabel: string
+  receiptUrl: string
+}
+
+async function createReceiptImagePdf(input: VisualReceiptInput) {
+  const canvas = document.createElement('canvas')
+  const scale = 2
+  const width = 612
+  const height = 792
+  canvas.width = width * scale
+  canvas.height = height * scale
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return new Blob([], { type: 'application/pdf' })
+  ctx.scale(scale, scale)
+  drawReceiptCanvas(ctx, input, width, height)
+  const jpeg = await new Promise<string>((resolve) => canvas.toBlob(blob => {
+    if (!blob) return resolve('')
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result ?? ''))
+    reader.readAsDataURL(blob)
+  }, 'image/jpeg', 0.92))
+  return createPdfWithJpeg(jpeg, width, height)
+}
+
+function drawReceiptCanvas(ctx: CanvasRenderingContext2D, input: VisualReceiptInput, width: number, height: number) {
+  const { receipt, labels } = input
+  const archived = Boolean(receipt.proof?.ogExplorer || receipt.proof?.ogTxHash)
+  ctx.fillStyle = '#f5f5f7'
+  ctx.fillRect(0, 0, width, height)
+  roundRect(ctx, 36, 34, width - 72, height - 68, 24, '#ffffff')
+  roundRect(ctx, 64, 64, 48, 48, 14, '#111827')
+  ctx.fillStyle = '#ffffff'
+  ctx.font = '700 16px Arial'
+  ctx.fillText('HP', 78, 94)
+  ctx.fillStyle = '#111827'
+  ctx.font = '700 22px Arial'
+  ctx.fillText('Hash PayLink', 128, 82)
+  ctx.fillStyle = '#6b7280'
+  ctx.font = '700 10px Arial'
+  ctx.fillText(labels.heading.toUpperCase(), 128, 101)
+  drawBadge(ctx, archived ? '0G ARCHIVED' : '0G ARCHIVING', archived ? '#f3e8ff' : '#f3f4f6', archived ? '#7e22ce' : '#6b7280', 438, 73)
+
+  ctx.fillStyle = '#111827'
+  ctx.font = '700 24px Arial'
+  drawText(ctx, labels.title, 64, 154, 470, 28)
+  ctx.fillStyle = '#4b5563'
+  ctx.font = '500 13px Arial'
+  drawText(ctx, `${receipt.amount} ${receipt.asset} confirmed on ${input.metaLabel}`, 64, 186, 470, 18)
+
+  const rows: Array<[string, string]> = [
+    ['Status', receipt.status],
+    [labels.amountLabel, `${receipt.amount} ${receipt.asset}`],
+    ...(receipt.requestedAmount && receipt.requestedAmount !== receipt.amount ? [['Requested', `${receipt.requestedAmount} ${receipt.asset}`] as [string, string]] : []),
+    ['Network', input.metaLabel],
+    [labels.payer, receipt.payer],
+    [labels.context, labels.contextValue],
+    ...(labels.merchantValue ? [[labels.merchantLabel, labels.merchantValue] as [string, string]] : []),
+    ['Type', receipt.settlementType?.replace(/-/g, ' ') || receipt.source || 'payment'],
+    ['Time', fmtTime(receipt.createdAt)],
+    ['Tx hash', receipt.txHash],
+    ['Receipt hash', receipt.receiptHash],
+  ]
+  let y = 232
+  for (const [label, value] of rows.slice(0, 10)) {
+    roundRect(ctx, 64, y - 20, width - 128, 38, 10, '#f9fafb')
+    ctx.fillStyle = '#6b7280'
+    ctx.font = '600 11px Arial'
+    ctx.fillText(label, 82, y + 3)
+    ctx.fillStyle = '#111827'
+    ctx.font = '600 11px Courier New'
+    drawRightText(ctx, value || '-', 526, y + 3, 300)
+    y += 45
+  }
+
+  const statusText = archived ? 'Archived on 0G Storage and anchored on-chain' : '0G archive is still being finalized'
+  roundRect(ctx, 64, y - 12, width - 128, 48, 14, archived ? '#faf5ff' : '#f9fafb')
+  ctx.fillStyle = archived ? '#7e22ce' : '#6b7280'
+  ctx.font = '700 12px Arial'
+  ctx.fillText(statusText, 82, y + 17)
+  y += 82
+
+  ctx.fillStyle = '#6b7280'
+  ctx.font = '500 11px Arial'
+  drawText(ctx, 'This receipt records a confirmed USDC workflow on Hash PayLink. Verify the transaction hash and 0G proof status from the public receipt page.', 64, y, width - 128, 18)
+  ctx.fillStyle = '#9ca3af'
+  ctx.font = '500 9px Arial'
+  drawText(ctx, input.receiptUrl, 64, height - 72, width - 128, 12)
+}
+
+function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number, fill: string) {
+  ctx.beginPath()
+  ctx.moveTo(x + r, y)
+  ctx.lineTo(x + w - r, y)
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r)
+  ctx.lineTo(x + w, y + h - r)
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h)
+  ctx.lineTo(x + r, y + h)
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r)
+  ctx.lineTo(x, y + r)
+  ctx.quadraticCurveTo(x, y, x + r, y)
+  ctx.closePath()
+  ctx.fillStyle = fill
+  ctx.fill()
+}
+
+function drawBadge(ctx: CanvasRenderingContext2D, text: string, bg: string, fg: string, x: number, y: number) {
+  roundRect(ctx, x, y, 108, 26, 13, bg)
+  ctx.fillStyle = fg
+  ctx.font = '700 9px Arial'
+  ctx.fillText(text, x + 15, y + 17)
+}
+
+function drawRightText(ctx: CanvasRenderingContext2D, text: string, right: number, y: number, maxWidth: number) {
+  const clipped = clipCanvasText(ctx, text, maxWidth)
+  ctx.fillText(clipped, right - ctx.measureText(clipped).width, y)
+}
+
+function drawText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, maxWidth: number, lineHeight: number) {
+  let line = ''
+  for (const word of text.split(/\s+/)) {
+    const next = line ? `${line} ${word}` : word
+    if (ctx.measureText(next).width > maxWidth && line) {
+      ctx.fillText(line, x, y)
+      y += lineHeight
+      line = word
+    } else {
+      line = next
+    }
+  }
+  if (line) ctx.fillText(line, x, y)
+}
+
+function clipCanvasText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number) {
+  if (ctx.measureText(text).width <= maxWidth) return text
+  let clipped = text
+  while (clipped.length > 4 && ctx.measureText(`${clipped.slice(0, -1)}...`).width > maxWidth) {
+    clipped = clipped.slice(0, -1)
+  }
+  return `${clipped}...`
+}
+
+function createPdfWithJpeg(dataUrl: string, width: number, height: number) {
+  const base64 = dataUrl.split(',')[1] ?? ''
+  const binary = atob(base64)
+  const imageBytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i += 1) imageBytes[i] = binary.charCodeAt(i)
+
+  const encoder = new TextEncoder()
+  const parts: BlobPart[] = []
+  const offsets: number[] = [0]
+  let offset = 0
+  const add = (part: string | ArrayBuffer) => {
+    parts.push(part)
+    offset += typeof part === 'string' ? encoder.encode(part).length : part.byteLength
+  }
+  const start = (id: number) => {
+    offsets[id] = offset
+    add(`${id} 0 obj\n`)
+  }
+  const stream = `q\n${width} 0 0 ${height} 0 0 cm\n/Im1 Do\nQ`
+
+  add('%PDF-1.4\n')
+  start(1); add('<< /Type /Catalog /Pages 2 0 R >>\nendobj\n')
+  start(2); add('<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n')
+  start(3); add(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${width} ${height}] /Resources << /XObject << /Im1 4 0 R >> >> /Contents 5 0 R >>\nendobj\n`)
+  start(4); add(`<< /Type /XObject /Subtype /Image /Width ${width * 2} /Height ${height * 2} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${imageBytes.byteLength} >>\nstream\n`); add(imageBytes.buffer.slice(0) as ArrayBuffer); add('\nendstream\nendobj\n')
+  start(5); add(`<< /Length ${encoder.encode(stream).length} >>\nstream\n${stream}\nendstream\nendobj\n`)
+  const xref = offset
+  add('xref\n0 6\n0000000000 65535 f \n')
+  for (let i = 1; i <= 5; i += 1) add(`${String(offsets[i]).padStart(10, '0')} 00000 n \n`)
+  add(`trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`)
+  return new Blob(parts, { type: 'application/pdf' })
 }
