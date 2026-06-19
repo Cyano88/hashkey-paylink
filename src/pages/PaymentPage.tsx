@@ -61,6 +61,13 @@ import { getPaylinkParam, hasPaylinkFlag, isTelegramSourceParam } from '../lib/p
 import { PRIVY_AUTH_ENABLED } from '../lib/authMode'
 import { PrivyConnectButton } from '../lib/PrivyConnectButton'
 import { resolvePrivyCircleLink, savePrivyCircleLink } from '../lib/privyCircleLink'
+import {
+  compactReceiptAmount,
+  createPaymentReceiptPdf,
+  paymentReceiptFileName,
+  type PaylinkReceipt,
+  type ReceiptLookupResponse,
+} from '../lib/paymentReceiptPdf'
 
 type CircleSolanaSession = Awaited<ReturnType<typeof connectCircleSolanaEmailWallet>>
 type CircleEvmEmailSession = Awaited<ReturnType<typeof connectCircleEvmEmailWallet>>
@@ -369,11 +376,11 @@ export default function PaymentPage() {
   const [localAmt,    setLocalAmt]    = useState('')
 
   // ── UI state ──────────────────────────────────────────────────────────────
-  const [hashCopied,        setHashCopied]       = useState(false)
   const [addrCopied,        setAddrCopied]        = useState(false)
   const [agentLinkCopied,   setAgentLinkCopied]   = useState(false)
-  const [receiptLinkCopied, setReceiptLinkCopied] = useState(false)
-  const [paymentReceiptUrl, setPaymentReceiptUrl] = useState('')
+  const [receiptShared,     setReceiptShared]     = useState(false)
+  const [paymentReceiptId,  setPaymentReceiptId]  = useState('')
+  const [paymentReceipt,    setPaymentReceipt]    = useState<PaylinkReceipt | null>(null)
   const [manualPayDetected, setManualPayDetected] = useState(false)
   const [manualTxHash,      setManualTxHash]      = useState<`0x${string}` | null>(null)
   const [receivedAmount,    setReceivedAmount]    = useState<bigint | null>(null)
@@ -1587,7 +1594,7 @@ export default function PaymentPage() {
     setCircleSolanaPending(false); setCircleSolanaError(null); setCircleSolanaBalance(null); setCircleSolanaBalanceError(false)
     setCircleSolanaSession(null); setCircleSolanaAddress(''); setCircleSolanaCopied(false)
     setManualPayDetected(false); setManualTxHash(null); setReceivedAmount(null)
-    setPaymentReceiptUrl(''); setReceiptLinkCopied(false)
+    setPaymentReceiptId(''); setPaymentReceipt(null); setReceiptShared(false)
     ordinaryReceiptRegistered.current = false
     setCirclePaymasterPending(false); setCirclePaymasterTxHash(null); setCirclePaymasterError(null)
     setCirclePasskeyPending(false); setCirclePasskeyError(null); setCircleSmartAccount(null); setCircleEvmEmailSession(null); setCircleEvmPaymentProcessing(false); setCircleEvmAcceptedPending(false); setCircleWalletCopied(false)
@@ -1608,14 +1615,6 @@ export default function PaymentPage() {
   }
 
   // ── Copy handlers ─────────────────────────────────────────────────────────
-  async function handleCopyHash() {
-    const hash = chain === 'starknet' ? starkTxHash : chain === 'solana' ? solanaTxHash : chain === 'arbitrum' ? ghoRelayHash : evmTxHash
-    if (!hash) return
-    await copyToClipboard(hash)
-    setHashCopied(true)
-    setTimeout(() => setHashCopied(false), 2000)
-  }
-
   async function handleCopyAddress() {
     if (!displayAddress) return
     await copyToClipboard(displayAddress)
@@ -1630,11 +1629,59 @@ export default function PaymentPage() {
     setTimeout(() => setCircleWalletCopied(false), 2200)
   }
 
-  async function handleCopyReceiptLink() {
-    if (!paymentReceiptUrl) return
-    await copyToClipboard(paymentReceiptUrl)
-    setReceiptLinkCopied(true)
-    setTimeout(() => setReceiptLinkCopied(false), 2200)
+  async function receiptPdfBlob() {
+    if (!paymentReceipt) return new Blob([], { type: 'application/pdf' })
+    return createPaymentReceiptPdf(paymentReceipt)
+  }
+
+  async function openPaymentReceiptPdf() {
+    if (!paymentReceipt) return
+    const blob = await receiptPdfBlob()
+    const url = URL.createObjectURL(blob)
+    const win = window.open(url, '_blank', 'noopener,noreferrer')
+    if (!win) {
+      const link = document.createElement('a')
+      link.href = url
+      link.download = paymentReceiptFileName(paymentReceipt)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+    }
+    window.setTimeout(() => URL.revokeObjectURL(url), 30_000)
+  }
+
+  async function downloadPaymentReceiptPdf() {
+    if (!paymentReceipt) return
+    const blob = await receiptPdfBlob()
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = paymentReceiptFileName(paymentReceipt)
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
+  }
+
+  async function sharePaymentReceiptPdf() {
+    if (!paymentReceipt) return
+    const pdf = await receiptPdfBlob()
+    const file = new File([pdf], paymentReceiptFileName(paymentReceipt), { type: 'application/pdf' })
+    const nav = navigator as Navigator & {
+      canShare?: (data: ShareData) => boolean
+      share?: (data: ShareData) => Promise<void>
+    }
+    if (nav.share && (!nav.canShare || nav.canShare({ files: [file] }))) {
+      await nav.share({
+        title: 'Hash PayLink receipt',
+        text: `${compactReceiptAmount(paymentReceipt.amount)} ${paymentReceipt.asset} confirmed`,
+        files: [file],
+      })
+      return
+    }
+    await downloadPaymentReceiptPdf()
+    setReceiptShared(true)
+    setTimeout(() => setReceiptShared(false), 1800)
   }
 
   function handleCircleWithdrawMax() {
@@ -2781,9 +2828,9 @@ export default function PaymentPage() {
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify(payload),
       })
-      const data = await res.json() as { ok: boolean; error?: string; receiptUrl?: string }
+      const data = await res.json() as { ok: boolean; error?: string; receiptId?: string }
       console.log('[EventReg] response:', data)
-      if (data.ok && data.receiptUrl) setPaymentReceiptUrl(new URL(data.receiptUrl, window.location.origin).toString())
+      if (data.ok && data.receiptId) setPaymentReceiptId(data.receiptId)
       setEventRegStatus(data.ok ? 'ok' : 'error')
     } catch (err) {
       console.error('[EventReg] fetch failed:', err)
@@ -2854,8 +2901,8 @@ export default function PaymentPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       })
-      const data = await res.json().catch(() => undefined) as { ok?: boolean; receiptUrl?: string } | undefined
-      if (data?.ok && data.receiptUrl) setPaymentReceiptUrl(new URL(data.receiptUrl, window.location.origin).toString())
+      const data = await res.json().catch(() => undefined) as { ok?: boolean; receiptId?: string } | undefined
+      if (data?.ok && data.receiptId) setPaymentReceiptId(data.receiptId)
     } catch (err) {
       console.error('[NgPosReg] fetch failed:', err)
     }
@@ -2886,10 +2933,8 @@ export default function PaymentPage() {
           settlementType: 'payment',
         }),
       })
-      const data = await res.json().catch(() => undefined) as { ok?: boolean; receiptUrl?: string } | undefined
-      if (data?.ok && data.receiptUrl) {
-        setPaymentReceiptUrl(new URL(data.receiptUrl, window.location.origin).toString())
-      }
+      const data = await res.json().catch(() => undefined) as { ok?: boolean; receiptId?: string } | undefined
+      if (data?.ok && data.receiptId) setPaymentReceiptId(data.receiptId)
     } catch {
       // Receipt registration is non-blocking; the payment success state is already confirmed.
     }
@@ -2942,6 +2987,34 @@ export default function PaymentPage() {
     void registerOrdinaryReceipt()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isConfirmed, txHash])
+
+  useEffect(() => {
+    if (!paymentReceiptId) return
+    let cancelled = false
+    let timer: number | undefined
+    let attempts = 0
+
+    async function loadReceipt() {
+      attempts += 1
+      try {
+        const res = await fetch(`/api/receipt?id=${encodeURIComponent(paymentReceiptId)}`)
+        const data = await res.json().catch(() => undefined) as ReceiptLookupResponse | undefined
+        if (!cancelled && data?.ok && data.receipt) {
+          setPaymentReceipt(data.receipt)
+          if (data.receipt.proof?.ogTxHash || data.receipt.proof?.ogExplorer) return
+        }
+      } catch {
+        // Receipt polling should not affect the already-confirmed payment state.
+      }
+      if (!cancelled && attempts < 40) timer = window.setTimeout(loadReceipt, 5_000)
+    }
+
+    void loadReceipt()
+    return () => {
+      cancelled = true
+      if (timer) window.clearTimeout(timer)
+    }
+  }, [paymentReceiptId])
 
   // ── openConnectModal unused lint suppression ──────────────────────────────
   useEffect(() => {
@@ -3022,6 +3095,9 @@ export default function PaymentPage() {
     const primaryExplorerUrl = chain === 'hashkey'
       ? (txHash ? `${meta.explorerUrl}/tx/${txHash}` : null)
       : (txHash ? `${meta.explorerUrl}/tx/${txHash}` : null)
+    const ogExplorerUrl = paymentReceipt?.proof?.ogExplorer || (paymentReceipt?.proof?.ogTxHash ? `https://chainscan.0g.ai/tx/${paymentReceipt.proof.ogTxHash}` : '')
+    const ogProofValue = paymentReceipt?.proof?.ogTxHash || paymentReceipt?.proof?.ogRootHash || ''
+    const receiptReady = Boolean(paymentReceipt && txHash && ogProofValue)
 
     return (
       <div className="mx-auto max-w-md animate-scale-in">
@@ -3103,7 +3179,7 @@ export default function PaymentPage() {
           <div className="p-6 space-y-4">
             <div className="divide-y divide-gray-100 rounded-xl border border-gray-100 bg-gray-50/60 overflow-hidden">
               <Row label="Amount"    value={`${formatAmount(effectiveAmt, meta.decimals)} ${meta.asset}`} mono={false} />
-              <Row label="Recipient" value={truncateAddress(activeRecipient, 8)} mono />
+              <Row label="Recipient" value={truncateAddress(activeRecipient, 4)} mono />
               <Row label="Network"   value={meta.label} mono={false} />
               {isPolymarketBridge && polymarketWalletParam && <Row label="Polymarket" value={truncateAddress(polymarketWalletParam, 8)} mono />}
               {memo && <Row label={isPolymarketFunding ? 'Funding' : 'For'} value={isPolymarketFunding ? polymarketFundingLabel : memo} mono={false} />}
@@ -3111,10 +3187,19 @@ export default function PaymentPage() {
                 <div className="flex items-center justify-between px-4 py-3">
                   <span className="text-sm text-gray-500">Tx Hash</span>
                   <div className="flex items-center gap-2">
-                    <span className="font-mono text-xs text-gray-700">{truncateAddress(txHash, 8)}</span>
-                    <button onClick={handleCopyHash} className="text-gray-400 hover:text-gray-600 transition-colors">
-                      {hashCopied ? <CheckCheck className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
-                    </button>
+                    {primaryExplorerUrl ? (
+                      <a
+                        href={primaryExplorerUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 font-mono text-xs font-semibold text-gray-700 transition-colors hover:text-blue-600"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                        {truncateAddress(txHash, 4)}
+                      </a>
+                    ) : (
+                      <span className="font-mono text-xs text-gray-700">{truncateAddress(txHash, 4)}</span>
+                    )}
                   </div>
                 </div>
               )}
@@ -3124,6 +3209,30 @@ export default function PaymentPage() {
                   <span className="text-xs font-medium text-gray-400">
                     Syncing{'.'.repeat((txSyncTick % 3) + 1)}
                   </span>
+                </div>
+              )}
+              {paymentReceiptId && (
+                <div className="flex items-center justify-between px-4 py-3">
+                  <span className="text-sm text-gray-500">0G Archive</span>
+                  {ogProofValue ? (
+                    <a
+                      href={ogExplorerUrl || undefined}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={cn(
+                        'inline-flex items-center gap-1.5 font-mono text-xs font-semibold text-purple-700 transition-colors',
+                        ogExplorerUrl ? 'hover:text-purple-900' : 'pointer-events-none',
+                      )}
+                    >
+                      <img src="/brand/0g-logo.jpeg" alt="0G" className="h-3.5 w-3.5 rounded-full object-contain" />
+                      {truncateAddress(ogProofValue, 4)}
+                    </a>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-400">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Archiving...
+                    </span>
+                  )}
                 </div>
               )}
             </div>
@@ -3189,33 +3298,23 @@ export default function PaymentPage() {
               </div>
             )}
 
-            {primaryExplorerUrl && (
-              <a href={primaryExplorerUrl} target="_blank" rel="noopener noreferrer"
-                className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-all active:scale-[0.98]"
-              >
-                <ExternalLink className="h-4 w-4" />
-                View on {meta.explorerName}
-              </a>
-            )}
-
-            {paymentReceiptUrl && (
-              <div className="grid gap-2 sm:grid-cols-2">
-                <a
-                  href={paymentReceiptUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
+            {receiptReady && (
+              <div className="grid gap-2">
+                <button
+                  type="button"
+                  onClick={openPaymentReceiptPdf}
                   className="flex w-full items-center justify-center gap-2 rounded-xl bg-gray-900 px-5 py-2.5 text-sm font-medium text-white transition-all hover:bg-gray-800 active:scale-[0.98]"
                 >
                   <Share2 className="h-4 w-4" />
-                  Open receipt
-                </a>
+                  View receipt
+                </button>
                 <button
                   type="button"
-                  onClick={handleCopyReceiptLink}
+                  onClick={sharePaymentReceiptPdf}
                   className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98]"
                 >
-                  {receiptLinkCopied ? <CheckCheck className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
-                  {receiptLinkCopied ? 'Copied' : 'Copy receipt'}
+                  <Share2 className="h-4 w-4" />
+                  {receiptShared ? 'Downloaded' : 'Share receipt'}
                 </button>
               </div>
             )}

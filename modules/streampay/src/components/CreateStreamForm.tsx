@@ -19,6 +19,13 @@ import {
 import { EVM_TREASURY } from '../../../../src/lib/chains'
 import { PRIVY_AUTH_ENABLED } from '../../../../src/lib/authMode'
 import { resolvePrivyCircleLink, savePrivyCircleLink } from '../../../../src/lib/privyCircleLink'
+import {
+  compactReceiptAmount,
+  createPaymentReceiptPdf,
+  paymentReceiptFileName,
+  type PaylinkReceipt,
+  type ReceiptLookupResponse,
+} from '../../../../src/lib/paymentReceiptPdf'
 
 const ARC_CHAIN_ID = 5042002
 const ARC_USDC     = '0x3600000000000000000000000000000000000000' as const
@@ -221,14 +228,6 @@ function buildStreamLink(
   return `${origin}/stream/${vault}${qs ? `?${qs}` : ''}`
 }
 
-function receiptOrigin() {
-  const { hostname, origin } = window.location
-  if (hostname === 'streampay.xyz' || hostname.endsWith('.streampay.xyz') || hostname.includes('streampay')) {
-    return 'https://hashpaylink.com'
-  }
-  return origin
-}
-
 export function CreateStreamForm() {
   const [prefill] = useState(readPrefill)
   const { authenticated: privyAuthenticated, user: privyUser, login: loginPrivy, getAccessToken } = usePrivy()
@@ -254,7 +253,8 @@ export function CreateStreamForm() {
   const [statusMsg,    setStatusMsg]    = useState('')
   const [error,        setError]        = useState<string | null>(null)
   const [streamLink,   setStreamLink]   = useState<string | null>(null)
-  const [streamReceiptUrl, setStreamReceiptUrl] = useState<string | null>(null)
+  const [streamReceiptId, setStreamReceiptId] = useState<string | null>(null)
+  const [streamReceipt, setStreamReceipt] = useState<PaylinkReceipt | null>(null)
   const [deployTxHash, setDeployTxHash] = useState<string | null>(null)
   const [copied,       setCopied]       = useState(false)
   const [receiptCopied, setReceiptCopied] = useState(false)
@@ -460,14 +460,41 @@ export function CreateStreamForm() {
           settlementType: 'stream-created',
         }),
       })
-      const data = await res.json().catch(() => ({})) as { ok?: boolean; receiptUrl?: string }
-      if (res.ok && data.ok && data.receiptUrl) {
-        setStreamReceiptUrl(new URL(data.receiptUrl, receiptOrigin()).toString())
-      }
+      const data = await res.json().catch(() => ({})) as { ok?: boolean; receiptId?: string }
+      if (res.ok && data.ok && data.receiptId) setStreamReceiptId(data.receiptId)
     } catch {
       // Receipt registration is non-blocking; the stream itself is already on-chain.
     }
   }
+
+  useEffect(() => {
+    if (!streamReceiptId) return
+    const receiptId = streamReceiptId
+    let cancelled = false
+    let timer: number | undefined
+    let attempts = 0
+
+    async function loadReceipt() {
+      attempts += 1
+      try {
+        const res = await fetch(`/api/receipt?id=${encodeURIComponent(receiptId)}`)
+        const data = await res.json().catch(() => undefined) as ReceiptLookupResponse | undefined
+        if (!cancelled && data?.ok && data.receipt) {
+          setStreamReceipt(data.receipt)
+          if (data.receipt.proof?.ogTxHash || data.receipt.proof?.ogExplorer) return
+        }
+      } catch {
+        // Receipt polling is non-blocking; stream creation is already confirmed.
+      }
+      if (!cancelled && attempts < 40) timer = window.setTimeout(loadReceipt, 5_000)
+    }
+
+    void loadReceipt()
+    return () => {
+      cancelled = true
+      if (timer) window.clearTimeout(timer)
+    }
+  }, [streamReceiptId])
 
   async function rememberPrivyCircleSession(session: CircleEvmEmailSession, email = circleEmail || privyEmail) {
     if (!PRIVY_AUTH_ENABLED || !privyAuthenticated) return
@@ -757,47 +784,59 @@ export function CreateStreamForm() {
     setTimeout(() => setCopied(false), 3000)
   }
 
-  function handleCopyReceipt() {
-    if (!streamReceiptUrl) return
-    navigator.clipboard.writeText(streamReceiptUrl)
-    setReceiptCopied(true)
-    setTimeout(() => setReceiptCopied(false), 3000)
+  async function streamReceiptPdfBlob() {
+    if (!streamReceipt) return new Blob([], { type: 'application/pdf' })
+    return createPaymentReceiptPdf(streamReceipt)
   }
 
-  async function handleShareReceipt() {
-    if (!streamReceiptUrl) return
-    const nav = navigator as Navigator & { share?: (data: ShareData) => Promise<void> }
-    if (nav.share) {
-      await nav.share({
-        title: 'StreamPay receipt',
-        text: `${formatUsdcFull(amountBn)} USDC stream created on Arc`,
-        url: streamReceiptUrl,
-      })
-      return
+  async function handleOpenReceipt() {
+    if (!streamReceipt) return
+    const blob = await streamReceiptPdfBlob()
+    const url = URL.createObjectURL(blob)
+    const win = window.open(url, '_blank', 'noopener,noreferrer')
+    if (!win) {
+      const link = document.createElement('a')
+      link.href = url
+      link.download = paymentReceiptFileName(streamReceipt)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
     }
-    handleCopyReceipt()
+    window.setTimeout(() => URL.revokeObjectURL(url), 30_000)
   }
 
-  function handleDownloadReceiptLink() {
-    if (!streamReceiptUrl) return
-    const lines = [
-      'StreamPay Receipt',
-      '',
-      `Amount: ${formatUsdcFull(amountBn)} USDC`,
-      `Recipient: ${recipient}`,
-      reason.trim() ? `Memo: ${reason.trim()}` : '',
-      deployTxHash ? `Transaction: ${deployTxHash}` : '',
-      `Receipt URL: ${streamReceiptUrl}`,
-    ].filter(Boolean).join('\n')
-    const blob = new Blob([lines], { type: 'text/plain;charset=utf-8' })
+  async function handleDownloadReceipt() {
+    if (!streamReceipt) return
+    const blob = await streamReceiptPdfBlob()
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = `streampay-receipt-${Date.now()}.txt`
+    link.download = paymentReceiptFileName(streamReceipt)
     document.body.appendChild(link)
     link.click()
     link.remove()
     URL.revokeObjectURL(url)
+  }
+
+  async function handleShareReceipt() {
+    if (!streamReceipt) return
+    const pdf = await streamReceiptPdfBlob()
+    const file = new File([pdf], paymentReceiptFileName(streamReceipt), { type: 'application/pdf' })
+    const nav = navigator as Navigator & {
+      canShare?: (data: ShareData) => boolean
+      share?: (data: ShareData) => Promise<void>
+    }
+    if (nav.share && (!nav.canShare || nav.canShare({ files: [file] }))) {
+      await nav.share({
+        title: 'StreamPay receipt',
+        text: `${compactReceiptAmount(streamReceipt.amount)} USDC stream created on Arc`,
+        files: [file],
+      })
+      return
+    }
+    await handleDownloadReceipt()
+    setReceiptCopied(true)
+    setTimeout(() => setReceiptCopied(false), 1800)
   }
 
   async function handleCopyCircleWallet() {
@@ -1105,41 +1144,34 @@ export function CreateStreamForm() {
               {agenticError && <p className="text-center text-[11px] font-semibold text-red-500 dark:text-red-400">{agenticError}</p>}
             </div>
 
-            {streamReceiptUrl && (
+            {streamReceiptId && (
               <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 p-3 text-left dark:border-emerald-900/40 dark:bg-emerald-950/20">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-300">Shareable receipt</p>
-                <p className="mt-1 truncate font-mono text-[11px] text-emerald-700 dark:text-emerald-200">{streamReceiptUrl}</p>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-300">
+                  {streamReceipt?.proof?.ogTxHash || streamReceipt?.proof?.ogExplorer ? 'Shareable receipt' : 'Archiving receipt...'}
+                </p>
+                <p className="mt-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-200">
+                  {streamReceipt?.proof?.ogTxHash || streamReceipt?.proof?.ogExplorer
+                    ? '0G proof is ready. Open or share the PDF receipt.'
+                    : 'Waiting for 0G proof before receipt actions unlock.'}
+                </p>
+                {(streamReceipt?.proof?.ogTxHash || streamReceipt?.proof?.ogExplorer) && (
                 <div className="mt-3 grid grid-cols-2 gap-2">
-                  <a
-                    href={streamReceiptUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center justify-center rounded-xl bg-emerald-600 py-2.5 text-[12px] font-semibold text-white transition-colors hover:bg-emerald-700"
-                  >
-                    Open receipt
-                  </a>
                   <button
                     type="button"
-                    onClick={handleCopyReceipt}
-                    className="flex items-center justify-center rounded-xl border border-emerald-200 bg-white py-2.5 text-[12px] font-semibold text-emerald-700 transition-colors hover:bg-emerald-50 dark:border-emerald-800 dark:bg-[#15151a] dark:text-emerald-200 dark:hover:bg-emerald-950/30"
+                    onClick={handleOpenReceipt}
+                    className="flex items-center justify-center rounded-xl bg-emerald-600 py-2.5 text-[12px] font-semibold text-white transition-colors hover:bg-emerald-700"
                   >
-                    {receiptCopied ? 'Copied' : 'Copy receipt'}
+                    View receipt
                   </button>
                   <button
                     type="button"
                     onClick={handleShareReceipt}
                     className="flex items-center justify-center rounded-xl border border-emerald-200 bg-white py-2.5 text-[12px] font-semibold text-emerald-700 transition-colors hover:bg-emerald-50 dark:border-emerald-800 dark:bg-[#15151a] dark:text-emerald-200 dark:hover:bg-emerald-950/30"
                   >
-                    Share receipt
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleDownloadReceiptLink}
-                    className="flex items-center justify-center rounded-xl border border-emerald-200 bg-white py-2.5 text-[12px] font-semibold text-emerald-700 transition-colors hover:bg-emerald-50 dark:border-emerald-800 dark:bg-[#15151a] dark:text-emerald-200 dark:hover:bg-emerald-950/30"
-                  >
-                    Download record
+                    {receiptCopied ? 'Downloaded' : 'Share receipt'}
                   </button>
                 </div>
+                )}
               </div>
             )}
 
