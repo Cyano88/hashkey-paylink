@@ -764,6 +764,42 @@ export function CreateStreamForm() {
     setTimeout(() => setReceiptCopied(false), 3000)
   }
 
+  async function handleShareReceipt() {
+    if (!streamReceiptUrl) return
+    const nav = navigator as Navigator & { share?: (data: ShareData) => Promise<void> }
+    if (nav.share) {
+      await nav.share({
+        title: 'StreamPay receipt',
+        text: `${formatUsdcFull(amountBn)} USDC stream created on Arc`,
+        url: streamReceiptUrl,
+      })
+      return
+    }
+    handleCopyReceipt()
+  }
+
+  function handleDownloadReceiptLink() {
+    if (!streamReceiptUrl) return
+    const lines = [
+      'StreamPay Receipt',
+      '',
+      `Amount: ${formatUsdcFull(amountBn)} USDC`,
+      `Recipient: ${recipient}`,
+      reason.trim() ? `Memo: ${reason.trim()}` : '',
+      deployTxHash ? `Transaction: ${deployTxHash}` : '',
+      `Receipt URL: ${streamReceiptUrl}`,
+    ].filter(Boolean).join('\n')
+    const blob = new Blob([lines], { type: 'text/plain;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `streampay-receipt-${Date.now()}.txt`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
+  }
+
   async function handleCopyCircleWallet() {
     const walletAddress = circleFundingAddress
     if (!walletAddress) return
@@ -1088,6 +1124,20 @@ export function CreateStreamForm() {
                     className="flex items-center justify-center rounded-xl border border-emerald-200 bg-white py-2.5 text-[12px] font-semibold text-emerald-700 transition-colors hover:bg-emerald-50 dark:border-emerald-800 dark:bg-[#15151a] dark:text-emerald-200 dark:hover:bg-emerald-950/30"
                   >
                     {receiptCopied ? 'Copied' : 'Copy receipt'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleShareReceipt}
+                    className="flex items-center justify-center rounded-xl border border-emerald-200 bg-white py-2.5 text-[12px] font-semibold text-emerald-700 transition-colors hover:bg-emerald-50 dark:border-emerald-800 dark:bg-[#15151a] dark:text-emerald-200 dark:hover:bg-emerald-950/30"
+                  >
+                    Share receipt
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDownloadReceiptLink}
+                    className="flex items-center justify-center rounded-xl border border-emerald-200 bg-white py-2.5 text-[12px] font-semibold text-emerald-700 transition-colors hover:bg-emerald-50 dark:border-emerald-800 dark:bg-[#15151a] dark:text-emerald-200 dark:hover:bg-emerald-950/30"
+                  >
+                    Download record
                   </button>
                 </div>
               </div>
