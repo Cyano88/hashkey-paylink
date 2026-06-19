@@ -63,6 +63,12 @@ function fmtTime(value?: number) {
   })
 }
 
+function formatNgn(value?: string) {
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) return ''
+  return `NGN ${numeric.toLocaleString('en-NG', { maximumFractionDigits: 2 })}`
+}
+
 function receiptLabels(receipt: PaylinkReceipt) {
   const isStream = receipt.source === 'streampay' || receipt.settlementType === 'stream-created'
   const isPos = receipt.source === 'ngpos'
@@ -127,6 +133,8 @@ function drawReceiptCanvas(
   const meta = CHAIN_META[receiptChainKey(receipt.chain)]
   const archived = Boolean(receipt.proof?.ogExplorer || receipt.proof?.ogTxHash)
   const amount = compactReceiptAmount(receipt.amount)
+  const isPos = receipt.source === 'ngpos'
+  const amountNgn = isPos ? formatNgn(receipt.amountNgn) : ''
 
   ctx.fillStyle = '#f4f7fb'
   ctx.fillRect(0, 0, width, height)
@@ -158,13 +166,18 @@ function drawReceiptCanvas(
   ctx.font = '600 14px Arial'
   drawText(ctx, `${amount} ${receipt.asset} confirmed on ${meta.label}`, 64, 184, 470, 20)
 
-  roundRect(ctx, 64, 216, width - 128, 76, 18, '#f8fafc')
+  roundRect(ctx, 64, 216, width - 128, 88, 18, '#f8fafc')
   ctx.fillStyle = '#667085'
   ctx.font = '700 10px Arial'
   ctx.fillText('AMOUNT PAID', 84, 244)
   ctx.fillStyle = '#101828'
   ctx.font = '800 30px Arial'
   ctx.fillText(`${amount} ${receipt.asset}`, 84, 274)
+  if (amountNgn) {
+    ctx.fillStyle = '#667085'
+    ctx.font = '700 13px Arial'
+    ctx.fillText(amountNgn, 84, 294)
+  }
 
   const rows: Array<[string, string]> = [
     ['Network', meta.label],
@@ -176,42 +189,46 @@ function drawReceiptCanvas(
     ['Tx hash', receipt.txHash],
     ['Receipt hash', receipt.receiptHash],
   ]
-  let y = 330
+  let y = 342
   for (const [label, value] of rows.slice(0, 8)) {
-    roundRect(ctx, 64, y - 22, width - 128, 40, 11, '#fbfcfe')
+    roundRect(ctx, 64, y - 22, width - 128, 37, 11, '#fbfcfe')
     ctx.fillStyle = '#667085'
     ctx.font = '700 11px Arial'
     ctx.fillText(label, 84, y + 3)
     ctx.fillStyle = '#101828'
     ctx.font = '700 11px Courier New'
     drawRightText(ctx, shortPdfValue(value || '-'), 526, y + 3, 300)
-    y += 45
+    y += 39
   }
 
   const proofLabel = archived ? '0G achieved' : '0G archive pending'
-  roundRect(ctx, 64, 654, width - 128, 54, 16, archived ? '#faf5ff' : '#f8fafc')
+  roundRect(ctx, 64, 660, width - 128, 50, 16, archived ? '#faf5ff' : '#f8fafc')
   if (ogLogo && archived) {
     ctx.save()
     ctx.beginPath()
-    ctx.arc(88, 681, 13, 0, Math.PI * 2)
+    ctx.arc(88, 685, 13, 0, Math.PI * 2)
     ctx.clip()
-    ctx.drawImage(ogLogo, 75, 668, 26, 26)
+    ctx.drawImage(ogLogo, 75, 672, 26, 26)
     ctx.restore()
   } else {
     ctx.fillStyle = '#98a2b3'
     ctx.beginPath()
-    ctx.arc(88, 681, 13, 0, Math.PI * 2)
+    ctx.arc(88, 685, 13, 0, Math.PI * 2)
     ctx.fill()
   }
   ctx.fillStyle = archived ? '#7e22ce' : '#667085'
   ctx.font = '800 13px Arial'
-  ctx.fillText(proofLabel, 112, 676)
+  ctx.fillText(proofLabel, 112, 681)
   ctx.font = '700 10px Courier New'
-  ctx.fillText(shortPdfValue(receipt.proof?.ogTxHash || receipt.proof?.ogRootHash || 'Archiving...'), 112, 692)
+  ctx.fillText(shortPdfValue(receipt.proof?.ogTxHash || receipt.proof?.ogRootHash || 'Archiving...'), 112, 696)
 
   ctx.fillStyle = '#667085'
   ctx.font = '600 11px Arial'
-  drawText(ctx, 'This PDF is a portable Hash PayLink payment receipt. The payment transaction and 0G proof are included so the payment can be reconciled without sharing a bulky receipt page link.', 64, 732, width - 128, 16)
+  drawText(ctx, isPos ? 'Keep this receipt for store verification.' : 'Keep this receipt for payment verification.', 64, 734, width - 128, 16)
+  ctx.fillStyle = '#667085'
+  ctx.font = '800 11px Arial'
+  const poweredBy = 'Powered by Circle USDC'
+  ctx.fillText(poweredBy, (width - ctx.measureText(poweredBy).width) / 2, 760)
 }
 
 function shortPdfValue(value: string) {
