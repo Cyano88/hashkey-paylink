@@ -60,6 +60,7 @@ import { isValidSolanaAddress } from '../lib/solanaAddress'
 import { getPaylinkParam, hasPaylinkFlag, isTelegramSourceParam } from '../lib/paylinkParams'
 import { PRIVY_AUTH_ENABLED } from '../lib/authMode'
 import { PrivyConnectButton } from '../lib/PrivyConnectButton'
+import { ReceiptIcon } from '../components/ReceiptIcon'
 import { resolvePrivyCircleLink, savePrivyCircleLink } from '../lib/privyCircleLink'
 import {
   compactReceiptAmount,
@@ -3305,7 +3306,7 @@ export default function PaymentPage() {
                   onClick={openPaymentReceiptPdf}
                   className="flex w-full items-center justify-center gap-2 rounded-xl bg-gray-900 px-5 py-2.5 text-sm font-medium text-white transition-all hover:bg-gray-800 active:scale-[0.98]"
                 >
-                  <Share2 className="h-4 w-4" />
+                  <ReceiptIcon className="h-4 w-4" />
                   View receipt
                 </button>
                 <button

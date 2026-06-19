@@ -26,6 +26,7 @@ import {
   type PaylinkReceipt,
   type ReceiptLookupResponse,
 } from '../../../../src/lib/paymentReceiptPdf'
+import { ReceiptIcon } from '../../../../src/components/ReceiptIcon'
 
 const ARC_CHAIN_ID = 5042002
 const ARC_USDC     = '0x3600000000000000000000000000000000000000' as const
@@ -1159,8 +1160,9 @@ export function CreateStreamForm() {
                   <button
                     type="button"
                     onClick={handleOpenReceipt}
-                    className="flex items-center justify-center rounded-xl bg-emerald-600 py-2.5 text-[12px] font-semibold text-white transition-colors hover:bg-emerald-700"
+                    className="flex items-center justify-center gap-2 rounded-xl bg-emerald-600 py-2.5 text-[12px] font-semibold text-white transition-colors hover:bg-emerald-700"
                   >
+                    <ReceiptIcon className="h-4 w-4" />
                     View receipt
                   </button>
                   <button

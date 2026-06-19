@@ -150,6 +150,11 @@ function emailVerificationError(err: unknown) {
   return message
 }
 
+function closeCircleSdkModal() {
+  const iframe = window.document.getElementById('sdkIframe')
+  iframe?.parentNode?.removeChild(iframe)
+}
+
 function isCircleCloseMessage(data: unknown) {
   if (!data || typeof data !== 'object') return false
   const record = data as Record<string, unknown>
@@ -334,6 +339,12 @@ function applyHashPayLinkCircleUi(sdk: W3SSdk, context?: {
       title: 'Hash PayLink',
       headline: 'Confirm your email to continue.',
     },
+    emailOtp: {
+      title: 'Enter Circle code',
+      subtitle: 'Use the newest code from your email. If it fails, resend for a clean code.',
+      resendHint: 'Code not working?',
+      resend: 'Resend code',
+    },
     transactionRequest: {
       title: 'Confirm payment',
       subtitle: amount
@@ -468,6 +479,7 @@ export async function connectCircleEvmEmailWallet(
     deviceId,
     email,
   })
+  let currentOtp = otp
 
   const login = await withTimeout(new Promise<CircleEmailLoginResult>((resolve, reject) => {
     const handleClose = (event: MessageEvent) => {
@@ -475,29 +487,51 @@ export async function connectCircleEvmEmailWallet(
       window.removeEventListener('message', handleClose)
       reject(new Error('Payment cancelled.'))
     }
-    window.addEventListener('message', handleClose)
-    sdk.updateConfigs({
-      appSettings: { appId },
-      loginConfigs: {
-        deviceToken: otp.deviceToken,
-        deviceEncryptionKey: otp.deviceEncryptionKey,
-        otpToken: otp.otpToken,
-      },
-    }, (error, result) => {
+    const onLoginComplete = (error?: unknown, result?: CircleEmailLoginResult) => {
       window.removeEventListener('message', handleClose)
       if (error) {
+        closeCircleSdkModal()
         reject(new Error(emailVerificationError(error)))
         return
       }
       if (!result?.userToken || !result.encryptionKey) {
+        closeCircleSdkModal()
         reject(new Error('Circle email verification did not return a wallet session. Request a new code and try again.'))
         return
       }
       resolve(result)
+    }
+    const refreshOtpConfig = () => {
+      sdk.updateConfigs({
+        appSettings: { appId },
+        loginConfigs: {
+          deviceToken: currentOtp.deviceToken,
+          deviceEncryptionKey: currentOtp.deviceEncryptionKey,
+          otpToken: currentOtp.otpToken,
+        },
+      }, onLoginComplete)
+    }
+    window.addEventListener('message', handleClose)
+    sdk.setOnResendOtpEmail(() => {
+      void circleWalletApi<typeof currentOtp>({
+        action: 'requestEmailOtp',
+        chain,
+        deviceId,
+        email,
+      }).then(nextOtp => {
+        currentOtp = nextOtp
+        refreshOtpConfig()
+      }).catch(err => {
+        closeCircleSdkModal()
+        window.removeEventListener('message', handleClose)
+        reject(new Error(emailVerificationError(err)))
+      })
     })
+    refreshOtpConfig()
     try {
       sdk.verifyOtp()
     } catch (err) {
+      closeCircleSdkModal()
       reject(new Error(emailVerificationError(err)))
     }
   }), CIRCLE_EMAIL_VERIFICATION_TIMEOUT_MS, 'Code expired. Request a new code.')
