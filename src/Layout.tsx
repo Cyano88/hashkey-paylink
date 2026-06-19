@@ -167,6 +167,7 @@ export type LayoutOutletContext = {
   onNetworkSelect:  (key: ChainKey) => void
   onPayChainChange: (key: ChainKey) => void  // payer page → mirror current chain in header pill
   onPayWalletStateChange: (state: { connected: boolean; disconnect?: () => void }) => void
+  onPaySuccessVisibleChange: (visible: boolean) => void
 }
 
 // ─── Network Toolkit ─────────────────────────────────────────────────────────
@@ -380,6 +381,7 @@ export default function Layout() {
   const [payChain,    setPayChain]    = useState<ChainKey | null>(null)
   const [payWalletConnected, setPayWalletConnected] = useState(false)
   const [payWalletDisconnect, setPayWalletDisconnect] = useState<(() => void) | null>(null)
+  const [paySuccessVisible, setPaySuccessVisible] = useState(false)
   const headerWalletConnected = headerControlConnected || (isPayPage && payWalletConnected)
 
   // Sync selectedNet when a wallet actually connects / chain changes.
@@ -432,6 +434,10 @@ export default function Layout() {
   const handlePayWalletStateChange = useCallback((state: { connected: boolean; disconnect?: () => void }) => {
     setPayWalletConnected(state.connected)
     setPayWalletDisconnect(() => state.disconnect ?? null)
+  }, [])
+
+  const handlePaySuccessVisibleChange = useCallback((visible: boolean) => {
+    setPaySuccessVisible(visible)
   }, [])
 
   function disconnectAll() {
@@ -565,7 +571,7 @@ export default function Layout() {
             )}
 
             {/* Disconnect — pay page only, between network indicator and theme toggle */}
-            {isPayPage && headerWalletConnected && (
+            {isPayPage && !paySuccessVisible && headerWalletConnected && (
               PRIVY_AUTH_ENABLED ? (
                 <PrivyDisconnectButton
                   onDisconnectWallets={disconnectAll}
@@ -647,6 +653,7 @@ export default function Layout() {
           onNetworkSelect: handleNetworkSelect,
           onPayChainChange: setPayChain,
           onPayWalletStateChange: handlePayWalletStateChange,
+          onPaySuccessVisibleChange: handlePaySuccessVisibleChange,
         } satisfies LayoutOutletContext} />
       </main>
 

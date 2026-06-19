@@ -295,7 +295,7 @@ function telegramReturnUrl(params: URLSearchParams) {
 export default function PaymentPage() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
-  const { onPayChainChange, onPayWalletStateChange } = useOutletContext<LayoutOutletContext>()
+  const { onPayChainChange, onPayWalletStateChange, onPaySuccessVisibleChange } = useOutletContext<LayoutOutletContext>()
 
   const evmParam    = getPaylinkParam(searchParams, 'evm', 'e') || searchParams.get('to') || ''
   const starkParam  = getPaylinkParam(searchParams, 'stark', 'k')
@@ -2793,6 +2793,11 @@ export default function PaymentPage() {
                         : isEvmReverted
                           ? 'Transaction reverted. The permit may have expired or your USDC balance was insufficient.'
                           : (evmSendError?.message ?? 'An unknown error occurred').slice(0, 140)
+
+  useEffect(() => {
+    onPaySuccessVisibleChange(isConfirmed)
+    return () => onPaySuccessVisibleChange(false)
+  }, [isConfirmed, onPaySuccessVisibleChange])
 
   useEffect(() => {
     if (!isConfirmed || !isPolymarketBridge) return
