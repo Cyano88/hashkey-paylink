@@ -134,6 +134,7 @@ function paymentReceiptId(eventId: string, txHash: string) {
 }
 
 type DateFilter = 'today' | 'yesterday' | 'last7' | 'custom' | 'all'
+type ReceiptFilter = 'all' | 'paylink' | 'pos' | 'streampay' | 'direct'
 type PosNetwork = 'base' | 'arbitrum' | 'arc' | 'solana'
 
 const POS_NETWORK_LABELS: Record<PosNetwork, string> = {
@@ -143,6 +144,13 @@ const POS_NETWORK_LABELS: Record<PosNetwork, string> = {
   solana: 'Solana',
 }
 const POS_RECEIPT_PAGE_SIZE = 5
+const RECEIPT_FILTERS: Array<{ key: ReceiptFilter; label: string }> = [
+  { key: 'all', label: 'All' },
+  { key: 'paylink', label: 'PayLink' },
+  { key: 'pos', label: 'POS' },
+  { key: 'streampay', label: 'StreamPay' },
+  { key: 'direct', label: 'Direct' },
+]
 
 function isPosNetwork(value: string): value is PosNetwork {
   return value === 'base' || value === 'arbitrum' || value === 'arc' || value === 'solana'
@@ -247,6 +255,7 @@ export default function Dashboard() {
   const [balanceOpen,   setBalanceOpen]   = useState(false)
   const [receiptFlash,  setReceiptFlash]  = useState(false)
   const [dateFilter,    setDateFilter]    = useState<DateFilter>('today')
+  const [receiptFilter, setReceiptFilter]  = useState<ReceiptFilter>('all')
   const [customDate,    setCustomDate]    = useState(() => new Date().toISOString().slice(0, 10))
   const [posNetworks,   setPosNetworks]   = useState<PosNetwork[]>([])
   const [posMerchantName, setPosMerchantName] = useState('')
@@ -544,6 +553,34 @@ export default function Dashboard() {
     if (!row) return 'USDC wallet'
     return row.settlementType === 'instant_fiat' ? 'Naira bank' : 'USDC wallet'
   }
+  function receiptKind(row: PaymentRow) {
+    if (row.source === 'ngpos') {
+      return {
+        key: 'pos' as const,
+        label: 'POS receipt',
+        className: 'border-emerald-100 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-300',
+      }
+    }
+    if (row.source === 'streampay' || row.settlementType === 'stream-created') {
+      return {
+        key: 'streampay' as const,
+        label: 'StreamPay',
+        className: 'border-purple-100 bg-purple-50 text-purple-700 dark:border-purple-900/50 dark:bg-purple-950/30 dark:text-purple-300',
+      }
+    }
+    if (row.source === 'paylink' || row.flow === 'registry' || row.flow === 'v2') {
+      return {
+        key: 'paylink' as const,
+        label: 'PayLink receipt',
+        className: 'border-blue-100 bg-blue-50 text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-300',
+      }
+    }
+    return {
+      key: 'direct' as const,
+      label: 'Direct USDC',
+      className: 'border-gray-100 bg-gray-50 text-gray-600 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-300',
+    }
+  }
   function rowMeta(row: PaymentRow) { return CHAIN_META[row.chain] ?? meta }
   function customerLabel(row: PaymentRow) {
     const customerSource = row.source === 'ngpos' ? (row.label || row.sender) : row.sender
@@ -728,6 +765,11 @@ export default function Dashboard() {
       setPosReceiptBusy(false)
     }
   }
+
+  const filteredPayments = useMemo(() => {
+    if (isNgPosDashboard || receiptFilter === 'all') return selectedPayments
+    return selectedPayments.filter(row => receiptKind(row).key === receiptFilter)
+  }, [isNgPosDashboard, receiptFilter, selectedPayments])
 
   // No address
   if (!hasDashboardAddress) {
@@ -947,6 +989,28 @@ export default function Dashboard() {
                 )}
               </>
             )}
+            {!isNgPosDashboard && payments.length > 0 && (
+              <div className="flex max-w-full flex-wrap items-center gap-1 rounded-lg border border-gray-100 bg-gray-50/70 p-1 dark:border-white/10 dark:bg-white/[0.04]">
+                {RECEIPT_FILTERS.map(filter => {
+                  const active = receiptFilter === filter.key
+                  return (
+                    <button
+                      key={filter.key}
+                      type="button"
+                      onClick={() => setReceiptFilter(filter.key)}
+                      className={cn(
+                        'rounded-md px-2 py-1 text-[10px] font-semibold transition-colors',
+                        active
+                          ? 'bg-white text-gray-900 shadow-sm dark:bg-white/10 dark:text-white'
+                          : 'text-gray-500 hover:bg-white/70 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.07] dark:hover:text-gray-200',
+                      )}
+                    >
+                      {filter.label}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
             <div className="flex items-center gap-1.5 text-[11px] font-medium text-emerald-600">
               <span className="relative flex h-2 w-2">
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
@@ -1127,6 +1191,12 @@ export default function Dashboard() {
               )}
             </div>
           )
+        ) : filteredPayments.length === 0 ? (
+          <div className="py-14 text-center">
+            <TrendingUp className="mx-auto mb-4 h-10 w-10 text-gray-200 dark:text-gray-700" />
+            <p className="text-sm font-medium text-gray-500 dark:text-gray-300">No records in this category</p>
+            <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">Switch filters to view another payment type.</p>
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -1142,9 +1212,10 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50 dark:divide-white/10">
-                {payments.map((row) => {
+                {filteredPayments.map((row) => {
                   const received = receivedUsdc(row)
                   const chainMeta = rowMeta(row)
+                  const kind = receiptKind(row)
 
                   return (
                     <tr key={row.id} className="group hover:bg-gray-50/60 transition-colors dark:hover:bg-white/[0.03]">
@@ -1156,8 +1227,11 @@ export default function Dashboard() {
                           <span className="inline-flex items-center rounded-full border border-gray-100 bg-gray-50 px-2 py-0.5 text-[10px] font-semibold text-gray-600 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-300">
                             {chainMeta.label}
                           </span>
+                          <span className={cn('inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold', kind.className)}>
+                            {kind.label}
+                          </span>
                           {row.flow === 'v2' || row.flow === 'registry' ? (
-                            <span className="inline-flex items-center gap-1 rounded-full border border-blue-100 bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-600 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-300">
+                            <span className="inline-flex max-w-[220px] items-center gap-1 truncate rounded-full border border-gray-100 bg-white px-2 py-0.5 text-[10px] font-semibold text-gray-600 dark:border-white/10 dark:bg-white/[0.03] dark:text-gray-300">
                               {row.label ?? 'Direct Send'}
                             </span>
                           ) : (
