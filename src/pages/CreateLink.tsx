@@ -911,6 +911,21 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     return `${window.location.origin}/event?${params.toString()}`
   }
 
+  function buildGlobalDashboardLink() {
+    const params = new URLSearchParams()
+    if (multiChainMode) {
+      params.set('x', '1')
+      if (evmValid) setPaylinkParam(params, 'e', evmAddr)
+      if (SHOW_STARKNET_CREATE_UI && starkValid) setPaylinkParam(params, 'k', starkAddr)
+      if (solanaValid) setPaylinkParam(params, 's', solanaAddr)
+    } else {
+      params.set('n', selectedNet)
+      if (selectedNet === 'solana') setPaylinkParam(params, 's', solanaAddr)
+      else setPaylinkParam(params, 'e', evmAddr)
+    }
+    return `${window.location.origin}/dashboard?${params.toString()}`
+  }
+
   // ── Generate handler ───────────────────────────────────────────────────
   function handleGenerate() {
     if (!canGenerate) return
@@ -2303,15 +2318,26 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
 
               {/* Organizer dashboard — multi-payer / access mode only */}
               {effectiveEventMode && (
-                <a
-                  href={buildDashboardLink()}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-blue-200 bg-white px-4 py-2.5 text-sm font-semibold text-blue-600 hover:bg-blue-50 transition-all active:scale-[0.98]"
-                >
-                  <LayoutDashboard className="h-4 w-4" />
-                  Open Organizer Dashboard
-                </a>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <a
+                    href={buildDashboardLink()}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-blue-200 bg-white px-4 py-2.5 text-sm font-semibold text-blue-600 hover:bg-blue-50 transition-all active:scale-[0.98]"
+                  >
+                    <LayoutDashboard className="h-4 w-4" />
+                    Open Organizer Dashboard
+                  </a>
+                  <a
+                    href={buildGlobalDashboardLink()}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 hover:border-gray-300 hover:bg-gray-50 transition-all active:scale-[0.98]"
+                  >
+                    <Globe className="h-4 w-4" />
+                    Open Global Dashboard
+                  </a>
+                </div>
               )}
 
               {effectiveEventMode && (

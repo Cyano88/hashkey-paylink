@@ -46,6 +46,7 @@ interface PaymentRow {
   label?:           string
   source?:          string
   merchantId?:      string
+  contextLabel?:    string
   settlementType?:  string
   amountNgn?:       string
   ogRootHash?:      string
@@ -76,6 +77,7 @@ interface EventPaymentRow {
   ts: number
   source?: string
   merchantId?: string
+  contextLabel?: string
   settlementType?: string
   amountNgn?: string
   ogRootHash?: string
@@ -120,6 +122,7 @@ function eventPaymentToRow(row: EventPaymentRow, index: number): PaymentRow {
     label: row.memo || row.payer || 'Payment',
     source: row.source,
     merchantId: row.merchantId,
+    contextLabel: row.contextLabel,
     settlementType: row.settlementType,
     amountNgn: row.amountNgn,
     ogRootHash: row.ogRootHash,
@@ -135,6 +138,7 @@ function paymentReceiptId(eventId: string, txHash: string) {
 
 type DateFilter = 'today' | 'yesterday' | 'last7' | 'custom' | 'all'
 type ReceiptFilter = 'all' | 'paylink' | 'pos' | 'streampay' | 'direct'
+type ContextFilter = 'all' | string
 type PosNetwork = 'base' | 'arbitrum' | 'arc' | 'solana'
 
 const POS_NETWORK_LABELS: Record<PosNetwork, string> = {
@@ -256,6 +260,7 @@ export default function Dashboard() {
   const [receiptFlash,  setReceiptFlash]  = useState(false)
   const [dateFilter,    setDateFilter]    = useState<DateFilter>('today')
   const [receiptFilter, setReceiptFilter]  = useState<ReceiptFilter>('all')
+  const [contextFilter, setContextFilter]  = useState<ContextFilter>('all')
   const [customDate,    setCustomDate]    = useState(() => new Date().toISOString().slice(0, 10))
   const [posNetworks,   setPosNetworks]   = useState<PosNetwork[]>([])
   const [posMerchantName, setPosMerchantName] = useState('')
@@ -581,6 +586,15 @@ export default function Dashboard() {
       className: 'border-gray-100 bg-gray-50 text-gray-600 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-300',
     }
   }
+  function contextMeta(row: PaymentRow) {
+    const explicit = row.contextLabel?.trim()
+    if (explicit) return { key: `label:${explicit.toLowerCase()}`, label: explicit }
+    if (row.source === 'ngpos' && row.merchantId) return { key: `pos:${row.merchantId}`, label: row.merchantId }
+    if (row.source === 'paylink' && row.label) return { key: `paylink:${row.label.toLowerCase()}`, label: row.label }
+    if (row.flow === 'registry' && row.label) return { key: `collection:${row.label.toLowerCase()}`, label: row.label }
+    if (row.flow === 'direct') return { key: `direct:${row.sender.toLowerCase()}`, label: 'Direct transfers' }
+    return { key: 'unlabeled', label: 'Unlabeled' }
+  }
   function rowMeta(row: PaymentRow) { return CHAIN_META[row.chain] ?? meta }
   function customerLabel(row: PaymentRow) {
     const customerSource = row.source === 'ngpos' ? (row.label || row.sender) : row.sender
@@ -766,10 +780,30 @@ export default function Dashboard() {
     }
   }
 
-  const filteredPayments = useMemo(() => {
+  const categoryFilteredPayments = useMemo(() => {
     if (isNgPosDashboard || receiptFilter === 'all') return selectedPayments
     return selectedPayments.filter(row => receiptKind(row).key === receiptFilter)
   }, [isNgPosDashboard, receiptFilter, selectedPayments])
+
+  const contextOptions = useMemo(() => {
+    const seen = new Map<string, string>()
+    for (const row of categoryFilteredPayments) {
+      const context = contextMeta(row)
+      seen.set(context.key, context.label)
+    }
+    return Array.from(seen, ([key, label]) => ({ key, label }))
+      .sort((a, b) => a.label.localeCompare(b.label))
+  }, [categoryFilteredPayments])
+
+  const filteredPayments = useMemo(() => {
+    if (isNgPosDashboard || contextFilter === 'all') return categoryFilteredPayments
+    return categoryFilteredPayments.filter(row => contextMeta(row).key === contextFilter)
+  }, [categoryFilteredPayments, contextFilter, isNgPosDashboard])
+
+  useEffect(() => {
+    if (contextFilter === 'all') return
+    if (!contextOptions.some(option => option.key === contextFilter)) setContextFilter('all')
+  }, [contextFilter, contextOptions])
 
   // No address
   if (!hasDashboardAddress) {
@@ -990,26 +1024,41 @@ export default function Dashboard() {
               </>
             )}
             {!isNgPosDashboard && payments.length > 0 && (
-              <div className="flex max-w-full flex-wrap items-center gap-1 rounded-lg border border-gray-100 bg-gray-50/70 p-1 dark:border-white/10 dark:bg-white/[0.04]">
-                {RECEIPT_FILTERS.map(filter => {
-                  const active = receiptFilter === filter.key
-                  return (
-                    <button
-                      key={filter.key}
-                      type="button"
-                      onClick={() => setReceiptFilter(filter.key)}
-                      className={cn(
-                        'rounded-md px-2 py-1 text-[10px] font-semibold transition-colors',
-                        active
-                          ? 'bg-white text-gray-900 shadow-sm dark:bg-white/10 dark:text-white'
-                          : 'text-gray-500 hover:bg-white/70 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.07] dark:hover:text-gray-200',
-                      )}
-                    >
-                      {filter.label}
-                    </button>
-                  )
-                })}
-              </div>
+              <>
+                <div className="flex max-w-full flex-wrap items-center gap-1 rounded-lg border border-gray-100 bg-gray-50/70 p-1 dark:border-white/10 dark:bg-white/[0.04]">
+                  {RECEIPT_FILTERS.map(filter => {
+                    const active = receiptFilter === filter.key
+                    return (
+                      <button
+                        key={filter.key}
+                        type="button"
+                        onClick={() => setReceiptFilter(filter.key)}
+                        className={cn(
+                          'rounded-md px-2 py-1 text-[10px] font-semibold transition-colors',
+                          active
+                            ? 'bg-white text-gray-900 shadow-sm dark:bg-white/10 dark:text-white'
+                            : 'text-gray-500 hover:bg-white/70 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.07] dark:hover:text-gray-200',
+                        )}
+                      >
+                        {filter.label}
+                      </button>
+                    )
+                  })}
+                </div>
+                {contextOptions.length > 1 && (
+                  <select
+                    value={contextFilter}
+                    onChange={event => setContextFilter(event.target.value)}
+                    className="h-8 max-w-[190px] rounded-lg border border-gray-200 bg-white px-2 text-xs font-semibold text-gray-600 outline-none transition-all hover:bg-gray-50 focus:border-gray-300 dark:border-white/10 dark:bg-white/5 dark:text-gray-300 dark:hover:bg-white/10"
+                    aria-label="Filter by payment context"
+                  >
+                    <option value="all">All contexts</option>
+                    {contextOptions.map(option => (
+                      <option key={option.key} value={option.key}>{option.label}</option>
+                    ))}
+                  </select>
+                )}
+              </>
             )}
             <div className="flex items-center gap-1.5 text-[11px] font-medium text-emerald-600">
               <span className="relative flex h-2 w-2">
@@ -1216,6 +1265,7 @@ export default function Dashboard() {
                   const received = receivedUsdc(row)
                   const chainMeta = rowMeta(row)
                   const kind = receiptKind(row)
+                  const context = contextMeta(row)
 
                   return (
                     <tr key={row.id} className="group hover:bg-gray-50/60 transition-colors dark:hover:bg-white/[0.03]">
@@ -1229,6 +1279,9 @@ export default function Dashboard() {
                           </span>
                           <span className={cn('inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold', kind.className)}>
                             {kind.label}
+                          </span>
+                          <span className="inline-flex max-w-[180px] items-center truncate rounded-full border border-gray-100 bg-white px-2 py-0.5 text-[10px] font-semibold text-gray-500 dark:border-white/10 dark:bg-white/[0.03] dark:text-gray-400">
+                            {context.label}
                           </span>
                           {row.flow === 'v2' || row.flow === 'registry' ? (
                             <span className="inline-flex max-w-[220px] items-center gap-1 truncate rounded-full border border-gray-100 bg-white px-2 py-0.5 text-[10px] font-semibold text-gray-600 dark:border-white/10 dark:bg-white/[0.03] dark:text-gray-300">

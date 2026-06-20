@@ -16,6 +16,7 @@ type PaymentEntry = {
   ts:          number
   source?:     string
   merchantId?: string
+  contextLabel?: string
   settlementType?: string
   amountNgn?:  string
   ogRootHash?: string
@@ -140,6 +141,7 @@ function receiptHash(entry: PaymentEntry) {
     ts: entry.ts,
     source: entry.source,
     merchantId: entry.merchantId,
+    contextLabel: entry.contextLabel,
     settlementType: entry.settlementType,
   })).digest('hex')
 }
@@ -172,6 +174,7 @@ export async function registerEventPayment(req: Request, res: Response): Promise
   let agentSlug = ''
   let source = ''
   let merchantId = ''
+  let contextLabel = ''
   let settlementType = ''
   let amountNgn = ''
 
@@ -186,6 +189,7 @@ export async function registerEventPayment(req: Request, res: Response): Promise
     agentSlug = normalizeActivitySlug(req.body?.agentSlug)
     source = cleanOptionalString(req.body?.source, MAX_TEXT_LENGTH)
     merchantId = cleanOptionalString(req.body?.merchantId, MAX_TEXT_LENGTH)
+    contextLabel = cleanOptionalString(req.body?.contextLabel, MAX_TEXT_LENGTH)
     settlementType = cleanOptionalString(req.body?.settlementType, MAX_TEXT_LENGTH)
     amountNgn = cleanOptionalString(req.body?.amountNgn, MAX_AMOUNT_LENGTH)
   } catch (err) {
@@ -226,6 +230,7 @@ export async function registerEventPayment(req: Request, res: Response): Promise
         requestedAmount: requestedAmount || entries[manualIndex].requestedAmount,
         source: source || entries[manualIndex].source,
         merchantId: merchantId || entries[manualIndex].merchantId,
+        contextLabel: contextLabel || entries[manualIndex].contextLabel,
         settlementType: settlementType || entries[manualIndex].settlementType,
         amountNgn: amountNgn || entries[manualIndex].amountNgn,
       }
@@ -257,6 +262,7 @@ export async function registerEventPayment(req: Request, res: Response): Promise
   if (requestedAmount) entry.requestedAmount = requestedAmount
   if (source) entry.source = source
   if (merchantId) entry.merchantId = merchantId
+  if (contextLabel) entry.contextLabel = contextLabel
   if (settlementType) entry.settlementType = settlementType
   if (amountNgn) entry.amountNgn = amountNgn
   entries.push(entry)
@@ -296,12 +302,14 @@ export async function registerEventPayment(req: Request, res: Response): Promise
     ts: entry.ts,
     source: entry.source,
     merchantId: entry.merchantId,
+    contextLabel: entry.contextLabel,
     settlementType: entry.settlementType,
     amountNgn: entry.amountNgn,
     metadata: entry.source === 'ngpos'
       ? {
           type: 'nigerian_retail_pos_payment',
           merchantId: entry.merchantId,
+          contextLabel: entry.contextLabel,
           amountNgn: entry.amountNgn,
           amountUsdc: entry.amount,
           settlementType: entry.settlementType,

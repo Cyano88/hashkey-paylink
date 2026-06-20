@@ -51,6 +51,7 @@ export type ArchiveRecord = {
   ts:      number
   source?: string
   merchantId?: string
+  contextLabel?: string
   settlementType?: string
   amountNgn?: string
   metadata?: Record<string, unknown>

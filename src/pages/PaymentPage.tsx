@@ -2825,7 +2825,16 @@ export default function PaymentPage() {
     const actualAmt = receivedAmount != null
       ? (Number(receivedAmount) / Math.pow(10, meta.decimals)).toFixed(meta.decimals <= 6 ? 6 : 8)
       : effectiveAmt
-    const payload = { eventId, txHash, chain, payer, memo: name || memo || 'Agent wallet funding', amount: actualAmt, agentSlug: agentFundingSlug || undefined }
+    const payload = {
+      eventId,
+      txHash,
+      chain,
+      payer,
+      memo: name || memo || 'Agent wallet funding',
+      amount: actualAmt,
+      agentSlug: agentFundingSlug || undefined,
+      contextLabel: memo || eventId,
+    }
     console.log('[EventReg] posting:', payload)
     setEventRegStatus('pending')
     try {
@@ -2897,6 +2906,7 @@ export default function PaymentPage() {
       amount: actualAmt,
       source: 'ngpos',
       merchantId: ngPosMerchantId,
+      contextLabel: memo || ngPosMerchantId,
       settlementType: ngPosSettlement,
       amountNgn: ngPosAmountNgn,
       requestedAmount: expectedSettlementAmt,
@@ -2936,6 +2946,7 @@ export default function PaymentPage() {
           requestedAmount: effectiveAmt,
           source: 'paylink',
           merchantId: activeRecipient,
+          contextLabel: memo || activeRecipient,
           settlementType: 'payment',
         }),
       })
