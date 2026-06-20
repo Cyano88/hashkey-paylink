@@ -319,11 +319,11 @@ function CircleReceiveSelector({
   }, [selectedNet, isEvmNet, receiveMode, evmValid, evmAddr, solanaValid, solanaAddr])
 
   return (
-    <div className="space-y-2">
+    <div className="min-w-0 space-y-2">
       <label className="text-sm font-medium text-gray-700 dark:text-gray-200">
         Receive to
       </label>
-      <div className={cn('grid gap-2', canReceiveWithEmail ? 'grid-cols-2' : 'grid-cols-1')}>
+      <div className={cn('grid min-w-0 gap-2', canReceiveWithEmail ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1')}>
         <button
           type="button"
           onClick={() => {
@@ -332,15 +332,15 @@ function CircleReceiveSelector({
             setGeneratedLink('')
           }}
           className={cn(
-            'rounded-xl border px-3 py-3 text-left transition-all active:scale-[0.99]',
+            'min-w-0 rounded-xl border px-3 py-3 text-left transition-all active:scale-[0.99]',
             receiveMode === 'paste'
               ? 'border-gray-900 bg-gray-50 text-gray-900 dark:border-white/30 dark:bg-white/10 dark:text-gray-100'
               : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:border-white/20 dark:hover:bg-white/[0.07]',
           )}
         >
-          <span className="flex items-center gap-2 text-sm font-semibold">
-            <Wallet className="h-4 w-4 text-gray-500" />
-            Paste wallet address
+          <span className="flex min-w-0 items-center gap-2 text-sm font-semibold">
+            <Wallet className="h-4 w-4 shrink-0 text-gray-500" />
+            <span className="truncate">Paste wallet address</span>
           </span>
           <span className="mt-1 block text-[11px] text-gray-400">Any wallet or exchange</span>
         </button>
@@ -350,16 +350,16 @@ function CircleReceiveSelector({
             onClick={handleEmailRecipient}
             disabled={circleRecipientPending}
             className={cn(
-              'rounded-xl border px-3 py-3 text-left transition-all active:scale-[0.99]',
+              'min-w-0 rounded-xl border px-3 py-3 text-left transition-all active:scale-[0.99]',
               receiveMode === 'email'
                 ? 'border-gray-900 bg-gray-50 text-gray-900 dark:border-white/30 dark:bg-white/10 dark:text-gray-100'
                 : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:border-white/20 dark:hover:bg-white/[0.07]',
               circleRecipientPending && 'cursor-not-allowed opacity-70',
             )}
           >
-            <span className="flex items-center gap-2 text-sm font-semibold">
-              {circleRecipientPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4 text-blue-500" />}
-              Receive with email
+            <span className="flex min-w-0 items-center gap-2 text-sm font-semibold">
+              {circleRecipientPending ? <Loader2 className="h-4 w-4 shrink-0 animate-spin" /> : <Mail className="h-4 w-4 shrink-0 text-blue-500" />}
+              <span className="truncate">Receive with email</span>
             </span>
             <span className="mt-1 block text-[11px] text-gray-400">
               Single-network Circle wallet
@@ -1040,17 +1040,17 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
       ]
 
   return (
-    <div className="mx-auto max-w-lg animate-fade-in">
+    <div className="mx-auto min-w-0 animate-fade-in" style={{ width: 'calc(100vw - 2rem)', maxWidth: '32rem' }}>
       {/* ── Hero ──────────────────────────────────────────────────────── */}
-      <div className="mb-8 text-center">
-        <span className="mb-4 inline-flex items-center gap-1.5 rounded-full border border-blue-100 bg-blue-50 px-3.5 py-1.5 text-xs font-semibold text-[#0071E3]">
+      <div className="mb-9 text-center sm:mb-8">
+        <span className="mb-5 inline-flex items-center gap-1.5 rounded-full border border-blue-100 bg-blue-50 px-3.5 py-1.5 text-xs font-semibold text-[#0071E3] sm:mb-4">
           <Sparkles className="h-3.5 w-3.5" />
           Multi-Chain PayFi
         </span>
-        <h1 className="text-3xl font-bold tracking-tight text-gray-900 sm:text-[2.25rem]">
+        <h1 className="text-3xl font-bold leading-tight tracking-tight text-gray-900 sm:text-[2.25rem]">
           {polymarketMode ? 'PolyDesk' : posMode ? 'Retail POS' : streamMode ? 'StreamPay' : accessMode ? 'Hash PayLink Agent' : 'Create a Hash PayLink'}
         </h1>
-        <p className="mt-2 text-[15px] text-gray-500 text-balance">
+        <p className="mt-3 text-[15px] leading-relaxed text-gray-500 text-balance sm:mt-2">
           {polymarketMode
             ? 'Fund Polymarket, track positions, get alerts, and ask LP Scout from Telegram.'
             : posMode
@@ -1063,8 +1063,8 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
         </p>
 
         {/* ── Chain preview toggle — hidden in multi-chain mode (all chains active) */}
-        {!multiChainMode && !posMode && !streamMode && !polymarketMode && <div className="mt-5 flex flex-col items-center gap-2.5">
-          <div className="flex items-center justify-center gap-0.5 sm:gap-1 rounded-xl border border-gray-200 bg-gray-100/80 p-1 overflow-x-auto w-full sm:w-auto sm:inline-flex">
+        {!multiChainMode && !posMode && !streamMode && !polymarketMode && <div className="mt-6 flex flex-col items-center gap-2.5 sm:mt-5">
+          <div className="flex w-full max-w-[calc(100vw-2rem)] items-center justify-start gap-1 overflow-x-auto rounded-xl border border-gray-200 bg-gray-100/80 p-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:w-auto sm:justify-center sm:gap-1 sm:p-1">
             {VISIBLE_CREATE_CHAINS.map((c) => {
               const m = CHAIN_META[c]
               const isActive = selectedNet === c
@@ -1073,7 +1073,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                   key={c}
                   onClick={() => onNetworkSelect(c)}
                   className={cn(
-                    'flex shrink-0 items-center gap-1 sm:gap-1.5 rounded-lg px-1.5 py-1 sm:px-3 sm:py-1.5 text-[10px] sm:text-xs font-semibold transition-all duration-150',
+                    'flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 sm:gap-1.5 sm:px-3 sm:py-1.5 text-[10px] sm:text-xs font-semibold transition-all duration-150',
                     isActive ? m.toggleActive : 'text-gray-500 hover:text-gray-800',
                   )}
                 >
@@ -1120,8 +1120,8 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
       </div>
 
       {/* ── Form card ─────────────────────────────────────────────────── */}
-      <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-card dark:border-white/10 dark:bg-[#111114]">
-        <div className="space-y-5 p-6 sm:p-8">
+      <div className="min-w-0 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-card dark:border-white/10 dark:bg-[#111114]">
+        <div className="min-w-0 space-y-5 p-4 sm:p-8">
 
           <div className="flex items-center justify-center gap-2 text-[11px] font-semibold text-gray-400">
             <img src="/brand/circle-logo.jpeg" alt="" className="h-4 w-4 rounded-full object-cover" />
@@ -1129,18 +1129,19 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
           </div>
 
           {/* ── Payment / Access toggle ───────────────────────────────── */}
-          <div className="grid grid-cols-5 rounded-xl border border-gray-200 bg-gray-50 p-1 dark:border-white/10 dark:bg-white/[0.04]">
+          <div className="grid min-w-0 grid-cols-3 gap-1 rounded-xl border border-gray-200 bg-gray-50 p-1.5 dark:border-white/10 dark:bg-white/[0.04] sm:grid-cols-5 sm:p-1">
             <button
               type="button"
               onClick={() => toggleAccessMode(false)}
               aria-label="Payment"
               title="Payment"
               className={cn(
-                'flex h-11 items-center justify-center rounded-lg transition-all',
+                'flex h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-lg transition-all sm:h-11 sm:flex-row sm:gap-0',
                 !accessMode && !posMode && !streamMode && !polymarketMode ? 'bg-white text-gray-900 shadow-sm dark:bg-white/10 dark:text-white' : 'text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300',
               )}
             >
               <Coins className="h-5 w-5" />
+              <span className="text-[9px] font-semibold leading-none sm:hidden">Payment</span>
             </button>
             <button
               type="button"
@@ -1148,11 +1149,12 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               aria-label="Agent"
               title="Agent"
               className={cn(
-                'flex h-11 items-center justify-center rounded-lg transition-all',
+                'flex h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-lg transition-all sm:h-11 sm:flex-row sm:gap-0',
                 accessMode ? 'bg-white text-gray-900 shadow-sm dark:bg-white/10 dark:text-white' : 'text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300',
               )}
             >
               <Bot className="h-5 w-5" />
+              <span className="text-[9px] font-semibold leading-none sm:hidden">Agent</span>
             </button>
             <button
               type="button"
@@ -1160,11 +1162,12 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               aria-label="Retail POS"
               title="Retail POS"
               className={cn(
-                'flex h-11 items-center justify-center rounded-lg transition-all',
+                'flex h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-lg transition-all sm:h-11 sm:flex-row sm:gap-0',
                 posMode ? 'bg-white text-gray-900 shadow-sm dark:bg-white/10 dark:text-white' : 'text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300',
               )}
             >
               <Store className="h-5 w-5" />
+              <span className="text-[9px] font-semibold leading-none sm:hidden">POS</span>
             </button>
             <button
               type="button"
@@ -1172,11 +1175,12 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               aria-label="StreamPay"
               title="StreamPay"
               className={cn(
-                'flex h-11 items-center justify-center rounded-lg transition-all',
+                'flex h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-lg transition-all sm:h-11 sm:flex-row sm:gap-0',
                 streamMode ? 'bg-white text-gray-900 shadow-sm dark:bg-white/10 dark:text-white' : 'text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300',
               )}
             >
               <Radio className="h-5 w-5" />
+              <span className="text-[9px] font-semibold leading-none sm:hidden">Stream</span>
             </button>
             <button
               type="button"
@@ -1184,11 +1188,12 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               aria-label="PolyDesk"
               title="PolyDesk"
               className={cn(
-                'flex h-11 items-center justify-center rounded-lg transition-all',
+                'flex h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-lg transition-all sm:h-11 sm:flex-row sm:gap-0',
                 polymarketMode ? 'bg-white text-gray-900 shadow-sm dark:bg-white/10 dark:text-white' : 'text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300',
               )}
             >
               <img src={POLYMARKET_LOGO} alt="" className="h-5 w-5 invert dark:invert-0" />
+              <span className="text-[9px] font-semibold leading-none sm:hidden">Poly</span>
             </button>
           </div>
 
@@ -1695,12 +1700,12 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
             </div>
           )}
 
-          {(isEvmNet || multiChainMode) && (multiChainMode || receiveMode === 'paste') && <fieldset className="space-y-1.5">
+          {(isEvmNet || multiChainMode) && (multiChainMode || receiveMode === 'paste') && <fieldset className="space-y-2">
             <label className="flex items-center justify-between">
               <span className="flex items-center gap-2 text-sm font-medium text-gray-700">
                 {multiChainMode ? 'EVM wallet address' : 'Wallet address'}
               </span>
-              <span className="text-[11px] font-medium text-gray-400">
+              <span className="hidden text-[11px] font-medium text-gray-400 sm:inline">
                 {multiChainMode ? 'Base · Arc Testnet · Arbitrum' : 'Starts with 0x'}
               </span>
             </label>
@@ -1759,12 +1764,12 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
           </fieldset>}
 
           {/* ── Starknet Address — Starknet only ─────────────────────── */}
-          {SHOW_STARKNET_CREATE_UI && (selectedNet === 'starknet' || multiChainMode) && <fieldset className="space-y-1.5">
+          {SHOW_STARKNET_CREATE_UI && (selectedNet === 'starknet' || multiChainMode) && <fieldset className="space-y-2">
             <label className="flex items-center justify-between">
               <span className="flex items-center gap-2 text-sm font-medium text-gray-700">
                 Starknet Address
               </span>
-              <span className="text-[11px] font-medium text-gray-400">Starknet Mainnet · WalletConnect</span>
+              <span className="hidden text-[11px] font-medium text-gray-400 sm:inline">Starknet Mainnet · WalletConnect</span>
             </label>
             <div className="relative">
               <input
@@ -1804,12 +1809,12 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
           </fieldset>}
 
           {/* ── Solana Address — Solana only ──────────────────────────── */}
-          {(selectedNet === 'solana' || multiChainMode) && (multiChainMode || receiveMode === 'paste') && <fieldset className="space-y-1.5">
+          {(selectedNet === 'solana' || multiChainMode) && (multiChainMode || receiveMode === 'paste') && <fieldset className="space-y-2">
             <label className="flex items-center justify-between">
               <span className="flex items-center gap-2 text-sm font-medium text-gray-700">
                 Solana wallet address
               </span>
-              <span className="text-[11px] font-medium text-gray-400">No 0x · usually 32-44 chars</span>
+              <span className="hidden text-[11px] font-medium text-gray-400 sm:inline">No 0x · usually 32-44 chars</span>
             </label>
             <div className="relative">
               <input
@@ -1871,7 +1876,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
 
           {/* ── Amount ───────────────────────────────────────────────── */}
           {flexAmount && (
-            <div className="flex items-center gap-3 rounded-xl border border-dashed border-violet-200 bg-violet-50/40 px-4 py-3">
+            <div className="flex items-center gap-3.5 rounded-xl border border-dashed border-violet-200 bg-violet-50/40 px-4 py-3.5">
               <Sliders className="h-4 w-4 shrink-0 text-violet-400" />
               <div>
                 <p className="text-xs font-semibold text-violet-600">Flexible Amount enabled</p>
@@ -1879,7 +1884,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               </div>
             </div>
           )}
-          {!flexAmount && <fieldset className="space-y-1.5">
+          {!flexAmount && <fieldset className="space-y-2">
             <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
               <Coins className="h-3.5 w-3.5 text-gray-400" />
               Amount
@@ -1919,7 +1924,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
           </fieldset>}
 
           {/* ── Payment note ──────────────────────────────────────────── */}
-          <fieldset className="space-y-1.5">
+          <fieldset className="space-y-2">
             <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
               <Tag className="h-3.5 w-3.5 text-gray-400" />
               Payment note
@@ -1937,7 +1942,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
 
           {/* ── Agent URL (Access mode only) ─────────────────────────── */}
           {!accessMode && (
-            <div className="rounded-xl border border-gray-200 bg-gray-50 p-1.5">
+            <div className="my-1 rounded-xl border border-gray-200 bg-gray-50 p-2 sm:my-0 sm:p-1.5">
               <div className="grid grid-cols-2 gap-1">
                 {([
                   { key: 'personal', title: 'Personal', body: 'Simple PayLink request for one payer.', icon: Link2 },
@@ -1950,7 +1955,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                       type="button"
                       onClick={() => setPaymentMode(key)}
                       className={cn(
-                        'min-h-[74px] rounded-lg px-3 py-2.5 text-left transition-all',
+                        'min-h-[82px] rounded-lg px-3 py-3 text-left transition-all sm:min-h-[74px] sm:py-2.5',
                         active
                           ? 'bg-white text-gray-900 shadow-sm'
                           : 'text-gray-500 hover:bg-white/70 hover:text-gray-800',
@@ -1969,7 +1974,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
           )}
 
           {accessMode && (
-            <fieldset className="space-y-1.5">
+            <fieldset className="space-y-2">
               <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
                 <Bot className="h-3.5 w-3.5 text-gray-400" />
                 Agent URL
@@ -2037,11 +2042,13 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                 : 'border-gray-200 bg-gray-50/50 dark:border-white/10 dark:bg-white/[0.03]',
             )}>
               {/* Header row with toggle */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <DollarSign className={cn('h-3.5 w-3.5', fxShow ? 'text-blue-400' : 'text-gray-400 dark:text-gray-500')} />
-                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Local Currency Display</span>
-                  <span className="text-[10px] text-gray-400 dark:text-gray-500 font-normal">— optional</span>
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <DollarSign className={cn('h-3.5 w-3.5 shrink-0', fxShow ? 'text-blue-400' : 'text-gray-400 dark:text-gray-500')} />
+                  <span className="min-w-0 leading-tight">
+                    <span className="block text-sm font-medium text-gray-700 dark:text-gray-300">Local Currency Display</span>
+                    <span className="block text-[10px] font-normal text-gray-400 dark:text-gray-500">optional</span>
+                  </span>
                 </div>
                 <button
                   type="button"
@@ -2152,28 +2159,32 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
             type="button"
             onClick={() => toggleMultiChainMode(!multiChainMode)}
             className={cn(
-              'w-full rounded-xl border-2 p-3.5 text-left transition-all',
+              'w-full rounded-xl border-2 p-4 text-left transition-all',
               multiChainMode
                 ? 'border-violet-400 bg-violet-50/60'
                 : 'border-gray-200 bg-white hover:border-gray-300',
             )}
           >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Globe className={cn('h-4 w-4', multiChainMode ? 'text-violet-500' : 'text-gray-400')} />
-                <span className="text-sm font-semibold text-gray-800">Let payer choose network</span>
-                <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold text-violet-700">New</span>
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex min-w-0 items-start gap-2.5">
+                <Globe className={cn('mt-0.5 h-4 w-4 shrink-0', multiChainMode ? 'text-violet-500' : 'text-gray-400')} />
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-sm font-semibold text-gray-800">Let payer choose network</span>
+                    <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold text-violet-700">New</span>
+                  </div>
+                  <p className="mt-1 text-xs leading-relaxed text-gray-500">
+                    Add multiple wallet addresses so the payer can choose a network.
+                  </p>
+                </div>
               </div>
-              <div className={cn('relative h-5 w-9 rounded-full transition-colors', multiChainMode ? 'bg-violet-500' : 'bg-gray-300')}>
+              <div className={cn('relative h-5 w-9 shrink-0 rounded-full transition-colors', multiChainMode ? 'bg-violet-500' : 'bg-gray-300')}>
                 <div className={cn(
                   'absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform',
                   multiChainMode ? 'translate-x-4' : 'translate-x-0.5',
                 )} />
               </div>
             </div>
-            <p className="mt-1.5 text-xs text-gray-500 leading-relaxed">
-              Add multiple wallet addresses so the payer can choose a network.
-            </p>
           </button>
 
           {/* ── Flexible amount toggle ────────────────────────────────── */}
@@ -2181,27 +2192,29 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
             type="button"
             onClick={() => toggleFlexAmount(!flexAmount)}
             className={cn(
-              'w-full rounded-xl border-2 p-3.5 text-left transition-all',
+              'w-full rounded-xl border-2 p-4 text-left transition-all',
               flexAmount
                 ? 'border-violet-400 bg-violet-50/60'
                 : 'border-gray-200 bg-white hover:border-gray-300',
             )}
           >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Sliders className={cn('h-4 w-4', flexAmount ? 'text-violet-500' : 'text-gray-400')} />
-                <span className="text-sm font-semibold text-gray-800">Let payer enter amount</span>
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex min-w-0 items-start gap-2.5">
+                <Sliders className={cn('mt-0.5 h-4 w-4 shrink-0', flexAmount ? 'text-violet-500' : 'text-gray-400')} />
+                <div className="min-w-0">
+                  <span className="text-sm font-semibold text-gray-800">Let payer enter amount</span>
+                  <p className="mt-1 text-xs leading-relaxed text-gray-500">
+                    No fixed price. The payer enters the amount at checkout.
+                  </p>
+                </div>
               </div>
-              <div className={cn('relative h-5 w-9 rounded-full transition-colors', flexAmount ? 'bg-violet-500' : 'bg-gray-300')}>
+              <div className={cn('relative h-5 w-9 shrink-0 rounded-full transition-colors', flexAmount ? 'bg-violet-500' : 'bg-gray-300')}>
                 <div className={cn(
                   'absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform',
                   flexAmount ? 'translate-x-4' : 'translate-x-0.5',
                 )} />
               </div>
             </div>
-            <p className="mt-1.5 text-xs text-gray-500 leading-relaxed">
-              No fixed price. The payer enters the amount at checkout.
-            </p>
           </button>
 
           {/* ── Generate / checking button ───────────────────────────── */}
