@@ -69,6 +69,7 @@ const POLYMARKET_LOGO = '/brand/polymarket-logo.png'
 
 type VaultStep = 'idle' | 'ready'
 type ReceiveMode = 'email' | 'paste'
+type PaymentMode = 'personal' | 'business'
 type PosNetwork = 'base' | 'arbitrum' | 'arc' | 'solana'
 type PosCountry = 'NG' | 'KE' | 'GH'
 type PosSettlementPath = 'USDC_WALLET' | 'SPENDA_NAIRA'
@@ -546,7 +547,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   // Once a router is deployed for this address, every future link auto-shows Active.
   // ── FX preview rate ───────────────────────────────────────────────────────
   useEffect(() => {
-    if (!fxShow || !eventMode || !fxCurrency) { setFxPreviewRate(null); return }
+    if (!fxShow || !fxCurrency) { setFxPreviewRate(null); return }
     if (fxSrc === 'custom') {
       const v = parseFloat(fxCustomRate)
       setFxPreviewRate(v > 0 ? v : null)
@@ -558,7 +559,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
       if (!cancelled && d.ok && d.rate) setFxPreviewRate(d.rate)
     }).catch(() => {}).finally(() => { if (!cancelled) setFxPreviewLoad(false) })
     return () => { cancelled = true }
-  }, [fxShow, fxCurrency, eventMode, fxSrc, fxCustomRate])
+  }, [fxShow, fxCurrency, fxSrc, fxCustomRate])
 
   // ── Validation ─────────────────────────────────────────────────────────
   const evmDirty    = evmAddr.length > 0
@@ -570,6 +571,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   const starkValid  = isValidStarkAddr(starkAddr)
   const solanaValid = isValidSolanaAddr(solanaAddr)
   const isValidAmt  = amtDirty && /^(?:\d+|\d*\.\d+)$/.test(amt) && Number(amt) > 0
+  const paymentMode: PaymentMode = eventMode ? 'business' : 'personal'
 
   // In access mode event collection is always on
   const effectiveEventMode = accessMode || eventMode
@@ -625,6 +627,10 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   }
 
   // ── Access mode toggle ─────────────────────────────────────────────────────
+  function setPaymentMode(nextMode: PaymentMode) {
+    toggleEventMode(nextMode === 'business')
+  }
+
   function toggleAccessMode(on: boolean) {
     setPosMode(false)
     setStreamMode(false)
@@ -865,6 +871,12 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
           }
         }
       }
+      if (!effectiveEventMode && fxShow && fxCurrency) {
+        params.set('fx', fxCurrency); params.set('fs', '1')
+        if (fxSrc === 'custom' && parseFloat(fxCustomRate) > 0) {
+          params.set('xs', 'custom'); params.set('xr', fxCustomRate)
+        }
+      }
       if (accessMode && agentUrl) setPaylinkParam(params, 'g', agentUrl)
       return `${window.location.origin}/pay?${params.toString()}`
     }
@@ -881,6 +893,12 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
         if (fxSrc === 'custom' && parseFloat(fxCustomRate) > 0) {
           params.set('xs', 'custom'); params.set('xr', fxCustomRate)
         }
+      }
+    }
+    if (!effectiveEventMode && fxShow && fxCurrency) {
+      params.set('fx', fxCurrency); params.set('fs', '1')
+      if (fxSrc === 'custom' && parseFloat(fxCustomRate) > 0) {
+        params.set('xs', 'custom'); params.set('xr', fxCustomRate)
       }
     }
     if (accessMode && agentUrl) setPaylinkParam(params, 'g', agentUrl)
@@ -985,6 +1003,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   function handleReset() {
     setEvmAddr(''); setStarkAddr(''); setSolanaAddr(''); setAmt(''); setMemo('')
     setGeneratedLink(''); setCopied(false); setMultiChainMode(false); setFlexAmount(false)
+    setEventMode(false)
     setVaultStep('idle')
     setAccessMode(false); setPolymarketMode(false); setAgentUrl(''); setAgentUrlStatus('idle')
   }
@@ -1917,6 +1936,38 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
           </fieldset>
 
           {/* ── Agent URL (Access mode only) ─────────────────────────── */}
+          {!accessMode && (
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-1.5">
+              <div className="grid grid-cols-2 gap-1">
+                {([
+                  { key: 'personal', title: 'Personal', body: 'Simple PayLink request for one payer.', icon: Link2 },
+                  { key: 'business', title: 'Business', body: 'Collections, donations, dues, and payer logs.', icon: ScanLine },
+                ] as const).map(({ key, title, body, icon: Icon }) => {
+                  const active = paymentMode === key
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setPaymentMode(key)}
+                      className={cn(
+                        'min-h-[74px] rounded-lg px-3 py-2.5 text-left transition-all',
+                        active
+                          ? 'bg-white text-gray-900 shadow-sm'
+                          : 'text-gray-500 hover:bg-white/70 hover:text-gray-800',
+                      )}
+                    >
+                      <span className="flex items-center gap-1.5 text-sm font-semibold">
+                        <Icon className={cn('h-4 w-4', active ? 'text-blue-500' : 'text-gray-400')} />
+                        {title}
+                      </span>
+                      <span className="mt-1 block text-[11px] leading-snug text-gray-400">{body}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
           {accessMode && (
             <fieldset className="space-y-1.5">
               <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
@@ -1967,39 +2018,6 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
             </fieldset>
           )}
 
-          {/* ── Multi-payer Collection toggle (Payment mode only) ─────── */}
-          {!accessMode && <button
-            type="button"
-            onClick={() => toggleEventMode(!eventMode)}
-            className={cn(
-              'w-full rounded-xl border-2 p-3.5 text-left transition-all',
-              eventMode
-                ? 'border-blue-400 bg-blue-50/60'
-                : 'border-gray-200 bg-white hover:border-gray-300',
-            )}
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <ScanLine className={cn('h-4 w-4', eventMode ? 'text-blue-500' : 'text-gray-400')} />
-                <span className="text-sm font-semibold text-gray-800">Multi-payer Collection</span>
-                <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-700">Beta</span>
-              </div>
-              {/* Toggle pill */}
-              <div className={cn('relative h-5 w-9 rounded-full transition-colors', eventMode ? 'bg-blue-500' : 'bg-gray-300')}>
-                <div className={cn(
-                  'absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform',
-                  eventMode ? 'translate-x-4' : 'translate-x-0.5',
-                )} />
-              </div>
-            </div>
-            <p className="mt-1.5 text-xs text-gray-500 leading-relaxed">
-              Collect payer names and track payments in a live dashboard.
-            </p>
-            <p className="mt-1 text-[11px] text-gray-400">
-              Suitable for: <span className="font-medium text-gray-500">donations · group splits · fees · dues · registrations</span>
-            </p>
-          </button>}
-
           {/* ── Access mode: multi-payer always on notice ─────────────── */}
           {accessMode && (
             <div className="flex items-center gap-2.5 rounded-xl border border-blue-100 dark:border-blue-900/40 bg-blue-50/50 dark:bg-blue-950/30 px-4 py-3">
@@ -2011,7 +2029,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
           )}
 
           {/* ── FX Display Settings (event or access mode) ────────────── */}
-          {effectiveEventMode && (
+          {(effectiveEventMode || !accessMode) && (
             <div className={cn(
               'rounded-xl border p-4 space-y-3 transition-all',
               fxShow
@@ -2317,8 +2335,20 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               </div>
 
               {/* Organizer dashboard — multi-payer / access mode only */}
+              {!effectiveEventMode && (
+                <a
+                  href={buildGlobalDashboardLink()}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 hover:border-gray-300 hover:bg-gray-50 transition-all active:scale-[0.98]"
+                >
+                  <LayoutDashboard className="h-4 w-4" />
+                  Open Personal Dashboard
+                </a>
+              )}
+
               {effectiveEventMode && (
-                <div className="grid gap-2 sm:grid-cols-2">
+                <div className="grid gap-2">
                   <a
                     href={buildDashboardLink()}
                     target="_blank"
@@ -2326,16 +2356,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                     className="flex w-full items-center justify-center gap-2 rounded-xl border border-blue-200 bg-white px-4 py-2.5 text-sm font-semibold text-blue-600 hover:bg-blue-50 transition-all active:scale-[0.98]"
                   >
                     <LayoutDashboard className="h-4 w-4" />
-                    Open Organizer Dashboard
-                  </a>
-                  <a
-                    href={buildGlobalDashboardLink()}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 hover:border-gray-300 hover:bg-gray-50 transition-all active:scale-[0.98]"
-                  >
-                    <Globe className="h-4 w-4" />
-                    Open Global Dashboard
+                    Open Business Dashboard
                   </a>
                 </div>
               )}
