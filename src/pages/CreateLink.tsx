@@ -40,6 +40,8 @@ import {
   LogOut,
   Radio,
   Store,
+  UserRound,
+  Briefcase,
 } from 'lucide-react'
 import { QRCodeCanvas } from 'qrcode.react'
 import { FX_CURRENCIES, getFxMeta, formatLocalAmt, fetchFxRate } from '../lib/fx'
@@ -65,7 +67,23 @@ const isValidSolanaAddr = isValidSolanaAddress
 const VISIBLE_CREATE_CHAINS: ChainKey[] = ['base', 'arc', 'solana', 'arbitrum']
 const SHOW_STARKNET_CREATE_UI = false
 const TELEGRAM_AGENT_URL = import.meta.env.VITE_TELEGRAM_AGENT_URL || 'https://t.me/HashPayLinkBot'
-const POLYMARKET_LOGO = '/brand/polymarket-logo.png'
+
+function PolymarketMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className={className} fill="none">
+      <path
+        d="M6.25 5.8 18.4 2.75a1 1 0 0 1 1.24.97v16.56a1 1 0 0 1-1.24.97L6.25 18.2a1 1 0 0 1-.75-.97V6.77a1 1 0 0 1 .75-.97Z"
+        stroke="currentColor"
+        strokeWidth="2.1"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M7.2 8.45 17.2 5.9v5.35L7.2 8.45ZM7.2 15.55l10-2.8v5.35l-10-2.55Z"
+        fill="currentColor"
+      />
+    </svg>
+  )
+}
 
 type VaultStep = 'idle' | 'ready'
 type ReceiveMode = 'email' | 'paste'
@@ -319,11 +337,11 @@ function CircleReceiveSelector({
   }, [selectedNet, isEvmNet, receiveMode, evmValid, evmAddr, solanaValid, solanaAddr])
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-1.5">
       <label className="text-sm font-medium text-gray-700 dark:text-gray-200">
         Receive to
       </label>
-      <div className={cn('grid gap-2', canReceiveWithEmail ? 'grid-cols-2' : 'grid-cols-1')}>
+      <div className={cn('grid gap-2', canReceiveWithEmail ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1')}>
         <button
           type="button"
           onClick={() => {
@@ -332,7 +350,7 @@ function CircleReceiveSelector({
             setGeneratedLink('')
           }}
           className={cn(
-            'rounded-xl border px-3 py-3 text-left transition-all active:scale-[0.99]',
+            'rounded-xl border px-3 py-2.5 text-left transition-all active:scale-[0.99]',
             receiveMode === 'paste'
               ? 'border-gray-900 bg-gray-50 text-gray-900 dark:border-white/30 dark:bg-white/10 dark:text-gray-100'
               : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:border-white/20 dark:hover:bg-white/[0.07]',
@@ -350,7 +368,7 @@ function CircleReceiveSelector({
             onClick={handleEmailRecipient}
             disabled={circleRecipientPending}
             className={cn(
-              'rounded-xl border px-3 py-3 text-left transition-all active:scale-[0.99]',
+              'rounded-xl border px-3 py-2.5 text-left transition-all active:scale-[0.99]',
               receiveMode === 'email'
                 ? 'border-gray-900 bg-gray-50 text-gray-900 dark:border-white/30 dark:bg-white/10 dark:text-gray-100'
                 : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:border-white/20 dark:hover:bg-white/[0.07]',
@@ -1040,7 +1058,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
       ]
 
   return (
-    <div className="mx-auto max-w-lg animate-fade-in">
+    <div className="mx-auto w-72 min-w-0 animate-fade-in sm:w-[32rem]">
       {/* ── Hero ──────────────────────────────────────────────────────── */}
       <div className="mb-8 text-center">
         <span className="mb-4 inline-flex items-center gap-1.5 rounded-full border border-blue-100 bg-blue-50 px-3.5 py-1.5 text-xs font-semibold text-[#0071E3]">
@@ -1111,7 +1129,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
         {/* Multi-chain mode active badge */}
         {multiChainMode && !posMode && !streamMode && !polymarketMode && (
           <div className="mt-5 flex justify-center">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-[11px] font-semibold text-violet-700">
+            <span className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-gray-700 shadow-sm dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200">
               <Globe className="h-3 w-3" />
               Multi-Chain · All networks active
             </span>
@@ -1120,27 +1138,28 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
       </div>
 
       {/* ── Form card ─────────────────────────────────────────────────── */}
-      <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-card dark:border-white/10 dark:bg-[#111114]">
-        <div className="space-y-5 p-6 sm:p-8">
-
-          <div className="flex items-center justify-center gap-2 text-[11px] font-semibold text-gray-400">
-            <img src="/brand/circle-logo.jpeg" alt="" className="h-4 w-4 rounded-full object-cover" />
-            <span>Powered by Circle USDC</span>
-          </div>
+      <div
+        className="w-full min-w-0 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-card dark:border-white/10 dark:bg-[#111114]"
+        style={{ overflowX: 'hidden' }}
+      >
+        <div className="border-b border-gray-100 bg-gray-50/70 p-1.5 dark:border-white/10 dark:bg-white/[0.03] sm:p-2">
 
           {/* ── Payment / Access toggle ───────────────────────────────── */}
-          <div className="grid grid-cols-5 rounded-xl border border-gray-200 bg-gray-50 p-1 dark:border-white/10 dark:bg-white/[0.04]">
+          <div className="grid min-w-0 grid-cols-2 sm:grid-cols-5">
             <button
               type="button"
               onClick={() => toggleAccessMode(false)}
               aria-label="Payment"
               title="Payment"
               className={cn(
-                'flex h-11 items-center justify-center rounded-lg transition-all',
-                !accessMode && !posMode && !streamMode && !polymarketMode ? 'bg-white text-gray-900 shadow-sm dark:bg-white/10 dark:text-white' : 'text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300',
+                'flex h-[52px] min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl text-[10px] font-semibold transition-all',
+                !accessMode && !posMode && !streamMode && !polymarketMode
+                  ? 'bg-gray-950 text-white shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:text-white dark:ring-white/10'
+                  : 'text-gray-400 hover:bg-white/70 hover:text-gray-700 dark:text-gray-500 dark:hover:bg-white/[0.06] dark:hover:text-gray-300',
               )}
             >
               <Coins className="h-5 w-5" />
+              <span>Payment</span>
             </button>
             <button
               type="button"
@@ -1148,11 +1167,14 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               aria-label="Agent"
               title="Agent"
               className={cn(
-                'flex h-11 items-center justify-center rounded-lg transition-all',
-                accessMode ? 'bg-white text-gray-900 shadow-sm dark:bg-white/10 dark:text-white' : 'text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300',
+                'flex h-[52px] min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl text-[10px] font-semibold transition-all',
+                accessMode
+                  ? 'bg-gray-950 text-white shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:text-white dark:ring-white/10'
+                  : 'text-gray-400 hover:bg-white/70 hover:text-gray-700 dark:text-gray-500 dark:hover:bg-white/[0.06] dark:hover:text-gray-300',
               )}
             >
               <Bot className="h-5 w-5" />
+              <span>Agent</span>
             </button>
             <button
               type="button"
@@ -1160,11 +1182,14 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               aria-label="Retail POS"
               title="Retail POS"
               className={cn(
-                'flex h-11 items-center justify-center rounded-lg transition-all',
-                posMode ? 'bg-white text-gray-900 shadow-sm dark:bg-white/10 dark:text-white' : 'text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300',
+                'flex h-[52px] min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl text-[10px] font-semibold transition-all',
+                posMode
+                  ? 'bg-gray-950 text-white shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:text-white dark:ring-white/10'
+                  : 'text-gray-400 hover:bg-white/70 hover:text-gray-700 dark:text-gray-500 dark:hover:bg-white/[0.06] dark:hover:text-gray-300',
               )}
             >
               <Store className="h-5 w-5" />
+              <span>POS</span>
             </button>
             <button
               type="button"
@@ -1172,11 +1197,14 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               aria-label="StreamPay"
               title="StreamPay"
               className={cn(
-                'flex h-11 items-center justify-center rounded-lg transition-all',
-                streamMode ? 'bg-white text-gray-900 shadow-sm dark:bg-white/10 dark:text-white' : 'text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300',
+                'flex h-[52px] min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl text-[10px] font-semibold transition-all',
+                streamMode
+                  ? 'bg-gray-950 text-white shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:text-white dark:ring-white/10'
+                  : 'text-gray-400 hover:bg-white/70 hover:text-gray-700 dark:text-gray-500 dark:hover:bg-white/[0.06] dark:hover:text-gray-300',
               )}
             >
               <Radio className="h-5 w-5" />
+              <span>Stream</span>
             </button>
             <button
               type="button"
@@ -1184,20 +1212,25 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               aria-label="PolyDesk"
               title="PolyDesk"
               className={cn(
-                'flex h-11 items-center justify-center rounded-lg transition-all',
-                polymarketMode ? 'bg-white text-gray-900 shadow-sm dark:bg-white/10 dark:text-white' : 'text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300',
+                'flex h-[52px] min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl text-[10px] font-semibold transition-all',
+                polymarketMode
+                  ? 'bg-gray-950 text-white shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:text-white dark:ring-white/10'
+                  : 'text-gray-400 hover:bg-white/70 hover:text-gray-700 dark:text-gray-500 dark:hover:bg-white/[0.06] dark:hover:text-gray-300',
               )}
             >
-              <img src={POLYMARKET_LOGO} alt="" className="h-5 w-5 invert dark:invert-0" />
+              <PolymarketMark className="h-5 w-5" />
+              <span>Poly</span>
             </button>
           </div>
+        </div>
 
+        <div className="space-y-0 p-0">
           {polymarketMode ? (
-            <div className="space-y-5">
+            <div className="space-y-5 p-4 sm:p-5">
               <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-4 dark:border-white/10 dark:bg-white/[0.04]">
                 <div className="flex items-start gap-3">
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white dark:border-white/10 dark:bg-white/[0.06]">
-                    <img src={POLYMARKET_LOGO} alt="" className="h-[18px] w-[18px] invert dark:invert-0" />
+                    <PolymarketMark className="h-[18px] w-[18px] text-gray-700 dark:text-gray-200" />
                   </div>
                   <div className="min-w-0">
                     <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">PolyDesk</p>
@@ -1241,7 +1274,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               </div>
             </div>
           ) : streamMode ? (
-            <div className="space-y-5">
+            <div className="space-y-5 p-4 sm:p-5">
               <button
                 type="button"
                 onClick={closeStreamMode}
@@ -1322,7 +1355,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               </p>
             </div>
           ) : posMode ? (
-            <div className="space-y-5">
+            <div className="space-y-5 p-4 sm:p-5">
               <button
                 type="button"
                 onClick={handlePosBack}
@@ -1603,7 +1636,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               )}
             </div>
           ) : accessMode ? (
-            <div className="space-y-5">
+            <div className="space-y-5 p-4 sm:p-5">
               <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-4 dark:border-white/10 dark:bg-white/[0.04]">
                 <div className="flex items-start gap-3">
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white dark:border-white/10 dark:bg-white/[0.06]">
@@ -1669,6 +1702,35 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
             </div>
           ) : (
             <>
+          <div className="overflow-hidden bg-gray-50/60 dark:bg-white/[0.035]">
+            {!accessMode && (
+              <div className="grid min-w-0 grid-cols-2 border-b border-gray-100 bg-white p-1.5 dark:border-white/10 dark:bg-white/[0.04]">
+                {([
+                  { key: 'personal', title: 'Personal', icon: UserRound },
+                  { key: 'business', title: 'Business', icon: Briefcase },
+                ] as const).map(({ key, title, icon: Icon }) => {
+                  const active = paymentMode === key
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setPaymentMode(key)}
+                      className={cn(
+                        'flex h-[52px] min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl text-[11px] font-semibold transition-all',
+                        active
+                          ? 'bg-gray-950 text-white shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:text-white dark:ring-white/10'
+                          : 'text-gray-500 hover:bg-gray-50 hover:text-gray-800 dark:hover:bg-white/[0.06] dark:hover:text-gray-200',
+                      )}
+                    >
+                      <Icon className="h-5 w-5" />
+                      {title}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+
+            <div className="space-y-3.5 px-3.5 py-3 sm:p-4">
 
           {!accessMode && !multiChainMode && PRIVY_AUTH_ENABLED && (
             <CircleReceiveSelector
@@ -1700,7 +1762,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               <span className="flex items-center gap-2 text-sm font-medium text-gray-700">
                 {multiChainMode ? 'EVM wallet address' : 'Wallet address'}
               </span>
-              <span className="text-[11px] font-medium text-gray-400">
+              <span className="hidden text-[11px] font-medium text-gray-400 sm:inline">
                 {multiChainMode ? 'Base · Arc Testnet · Arbitrum' : 'Starts with 0x'}
               </span>
             </label>
@@ -1713,7 +1775,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                 spellCheck={false}
                 autoComplete="off"
                 className={cn(
-                  'w-full rounded-xl border bg-gray-50/60 px-4 py-3 font-mono text-sm',
+                  'w-full rounded-xl border bg-gray-50/60 px-3.5 py-2.5 font-mono text-sm',
                   'placeholder:text-gray-400 transition-all focus:bg-white focus:outline-none focus:ring-2',
                   evmDirty && !evmValid
                     ? 'border-red-300 pr-10 text-red-600 focus:ring-red-100'
@@ -1775,7 +1837,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                 spellCheck={false}
                 autoComplete="off"
                 className={cn(
-                  'w-full rounded-xl border bg-gray-50/60 px-4 py-3 font-mono text-sm',
+                  'w-full rounded-xl border bg-gray-50/60 px-3.5 py-2.5 font-mono text-sm',
                   'placeholder:text-gray-400 transition-all focus:bg-white focus:outline-none focus:ring-2',
                   starkDirty && !starkValid
                     ? 'border-red-300 pr-10 text-red-600 focus:ring-red-100'
@@ -1809,7 +1871,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               <span className="flex items-center gap-2 text-sm font-medium text-gray-700">
                 Solana wallet address
               </span>
-              <span className="text-[11px] font-medium text-gray-400">No 0x · usually 32-44 chars</span>
+              <span className="hidden text-[11px] font-medium text-gray-400 sm:inline">No 0x · usually 32-44 chars</span>
             </label>
             <div className="relative">
               <input
@@ -1820,7 +1882,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                 spellCheck={false}
                 autoComplete="off"
                 className={cn(
-                  'w-full rounded-xl border bg-gray-50/60 px-4 py-3 font-mono text-sm',
+                  'w-full rounded-xl border bg-gray-50/60 px-3.5 py-2.5 font-mono text-sm',
                   'placeholder:text-gray-400 transition-all focus:bg-white focus:outline-none focus:ring-2',
                   solanaDirty && !solanaValid
                     ? 'border-red-300 pr-10 text-red-600 focus:ring-red-100'
@@ -1871,11 +1933,13 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
 
           {/* ── Amount ───────────────────────────────────────────────── */}
           {flexAmount && (
-            <div className="flex items-center gap-3 rounded-xl border border-dashed border-violet-200 bg-violet-50/40 px-4 py-3">
-              <Sliders className="h-4 w-4 shrink-0 text-violet-400" />
-              <div>
-                <p className="text-xs font-semibold text-violet-600">Flexible Amount enabled</p>
-                <p className="text-[11px] text-violet-400 mt-0.5">Payer enters the amount at checkout</p>
+            <div className="flex items-center gap-2.5 rounded-xl border border-gray-200 bg-white px-3 py-2.5 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-gray-900 bg-gray-950 text-white dark:border-white dark:bg-white dark:text-gray-950">
+                <Sliders className="h-3.5 w-3.5" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-xs font-semibold leading-tight text-gray-800 dark:text-gray-100">Flexible amount enabled</p>
+                <p className="mt-0.5 text-[11px] font-medium leading-snug text-gray-400 dark:text-gray-500">Payer enters the amount.</p>
               </div>
             </div>
           )}
@@ -1893,7 +1957,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                 value={amt}
                 onChange={(e) => { setAmt(normalizeAmountInput(e.target.value)); setGeneratedLink('') }}
                 className={cn(
-                  'w-full rounded-xl border bg-gray-50/60 px-4 py-3 pr-28 text-sm',
+                  'w-full rounded-xl border bg-gray-50/60 px-3.5 py-2.5 pr-28 text-sm',
                   'placeholder:text-gray-400 transition-all focus:bg-white focus:outline-none focus:ring-2',
                   amtDirty && !isValidAmt
                     ? 'border-red-300 focus:ring-red-100'
@@ -1931,43 +1995,11 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               value={memo}
               maxLength={100}
               onChange={(e) => { setMemo(e.target.value); setGeneratedLink('') }}
-              className="w-full rounded-xl border border-gray-200 bg-gray-50/60 px-4 py-3 text-sm placeholder:text-gray-400 transition-all focus:border-[#0071E3]/40 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0071E3]/15"
+              className="w-full rounded-xl border border-gray-200 bg-gray-50/60 px-3.5 py-2.5 text-sm placeholder:text-gray-400 transition-all focus:border-[#0071E3]/40 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0071E3]/15"
             />
           </fieldset>
 
           {/* ── Agent URL (Access mode only) ─────────────────────────── */}
-          {!accessMode && (
-            <div className="rounded-xl border border-gray-200 bg-gray-50 p-1.5">
-              <div className="grid grid-cols-2 gap-1">
-                {([
-                  { key: 'personal', title: 'Personal', body: 'Simple PayLink request for one payer.', icon: Link2 },
-                  { key: 'business', title: 'Business', body: 'Collections, donations, dues, and payer logs.', icon: ScanLine },
-                ] as const).map(({ key, title, body, icon: Icon }) => {
-                  const active = paymentMode === key
-                  return (
-                    <button
-                      key={key}
-                      type="button"
-                      onClick={() => setPaymentMode(key)}
-                      className={cn(
-                        'min-h-[74px] rounded-lg px-3 py-2.5 text-left transition-all',
-                        active
-                          ? 'bg-white text-gray-900 shadow-sm'
-                          : 'text-gray-500 hover:bg-white/70 hover:text-gray-800',
-                      )}
-                    >
-                      <span className="flex items-center gap-1.5 text-sm font-semibold">
-                        <Icon className={cn('h-4 w-4', active ? 'text-blue-500' : 'text-gray-400')} />
-                        {title}
-                      </span>
-                      <span className="mt-1 block text-[11px] leading-snug text-gray-400">{body}</span>
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-
           {accessMode && (
             <fieldset className="space-y-1.5">
               <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
@@ -2020,10 +2052,12 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
 
           {/* ── Access mode: multi-payer always on notice ─────────────── */}
           {accessMode && (
-            <div className="flex items-center gap-2.5 rounded-xl border border-blue-100 dark:border-blue-900/40 bg-blue-50/50 dark:bg-blue-950/30 px-4 py-3">
-              <ScanLine className="h-3.5 w-3.5 text-blue-400 dark:text-blue-500 shrink-0" />
-              <p className="text-xs text-blue-600 dark:text-blue-300">
-                <span className="font-semibold">Multi-payer collection is always on</span> in Access mode — each payer's name is logged and archived to 0G for verification.
+            <div className="flex items-center gap-2.5 rounded-xl border border-gray-200 bg-white px-3 py-2.5 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-gray-900 bg-gray-950 text-white dark:border-white dark:bg-white dark:text-gray-950">
+                <ScanLine className="h-3.5 w-3.5" />
+              </span>
+              <p className="text-xs leading-snug text-gray-500 dark:text-gray-400">
+                <span className="font-semibold text-gray-800 dark:text-gray-100">Multi-payer collection is always on</span> in Access mode. Each payer's name is logged and archived to 0G.
               </p>
             </div>
           )}
@@ -2031,42 +2065,53 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
           {/* ── FX Display Settings (event or access mode) ────────────── */}
           {(effectiveEventMode || !accessMode) && (
             <div className={cn(
-              'rounded-xl border p-4 space-y-3 transition-all',
+              'rounded-xl border p-3 space-y-3 transition-all',
               fxShow
-                ? 'border-blue-200 bg-blue-50/30 dark:border-blue-800/40 dark:bg-blue-950/20'
+                ? 'border-gray-300 bg-white shadow-sm dark:border-white/15 dark:bg-white/[0.05]'
                 : 'border-gray-200 bg-gray-50/50 dark:border-white/10 dark:bg-white/[0.03]',
             )}>
               {/* Header row with toggle */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <DollarSign className={cn('h-3.5 w-3.5', fxShow ? 'text-blue-400' : 'text-gray-400 dark:text-gray-500')} />
-                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Local Currency Display</span>
-                  <span className="text-[10px] text-gray-400 dark:text-gray-500 font-normal">— optional</span>
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className={cn(
+                    'flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border transition-all',
+                    fxShow
+                      ? 'border-gray-900 bg-gray-950 text-white dark:border-white/20 dark:bg-gray-900 dark:text-white'
+                      : 'border-gray-200 bg-white text-gray-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-500',
+                  )}>
+                    <DollarSign className="h-3.5 w-3.5" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-semibold leading-tight text-gray-800 dark:text-gray-100">Local Currency Display</span>
+                    <span className="block text-[10px] font-medium uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Optional</span>
+                  </span>
                 </div>
                 <button
                   type="button"
                   onClick={() => setFxShow(v => !v)}
-                  className="shrink-0"
+                  aria-pressed={fxShow}
+                  className={cn(
+                    'relative h-6 w-10 shrink-0 rounded-full p-0.5 transition-all focus:outline-none focus:ring-2 focus:ring-gray-900/10 dark:focus:ring-white/20 sm:h-7 sm:w-12',
+                    fxShow ? 'bg-gray-950 shadow-inner dark:bg-white' : 'bg-gray-200 dark:bg-white/10',
+                  )}
                 >
-                  <div className={cn('relative h-5 w-9 rounded-full transition-colors', fxShow ? 'bg-blue-500' : 'bg-gray-300')}>
-                    <div className={cn(
-                      'absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform',
-                      fxShow ? 'translate-x-4' : 'translate-x-0.5',
-                    )} />
-                  </div>
+                  <span className={cn(
+                    'block h-5 w-5 rounded-full bg-white shadow-sm transition-transform dark:bg-gray-950 sm:h-6 sm:w-6',
+                    fxShow ? 'translate-x-4 sm:translate-x-5' : 'translate-x-0',
+                  )} />
                 </button>
               </div>
 
               {/* Settings — only when toggled on */}
               {fxShow && (
-                <div className="space-y-2.5 pt-0.5">
+                <div className="space-y-3 border-t border-gray-100 pt-3 dark:border-white/10">
                   {/* Currency picker */}
-                  <div className="flex items-center gap-3">
-                    <label className="w-16 shrink-0 text-[11px] text-gray-500">Currency</label>
+                  <div className="grid gap-1.5 sm:grid-cols-[76px_minmax(0,1fr)] sm:items-center sm:gap-3">
+                    <label className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-400">Currency</label>
                     <select
                       value={fxCurrency}
                       onChange={e => { setFxCurrency(e.target.value); setFxPreviewRate(null) }}
-                      className="flex-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-700 focus:border-blue-300 focus:outline-none focus:ring-1 focus:ring-blue-100"
+                      className="min-w-0 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 outline-none transition-all focus:border-gray-900 focus:ring-2 focus:ring-gray-900/10 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-100 dark:focus:border-white dark:focus:ring-white/10"
                     >
                       {FX_CURRENCIES.map(c => (
                         <option key={c.code} value={c.code}>
@@ -2077,23 +2122,27 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                   </div>
 
                   {/* Rate source toggle */}
-                  <div className="flex items-center gap-3">
-                    <label className="w-16 shrink-0 text-[11px] text-gray-500">Rate</label>
-                    <div className="flex flex-1 rounded-lg border border-gray-200 bg-gray-50 p-0.5 text-xs font-medium">
+                  <div className="grid gap-1.5 sm:grid-cols-[76px_minmax(0,1fr)] sm:items-center sm:gap-3">
+                    <label className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-400">Rate</label>
+                    <div className="grid grid-cols-2 rounded-lg border border-gray-200 bg-gray-50 p-1 text-xs font-semibold dark:border-white/10 dark:bg-white/[0.04]">
                       <button
                         type="button"
                         onClick={() => setFxSrc('live')}
                         className={cn(
-                          'flex-1 rounded-md px-3 py-1.5 transition-all',
-                          fxSrc === 'live' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700',
+                          'min-w-0 rounded-md px-2 py-2 text-center transition-all',
+                          fxSrc === 'live'
+                            ? 'bg-gray-950 text-white shadow-sm dark:bg-gray-900 dark:text-white'
+                            : 'text-gray-500 hover:bg-white/70 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.06] dark:hover:text-gray-200',
                         )}
                       >Live (Fixer.io)</button>
                       <button
                         type="button"
                         onClick={() => setFxSrc('custom')}
                         className={cn(
-                          'flex-1 rounded-md px-3 py-1.5 transition-all',
-                          fxSrc === 'custom' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700',
+                          'min-w-0 rounded-md px-2 py-2 text-center transition-all',
+                          fxSrc === 'custom'
+                            ? 'bg-gray-950 text-white shadow-sm dark:bg-gray-900 dark:text-white'
+                            : 'text-gray-500 hover:bg-white/70 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.06] dark:hover:text-gray-200',
                         )}
                       >Custom / Street</button>
                     </div>
@@ -2101,9 +2150,9 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
 
                   {/* Custom rate input */}
                   {fxSrc === 'custom' && (
-                    <div className="flex items-center gap-3">
-                      <label className="w-16 shrink-0 text-[11px] text-gray-500">1 USDC =</label>
-                      <div className="relative flex-1">
+                    <div className="grid gap-1.5 sm:grid-cols-[76px_minmax(0,1fr)] sm:items-center sm:gap-3">
+                      <label className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-400">1 USDC</label>
+                      <div className="relative min-w-0">
                         <input
                           type="number"
                           min="0"
@@ -2111,7 +2160,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                           placeholder={`e.g. 1780`}
                           value={fxCustomRate}
                           onChange={e => setFxCustomRate(e.target.value)}
-                          className="w-full rounded-lg border border-gray-200 bg-white px-3 py-1.5 pr-14 text-sm text-gray-700 placeholder:text-gray-300 focus:border-blue-300 focus:outline-none focus:ring-1 focus:ring-blue-100"
+                          className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 pr-14 text-sm font-medium text-gray-700 outline-none placeholder:text-gray-300 transition-all focus:border-gray-900 focus:ring-2 focus:ring-gray-900/10 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-100 dark:focus:border-white dark:focus:ring-white/10"
                         />
                         <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-semibold text-gray-400">
                           {fxCurrency}
@@ -2121,25 +2170,25 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                   )}
 
                   {/* Live preview */}
-                  <div className="flex items-center justify-center gap-1.5 pt-0.5">
+                  <div className="flex items-center justify-center gap-1.5 rounded-lg bg-gray-50 px-3 py-2 dark:bg-white/[0.035]">
                     {fxPreviewLoad ? (
                       <RefreshCw className="h-3 w-3 animate-spin text-gray-300" />
                     ) : fxPreviewRate ? (() => {
                         const decimals = getFxMeta(fxCurrency)?.decimals ?? 2
                         return (
-                          <p className="text-[11px] text-gray-400 text-center">
-                            {fxSrc === 'custom' ? '📌 Custom rate:' : 'Live rate:'}{' '}
+                          <p className="text-center text-[11px] font-medium leading-snug text-gray-500 dark:text-gray-400">
+                            {fxSrc === 'custom' ? 'Custom rate:' : 'Live rate:'}{' '}
                             1 USDC = {fxPreviewRate.toFixed(decimals > 0 ? 2 : 0)} {fxCurrency}
                             {isValidAmt && ` · ≈ ${formatLocalAmt(parseFloat(amt), fxPreviewRate, decimals)} ${fxCurrency} for ${amt} USDC`}
                           </p>
                         )
                       })() : fxSrc === 'custom' && !fxCustomRate ? (
-                      <p className="text-[11px] text-gray-400">Enter your street / parallel market rate above</p>
+                      <p className="text-center text-[11px] font-medium leading-snug text-gray-400">Enter your street / parallel market rate above</p>
                     ) : null}
                   </div>
                   {fxSrc === 'custom' && (
-                    <p className="text-[10px] text-gray-400 dark:text-gray-500 text-center leading-relaxed">
-                      Custom rate is baked into the link — regenerate if the rate shifts significantly.
+                    <p className="px-2 text-center text-[10px] leading-relaxed text-gray-400 dark:text-gray-500">
+                      Custom rate is baked into the link. Regenerate if the rate shifts significantly.
                     </p>
                   )}
                 </div>
@@ -2152,28 +2201,40 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
             type="button"
             onClick={() => toggleMultiChainMode(!multiChainMode)}
             className={cn(
-              'w-full rounded-xl border-2 p-3.5 text-left transition-all',
+              'w-full rounded-xl border p-3 text-left transition-all',
               multiChainMode
-                ? 'border-violet-400 bg-violet-50/60'
-                : 'border-gray-200 bg-white hover:border-gray-300',
+                ? 'border-gray-300 bg-white shadow-sm dark:border-white/15 dark:bg-white/[0.05]'
+                : 'border-gray-200 bg-white hover:border-gray-300 dark:border-white/10 dark:bg-white/[0.03] dark:hover:border-white/20',
             )}
           >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Globe className={cn('h-4 w-4', multiChainMode ? 'text-violet-500' : 'text-gray-400')} />
-                <span className="text-sm font-semibold text-gray-800">Let payer choose network</span>
-                <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold text-violet-700">New</span>
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-2">
+                <span className={cn(
+                  'flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border transition-all',
+                  multiChainMode
+                    ? 'border-gray-900 bg-gray-950 text-white dark:border-white/20 dark:bg-gray-900 dark:text-white'
+                    : 'border-gray-200 bg-white text-gray-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-500',
+                )}>
+                  <Globe className="h-3.5 w-3.5" />
+                </span>
+                <span className="min-w-0">
+                  <span className="flex items-center gap-1.5">
+                    <span className="text-sm font-semibold leading-tight text-gray-800 dark:text-gray-100">Let payer choose network</span>
+                    <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-gray-500 dark:bg-white/10 dark:text-gray-400">New</span>
+                  </span>
+                  <span className="block text-[11px] font-medium leading-snug text-gray-400 dark:text-gray-500">Add addresses per network.</span>
+                </span>
               </div>
-              <div className={cn('relative h-5 w-9 rounded-full transition-colors', multiChainMode ? 'bg-violet-500' : 'bg-gray-300')}>
-                <div className={cn(
-                  'absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform',
-                  multiChainMode ? 'translate-x-4' : 'translate-x-0.5',
+              <span className={cn(
+                'relative h-6 w-10 shrink-0 rounded-full p-0.5 transition-all sm:h-7 sm:w-12',
+                multiChainMode ? 'bg-gray-950 shadow-inner dark:bg-white' : 'bg-gray-200 dark:bg-white/10',
+              )}>
+                <span className={cn(
+                  'block h-5 w-5 rounded-full bg-white shadow-sm transition-transform dark:bg-gray-950 sm:h-6 sm:w-6',
+                  multiChainMode ? 'translate-x-4 sm:translate-x-5' : 'translate-x-0',
                 )} />
-              </div>
+              </span>
             </div>
-            <p className="mt-1.5 text-xs text-gray-500 leading-relaxed">
-              Add multiple wallet addresses so the payer can choose a network.
-            </p>
           </button>
 
           {/* ── Flexible amount toggle ────────────────────────────────── */}
@@ -2181,44 +2242,57 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
             type="button"
             onClick={() => toggleFlexAmount(!flexAmount)}
             className={cn(
-              'w-full rounded-xl border-2 p-3.5 text-left transition-all',
+              'w-full rounded-xl border p-3 text-left transition-all',
               flexAmount
-                ? 'border-violet-400 bg-violet-50/60'
-                : 'border-gray-200 bg-white hover:border-gray-300',
+                ? 'border-gray-300 bg-white shadow-sm dark:border-white/15 dark:bg-white/[0.05]'
+                : 'border-gray-200 bg-white hover:border-gray-300 dark:border-white/10 dark:bg-white/[0.03] dark:hover:border-white/20',
             )}
           >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Sliders className={cn('h-4 w-4', flexAmount ? 'text-violet-500' : 'text-gray-400')} />
-                <span className="text-sm font-semibold text-gray-800">Let payer enter amount</span>
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-2">
+                <span className={cn(
+                  'flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border transition-all',
+                  flexAmount
+                    ? 'border-gray-900 bg-gray-950 text-white dark:border-white/20 dark:bg-gray-900 dark:text-white'
+                    : 'border-gray-200 bg-white text-gray-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-500',
+                )}>
+                  <Sliders className="h-3.5 w-3.5" />
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold leading-tight text-gray-800 dark:text-gray-100">Let payer enter amount</span>
+                  <span className="block text-[11px] font-medium leading-snug text-gray-400 dark:text-gray-500">Payer enters the amount.</span>
+                </span>
               </div>
-              <div className={cn('relative h-5 w-9 rounded-full transition-colors', flexAmount ? 'bg-violet-500' : 'bg-gray-300')}>
-                <div className={cn(
-                  'absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform',
-                  flexAmount ? 'translate-x-4' : 'translate-x-0.5',
+              <span className={cn(
+                'relative h-6 w-10 shrink-0 rounded-full p-0.5 transition-all sm:h-7 sm:w-12',
+                flexAmount ? 'bg-gray-950 shadow-inner dark:bg-white' : 'bg-gray-200 dark:bg-white/10',
+              )}>
+                <span className={cn(
+                  'block h-5 w-5 rounded-full bg-white shadow-sm transition-transform dark:bg-gray-950 sm:h-6 sm:w-6',
+                  flexAmount ? 'translate-x-4 sm:translate-x-5' : 'translate-x-0',
                 )} />
-              </div>
+              </span>
             </div>
-            <p className="mt-1.5 text-xs text-gray-500 leading-relaxed">
-              No fixed price. The payer enters the amount at checkout.
-            </p>
           </button>
+            </div>
+          </div>
 
           {/* ── Generate / checking button ───────────────────────────── */}
+          <div className="space-y-2 p-3 sm:p-4">
           {vaultStep === 'idle' && (
             <button
               onClick={handleGenerate}
               disabled={!canGenerate}
               className={cn(
-                'flex w-full items-center justify-center gap-2 rounded-xl px-6 py-3.5 text-sm font-semibold transition-all duration-200',
+                'flex w-full items-center justify-center gap-1.5 rounded-xl px-4 py-3 text-center text-sm font-semibold leading-tight transition-all duration-200',
                 canGenerate
                   ? 'bg-black text-white shadow-button hover:bg-gray-800 hover:shadow-md active:scale-[0.98]'
                   : 'cursor-not-allowed bg-gray-100 text-gray-400',
               )}
             >
-              <Link2 className="h-4 w-4" />
-              Generate Payment Link
-              {canGenerate && <ArrowRight className="h-4 w-4" />}
+              <Link2 className="h-4 w-4 shrink-0" />
+              <span>Generate Payment Link</span>
+              {canGenerate && <ArrowRight className="h-4 w-4 shrink-0" />}
             </button>
           )}
 
@@ -2227,63 +2301,66 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               ? (!evmDirty && !solanaDirty && !(SHOW_STARKNET_CREATE_UI && starkDirty))
               : (selectedNet === 'solana' ? !solanaDirty : isEvmNet ? !evmDirty : !starkDirty)
           ) && (
-            <p className="text-center text-xs text-gray-400">
+            <p className="px-2 text-center text-xs leading-snug text-gray-400">
               {multiChainMode
                 ? 'Enter at least one wallet address to continue'
                 : `Enter a ${selectedNet === 'solana' ? 'Solana' : 'wallet'} address to continue`}
             </p>
           )}
+          </div>
             </>
           )}
         </div>
 
         {/* ── Link ready panel ─────────────────────────────────────────── */}
         {linkReady && (
-          <div className="animate-slide-up border-t border-gray-100 bg-gradient-to-b from-gray-50/80 to-white p-6 sm:px-8 space-y-4">
+          <div className="animate-slide-up space-y-4 border-t border-gray-100 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.03] sm:p-4">
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <p className="flex items-center gap-2 text-sm font-semibold text-gray-800">
-                  <CheckCheck className="h-4 w-4 text-emerald-500" />
+                <p className="flex items-center gap-2 text-sm font-semibold text-gray-800 dark:text-gray-100">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-900 bg-gray-950 text-white dark:border-white dark:bg-white dark:text-gray-950">
+                    <CheckCheck className="h-3.5 w-3.5" />
+                  </span>
                   Link Ready
                 </p>
-                <button onClick={handleReset} className="text-xs text-gray-400 hover:text-gray-600 transition-colors">
+                <button onClick={handleReset} className="text-xs font-medium text-gray-400 transition-colors hover:text-gray-700 dark:hover:text-gray-200">
                   Start over
                 </button>
               </div>
 
               {/* Preview + QR side by side */}
-              <div className="rounded-xl border border-gray-100 bg-white p-4 flex items-start gap-3">
+              <div className="flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-white/[0.04] sm:flex-row sm:items-start">
                 {/* Left — link details */}
-                <div className="flex-1 min-w-0 space-y-2">
+                <div className="min-w-0 flex-1 space-y-2">
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Preview</p>
                   <div className="flex items-baseline gap-1.5">
                     {flexAmount
-                      ? <span className="inline-flex items-center gap-1.5 rounded-full bg-violet-100 px-3 py-1 text-sm font-semibold text-violet-700"><Sliders className="h-3.5 w-3.5" />Flexible</span>
-                      : <><span className="text-2xl font-bold text-gray-900">{formatAmount(amt, 6)}</span><span className="text-sm font-medium text-gray-500">USDC</span></>
+                      ? <span className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1 text-sm font-semibold text-gray-800 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-100"><Sliders className="h-3.5 w-3.5" />Flexible</span>
+                      : <><span className="text-2xl font-bold text-gray-900 dark:text-white">{formatAmount(amt, 6)}</span><span className="text-sm font-medium text-gray-500 dark:text-gray-400">USDC</span></>
                     }
                   </div>
                   <div className="space-y-1">
                     {evmValid && (
-                      <div className="flex items-center gap-2 text-xs text-gray-500">
+                      <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
                         <span>{multiChainMode ? 'Base · Arc Testnet · Arbitrum' : CHAIN_META[selectedNet].label}:</span>
-                        <span className="font-mono text-gray-700">{truncateAddress(evmAddr, 8)}</span>
+                        <span className="font-mono text-gray-700 dark:text-gray-200">{truncateAddress(evmAddr, 8)}</span>
                       </div>
                     )}
                     {SHOW_STARKNET_CREATE_UI && starkValid && (
-                      <div className="flex items-center gap-2 text-xs text-gray-500">
+                      <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
                         <span>Starknet:</span>
-                        <span className="font-mono text-gray-700">{truncateAddress(starkAddr, 8)}</span>
+                        <span className="font-mono text-gray-700 dark:text-gray-200">{truncateAddress(starkAddr, 8)}</span>
                       </div>
                     )}
                     {solanaValid && (
-                      <div className="flex items-center gap-2 text-xs text-gray-500">
+                      <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
                         <span>Solana:</span>
-                        <span className="font-mono text-gray-700">{truncateAddress(solanaAddr, 8)}</span>
+                        <span className="font-mono text-gray-700 dark:text-gray-200">{truncateAddress(solanaAddr, 8)}</span>
                       </div>
                     )}
                     {memo && (
-                      <div className="flex items-center gap-2 text-xs text-gray-500">
-                        <span>Payment note: <span className="font-medium text-gray-700">"{memo}"</span></span>
+                      <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                        <span>Payment note: <span className="font-medium text-gray-700 dark:text-gray-200">"{memo}"</span></span>
                       </div>
                     )}
                   </div>
@@ -2291,8 +2368,8 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
 
                 {/* Right — QR code (single payment mode only) */}
                 {!effectiveEventMode && (
-                  <div className="shrink-0 flex flex-col items-center gap-1.5">
-                    <div ref={qrRef} className="relative rounded-xl bg-white p-1.5 shadow-sm border border-gray-100">
+                  <div className="flex shrink-0 flex-col items-center gap-1.5 self-center sm:self-auto">
+                    <div ref={qrRef} className="relative rounded-xl border border-gray-100 bg-white p-1.5 shadow-sm">
                       <QRCodeCanvas value={generatedLink} size={112} level="H" includeMargin />
                       <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                         <div className="rounded-sm bg-white p-0.5">
@@ -2302,7 +2379,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                     </div>
                     <button
                       onClick={downloadQR}
-                      className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-[10px] font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-all active:scale-[0.98]"
+                      className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-[10px] font-medium text-gray-500 transition-all hover:bg-gray-50 hover:text-gray-700 active:scale-[0.98]"
                     >
                       <Download className="h-3 w-3" /> Save
                     </button>
@@ -2311,14 +2388,14 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               </div>
 
               {/* Share + Test buttons */}
-              <div className="flex gap-2.5">
+              <div className="grid gap-2.5 sm:grid-cols-[1fr_auto]">
                 <button
                   onClick={handleShare}
                   className={cn(
-                    'flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all active:scale-[0.98]',
+                    'flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all active:scale-[0.98]',
                     copied
-                      ? 'border border-emerald-200 bg-emerald-50 text-emerald-700'
-                      : 'bg-black text-white hover:bg-gray-800',
+                      ? 'border border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-300'
+                      : 'bg-black text-white hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200',
                   )}
                 >
                   {copied ? <><CheckCheck className="h-4 w-4" /> Copied!</> : <><Share2 className="h-4 w-4" /> Share</>}
@@ -2327,7 +2404,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                   href={generatedLink}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:border-gray-300 hover:bg-gray-50 transition-all active:scale-[0.98]"
+                  className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition-all hover:border-gray-300 hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:border-white/20 dark:hover:bg-white/[0.07]"
                 >
                   <ExternalLink className="h-4 w-4" />
                   Test
@@ -2340,7 +2417,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                   href={buildGlobalDashboardLink()}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 hover:border-gray-300 hover:bg-gray-50 transition-all active:scale-[0.98]"
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition-all hover:border-gray-300 hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:border-white/20 dark:hover:bg-white/[0.07]"
                 >
                   <LayoutDashboard className="h-4 w-4" />
                   Open Personal Dashboard
@@ -2353,7 +2430,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                     href={buildDashboardLink()}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-blue-200 bg-white px-4 py-2.5 text-sm font-semibold text-blue-600 hover:bg-blue-50 transition-all active:scale-[0.98]"
+                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition-all hover:border-gray-300 hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:border-white/20 dark:hover:bg-white/[0.07]"
                   >
                     <LayoutDashboard className="h-4 w-4" />
                     Open Business Dashboard
