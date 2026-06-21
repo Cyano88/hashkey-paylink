@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { usePrivy } from '@privy-io/react-auth'
+import { usePrivy, useWallets } from '@privy-io/react-auth'
 import { useAccount, useWalletClient } from 'wagmi'
 import { keccak256, toBytes, type Address } from 'viem'
 import {
@@ -110,7 +110,14 @@ export function LinkFactory({
     user: privyUser,
     login: loginPrivy,
   } = usePrivy()
+  const { wallets: privyWallets } = useWallets()
   const privyEmail = cleanEmail(emailFromPrivyUser(privyUser))
+  const connectedPrivyWallet = PRIVY_AUTH_ENABLED && address
+    ? privyWallets.find(wallet => wallet.address?.toLowerCase() === address.toLowerCase())
+    : undefined
+  const hasExternalPrivyEvmWallet = PRIVY_AUTH_ENABLED
+    ? !!connectedPrivyWallet && connectedPrivyWallet.walletClientType !== 'privy'
+    : !!address
 
   const [mode,        setMode]        = useState<'unlock' | 'stream'>('unlock')
   const [contentType, setContentType] = useState<'text' | 'url'>('text')
@@ -138,9 +145,21 @@ export function LinkFactory({
     : privateUrlValid
 
   const streamReady = rateNum > 0 && capNum > rateNum
-  const creatorAddress = circleSession?.wallet.address || address || ''
+  const creatorAddress = circleSession?.wallet.address || (hasExternalPrivyEvmWallet ? address : '') || ''
   const hasCreatorAddress = /^0x[a-fA-F0-9]{40}$/.test(creatorAddress)
   const canBuild = hasCreatorAddress && capNum > 0 && hasContent && (mode === 'unlock' || streamReady)
+  const creatorAuthLabel = !privyAuthenticated && PRIVY_AUTH_ENABLED
+    ? 'Connect to create link'
+    : hasExternalPrivyEvmWallet
+      ? 'Wallet connected'
+      : circleSession
+        ? 'Circle wallet ready'
+        : 'Open Circle wallet'
+  const creatorAuthHint = !privyAuthenticated && PRIVY_AUTH_ENABLED
+    ? 'Sign in with email or connect a wallet to create creator links'
+    : hasExternalPrivyEvmWallet
+      ? 'External wallet connected for creator proof'
+      : 'Open your Circle Arc wallet to create this creator link'
 
   const streamDurationSec = streamReady ? Math.round(capNum / rateNum) : 0
   const streamDurationLabel = streamDurationSec >= 3600
@@ -251,7 +270,7 @@ export function LinkFactory({
       }
       return
     }
-    if (address) return
+    if (hasExternalPrivyEvmWallet) return
     if (PRIVY_AUTH_ENABLED && !privyEmail) {
       setStoreError('Sign in with email or connect a wallet to create creator links.')
       return
@@ -494,7 +513,7 @@ export function LinkFactory({
                     className="flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-[14px] font-bold tracking-widest min-h-[52px] transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
                     style={{ background: '#f3f4f6', color: '#9ca3af', cursor: authBusy ? 'not-allowed' : 'pointer' }}
                   >
-                    {authBusy ? <><Spinner />Opening wallet...</> : 'Connect to create link'}
+                    {authBusy ? <><Spinner />Opening wallet...</> : creatorAuthLabel}
                   </button>
                 ) : (
                   <button
@@ -583,7 +602,7 @@ export function LinkFactory({
 
             {!hasCreatorAddress && (
               <p className="text-center text-[12px] text-gray-400">
-                Sign in with email or connect a wallet to create creator links
+                {creatorAuthHint}
               </p>
             )}
           </div>
