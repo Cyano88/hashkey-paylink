@@ -6,10 +6,12 @@
  */
 
 import type { Request, Response } from 'express'
+import pg from 'pg'
 import {
   createPublicClient, http, defineChain,
   parseAbi, isAddress,
 } from 'viem'
+import type { NextFunction } from 'express'
 
 const arcChain = defineChain({
   id:             5042002,
@@ -39,6 +41,118 @@ type ContentEntry = {
 const store = new Map<string, ContentEntry>()
 const MAX_CONTENT_ID_LENGTH = 128
 const MAX_CONTENT_LENGTH = 100_000
+const DATABASE_URL = (process.env.DATABASE_URL ?? process.env.POSTGRES_URL ?? '').trim()
+const CREATOR_X402_NETWORKS = (process.env.X402_CREATOR_ACCEPT_NETWORKS ?? 'eip155:5042002')
+  .split(',')
+  .map(network => network.trim())
+  .filter(Boolean)
+const CREATOR_X402_FACILITATOR_URL = process.env.X402_CREATOR_FACILITATOR_URL?.trim()
+  || process.env.X402_FACILITATOR_URL?.trim()
+  || 'https://gateway-api-testnet.circle.com'
+
+type PaidRequest = Request & {
+  payment?: {
+    verified: boolean
+    payer: string
+    amount: string
+    network: string
+    transaction?: string
+  }
+}
+
+const gatewayCache = new Map<string, (req: Request, res: Response, next: NextFunction) => void | Promise<void>>()
+const { Pool } = pg
+const pool = DATABASE_URL
+  ? new Pool({
+      connectionString: DATABASE_URL,
+      ssl: DATABASE_URL.includes('localhost') || DATABASE_URL.includes('127.0.0.1')
+        ? false
+        : { rejectUnauthorized: false },
+    })
+  : null
+
+let schemaReady: Promise<void> | null = null
+
+function ensureSchema() {
+  if (!pool) return Promise.resolve()
+  if (!schemaReady) {
+    schemaReady = pool.query(`
+      create table if not exists streampay_creator_content (
+        content_id text primary key,
+        creator text not null,
+        type text not null,
+        content text not null,
+        cap_raw integer not null default 0,
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now()
+      );
+      create index if not exists streampay_creator_content_creator_idx on streampay_creator_content (creator);
+    `).then(() => undefined)
+  }
+  return schemaReady
+}
+
+function rowToContentEntry(row: Record<string, unknown>): ContentEntry {
+  return {
+    type: String(row.type) === 'url' ? 'url' : 'text',
+    content: String(row.content ?? ''),
+    creator: String(row.creator ?? ''),
+    capRaw: Number(row.cap_raw ?? 0),
+    ts: row.updated_at instanceof Date ? row.updated_at.getTime() : Date.now(),
+  }
+}
+
+async function readContentEntry(contentId: string): Promise<ContentEntry | null> {
+  if (pool) {
+    await ensureSchema()
+    const result = await pool.query('select * from streampay_creator_content where content_id = $1 limit 1', [contentId])
+    if (!result.rowCount) return null
+    return rowToContentEntry(result.rows[0])
+  }
+  return store.get(contentId) ?? null
+}
+
+async function writeContentEntry(contentId: string, entry: ContentEntry) {
+  if (pool) {
+    await ensureSchema()
+    await pool.query(
+      `insert into streampay_creator_content (content_id, creator, type, content, cap_raw, created_at, updated_at)
+       values ($1, $2, $3, $4, $5, to_timestamp($6 / 1000.0), now())
+       on conflict (content_id) do update set
+         creator = excluded.creator,
+         type = excluded.type,
+         content = excluded.content,
+         cap_raw = excluded.cap_raw,
+         updated_at = now()`,
+      [contentId, entry.creator, entry.type, entry.content, entry.capRaw, entry.ts],
+    )
+    return
+  }
+  store.set(contentId, entry)
+}
+
+function creatorPrice(entry: ContentEntry) {
+  const raw = Math.max(1, Math.round(Number(entry.capRaw) || 0))
+  return `$${(raw / 1_000_000).toFixed(6).replace(/0+$/, '').replace(/\.$/, '')}`
+}
+
+async function creatorGatewayMiddleware(entry: ContentEntry) {
+  const price = creatorPrice(entry)
+  const cacheKey = `${entry.creator.toLowerCase()}:${price}:${CREATOR_X402_NETWORKS.join(',')}:${CREATOR_X402_FACILITATOR_URL}`
+  const cached = gatewayCache.get(cacheKey)
+  if (cached) return cached
+
+  const { createGatewayMiddleware } = await import('@circle-fin/x402-batching/server')
+  const gateway = createGatewayMiddleware({
+    sellerAddress: entry.creator,
+    networks: CREATOR_X402_NETWORKS,
+    facilitatorUrl: CREATOR_X402_FACILITATOR_URL,
+    description: 'Hash PayLink Creator Studio content access',
+  })
+  const middleware = gateway.require(price)
+  gatewayCache.set(cacheKey, middleware)
+  return middleware
+}
 
 export async function storeContent(req: Request, res: Response) {
   const { contentId, creator, type, content, capRaw } = (req.body ?? {}) as {
@@ -62,12 +176,12 @@ export async function storeContent(req: Request, res: Response) {
     return res.status(400).json({ ok: false, error: 'creator must be a valid EVM address' })
   }
 
-  const existing = store.get(contentId)
+  const existing = await readContentEntry(contentId)
   if (existing && existing.creator.toLowerCase() !== creator.toLowerCase()) {
     return res.status(409).json({ ok: false, error: 'contentId is already registered' })
   }
 
-  store.set(contentId, {
+  await writeContentEntry(contentId, {
     type,
     content,
     creator,
@@ -86,7 +200,7 @@ export async function getContent(req: Request, res: Response) {
     return res.status(400).json({ ok: false, error: 'viewer must be a valid EVM address' })
   }
 
-  const entry = store.get(id)
+  const entry = await readContentEntry(id)
   if (!entry) {
     return res.status(404).json({
       ok: false,
@@ -118,4 +232,27 @@ export async function getContent(req: Request, res: Response) {
   }
 
   return res.status(200).json({ ok: true, type: entry.type, content: entry.content })
+}
+
+export async function getContentX402(req: PaidRequest, res: Response) {
+  const { id } = req.query as { id?: string }
+  if (!id) return res.status(400).json({ ok: false, error: 'id is required' })
+
+  const entry = await readContentEntry(id)
+  if (!entry) {
+    return res.status(404).json({
+      ok: false,
+      error: 'Content not found. Ask the creator to re-generate the link.',
+    })
+  }
+
+  const middleware = await creatorGatewayMiddleware(entry)
+  return middleware(req, res, () => {
+    return res.status(200).json({
+      ok: true,
+      type: entry.type,
+      content: entry.content,
+      payment: req.payment ?? null,
+    })
+  })
 }

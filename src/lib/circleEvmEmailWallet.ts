@@ -673,6 +673,50 @@ function findSignature(value: unknown): Hex | null {
   return null
 }
 
+export type CircleEvmTypedData = {
+  domain: Record<string, unknown>
+  types: Record<string, { name: string; type: string }[]>
+  primaryType: string
+  message: Record<string, unknown>
+}
+
+function withEip712DomainTypes(data: CircleEvmTypedData) {
+  if (data.types.EIP712Domain) return data
+  return {
+    ...data,
+    types: {
+      EIP712Domain: [
+        { name: 'name', type: 'string' },
+        { name: 'version', type: 'string' },
+        { name: 'chainId', type: 'uint256' },
+        { name: 'verifyingContract', type: 'address' },
+      ],
+      ...data.types,
+    },
+  }
+}
+
+export async function signCircleEvmEmailTypedData(params: {
+  session: CircleEvmEmailSession
+  data: CircleEvmTypedData
+  memo?: string
+}) {
+  const sdk = authenticatedSdk(params.session)
+  const challenge = await circleWalletApi<{ challengeId?: string }>({
+    action: 'signTypedData',
+    userToken: params.session.userToken,
+    walletId: params.session.wallet.id,
+    chain: params.session.chain,
+    data: JSON.stringify(withEip712DomainTypes(params.data)),
+    memo: params.memo ?? 'Sign Hash PayLink typed data',
+  })
+  if (!challenge.challengeId) throw new Error('Circle did not return a typed-data signing challenge.')
+  const result = await executeChallenge(sdk, challenge.challengeId)
+  const signature = findSignature(result)
+  if (!signature) throw new Error('Circle did not return a usable EVM signature.')
+  return signature
+}
+
 export async function sendCircleArcStream(params: {
   session: CircleEvmEmailSession
   factoryAddress: Address

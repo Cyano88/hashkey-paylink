@@ -1288,11 +1288,29 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                 <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">USDC on Arc</p>
                 <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">Choose a StreamPay flow</h2>
                 <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-                  Start with Arena rooms today. Payroll, agent streams, and Telegram services follow the same wallet flow.
+                  Creator Studio, Arena rooms, payroll, and agent streams share the same Arc USDC settlement layer.
                 </p>
               </div>
 
               <div className="space-y-3">
+                <Link
+                  to="/creator?app=streampay"
+                  className="group relative block overflow-hidden rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-600 to-gray-950 p-4 text-left text-white shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-blue-400/20"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-blue-100">Live</p>
+                      <p className="mt-1 text-[15px] font-black">Creator Studio</p>
+                      <p className="mt-1 max-w-[270px] text-[12px] leading-snug text-white/70">
+                        Gate articles or private links and earn USDC by the second while readers consume.
+                      </p>
+                    </div>
+                    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-white px-2.5 py-1 text-[11px] font-bold text-gray-950">
+                      Open <ArrowRight className="h-3 w-3" />
+                    </span>
+                  </div>
+                </Link>
+
                 <Link
                   to="/arena?app=streampay&game=trivia"
                   className="group relative block overflow-hidden rounded-2xl border border-gray-200 bg-gradient-to-br from-gray-950 to-gray-800 p-4 text-left text-white shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-white/10"
@@ -1351,7 +1369,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               </div>
 
               <p className="text-center text-[11px] text-gray-400">
-                Same Hash PayLink platform. Real-money flows settle through Arena escrow on Arc and archive to 0G.
+                Same Hash PayLink platform. StreamPay flows settle on Arc and can attach receipts, dashboards, and 0G records.
               </p>
             </div>
           ) : posMode ? (

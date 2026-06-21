@@ -683,7 +683,11 @@ export function CreateStreamForm() {
 
   async function handleCircleDeploy() {
     if (PRIVY_AUTH_ENABLED && !privyAuthenticated) {
-      loginPrivy()
+      try {
+        await loginPrivy({ loginMethods: ['email'] })
+      } catch (err) {
+        setError(err instanceof Error ? err.message.slice(0, 180) : 'Could not open secure sign-in.')
+      }
       return
     }
     if (!publicClient) {

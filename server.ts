@@ -24,7 +24,7 @@ import setupRelayerHandler    from './api/setup-relayer.js'
 import relayStreamHandler               from './modules/streampay/api/relay-stream.js'
 import streamOgHandler                 from './modules/streampay/api/stream-og.js'
 import settlePoaHandler                from './modules/streampay/api/settle-poa.js'
-import { storeContent, getContent }      from './modules/streampay/api/content.js'
+import { storeContent, getContent, getContentX402 } from './modules/streampay/api/content.js'
 import { registerVault, getVault, listViewers } from './modules/streampay/api/vault-registry.js'
 import { registerEventPayment, listEventPayments } from './api/event-registry.js'
 import {
@@ -115,6 +115,7 @@ app.post('/api/relay-stream',          relayLimiter, relayStreamHandler)
 app.post('/api/settle-poa',            relayLimiter, settlePoaHandler)
 app.post('/api/store-content',         strictLimiter, storeContent)
 app.get('/api/get-content',            readLimiter, getContent)
+app.get('/api/get-content-x402',       readLimiter, getContentX402)
 app.post('/api/register-vault',        registerVault)
 app.get('/api/get-vault',              getVault)
 app.get('/api/list-viewers',           listViewers)

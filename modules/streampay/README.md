@@ -14,7 +14,7 @@ USDC streaming payments on Arc Network. Payroll, agentic streams, and Arena room
 | **Payroll** | Time-Sovereign | Pre-fund a vault · USDC unlocks linearly to the recipient · gasless withdrawal |
 | **Agentic Stream** | Agent-Sovereign | Stream Arc USDC to the Hash PayLink Agent for recurring services such as daily LP research |
 | **StreamPay Arena** | Game-Sovereign | Competitive rooms where player deposits stream into a prize pool while they stay active |
-| **Creator Studio** | Legacy direct route | Existing creator/gate code remains in the module, but it is not the primary public StreamPay nav |
+| **Creator Studio** | Creator-Sovereign | Paid content links and nano-streaming gates for articles, reports, private links, and creator access |
 
 ---
 
@@ -45,15 +45,16 @@ Set in Render → Service → **Environment**.
 | `ARENA_RELAYER_PRIVATE_KEY` | Server | Room escrow deployer/settlement wallet. Must match the deployed Arena factory relayer. Never expose with `VITE_` |
 | `ARC_POA_CONTRACT` | Server | `PoASettlement` address |
 | `VITE_POA_CONTRACT` | Browser | Same — must match server value |
+| `DATABASE_URL` | Server | Durable Creator Studio content, signed viewer vaults, Arena rooms, and Privy/Circle mappings |
 
 `VITE_` prefixed variables are baked into the frontend bundle at build time.  
 Never add `VITE_` to private keys — they would be exposed to the browser.
 
 ---
 
-### Arena Storage
+### Durable Storage
 
-StreamPay Arena uses Postgres as the durable source of truth for private room settings. Set `DATABASE_URL` on Render. The `/api/arena-room` route stores entry amount, player count, round count, risk curve, timer, start rule, room status, escrow/payment status, deposit asset, and the fixed 0.5% platform fee in the `arena_rooms` table. The table is created or migrated automatically on first use.
+StreamPay uses Postgres when `DATABASE_URL` is configured. Creator Studio stores gated content in `streampay_creator_content` and signed viewer vaults in `streampay_creator_vaults`, so shared links and creator earnings survive Render restarts. Arena stores private room settings in `arena_rooms`. Tables are created or migrated automatically on first use.
 
 Postgres does not custody funds. Real-money Arena deposits, stream halts, refunds, platform fee collection, and winner claims go through `ArenaRoomEscrow` contracts deployed by `ArenaRoomEscrowFactory`. When `ARENA_ESCROW_FACTORY_ADDRESS`, `VITE_ARENA_ESCROW_FACTORY_ADDRESS`, and a matching server-side `ARENA_RELAYER_PRIVATE_KEY` are configured, `/api/arena-room` deploys one deterministic escrow per private room and stores that escrow address with `payment_status = deposit_open`. If the relayer key is missing or does not match the factory relayer, the room remains saved as `escrow_pending` and paid deposits stay disabled.
 
@@ -71,7 +72,7 @@ modules/streampay/
 ├── src/
 │   ├── StreamPayApp.tsx              # Root router (Payroll + Agentic + Arena + Creator routes)
 │   ├── components/
-│   │   ├── StreamPayHeader.tsx       # Shared nav (Payroll / Agentic / Arena, wallet)
+│   │   ├── StreamPayHeader.tsx       # Shared nav (Payroll / Creator / Agentic / Arena)
 │   │   ├── StreamPayLayout.tsx       # Shell (header + footer)
 │   │   ├── CreateStreamForm.tsx      # Payroll: create a stream
 │   │   ├── StreamView.tsx            # Payroll: view + claim/cancel a stream

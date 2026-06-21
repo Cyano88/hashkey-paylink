@@ -15,7 +15,7 @@ function parseContentId(input: string): string {
 }
 
 // Scan localStorage for any ghost vaults matching this contentId.
-// Fallback for when the server restarted and lost its in-memory registry.
+// Local fallback for unsigned/offline recovery before the server registry sees the latest vault.
 function getLocalVaults(contentId: string): ViewerRow[] {
   const prefix = `sp_poa_${contentId}_`
   const rows: ViewerRow[] = []
@@ -34,9 +34,9 @@ function getLocalVaults(contentId: string): ViewerRow[] {
   return rows
 }
 
-// ── Settlement Dashboard ──────────────────────────────────────────────────────
+// Creator earnings panel.
 
-function SettlementDashboard() {
+function SettlementDashboard({ initialGateLink }: { initialGateLink?: string }) {
   const { isConnected } = useAccount()
 
   const [gateInput,   setGateInput]   = useState('')
@@ -46,6 +46,11 @@ function SettlementDashboard() {
   const [settlingFor, setSettlingFor] = useState<string | null>(null)
   const [settledTxs,  setSettledTxs]  = useState<Record<string, string>>({})
   const [errors,      setErrors]      = useState<Record<string, string>>({})
+
+  useEffect(() => {
+    if (!initialGateLink || gateInput) return
+    handleGateInput(initialGateLink)
+  }, [initialGateLink, gateInput])
 
   // Parse gate link or raw contentId as the user types
   function handleGateInput(val: string) {
@@ -77,7 +82,7 @@ function SettlementDashboard() {
 
       setViewers(Array.from(merged.values()).sort((a, b) => b.ts - a.ts))
     } catch {
-      // Network error — fall back to localStorage only
+      // Network error: fall back to localStorage only.
       setViewers(getLocalVaults(id.trim()))
     } finally {
       setLoading(false)
@@ -99,7 +104,7 @@ function SettlementDashboard() {
       const data = await res.json() as { ok: boolean; vault?: GhostVaultEntry }
       vault = data.ok && data.vault ? data.vault as GhostVaultEntry : readGhostVault(contentId, viewerAddr)
 
-      if (!vault) throw new Error('Vault not found — viewer may need to re-sign')
+      if (!vault) throw new Error('Vault not found - viewer may need to re-sign')
 
       const settle = await fetch('/api/settle-poa', {
         method:  'POST',
@@ -118,7 +123,7 @@ function SettlementDashboard() {
   }
 
   return (
-    <div className="w-full max-w-[480px] mx-auto mt-6 mb-12">
+    <div className="w-full">
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         <div className="px-5 py-5 sm:px-7 sm:py-6 space-y-5">
 
@@ -128,26 +133,26 @@ function SettlementDashboard() {
               <span className="h-2 w-2 rounded-full bg-blue-500" />
             </span>
             <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-500">
-              Settlement Dashboard
+              Creator earnings
             </span>
           </div>
 
           {/* Gate link input */}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <span className="text-[13px] font-semibold text-gray-700">Paste Gate Link</span>
-              <span className="text-[11px] text-gray-400">Content ID auto-filled</span>
+              <span className="text-[13px] font-semibold text-gray-700">Gate link</span>
+              <span className="text-[11px] text-gray-400">Auto-detects content</span>
             </div>
             <input
               type="text"
-              placeholder="https://…/gate?id=abc123…  or just the Content ID"
+              placeholder="Paste a creator gate link or content ID"
               value={gateInput}
               onChange={e => handleGateInput(e.target.value)}
               className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-[13px] placeholder:text-gray-300 focus:outline-none focus:border-gray-400 transition-colors min-h-[48px]"
             />
             {contentId && (
               <p className="text-[11px] text-gray-400">
-                Content ID: <span className="font-mono font-semibold text-gray-600">{contentId}</span>
+                Tracking: <span className="font-mono font-semibold text-gray-600">{contentId}</span>
                 {' '}
                 <button
                   onClick={() => fetchViewers(contentId)}
@@ -162,20 +167,20 @@ function SettlementDashboard() {
           {/* Viewers list */}
           {loading && (
             <div className="flex items-center justify-center gap-2 rounded-xl border border-gray-100 bg-gray-50 px-4 py-4 text-[12px] text-gray-400">
-              <VaultSpinner />Looking up viewers…
+              <VaultSpinner />Looking up payments...
             </div>
           )}
 
           {!loading && contentId && viewers.length === 0 && (
             <div className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-4 text-center text-[12px] text-gray-400">
-              No viewers have signed yet — share your gate link
+              No payments yet. Share your gated link and check back here.
             </div>
           )}
 
           {!loading && viewers.length > 0 && (
             <div className="space-y-2">
               <p className="text-[11px] font-semibold text-gray-500">
-                {viewers.length} viewer{viewers.length > 1 ? 's' : ''} signed
+                {viewers.length} payment{viewers.length > 1 ? 's' : ''} ready
               </p>
               {viewers.map(v => {
                 const amt    = (Number(v.amountRaw) / 1_000_000).toFixed(6)
@@ -188,7 +193,7 @@ function SettlementDashboard() {
                     <div className="flex items-center justify-between">
                       <div className="space-y-0.5">
                         <p className="font-mono text-[12px] text-gray-700">
-                          {v.viewer.slice(0, 8)}…{v.viewer.slice(-6)}
+                          {v.viewer.slice(0, 8)}...{v.viewer.slice(-6)}
                         </p>
                         <p className="text-[10px] text-gray-400">
                           {new Date(v.ts).toLocaleString()}
@@ -216,7 +221,7 @@ function SettlementDashboard() {
                           ? { background: '#111827', color: '#ffffff' }
                           : { background: '#f3f4f6', color: '#9ca3af', cursor: 'not-allowed' }}
                       >
-                        {busy ? <><Spinner />Settling…</> : 'Claim Revenue'}
+                        {busy ? <><Spinner />Settling...</> : 'Claim earnings'}
                       </button>
                     )}
 
@@ -231,14 +236,14 @@ function SettlementDashboard() {
 
           {!isConnected && (
             <p className="text-center text-[12px] text-gray-400">
-              Connect your wallet above to settle
+              Connect your wallet above to view and claim earnings
             </p>
           )}
         </div>
       </div>
 
       {/* ── Footer links ── */}
-      <div className="border-t border-gray-100 pt-4 pb-2 flex items-center justify-center gap-8">
+      <div className="border-t border-gray-100 pt-4 pb-2 flex flex-wrap items-center justify-center gap-x-8 gap-y-2">
         <a
           href="mailto:support@hashpaylink.com"
           className="flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-gray-900 transition-colors"
@@ -260,17 +265,55 @@ function SettlementDashboard() {
   )
 }
 
-// ── Creator Page — combines Link Factory + Settlement Dashboard ────────────────
+// Creator page.
 export function CreatorPage() {
+  const [activeTab, setActiveTab] = useState<'create' | 'earnings'>('create')
+  const [latestGateLink, setLatestGateLink] = useState('')
+
   return (
-    <>
-      <LinkFactory />
-      <SettlementDashboard />
-    </>
+    <div className="w-full max-w-[480px] mx-auto mt-12 mb-12">
+      <div className="mb-5 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+        <div className="grid grid-cols-2">
+          {([
+            { id: 'create', label: 'Create', helper: 'Paid content links' },
+            { id: 'earnings', label: 'Earnings', helper: 'Track and claim' },
+          ] as const).map(tab => {
+            const selected = activeTab === tab.id
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                className={[
+                  'min-h-[58px] px-4 py-3 text-left transition-colors',
+                  selected ? 'bg-gray-950 text-white' : 'bg-white text-gray-500 hover:bg-gray-50',
+                ].join(' ')}
+              >
+                <span className="block text-[13px] font-bold">{tab.label}</span>
+                <span className={['block text-[10px]', selected ? 'text-white/65' : 'text-gray-400'].join(' ')}>
+                  {tab.helper}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {activeTab === 'create' ? (
+        <LinkFactory
+          onGateCreated={link => {
+            setLatestGateLink(link)
+          }}
+          onTrackEarnings={() => setActiveTab('earnings')}
+        />
+      ) : (
+        <SettlementDashboard initialGateLink={latestGateLink} />
+      )}
+    </div>
   )
 }
 
-// ── Icons ─────────────────────────────────────────────────────────────────────
+// Icons.
 
 function CheckIcon() {
   return (

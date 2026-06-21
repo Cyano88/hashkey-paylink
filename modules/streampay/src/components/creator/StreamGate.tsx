@@ -1,10 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { usePrivy } from '@privy-io/react-auth'
 import { useSearchParams }    from 'react-router-dom'
-import { useAccount, useChainId, useSwitchChain, useWriteContract } from 'wagmi'
+import { useAccount, useChainId, useSwitchChain, useWalletClient, useWriteContract } from 'wagmi'
 import { useQuery }           from '@tanstack/react-query'
-import { createPublicClient, http, defineChain, parseAbi } from 'viem'
+import { createPublicClient, http, defineChain, parseAbi, type Address } from 'viem'
 import { usePoAStream }       from '../../hooks/usePoAStream'
 import { usePasskey }         from '../../hooks/usePasskey'
+import {
+  connectCircleEvmEmailWallet,
+  signCircleEvmEmailTypedData,
+  type CircleEvmEmailSession,
+} from '../../../../../src/lib/circleEvmEmailWallet'
+import { PRIVY_AUTH_ENABLED } from '../../../../../src/lib/authMode'
+import { resolvePrivyCircleLink, savePrivyCircleLink } from '../../../../../src/lib/privyCircleLink'
+import {
+  fetchWithGatewaySignerPayment,
+  type GatewaySignerParams,
+  type GatewayX402Signer,
+} from '../../../../../src/lib/x402GatewayPayment'
 
 // ── Arc standalone client ─────────────────────────────────────────────────────
 const arcClient = createPublicClient({
@@ -29,6 +42,32 @@ const ERC20_ABI = parseAbi([
 type FetchedContent = { type: 'text' | 'url'; content: string }
 type ContentState   = 'idle' | 'loading' | 'ready' | 'error'
 
+function cleanEmail(value: string) {
+  return value.trim().toLowerCase()
+}
+
+function emailFromPrivyUser(user: unknown) {
+  if (!user || typeof user !== 'object') return ''
+  const record = user as Record<string, unknown>
+  const directEmail = record.email
+  if (directEmail && typeof directEmail === 'object') {
+    const address = (directEmail as Record<string, unknown>).address
+    if (typeof address === 'string') return address
+  }
+  for (const key of ['google', 'apple']) {
+    const provider = record[key]
+    if (provider && typeof provider === 'object') {
+      const email = (provider as Record<string, unknown>).email
+      if (typeof email === 'string') return email
+    }
+  }
+  return ''
+}
+
+function shortAddress(value: string) {
+  return value ? `${value.slice(0, 6)}...${value.slice(-4)}` : ''
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function StreamGate() {
@@ -39,6 +78,7 @@ export function StreamGate() {
   const rateRaw   = parseInt(params.get('r')   ?? '1000',   10)
   const capRaw    = parseInt(params.get('cap') ?? '100000', 10)
   const title     = params.get('t')    ?? ''
+  const paymentMode = params.get('pay') === 'x402' ? 'x402' : 'poa'
 
   const dripRate   = rateRaw  / 1_000_000
   const sessionCap = capRaw   / 1_000_000
@@ -47,13 +87,58 @@ export function StreamGate() {
   const chainId                   = useChainId()
   const { switchChain }           = useSwitchChain()
   const { writeContractAsync }    = useWriteContract()
+  const { data: walletClient }    = useWalletClient()
   const isOnArc = chainId === ARC_CHAIN_ID
+  const {
+    authenticated: privyAuthenticated,
+    user: privyUser,
+    login: loginPrivy,
+    getAccessToken,
+  } = usePrivy()
+  const privyEmail = cleanEmail(emailFromPrivyUser(privyUser))
 
   const passkey = usePasskey()
   const poa     = usePoAStream({ contentId, creator, dripRate, sessionCap })
   const { sessionStart, sessionStop, setVisible, forceSign } = poa
   const [ending,  setEnding]  = useState(false)
   const [ended,   setEnded]   = useState(false)
+  const [circleEmail, setCircleEmail] = useState('')
+  const [circleSession, setCircleSession] = useState<CircleEvmEmailSession | null>(null)
+  const [linkedCircleAddress, setLinkedCircleAddress] = useState('')
+  const [circleLinkLoading, setCircleLinkLoading] = useState(false)
+  const [circleNotice, setCircleNotice] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!PRIVY_AUTH_ENABLED || !privyAuthenticated || !privyEmail) return
+    setCircleEmail(privyEmail)
+  }, [privyAuthenticated, privyEmail])
+
+  useEffect(() => {
+    let cancelled = false
+    async function restoreCircleLink() {
+      if (!PRIVY_AUTH_ENABLED || !privyAuthenticated || !getAccessToken) return
+      setCircleLinkLoading(true)
+      try {
+        const token = await getAccessToken()
+        if (!token) return
+        const data = await resolvePrivyCircleLink({
+          accessToken: token,
+          chain: 'arc',
+          purpose: 'payment',
+        })
+        if (cancelled) return
+        if (data.email) setCircleEmail(cleanEmail(data.email))
+        const linkedAddress = data.link?.circleWalletAddress
+        if (linkedAddress) setLinkedCircleAddress(linkedAddress)
+      } catch {
+        if (!cancelled) setLinkedCircleAddress('')
+      } finally {
+        if (!cancelled) setCircleLinkLoading(false)
+      }
+    }
+    restoreCircleLink()
+    return () => { cancelled = true }
+  }, [privyAuthenticated, getAccessToken])
 
   async function handleEndSession() {
     setEnding(true)
@@ -126,14 +211,128 @@ export function StreamGate() {
   }, [refetchAllowance])
 
   // ── Content fetch (after full auth) ──────────────────────────────────────
-  const fullyAuthorised = isConnected && isOnArc && passkey.registered && isApproved
-
   const [contentState,  setContentState]  = useState<ContentState>('idle')
   const [fetchedContent, setFetchedContent] = useState<FetchedContent | null>(null)
   const [contentError,  setContentError]  = useState<string | null>(null)
+  const [gatewayPaying, setGatewayPaying] = useState(false)
+  const [gatewayTx, setGatewayTx] = useState<string | null>(null)
+
+  const legacyFullyAuthorised = isConnected && isOnArc && passkey.registered && isApproved
+  const fullyAuthorised = paymentMode === 'x402' ? contentState === 'ready' : legacyFullyAuthorised
+
+  async function unlockWithGatewaySigner(signer: GatewayX402Signer, payer: Address) {
+    if (gatewayPaying) return
+    setGatewayPaying(true)
+    setContentError(null)
+    setContentState('loading')
+    try {
+      const { data, settlement } = await fetchWithGatewaySignerPayment<{
+        ok: boolean
+        type?: string
+        content?: string
+        error?: string
+      }>({
+        url: `/api/get-content-x402?id=${encodeURIComponent(contentId)}&viewer=${payer}`,
+        signer,
+      })
+      if (!data.ok || !data.type || !data.content) throw new Error(data.error ?? 'Could not unlock content')
+      setFetchedContent({ type: data.type as 'text' | 'url', content: data.content })
+      setGatewayTx(settlement?.transaction ?? null)
+      setContentState('ready')
+    } catch (err) {
+      setContentError(err instanceof Error ? err.message.slice(0, 180) : 'Gateway payment failed.')
+      setContentState('error')
+    } finally {
+      setGatewayPaying(false)
+    }
+  }
+
+  async function handleCircleGatewayPay() {
+    if (gatewayPaying) return
+    setCircleNotice(null)
+    if (PRIVY_AUTH_ENABLED && !privyAuthenticated) {
+      loginPrivy()
+      return
+    }
+    const email = cleanEmail(PRIVY_AUTH_ENABLED ? privyEmail || circleEmail : circleEmail)
+    if (!email) {
+      setContentError('Sign in with email to continue.')
+      return
+    }
+    try {
+      setCircleLinkLoading(true)
+      const session = circleSession ?? await connectCircleEvmEmailWallet(email, 'arc')
+      setCircleSession(session)
+      setCircleEmail(email)
+      setLinkedCircleAddress(session.wallet.address)
+      if (PRIVY_AUTH_ENABLED && privyAuthenticated && getAccessToken) {
+        const token = await getAccessToken()
+        if (token) {
+          await savePrivyCircleLink({
+            accessToken: token,
+            chain: 'arc',
+            purpose: 'payment',
+            email,
+            wallet: {
+              id: session.wallet.id,
+              address: session.wallet.address,
+              blockchain: session.wallet.blockchain,
+            },
+          })
+        }
+      }
+      const signer: GatewayX402Signer = {
+        address: session.wallet.address,
+        signTypedData: (params: GatewaySignerParams) => signCircleEvmEmailTypedData({
+          session,
+          data: params,
+          memo: 'Pay Hash PayLink Creator Studio with x402',
+        }),
+      }
+      await unlockWithGatewaySigner(signer, session.wallet.address)
+    } catch (err) {
+      setContentError(err instanceof Error ? err.message.slice(0, 180) : 'Circle wallet payment failed.')
+      setContentState('error')
+    } finally {
+      setCircleLinkLoading(false)
+    }
+  }
+
+  async function handleGatewayPay() {
+    if (!address || !walletClient || !isOnArc || gatewayPaying) return
+    await unlockWithGatewaySigner({
+      address,
+      signTypedData: (params: GatewaySignerParams) => walletClient.signTypedData({
+        ...params,
+        account: address,
+      } as Parameters<typeof walletClient.signTypedData>[0]),
+    }, address)
+  }
+
+  async function handlePrimaryGatewayPay() {
+    setCircleNotice(null)
+    if (PRIVY_AUTH_ENABLED && !privyAuthenticated) {
+      loginPrivy()
+      return
+    }
+    if (privyEmail || (!PRIVY_AUTH_ENABLED && circleEmail)) {
+      await handleCircleGatewayPay()
+      return
+    }
+    if (isConnected && !isOnArc) {
+      switchChain({ chainId: ARC_CHAIN_ID })
+      return
+    }
+    if (isConnected && isOnArc) {
+      await handleGatewayPay()
+      return
+    }
+    if (PRIVY_AUTH_ENABLED) loginPrivy()
+    else setContentError('Enter an email or connect a wallet to continue.')
+  }
 
   useEffect(() => {
-    if (!fullyAuthorised || !address || !contentId || contentState !== 'idle') return
+    if (paymentMode === 'x402' || !legacyFullyAuthorised || !address || !contentId || contentState !== 'idle') return
     setContentState('loading')
     fetch(`/api/get-content?id=${encodeURIComponent(contentId)}&viewer=${address}`)
       .then(r => r.json())
@@ -147,7 +346,7 @@ export function StreamGate() {
         }
       })
       .catch(() => { setContentError('Server error — please try again'); setContentState('error') })
-  }, [fullyAuthorised, address, contentId, contentState])
+  }, [paymentMode, legacyFullyAuthorised, address, contentId, contentState])
 
   // ── IntersectionObserver: drip only when content is visible + ready ───────
   // Drip starts AFTER content is fetched and visible — not on auth alone.
@@ -155,7 +354,7 @@ export function StreamGate() {
 
   useEffect(() => {
     const el = contentRef.current
-    if (!el || !fullyAuthorised || contentState !== 'ready') return
+    if (paymentMode === 'x402' || !el || !fullyAuthorised || contentState !== 'ready') return
 
     const observer = new IntersectionObserver(
       ([entry]) => {
@@ -168,13 +367,13 @@ export function StreamGate() {
     )
     observer.observe(el)
     return () => observer.disconnect()
-  }, [fullyAuthorised, contentState, sessionStart, sessionStop, setVisible])
+  }, [paymentMode, fullyAuthorised, contentState, sessionStart, sessionStop, setVisible])
 
   // Final checkpoint on unmount
   useEffect(() => () => sessionStop(), [sessionStop])
 
   // ── Auth step tracking ────────────────────────────────────────────────────
-  const currentStep = !isConnected ? 0 : !isOnArc ? 1 : !passkey.registered ? 2 : 3
+  const currentStep = paymentMode === 'x402' ? (!isConnected ? 0 : !isOnArc ? 1 : 3) : (!isConnected ? 0 : !isOnArc ? 1 : !passkey.registered ? 2 : 3)
 
   const progressPct = Math.min((poa.accrued / sessionCap) * 100, 100)
 
@@ -197,25 +396,92 @@ export function StreamGate() {
 
         {/* ── Auth steps overlay ── */}
         {!fullyAuthorised && (
-          <OverlayShell dripRate={dripRate} sessionCap={sessionCap}>
+          <OverlayShell dripRate={dripRate} sessionCap={sessionCap} paymentMode={paymentMode}>
 
-            {!isConnected && (
-              <div className="rounded-xl border border-gray-100 bg-gray-50 px-5 py-3 text-center text-[12px] text-gray-500">
-                Connect your wallet in the header above
+            {paymentMode === 'x402' ? (
+              <div className="w-full max-w-[320px] space-y-3">
+                <div className="rounded-2xl border border-gray-100 bg-white/85 p-3.5 text-left shadow-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 space-y-0.5">
+                      <p className="text-[12px] font-bold text-gray-900">
+                        {privyAuthenticated ? 'Ready to unlock' : 'Sign in to continue'}
+                      </p>
+                      <p className="truncate text-[11px] text-gray-500">
+                        {PRIVY_AUTH_ENABLED
+                          ? privyAuthenticated
+                            ? privyEmail || (isConnected ? 'Wallet connected' : 'Choose email or wallet')
+                            : 'Email or wallet through Privy'
+                          : circleEmail || 'Enter your email to pay'}
+                      </p>
+                      {(circleSession?.wallet.address || linkedCircleAddress) && (
+                        <p className="font-mono text-[10px] text-blue-600">
+                          {shortAddress(circleSession?.wallet.address ?? linkedCircleAddress)}
+                        </p>
+                      )}
+                      {circleLinkLoading && (
+                        <p className="text-[10px] text-gray-400">Checking Circle wallet...</p>
+                      )}
+                    </div>
+                    <span className="shrink-0 rounded-full bg-blue-50 px-2 py-1 text-[10px] font-bold text-blue-600 ring-1 ring-blue-100">
+                      Circle
+                    </span>
+                  </div>
+                  {!PRIVY_AUTH_ENABLED && (
+                    <input
+                      type="email"
+                      value={circleEmail}
+                      onChange={event => setCircleEmail(event.target.value)}
+                      placeholder="you@example.com"
+                      className="mt-3 w-full rounded-xl border border-blue-100 bg-white px-3 py-2.5 text-[13px] text-gray-900 outline-none placeholder:text-gray-300 focus:border-blue-300"
+                    />
+                  )}
+                </div>
+                <button
+                  onClick={handlePrimaryGatewayPay}
+                  disabled={gatewayPaying || circleLinkLoading}
+                  className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl px-5 py-3 text-[13px] font-semibold text-white transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+                  style={{ background: '#111827' }}
+                >
+                  {gatewayPaying
+                    ? <><Spinner />Paying...</>
+                    : PRIVY_AUTH_ENABLED && !privyAuthenticated
+                    ? 'Continue'
+                    : privyEmail || (!PRIVY_AUTH_ENABLED && circleEmail)
+                    ? 'Pay with Circle wallet'
+                    : isConnected && !isOnArc
+                    ? 'Switch to Arc'
+                    : isConnected
+                    ? 'Pay with connected wallet'
+                    : 'Continue'}
+                </button>
+                {circleNotice && (
+                  <p className="text-center text-[11px] text-gray-500">{circleNotice}</p>
+                )}
+                {contentState === 'error' && contentError && (
+                  <p className="text-center text-[11px] text-red-500">{contentError}</p>
+                )}
               </div>
+            ) : (
+              <>
+                {!isConnected && (
+                  <div className="rounded-xl border border-gray-100 bg-gray-50 px-5 py-3 text-center text-[12px] text-gray-500">
+                    Connect your wallet in the header above
+                  </div>
+                )}
+
+                {isConnected && !isOnArc && (
+                  <button
+                    onClick={() => switchChain({ chainId: ARC_CHAIN_ID })}
+                    className="flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-[13px] font-semibold text-white min-h-[48px] transition-all active:scale-[0.98]"
+                    style={{ background: '#111827' }}
+                  >
+                    Switch to Arc Network
+                  </button>
+                )}
+              </>
             )}
 
-            {isConnected && !isOnArc && (
-              <button
-                onClick={() => switchChain({ chainId: ARC_CHAIN_ID })}
-                className="flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-[13px] font-semibold text-white min-h-[48px] transition-all active:scale-[0.98]"
-                style={{ background: '#111827' }}
-              >
-                Switch to Arc Network
-              </button>
-            )}
-
-            {isConnected && isOnArc && !passkey.registered && (
+            {paymentMode === 'poa' && isConnected && isOnArc && !passkey.registered && (
               <>
                 <button
                   onClick={() => void passkey.register()}
@@ -233,7 +499,7 @@ export function StreamGate() {
               </>
             )}
 
-            {isConnected && isOnArc && passkey.registered && !isApproved && (
+            {paymentMode === 'poa' && isConnected && isOnArc && passkey.registered && !isApproved && (
               <>
                 {!POA_CONTRACT ? (
                   <div className="rounded-xl border border-amber-100 bg-amber-50 px-4 py-3 text-center text-[12px] text-amber-700">
@@ -341,7 +607,7 @@ export function StreamGate() {
         )}
 
         {/* ── ViewerHUD — drip meter ── */}
-        {fullyAuthorised && contentState === 'ready' && !ended && (
+        {paymentMode === 'poa' && fullyAuthorised && contentState === 'ready' && !ended && (
           <div className="border-t border-gray-100 bg-gray-50/60 px-4 py-3 space-y-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5">
@@ -390,7 +656,7 @@ export function StreamGate() {
         )}
 
         {/* ── Session ended confirmation ── */}
-        {fullyAuthorised && ended && (
+        {paymentMode === 'poa' && fullyAuthorised && ended && (
           <div className="border-t border-gray-100 bg-emerald-50/60 px-4 py-3 space-y-2">
             <div className="flex items-center gap-1.5">
               <svg className="h-3.5 w-3.5 text-emerald-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -413,6 +679,18 @@ export function StreamGate() {
             </div>
           </div>
         )}
+
+        {paymentMode === 'x402' && fullyAuthorised && gatewayTx && (
+          <div className="border-t border-gray-100 bg-emerald-50/60 px-4 py-3">
+            <button
+              type="button"
+              onClick={() => window.open(`https://testnet.arcscan.app/tx/${gatewayTx}`, '_blank', 'noopener,noreferrer')}
+              className="flex w-full items-center justify-center gap-1.5 text-[11px] font-semibold text-emerald-700 hover:text-emerald-800 transition-colors"
+            >
+              <CheckIcon />Circle Gateway paid - {gatewayTx.slice(0, 8)}...{gatewayTx.slice(-6)}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* ── Creator / rate strip ── */}
@@ -424,8 +702,12 @@ export function StreamGate() {
           </p>
         </div>
         <div className="text-right space-y-0.5">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Drip Rate</p>
-          <p className="text-[12px] font-semibold text-gray-700">${dripRate.toFixed(4)}/sec</p>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+            {paymentMode === 'x402' ? 'Access Price' : 'Drip Rate'}
+          </p>
+          <p className="text-[12px] font-semibold text-gray-700">
+            {paymentMode === 'x402' ? `${sessionCap.toFixed(6)} USDC` : `$${dripRate.toFixed(4)}/sec`}
+          </p>
         </div>
       </div>
 
@@ -436,9 +718,12 @@ export function StreamGate() {
 // ── Shared overlay shell ──────────────────────────────────────────────────────
 
 function OverlayShell({
-  dripRate, sessionCap, children,
+  dripRate, sessionCap, paymentMode, children,
 }: {
-  dripRate: number; sessionCap: number; children: React.ReactNode
+  dripRate: number
+  sessionCap: number
+  paymentMode: 'x402' | 'poa'
+  children: React.ReactNode
 }) {
   return (
     <div
@@ -447,7 +732,12 @@ function OverlayShell({
     >
       <div className="text-center space-y-1.5">
         <p className="text-[15px] font-bold text-gray-900">Content Locked</p>
-        <p className="text-[12px] text-gray-500 max-w-[260px]">
+        {paymentMode === 'x402' && (
+          <p className="text-[12px] text-gray-500 max-w-[260px]">
+            Pay <span className="font-semibold">{sessionCap.toFixed(6)} USDC</span> to unlock this creator content.
+          </p>
+        )}
+        <p className={paymentMode === 'x402' ? 'hidden' : 'text-[12px] text-gray-500 max-w-[260px]'}>
           Pay <span className="font-semibold">${dripRate.toFixed(4)}/sec</span>
           {' '}— max <span className="font-semibold">${sessionCap.toFixed(2)} USDC</span>
         </p>
@@ -455,7 +745,7 @@ function OverlayShell({
       {children}
       <div className="flex items-center gap-1.5 text-[10px] text-gray-400">
         <span className="h-1.5 w-1.5 rounded-full bg-blue-400" />
-        Powered by Arc Network
+        {paymentMode === 'x402' ? 'Powered by Circle Gateway on Arc' : 'Powered by Arc Network'}
       </div>
     </div>
   )
@@ -505,6 +795,14 @@ function ExtLinkIcon() {
   )
 }
 
+function CheckIcon() {
+  return (
+    <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+    </svg>
+  )
+}
+
 function Spinner() {
   return (
     <svg className="h-4 w-4 animate-spin shrink-0" fill="none" viewBox="0 0 24 24">
@@ -513,4 +811,3 @@ function Spinner() {
     </svg>
   )
 }
-

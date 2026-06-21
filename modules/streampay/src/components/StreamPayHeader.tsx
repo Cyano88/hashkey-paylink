@@ -41,6 +41,7 @@ export function StreamPayHeader() {
   const telegramMode = isTelegramStreamPay(search)
 
   const payrollTo = useAppPath('/')
+  const creatorTo = useModePath('/creator')
   const agenticTo = useModePath('/agentic', {
     mode: 'agentic-streaming',
     service: 'polymarket-lp',
@@ -52,6 +53,7 @@ export function StreamPayHeader() {
   const arenaTo = useModePath('/arena')
   const navItems = [
     { label: 'Payroll', to: payrollTo, active: !isCreatorMode && !isAgenticMode && !isArenaMode },
+    { label: 'Creator', to: creatorTo, active: isCreatorMode },
     { label: 'Agentic', to: agenticTo, active: isAgenticMode },
     { label: 'Arena', to: arenaTo, active: isArenaMode },
   ] as const
@@ -96,7 +98,7 @@ export function StreamPayHeader() {
       </div>
       {!telegramMode && (
         <div className="mx-auto flex max-w-5xl px-4 pb-3 sm:hidden">
-          <div className="grid w-full grid-cols-3 gap-1 rounded-full border border-gray-200 dark:border-white/10 bg-gray-50/80 dark:bg-[#1c1c20] p-0.5">
+          <div className="grid w-full grid-cols-4 gap-1 rounded-full border border-gray-200 dark:border-white/10 bg-gray-50/80 dark:bg-[#1c1c20] p-0.5">
             {navItems.map(item => (
               <Link
                 key={item.label}
