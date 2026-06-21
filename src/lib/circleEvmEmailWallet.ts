@@ -696,6 +696,13 @@ function withEip712DomainTypes(data: CircleEvmTypedData) {
   }
 }
 
+function stringifyTypedData(data: CircleEvmTypedData) {
+  return JSON.stringify(withEip712DomainTypes(data), (_key, value) => {
+    if (typeof value === 'bigint') return value.toString()
+    return value
+  })
+}
+
 export async function signCircleEvmEmailTypedData(params: {
   session: CircleEvmEmailSession
   data: CircleEvmTypedData
@@ -707,7 +714,7 @@ export async function signCircleEvmEmailTypedData(params: {
     userToken: params.session.userToken,
     walletId: params.session.wallet.id,
     chain: params.session.chain,
-    data: JSON.stringify(withEip712DomainTypes(params.data)),
+    data: stringifyTypedData(params.data),
     memo: params.memo ?? 'Sign Hash PayLink typed data',
   })
   if (!challenge.challengeId) throw new Error('Circle did not return a typed-data signing challenge.')

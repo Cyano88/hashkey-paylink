@@ -27,6 +27,33 @@ function makeContentId(): string {
   return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('')
 }
 
+function shortId(value: string) {
+  return value.length > 12 ? `${value.slice(0, 6)}...${value.slice(-4)}` : value
+}
+
+function creatorProofMessage(params: {
+  contentId: string
+  creator: string
+  contentHash: string
+  capRaw: number
+  issuedAt: number
+}) {
+  return [
+    'Create a Hash PayLink Creator Studio gate',
+    '',
+    `Content ID: ${shortId(params.contentId)}`,
+    `Creator wallet: ${params.creator}`,
+    `Price: ${(params.capRaw / 1_000_000).toFixed(6).replace(/0+$/, '').replace(/\.$/, '')} USDC`,
+    'Network: Arc Testnet',
+    '',
+    'This signature proves you control the creator wallet.',
+    'It does not move funds or approve spending.',
+    '',
+    `Content hash: ${params.contentHash}`,
+    `Issued at: ${params.issuedAt}`,
+  ].join('\n')
+}
+
 function buildGateLink(params: {
   contentId: string
   creator:   string
@@ -131,6 +158,7 @@ export function LinkFactory({
     const content   = contentType === 'text' ? contentBody.trim() : privateUrl.trim()
     const capRaw = Math.round(capNum * 1_000_000)
     const issuedAt = Date.now()
+    const contentHash = keccak256(toBytes(content))
     const proofData = {
       domain: {
         name: 'Hash PayLink Creator Studio',
@@ -143,13 +171,14 @@ export function LinkFactory({
       message: {
         contentId,
         creator: creatorAddress as Address,
-        contentHash: keccak256(toBytes(content)),
-        capRaw: BigInt(capRaw),
-        issuedAt: BigInt(issuedAt),
+        contentHash,
+        capRaw: capRaw.toString(),
+        issuedAt: issuedAt.toString(),
       },
     } as const
 
     try {
+      const proofType = circleSession ? 'typedData' : 'message'
       const signature = circleSession
         ? await signCircleEvmEmailTypedData({
             session: circleSession,
@@ -157,9 +186,15 @@ export function LinkFactory({
             memo: 'Create Hash PayLink Creator Studio gate',
           })
         : walletClient && address
-        ? await walletClient.signTypedData({
-            ...proofData,
+        ? await walletClient.signMessage({
             account: address,
+            message: creatorProofMessage({
+              contentId,
+              creator: creatorAddress,
+              contentHash,
+              capRaw,
+              issuedAt,
+            }),
           })
         : null
       if (!signature) throw new Error('Connect a creator wallet before creating this link.')
@@ -175,6 +210,7 @@ export function LinkFactory({
           capRaw,
           issuedAt,
           signature,
+          proofType,
         }),
       })
       const data = await res.json() as { ok: boolean; error?: string }

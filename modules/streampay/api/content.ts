@@ -9,7 +9,7 @@ import type { Request, Response } from 'express'
 import pg from 'pg'
 import {
   createPublicClient, http, defineChain,
-  parseAbi, isAddress, keccak256, toBytes, verifyTypedData,
+  parseAbi, isAddress, keccak256, toBytes, verifyMessage, verifyTypedData,
   type Address, type Hex,
 } from 'viem'
 import type { NextFunction } from 'express'
@@ -151,6 +151,33 @@ function isHexSignature(value: unknown): value is Hex {
   return typeof value === 'string' && /^0x[a-fA-F0-9]{130}$/.test(value)
 }
 
+function shortId(value: string) {
+  return value.length > 12 ? `${value.slice(0, 6)}...${value.slice(-4)}` : value
+}
+
+function creatorProofMessage(params: {
+  contentId: string
+  creator: string
+  contentHash: string
+  capRaw: number
+  issuedAt: number
+}) {
+  return [
+    'Create a Hash PayLink Creator Studio gate',
+    '',
+    `Content ID: ${shortId(params.contentId)}`,
+    `Creator wallet: ${params.creator}`,
+    `Price: ${(params.capRaw / 1_000_000).toFixed(6).replace(/0+$/, '').replace(/\.$/, '')} USDC`,
+    'Network: Arc Testnet',
+    '',
+    'This signature proves you control the creator wallet.',
+    'It does not move funds or approve spending.',
+    '',
+    `Content hash: ${params.contentHash}`,
+    `Issued at: ${params.issuedAt}`,
+  ].join('\n')
+}
+
 async function verifyCreatorProof(params: {
   contentId: string
   creator: Address
@@ -158,9 +185,25 @@ async function verifyCreatorProof(params: {
   capRaw: number
   issuedAt: number
   signature: Hex
+  proofType: 'message' | 'typedData'
 }) {
   const age = Math.abs(Date.now() - params.issuedAt)
   if (!Number.isFinite(params.issuedAt) || age > MAX_CREATOR_PROOF_AGE_MS) return false
+  const contentHash = keccak256(toBytes(params.content))
+
+  if (params.proofType === 'message') {
+    return verifyMessage({
+      address: params.creator,
+      message: creatorProofMessage({
+        contentId: params.contentId,
+        creator: params.creator,
+        contentHash,
+        capRaw: params.capRaw,
+        issuedAt: params.issuedAt,
+      }),
+      signature: params.signature,
+    })
+  }
 
   return verifyTypedData({
     address: params.creator,
@@ -175,7 +218,7 @@ async function verifyCreatorProof(params: {
     message: {
       contentId: params.contentId,
       creator: params.creator,
-      contentHash: keccak256(toBytes(params.content)),
+      contentHash,
       capRaw: BigInt(params.capRaw),
       issuedAt: BigInt(params.issuedAt),
     },
@@ -202,7 +245,7 @@ async function creatorGatewayMiddleware(entry: ContentEntry) {
 }
 
 export async function storeContent(req: Request, res: Response) {
-  const { contentId, creator, type, content, capRaw, issuedAt, signature } = (req.body ?? {}) as {
+  const { contentId, creator, type, content, capRaw, issuedAt, signature, proofType } = (req.body ?? {}) as {
     contentId?: string
     creator?: string
     type?: string
@@ -210,6 +253,7 @@ export async function storeContent(req: Request, res: Response) {
     capRaw?: number
     issuedAt?: number
     signature?: string
+    proofType?: string
   }
 
   if (!contentId || !creator || !type || !content || !issuedAt || !signature) {
@@ -235,6 +279,7 @@ export async function storeContent(req: Request, res: Response) {
     capRaw: safeCapRaw,
     issuedAt: Number(issuedAt),
     signature,
+    proofType: proofType === 'typedData' ? 'typedData' : 'message',
   }).catch(() => false)
   if (!creatorVerified) {
     return res.status(401).json({ ok: false, error: 'Creator wallet proof failed. Sign again and retry.' })
