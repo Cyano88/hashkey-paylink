@@ -1082,7 +1082,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
 
         {/* ── Chain preview toggle — hidden in multi-chain mode (all chains active) */}
         {!multiChainMode && !posMode && !streamMode && !polymarketMode && <div className="mt-5 flex flex-col items-center gap-2.5">
-          <div className="flex w-full items-center justify-start gap-0.5 overflow-x-auto rounded-xl border border-gray-200 bg-gray-100/80 p-1 [scrollbar-width:none] dark:border-white/10 dark:bg-white/[0.05] [&::-webkit-scrollbar]:hidden sm:inline-flex sm:w-auto sm:justify-center sm:gap-1">
+          <div className="mx-auto flex w-[17.5rem] max-w-full items-center justify-start gap-0.5 overflow-x-auto rounded-xl border border-gray-200 bg-gray-100/80 p-1 [scrollbar-width:none] dark:border-white/10 dark:bg-white/[0.05] [&::-webkit-scrollbar]:hidden sm:inline-flex sm:w-auto sm:justify-center sm:gap-1">
             {VISIBLE_CREATE_CHAINS.map((c) => {
               const m = CHAIN_META[c]
               const isActive = selectedNet === c
