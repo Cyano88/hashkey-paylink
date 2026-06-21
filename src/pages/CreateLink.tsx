@@ -1040,17 +1040,17 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
       ]
 
   return (
-    <div className="mx-auto min-w-0 animate-fade-in" style={{ width: 'calc(100vw - 2rem)', maxWidth: '32rem' }}>
+    <div className="mx-auto w-[calc(100vw-2rem)] max-w-lg min-w-0 animate-fade-in sm:w-full">
       {/* ── Hero ──────────────────────────────────────────────────────── */}
       <div className="mb-9 text-center sm:mb-8">
         <span className="mb-5 inline-flex items-center gap-1.5 rounded-full border border-blue-100 bg-blue-50 px-3.5 py-1.5 text-xs font-semibold text-[#0071E3] sm:mb-4">
           <Sparkles className="h-3.5 w-3.5" />
           Multi-Chain PayFi
         </span>
-        <h1 className="text-3xl font-bold leading-tight tracking-tight text-gray-900 sm:text-[2.25rem]">
+        <h1 className="mx-auto max-w-[18rem] text-[1.65rem] font-bold leading-tight tracking-tight text-gray-900 dark:text-white sm:max-w-none sm:text-[2.25rem]">
           {polymarketMode ? 'PolyDesk' : posMode ? 'Retail POS' : streamMode ? 'StreamPay' : accessMode ? 'Hash PayLink Agent' : 'Create a Hash PayLink'}
         </h1>
-        <p className="mt-3 text-[15px] leading-relaxed text-gray-500 text-balance sm:mt-2">
+        <p className="mt-3 text-[15px] leading-relaxed text-gray-500 text-balance dark:text-gray-400 sm:mt-2">
           {polymarketMode
             ? 'Fund Polymarket, track positions, get alerts, and ask LP Scout from Telegram.'
             : posMode
@@ -1064,7 +1064,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
 
         {/* ── Chain preview toggle — hidden in multi-chain mode (all chains active) */}
         {!multiChainMode && !posMode && !streamMode && !polymarketMode && <div className="mt-6 flex flex-col items-center gap-2.5 sm:mt-5">
-          <div className="flex w-full max-w-[calc(100vw-2rem)] items-center justify-start gap-1 overflow-x-auto rounded-xl border border-gray-200 bg-gray-100/80 p-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:w-auto sm:justify-center sm:gap-1 sm:p-1">
+          <div className="flex w-full max-w-[calc(100vw-2rem)] items-center justify-start gap-1 overflow-x-auto rounded-xl border border-gray-200 bg-gray-100/80 p-1.5 [scrollbar-width:none] dark:border-white/10 dark:bg-white/[0.05] [&::-webkit-scrollbar]:hidden sm:w-auto sm:justify-center sm:gap-1 sm:p-1">
             {VISIBLE_CREATE_CHAINS.map((c) => {
               const m = CHAIN_META[c]
               const isActive = selectedNet === c
@@ -1073,8 +1073,8 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                   key={c}
                   onClick={() => onNetworkSelect(c)}
                   className={cn(
-                    'flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 sm:gap-1.5 sm:px-3 sm:py-1.5 text-[10px] sm:text-xs font-semibold transition-all duration-150',
-                    isActive ? m.toggleActive : 'text-gray-500 hover:text-gray-800',
+                    'flex shrink-0 items-center gap-1 rounded-lg px-2 py-1.5 sm:gap-1.5 sm:px-3 sm:py-1.5 text-[10px] sm:text-xs font-semibold transition-all duration-150',
+                    isActive ? m.toggleActive : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200',
                   )}
                 >
                   <span className={cn(
@@ -1137,7 +1137,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               title="Payment"
               className={cn(
                 'flex h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-lg transition-all sm:h-11 sm:flex-row sm:gap-0',
-                !accessMode && !posMode && !streamMode && !polymarketMode ? 'bg-white text-gray-900 shadow-sm dark:bg-white/10 dark:text-white' : 'text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300',
+                !accessMode && !posMode && !streamMode && !polymarketMode ? 'bg-white text-gray-900 shadow-sm dark:bg-white/15 dark:text-white dark:ring-1 dark:ring-white/10' : 'text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300',
               )}
             >
               <Coins className="h-5 w-5" />
@@ -1150,7 +1150,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               title="Agent"
               className={cn(
                 'flex h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-lg transition-all sm:h-11 sm:flex-row sm:gap-0',
-                accessMode ? 'bg-white text-gray-900 shadow-sm dark:bg-white/10 dark:text-white' : 'text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300',
+                accessMode ? 'bg-white text-gray-900 shadow-sm dark:bg-white/15 dark:text-white dark:ring-1 dark:ring-white/10' : 'text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300',
               )}
             >
               <Bot className="h-5 w-5" />
@@ -1163,7 +1163,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               title="Retail POS"
               className={cn(
                 'flex h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-lg transition-all sm:h-11 sm:flex-row sm:gap-0',
-                posMode ? 'bg-white text-gray-900 shadow-sm dark:bg-white/10 dark:text-white' : 'text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300',
+                posMode ? 'bg-white text-gray-900 shadow-sm dark:bg-white/15 dark:text-white dark:ring-1 dark:ring-white/10' : 'text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300',
               )}
             >
               <Store className="h-5 w-5" />
@@ -1176,7 +1176,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               title="StreamPay"
               className={cn(
                 'flex h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-lg transition-all sm:h-11 sm:flex-row sm:gap-0',
-                streamMode ? 'bg-white text-gray-900 shadow-sm dark:bg-white/10 dark:text-white' : 'text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300',
+                streamMode ? 'bg-white text-gray-900 shadow-sm dark:bg-white/15 dark:text-white dark:ring-1 dark:ring-white/10' : 'text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300',
               )}
             >
               <Radio className="h-5 w-5" />
@@ -1189,7 +1189,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               title="PolyDesk"
               className={cn(
                 'flex h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-lg transition-all sm:h-11 sm:flex-row sm:gap-0',
-                polymarketMode ? 'bg-white text-gray-900 shadow-sm dark:bg-white/10 dark:text-white' : 'text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300',
+                polymarketMode ? 'bg-white text-gray-900 shadow-sm dark:bg-white/15 dark:text-white dark:ring-1 dark:ring-white/10' : 'text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300',
               )}
             >
               <img src={POLYMARKET_LOGO} alt="" className="h-5 w-5 invert dark:invert-0" />
@@ -1702,7 +1702,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
 
           {(isEvmNet || multiChainMode) && (multiChainMode || receiveMode === 'paste') && <fieldset className="space-y-2">
             <label className="flex items-center justify-between">
-              <span className="flex items-center gap-2 text-sm font-medium text-gray-700">
+              <span className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
                 {multiChainMode ? 'EVM wallet address' : 'Wallet address'}
               </span>
               <span className="hidden text-[11px] font-medium text-gray-400 sm:inline">
@@ -1719,12 +1719,12 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                 autoComplete="off"
                 className={cn(
                   'w-full rounded-xl border bg-gray-50/60 px-4 py-3 font-mono text-sm',
-                  'placeholder:text-gray-400 transition-all focus:bg-white focus:outline-none focus:ring-2',
+                  'placeholder:text-gray-400 transition-all focus:bg-white focus:outline-none focus:ring-2 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-100 dark:placeholder:text-gray-600 dark:focus:bg-white/[0.06]',
                   evmDirty && !evmValid
-                    ? 'border-red-300 pr-10 text-red-600 focus:ring-red-100'
+                    ? 'border-red-300 pr-10 text-red-600 focus:ring-red-100 dark:border-red-400/40 dark:text-red-300 dark:focus:ring-red-400/10'
                     : evmValid
-                    ? 'border-emerald-300 text-gray-900 focus:ring-emerald-100'
-                    : 'border-gray-200 text-gray-900 focus:border-[#0071E3]/40 focus:ring-[#0071E3]/15',
+                    ? 'border-emerald-300 text-gray-900 focus:ring-emerald-100 dark:border-emerald-400/40 dark:text-gray-100 dark:focus:ring-emerald-400/10'
+                    : 'border-gray-200 text-gray-900 focus:border-[#0071E3]/40 focus:ring-[#0071E3]/15 dark:border-white/10 dark:text-gray-100 dark:focus:border-blue-400/40 dark:focus:ring-blue-400/10',
                 )}
               />
               {evmDirty && !evmValid && (
@@ -1766,7 +1766,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
           {/* ── Starknet Address — Starknet only ─────────────────────── */}
           {SHOW_STARKNET_CREATE_UI && (selectedNet === 'starknet' || multiChainMode) && <fieldset className="space-y-2">
             <label className="flex items-center justify-between">
-              <span className="flex items-center gap-2 text-sm font-medium text-gray-700">
+              <span className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
                 Starknet Address
               </span>
               <span className="hidden text-[11px] font-medium text-gray-400 sm:inline">Starknet Mainnet · WalletConnect</span>
@@ -1781,12 +1781,12 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                 autoComplete="off"
                 className={cn(
                   'w-full rounded-xl border bg-gray-50/60 px-4 py-3 font-mono text-sm',
-                  'placeholder:text-gray-400 transition-all focus:bg-white focus:outline-none focus:ring-2',
+                  'placeholder:text-gray-400 transition-all focus:bg-white focus:outline-none focus:ring-2 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-100 dark:placeholder:text-gray-600 dark:focus:bg-white/[0.06]',
                   starkDirty && !starkValid
-                    ? 'border-red-300 pr-10 text-red-600 focus:ring-red-100'
+                    ? 'border-red-300 pr-10 text-red-600 focus:ring-red-100 dark:border-red-400/40 dark:text-red-300 dark:focus:ring-red-400/10'
                     : starkValid
-                    ? 'border-purple-300 text-gray-900 focus:ring-purple-100'
-                    : 'border-gray-200 text-gray-900 focus:border-[#8B5CF6]/40 focus:ring-[#8B5CF6]/15',
+                    ? 'border-purple-300 text-gray-900 focus:ring-purple-100 dark:border-purple-400/40 dark:text-gray-100 dark:focus:ring-purple-400/10'
+                    : 'border-gray-200 text-gray-900 focus:border-[#8B5CF6]/40 focus:ring-[#8B5CF6]/15 dark:border-white/10 dark:text-gray-100 dark:focus:border-purple-400/40 dark:focus:ring-purple-400/10',
                 )}
               />
               {starkDirty && !starkValid && (
@@ -1811,7 +1811,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
           {/* ── Solana Address — Solana only ──────────────────────────── */}
           {(selectedNet === 'solana' || multiChainMode) && (multiChainMode || receiveMode === 'paste') && <fieldset className="space-y-2">
             <label className="flex items-center justify-between">
-              <span className="flex items-center gap-2 text-sm font-medium text-gray-700">
+              <span className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
                 Solana wallet address
               </span>
               <span className="hidden text-[11px] font-medium text-gray-400 sm:inline">No 0x · usually 32-44 chars</span>
@@ -1826,12 +1826,12 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                 autoComplete="off"
                 className={cn(
                   'w-full rounded-xl border bg-gray-50/60 px-4 py-3 font-mono text-sm',
-                  'placeholder:text-gray-400 transition-all focus:bg-white focus:outline-none focus:ring-2',
+                  'placeholder:text-gray-400 transition-all focus:bg-white focus:outline-none focus:ring-2 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-100 dark:placeholder:text-gray-600 dark:focus:bg-white/[0.06]',
                   solanaDirty && !solanaValid
-                    ? 'border-red-300 pr-10 text-red-600 focus:ring-red-100'
+                    ? 'border-red-300 pr-10 text-red-600 focus:ring-red-100 dark:border-red-400/40 dark:text-red-300 dark:focus:ring-red-400/10'
                     : solanaValid
-                    ? 'border-emerald-300 text-gray-900 focus:ring-emerald-100'
-                    : 'border-gray-200 text-gray-900 focus:border-[#14F195]/40 focus:ring-[#14F195]/15',
+                    ? 'border-emerald-300 text-gray-900 focus:ring-emerald-100 dark:border-emerald-400/40 dark:text-gray-100 dark:focus:ring-emerald-400/10'
+                    : 'border-gray-200 text-gray-900 focus:border-[#14F195]/40 focus:ring-[#14F195]/15 dark:border-white/10 dark:text-gray-100 dark:focus:border-emerald-400/40 dark:focus:ring-emerald-400/10',
                 )}
               />
               {solanaDirty && !solanaValid && (
@@ -1876,7 +1876,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
 
           {/* ── Amount ───────────────────────────────────────────────── */}
           {flexAmount && (
-            <div className="flex items-center gap-3.5 rounded-xl border border-dashed border-violet-200 bg-violet-50/40 px-4 py-3.5">
+            <div className="flex items-center gap-3.5 rounded-xl border border-dashed border-violet-200 bg-violet-50/40 px-4 py-3.5 dark:border-violet-400/30 dark:bg-violet-400/10">
               <Sliders className="h-4 w-4 shrink-0 text-violet-400" />
               <div>
                 <p className="text-xs font-semibold text-violet-600">Flexible Amount enabled</p>
@@ -1885,7 +1885,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
             </div>
           )}
           {!flexAmount && <fieldset className="space-y-2">
-            <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+            <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
               <Coins className="h-3.5 w-3.5 text-gray-400" />
               Amount
             </label>
@@ -1898,11 +1898,11 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                 value={amt}
                 onChange={(e) => { setAmt(normalizeAmountInput(e.target.value)); setGeneratedLink('') }}
                 className={cn(
-                  'w-full rounded-xl border bg-gray-50/60 px-4 py-3 pr-28 text-sm',
-                  'placeholder:text-gray-400 transition-all focus:bg-white focus:outline-none focus:ring-2',
+                  'w-full rounded-xl border bg-gray-50/60 px-4 py-3 pr-16 text-sm sm:pr-28',
+                  'placeholder:text-gray-400 transition-all focus:bg-white focus:outline-none focus:ring-2 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-100 dark:placeholder:text-gray-600 dark:focus:bg-white/[0.06]',
                   amtDirty && !isValidAmt
-                    ? 'border-red-300 focus:ring-red-100'
-                    : 'border-gray-200 focus:border-[#0071E3]/40 focus:ring-[#0071E3]/15',
+                    ? 'border-red-300 focus:ring-red-100 dark:border-red-400/40 dark:text-red-300 dark:focus:ring-red-400/10'
+                    : 'border-gray-200 focus:border-[#0071E3]/40 focus:ring-[#0071E3]/15 dark:border-white/10 dark:focus:border-blue-400/40 dark:focus:ring-blue-400/10',
                 )}
               />
               <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-semibold text-gray-400 whitespace-nowrap">
@@ -1915,7 +1915,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               </p>
             )}
             {!amtDirty && (
-              <p className="text-[11px] text-gray-400">
+              <p className="text-[11px] text-gray-400 dark:text-gray-500">
                 {multiChainMode
                   ? 'USDC on Base, Arc Testnet, Solana, or Arbitrum — payer chooses the chain'
                   : `USDC on ${selectedNet === 'arc' ? 'Arc Testnet' : CHAIN_META[selectedNet].label}`}
@@ -1925,7 +1925,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
 
           {/* ── Payment note ──────────────────────────────────────────── */}
           <fieldset className="space-y-2">
-            <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+            <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
               <Tag className="h-3.5 w-3.5 text-gray-400" />
               Payment note
               <span className="text-xs font-normal text-gray-400">(optional)</span>
@@ -1936,13 +1936,13 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               value={memo}
               maxLength={100}
               onChange={(e) => { setMemo(e.target.value); setGeneratedLink('') }}
-              className="w-full rounded-xl border border-gray-200 bg-gray-50/60 px-4 py-3 text-sm placeholder:text-gray-400 transition-all focus:border-[#0071E3]/40 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0071E3]/15"
+              className="w-full rounded-xl border border-gray-200 bg-gray-50/60 px-4 py-3 text-sm placeholder:text-gray-400 transition-all focus:border-[#0071E3]/40 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0071E3]/15 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-100 dark:placeholder:text-gray-600 dark:focus:border-blue-400/40 dark:focus:bg-white/[0.06] dark:focus:ring-blue-400/10"
             />
           </fieldset>
 
           {/* ── Agent URL (Access mode only) ─────────────────────────── */}
           {!accessMode && (
-            <div className="my-1 rounded-xl border border-gray-200 bg-gray-50 p-2 sm:my-0 sm:p-1.5">
+            <div className="my-1 rounded-xl border border-gray-200 bg-gray-50 p-2 dark:border-white/10 dark:bg-white/[0.04] sm:my-0 sm:p-1.5">
               <div className="grid grid-cols-2 gap-1">
                 {([
                   { key: 'personal', title: 'Personal', body: 'Simple PayLink request for one payer.', icon: Link2 },
@@ -1957,15 +1957,15 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                       className={cn(
                         'min-h-[82px] rounded-lg px-3 py-3 text-left transition-all sm:min-h-[74px] sm:py-2.5',
                         active
-                          ? 'bg-white text-gray-900 shadow-sm'
-                          : 'text-gray-500 hover:bg-white/70 hover:text-gray-800',
+                          ? 'bg-white text-gray-900 shadow-sm dark:bg-white/15 dark:text-white dark:ring-1 dark:ring-white/10'
+                          : 'text-gray-500 hover:bg-white/70 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-white/10 dark:hover:text-gray-200',
                       )}
                     >
                       <span className="flex items-center gap-1.5 text-sm font-semibold">
                         <Icon className={cn('h-4 w-4', active ? 'text-blue-500' : 'text-gray-400')} />
                         {title}
                       </span>
-                      <span className="mt-1 block text-[11px] leading-snug text-gray-400">{body}</span>
+                      <span className="mt-1 block text-[11px] leading-snug text-gray-400 dark:text-gray-500">{body}</span>
                     </button>
                   )
                 })}
@@ -1975,7 +1975,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
 
           {accessMode && (
             <fieldset className="space-y-2">
-              <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
                 <Bot className="h-3.5 w-3.5 text-gray-400" />
                 Agent URL
               </label>
@@ -1990,10 +1990,10 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                   autoComplete="off"
                   className={cn(
                     'w-full rounded-xl border bg-gray-50/60 px-4 py-3 text-sm',
-                    'placeholder:text-gray-400 transition-all focus:bg-white focus:outline-none focus:ring-2',
+                    'placeholder:text-gray-400 transition-all focus:bg-white focus:outline-none focus:ring-2 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-100 dark:placeholder:text-gray-600 dark:focus:bg-white/[0.06]',
                     agentUrlStatus === 'ok'           ? 'border-emerald-300 focus:ring-emerald-100'
                     : agentUrlStatus === 'incompatible' ? 'border-red-300 focus:ring-red-100'
-                    : 'border-gray-200 focus:border-[#0071E3]/40 focus:ring-[#0071E3]/15',
+                    : 'border-gray-200 focus:border-[#0071E3]/40 focus:ring-[#0071E3]/15 dark:border-white/10 dark:focus:border-blue-400/40 dark:focus:ring-blue-400/10',
                   )}
                 />
                 {agentUrlStatus === 'checking'     && <Loader2    className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-gray-400" />}
@@ -2053,9 +2053,9 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                 <button
                   type="button"
                   onClick={() => setFxShow(v => !v)}
-                  className="shrink-0"
+                  className="flex h-9 w-11 shrink-0 items-center justify-center"
                 >
-                  <div className={cn('relative h-5 w-9 rounded-full transition-colors', fxShow ? 'bg-blue-500' : 'bg-gray-300')}>
+                  <div className={cn('relative h-5 w-9 rounded-full transition-colors', fxShow ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600')}>
                     <div className={cn(
                       'absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform',
                       fxShow ? 'translate-x-4' : 'translate-x-0.5',
@@ -2069,11 +2069,11 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                 <div className="space-y-2.5 pt-0.5">
                   {/* Currency picker */}
                   <div className="flex items-center gap-3">
-                    <label className="w-16 shrink-0 text-[11px] text-gray-500">Currency</label>
+                    <label className="w-16 shrink-0 text-[11px] text-gray-500 dark:text-gray-400">Currency</label>
                     <select
                       value={fxCurrency}
                       onChange={e => { setFxCurrency(e.target.value); setFxPreviewRate(null) }}
-                      className="flex-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-700 focus:border-blue-300 focus:outline-none focus:ring-1 focus:ring-blue-100"
+                      className="flex-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-700 focus:border-blue-300 focus:outline-none focus:ring-1 focus:ring-blue-100 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-100 dark:focus:border-blue-400/40 dark:focus:ring-blue-400/10"
                     >
                       {FX_CURRENCIES.map(c => (
                         <option key={c.code} value={c.code}>
@@ -2085,14 +2085,14 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
 
                   {/* Rate source toggle */}
                   <div className="flex items-center gap-3">
-                    <label className="w-16 shrink-0 text-[11px] text-gray-500">Rate</label>
-                    <div className="flex flex-1 rounded-lg border border-gray-200 bg-gray-50 p-0.5 text-xs font-medium">
+                    <label className="w-16 shrink-0 text-[11px] text-gray-500 dark:text-gray-400">Rate</label>
+                    <div className="flex flex-1 rounded-lg border border-gray-200 bg-gray-50 p-0.5 text-xs font-medium dark:border-white/10 dark:bg-white/[0.04]">
                       <button
                         type="button"
                         onClick={() => setFxSrc('live')}
                         className={cn(
                           'flex-1 rounded-md px-3 py-1.5 transition-all',
-                          fxSrc === 'live' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700',
+                          fxSrc === 'live' ? 'bg-white text-gray-800 shadow-sm dark:bg-white/15 dark:text-white' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200',
                         )}
                       >Live (Fixer.io)</button>
                       <button
@@ -2100,7 +2100,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                         onClick={() => setFxSrc('custom')}
                         className={cn(
                           'flex-1 rounded-md px-3 py-1.5 transition-all',
-                          fxSrc === 'custom' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700',
+                          fxSrc === 'custom' ? 'bg-white text-gray-800 shadow-sm dark:bg-white/15 dark:text-white' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200',
                         )}
                       >Custom / Street</button>
                     </div>
@@ -2109,7 +2109,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                   {/* Custom rate input */}
                   {fxSrc === 'custom' && (
                     <div className="flex items-center gap-3">
-                      <label className="w-16 shrink-0 text-[11px] text-gray-500">1 USDC =</label>
+                      <label className="w-16 shrink-0 text-[11px] text-gray-500 dark:text-gray-400">1 USDC =</label>
                       <div className="relative flex-1">
                         <input
                           type="number"
@@ -2118,7 +2118,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                           placeholder={`e.g. 1780`}
                           value={fxCustomRate}
                           onChange={e => setFxCustomRate(e.target.value)}
-                          className="w-full rounded-lg border border-gray-200 bg-white px-3 py-1.5 pr-14 text-sm text-gray-700 placeholder:text-gray-300 focus:border-blue-300 focus:outline-none focus:ring-1 focus:ring-blue-100"
+                          className="w-full rounded-lg border border-gray-200 bg-white px-3 py-1.5 pr-14 text-sm text-gray-700 placeholder:text-gray-300 focus:border-blue-300 focus:outline-none focus:ring-1 focus:ring-blue-100 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-100 dark:placeholder:text-gray-600 dark:focus:border-blue-400/40 dark:focus:ring-blue-400/10"
                         />
                         <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-semibold text-gray-400">
                           {fxCurrency}
@@ -2161,24 +2161,24 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
             className={cn(
               'w-full rounded-xl border-2 p-4 text-left transition-all',
               multiChainMode
-                ? 'border-violet-400 bg-violet-50/60'
-                : 'border-gray-200 bg-white hover:border-gray-300',
+                ? 'border-violet-400 bg-violet-50/60 dark:border-violet-400/50 dark:bg-violet-400/10'
+                : 'border-gray-200 bg-white hover:border-gray-300 dark:border-white/10 dark:bg-white/[0.04] dark:hover:border-white/20',
             )}
           >
             <div className="flex items-center justify-between gap-3">
               <div className="flex min-w-0 items-start gap-2.5">
-                <Globe className={cn('mt-0.5 h-4 w-4 shrink-0', multiChainMode ? 'text-violet-500' : 'text-gray-400')} />
+                <Globe className={cn('mt-0.5 h-4 w-4 shrink-0', multiChainMode ? 'text-violet-500 dark:text-violet-300' : 'text-gray-400 dark:text-gray-500')} />
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="text-sm font-semibold text-gray-800">Let payer choose network</span>
+                    <span className="text-sm font-semibold text-gray-800 dark:text-gray-100">Let payer choose network</span>
                     <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold text-violet-700">New</span>
                   </div>
-                  <p className="mt-1 text-xs leading-relaxed text-gray-500">
+                  <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
                     Add multiple wallet addresses so the payer can choose a network.
                   </p>
                 </div>
               </div>
-              <div className={cn('relative h-5 w-9 shrink-0 rounded-full transition-colors', multiChainMode ? 'bg-violet-500' : 'bg-gray-300')}>
+              <div className={cn('relative h-5 w-9 shrink-0 rounded-full transition-colors', multiChainMode ? 'bg-violet-500' : 'bg-gray-300 dark:bg-gray-600')}>
                 <div className={cn(
                   'absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform',
                   multiChainMode ? 'translate-x-4' : 'translate-x-0.5',
@@ -2194,21 +2194,21 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
             className={cn(
               'w-full rounded-xl border-2 p-4 text-left transition-all',
               flexAmount
-                ? 'border-violet-400 bg-violet-50/60'
-                : 'border-gray-200 bg-white hover:border-gray-300',
+                ? 'border-violet-400 bg-violet-50/60 dark:border-violet-400/50 dark:bg-violet-400/10'
+                : 'border-gray-200 bg-white hover:border-gray-300 dark:border-white/10 dark:bg-white/[0.04] dark:hover:border-white/20',
             )}
           >
             <div className="flex items-center justify-between gap-3">
               <div className="flex min-w-0 items-start gap-2.5">
-                <Sliders className={cn('mt-0.5 h-4 w-4 shrink-0', flexAmount ? 'text-violet-500' : 'text-gray-400')} />
+                <Sliders className={cn('mt-0.5 h-4 w-4 shrink-0', flexAmount ? 'text-violet-500 dark:text-violet-300' : 'text-gray-400 dark:text-gray-500')} />
                 <div className="min-w-0">
-                  <span className="text-sm font-semibold text-gray-800">Let payer enter amount</span>
-                  <p className="mt-1 text-xs leading-relaxed text-gray-500">
+                  <span className="text-sm font-semibold text-gray-800 dark:text-gray-100">Let payer enter amount</span>
+                  <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
                     No fixed price. The payer enters the amount at checkout.
                   </p>
                 </div>
               </div>
-              <div className={cn('relative h-5 w-9 shrink-0 rounded-full transition-colors', flexAmount ? 'bg-violet-500' : 'bg-gray-300')}>
+              <div className={cn('relative h-5 w-9 shrink-0 rounded-full transition-colors', flexAmount ? 'bg-violet-500' : 'bg-gray-300 dark:bg-gray-600')}>
                 <div className={cn(
                   'absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform',
                   flexAmount ? 'translate-x-4' : 'translate-x-0.5',
@@ -2225,8 +2225,8 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               className={cn(
                 'flex w-full items-center justify-center gap-2 rounded-xl px-6 py-3.5 text-sm font-semibold transition-all duration-200',
                 canGenerate
-                  ? 'bg-black text-white shadow-button hover:bg-gray-800 hover:shadow-md active:scale-[0.98]'
-                  : 'cursor-not-allowed bg-gray-100 text-gray-400',
+                  ? 'bg-black text-white shadow-button hover:bg-gray-800 hover:shadow-md active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200'
+                  : 'cursor-not-allowed bg-gray-100 text-gray-400 dark:bg-white/[0.06] dark:text-gray-500',
               )}
             >
               <Link2 className="h-4 w-4" />
@@ -2240,7 +2240,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               ? (!evmDirty && !solanaDirty && !(SHOW_STARKNET_CREATE_UI && starkDirty))
               : (selectedNet === 'solana' ? !solanaDirty : isEvmNet ? !evmDirty : !starkDirty)
           ) && (
-            <p className="text-center text-xs text-gray-400">
+            <p className="text-center text-xs text-gray-400 dark:text-gray-500">
               {multiChainMode
                 ? 'Enter at least one wallet address to continue'
                 : `Enter a ${selectedNet === 'solana' ? 'Solana' : 'wallet'} address to continue`}
@@ -2467,28 +2467,28 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
 
           {/* ── Agent links ───────────────────────────────────────────── */}
           {/* ── Footer links ─────────────────────────────────────────── */}
-          <div className="mt-6 border-t border-gray-100 pt-5 flex items-center justify-center gap-8">
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 border-t border-gray-100 pt-5">
             <a
               href="mailto:support@hashpaylink.com"
-              className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-900 transition-colors"
+              className="flex min-w-0 items-center gap-1.5 py-1 text-xs text-gray-400 transition-colors hover:text-gray-900 dark:hover:text-gray-200"
             >
-              <Mail className="h-3.5 w-3.5" />
+              <Mail className="h-3.5 w-3.5 shrink-0" />
               support@hashpaylink.com
             </a>
             <a
               href="https://x.com/Hash_PayLink"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-900 transition-colors"
+              className="flex items-center gap-1.5 py-1 text-xs text-gray-400 transition-colors hover:text-gray-900 dark:hover:text-gray-200"
             >
-              <X className="h-3.5 w-3.5" />
+              <X className="h-3.5 w-3.5 shrink-0" />
               @Hash_PayLink
             </a>
             <Link
               to="/docs"
-              className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-900 transition-colors"
+              className="flex items-center gap-1.5 py-1 text-xs text-gray-400 transition-colors hover:text-gray-900 dark:hover:text-gray-200"
             >
-              <ExternalLink className="h-3.5 w-3.5" />
+              <ExternalLink className="h-3.5 w-3.5 shrink-0" />
               Docs
             </Link>
           </div>
