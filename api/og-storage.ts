@@ -21,6 +21,19 @@ import { join }              from 'path'
 import { tmpdir }            from 'os'
 import { randomBytes }       from 'crypto'
 
+const OG_UPLOAD_TIMEOUT_MS = 90_000
+const OG_ANCHOR_TIMEOUT_MS = 90_000
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${Math.round(ms / 1000)}s`)), ms)
+  })
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timer) clearTimeout(timer)
+  })
+}
+
 // ─── 0G Mainnet config ────────────────────────────────────────────────────────
 const EVM_RPC     = 'https://evmrpc.0g.ai'
 const INDEXER_RPC = 'https://indexer-storage-turbo.0g.ai'
@@ -92,7 +105,11 @@ export async function archivePayment(entry: ArchiveRecord): Promise<ArchiveResul
     const rootHash = tree.rootHash() as string
 
     const indexer = new Indexer(INDEXER_RPC)
-    const [, uploadErr] = await indexer.upload(file, EVM_RPC, signer)
+    const [, uploadErr] = await withTimeout(
+      indexer.upload(file, EVM_RPC, signer),
+      OG_UPLOAD_TIMEOUT_MS,
+      '0G upload',
+    )
     await file.close()
 
     if (uploadErr) {
@@ -110,15 +127,19 @@ export async function archivePayment(entry: ArchiveRecord): Promise<ArchiveResul
 
     try {
       const contract = new ethers.Contract(archiveAddr, ARCHIVE_ABI, signer)
-      const tx = await contract.archive(
-        entry.eventId,
-        ethers.hexlify(ethers.toUtf8Bytes(rootHash).slice(0, 32)).padEnd(66, '0') as `0x${string}`,
-        entry.chain,
-        entry.payer,
-        entry.amount,
-        BigInt(entry.ts),
+      const tx = await withTimeout(
+        contract.archive(
+          entry.eventId,
+          ethers.hexlify(ethers.toUtf8Bytes(rootHash).slice(0, 32)).padEnd(66, '0') as `0x${string}`,
+          entry.chain,
+          entry.payer,
+          entry.amount,
+          BigInt(entry.ts),
+        ),
+        OG_ANCHOR_TIMEOUT_MS,
+        '0G archive transaction',
       )
-      await tx.wait()
+      await withTimeout(tx.wait(), OG_ANCHOR_TIMEOUT_MS, '0G archive confirmation')
       console.log(`[0g] anchored on-chain — tx: ${tx.hash}`)
       return { rootHash, ogTxHash: tx.hash as string }
     } catch (anchorErr) {

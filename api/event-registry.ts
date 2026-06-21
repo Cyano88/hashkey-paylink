@@ -109,6 +109,12 @@ async function persistRegistry(): Promise<void> {
 }
 
 const registry = loadRegistry()
+const archiveInFlight = new Set<string>()
+const ARCHIVE_RETRY_DELAYS_MS = [0, 10_000, 30_000]
+
+function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
 
 function encodeReceiptId(eventId: string, txHash: string) {
   return Buffer.from(JSON.stringify({ eventId, txHash }), 'utf8')
@@ -148,6 +154,69 @@ function receiptHash(entry: PaymentEntry) {
 
 export function paymentReceiptId(eventId: string, txHash: string) {
   return encodeReceiptId(eventId, txHash)
+}
+
+function archiveKey(entry: PaymentEntry) {
+  return `${entry.eventId}:${entry.txHash}`.toLowerCase()
+}
+
+function archiveMetadata(entry: PaymentEntry, customerWallet: string) {
+  if (entry.source !== 'ngpos') return undefined
+  return {
+    type: 'nigerian_retail_pos_payment',
+    merchantId: entry.merchantId,
+    contextLabel: entry.contextLabel,
+    amountNgn: entry.amountNgn,
+    amountUsdc: entry.amount,
+    settlementType: entry.settlementType,
+    customerWallet,
+  }
+}
+
+function scheduleArchivePayment(entry: PaymentEntry, payerWallet = entry.payer) {
+  if (entry.ogTxHash) return
+  const key = archiveKey(entry)
+  if (archiveInFlight.has(key)) return
+  archiveInFlight.add(key)
+
+  void (async () => {
+    for (const delay of ARCHIVE_RETRY_DELAYS_MS) {
+      if (delay > 0) await sleep(delay)
+      const list = registry.get(entry.eventId)
+      const current = list?.find(item => item.txHash === entry.txHash) ?? entry
+      if (current.ogTxHash) return
+
+      const result = await archivePayment({
+        eventId: current.eventId,
+        txHash: current.txHash,
+        chain: current.chain,
+        payer: current.memo || payerWallet || current.payer,
+        amount: current.amount,
+        ts: current.ts,
+        source: current.source,
+        merchantId: current.merchantId,
+        contextLabel: current.contextLabel,
+        settlementType: current.settlementType,
+        amountNgn: current.amountNgn,
+        metadata: archiveMetadata(current, payerWallet),
+      })
+
+      if (!result) continue
+      const latest = registry.get(current.eventId)
+      if (!latest) return
+      const idx = latest.findIndex(item => item.txHash === current.txHash)
+      if (idx === -1) return
+      latest[idx].ogRootHash = result.rootHash
+      latest[idx].ogTxHash = result.ogTxHash
+      await persistRegistry()
+      return
+    }
+    console.warn('[registry] 0G archive still pending after retries:', entry.eventId, entry.txHash)
+  })().catch(err => {
+    console.warn('[registry] 0G archive scheduler failed:', err instanceof Error ? err.message : String(err))
+  }).finally(() => {
+    archiveInFlight.delete(key)
+  })
 }
 
 export async function findRegisteredPaymentReceipt(receiptId: string): Promise<RegisteredPaymentReceipt | undefined> {
@@ -242,6 +311,7 @@ export async function registerEventPayment(req: Request, res: Response): Promise
         receiptId: paymentReceiptId(eventId, txHash),
         receiptUrl: `/r/${paymentReceiptId(eventId, txHash)}`,
       })
+      scheduleArchivePayment(entries[manualIndex], payer)
       return
     }
   }
@@ -250,12 +320,16 @@ export async function registerEventPayment(req: Request, res: Response): Promise
     ? entries.some(e => e.payer.toLowerCase() === payer.toLowerCase())
     : entries.some(e => e.txHash.toLowerCase() === txHash.toLowerCase())
   if (isDupe) {
+    const duplicate = txHash.startsWith('manual_')
+      ? entries.find(e => e.payer.toLowerCase() === payer.toLowerCase())
+      : entries.find(e => e.txHash.toLowerCase() === txHash.toLowerCase())
     res.json({
       ok: true,
       duplicate: true,
       receiptId: paymentReceiptId(eventId, txHash),
       receiptUrl: `/r/${paymentReceiptId(eventId, txHash)}`,
     })
+    if (duplicate) scheduleArchivePayment(duplicate, payer)
     return
   }
   const entry: PaymentEntry = { eventId, txHash, chain, payer, memo, amount, ts: Date.now() }
@@ -293,42 +367,7 @@ export async function registerEventPayment(req: Request, res: Response): Promise
   // When complete, patch the entry in-place so the dashboard can show the badge.
   // Use the human-readable name (memo) as payer in the 0G archive so
   // agent-verify can match by name, not wallet address.
-  archivePayment({
-    eventId,
-    txHash,
-    chain: entry.chain,
-    payer: entry.memo || payer,
-    amount: entry.amount,
-    ts: entry.ts,
-    source: entry.source,
-    merchantId: entry.merchantId,
-    contextLabel: entry.contextLabel,
-    settlementType: entry.settlementType,
-    amountNgn: entry.amountNgn,
-    metadata: entry.source === 'ngpos'
-      ? {
-          type: 'nigerian_retail_pos_payment',
-          merchantId: entry.merchantId,
-          contextLabel: entry.contextLabel,
-          amountNgn: entry.amountNgn,
-          amountUsdc: entry.amount,
-          settlementType: entry.settlementType,
-          customerWallet: payer,
-        }
-      : undefined,
-  })
-    .then(result => {
-      if (!result) return
-      const list = registry.get(eventId)
-      if (!list) return
-      const idx = list.findIndex(e => e.txHash === txHash)
-      if (idx !== -1) {
-        list[idx].ogRootHash = result.rootHash
-        list[idx].ogTxHash   = result.ogTxHash
-        void persistRegistry()
-      }
-    })
-    .catch(() => {})
+  scheduleArchivePayment(entry, payer)
 }
 
 export async function listEventPayments(req: Request, res: Response): Promise<void> {

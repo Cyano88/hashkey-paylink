@@ -382,6 +382,8 @@ export default function PaymentPage() {
   const [receiptShared,     setReceiptShared]     = useState(false)
   const [paymentReceiptId,  setPaymentReceiptId]  = useState('')
   const [paymentReceipt,    setPaymentReceipt]    = useState<PaylinkReceipt | null>(null)
+  const [receiptPollAttempts, setReceiptPollAttempts] = useState(0)
+  const [receiptArchiveTimedOut, setReceiptArchiveTimedOut] = useState(false)
   const [manualPayDetected, setManualPayDetected] = useState(false)
   const [manualTxHash,      setManualTxHash]      = useState<`0x${string}` | null>(null)
   const [receivedAmount,    setReceivedAmount]    = useState<bigint | null>(null)
@@ -3010,20 +3012,27 @@ export default function PaymentPage() {
     let cancelled = false
     let timer: number | undefined
     let attempts = 0
+    setReceiptPollAttempts(0)
+    setReceiptArchiveTimedOut(false)
 
     async function loadReceipt() {
       attempts += 1
+      if (!cancelled) setReceiptPollAttempts(attempts)
       try {
         const res = await fetch(`/api/receipt?id=${encodeURIComponent(paymentReceiptId)}`)
         const data = await res.json().catch(() => undefined) as ReceiptLookupResponse | undefined
         if (!cancelled && data?.ok && data.receipt) {
           setPaymentReceipt(data.receipt)
-          if (data.receipt.proof?.ogTxHash || data.receipt.proof?.ogExplorer) return
+          if (data.receipt.proof?.ogTxHash || data.receipt.proof?.ogExplorer) {
+            setReceiptArchiveTimedOut(false)
+            return
+          }
         }
       } catch {
         // Receipt polling should not affect the already-confirmed payment state.
       }
       if (!cancelled && attempts < 40) timer = window.setTimeout(loadReceipt, 5_000)
+      if (!cancelled && attempts >= 40) setReceiptArchiveTimedOut(true)
     }
 
     void loadReceipt()
@@ -3115,6 +3124,11 @@ export default function PaymentPage() {
     const ogExplorerUrl = paymentReceipt?.proof?.ogExplorer || (paymentReceipt?.proof?.ogTxHash ? `https://chainscan.0g.ai/tx/${paymentReceipt.proof.ogTxHash}` : '')
     const ogProofValue = paymentReceipt?.proof?.ogTxHash || paymentReceipt?.proof?.ogRootHash || ''
     const receiptReady = Boolean(paymentReceipt && txHash && ogProofValue)
+    const archivePendingLabel = receiptArchiveTimedOut
+      ? 'Archive pending'
+      : receiptPollAttempts >= 9
+      ? 'Still archiving...'
+      : 'Archiving...'
 
     return (
       <div className="mx-auto max-w-md animate-scale-in">
@@ -3246,8 +3260,12 @@ export default function PaymentPage() {
                     </a>
                   ) : (
                     <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-400">
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      Archiving...
+                      {receiptArchiveTimedOut ? (
+                        <AlertCircle className="h-3.5 w-3.5" />
+                      ) : (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      )}
+                      {archivePendingLabel}
                     </span>
                   )}
                 </div>
