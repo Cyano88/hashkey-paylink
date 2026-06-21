@@ -1098,7 +1098,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
             const m = CHAIN_META[selectedNet]
             return (
               <span className={cn(
-                'inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-semibold transition-all duration-200',
+                'inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-semibold transition-all duration-200 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-300',
                 m.badgeBg, m.badgeText, m.badgeBorder,
               )}>
                 <span className={cn('h-1.5 w-1.5 rounded-full', m.dotColor)} />
@@ -1111,7 +1111,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
         {/* Multi-chain mode active badge */}
         {multiChainMode && !posMode && !streamMode && !polymarketMode && (
           <div className="mt-5 flex justify-center">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-[11px] font-semibold text-violet-700">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-[11px] font-semibold text-violet-700 dark:border-violet-400/30 dark:bg-violet-500/10 dark:text-violet-200">
               <Globe className="h-3 w-3" />
               Multi-Chain · All networks active
             </span>
@@ -1123,13 +1123,13 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
       <div className="min-w-0 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-card dark:border-white/10 dark:bg-[#111114]">
         <div className="min-w-0 space-y-5 p-4 sm:p-8">
 
-          <div className="flex items-center justify-center gap-2 text-[11px] font-semibold text-gray-400">
+          <div className="flex items-center justify-center gap-2 text-[11px] font-semibold text-gray-400 dark:text-gray-500">
             <img src="/brand/circle-logo.jpeg" alt="" className="h-4 w-4 rounded-full object-cover" />
             <span>Powered by Circle USDC</span>
           </div>
 
           {/* ── Payment / Access toggle ───────────────────────────────── */}
-          <div className="grid min-w-0 grid-cols-3 gap-1 rounded-xl border border-gray-200 bg-gray-50 p-1.5 dark:border-white/10 dark:bg-white/[0.04] sm:grid-cols-5 sm:p-1">
+          <div className="grid min-w-0 grid-cols-5 gap-1 rounded-xl border border-gray-200 bg-gray-50 p-1.5 dark:border-white/10 dark:bg-white/[0.04] sm:p-1">
             <button
               type="button"
               onClick={() => toggleAccessMode(false)}
@@ -1141,7 +1141,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               )}
             >
               <Coins className="h-5 w-5" />
-              <span className="text-[9px] font-semibold leading-none sm:hidden">Payment</span>
+              <span className="text-[10px] font-semibold leading-none sm:hidden">Payment</span>
             </button>
             <button
               type="button"
@@ -1154,7 +1154,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               )}
             >
               <Bot className="h-5 w-5" />
-              <span className="text-[9px] font-semibold leading-none sm:hidden">Agent</span>
+              <span className="text-[10px] font-semibold leading-none sm:hidden">Agent</span>
             </button>
             <button
               type="button"
@@ -1167,7 +1167,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               )}
             >
               <Store className="h-5 w-5" />
-              <span className="text-[9px] font-semibold leading-none sm:hidden">POS</span>
+              <span className="text-[10px] font-semibold leading-none sm:hidden">POS</span>
             </button>
             <button
               type="button"
@@ -1180,7 +1180,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               )}
             >
               <Radio className="h-5 w-5" />
-              <span className="text-[9px] font-semibold leading-none sm:hidden">Stream</span>
+              <span className="text-[10px] font-semibold leading-none sm:hidden">Stream</span>
             </button>
             <button
               type="button"
@@ -1193,7 +1193,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               )}
             >
               <img src={POLYMARKET_LOGO} alt="" className="h-5 w-5 invert dark:invert-0" />
-              <span className="text-[9px] font-semibold leading-none sm:hidden">Poly</span>
+              <span className="text-[10px] font-semibold leading-none sm:hidden">Poly</span>
             </button>
           </div>
 
@@ -1879,8 +1879,8 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
             <div className="flex items-center gap-3.5 rounded-xl border border-dashed border-violet-200 bg-violet-50/40 px-4 py-3.5 dark:border-violet-400/30 dark:bg-violet-400/10">
               <Sliders className="h-4 w-4 shrink-0 text-violet-400" />
               <div>
-                <p className="text-xs font-semibold text-violet-600">Flexible Amount enabled</p>
-                <p className="text-[11px] text-violet-400 mt-0.5">Payer enters the amount at checkout</p>
+                <p className="text-xs font-semibold text-violet-600 dark:text-violet-200">Flexible Amount enabled</p>
+                <p className="text-[11px] text-violet-400 mt-0.5 dark:text-violet-300">Payer enters the amount at checkout</p>
               </div>
             </div>
           )}
@@ -2171,7 +2171,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-1.5">
                     <span className="text-sm font-semibold text-gray-800 dark:text-gray-100">Let payer choose network</span>
-                    <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold text-violet-700">New</span>
+                    <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold text-violet-700 dark:bg-violet-400/15 dark:text-violet-200">New</span>
                   </div>
                   <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
                     Add multiple wallet addresses so the payer can choose a network.
@@ -2252,51 +2252,51 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
 
         {/* ── Link ready panel ─────────────────────────────────────────── */}
         {linkReady && (
-          <div className="animate-slide-up border-t border-gray-100 bg-gradient-to-b from-gray-50/80 to-white p-6 sm:px-8 space-y-4">
+          <div className="animate-slide-up border-t border-gray-100 bg-gradient-to-b from-gray-50/80 to-white p-6 space-y-4 dark:border-white/10 dark:from-white/[0.04] dark:to-white/[0.02] sm:px-8">
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <p className="flex items-center gap-2 text-sm font-semibold text-gray-800">
+                <p className="flex items-center gap-2 text-sm font-semibold text-gray-800 dark:text-gray-100">
                   <CheckCheck className="h-4 w-4 text-emerald-500" />
                   Link Ready
                 </p>
-                <button onClick={handleReset} className="text-xs text-gray-400 hover:text-gray-600 transition-colors">
+                <button onClick={handleReset} className="text-xs text-gray-400 transition-colors hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300">
                   Start over
                 </button>
               </div>
 
               {/* Preview + QR side by side */}
-              <div className="rounded-xl border border-gray-100 bg-white p-4 flex items-start gap-3">
+              <div className="flex items-start gap-3 rounded-xl border border-gray-100 bg-white p-4 dark:border-white/10 dark:bg-white/[0.04]">
                 {/* Left — link details */}
                 <div className="flex-1 min-w-0 space-y-2">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Preview</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">Preview</p>
                   <div className="flex items-baseline gap-1.5">
                     {flexAmount
-                      ? <span className="inline-flex items-center gap-1.5 rounded-full bg-violet-100 px-3 py-1 text-sm font-semibold text-violet-700"><Sliders className="h-3.5 w-3.5" />Flexible</span>
-                      : <><span className="text-2xl font-bold text-gray-900">{formatAmount(amt, 6)}</span><span className="text-sm font-medium text-gray-500">USDC</span></>
+                      ? <span className="inline-flex items-center gap-1.5 rounded-full bg-violet-100 px-3 py-1 text-sm font-semibold text-violet-700 dark:bg-violet-400/15 dark:text-violet-200"><Sliders className="h-3.5 w-3.5" />Flexible</span>
+                      : <><span className="text-2xl font-bold text-gray-900 dark:text-white">{formatAmount(amt, 6)}</span><span className="text-sm font-medium text-gray-500 dark:text-gray-400">USDC</span></>
                     }
                   </div>
                   <div className="space-y-1">
                     {evmValid && (
-                      <div className="flex items-center gap-2 text-xs text-gray-500">
+                      <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
                         <span>{multiChainMode ? 'Base · Arc Testnet · Arbitrum' : CHAIN_META[selectedNet].label}:</span>
-                        <span className="font-mono text-gray-700">{truncateAddress(evmAddr, 8)}</span>
+                        <span className="font-mono text-gray-700 dark:text-gray-200">{truncateAddress(evmAddr, 8)}</span>
                       </div>
                     )}
                     {SHOW_STARKNET_CREATE_UI && starkValid && (
-                      <div className="flex items-center gap-2 text-xs text-gray-500">
+                      <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
                         <span>Starknet:</span>
-                        <span className="font-mono text-gray-700">{truncateAddress(starkAddr, 8)}</span>
+                        <span className="font-mono text-gray-700 dark:text-gray-200">{truncateAddress(starkAddr, 8)}</span>
                       </div>
                     )}
                     {solanaValid && (
-                      <div className="flex items-center gap-2 text-xs text-gray-500">
+                      <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
                         <span>Solana:</span>
-                        <span className="font-mono text-gray-700">{truncateAddress(solanaAddr, 8)}</span>
+                        <span className="font-mono text-gray-700 dark:text-gray-200">{truncateAddress(solanaAddr, 8)}</span>
                       </div>
                     )}
                     {memo && (
-                      <div className="flex items-center gap-2 text-xs text-gray-500">
-                        <span>Payment note: <span className="font-medium text-gray-700">"{memo}"</span></span>
+                      <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                        <span>Payment note: <span className="font-medium text-gray-700 dark:text-gray-200">"{memo}"</span></span>
                       </div>
                     )}
                   </div>
@@ -2330,8 +2330,8 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                   className={cn(
                     'flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all active:scale-[0.98]',
                     copied
-                      ? 'border border-emerald-200 bg-emerald-50 text-emerald-700'
-                      : 'bg-black text-white hover:bg-gray-800',
+                      ? 'border border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-400/30 dark:bg-emerald-400/10 dark:text-emerald-200'
+                      : 'bg-black text-white hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200',
                   )}
                 >
                   {copied ? <><CheckCheck className="h-4 w-4" /> Copied!</> : <><Share2 className="h-4 w-4" /> Share</>}
@@ -2340,7 +2340,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                   href={generatedLink}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:border-gray-300 hover:bg-gray-50 transition-all active:scale-[0.98]"
+                  className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition-all hover:border-gray-300 hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:border-white/20 dark:hover:bg-white/[0.08]"
                 >
                   <ExternalLink className="h-4 w-4" />
                   Test
@@ -2353,7 +2353,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                   href={buildGlobalDashboardLink()}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 hover:border-gray-300 hover:bg-gray-50 transition-all active:scale-[0.98]"
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition-all hover:border-gray-300 hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:border-white/20 dark:hover:bg-white/[0.08]"
                 >
                   <LayoutDashboard className="h-4 w-4" />
                   Open Personal Dashboard
@@ -2366,7 +2366,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                     href={buildDashboardLink()}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-blue-200 bg-white px-4 py-2.5 text-sm font-semibold text-blue-600 hover:bg-blue-50 transition-all active:scale-[0.98]"
+                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-blue-200 bg-white px-4 py-2.5 text-sm font-semibold text-blue-600 transition-all hover:bg-blue-50 active:scale-[0.98] dark:border-blue-400/30 dark:bg-blue-400/10 dark:text-blue-200 dark:hover:bg-blue-400/15"
                   >
                     <LayoutDashboard className="h-4 w-4" />
                     Open Business Dashboard
@@ -2375,7 +2375,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               )}
 
               {effectiveEventMode && (
-                <p className="text-[11px] text-gray-400">
+                <p className="text-[11px] text-gray-400 dark:text-gray-500">
                   {accessMode
                     ? 'Each payer enters their name — used to generate their personal access link after payment.'
                     : 'Each payer must enter their name before paying — their entry will appear live in the dashboard.'}
@@ -2467,7 +2467,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
 
           {/* ── Agent links ───────────────────────────────────────────── */}
           {/* ── Footer links ─────────────────────────────────────────── */}
-          <div className="mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 border-t border-gray-100 pt-5">
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 border-t border-gray-100 pt-5 dark:border-white/10">
             <a
               href="mailto:support@hashpaylink.com"
               className="flex min-w-0 items-center gap-1.5 py-1 text-xs text-gray-400 transition-colors hover:text-gray-900 dark:hover:text-gray-200"
