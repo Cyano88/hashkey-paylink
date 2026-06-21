@@ -9,7 +9,8 @@ import type { Request, Response } from 'express'
 import pg from 'pg'
 import {
   createPublicClient, http, defineChain,
-  parseAbi, isAddress,
+  parseAbi, isAddress, keccak256, toBytes, verifyTypedData,
+  type Address, type Hex,
 } from 'viem'
 import type { NextFunction } from 'express'
 
@@ -41,6 +42,7 @@ type ContentEntry = {
 const store = new Map<string, ContentEntry>()
 const MAX_CONTENT_ID_LENGTH = 128
 const MAX_CONTENT_LENGTH = 100_000
+const MAX_CREATOR_PROOF_AGE_MS = 10 * 60 * 1000
 const DATABASE_URL = (process.env.DATABASE_URL ?? process.env.POSTGRES_URL ?? '').trim()
 const CREATOR_X402_NETWORKS = (process.env.X402_CREATOR_ACCEPT_NETWORKS ?? 'eip155:5042002')
   .split(',')
@@ -61,6 +63,15 @@ type PaidRequest = Request & {
 }
 
 const gatewayCache = new Map<string, (req: Request, res: Response, next: NextFunction) => void | Promise<void>>()
+const CREATOR_PROOF_TYPES = {
+  CreatorContent: [
+    { name: 'contentId', type: 'string' },
+    { name: 'creator', type: 'address' },
+    { name: 'contentHash', type: 'bytes32' },
+    { name: 'capRaw', type: 'uint256' },
+    { name: 'issuedAt', type: 'uint256' },
+  ],
+} as const
 const { Pool } = pg
 const pool = DATABASE_URL
   ? new Pool({
@@ -136,6 +147,42 @@ function creatorPrice(entry: ContentEntry) {
   return `$${(raw / 1_000_000).toFixed(6).replace(/0+$/, '').replace(/\.$/, '')}`
 }
 
+function isHexSignature(value: unknown): value is Hex {
+  return typeof value === 'string' && /^0x[a-fA-F0-9]{130}$/.test(value)
+}
+
+async function verifyCreatorProof(params: {
+  contentId: string
+  creator: Address
+  content: string
+  capRaw: number
+  issuedAt: number
+  signature: Hex
+}) {
+  const age = Math.abs(Date.now() - params.issuedAt)
+  if (!Number.isFinite(params.issuedAt) || age > MAX_CREATOR_PROOF_AGE_MS) return false
+
+  return verifyTypedData({
+    address: params.creator,
+    domain: {
+      name: 'Hash PayLink Creator Studio',
+      version: '1',
+      chainId: 5042002,
+      verifyingContract: params.creator,
+    },
+    types: CREATOR_PROOF_TYPES,
+    primaryType: 'CreatorContent',
+    message: {
+      contentId: params.contentId,
+      creator: params.creator,
+      contentHash: keccak256(toBytes(params.content)),
+      capRaw: BigInt(params.capRaw),
+      issuedAt: BigInt(params.issuedAt),
+    },
+    signature: params.signature,
+  })
+}
+
 async function creatorGatewayMiddleware(entry: ContentEntry) {
   const price = creatorPrice(entry)
   const cacheKey = `${entry.creator.toLowerCase()}:${price}:${CREATOR_X402_NETWORKS.join(',')}:${CREATOR_X402_FACILITATOR_URL}`
@@ -155,16 +202,18 @@ async function creatorGatewayMiddleware(entry: ContentEntry) {
 }
 
 export async function storeContent(req: Request, res: Response) {
-  const { contentId, creator, type, content, capRaw } = (req.body ?? {}) as {
+  const { contentId, creator, type, content, capRaw, issuedAt, signature } = (req.body ?? {}) as {
     contentId?: string
     creator?: string
     type?: string
     content?: string
     capRaw?: number
+    issuedAt?: number
+    signature?: string
   }
 
-  if (!contentId || !creator || !type || !content) {
-    return res.status(400).json({ ok: false, error: 'contentId, creator, type, content are required' })
+  if (!contentId || !creator || !type || !content || !issuedAt || !signature) {
+    return res.status(400).json({ ok: false, error: 'contentId, creator, type, content, issuedAt, and signature are required' })
   }
   if (contentId.length > MAX_CONTENT_ID_LENGTH || content.length > MAX_CONTENT_LENGTH) {
     return res.status(400).json({ ok: false, error: 'contentId or content is too large' })
@@ -174,6 +223,21 @@ export async function storeContent(req: Request, res: Response) {
   }
   if (!isAddress(creator)) {
     return res.status(400).json({ ok: false, error: 'creator must be a valid EVM address' })
+  }
+  const safeCapRaw = Math.max(0, Number(capRaw) || 0)
+  if (!isHexSignature(signature)) {
+    return res.status(400).json({ ok: false, error: 'creator signature is invalid' })
+  }
+  const creatorVerified = await verifyCreatorProof({
+    contentId,
+    creator,
+    content,
+    capRaw: safeCapRaw,
+    issuedAt: Number(issuedAt),
+    signature,
+  }).catch(() => false)
+  if (!creatorVerified) {
+    return res.status(401).json({ ok: false, error: 'Creator wallet proof failed. Sign again and retry.' })
   }
 
   const existing = await readContentEntry(contentId)
@@ -185,7 +249,7 @@ export async function storeContent(req: Request, res: Response) {
     type,
     content,
     creator,
-    capRaw: Math.max(0, Number(capRaw) || 0),
+    capRaw: safeCapRaw,
     ts: Date.now(),
   })
 

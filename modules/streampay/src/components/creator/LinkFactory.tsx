@@ -1,18 +1,30 @@
 import { useState } from 'react'
 import { usePrivy } from '@privy-io/react-auth'
-import { useAccount } from 'wagmi'
+import { useAccount, useWalletClient } from 'wagmi'
+import { keccak256, toBytes, type Address } from 'viem'
 import {
   canUseCircleEvmEmailWallet,
   connectCircleEvmEmailWallet,
+  signCircleEvmEmailTypedData,
   type CircleEvmEmailSession,
 } from '../../../../../src/lib/circleEvmEmailWallet'
 import { PRIVY_AUTH_ENABLED } from '../../../../../src/lib/authMode'
 
-// Derives a deterministic content ID from creator address + title slug
-function makeContentId(title: string, creator: string): string {
-  const slug = title.trim().replace(/[^a-z0-9]/gi, '').slice(0, 14).toLowerCase()
-    || Date.now().toString(36)
-  return `${creator.slice(2, 8).toLowerCase()}${slug}`
+const ARC_CHAIN_ID = 5042002
+const CREATOR_PROOF_TYPES = {
+  CreatorContent: [
+    { name: 'contentId', type: 'string' },
+    { name: 'creator', type: 'address' },
+    { name: 'contentHash', type: 'bytes32' },
+    { name: 'capRaw', type: 'uint256' },
+    { name: 'issuedAt', type: 'uint256' },
+  ],
+}
+
+function makeContentId(): string {
+  const bytes = new Uint8Array(16)
+  crypto.getRandomValues(bytes)
+  return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('')
 }
 
 function buildGateLink(params: {
@@ -65,6 +77,7 @@ export function LinkFactory({
   onTrackEarnings?: () => void
 }) {
   const { address } = useAccount()
+  const { data: walletClient } = useWalletClient()
   const {
     authenticated: privyAuthenticated,
     user: privyUser,
@@ -114,10 +127,43 @@ export function LinkFactory({
     setStoreError(null)
     setStoring(true)
 
-    const contentId = makeContentId(title || contentBody.slice(0, 20), creatorAddress)
+    const contentId = makeContentId()
     const content   = contentType === 'text' ? contentBody.trim() : privateUrl.trim()
+    const capRaw = Math.round(capNum * 1_000_000)
+    const issuedAt = Date.now()
+    const proofData = {
+      domain: {
+        name: 'Hash PayLink Creator Studio',
+        version: '1',
+        chainId: ARC_CHAIN_ID,
+        verifyingContract: creatorAddress as Address,
+      },
+      types: CREATOR_PROOF_TYPES,
+      primaryType: 'CreatorContent',
+      message: {
+        contentId,
+        creator: creatorAddress as Address,
+        contentHash: keccak256(toBytes(content)),
+        capRaw: BigInt(capRaw),
+        issuedAt: BigInt(issuedAt),
+      },
+    } as const
 
     try {
+      const signature = circleSession
+        ? await signCircleEvmEmailTypedData({
+            session: circleSession,
+            data: proofData,
+            memo: 'Create Hash PayLink Creator Studio gate',
+          })
+        : walletClient && address
+        ? await walletClient.signTypedData({
+            ...proofData,
+            account: address,
+          })
+        : null
+      if (!signature) throw new Error('Connect a creator wallet before creating this link.')
+
       const res  = await fetch('/api/store-content', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -126,7 +172,9 @@ export function LinkFactory({
           creator: creatorAddress,
           type:    contentType,
           content,
-          capRaw:  Math.round(capNum * 1_000_000),
+          capRaw,
+          issuedAt,
+          signature,
         }),
       })
       const data = await res.json() as { ok: boolean; error?: string }
