@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Loader2, LockKeyhole, Mail, Plus, Radio, TrendingUp, X as XIcon } from 'lucide-react'
+import { Loader2, LockKeyhole, Mail, Plus, TrendingUp, X as XIcon } from 'lucide-react'
 import { LinkFactory }            from './LinkFactory'
 import { readGhostVault }         from '../../hooks/usePoAStream'
 import type { GhostVaultEntry }   from '../../hooks/usePoAStream'
@@ -113,6 +113,8 @@ type PolyStreamFeed = {
   ok?: boolean
   providerConfigured?: boolean
   providerStatus?: string
+  selectedDate?: string
+  displayDate?: string
   updatedAt?: string
   matches?: PolyStreamMatch[]
 }
@@ -259,8 +261,7 @@ function getSportsCountdown(card: PublishedContent, now: number) {
 }
 
 function scoreLine(match: PolyStreamMatch) {
-  const hasScore = match.homeScore !== undefined && match.homeScore !== '' && match.awayScore !== undefined && match.awayScore !== ''
-  if (hasScore) return `${match.homeScore} - ${match.awayScore}`
+  if (hasMatchScore(match)) return `${match.homeScore} - ${match.awayScore}`
   return match.clock || match.status || match.time || 'Upcoming'
 }
 
@@ -532,7 +533,8 @@ function DiscoverContent({
         setScoreError('')
       }
       try {
-        const res = await fetch('/api/poly-stream')
+        const matchday = new Date().toISOString().slice(0, 10)
+        const res = await fetch(`/api/poly-stream?date=${matchday}`)
         const data = await res.json() as PolyStreamFeed
         if (cancelled) return
         if (!res.ok || !data.ok) throw new Error('Live scores are not available.')
@@ -585,23 +587,31 @@ function DiscoverContent({
     OFFICIAL_DISCOVER_CONTENT[0],
     ...worldCupNewsCards,
   ].filter(Boolean) as PublishedContent[]
+  const heroCards = [
+    OFFICIAL_DISCOVER_CONTENT[0],
+    OFFICIAL_DISCOVER_CONTENT[1],
+    ...worldCupNewsCards,
+    ...approvedSessionPosts,
+    ...approvedPosts,
+  ].filter(card => categoryFilter === 'all' || card.category === categoryFilter)
   const allCards = [...officialCards, ...approvedSessionPosts, ...approvedPosts]
   const cards = allCards
     .filter(card => categoryFilter === 'all' || card.category === categoryFilter)
     .slice(0, 8)
-  const hero = cards[heroIndex % Math.max(cards.length, 1)] || published[0] || OFFICIAL_DISCOVER_CONTENT[0]
+  const hero = heroCards[heroIndex % Math.max(heroCards.length, 1)] || published[0] || OFFICIAL_DISCOVER_CONTENT[0]
+  const heroIsScores = hero.id === 'worldcup-live-scores'
 
   useEffect(() => {
     setHeroIndex(0)
-  }, [categoryFilter, cards.length])
+  }, [categoryFilter, heroCards.length])
 
   useEffect(() => {
-    if (cards.length < 2) return undefined
+    if (heroCards.length < 2) return undefined
     const timer = window.setInterval(() => {
-      setHeroIndex(index => (index + 1) % cards.length)
+      setHeroIndex(index => (index + 1) % heroCards.length)
     }, 10000)
     return () => window.clearInterval(timer)
-  }, [cards.length])
+  }, [heroCards.length])
 
   function openContent(card: PublishedContent) {
     if (card.action === 'gate' && card.gateLink) {
@@ -641,39 +651,136 @@ function DiscoverContent({
           onClick={() => openContent(hero)}
           className="group relative block h-[320px] w-full overflow-hidden text-left"
         >
-          <img
-            src={hero.image}
-            alt=""
-            className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-gray-950 via-gray-950/65 to-gray-950/15" />
-          <div className="relative flex h-[320px] flex-col justify-end p-5 sm:p-6">
-            <div className="mb-4 flex items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-white backdrop-blur">
-                <TrendingUp className="h-3.5 w-3.5" />
-                Trending
-              </span>
-              <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-gray-950">
-                {hero.price} USDC
-              </span>
-            </div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/65">{hero.source}</p>
-            <h2 className="mt-2 text-[25px] font-black leading-[1.02] tracking-tight text-white sm:text-[30px]">
-              {hero.title}
-            </h2>
-            <p className="mt-3 line-clamp-3 text-[13px] leading-5 text-white/72">
-              {hero.description}
-            </p>
-            <div className="mt-5 flex items-center justify-between gap-3">
-              <span className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-3 text-[12px] font-black text-gray-950 shadow-sm">
-                <LockKeyhole className="h-4 w-4" />
-                {heroCta}
-              </span>
-              <span className="rounded-full border border-white/20 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-white/75">
-                {hero.tag}
-              </span>
-            </div>
-          </div>
+          {heroIsScores ? (
+            <>
+              {homeFlag && (
+                <div
+                  className="absolute inset-0 bg-cover bg-center opacity-100 blur-[1px] transition-opacity duration-1000 [animation:hpFlagSwapA_10s_ease-in-out_infinite]"
+                  style={{ backgroundImage: `linear-gradient(rgba(0,0,0,.52), rgba(0,0,0,.82)), url(${homeFlag})` }}
+                />
+              )}
+              {awayFlag && (
+                <div
+                  className="absolute inset-0 bg-cover bg-center opacity-0 blur-[1px] transition-opacity duration-1000 [animation:hpFlagSwapB_10s_ease-in-out_infinite]"
+                  style={{ backgroundImage: `linear-gradient(rgba(0,0,0,.52), rgba(0,0,0,.82)), url(${awayFlag})` }}
+                />
+              )}
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,.18),transparent_36%),linear-gradient(180deg,rgba(0,0,0,.12),rgba(0,0,0,.64))]" />
+              <div className="relative z-10 flex h-[320px] flex-col justify-between p-4 sm:p-6">
+                <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                  <span className="truncate text-[10px] font-semibold text-white/68">
+                    {scoreLoading ? 'Syncing live board' : featuredScore?.time || 'Sportmonks matchday board'}
+                  </span>
+                  {scoreMarketMatched ? (
+                    <span className="inline-flex items-center justify-center gap-1.5 rounded-full border border-white/15 bg-black/35 px-3 py-1.5 text-[10px] font-black leading-none text-white shadow-sm backdrop-blur-sm">
+                      <img src={POLYMARKET_LOGO} alt="" className="h-3.5 w-3.5" />
+                      Trade
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center justify-center gap-1.5 rounded-full border border-white/15 bg-black/35 px-3 py-1.5 text-[10px] font-black leading-none text-white/75 shadow-sm backdrop-blur-sm">
+                      <img src={POLYMARKET_LOGO} alt="" className="h-3.5 w-3.5 opacity-80" />
+                      Route
+                    </span>
+                  )}
+                  <span className={[
+                    'justify-self-end rounded-full px-2.5 py-1 text-[10px] font-bold uppercase leading-none ring-1',
+                    scoreState?.tag === 'LIVE'
+                      ? 'bg-emerald-400/15 text-emerald-100 ring-emerald-300/30'
+                      : 'bg-white/12 text-white/85 ring-white/15',
+                  ].join(' ')}>
+                    {scoreLoading ? 'SYNC' : scoreState?.tag || (scoresReady ? 'LIVE' : 'WAIT')}
+                  </span>
+                </div>
+
+                <div className="grid min-h-[160px] grid-cols-[minmax(0,1fr)_78px_minmax(0,1fr)] items-center gap-2">
+                  <div className="min-w-0 text-center">
+                    <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-black/30 shadow-xl ring-1 ring-white/15 backdrop-blur-sm">
+                      <TeamFlagMark name={scoreHome} />
+                    </div>
+                    <p className="mx-auto mt-2 max-w-[8rem] truncate text-[12px] font-black tracking-wide text-white">{scoreHome}</p>
+                    {featuredScore?.homeMarketPrice && (
+                      <p className="mt-1 text-[9px] font-black uppercase tabular-nums text-white/55">{featuredScore.homeMarketPrice}</p>
+                    )}
+                  </div>
+                  <div className="rounded-2xl border border-white/12 bg-black/35 px-2 py-3 text-center shadow-2xl backdrop-blur-sm">
+                    {scoreLoading ? (
+                      <Loader2 className="mx-auto h-6 w-6 animate-spin text-white/80" />
+                    ) : (
+                      <p className="text-[22px] font-black tabular-nums text-white">{scoreState?.center || 'vs'}</p>
+                    )}
+                    <p className="mt-1 truncate text-[9px] font-bold uppercase text-white/55">
+                      {scoreError ? 'Retry shortly' : scoreState?.sub || scoreFeed?.displayDate || 'Matchday'}
+                    </p>
+                    {featuredScore?.drawMarketPrice && (
+                      <p className="mt-1.5 text-[9px] font-black uppercase tabular-nums text-white/55">Draw {featuredScore.drawMarketPrice}</p>
+                    )}
+                  </div>
+                  <div className="min-w-0 text-center">
+                    <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-black/30 shadow-xl ring-1 ring-white/15 backdrop-blur-sm">
+                      <TeamFlagMark name={scoreAway || 'Scores'} />
+                    </div>
+                    <p className="mx-auto mt-2 max-w-[8rem] truncate text-[12px] font-black tracking-wide text-white">{scoreAway || 'Opponent'}</p>
+                    {featuredScore?.awayMarketPrice && (
+                      <p className="mt-1 text-[9px] font-black uppercase tabular-nums text-white/55">{featuredScore.awayMarketPrice}</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/25 px-3 py-2.5 backdrop-blur-sm">
+                  <div className="min-w-0">
+                    <p className="truncate text-[10px] font-bold uppercase tracking-[0.16em] text-white/50">Live Scores Pulse</p>
+                    <p className="mt-0.5 truncate text-[12px] font-semibold text-white/82">
+                      {scoreError
+                        ? 'Scores temporarily unavailable'
+                        : featuredScore
+                          ? 'Unlock direct Polymarket trading routes'
+                          : 'Provider-backed World Cup board'}
+                    </p>
+                  </div>
+                  <span className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-white px-3 py-2 text-[12px] font-black text-gray-950 shadow-sm">
+                    <LockKeyhole className="h-4 w-4" />
+                    Unlock
+                  </span>
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <img
+                src={hero.image}
+                alt=""
+                className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-gray-950 via-gray-950/65 to-gray-950/15" />
+              <div className="relative flex h-[320px] flex-col justify-end p-5 sm:p-6">
+                <div className="mb-4 flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-white backdrop-blur">
+                    <TrendingUp className="h-3.5 w-3.5" />
+                    Trending
+                  </span>
+                  <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-gray-950">
+                    {hero.price} USDC
+                  </span>
+                </div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/65">{hero.source}</p>
+                <h2 className="mt-2 text-[25px] font-black leading-[1.02] tracking-tight text-white sm:text-[30px]">
+                  {hero.title}
+                </h2>
+                <p className="mt-3 line-clamp-3 text-[13px] leading-5 text-white/72">
+                  {hero.description}
+                </p>
+                <div className="mt-5 flex items-center justify-between gap-3">
+                  <span className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-3 text-[12px] font-black text-gray-950 shadow-sm">
+                    <LockKeyhole className="h-4 w-4" />
+                    {heroCta}
+                  </span>
+                  <span className="rounded-full border border-white/20 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-white/75">
+                    {hero.tag}
+                  </span>
+                </div>
+              </div>
+            </>
+          )}
         </button>
       </section>
 
@@ -696,7 +803,7 @@ function DiscoverContent({
         <button
           type="button"
           onClick={() => window.location.href = OFFICIAL_WORLD_CUP_SCORES_GATE}
-          className="group relative mx-4 mt-4 block h-[228px] w-[calc(100%-2rem)] overflow-hidden rounded-2xl bg-gray-950 text-left text-white shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
+          className="hidden"
         >
           {homeFlag && (
             <div
@@ -794,7 +901,7 @@ function DiscoverContent({
         >
           <div className="relative flex h-full w-24 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gray-950 text-white">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,.18),transparent_40%),linear-gradient(135deg,rgba(17,24,39,.96),rgba(3,7,18,.88))]" />
-            <Radio className="relative h-8 w-8" />
+            <LockKeyhole className="relative h-8 w-8" />
             <span className="absolute bottom-1.5 left-1.5 right-1.5 truncate rounded-full bg-white/90 px-2 py-1 text-center text-[8px] font-bold uppercase tracking-[0.12em] text-gray-950">
               Live Scores
             </span>

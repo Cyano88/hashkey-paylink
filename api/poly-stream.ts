@@ -39,6 +39,8 @@ type ScoreFeed = {
   providerConfigured: boolean
   source: string
   providerStatus: string
+  selectedDate: string
+  displayDate: string
   updatedAt: string
   matches: ScoreMatch[]
 }
@@ -75,6 +77,27 @@ function fixtureLimit() {
   const configured = Number(process.env.POLY_STREAM_LIMIT?.trim())
   if (!Number.isFinite(configured) || configured <= 0) return DEFAULT_FIXTURE_LIMIT
   return Math.max(DEFAULT_FIXTURE_LIMIT, Math.floor(configured))
+}
+
+function todayKey() {
+  return new Date().toISOString().slice(0, 10)
+}
+
+function normalizeDateKey(value: unknown) {
+  const text = asString(value)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return ''
+  const date = new Date(`${text}T00:00:00Z`)
+  return Number.isFinite(date.getTime()) ? date.toISOString().slice(0, 10) : ''
+}
+
+function requestDate(req: Request) {
+  const value = Array.isArray(req.query.date) ? req.query.date[0] : req.query.date
+  return normalizeDateKey(value) || todayKey()
+}
+
+function matchDateKey(match: ScoreMatch) {
+  const timestamp = Date.parse(match.kickoffAt || match.time)
+  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString().slice(0, 10) : ''
 }
 
 function asRecord(value: unknown) {
@@ -1036,18 +1059,30 @@ function matchTimeValue(match: ScoreMatch) {
   return Number.isFinite(timestamp) ? timestamp : Number.MAX_SAFE_INTEGER
 }
 
-async function fetchProviderMatches(): Promise<ScoreMatch[]> {
+function selectMatchday(matches: ScoreMatch[], selectedDate: string) {
+  const dated = matches.filter(match => matchDateKey(match))
+  const exact = dated.filter(match => matchDateKey(match) === selectedDate)
+  if (exact.length) return exact
+
+  const nextDate = dated
+    .map(matchDateKey)
+    .filter(date => date >= selectedDate)
+    .sort()[0]
+  return nextDate ? dated.filter(match => matchDateKey(match) === nextDate) : []
+}
+
+async function fetchProviderMatches(selectedDate: string): Promise<ScoreMatch[]> {
   const provider = providerName()
   const apiKey = envValue('POLY_STREAM_API_KEY', 'SPORTS_API_KEY')
   if (!apiKey) return []
 
   const mode = fixtureMode()
-  const modes: FixtureMode[] = mode === 'auto' ? ['live', 'next', 'last'] : [mode]
+  const modes: FixtureMode[] = mode === 'auto' ? ['live', 'next'] : mode === 'last' ? ['next'] : [mode]
   const batches = await Promise.all(modes.map(current => fetchProviderMode(provider, apiKey, current).catch(err => {
     lastProviderError = err instanceof Error ? err.message : 'Score provider failed.'
     return [] as ScoreMatch[]
   })))
-  const matches = dedupeMatches(batches.flat())
+  const matches = selectMatchday(dedupeMatches(batches.flat()), selectedDate)
     .sort((a, b) => matchRank(a) - matchRank(b) || matchTimeValue(a) - matchTimeValue(b))
     .slice(0, fixtureLimit())
   const detailedMatches = provider === 'api-football' || provider === 'api-sports'
@@ -1067,15 +1102,18 @@ export default async function polyStreamHandler(req: Request, res: Response) {
 
   const provider = providerName()
   const providerConfigured = Boolean(envValue('POLY_STREAM_API_KEY', 'SPORTS_API_KEY'))
+  const selectedDate = requestDate(req)
 
   try {
-    const matches = providerConfigured ? await fetchProviderMatches() : []
+    const matches = providerConfigured ? await fetchProviderMatches(selectedDate) : []
     lastProviderError = providerConfigured && !matches.length ? 'Provider returned no live or upcoming World Cup matches.' : ''
     const feed: ScoreFeed = {
       ok: true,
       providerConfigured,
       source: providerConfigured ? provider : 'not_configured',
       providerStatus: matches.length ? 'connected' : providerConfigured ? 'empty' : 'not_configured',
+      selectedDate,
+      displayDate: matches[0] ? matchDateKey(matches[0]) || selectedDate : selectedDate,
       updatedAt: new Date().toISOString(),
       matches,
     }
@@ -1088,6 +1126,8 @@ export default async function polyStreamHandler(req: Request, res: Response) {
       providerConfigured,
       source: provider || 'provider',
       providerStatus: 'error',
+      selectedDate,
+      displayDate: selectedDate,
       updatedAt: new Date().toISOString(),
       matches: [],
     }
