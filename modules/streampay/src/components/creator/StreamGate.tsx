@@ -85,6 +85,15 @@ function cleanAgentSlug(value: string) {
   return value.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').slice(0, 32)
 }
 
+function walletSlugFromEmail(email: string) {
+  const value = cleanEmail(email)
+  let hash = 0
+  for (let i = 0; i < value.length; i += 1) {
+    hash = ((hash << 5) - hash + value.charCodeAt(i)) | 0
+  }
+  return `creator-${Math.abs(hash).toString(36)}`
+}
+
 function agentSlugFromCircleWalletId(value?: string) {
   const match = String(value ?? '').match(/^agent:([a-z0-9-]+):/i)
   return cleanAgentSlug(match?.[1] ?? '')
@@ -123,6 +132,12 @@ function unlockRecoveryStep(message: string): UnlockStep | null {
 }
 
 function readableUnlockError(message: string) {
+  if (/pinned by Hash PayLink/i.test(message)) {
+    return 'This email needs its own payment wallet. Resend the code and use the newest email code.'
+  }
+  if (/OTP expired|Resend OTP/i.test(message)) {
+    return 'That code expired. Resend the code and use the newest email code.'
+  }
   if (/balance|fund|insufficient|gateway|deposit|activation/i.test(message)) {
     return 'This payment wallet needs USDC added before it can unlock content.'
   }
@@ -429,9 +444,15 @@ export function StreamGate() {
     await unlockWithAgentX402(selectedAgent.slug)
   }
 
-  async function startPaymentWalletLogin() {
+  function walletSlugForEmail(email: string, preferredSlug?: string) {
+    const cleanPreferred = cleanAgentSlug(preferredSlug || '')
+    if (cleanPreferred && cleanPreferred !== 'hashpaylink-agent') return cleanPreferred
+    return walletSlugFromEmail(email)
+  }
+
+  async function startPaymentWalletLogin(slugOverride?: string) {
     const email = cleanEmail(walletEmail || privyEmail)
-    const slug = safeAgentSlug || 'hashpaylink-agent'
+    const slug = walletSlugForEmail(email, slugOverride || safeAgentSlug)
     setWalletError(null)
     setContentError(null)
     setCircleNotice(null)
@@ -439,10 +460,7 @@ export function StreamGate() {
       setWalletError('Enter your email to open your payment wallet.')
       return
     }
-    if (!slug) {
-      setWalletError('Choose a payment wallet profile.')
-      return
-    }
+    setAgentSlug(slug)
     setWalletBusy(true)
     try {
       const res = await fetch('/api/agent-wallet', {
@@ -457,14 +475,15 @@ export function StreamGate() {
       setUnlockStep('otp')
       setCircleNotice('Check your email for the wallet code.')
     } catch (err) {
-      setWalletError(err instanceof Error ? err.message.slice(0, 160) : 'Could not send the sign-in code.')
+      setWalletError(err instanceof Error ? readableUnlockError(err.message) : 'Could not send the sign-in code.')
     } finally {
       setWalletBusy(false)
     }
   }
 
   async function completePaymentWalletLogin() {
-    const context = walletOtpContext || { email: cleanEmail(walletEmail || privyEmail), slug: safeAgentSlug || 'hashpaylink-agent' }
+    const fallbackEmail = cleanEmail(walletEmail || privyEmail)
+    const context = walletOtpContext || { email: fallbackEmail, slug: walletSlugForEmail(fallbackEmail, safeAgentSlug) }
     const otp = walletOtp.trim()
     setWalletError(null)
     setContentError(null)
@@ -507,10 +526,16 @@ export function StreamGate() {
       setUnlockStep('choose')
       setContentState('idle')
     } catch (err) {
-      setWalletError(err instanceof Error ? err.message.slice(0, 160) : 'Could not verify the wallet code.')
+      setWalletError(err instanceof Error ? readableUnlockError(err.message) : 'Could not verify the wallet code.')
     } finally {
       setWalletBusy(false)
     }
+  }
+
+  async function resendPaymentWalletCode() {
+    const slug = walletOtpContext?.slug || safeAgentSlug
+    setWalletOtp('')
+    await startPaymentWalletLogin(slug)
   }
 
   function paymentWalletFundUrl() {
@@ -733,7 +758,7 @@ export function StreamGate() {
                       <button
                         type="button"
                         onClick={() => {
-                          setAgentSlug(safeAgentSlug || 'hashpaylink-agent')
+                          setAgentSlug('')
                           setWalletError(null)
                           setUnlockStep('email')
                         }}
@@ -775,7 +800,7 @@ export function StreamGate() {
                             type="text"
                             value={agentSlug}
                             onChange={event => setAgentSlug(cleanAgentSlug(event.target.value))}
-                            placeholder="hashpaylink-agent"
+                            placeholder={walletEmail ? walletSlugFromEmail(walletEmail) : 'creator-wallet'}
                             className="w-full rounded-xl border border-gray-200 bg-white px-3 py-3 font-mono text-[13px] text-gray-900 outline-none placeholder:text-gray-300 focus:border-blue-300"
                           />
                         </label>
@@ -790,7 +815,7 @@ export function StreamGate() {
                         </button>
                         <button
                           type="button"
-                          onClick={startPaymentWalletLogin}
+                          onClick={() => void startPaymentWalletLogin()}
                           disabled={walletBusy}
                           className="rounded-xl bg-gray-950 px-3 py-3 text-[12px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
                         >
@@ -833,6 +858,17 @@ export function StreamGate() {
                           {walletBusy ? 'Verifying...' : 'Verify'}
                         </button>
                       </div>
+                      <button
+                        type="button"
+                        onClick={resendPaymentWalletCode}
+                        disabled={walletBusy}
+                        className="w-full rounded-xl border border-blue-100 bg-blue-50 px-3 py-3 text-[12px] font-bold text-blue-700 transition-all hover:border-blue-200 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {walletBusy ? 'Sending...' : 'Resend code'}
+                      </button>
+                      <p className="text-center text-[11px] leading-relaxed text-gray-400">
+                        Use the newest email code. Resending replaces the previous code.
+                      </p>
                     </div>
                   )}
 
