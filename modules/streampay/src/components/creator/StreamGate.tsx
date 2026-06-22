@@ -7,6 +7,7 @@ import { createPublicClient, http, defineChain, parseAbi } from 'viem'
 import { usePoAStream }       from '../../hooks/usePoAStream'
 import { usePasskey }         from '../../hooks/usePasskey'
 import { PRIVY_AUTH_ENABLED } from '../../../../../src/lib/authMode'
+import { resolvePrivyCircleLink } from '../../../../../src/lib/privyCircleLink'
 
 // ── Arc standalone client ─────────────────────────────────────────────────────
 const arcClient = createPublicClient({
@@ -30,6 +31,25 @@ const ERC20_ABI = parseAbi([
 
 type FetchedContent = { type: 'text' | 'url'; content: string }
 type ContentState   = 'idle' | 'loading' | 'ready' | 'error'
+type AgentProfile = {
+  slug: string
+  name: string
+  purpose?: string
+  walletAddress?: string
+}
+type AgentWalletStatus = {
+  ok?: boolean
+  found?: boolean
+  connected?: boolean
+  walletAddress?: string
+  gatewayBalance?: string
+  gatewayBalanceError?: string
+}
+type AgentOption = AgentProfile & {
+  connected?: boolean
+  gatewayBalance?: string
+  gatewayBalanceError?: string
+}
 
 function cleanEmail(value: string) {
   return value.trim().toLowerCase()
@@ -61,8 +81,21 @@ function cleanAgentSlug(value: string) {
   return value.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').slice(0, 32)
 }
 
+function agentSlugFromCircleWalletId(value?: string) {
+  const match = String(value ?? '').match(/^agent:([a-z0-9-]+):/i)
+  return cleanAgentSlug(match?.[1] ?? '')
+}
+
 function formatUsdc(value: number) {
   return value.toFixed(6).replace(/0+$/, '').replace(/\.$/, '')
+}
+
+function mergeAgentOptions(existing: AgentOption[], next: AgentOption) {
+  const slug = cleanAgentSlug(next.slug)
+  if (!slug) return existing
+  const current = existing.find(item => item.slug === slug)
+  if (!current) return [...existing, { ...next, slug }]
+  return existing.map(item => item.slug === slug ? { ...item, ...next, slug } : item)
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -90,6 +123,7 @@ export function StreamGate() {
     authenticated: privyAuthenticated,
     user: privyUser,
     login: loginPrivy,
+    getAccessToken,
   } = usePrivy()
   const privyEmail = cleanEmail(emailFromPrivyUser(privyUser))
 
@@ -99,6 +133,9 @@ export function StreamGate() {
   const [ending,  setEnding]  = useState(false)
   const [ended,   setEnded]   = useState(false)
   const [agentSlug, setAgentSlug] = useState(initialAgentSlug)
+  const [agentOptions, setAgentOptions] = useState<AgentOption[]>([])
+  const [agentOptionsLoading, setAgentOptionsLoading] = useState(false)
+  const [agentOptionsError, setAgentOptionsError] = useState<string | null>(null)
   const [circleNotice, setCircleNotice] = useState<string | null>(null)
 
   async function handleEndSession() {
@@ -135,6 +172,107 @@ export function StreamGate() {
   const [approveError,   setApproveError]   = useState<string | null>(null)
   const [approvePending, setApprovePending] = useState(false)
   const safeAgentSlug = cleanAgentSlug(agentSlug)
+
+  function selectedAgentSetupUrl() {
+    const slug = safeAgentSlug || 'hashpaylink-agent'
+    const currentPath = `${window.location.pathname}${window.location.search}`
+    const params = new URLSearchParams({ profile: 'agent', agent: slug, src: 'creator', returnTo: currentPath })
+    return `/agent?${params.toString()}`
+  }
+
+  useEffect(() => {
+    if (paymentMode !== 'x402') return
+    let cancelled = false
+
+    async function hydrateAgentOptions() {
+      setAgentOptionsLoading(true)
+      setAgentOptionsError(null)
+      let options: AgentOption[] = []
+
+      async function addBySlug(slug: string, fallback?: Partial<AgentOption>) {
+        const cleanSlug = cleanAgentSlug(slug)
+        if (!cleanSlug) return
+        let option: AgentOption = {
+          slug: cleanSlug,
+          name: fallback?.name || cleanSlug,
+          purpose: fallback?.purpose,
+          walletAddress: fallback?.walletAddress,
+        }
+        try {
+          const profileRes = await fetch(`/api/agent-profile?agent=${encodeURIComponent(cleanSlug)}`)
+          const profileData = await profileRes.json().catch(() => ({})) as { ok?: boolean; agent?: AgentProfile }
+          if (profileRes.ok && profileData.ok && profileData.agent) {
+            option = { ...option, ...profileData.agent }
+          }
+        } catch {
+          // Status lookup below still gives enough information to let the user reconnect.
+        }
+        try {
+          const statusRes = await fetch(`/api/agent-wallet?agent=${encodeURIComponent(cleanSlug)}&x402=1`)
+          const status = await statusRes.json().catch(() => ({})) as AgentWalletStatus
+          if (statusRes.ok && status.ok !== false) {
+            option = {
+              ...option,
+              walletAddress: status.walletAddress || option.walletAddress,
+              connected: Boolean(status.connected),
+              gatewayBalance: status.gatewayBalance,
+              gatewayBalanceError: status.gatewayBalanceError,
+            }
+          }
+        } catch {
+          option = { ...option, connected: false }
+        }
+        options = mergeAgentOptions(options, option)
+      }
+
+      try {
+        if (initialAgentSlug) await addBySlug(initialAgentSlug)
+
+        if (PRIVY_AUTH_ENABLED && privyAuthenticated) {
+          const token = await getAccessToken()
+          if (token) {
+            try {
+              const linked = await resolvePrivyCircleLink({ accessToken: token, chain: 'arc', purpose: 'agent' })
+              const linkedSlug = agentSlugFromCircleWalletId(linked.link?.circleWalletId)
+              if (linkedSlug) {
+                await addBySlug(linkedSlug, {
+                  walletAddress: linked.link?.circleWalletAddress,
+                  name: linkedSlug,
+                  purpose: 'Linked through Privy email',
+                })
+              }
+            } catch {
+              // Missing Privy server config should not block manual agent selection.
+            }
+          }
+
+          if (privyEmail) {
+            try {
+              const res = await fetch(`/api/agent-profile?owner=${encodeURIComponent(privyEmail)}`)
+              const data = await res.json().catch(() => ({})) as { ok?: boolean; agents?: AgentProfile[] }
+              if (res.ok && data.ok && Array.isArray(data.agents)) {
+                for (const agent of data.agents) await addBySlug(agent.slug, agent)
+              }
+            } catch {
+              // Older Telegram-owned profiles may not be keyed by email yet.
+            }
+          }
+        }
+
+        if (!cancelled) {
+          setAgentOptions(options)
+          if (!safeAgentSlug && options.length === 1) setAgentSlug(options[0].slug)
+        }
+      } catch (err) {
+        if (!cancelled) setAgentOptionsError(err instanceof Error ? err.message.slice(0, 140) : 'Could not load saved agents.')
+      } finally {
+        if (!cancelled) setAgentOptionsLoading(false)
+      }
+    }
+
+    void hydrateAgentOptions()
+    return () => { cancelled = true }
+  }, [paymentMode, initialAgentSlug, privyAuthenticated, privyEmail, getAccessToken]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleApprove() {
     if (!POA_CONTRACT || !isConnected || !isOnArc) return
@@ -314,22 +452,73 @@ export function StreamGate() {
                           : 'Use a funded agent wallet'}
                       </p>
                       <p className="font-mono text-[11px] text-blue-600">
-                        {safeAgentSlug || 'No agent wallet selected'}
+                        {safeAgentSlug || 'No agent selected'}
                       </p>
                     </div>
                     <span className="shrink-0 rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-bold text-blue-600 ring-1 ring-blue-100">
                       x402
                     </span>
                   </div>
+                  <div className="mt-3 space-y-2">
+                    {agentOptions.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-gray-400">
+                          Saved agents
+                        </p>
+                        {agentOptions.map(agent => {
+                          const active = safeAgentSlug === agent.slug
+                          const ready = Boolean(agent.connected)
+                          return (
+                            <button
+                              key={agent.slug}
+                              type="button"
+                              onClick={() => {
+                                setAgentSlug(agent.slug)
+                                setContentError(null)
+                                if (contentState === 'error') setContentState('idle')
+                              }}
+                              className={[
+                                'flex w-full items-center justify-between gap-3 rounded-xl border px-3 py-2.5 text-left transition-all',
+                                active
+                                  ? 'border-blue-200 bg-blue-50/80'
+                                  : 'border-gray-100 bg-gray-50 hover:border-gray-200 hover:bg-white',
+                              ].join(' ')}
+                            >
+                              <span className="min-w-0">
+                                <span className="block truncate text-[12px] font-bold text-gray-900">
+                                  {agent.name || agent.slug}
+                                </span>
+                                <span className="mt-0.5 block truncate font-mono text-[11px] text-gray-500">
+                                  {agent.walletAddress ? shortAddress(agent.walletAddress) : agent.slug}
+                                </span>
+                              </span>
+                              <span className={[
+                                'shrink-0 rounded-full px-2 py-1 text-[10px] font-bold',
+                                ready ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100' : 'bg-amber-50 text-amber-700 ring-1 ring-amber-100',
+                              ].join(' ')}>
+                                {ready ? 'Ready' : 'Reconnect'}
+                              </span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
+                    {agentOptionsLoading && (
+                      <p className="text-center text-[11px] text-gray-400">Loading saved agents...</p>
+                    )}
+                    {agentOptionsError && (
+                      <p className="text-center text-[11px] text-amber-600">{agentOptionsError}</p>
+                    )}
+                  </div>
                   <label className="mt-3 block space-y-1">
                     <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-gray-400">
-                      Agent wallet
+                      Agent name
                     </span>
                     <input
                       type="text"
                       value={agentSlug}
                       onChange={event => setAgentSlug(cleanAgentSlug(event.target.value))}
-                      placeholder="your-agent-wallet"
+                      placeholder="hashpaylink-agent"
                       className="w-full rounded-xl border border-blue-100 bg-white px-3 py-3 font-mono text-[14px] text-gray-900 outline-none placeholder:text-gray-300 focus:border-blue-300"
                     />
                   </label>
@@ -349,10 +538,10 @@ export function StreamGate() {
                 {contentState === 'error' && /agent wallet session|reconnect|not enabled/i.test(contentError ?? '') && (
                   <button
                     type="button"
-                    onClick={() => window.open(`/agent?profile=agent&agent=${encodeURIComponent(safeAgentSlug || 'hashpaylink-agent')}`, '_blank', 'noopener,noreferrer')}
+                    onClick={() => window.open(selectedAgentSetupUrl(), '_blank', 'noopener,noreferrer')}
                     className="w-full text-center text-[11px] font-semibold text-blue-600 underline underline-offset-2"
                   >
-                    Open Agent Wallet setup
+                    Reconnect selected agent
                   </button>
                 )}
                 {circleNotice && (
@@ -367,7 +556,7 @@ export function StreamGate() {
                 )}
                 {privyAuthenticated && !safeAgentSlug && (
                   <p className="text-center text-[11px] text-gray-400">
-                    Use the same agent name you funded and activated for x402 in Agent Wallets.
+                    Select a saved agent, or enter the agent name you funded for x402.
                   </p>
                 )}
               </div>
