@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { LockKeyhole, Mail, Plus, TrendingUp, X as XIcon } from 'lucide-react'
+import { Loader2, LockKeyhole, Mail, Plus, Radio, TrendingUp, X as XIcon } from 'lucide-react'
 import { LinkFactory }            from './LinkFactory'
 import { readGhostVault }         from '../../hooks/usePoAStream'
 import type { GhostVaultEntry }   from '../../hooks/usePoAStream'
@@ -93,6 +93,25 @@ type PolyWorldCupFeed = {
   source?: string
   updatedAt?: string
   articles?: PolyWorldCupArticle[]
+}
+type PolyStreamMatch = {
+  fixtureId?: string
+  title: string
+  time: string
+  kickoffAt?: string
+  status: string
+  homeScore?: number | string
+  awayScore?: number | string
+  clock?: string
+  marketStatus?: 'matched' | 'pending'
+  polymarketUrl?: string
+}
+type PolyStreamFeed = {
+  ok?: boolean
+  providerConfigured?: boolean
+  providerStatus?: string
+  updatedAt?: string
+  matches?: PolyStreamMatch[]
 }
 
 const FALLBACK_CREATOR_COVERS = [
@@ -235,6 +254,16 @@ function getSportsCountdown(card: PublishedContent, now: number) {
   }
 }
 
+function scoreLine(match: PolyStreamMatch) {
+  const hasScore = match.homeScore !== undefined && match.homeScore !== '' && match.awayScore !== undefined && match.awayScore !== ''
+  if (hasScore) return `${match.homeScore} - ${match.awayScore}`
+  return match.clock || match.status || match.time || 'Upcoming'
+}
+
+function compactMatchTitle(title: string) {
+  return title.replace(/\s+/g, ' ').replace(/\bFIFA\b/gi, '').trim()
+}
+
 function contentFromGate(link: string, meta: GateCreatedMeta, index: number): PublishedContent {
   const title = meta.title.trim() || (meta.contentType === 'url' ? 'Private creator drop' : 'Creator article')
   const author = meta.authorName.trim() || 'Creator Studio'
@@ -312,6 +341,9 @@ function DiscoverContent({
 }) {
   const [approvedPosts, setApprovedPosts] = useState<PublishedContent[]>([])
   const [worldCupNewsCards, setWorldCupNewsCards] = useState<PublishedContent[]>([])
+  const [scoreFeed, setScoreFeed] = useState<PolyStreamFeed | null>(null)
+  const [scoreLoading, setScoreLoading] = useState(true)
+  const [scoreError, setScoreError] = useState('')
   const [categoryFilter, setCategoryFilter] = useState<CreatorCategory | 'all'>('all')
   const [heroIndex, setHeroIndex] = useState(0)
   const [now, setNow] = useState(Date.now())
@@ -328,6 +360,35 @@ function DiscoverContent({
         if (!cancelled) setApprovedPosts([])
       })
     return () => { cancelled = true }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    async function loadScores(silent = false) {
+      if (!silent) {
+        setScoreLoading(true)
+        setScoreError('')
+      }
+      try {
+        const res = await fetch('/api/poly-stream')
+        const data = await res.json() as PolyStreamFeed
+        if (cancelled) return
+        if (!res.ok || !data.ok) throw new Error('Live scores are not available.')
+        setScoreFeed(data)
+      } catch (err) {
+        if (!cancelled && !silent) setScoreError(err instanceof Error ? err.message : 'Live scores are not available.')
+      } finally {
+        if (!cancelled) setScoreLoading(false)
+      }
+    }
+    void loadScores()
+    const timer = window.setInterval(() => {
+      void loadScores(true)
+    }, 60_000)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
   }, [])
 
   useEffect(() => {
@@ -360,8 +421,8 @@ function DiscoverContent({
   const approvedSessionPosts = published.filter(card => card.reviewStatus === 'approved')
   const officialCards = [
     OFFICIAL_DISCOVER_CONTENT[0],
-    ...worldCupNewsCards,
     OFFICIAL_DISCOVER_CONTENT[1],
+    ...worldCupNewsCards,
   ].filter(Boolean) as PublishedContent[]
   const allCards = [...officialCards, ...approvedSessionPosts, ...approvedPosts]
   const cards = allCards
@@ -390,6 +451,9 @@ function DiscoverContent({
   }
 
   const heroCta = hero.cta || (hero.action === 'gate' ? 'Unlock' : 'Create')
+  const scoreMatches = scoreFeed?.matches ?? []
+  const featuredScore = scoreMatches[0]
+  const scoresReady = Boolean(scoreFeed?.providerConfigured && scoreFeed.providerStatus === 'connected' && scoreMatches.length)
 
   return (
     <div className="w-full space-y-4">
@@ -397,7 +461,7 @@ function DiscoverContent({
         <button
           type="button"
           onClick={() => openContent(hero)}
-          className="group relative block min-h-[320px] w-full overflow-hidden text-left"
+          className="group relative block h-[320px] w-full overflow-hidden text-left"
         >
           <img
             src={hero.image}
@@ -405,7 +469,7 @@ function DiscoverContent({
             className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-gray-950 via-gray-950/65 to-gray-950/15" />
-          <div className="relative flex min-h-[320px] flex-col justify-end p-5 sm:p-6">
+          <div className="relative flex h-[320px] flex-col justify-end p-5 sm:p-6">
             <div className="mb-4 flex items-center gap-2">
               <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-white backdrop-blur">
                 <TrendingUp className="h-3.5 w-3.5" />
@@ -449,6 +513,54 @@ function DiscoverContent({
           <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gray-950 text-white">
             <Plus className="h-5 w-5" />
           </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => window.location.href = OFFICIAL_WORLD_CUP_SCORES_GATE}
+          className="group mx-4 mt-4 flex h-[132px] w-[calc(100%-2rem)] gap-3 rounded-2xl border border-gray-100 bg-white p-2 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
+        >
+          <div className="relative flex h-full w-24 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gray-950 text-white">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,.18),transparent_40%),linear-gradient(135deg,rgba(17,24,39,.96),rgba(3,7,18,.88))]" />
+            <Radio className="relative h-8 w-8" />
+            <span className="absolute bottom-1.5 left-1.5 right-1.5 truncate rounded-full bg-white/90 px-2 py-1 text-center text-[8px] font-bold uppercase tracking-[0.12em] text-gray-950">
+              Live Scores
+            </span>
+          </div>
+          <div className="flex min-w-0 flex-1 flex-col justify-between py-1 pr-1">
+            <div className="min-w-0">
+              <div className="flex items-center justify-between gap-2">
+                <p className="truncate text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-400">
+                  Sportmonks live board
+                </p>
+                <span className={[
+                  'shrink-0 rounded-full px-2 py-1 text-[9px] font-bold uppercase',
+                  scoresReady ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500',
+                ].join(' ')}>
+                  {scoreLoading ? 'Syncing' : scoresReady ? 'Live' : 'Waiting'}
+                </span>
+              </div>
+              <h3 className="mt-1 line-clamp-2 text-[13px] font-black leading-[1.2] text-gray-950">
+                {featuredScore ? compactMatchTitle(featuredScore.title) : 'World Cup live score pulse'}
+              </h3>
+              <p className="mt-1.5 line-clamp-2 text-[11px] leading-4 text-gray-400">
+                {scoreError
+                  ? 'Scores are temporarily unavailable. Tap to open the paid match centre.'
+                  : featuredScore
+                    ? `${scoreLine(featuredScore)} · Unlock direct Polymarket trading routes when a market is matched.`
+                    : 'Provider-backed live scores with Polymarket trading routes after unlock.'}
+              </p>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <span className="min-w-0 truncate text-[10px] font-semibold text-gray-400">
+                {scoreFeed?.updatedAt ? 'Updated from API' : 'No stale rows'}
+              </span>
+              <span className="inline-flex shrink-0 items-center gap-1.5 text-[11px] font-bold text-gray-950">
+                {scoreLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <LockKeyhole className="h-3.5 w-3.5" />}
+                Unlock
+              </span>
+            </div>
+          </div>
         </button>
 
         <div className="flex items-center justify-between gap-3 px-5 pb-2 pt-4">
@@ -499,9 +611,9 @@ function DiscoverContent({
                 key={card.id}
                 type="button"
                 onClick={() => openContent(card)}
-                className="group flex w-full gap-3 rounded-2xl border border-gray-100 bg-white p-2 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
+                className="group flex h-[132px] w-full gap-3 rounded-2xl border border-gray-100 bg-white p-2 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
               >
-                <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-xl bg-gray-100">
+                <div className="relative h-full w-24 shrink-0 overflow-hidden rounded-xl bg-gray-100">
                   <img
                     src={card.image}
                     alt=""
@@ -517,7 +629,8 @@ function DiscoverContent({
                     {card.tag}
                   </span>
                 </div>
-                <div className="min-w-0 flex-1 py-1 pr-1">
+                <div className="flex min-w-0 flex-1 flex-col justify-between py-1 pr-1">
+                  <div className="min-w-0">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="truncate text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-400">
@@ -534,6 +647,7 @@ function DiscoverContent({
                 <p className="mt-1.5 line-clamp-2 text-[11px] leading-4 text-gray-400">
                   {card.description}
                 </p>
+                  </div>
                 <div className="mt-2 flex items-center justify-between gap-2">
                   <span className="min-w-0 truncate text-[10px] font-semibold text-gray-400">
                     {card.xHandle ? `@${card.xHandle.replace(/^@/, '')}` : card.source}
