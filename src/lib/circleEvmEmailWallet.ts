@@ -840,16 +840,16 @@ export async function deployCircleEvmEmailWallet(params: {
   const result = await executeChallengeWithTimeout(
     sdk,
     challenge.challengeId,
-    'Circle Smart Wallet confirmation did not finish. If you approved it, use Check Payment Status in a moment.',
+    'Circle Smart Wallet activation did not finish. If you approved it, wait a moment and try creating the link again.',
   )
   const txHash = findTxHash(result)
   if (txHash) return txHash
   const transactionId = findTransactionId(result)
   if (transactionId) {
-    const hash = await pollTransactionHash(params.session, transactionId)
+    const hash = await pollTransactionHash(params.session, transactionId).catch(() => null)
     if (hash) return hash
   }
-  throw new Error('Circle accepted the payment, but the transaction hash is not available yet. Use Check Payment Status in a moment.')
+  return null
 }
 
 export async function signCircleArcStreamClaim(params: {
