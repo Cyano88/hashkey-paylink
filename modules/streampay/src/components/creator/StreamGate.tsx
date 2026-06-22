@@ -52,6 +52,8 @@ type AgentOption = AgentProfile & {
   gatewayBalanceError?: string
   source?: 'platform' | 'saved' | 'linked' | 'env' | 'store'
 }
+type UnlockStep = 'intro' | 'choose' | 'email' | 'otp' | 'fund'
+type FundingChain = 'BASE' | 'ARBITRUM'
 
 function cleanEmail(value: string) {
   return value.trim().toLowerCase()
@@ -100,6 +102,36 @@ function mergeAgentOptions(existing: AgentOption[], next: AgentOption) {
   return existing.map(item => item.slug === slug ? { ...item, ...next, slug } : item)
 }
 
+function paymentWalletName(agent?: AgentOption | null) {
+  if (!agent || agent.slug === 'hashpaylink-agent' || agent.source === 'platform' || agent.source === 'env') {
+    return 'Hash PayLink wallet'
+  }
+  return agent.name || agent.slug.replace(/-/g, ' ')
+}
+
+function paymentWalletStatusText(agent?: AgentOption | null) {
+  if (!agent) return 'Ready to set up'
+  if (agent.connected) return 'Ready'
+  if (agent.walletAddress) return 'Sign in required'
+  return 'Set up required'
+}
+
+function unlockRecoveryStep(message: string): UnlockStep | null {
+  if (/balance|fund|insufficient|gateway|deposit|activation/i.test(message)) return 'fund'
+  if (/session|reconnect|login|wallet session|not found|not enabled|create the wallet/i.test(message)) return 'email'
+  return null
+}
+
+function readableUnlockError(message: string) {
+  if (/balance|fund|insufficient|gateway|deposit|activation/i.test(message)) {
+    return 'This payment wallet needs USDC added before it can unlock content.'
+  }
+  if (/session|reconnect|login|wallet session|not found|not enabled|create the wallet/i.test(message)) {
+    return 'Sign in to this payment wallet again to continue.'
+  }
+  return message.slice(0, 180)
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function StreamGate() {
@@ -139,7 +171,17 @@ export function StreamGate() {
   const [agentOptionsLoading, setAgentOptionsLoading] = useState(false)
   const [agentOptionsError, setAgentOptionsError] = useState<string | null>(null)
   const [circleNotice, setCircleNotice] = useState<string | null>(null)
-  const [agentManaging, setAgentManaging] = useState(false)
+  const [unlockStep, setUnlockStep] = useState<UnlockStep>('intro')
+  const [walletEmail, setWalletEmail] = useState('')
+  const [walletOtp, setWalletOtp] = useState('')
+  const [walletOtpContext, setWalletOtpContext] = useState<{ email: string; slug: string } | null>(null)
+  const [walletBusy, setWalletBusy] = useState(false)
+  const [walletError, setWalletError] = useState<string | null>(null)
+  const [fundAmount, setFundAmount] = useState('0.5')
+  const [fundChain, setFundChain] = useState<FundingChain>('BASE')
+  const [fundBusy, setFundBusy] = useState(false)
+  const [fundMessage, setFundMessage] = useState<string | null>(null)
+  const [copiedWallet, setCopiedWallet] = useState(false)
 
   async function handleEndSession() {
     setEnding(true)
@@ -176,20 +218,10 @@ export function StreamGate() {
   const [approvePending, setApprovePending] = useState(false)
   const safeAgentSlug = cleanAgentSlug(agentSlug)
   const selectedAgent = agentOptions.find(agent => agent.slug === safeAgentSlug)
-  const selectedAgentIsPinned = selectedAgent?.source === 'platform'
-    || selectedAgent?.source === 'env'
-    || safeAgentSlug === 'hashpaylink-agent'
 
-  function agentSetupUrlFor(slugValue?: string) {
-    const slug = cleanAgentSlug(slugValue || safeAgentSlug)
-    const currentPath = `${window.location.pathname}${window.location.search}`
-    const params = new URLSearchParams({ profile: 'agent', agent: slug, src: 'creator', returnTo: currentPath })
-    return `/agent?${params.toString()}`
-  }
-
-  function selectedAgentSetupUrl() {
-    return agentSetupUrlFor(safeAgentSlug || 'hashpaylink-agent')
-  }
+  useEffect(() => {
+    if (privyEmail && !walletEmail) setWalletEmail(privyEmail)
+  }, [privyEmail, walletEmail])
 
   useEffect(() => {
     if (paymentMode !== 'x402') return
@@ -291,32 +323,6 @@ export function StreamGate() {
     return () => { cancelled = true }
   }, [paymentMode, initialAgentSlug, privyAuthenticated, privyEmail, getAccessToken]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function logoutSelectedAgent() {
-    if (!safeAgentSlug || agentManaging) return
-    setAgentManaging(true)
-    setContentError(null)
-    setCircleNotice(null)
-    try {
-      const res = await fetch('/api/agent-wallet', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'disconnect', agentSlug: safeAgentSlug }),
-      })
-      const data = await res.json().catch(() => ({})) as { ok?: boolean; error?: string; code?: string }
-      if (!res.ok || !data.ok) throw new Error(data.error || 'Could not log out this agent session.')
-      setAgentOptions(current => current.map(agent => (
-        agent.slug === safeAgentSlug ? { ...agent, connected: false, gatewayBalance: undefined } : agent
-      )))
-      setCircleNotice('Agent session logged out. Select another agent or reconnect when ready.')
-      if (contentState === 'error') setContentState('idle')
-    } catch (err) {
-      setContentError(err instanceof Error ? err.message.slice(0, 180) : 'Could not log out this agent session.')
-      setContentState('error')
-    } finally {
-      setAgentManaging(false)
-    }
-  }
-
   async function handleApprove() {
     if (!POA_CONTRACT || !isConnected || !isOnArc) return
     setApproving(true); setApproveError(null)
@@ -363,11 +369,13 @@ export function StreamGate() {
   const legacyFullyAuthorised = isConnected && isOnArc && passkey.registered && isApproved
   const fullyAuthorised = paymentMode === 'x402' ? contentState === 'ready' : legacyFullyAuthorised
 
-  async function unlockWithAgentX402() {
+  async function unlockWithAgentX402(agentSlugOverride?: string) {
     if (gatewayPaying) return
-    if (!safeAgentSlug) {
-      setContentError('Enter the agent wallet name that has x402 balance.')
+    const paymentSlug = cleanAgentSlug(agentSlugOverride || safeAgentSlug)
+    if (!paymentSlug) {
+      setContentError('Choose a payment wallet to continue.')
       setContentState('error')
+      setUnlockStep('choose')
       return
     }
     setGatewayPaying(true)
@@ -377,7 +385,7 @@ export function StreamGate() {
       const res = await fetch('/api/creator-unlock-x402', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contentId, agentSlug: safeAgentSlug }),
+        body: JSON.stringify({ contentId, agentSlug: paymentSlug }),
       })
       const data = await res.json() as {
         ok: boolean
@@ -392,9 +400,12 @@ export function StreamGate() {
       setFetchedContent({ type: data.type as 'text' | 'url', content: data.content })
       setGatewayTx(data.payment?.transaction ?? null)
       setContentState('ready')
-      setCircleNotice(data.walletAddress ? `Paid by ${shortAddress(data.walletAddress)}` : 'Paid with Agent x402 balance')
+      setCircleNotice(data.walletAddress ? `Paid by ${shortAddress(data.walletAddress)}` : 'Payment complete')
     } catch (err) {
-      setContentError(err instanceof Error ? err.message.slice(0, 180) : 'Gateway payment failed.')
+      const rawMessage = err instanceof Error ? err.message : 'Payment failed.'
+      const nextStep = unlockRecoveryStep(rawMessage)
+      if (nextStep) setUnlockStep(nextStep)
+      setContentError(readableUnlockError(rawMessage))
       setContentState('error')
     } finally {
       setGatewayPaying(false)
@@ -407,7 +418,165 @@ export function StreamGate() {
       loginPrivy()
       return
     }
-    await unlockWithAgentX402()
+    if (unlockStep === 'intro') {
+      setUnlockStep(agentOptions.length > 0 ? 'choose' : 'email')
+      return
+    }
+    if (!selectedAgent?.connected) {
+      setUnlockStep(agentOptions.length > 0 ? 'choose' : 'email')
+      return
+    }
+    await unlockWithAgentX402(selectedAgent.slug)
+  }
+
+  async function startPaymentWalletLogin() {
+    const email = cleanEmail(walletEmail || privyEmail)
+    const slug = safeAgentSlug || 'hashpaylink-agent'
+    setWalletError(null)
+    setContentError(null)
+    setCircleNotice(null)
+    if (!email) {
+      setWalletError('Enter your email to open your payment wallet.')
+      return
+    }
+    if (!slug) {
+      setWalletError('Choose a payment wallet profile.')
+      return
+    }
+    setWalletBusy(true)
+    try {
+      const res = await fetch('/api/agent-wallet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'init', agentSlug: slug, email, testnet: true }),
+      })
+      const data = await res.json().catch(() => ({})) as { ok?: boolean; error?: string }
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Could not send the sign-in code.')
+      setWalletOtp('')
+      setWalletOtpContext({ email, slug })
+      setUnlockStep('otp')
+      setCircleNotice('Check your email for the wallet code.')
+    } catch (err) {
+      setWalletError(err instanceof Error ? err.message.slice(0, 160) : 'Could not send the sign-in code.')
+    } finally {
+      setWalletBusy(false)
+    }
+  }
+
+  async function completePaymentWalletLogin() {
+    const context = walletOtpContext || { email: cleanEmail(walletEmail || privyEmail), slug: safeAgentSlug || 'hashpaylink-agent' }
+    const otp = walletOtp.trim()
+    setWalletError(null)
+    setContentError(null)
+    setCircleNotice(null)
+    if (!context.email || !context.slug) {
+      setWalletError('Start wallet sign-in again.')
+      setUnlockStep('email')
+      return
+    }
+    if (otp.length < 4) {
+      setWalletError('Enter the code from your email.')
+      return
+    }
+    setWalletBusy(true)
+    try {
+      const res = await fetch('/api/agent-wallet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'complete', agentSlug: context.slug, email: context.email, otp, testnet: true }),
+      })
+      const data = await res.json().catch(() => ({})) as {
+        ok?: boolean
+        error?: string
+        walletAddress?: string
+        agentSlug?: string
+      }
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Could not verify the wallet code.')
+      const slug = cleanAgentSlug(data.agentSlug || context.slug)
+      setAgentSlug(slug)
+      setAgentOptions(current => mergeAgentOptions(current, {
+        slug,
+        name: slug === 'hashpaylink-agent' ? 'Hash PayLink wallet' : slug,
+        walletAddress: data.walletAddress,
+        connected: true,
+        source: 'store',
+      }))
+      setWalletOtp('')
+      setWalletOtpContext(null)
+      setCircleNotice('Payment wallet connected.')
+      setUnlockStep('choose')
+      setContentState('idle')
+    } catch (err) {
+      setWalletError(err instanceof Error ? err.message.slice(0, 160) : 'Could not verify the wallet code.')
+    } finally {
+      setWalletBusy(false)
+    }
+  }
+
+  function paymentWalletFundUrl() {
+    const wallet = selectedAgent?.walletAddress
+    if (!wallet) return ''
+    const params = new URLSearchParams({
+      e: wallet,
+      m: 'Fund payment wallet',
+      n: fundChain === 'ARBITRUM' ? 'arbitrum' : 'base',
+      f: '1',
+      v: '1',
+      src: 'creator',
+      agent: safeAgentSlug || 'hashpaylink-agent',
+      returnTo: `${window.location.pathname}${window.location.search}`,
+    })
+    return `/pay?${params.toString()}`
+  }
+
+  async function copyPaymentWalletAddress() {
+    const wallet = selectedAgent?.walletAddress
+    if (!wallet) return
+    await navigator.clipboard.writeText(wallet)
+    setCopiedWallet(true)
+    window.setTimeout(() => setCopiedWallet(false), 1500)
+  }
+
+  async function activatePaymentBalance() {
+    const amountNumber = Number(fundAmount)
+    setFundMessage(null)
+    setWalletError(null)
+    if (!safeAgentSlug) {
+      setWalletError('Choose a payment wallet first.')
+      setUnlockStep('choose')
+      return
+    }
+    if (!Number.isFinite(amountNumber) || amountNumber <= 0) {
+      setWalletError('Enter a valid USDC amount.')
+      return
+    }
+    setFundBusy(true)
+    try {
+      const res = await fetch('/api/agent-wallet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'gateway-deposit', agentSlug: safeAgentSlug, amount: fundAmount, chain: fundChain }),
+      })
+      const data = await res.json().catch(() => ({})) as {
+        ok?: boolean
+        error?: string
+        gatewayBalance?: string
+        walletAddress?: string
+      }
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Could not activate the payment balance.')
+      setAgentOptions(current => current.map(agent => (
+        agent.slug === safeAgentSlug
+          ? { ...agent, connected: true, walletAddress: data.walletAddress || agent.walletAddress, gatewayBalance: data.gatewayBalance }
+          : agent
+      )))
+      setFundMessage('Payment balance activated. You can unlock now.')
+      setUnlockStep('choose')
+      setContentState('idle')
+    } catch (err) {
+      setWalletError(err instanceof Error ? readableUnlockError(err.message) : 'Could not activate the payment balance.')
+    } finally {
+      setFundBusy(false)
+    }
   }
 
   useEffect(() => {
@@ -482,166 +651,299 @@ export function StreamGate() {
             {paymentMode === 'x402' ? (
               <div className="w-full space-y-4">
                 <div className="rounded-2xl border border-gray-100 bg-white p-4 text-left shadow-sm">
-                  <div className="flex items-start justify-between gap-3 border-b border-gray-100 pb-3">
-                    <div className="min-w-0 space-y-1">
-                      <p className="text-[13px] font-bold text-gray-900">
-                        {privyAuthenticated ? 'Ready to unlock' : 'Sign in to continue'}
-                      </p>
-                      <p className="truncate text-[12px] text-gray-500">
-                        {PRIVY_AUTH_ENABLED
-                          ? privyAuthenticated
-                            ? privyEmail || 'Wallet connected'
-                            : 'Email or wallet through Privy'
-                          : 'Use a funded agent wallet'}
-                      </p>
-                      <p className="font-mono text-[11px] text-blue-600">
-                        {safeAgentSlug || 'Choose or connect an agent'}
-                      </p>
-                    </div>
-                    <span className="shrink-0 rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-bold text-blue-600 ring-1 ring-blue-100">
-                      x402
-                    </span>
-                  </div>
-                  <div className="mt-3 space-y-2">
-                    {agentOptions.length > 0 && (
-                      <div className="space-y-2">
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-gray-400">
-                          Saved agents
-                        </p>
-                        {agentOptions.map(agent => {
-                          const active = safeAgentSlug === agent.slug
-                          const ready = Boolean(agent.connected)
-                          return (
-                            <button
-                              key={agent.slug}
-                              type="button"
-                              onClick={() => {
-                                setAgentSlug(agent.slug)
-                                setContentError(null)
-                                if (contentState === 'error') setContentState('idle')
-                                if (!ready) window.open(agentSetupUrlFor(agent.slug), '_blank', 'noopener,noreferrer')
-                              }}
-                              className={[
-                                'flex w-full items-center justify-between gap-3 rounded-xl border px-3 py-2.5 text-left transition-all',
-                                active
-                                  ? 'border-blue-200 bg-blue-50/80'
-                                  : 'border-gray-100 bg-gray-50 hover:border-gray-200 hover:bg-white',
-                              ].join(' ')}
-                            >
-                              <span className="min-w-0">
-                                <span className="block truncate text-[12px] font-bold text-gray-900">
-                                  {agent.name || agent.slug}
-                                </span>
-                                <span className="mt-0.5 block truncate font-mono text-[11px] text-gray-500">
-                                  {agent.walletAddress ? shortAddress(agent.walletAddress) : agent.slug}
-                                </span>
-                              </span>
-                              <span className={[
-                                'shrink-0 rounded-full px-2 py-1 text-[10px] font-bold',
-                                ready ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100' : 'bg-amber-50 text-amber-700 ring-1 ring-amber-100',
-                              ].join(' ')}>
-                                {ready ? 'Ready' : 'Reconnect'}
-                              </span>
-                            </button>
-                          )
-                        })}
+                  {unlockStep === 'intro' && (
+                    <div className="space-y-4 text-center">
+                      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full border border-blue-100 bg-blue-50 text-blue-600">
+                        <LockIcon />
                       </div>
-                    )}
-                    {agentOptionsLoading && (
-                      <p className="text-center text-[11px] text-gray-400">Loading saved agents...</p>
-                    )}
-                    {agentOptionsError && (
-                      <p className="text-center text-[11px] text-amber-600">{agentOptionsError}</p>
-                    )}
-                  </div>
-                  <label className="mt-3 block space-y-1">
-                    <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-gray-400">
-                      Agent name
-                    </span>
-                    <input
-                      type="text"
-                      value={agentSlug}
-                      onChange={event => setAgentSlug(cleanAgentSlug(event.target.value))}
-                      placeholder="hashpaylink-agent"
-                      className="w-full rounded-xl border border-blue-100 bg-white px-3 py-3 font-mono text-[14px] text-gray-900 outline-none placeholder:text-gray-300 focus:border-blue-300"
-                    />
-                  </label>
-                  <div className="mt-3 grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => window.open(selectedAgentSetupUrl(), '_blank', 'noopener,noreferrer')}
-                      disabled={!safeAgentSlug}
-                      className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-[11px] font-bold text-gray-700 transition-all hover:border-gray-300 hover:bg-white"
-                    >
-                      {selectedAgent?.connected ? 'Manage agent' : 'Connect agent'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setAgentSlug('')
-                        setContentError(null)
-                        setCircleNotice(null)
-                        if (contentState === 'error') setContentState('idle')
-                      }}
-                      className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-[11px] font-bold text-gray-500 transition-all hover:border-gray-300 hover:text-gray-800"
-                    >
-                      Switch agent
-                    </button>
-                  </div>
-                  {selectedAgentIsPinned ? (
-                    <p className="mt-2 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-[11px] font-medium leading-relaxed text-blue-700">
-                      This platform agent is shared across Hash PayLink. Reconnect it from Manage agent, or switch to your own agent name.
-                    </p>
-                  ) : safeAgentSlug ? (
-                    <button
-                      type="button"
-                      onClick={logoutSelectedAgent}
-                      disabled={agentManaging}
-                      className="mt-2 w-full rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-[11px] font-bold text-red-600 transition-all hover:border-red-200 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {agentManaging ? 'Logging out...' : 'Log out this agent'}
-                    </button>
-                  ) : (
-                    <p className="mt-2 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 text-[11px] font-medium leading-relaxed text-gray-500">
-                      Enter the agent name you funded for x402, then tap Connect agent to sign in or restore it.
-                    </p>
+                      <div className="space-y-1">
+                        <p className="text-[13px] font-bold text-gray-900">Private creator content</p>
+                        <p className="mx-auto max-w-[280px] text-[12px] leading-relaxed text-gray-500">
+                          Continue with your Hash PayLink payment wallet. If it needs a sign-in or USDC top-up, we will guide you.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {unlockStep === 'choose' && (
+                    <div className="space-y-3">
+                      <div className="flex items-start justify-between gap-3 border-b border-gray-100 pb-3">
+                        <div className="min-w-0">
+                          <p className="text-[13px] font-bold text-gray-900">Choose payment wallet</p>
+                          <p className="mt-1 truncate text-[12px] text-gray-500">
+                            {privyEmail || 'Signed in through Hash PayLink'}
+                          </p>
+                        </div>
+                        <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-bold text-emerald-700 ring-1 ring-emerald-100">
+                          Secure
+                        </span>
+                      </div>
+                      {agentOptionsLoading && (
+                        <p className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-3 text-center text-[12px] text-gray-500">
+                          Loading payment wallets...
+                        </p>
+                      )}
+                      {!agentOptionsLoading && agentOptions.length === 0 && (
+                        <p className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-3 text-center text-[12px] font-medium text-blue-700">
+                          Add a payment wallet to unlock this content.
+                        </p>
+                      )}
+                      {agentOptions.map(agent => {
+                        const active = safeAgentSlug === agent.slug
+                        const ready = Boolean(agent.connected)
+                        return (
+                          <button
+                            key={agent.slug}
+                            type="button"
+                            onClick={async () => {
+                              setAgentSlug(agent.slug)
+                              setWalletError(null)
+                              setContentError(null)
+                              if (contentState === 'error') setContentState('idle')
+                              if (ready) {
+                                await unlockWithAgentX402(agent.slug)
+                              } else {
+                                setUnlockStep('email')
+                              }
+                            }}
+                            className={[
+                              'flex w-full items-center justify-between gap-3 rounded-xl border px-3 py-3 text-left transition-all',
+                              active
+                                ? 'border-blue-200 bg-blue-50/80'
+                                : 'border-gray-100 bg-gray-50 hover:border-gray-200 hover:bg-white',
+                            ].join(' ')}
+                          >
+                            <span className="min-w-0">
+                              <span className="block truncate text-[13px] font-bold text-gray-900">
+                                {paymentWalletName(agent)}
+                              </span>
+                              <span className="mt-0.5 block truncate font-mono text-[11px] text-gray-500">
+                                {agent.walletAddress ? shortAddress(agent.walletAddress) : 'Email sign-in'}
+                              </span>
+                            </span>
+                            <span className={[
+                              'shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold',
+                              ready ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100' : 'bg-amber-50 text-amber-700 ring-1 ring-amber-100',
+                            ].join(' ')}>
+                              {paymentWalletStatusText(agent)}
+                            </span>
+                          </button>
+                        )
+                      })}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAgentSlug(safeAgentSlug || 'hashpaylink-agent')
+                          setWalletError(null)
+                          setUnlockStep('email')
+                        }}
+                        className="w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-[12px] font-bold text-gray-700 transition-all hover:border-gray-300 hover:bg-gray-50"
+                      >
+                        Use another email
+                      </button>
+                      {agentOptionsError && (
+                        <p className="text-center text-[11px] text-amber-600">{agentOptionsError}</p>
+                      )}
+                    </div>
+                  )}
+
+                  {unlockStep === 'email' && (
+                    <div className="space-y-3">
+                      <div className="border-b border-gray-100 pb-3">
+                        <p className="text-[13px] font-bold text-gray-900">Open payment wallet</p>
+                        <p className="mt-1 text-[12px] leading-relaxed text-gray-500">
+                          Enter the email used for this Hash PayLink wallet. We will send a one-time code.
+                        </p>
+                      </div>
+                      <label className="block space-y-1.5">
+                        <span className="text-[11px] font-semibold text-gray-600">Email</span>
+                        <input
+                          type="email"
+                          value={walletEmail}
+                          onChange={event => setWalletEmail(event.target.value)}
+                          placeholder="you@example.com"
+                          className="w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-[14px] text-gray-900 outline-none placeholder:text-gray-300 focus:border-blue-300"
+                        />
+                      </label>
+                      <details className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2">
+                        <summary className="cursor-pointer text-[11px] font-semibold text-gray-500">
+                          Use a different wallet profile
+                        </summary>
+                        <label className="mt-2 block space-y-1.5">
+                          <span className="text-[11px] font-semibold text-gray-600">Payment wallet name</span>
+                          <input
+                            type="text"
+                            value={agentSlug}
+                            onChange={event => setAgentSlug(cleanAgentSlug(event.target.value))}
+                            placeholder="hashpaylink-agent"
+                            className="w-full rounded-xl border border-gray-200 bg-white px-3 py-3 font-mono text-[13px] text-gray-900 outline-none placeholder:text-gray-300 focus:border-blue-300"
+                          />
+                        </label>
+                      </details>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setUnlockStep(agentOptions.length > 0 ? 'choose' : 'intro')}
+                          className="rounded-xl border border-gray-200 bg-white px-3 py-3 text-[12px] font-bold text-gray-600"
+                        >
+                          Back
+                        </button>
+                        <button
+                          type="button"
+                          onClick={startPaymentWalletLogin}
+                          disabled={walletBusy}
+                          className="rounded-xl bg-gray-950 px-3 py-3 text-[12px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {walletBusy ? 'Sending...' : 'Send code'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {unlockStep === 'otp' && (
+                    <div className="space-y-3">
+                      <div className="border-b border-gray-100 pb-3">
+                        <p className="text-[13px] font-bold text-gray-900">Enter verification code</p>
+                        <p className="mt-1 text-[12px] leading-relaxed text-gray-500">
+                          We sent a code to {walletOtpContext?.email || walletEmail || 'your email'}.
+                        </p>
+                      </div>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={walletOtp}
+                        onChange={event => setWalletOtp(event.target.value.replace(/\D/g, '').slice(0, 8))}
+                        placeholder="000000"
+                        className="w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-center font-mono text-[18px] font-bold tracking-[0.35em] text-gray-900 outline-none placeholder:text-gray-300 focus:border-blue-300"
+                      />
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setUnlockStep('email')}
+                          className="rounded-xl border border-gray-200 bg-white px-3 py-3 text-[12px] font-bold text-gray-600"
+                        >
+                          Back
+                        </button>
+                        <button
+                          type="button"
+                          onClick={completePaymentWalletLogin}
+                          disabled={walletBusy}
+                          className="rounded-xl bg-gray-950 px-3 py-3 text-[12px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {walletBusy ? 'Verifying...' : 'Verify'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {unlockStep === 'fund' && (
+                    <div className="space-y-3">
+                      <div className="border-b border-gray-100 pb-3">
+                        <p className="text-[13px] font-bold text-gray-900">Add USDC</p>
+                        <p className="mt-1 text-[12px] leading-relaxed text-gray-500">
+                          Add USDC to this payment wallet, then activate the balance for unlocks.
+                        </p>
+                      </div>
+                      {selectedAgent?.walletAddress && (
+                        <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-3">
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-gray-400">Wallet address</p>
+                          <div className="mt-1 flex items-center justify-between gap-2">
+                            <p className="min-w-0 truncate font-mono text-[12px] text-gray-700">{selectedAgent.walletAddress}</p>
+                            <button
+                              type="button"
+                              onClick={copyPaymentWalletAddress}
+                              className="shrink-0 rounded-lg border border-gray-200 bg-white px-2 py-1 text-[10px] font-bold text-gray-600"
+                            >
+                              {copiedWallet ? 'Copied' : 'Copy'}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                      <div className="grid grid-cols-2 gap-2">
+                        {(['BASE', 'ARBITRUM'] as FundingChain[]).map(chain => (
+                          <button
+                            key={chain}
+                            type="button"
+                            onClick={() => setFundChain(chain)}
+                            className={[
+                              'rounded-xl border px-3 py-2.5 text-[11px] font-bold transition-all',
+                              fundChain === chain
+                                ? 'border-blue-200 bg-blue-50 text-blue-700'
+                                : 'border-gray-200 bg-white text-gray-500',
+                            ].join(' ')}
+                          >
+                            {chain === 'BASE' ? 'Base' : 'Arbitrum'}
+                          </button>
+                        ))}
+                      </div>
+                      <label className="block space-y-1.5">
+                        <span className="text-[11px] font-semibold text-gray-600">Amount to activate</span>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.1"
+                            value={fundAmount}
+                            onChange={event => setFundAmount(event.target.value)}
+                            className="w-full rounded-xl border border-gray-200 bg-white px-3 py-3 pr-16 text-[14px] text-gray-900 outline-none focus:border-blue-300"
+                          />
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-bold text-gray-400">USDC</span>
+                        </div>
+                      </label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const url = paymentWalletFundUrl()
+                            if (url) window.open(url, '_blank', 'noopener,noreferrer')
+                          }}
+                          disabled={!selectedAgent?.walletAddress}
+                          className="rounded-xl border border-gray-200 bg-white px-3 py-3 text-[12px] font-bold text-gray-600 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Fund wallet
+                        </button>
+                        <button
+                          type="button"
+                          onClick={activatePaymentBalance}
+                          disabled={fundBusy}
+                          className="rounded-xl bg-gray-950 px-3 py-3 text-[12px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {fundBusy ? 'Activating...' : 'Activate'}
+                        </button>
+                      </div>
+                    </div>
                   )}
                 </div>
-                <button
-                  onClick={handlePrimaryGatewayPay}
-                  disabled={gatewayPaying || (privyAuthenticated && !safeAgentSlug)}
-                  className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl px-5 py-3 text-[13px] font-semibold text-white transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
-                  style={{ background: '#111827' }}
-                >
-                  {gatewayPaying
-                    ? <><Spinner />Paying...</>
-                    : PRIVY_AUTH_ENABLED && !privyAuthenticated
-                    ? 'Continue'
-                    : 'Pay with Agent x402'}
-                </button>
-                {contentState === 'error' && /agent wallet session|reconnect|not enabled/i.test(contentError ?? '') && (
+
+                {(unlockStep === 'intro' || unlockStep === 'choose') && (
                   <button
-                    type="button"
-                    onClick={() => window.open(selectedAgentSetupUrl(), '_blank', 'noopener,noreferrer')}
-                    className="w-full text-center text-[11px] font-semibold text-blue-600 underline underline-offset-2"
+                    onClick={handlePrimaryGatewayPay}
+                    disabled={gatewayPaying || (privyAuthenticated && unlockStep !== 'intro' && !safeAgentSlug)}
+                    className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl px-5 py-3 text-[13px] font-semibold text-white transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+                    style={{ background: '#111827' }}
                   >
-                    Reconnect selected agent
+                    {gatewayPaying
+                      ? <><Spinner />Unlocking...</>
+                      : unlockStep === 'choose' && selectedAgent?.connected
+                      ? 'Unlock content'
+                      : 'Continue to unlock'}
                   </button>
                 )}
+
                 {circleNotice && (
                   <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2.5 text-center text-[12px] font-medium text-emerald-700">
                     {circleNotice}
                   </div>
                 )}
-                {contentState === 'error' && contentError && (
-                  <div className="rounded-xl border border-red-100 bg-red-50 px-3 py-2.5 text-center text-[12px] font-medium text-red-600">
-                    {contentError}
+                {fundMessage && (
+                  <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2.5 text-center text-[12px] font-medium text-emerald-700">
+                    {fundMessage}
                   </div>
                 )}
-                {privyAuthenticated && !safeAgentSlug && (
-                  <p className="text-center text-[11px] text-gray-400">
-                    Select a saved agent, or enter the agent name you funded for x402.
-                  </p>
+                {(walletError || (contentState === 'error' && contentError)) && (
+                  <div className="rounded-xl border border-red-100 bg-red-50 px-3 py-2.5 text-center text-[12px] font-medium text-red-600">
+                    {walletError || contentError}
+                  </div>
                 )}
               </div>
             ) : (
@@ -972,6 +1274,15 @@ function FingerprintIcon() {
     <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
       <path strokeLinecap="round" strokeLinejoin="round"
         d="M7.864 4.243A7.5 7.5 0 0119.5 10.5c0 2.92-.556 5.709-1.568 8.268M5.742 6.364A7.465 7.465 0 004.5 10.5a7.464 7.464 0 01-1.15 3.993m1.989 3.559A11.209 11.209 0 008.25 10.5a3.75 3.75 0 117.5 0c0 .527-.021 1.049-.064 1.565M12 10.5a14.94 14.94 0 01-3.6 9.75m6.633-4.596a18.666 18.666 0 01-2.485 5.33" />
+    </svg>
+  )
+}
+
+function LockIcon() {
+  return (
+    <svg className="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.25}>
+      <path strokeLinecap="round" strokeLinejoin="round"
+        d="M7.5 10.5V8a4.5 4.5 0 119 0v2.5M6.75 10.5h10.5A1.75 1.75 0 0119 12.25v6A1.75 1.75 0 0117.25 20H6.75A1.75 1.75 0 015 18.25v-6a1.75 1.75 0 011.75-1.75z" />
     </svg>
   )
 }
