@@ -41,6 +41,7 @@ type AgentWalletStatus = {
   ok?: boolean
   found?: boolean
   connected?: boolean
+  source?: 'env' | 'store'
   walletAddress?: string
   gatewayBalance?: string
   gatewayBalanceError?: string
@@ -49,7 +50,7 @@ type AgentOption = AgentProfile & {
   connected?: boolean
   gatewayBalance?: string
   gatewayBalanceError?: string
-  source?: 'platform' | 'saved' | 'linked'
+  source?: 'platform' | 'saved' | 'linked' | 'env' | 'store'
 }
 
 function cleanEmail(value: string) {
@@ -174,23 +175,20 @@ export function StreamGate() {
   const [approveError,   setApproveError]   = useState<string | null>(null)
   const [approvePending, setApprovePending] = useState(false)
   const safeAgentSlug = cleanAgentSlug(agentSlug)
+  const selectedAgent = agentOptions.find(agent => agent.slug === safeAgentSlug)
+  const selectedAgentIsPinned = selectedAgent?.source === 'platform'
+    || selectedAgent?.source === 'env'
+    || safeAgentSlug === 'hashpaylink-agent'
 
-  function selectedAgentSetupUrl() {
-    const slug = safeAgentSlug || 'hashpaylink-agent'
+  function agentSetupUrlFor(slugValue?: string) {
+    const slug = cleanAgentSlug(slugValue || safeAgentSlug)
     const currentPath = `${window.location.pathname}${window.location.search}`
     const params = new URLSearchParams({ profile: 'agent', agent: slug, src: 'creator', returnTo: currentPath })
     return `/agent?${params.toString()}`
   }
 
-  function agentTelegramManageUrl() {
-    const slug = safeAgentSlug || 'hashpaylink-agent'
-    const params = new URLSearchParams({
-      section: 'agent-wallets',
-      service: 'agent-dashboard',
-      agent: slug,
-      open: '1',
-    })
-    return `/telegram/payment-links?${params.toString()}`
+  function selectedAgentSetupUrl() {
+    return agentSetupUrlFor(safeAgentSlug || 'hashpaylink-agent')
   }
 
   useEffect(() => {
@@ -229,6 +227,7 @@ export function StreamGate() {
               ...option,
               walletAddress: status.walletAddress || option.walletAddress,
               connected: Boolean(status.connected),
+              source: status.source === 'env' ? 'env' : option.source,
               gatewayBalance: status.gatewayBalance,
               gatewayBalanceError: status.gatewayBalanceError,
             }
@@ -496,7 +495,7 @@ export function StreamGate() {
                           : 'Use a funded agent wallet'}
                       </p>
                       <p className="font-mono text-[11px] text-blue-600">
-                        {safeAgentSlug || 'No agent selected'}
+                        {safeAgentSlug || 'Choose or connect an agent'}
                       </p>
                     </div>
                     <span className="shrink-0 rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-bold text-blue-600 ring-1 ring-blue-100">
@@ -520,6 +519,7 @@ export function StreamGate() {
                                 setAgentSlug(agent.slug)
                                 setContentError(null)
                                 if (contentState === 'error') setContentState('idle')
+                                if (!ready) window.open(agentSetupUrlFor(agent.slug), '_blank', 'noopener,noreferrer')
                               }}
                               className={[
                                 'flex w-full items-center justify-between gap-3 rounded-xl border px-3 py-2.5 text-left transition-all',
@@ -570,16 +570,10 @@ export function StreamGate() {
                     <button
                       type="button"
                       onClick={() => window.open(selectedAgentSetupUrl(), '_blank', 'noopener,noreferrer')}
+                      disabled={!safeAgentSlug}
                       className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-[11px] font-bold text-gray-700 transition-all hover:border-gray-300 hover:bg-white"
                     >
-                      Manage agent
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => window.open(agentTelegramManageUrl(), '_blank', 'noopener,noreferrer')}
-                      className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-[11px] font-bold text-gray-700 transition-all hover:border-gray-300 hover:bg-white"
-                    >
-                      Agent dashboard
+                      {selectedAgent?.connected ? 'Manage agent' : 'Connect agent'}
                     </button>
                     <button
                       type="button"
@@ -593,15 +587,25 @@ export function StreamGate() {
                     >
                       Switch agent
                     </button>
+                  </div>
+                  {selectedAgentIsPinned ? (
+                    <p className="mt-2 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-[11px] font-medium leading-relaxed text-blue-700">
+                      This platform agent is shared across Hash PayLink. Reconnect it from Manage agent, or switch to your own agent name.
+                    </p>
+                  ) : safeAgentSlug ? (
                     <button
                       type="button"
                       onClick={logoutSelectedAgent}
-                      disabled={!safeAgentSlug || agentManaging}
-                      className="rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-[11px] font-bold text-red-600 transition-all hover:border-red-200 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={agentManaging}
+                      className="mt-2 w-full rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-[11px] font-bold text-red-600 transition-all hover:border-red-200 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      {agentManaging ? 'Logging out...' : 'Log out agent'}
+                      {agentManaging ? 'Logging out...' : 'Log out this agent'}
                     </button>
-                  </div>
+                  ) : (
+                    <p className="mt-2 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 text-[11px] font-medium leading-relaxed text-gray-500">
+                      Enter the agent name you funded for x402, then tap Connect agent to sign in or restore it.
+                    </p>
+                  )}
                 </div>
                 <button
                   onClick={handlePrimaryGatewayPay}
