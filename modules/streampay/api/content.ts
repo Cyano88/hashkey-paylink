@@ -9,7 +9,7 @@ import type { Request, Response } from 'express'
 import pg from 'pg'
 import {
   createPublicClient, http, defineChain,
-  parseAbi, isAddress, keccak256, toBytes, verifyMessage, verifyTypedData,
+  parseAbi, isAddress, keccak256, toBytes, verifyMessage, verifyTypedData, hashTypedData,
   type Address, type Hex,
 } from 'viem'
 import type { NextFunction } from 'express'
@@ -30,6 +30,10 @@ const ARC_USDC = '0x3600000000000000000000000000000000000000' as const
 const ALLOW_ABI = parseAbi([
   'function allowance(address owner, address spender) view returns (uint256)',
 ])
+const ERC1271_ABI = parseAbi([
+  'function isValidSignature(bytes32 hash, bytes signature) view returns (bytes4)',
+])
+const ERC1271_MAGIC_VALUE = '0x1626ba7e'
 
 type ContentEntry = {
   type: 'text' | 'url'
@@ -205,7 +209,7 @@ async function verifyCreatorProof(params: {
     })
   }
 
-  return verifyTypedData({
+  const typedData = {
     address: params.creator,
     domain: {
       name: 'Hash PayLink Creator Studio',
@@ -223,7 +227,26 @@ async function verifyCreatorProof(params: {
       issuedAt: BigInt(params.issuedAt),
     },
     signature: params.signature,
+  } as const
+  const eoaValid = await verifyTypedData(typedData)
+  if (eoaValid) return true
+
+  const bytecode = await arcClient.getBytecode({ address: params.creator }).catch(() => undefined)
+  if (!bytecode || bytecode === '0x') return false
+
+  const digest = hashTypedData({
+    domain: typedData.domain,
+    types: typedData.types,
+    primaryType: typedData.primaryType,
+    message: typedData.message,
   })
+  const magic = await arcClient.readContract({
+    address: params.creator,
+    abi: ERC1271_ABI,
+    functionName: 'isValidSignature',
+    args: [digest, params.signature],
+  }).catch(() => null)
+  return typeof magic === 'string' && magic.toLowerCase() === ERC1271_MAGIC_VALUE
 }
 
 async function creatorGatewayMiddleware(entry: ContentEntry) {

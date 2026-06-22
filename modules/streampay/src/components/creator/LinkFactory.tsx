@@ -5,6 +5,7 @@ import { keccak256, toBytes, type Address } from 'viem'
 import {
   canUseCircleEvmEmailWallet,
   connectCircleEvmEmailWallet,
+  deployCircleEvmEmailWallet,
   signCircleEvmEmailTypedData,
   type CircleEvmEmailSession,
 } from '../../../../../src/lib/circleEvmEmailWallet'
@@ -283,6 +284,7 @@ export function LinkFactory({
       setAuthBusy(true)
       try {
         const session = await connectCircleEvmEmailWallet(privyEmail, 'arc')
+        await deployCircleEvmEmailWallet({ session })
         setCircleSession(session)
       } catch (err) {
         setStoreError(err instanceof Error ? err.message.slice(0, 160) : 'Circle wallet did not open.')
