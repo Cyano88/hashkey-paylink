@@ -103,6 +103,9 @@ type PolyStreamMatch = {
   homeScore?: number | string
   awayScore?: number | string
   clock?: string
+  homeMarketPrice?: string
+  awayMarketPrice?: string
+  drawMarketPrice?: string
   marketStatus?: 'matched' | 'pending'
   polymarketUrl?: string
 }
@@ -119,6 +122,7 @@ const FALLBACK_CREATOR_COVERS = [
   '/brand/abuja-business-bg.jpeg',
   '/brand/world-globe.png',
 ]
+const POLYMARKET_LOGO = '/brand/polymarket-logo.png'
 
 const CREATOR_CATEGORIES: Array<{ id: CreatorCategory; label: string; disabled?: boolean; visible?: boolean }> = [
   { id: 'general', label: 'General', visible: false },
@@ -264,6 +268,163 @@ function compactMatchTitle(title: string) {
   return title.replace(/\s+/g, ' ').replace(/\bFIFA\b/gi, '').trim()
 }
 
+function hasMatchScore(match: PolyStreamMatch) {
+  return match.homeScore !== undefined && match.homeScore !== '' && match.awayScore !== undefined && match.awayScore !== ''
+}
+
+function splitFixtureTitle(title: string) {
+  if (!title.includes(' vs ')) return [compactMatchTitle(title), ''] as const
+  const [home, away] = title.split(' vs ', 2)
+  return [home.trim(), away.trim()] as const
+}
+
+const WORLD_CUP_TEAM_ISO: Record<string, string> = {
+  algeria: 'dz',
+  argentina: 'ar',
+  australia: 'au',
+  austria: 'at',
+  belgium: 'be',
+  bosnia: 'ba',
+  'bosnia & herz': 'ba',
+  'bosnia and herzegovina': 'ba',
+  brazil: 'br',
+  canada: 'ca',
+  'cape verde': 'cv',
+  'cape verde islands': 'cv',
+  'cabo verde': 'cv',
+  colombia: 'co',
+  'congo dr': 'cd',
+  'dr congo': 'cd',
+  croatia: 'hr',
+  curacao: 'cw',
+  'cote divoire': 'ci',
+  ecuador: 'ec',
+  egypt: 'eg',
+  england: 'gb-eng',
+  france: 'fr',
+  germany: 'de',
+  ghana: 'gh',
+  haiti: 'ht',
+  iran: 'ir',
+  'ir iran': 'ir',
+  iraq: 'iq',
+  'ivory coast': 'ci',
+  japan: 'jp',
+  jordan: 'jo',
+  mexico: 'mx',
+  morocco: 'ma',
+  netherlands: 'nl',
+  'new zealand': 'nz',
+  norway: 'no',
+  panama: 'pa',
+  paraguay: 'py',
+  portugal: 'pt',
+  qatar: 'qa',
+  'saudi arabia': 'sa',
+  scotland: 'gb-sct',
+  senegal: 'sn',
+  'south africa': 'za',
+  'south korea': 'kr',
+  spain: 'es',
+  sweden: 'se',
+  switzerland: 'ch',
+  tunisia: 'tn',
+  turkey: 'tr',
+  turkiye: 'tr',
+  'united states': 'us',
+  usa: 'us',
+  uruguay: 'uy',
+  uzbekistan: 'uz',
+}
+
+function teamIso(name: string) {
+  const clean = name
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[']/g, '')
+    .replace(/\./g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return WORLD_CUP_TEAM_ISO[clean] || ''
+}
+
+function flagUrlForTeam(name: string, size = 640) {
+  const iso = teamIso(name)
+  return iso ? `https://flagcdn.com/w${size}/${iso}.png` : ''
+}
+
+function flagEmojiForTeam(name: string) {
+  const iso = teamIso(name)
+  if (!iso || iso.includes('-')) return 'WC'
+  return iso
+    .toUpperCase()
+    .replace(/./g, char => String.fromCodePoint(127397 + char.charCodeAt(0)))
+}
+
+function TeamFlagMark({ name }: { name: string }) {
+  const flag = flagUrlForTeam(name, 160)
+  return flag ? (
+    <img src={flag} alt="" className="h-8 w-12 rounded object-cover shadow-xl ring-1 ring-white/20" loading="lazy" />
+  ) : (
+    <span className="text-xs font-black text-white">{flagEmojiForTeam(name)}</span>
+  )
+}
+
+function readableMatchClock(value?: string) {
+  const text = (value || '').trim()
+  const stoppage = text.match(/^90\+(\d+)'$/)
+  if (stoppage) return `90+${stoppage[1]} mins`
+  const minute = text.match(/^(\d+)'$/)
+  if (minute) {
+    const count = Number(minute[1])
+    if (Number.isFinite(count)) {
+      if (count > 90) return `90+${Math.min(count - 90, 15)} mins`
+      return `${count} ${count === 1 ? 'min' : 'mins'}`
+    }
+  }
+  return text
+}
+
+function matchCountdown(match: PolyStreamMatch) {
+  const source = match.kickoffAt || match.time
+  const ts = Date.parse(source)
+  if (!Number.isFinite(ts)) return 'Countdown'
+  const diffMs = ts - Date.now()
+  if (diffMs <= 0) return 'Starting'
+  const totalSeconds = Math.ceil(diffMs / 1000)
+  const days = Math.floor(totalSeconds / 86_400)
+  const hours = Math.floor((totalSeconds % 86_400) / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+  if (days > 0) return `${days} ${days === 1 ? 'day' : 'days'} ${hours} ${hours === 1 ? 'hr' : 'hrs'}`
+  if (hours > 0) return `${hours} ${hours === 1 ? 'hr' : 'hrs'} ${minutes} ${minutes === 1 ? 'min' : 'mins'}`
+  if (minutes > 0) return `${minutes} ${minutes === 1 ? 'min' : 'mins'}`
+  return `${seconds} ${seconds === 1 ? 'sec' : 'secs'}`
+}
+
+function matchDisplayState(match: PolyStreamMatch) {
+  const status = `${match.status}`.toLowerCase()
+  const scored = hasMatchScore(match)
+  const matchTime = Date.parse(match.kickoffAt || match.time)
+  const isPast = Number.isFinite(matchTime) && matchTime < Date.now() - 90 * 60 * 1000
+  const clock = readableMatchClock(match.clock)
+  if (/(live|inplay|in play|1h|2h|1st|2nd|first half|second half|et)/.test(status)) {
+    return { tag: 'LIVE', center: scored ? `${match.homeScore}-${match.awayScore}` : 'Live', sub: clock || 'Live' }
+  }
+  if (/(half|ht)/.test(status)) {
+    return { tag: 'HT', center: scored ? `${match.homeScore}-${match.awayScore}` : 'HT', sub: clock || 'Half time' }
+  }
+  if (/(ft|full time|full-time|finished|result|complete|ended|after extra time|pen)/.test(status) || (scored && isPast)) {
+    return { tag: 'FT', center: `${match.homeScore}-${match.awayScore}`, sub: 'Full time' }
+  }
+  return { tag: 'NS', center: 'vs', sub: matchCountdown(match) }
+}
+
+function isLiveMatch(match: PolyStreamMatch) {
+  return matchDisplayState(match).tag === 'LIVE'
+}
+
 function contentFromGate(link: string, meta: GateCreatedMeta, index: number): PublishedContent {
   const title = meta.title.trim() || (meta.contentType === 'url' ? 'Private creator drop' : 'Creator article')
   const author = meta.authorName.trim() || 'Creator Studio'
@@ -344,6 +505,7 @@ function DiscoverContent({
   const [scoreFeed, setScoreFeed] = useState<PolyStreamFeed | null>(null)
   const [scoreLoading, setScoreLoading] = useState(true)
   const [scoreError, setScoreError] = useState('')
+  const [scoreIndex, setScoreIndex] = useState(0)
   const [categoryFilter, setCategoryFilter] = useState<CreatorCategory | 'all'>('all')
   const [heroIndex, setHeroIndex] = useState(0)
   const [now, setNow] = useState(Date.now())
@@ -421,7 +583,6 @@ function DiscoverContent({
   const approvedSessionPosts = published.filter(card => card.reviewStatus === 'approved')
   const officialCards = [
     OFFICIAL_DISCOVER_CONTENT[0],
-    OFFICIAL_DISCOVER_CONTENT[1],
     ...worldCupNewsCards,
   ].filter(Boolean) as PublishedContent[]
   const allCards = [...officialCards, ...approvedSessionPosts, ...approvedPosts]
@@ -451,9 +612,26 @@ function DiscoverContent({
   }
 
   const heroCta = hero.cta || (hero.action === 'gate' ? 'Unlock' : 'Create')
-  const scoreMatches = scoreFeed?.matches ?? []
-  const featuredScore = scoreMatches[0]
+  const scoreMatches = [...(scoreFeed?.matches ?? [])].sort((a, b) => Number(isLiveMatch(b)) - Number(isLiveMatch(a)))
+  const featuredScore = scoreMatches[scoreIndex % Math.max(scoreMatches.length, 1)]
   const scoresReady = Boolean(scoreFeed?.providerConfigured && scoreFeed.providerStatus === 'connected' && scoreMatches.length)
+  const [scoreHome, scoreAway] = featuredScore ? splitFixtureTitle(featuredScore.title) : ['World Cup', 'Scores']
+  const scoreState = featuredScore ? matchDisplayState(featuredScore) : null
+  const homeFlag = featuredScore ? flagUrlForTeam(scoreHome) : ''
+  const awayFlag = featuredScore ? flagUrlForTeam(scoreAway) : ''
+  const scoreMarketMatched = Boolean(featuredScore?.marketStatus === 'matched' && featuredScore.polymarketUrl)
+
+  useEffect(() => {
+    setScoreIndex(0)
+  }, [scoreMatches.length])
+
+  useEffect(() => {
+    if (scoreMatches.length < 2) return undefined
+    const timer = window.setInterval(() => {
+      setScoreIndex(index => (index + 1) % scoreMatches.length)
+    }, 10000)
+    return () => window.clearInterval(timer)
+  }, [scoreMatches.length])
 
   return (
     <div className="w-full space-y-4">
@@ -518,7 +696,101 @@ function DiscoverContent({
         <button
           type="button"
           onClick={() => window.location.href = OFFICIAL_WORLD_CUP_SCORES_GATE}
-          className="group mx-4 mt-4 flex h-[132px] w-[calc(100%-2rem)] gap-3 rounded-2xl border border-gray-100 bg-white p-2 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
+          className="group relative mx-4 mt-4 block h-[228px] w-[calc(100%-2rem)] overflow-hidden rounded-2xl bg-gray-950 text-left text-white shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
+        >
+          {homeFlag && (
+            <div
+              className="absolute inset-0 bg-cover bg-center opacity-100 blur-[1px] transition-opacity duration-1000 [animation:hpFlagSwapA_10s_ease-in-out_infinite]"
+              style={{ backgroundImage: `linear-gradient(rgba(0,0,0,.58), rgba(0,0,0,.84)), url(${homeFlag})` }}
+            />
+          )}
+          {awayFlag && (
+            <div
+              className="absolute inset-0 bg-cover bg-center opacity-0 blur-[1px] transition-opacity duration-1000 [animation:hpFlagSwapB_10s_ease-in-out_infinite]"
+              style={{ backgroundImage: `linear-gradient(rgba(0,0,0,.58), rgba(0,0,0,.84)), url(${awayFlag})` }}
+            />
+          )}
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,.12),transparent_38%),linear-gradient(180deg,rgba(0,0,0,.18),rgba(0,0,0,.62))]" />
+          <div className="relative z-10 flex h-full flex-col justify-between p-3">
+            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-1.5">
+              <span className="truncate text-[10px] font-semibold text-white/65">
+                {scoreLoading ? 'Syncing live board' : featuredScore?.time || 'Sportmonks live board'}
+              </span>
+              {scoreMarketMatched ? (
+                <span className="inline-flex items-center justify-center gap-1 rounded-full border border-white/15 bg-black/35 px-2 py-1 text-[10px] font-black leading-none text-white shadow-sm backdrop-blur-sm">
+                  <img src={POLYMARKET_LOGO} alt="" className="h-3 w-3" />
+                  Trade
+                </span>
+              ) : (
+                <span className="inline-flex items-center justify-center gap-1 rounded-full border border-white/15 bg-black/35 px-2 py-1 text-[10px] font-black leading-none text-white/70 shadow-sm backdrop-blur-sm">
+                  <img src={POLYMARKET_LOGO} alt="" className="h-3 w-3 opacity-80" />
+                  Route
+                </span>
+              )}
+              <span className={[
+                'justify-self-end rounded-full px-2 py-0.5 text-[10px] font-bold uppercase leading-none ring-1',
+                scoreState?.tag === 'LIVE'
+                  ? 'bg-emerald-400/15 text-emerald-100 ring-emerald-300/30'
+                  : 'bg-white/12 text-white/85 ring-white/15',
+              ].join(' ')}>
+                {scoreLoading ? 'SYNC' : scoreState?.tag || (scoresReady ? 'LIVE' : 'WAIT')}
+              </span>
+            </div>
+
+            <div className="grid min-h-[112px] grid-cols-[minmax(0,1fr)_72px_minmax(0,1fr)] items-center gap-1.5">
+              <div className="min-w-0 text-center">
+                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-black/30 shadow-xl ring-1 ring-white/15 backdrop-blur-sm">
+                  <TeamFlagMark name={scoreHome} />
+                </div>
+                <p className="mx-auto mt-1.5 max-w-[7.2rem] truncate text-[11px] font-black tracking-wide">{scoreHome}</p>
+                {featuredScore?.homeMarketPrice && (
+                  <p className="mt-1 text-[9px] font-black uppercase tabular-nums text-white/55">{featuredScore.homeMarketPrice}</p>
+                )}
+              </div>
+              <div className="rounded-xl border border-white/12 bg-black/35 px-1.5 py-1.5 text-center shadow-2xl backdrop-blur-sm">
+                {scoreLoading ? (
+                  <Loader2 className="mx-auto h-5 w-5 animate-spin text-white/80" />
+                ) : (
+                  <p className="text-lg font-black tabular-nums">{scoreState?.center || 'vs'}</p>
+                )}
+                <p className="mt-0.5 truncate text-[9px] font-bold uppercase text-white/55">
+                  {scoreError ? 'Retry shortly' : scoreState?.sub || 'Live board'}
+                </p>
+                {featuredScore?.drawMarketPrice && (
+                  <p className="mt-1 text-[9px] font-black uppercase tabular-nums text-white/55">Draw {featuredScore.drawMarketPrice}</p>
+                )}
+              </div>
+              <div className="min-w-0 text-center">
+                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-black/30 shadow-xl ring-1 ring-white/15 backdrop-blur-sm">
+                  <TeamFlagMark name={scoreAway || 'Scores'} />
+                </div>
+                <p className="mx-auto mt-1.5 max-w-[7.2rem] truncate text-[11px] font-black tracking-wide">{scoreAway || 'Opponent'}</p>
+                {featuredScore?.awayMarketPrice && (
+                  <p className="mt-1 text-[9px] font-black uppercase tabular-nums text-white/55">{featuredScore.awayMarketPrice}</p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-2 rounded-lg border border-white/10 bg-black/25 px-2.5 py-1.5 backdrop-blur-sm">
+              <p className="min-w-0 truncate text-[10px] font-semibold text-white/75">
+                {scoreError
+                  ? 'Scores temporarily unavailable'
+                  : featuredScore
+                    ? 'Unlock direct Polymarket trading routes'
+                    : 'Provider-backed World Cup board'}
+              </p>
+              <span className="inline-flex shrink-0 items-center gap-1.5 text-[11px] font-black text-white">
+                <LockKeyhole className="h-3.5 w-3.5" />
+                Unlock
+              </span>
+            </div>
+          </div>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => window.location.href = OFFICIAL_WORLD_CUP_SCORES_GATE}
+          className="hidden"
         >
           <div className="relative flex h-full w-24 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gray-950 text-white">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,.18),transparent_40%),linear-gradient(135deg,rgba(17,24,39,.96),rgba(3,7,18,.88))]" />
