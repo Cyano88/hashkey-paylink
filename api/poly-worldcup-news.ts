@@ -25,7 +25,7 @@ type CacheEntry = {
 
 const DEFAULT_QUERY = 'World Cup 2026 OR FIFA World Cup'
 const DEFAULT_CACHE_MS = 15 * 60 * 1000
-const FALLBACK_IMAGE = '/brand/polymarket-logo.png'
+const FALLBACK_IMAGE = '/brand/world-globe.png'
 
 let cache: CacheEntry | null = null
 
@@ -97,9 +97,20 @@ function normalizeArticle(article: ProviderArticle): PolyWorldCupArticle | null 
     source: articleSource(article),
     image: articleImage(article),
     url: articleUrl(article),
-    publishedAt: asString(article.publishedAt) || asString(article.published_at) || asString(article.date) || new Date().toISOString(),
+    publishedAt: asString(article.publishedAt)
+      || asString(article.published_at)
+      || asString(article.pubDate)
+      || asString(article.published)
+      || asString(article.created_at)
+      || asString(article.date)
+      || new Date().toISOString(),
     tag: tagFor(title, description),
   }
+}
+
+function articleTimeValue(article: PolyWorldCupArticle) {
+  const timestamp = Date.parse(article.publishedAt)
+  return Number.isFinite(timestamp) ? timestamp : 0
 }
 
 function extractArticles(payload: unknown): ProviderArticle[] {
@@ -172,7 +183,9 @@ async function fetchProviderArticles(): Promise<PolyWorldCupArticle[]> {
     const response = await fetch(url, { headers, signal: controller.signal })
     if (!response.ok) throw new Error(`News provider returned ${response.status}`)
     const payload = await response.json()
-    return extractArticles(payload).map(normalizeArticle).filter(Boolean).slice(0, 10) as PolyWorldCupArticle[]
+    return (extractArticles(payload).map(normalizeArticle).filter(Boolean) as PolyWorldCupArticle[])
+      .sort((a, b) => articleTimeValue(b) - articleTimeValue(a))
+      .slice(0, 10)
   } finally {
     clearTimeout(timeout)
   }

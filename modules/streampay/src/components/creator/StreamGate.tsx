@@ -37,9 +37,11 @@ type WorldCupScoreMatch = {
   tag: string
   title: string
   time: string
+  kickoffAt?: string
   status: string
   homeScore?: number | string
   awayScore?: number | string
+  clock?: string
   probability?: string
   polymarketUrl?: string
   marketStatus?: 'matched' | 'pending'
@@ -48,6 +50,7 @@ type WorldCupScoreFeed = {
   ok?: boolean
   providerConfigured?: boolean
   providerStatus?: string
+  displayDate?: string
   updatedAt?: string
   matches?: WorldCupScoreMatch[]
 }
@@ -74,6 +77,62 @@ type AgentOption = AgentProfile & {
 }
 type UnlockStep = 'intro' | 'choose' | 'email' | 'otp' | 'fund'
 type FundingChain = 'BASE' | 'ARBITRUM'
+
+function hasWorldCupScore(match: WorldCupScoreMatch) {
+  return match.homeScore !== undefined && match.homeScore !== '' && match.awayScore !== undefined && match.awayScore !== ''
+}
+
+function readableWorldCupClock(value?: string) {
+  const text = (value || '').trim()
+  const stoppage = text.match(/^90\+(\d+)'$/)
+  if (stoppage) return `90+${stoppage[1]} mins`
+  const minute = text.match(/^(\d+)'$/)
+  if (minute) {
+    const count = Number(minute[1])
+    if (Number.isFinite(count)) {
+      if (count > 90) return `90+${Math.min(count - 90, 15)} mins`
+      return `${count} ${count === 1 ? 'min' : 'mins'}`
+    }
+  }
+  return text
+}
+
+function worldCupCountdown(match: WorldCupScoreMatch) {
+  const source = match.kickoffAt || match.time
+  const ts = Date.parse(source)
+  if (!Number.isFinite(ts)) return 'Countdown'
+  const diffMs = ts - Date.now()
+  if (diffMs <= 0) return 'Starting'
+  const totalSeconds = Math.ceil(diffMs / 1000)
+  const days = Math.floor(totalSeconds / 86_400)
+  const hours = Math.floor((totalSeconds % 86_400) / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  if (days > 0) return `${days} ${days === 1 ? 'day' : 'days'} ${hours} ${hours === 1 ? 'hr' : 'hrs'}`
+  if (hours > 0) return `${hours} ${hours === 1 ? 'hr' : 'hrs'} ${minutes} ${minutes === 1 ? 'min' : 'mins'}`
+  return `${Math.max(1, minutes)} ${minutes === 1 ? 'min' : 'mins'}`
+}
+
+function worldCupMatchDisplayState(match: WorldCupScoreMatch) {
+  const status = `${match.status} ${match.tag || ''}`.toLowerCase()
+  const scored = hasWorldCupScore(match)
+  const matchTime = Date.parse(match.kickoffAt || match.time)
+  const isPast = Number.isFinite(matchTime) && matchTime < Date.now() - 90 * 60 * 1000
+  const clock = readableWorldCupClock(match.clock)
+  if (/(live|inplay|in play|1h|2h|1st|2nd|first half|second half|et)/.test(status)) {
+    return { tag: 'LIVE', center: scored ? `${match.homeScore}-${match.awayScore}` : 'Live', sub: clock || 'Live' }
+  }
+  if (/(half|ht)/.test(status)) {
+    return { tag: 'HT', center: scored ? `${match.homeScore}-${match.awayScore}` : 'HT', sub: clock || 'Half time' }
+  }
+  if (/(ft|full time|full-time|finished|result|complete|ended|after extra time|pen)/.test(status) || (scored && isPast)) {
+    return { tag: 'FT', center: `${match.homeScore}-${match.awayScore}`, sub: clock || 'Full time' }
+  }
+  return { tag: 'NS', center: 'vs', sub: worldCupCountdown(match) }
+}
+
+function todayMatchdayKey() {
+  return new Date().toISOString().slice(0, 10)
+}
 
 const ALLOWED_ARTICLE_TAGS = new Set(['P', 'BR', 'STRONG', 'B', 'EM', 'I', 'U', 'H2', 'H3', 'BLOCKQUOTE', 'UL', 'OL', 'LI', 'A'])
 
@@ -1343,7 +1402,7 @@ function WorldCupScoresUnlocked() {
     setLoading(true)
     setError('')
     try {
-      const res = await fetch('/api/poly-stream')
+      const res = await fetch(`/api/poly-stream?date=${todayMatchdayKey()}`)
       const data = await res.json() as WorldCupScoreFeed
       if (!res.ok || !data.ok) throw new Error('Live scores are not available.')
       setFeed(data)
@@ -1415,7 +1474,7 @@ function WorldCupScoresUnlocked() {
       {!loading && !error && matches.length > 0 && (
         <div className="max-h-[460px] space-y-2 overflow-y-auto pr-1 [scrollbar-width:none]">
           {matches.slice(0, 16).map(match => {
-            const hasScore = match.homeScore !== undefined && match.awayScore !== undefined
+            const state = worldCupMatchDisplayState(match)
             const marketUrl = match.marketStatus === 'matched' && match.polymarketUrl ? match.polymarketUrl : ''
             const matched = Boolean(marketUrl)
             return (
@@ -1426,16 +1485,16 @@ function WorldCupScoresUnlocked() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[9px] font-black uppercase text-gray-600">{match.tag || 'Fixture'}</span>
+                      <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[9px] font-black uppercase text-gray-600">{state.tag}</span>
                       <span className="text-[10px] font-semibold text-gray-400">{match.time}</span>
                     </div>
                     <p className="mt-1.5 line-clamp-2 text-[13px] font-black leading-snug text-gray-950">{match.title}</p>
-                    <p className="mt-1 text-[11px] leading-4 text-gray-500">{match.status}</p>
+                    <p className="mt-1 text-[11px] leading-4 text-gray-500">{state.sub || match.status}</p>
                     {match.probability && <p className="mt-1 text-[11px] font-semibold text-gray-600">{match.probability}</p>}
                   </div>
                   <div className="shrink-0 text-right">
                     <p className="rounded-xl bg-gray-950 px-3 py-2 text-[14px] font-black tabular-nums text-white">
-                      {hasScore ? `${match.homeScore}-${match.awayScore}` : 'vs'}
+                      {state.center}
                     </p>
                   </div>
                 </div>

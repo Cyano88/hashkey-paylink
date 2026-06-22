@@ -96,6 +96,7 @@ type PolyWorldCupFeed = {
 }
 type PolyStreamMatch = {
   fixtureId?: string
+  tag?: string
   title: string
   time: string
   kickoffAt?: string
@@ -125,6 +126,7 @@ const FALLBACK_CREATOR_COVERS = [
   '/brand/world-globe.png',
 ]
 const POLYMARKET_LOGO = '/brand/polymarket-logo.png'
+const WORLD_GLOBE_IMAGE = '/brand/world-globe.png'
 
 const CREATOR_CATEGORIES: Array<{ id: CreatorCategory; label: string; disabled?: boolean; visible?: boolean }> = [
   { id: 'general', label: 'General', visible: false },
@@ -147,7 +149,7 @@ const OFFICIAL_DISCOVER_CONTENT: PublishedContent[] = [
     price: '0.10',
     tag: 'Hash PayLink',
     source: 'Hash PayLink desk',
-    image: '/brand/world-globe.png',
+    image: WORLD_GLOBE_IMAGE,
     action: 'create',
     cta: 'Create',
   },
@@ -161,7 +163,7 @@ const OFFICIAL_DISCOVER_CONTENT: PublishedContent[] = [
     price: '0.10',
     tag: 'Live Scores',
     source: 'Hash PayLink Pulse',
-    image: '/brand/world-globe.png',
+    image: WORLD_GLOBE_IMAGE,
     gateLink: OFFICIAL_WORLD_CUP_SCORES_GATE,
     action: 'gate',
     cta: 'Unlock',
@@ -204,7 +206,7 @@ function worldCupNewsCard(article: PolyWorldCupArticle, index: number): Publishe
     price: '0.10',
     tag: article.tag || 'World Cup',
     source: article.source || 'Hash PayLink Pulse',
-    image: article.image || '/brand/world-globe.png',
+    image: article.image || WORLD_GLOBE_IMAGE,
     gateLink: `/gate?${params.toString()}`,
     action: 'gate',
     cta: 'Unlock',
@@ -216,6 +218,11 @@ function parseContentId(input: string): string {
     const url = new URL(input.includes('://') ? input : `https://x.com${input}`)
     return url.searchParams.get('id') ?? input.trim()
   } catch { return input.trim() }
+}
+
+function articleTimeValue(article: PolyWorldCupArticle) {
+  const timestamp = Date.parse(article.publishedAt)
+  return Number.isFinite(timestamp) ? timestamp : 0
 }
 
 // Scan localStorage for any ghost vaults matching this contentId.
@@ -258,11 +265,6 @@ function getSportsCountdown(card: PublishedContent, now: number) {
     label: hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`,
     isLive: false,
   }
-}
-
-function scoreLine(match: PolyStreamMatch) {
-  if (hasMatchScore(match)) return `${match.homeScore} - ${match.awayScore}`
-  return match.clock || match.status || match.time || 'Upcoming'
 }
 
 function compactMatchTitle(title: string) {
@@ -405,21 +407,26 @@ function matchCountdown(match: PolyStreamMatch) {
 }
 
 function matchDisplayState(match: PolyStreamMatch) {
-  const status = `${match.status}`.toLowerCase()
+  const status = `${match.status} ${match.tag || ''}`.toLowerCase()
   const scored = hasMatchScore(match)
   const matchTime = Date.parse(match.kickoffAt || match.time)
   const isPast = Number.isFinite(matchTime) && matchTime < Date.now() - 90 * 60 * 1000
   const clock = readableMatchClock(match.clock)
   if (/(live|inplay|in play|1h|2h|1st|2nd|first half|second half|et)/.test(status)) {
-    return { tag: 'LIVE', center: scored ? `${match.homeScore}-${match.awayScore}` : 'Live', sub: clock || 'Live' }
+    return {
+      tag: 'LIVE',
+      phase: match.status && !/^live$/i.test(match.status) ? match.status : '',
+      center: scored ? `${match.homeScore}-${match.awayScore}` : 'Live',
+      sub: clock || 'Live',
+    }
   }
   if (/(half|ht)/.test(status)) {
-    return { tag: 'HT', center: scored ? `${match.homeScore}-${match.awayScore}` : 'HT', sub: clock || 'Half time' }
+    return { tag: 'HT', phase: 'Half time', center: scored ? `${match.homeScore}-${match.awayScore}` : 'HT', sub: clock || 'Half time' }
   }
   if (/(ft|full time|full-time|finished|result|complete|ended|after extra time|pen)/.test(status) || (scored && isPast)) {
-    return { tag: 'FT', center: `${match.homeScore}-${match.awayScore}`, sub: 'Full time' }
+    return { tag: 'FT', phase: 'Full time', center: `${match.homeScore}-${match.awayScore}`, sub: clock || 'Full time' }
   }
-  return { tag: 'NS', center: 'vs', sub: matchCountdown(match) }
+  return { tag: 'NS', phase: '', center: 'vs', sub: matchCountdown(match) }
 }
 
 function isLiveMatch(match: PolyStreamMatch) {
@@ -507,6 +514,7 @@ function DiscoverContent({
   const [scoreLoading, setScoreLoading] = useState(true)
   const [scoreError, setScoreError] = useState('')
   const [scoreIndex, setScoreIndex] = useState(0)
+  const [brokenImages, setBrokenImages] = useState<Record<string, true>>({})
   const [categoryFilter, setCategoryFilter] = useState<CreatorCategory | 'all'>('all')
   const [heroIndex, setHeroIndex] = useState(0)
   const [now, setNow] = useState(Date.now())
@@ -562,7 +570,11 @@ function DiscoverContent({
         const res = await fetch('/api/poly-worldcup-news')
         const data = await res.json() as PolyWorldCupFeed
         if (cancelled || !res.ok || !data.ok || !Array.isArray(data.articles)) return
-        setWorldCupNewsCards(data.articles.filter(article => article.url).slice(0, 8).map(worldCupNewsCard))
+        setWorldCupNewsCards(data.articles
+          .filter(article => article.url)
+          .sort((a, b) => articleTimeValue(b) - articleTimeValue(a))
+          .slice(0, 8)
+          .map(worldCupNewsCard))
       } catch {
         if (!cancelled) setWorldCupNewsCards([])
       }
@@ -747,9 +759,10 @@ function DiscoverContent({
           ) : (
             <>
               <img
-                src={hero.image}
+                src={brokenImages[hero.id] ? WORLD_GLOBE_IMAGE : hero.image || WORLD_GLOBE_IMAGE}
                 alt=""
                 className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
+                onError={() => setBrokenImages(current => ({ ...current, [hero.id]: true }))}
               />
               <div className="absolute inset-0 bg-gradient-to-t from-gray-950 via-gray-950/65 to-gray-950/15" />
               <div className="relative flex h-[320px] flex-col justify-end p-5 sm:p-6">
@@ -798,148 +811,6 @@ function DiscoverContent({
           <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gray-950 text-white">
             <Plus className="h-5 w-5" />
           </span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => window.location.href = OFFICIAL_WORLD_CUP_SCORES_GATE}
-          className="hidden"
-        >
-          {homeFlag && (
-            <div
-              className="absolute inset-0 bg-cover bg-center opacity-100 blur-[1px] transition-opacity duration-1000 [animation:hpFlagSwapA_10s_ease-in-out_infinite]"
-              style={{ backgroundImage: `linear-gradient(rgba(0,0,0,.58), rgba(0,0,0,.84)), url(${homeFlag})` }}
-            />
-          )}
-          {awayFlag && (
-            <div
-              className="absolute inset-0 bg-cover bg-center opacity-0 blur-[1px] transition-opacity duration-1000 [animation:hpFlagSwapB_10s_ease-in-out_infinite]"
-              style={{ backgroundImage: `linear-gradient(rgba(0,0,0,.58), rgba(0,0,0,.84)), url(${awayFlag})` }}
-            />
-          )}
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,.12),transparent_38%),linear-gradient(180deg,rgba(0,0,0,.18),rgba(0,0,0,.62))]" />
-          <div className="relative z-10 flex h-full flex-col justify-between p-3">
-            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-1.5">
-              <span className="truncate text-[10px] font-semibold text-white/65">
-                {scoreLoading ? 'Syncing live board' : featuredScore?.time || 'Sportmonks live board'}
-              </span>
-              {scoreMarketMatched ? (
-                <span className="inline-flex items-center justify-center gap-1 rounded-full border border-white/15 bg-black/35 px-2 py-1 text-[10px] font-black leading-none text-white shadow-sm backdrop-blur-sm">
-                  <img src={POLYMARKET_LOGO} alt="" className="h-3 w-3" />
-                  Trade
-                </span>
-              ) : (
-                <span className="inline-flex items-center justify-center gap-1 rounded-full border border-white/15 bg-black/35 px-2 py-1 text-[10px] font-black leading-none text-white/70 shadow-sm backdrop-blur-sm">
-                  <img src={POLYMARKET_LOGO} alt="" className="h-3 w-3 opacity-80" />
-                  Route
-                </span>
-              )}
-              <span className={[
-                'justify-self-end rounded-full px-2 py-0.5 text-[10px] font-bold uppercase leading-none ring-1',
-                scoreState?.tag === 'LIVE'
-                  ? 'bg-emerald-400/15 text-emerald-100 ring-emerald-300/30'
-                  : 'bg-white/12 text-white/85 ring-white/15',
-              ].join(' ')}>
-                {scoreLoading ? 'SYNC' : scoreState?.tag || (scoresReady ? 'LIVE' : 'WAIT')}
-              </span>
-            </div>
-
-            <div className="grid min-h-[112px] grid-cols-[minmax(0,1fr)_72px_minmax(0,1fr)] items-center gap-1.5">
-              <div className="min-w-0 text-center">
-                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-black/30 shadow-xl ring-1 ring-white/15 backdrop-blur-sm">
-                  <TeamFlagMark name={scoreHome} />
-                </div>
-                <p className="mx-auto mt-1.5 max-w-[7.2rem] truncate text-[11px] font-black tracking-wide">{scoreHome}</p>
-                {featuredScore?.homeMarketPrice && (
-                  <p className="mt-1 text-[9px] font-black uppercase tabular-nums text-white/55">{featuredScore.homeMarketPrice}</p>
-                )}
-              </div>
-              <div className="rounded-xl border border-white/12 bg-black/35 px-1.5 py-1.5 text-center shadow-2xl backdrop-blur-sm">
-                {scoreLoading ? (
-                  <Loader2 className="mx-auto h-5 w-5 animate-spin text-white/80" />
-                ) : (
-                  <p className="text-lg font-black tabular-nums">{scoreState?.center || 'vs'}</p>
-                )}
-                <p className="mt-0.5 truncate text-[9px] font-bold uppercase text-white/55">
-                  {scoreError ? 'Retry shortly' : scoreState?.sub || 'Live board'}
-                </p>
-                {featuredScore?.drawMarketPrice && (
-                  <p className="mt-1 text-[9px] font-black uppercase tabular-nums text-white/55">Draw {featuredScore.drawMarketPrice}</p>
-                )}
-              </div>
-              <div className="min-w-0 text-center">
-                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-black/30 shadow-xl ring-1 ring-white/15 backdrop-blur-sm">
-                  <TeamFlagMark name={scoreAway || 'Scores'} />
-                </div>
-                <p className="mx-auto mt-1.5 max-w-[7.2rem] truncate text-[11px] font-black tracking-wide">{scoreAway || 'Opponent'}</p>
-                {featuredScore?.awayMarketPrice && (
-                  <p className="mt-1 text-[9px] font-black uppercase tabular-nums text-white/55">{featuredScore.awayMarketPrice}</p>
-                )}
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between gap-2 rounded-lg border border-white/10 bg-black/25 px-2.5 py-1.5 backdrop-blur-sm">
-              <p className="min-w-0 truncate text-[10px] font-semibold text-white/75">
-                {scoreError
-                  ? 'Scores temporarily unavailable'
-                  : featuredScore
-                    ? 'Unlock direct Polymarket trading routes'
-                    : 'Provider-backed World Cup board'}
-              </p>
-              <span className="inline-flex shrink-0 items-center gap-1.5 text-[11px] font-black text-white">
-                <LockKeyhole className="h-3.5 w-3.5" />
-                Unlock
-              </span>
-            </div>
-          </div>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => window.location.href = OFFICIAL_WORLD_CUP_SCORES_GATE}
-          className="hidden"
-        >
-          <div className="relative flex h-full w-24 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gray-950 text-white">
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,.18),transparent_40%),linear-gradient(135deg,rgba(17,24,39,.96),rgba(3,7,18,.88))]" />
-            <LockKeyhole className="relative h-8 w-8" />
-            <span className="absolute bottom-1.5 left-1.5 right-1.5 truncate rounded-full bg-white/90 px-2 py-1 text-center text-[8px] font-bold uppercase tracking-[0.12em] text-gray-950">
-              Live Scores
-            </span>
-          </div>
-          <div className="flex min-w-0 flex-1 flex-col justify-between py-1 pr-1">
-            <div className="min-w-0">
-              <div className="flex items-center justify-between gap-2">
-                <p className="truncate text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-400">
-                  Sportmonks live board
-                </p>
-                <span className={[
-                  'shrink-0 rounded-full px-2 py-1 text-[9px] font-bold uppercase',
-                  scoresReady ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500',
-                ].join(' ')}>
-                  {scoreLoading ? 'Syncing' : scoresReady ? 'Live' : 'Waiting'}
-                </span>
-              </div>
-              <h3 className="mt-1 line-clamp-2 text-[13px] font-black leading-[1.2] text-gray-950">
-                {featuredScore ? compactMatchTitle(featuredScore.title) : 'World Cup live score pulse'}
-              </h3>
-              <p className="mt-1.5 line-clamp-2 text-[11px] leading-4 text-gray-400">
-                {scoreError
-                  ? 'Scores are temporarily unavailable. Tap to open the paid match centre.'
-                  : featuredScore
-                    ? `${scoreLine(featuredScore)} · Unlock direct Polymarket trading routes when a market is matched.`
-                    : 'Provider-backed live scores with Polymarket trading routes after unlock.'}
-              </p>
-            </div>
-            <div className="flex items-center justify-between gap-2">
-              <span className="min-w-0 truncate text-[10px] font-semibold text-gray-400">
-                {scoreFeed?.updatedAt ? 'Updated from API' : 'No stale rows'}
-              </span>
-              <span className="inline-flex shrink-0 items-center gap-1.5 text-[11px] font-bold text-gray-950">
-                {scoreLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <LockKeyhole className="h-3.5 w-3.5" />}
-                Unlock
-              </span>
-            </div>
-          </div>
         </button>
 
         <div className="flex items-center justify-between gap-3 px-5 pb-2 pt-4">
@@ -994,9 +865,10 @@ function DiscoverContent({
               >
                 <div className="relative h-full w-24 shrink-0 overflow-hidden rounded-xl bg-gray-100">
                   <img
-                    src={card.image}
+                    src={brokenImages[card.id] ? WORLD_GLOBE_IMAGE : card.image || WORLD_GLOBE_IMAGE}
                     alt=""
                     className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
+                    onError={() => setBrokenImages(current => ({ ...current, [card.id]: true }))}
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-gray-950/70 to-transparent" />
                   {countdown && (
