@@ -454,9 +454,21 @@ export function StreamGate() {
   const [contentError,  setContentError]  = useState<string | null>(null)
   const [gatewayPaying, setGatewayPaying] = useState(false)
   const [gatewayTx, setGatewayTx] = useState<string | null>(null)
+  const [urlRedirected, setUrlRedirected] = useState(false)
 
   const legacyFullyAuthorised = isConnected && isOnArc && passkey.registered && isApproved
   const fullyAuthorised = paymentMode === 'x402' ? contentState === 'ready' : legacyFullyAuthorised
+
+  useEffect(() => {
+    setUrlRedirected(false)
+  }, [contentId])
+
+  useEffect(() => {
+    if (!fullyAuthorised || contentState !== 'ready' || fetchedContent?.type !== 'url' || urlRedirected) return
+    if (!/^https?:\/\//i.test(fetchedContent.content)) return
+    setUrlRedirected(true)
+    window.location.assign(fetchedContent.content)
+  }, [fullyAuthorised, contentState, fetchedContent, urlRedirected])
 
   async function unlockWithAgentX402(agentSlugOverride?: string) {
     if (gatewayPaying) return

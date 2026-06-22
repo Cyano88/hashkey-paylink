@@ -105,12 +105,37 @@ const OFFICIAL_CREATOR_ADDRESS = (
   ?? process.env.TREASURY_ADDRESS
   ?? '0xcE5dF9e1115F81a2Fc2F65941B20B820d508e753'
 ).trim()
+const OFFICIAL_WORLD_CUP_NEWS_URL = (
+  process.env.CREATOR_WORLD_CUP_NEWS_URL
+  ?? 'https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026'
+).trim()
+const SAFE_OFFICIAL_CREATOR = isAddress(OFFICIAL_CREATOR_ADDRESS)
+  ? OFFICIAL_CREATOR_ADDRESS
+  : '0xcE5dF9e1115F81a2Fc2F65941B20B820d508e753'
 
 const OFFICIAL_CONTENT: Record<string, ContentEntry> = {
+  'worldcup-news': {
+    type: 'url',
+    content: OFFICIAL_WORLD_CUP_NEWS_URL,
+    creator: SAFE_OFFICIAL_CREATOR,
+    capRaw: Number(process.env.CREATOR_WORLD_CUP_NEWS_PRICE_RAW ?? '100000'),
+    rateRaw: 1000,
+    mode: 'unlock',
+    title: 'World Cup News Pulse',
+    description: 'Paid tournament context and market-moving headlines for readers who want the full source.',
+    authorName: 'Hash PayLink Pulse',
+    xHandle: 'Hash_PayLink',
+    coverImage: '/brand/world-globe.png',
+    category: 'news',
+    reviewStatus: 'approved',
+    reviewedAt: Date.now(),
+    reviewNote: '',
+    ts: Date.now(),
+  },
   'worldcup-scores': {
     type: 'scores',
     content: 'worldcup-scores',
-    creator: isAddress(OFFICIAL_CREATOR_ADDRESS) ? OFFICIAL_CREATOR_ADDRESS : '0xcE5dF9e1115F81a2Fc2F65941B20B820d508e753',
+    creator: SAFE_OFFICIAL_CREATOR,
     capRaw: Number(process.env.CREATOR_WORLD_CUP_SCORES_PRICE_RAW ?? '100000'),
     rateRaw: 1000,
     mode: 'unlock',

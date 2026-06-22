@@ -22,6 +22,8 @@ type PublishedContent = {
   xHandle?: string
   gateLink?: string
   startsAt?: string | number
+  action?: 'create' | 'gate'
+  cta?: string
   editable?: boolean
   reviewStatus?: 'pending' | 'approved' | 'rejected'
   reviewNote?: string
@@ -83,13 +85,18 @@ const FALLBACK_CREATOR_COVERS = [
   '/brand/world-globe.png',
 ]
 
-const CREATOR_CATEGORIES: Array<{ id: CreatorCategory; label: string; disabled?: boolean }> = [
-  { id: 'general', label: 'General' },
-  { id: 'sports', label: 'Sports' },
+const CREATOR_CATEGORIES: Array<{ id: CreatorCategory; label: string; disabled?: boolean; visible?: boolean }> = [
+  { id: 'general', label: 'General', visible: false },
+  { id: 'sports', label: 'Sports', visible: false },
   { id: 'ebooks', label: 'Ebooks', disabled: true },
   { id: 'news', label: 'News', disabled: true },
   { id: 'crypto', label: 'Crypto' },
 ]
+
+const VISIBLE_CREATOR_CATEGORIES = CREATOR_CATEGORIES.filter(category => category.visible !== false)
+const OFFICIAL_CREATOR_ADDRESS = '0xcE5dF9e1115F81a2Fc2F65941B20B820d508e753'
+const OFFICIAL_WORLD_CUP_NEWS_GATE = `/gate?app=streampay&id=worldcup-news&cr=${OFFICIAL_CREATOR_ADDRESS}&r=1000&cap=100000&t=World%20Cup%20News%20Pulse&pay=x402`
+const OFFICIAL_WORLD_CUP_SCORES_GATE = `/gate?app=streampay&id=worldcup-scores&cr=${OFFICIAL_CREATOR_ADDRESS}&r=1000&cap=100000&t=Live%20Scores%20Pulse&pay=x402`
 
 const OFFICIAL_DISCOVER_CONTENT: PublishedContent[] = [
   {
@@ -101,6 +108,38 @@ const OFFICIAL_DISCOVER_CONTENT: PublishedContent[] = [
     tag: 'Hash PayLink',
     source: 'Hash PayLink desk',
     image: '/brand/world-globe.png',
+    action: 'create',
+    cta: 'Create',
+  },
+  {
+    id: 'worldcup-news-pulse',
+    contentId: 'worldcup-news',
+    creator: OFFICIAL_CREATOR_ADDRESS,
+    title: 'World Cup News Pulse',
+    description: 'Paid tournament context and market-moving headlines for readers who want the full source.',
+    category: 'news',
+    price: '0.10',
+    tag: 'World Cup',
+    source: 'Hash PayLink Pulse',
+    image: '/brand/world-globe.png',
+    gateLink: OFFICIAL_WORLD_CUP_NEWS_GATE,
+    action: 'gate',
+    cta: 'Unlock',
+  },
+  {
+    id: 'worldcup-live-scores',
+    contentId: 'worldcup-scores',
+    creator: OFFICIAL_CREATOR_ADDRESS,
+    title: 'Live Scores Pulse',
+    description: 'See the live score context first, then unlock the direct Polymarket trading route when a market is matched.',
+    category: 'sports',
+    price: '0.10',
+    tag: 'Live Scores',
+    source: 'Hash PayLink Pulse',
+    image: '/brand/world-globe.png',
+    gateLink: OFFICIAL_WORLD_CUP_SCORES_GATE,
+    action: 'gate',
+    cta: 'Unlock',
   },
 ]
 
@@ -230,6 +269,7 @@ function DiscoverContent({
 }) {
   const [approvedPosts, setApprovedPosts] = useState<PublishedContent[]>([])
   const [categoryFilter, setCategoryFilter] = useState<CreatorCategory | 'all'>('all')
+  const [heroIndex, setHeroIndex] = useState(0)
   const [now, setNow] = useState(Date.now())
 
   useEffect(() => {
@@ -256,11 +296,29 @@ function DiscoverContent({
   const cards = allCards
     .filter(card => categoryFilter === 'all' || card.category === categoryFilter)
     .slice(0, 8)
-  const hero = cards[0] || published[0] || OFFICIAL_DISCOVER_CONTENT[0]
+  const hero = cards[heroIndex % Math.max(cards.length, 1)] || published[0] || OFFICIAL_DISCOVER_CONTENT[0]
 
-  function openContent(_card: PublishedContent) {
+  useEffect(() => {
+    setHeroIndex(0)
+  }, [categoryFilter, cards.length])
+
+  useEffect(() => {
+    if (cards.length < 2) return undefined
+    const timer = window.setInterval(() => {
+      setHeroIndex(index => (index + 1) % cards.length)
+    }, 10000)
+    return () => window.clearInterval(timer)
+  }, [cards.length])
+
+  function openContent(card: PublishedContent) {
+    if (card.action === 'gate' && card.gateLink) {
+      window.location.href = card.gateLink
+      return
+    }
     onCreate()
   }
+
+  const heroCta = hero.cta || (hero.action === 'gate' ? 'Unlock' : 'Create')
 
   return (
     <div className="w-full space-y-4">
@@ -296,7 +354,7 @@ function DiscoverContent({
             <div className="mt-5 flex items-center justify-between gap-3">
               <span className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-3 text-[12px] font-black text-gray-950 shadow-sm">
                 <LockKeyhole className="h-4 w-4" />
-                Create
+                {heroCta}
               </span>
               <span className="rounded-full border border-white/20 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-white/75">
                 {hero.tag}
@@ -334,7 +392,7 @@ function DiscoverContent({
 
         <div className="overflow-x-auto px-4 pb-2 [scrollbar-width:none]">
           <div className="flex w-max gap-1 rounded-xl border border-gray-100 bg-gray-50 p-1">
-            {([{ id: 'all', label: 'All' }, ...CREATOR_CATEGORIES] as Array<{ id: CreatorCategory | 'all'; label: string; disabled?: boolean }>).map(category => {
+            {([{ id: 'all', label: 'All' }, ...VISIBLE_CREATOR_CATEGORIES] as Array<{ id: CreatorCategory | 'all'; label: string; disabled?: boolean }>).map(category => {
               const selected = categoryFilter === category.id
               return (
                 <button
@@ -376,19 +434,13 @@ function DiscoverContent({
                   <img
                     src={card.image}
                     alt=""
-                    className={[
-                      'h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]',
-                      countdown?.isLive ? 'blur-[1.5px] saturate-75' : '',
-                    ].join(' ')}
+                    className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-gray-950/70 to-transparent" />
                   {countdown && (
                     <div className="absolute inset-x-1.5 top-1.5 rounded-full bg-white/90 px-2 py-1 text-center text-[8px] font-black uppercase tracking-[0.12em] text-gray-950 backdrop-blur">
                       {countdown.isLive ? 'Pay to view live' : `Starts in ${countdown.label}`}
                     </div>
-                  )}
-                  {countdown?.isLive && (
-                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.18),transparent_22%),radial-gradient(circle_at_80%_30%,rgba(255,255,255,0.14),transparent_20%),linear-gradient(135deg,rgba(17,24,39,0.18),rgba(17,24,39,0.52))]" />
                   )}
                   <span className="absolute bottom-1.5 left-1.5 right-1.5 truncate rounded-full bg-white/90 px-2 py-1 text-center text-[8px] font-bold uppercase tracking-[0.12em] text-gray-950">
                     {card.tag}
@@ -435,9 +487,9 @@ function DiscoverContent({
                         Edit
                       </span>
                     )}
-                    <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-gray-950">
+                  <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-gray-950">
                       <LockKeyhole className="h-3.5 w-3.5" />
-                        Create
+                      {card.cta || (card.action === 'gate' ? 'Unlock' : 'Create')}
                     </span>
                   </span>
                 </div>
