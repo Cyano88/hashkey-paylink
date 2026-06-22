@@ -67,7 +67,6 @@ export async function fetchWithGatewaySignerPayment<T>({
     headers: http.encodePaymentSignatureHeader(payload),
   })
 
-  const settlement = http.getPaymentSettleResponse(name => paid.headers.get(name)) as Settlement | null
   const data = await paid.json() as T
   if (!paid.ok || (data as { ok?: boolean }).ok === false) {
     const error = (data as { error?: string; message?: string }).error
@@ -75,6 +74,14 @@ export async function fetchWithGatewaySignerPayment<T>({
       ?? `Gateway payment failed with HTTP ${paid.status}.`
     throw new Error(error)
   }
+
+  const settlement = (() => {
+    try {
+      return http.getPaymentSettleResponse(name => paid.headers.get(name)) as Settlement | null
+    } catch {
+      return null
+    }
+  })()
 
   return { data, settlement }
 }
