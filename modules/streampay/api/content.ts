@@ -14,6 +14,7 @@ import {
 } from 'viem'
 import type { NextFunction } from 'express'
 import { payAgentX402Service } from '../../../api/agent-wallet.js'
+import { getPolyWorldcupNewsFeed, polyWorldcupArticleId } from '../../../api/poly-worldcup-news.js'
 
 const arcChain = defineChain({
   id:             5042002,
@@ -151,6 +152,32 @@ const OFFICIAL_CONTENT: Record<string, ContentEntry> = {
     ts: Date.now(),
   },
 }
+
+async function readOfficialWorldCupNewsEntry(contentId: string): Promise<ContentEntry | null> {
+  if (!contentId.startsWith('worldcup-news-')) return null
+  const feed = await getPolyWorldcupNewsFeed().catch(() => null)
+  const articles = feed?.articles ?? []
+  const match = articles.find((article, index) => polyWorldcupArticleId(article, index) === contentId)
+  if (!match?.url) return null
+  return {
+    type: 'url',
+    content: match.url,
+    creator: SAFE_OFFICIAL_CREATOR,
+    capRaw: Number(process.env.CREATOR_WORLD_CUP_NEWS_PRICE_RAW ?? '100000'),
+    rateRaw: 1000,
+    mode: 'unlock',
+    title: match.title,
+    description: match.description,
+    authorName: match.source || 'Hash PayLink Pulse',
+    xHandle: 'Hash_PayLink',
+    coverImage: match.image || '/brand/world-globe.png',
+    category: 'news',
+    reviewStatus: 'approved',
+    reviewedAt: Date.now(),
+    reviewNote: '',
+    ts: Date.now(),
+  }
+}
 const { Pool } = pg
 const pool = DATABASE_URL
   ? new Pool({
@@ -233,6 +260,8 @@ function rowToContentEntry(row: Record<string, unknown>): ContentEntry {
 
 async function readContentEntry(contentId: string): Promise<ContentEntry | null> {
   if (OFFICIAL_CONTENT[contentId]) return OFFICIAL_CONTENT[contentId]
+  const officialNews = await readOfficialWorldCupNewsEntry(contentId)
+  if (officialNews) return officialNews
   if (pool) {
     await ensureSchema()
     const result = await pool.query('select * from streampay_creator_content where content_id = $1 limit 1', [contentId])

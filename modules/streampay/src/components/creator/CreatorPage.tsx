@@ -78,6 +78,22 @@ type ServerCreatorPost = {
   reviewStatus?: 'pending' | 'approved' | 'rejected'
   reviewNote?: string
 }
+type PolyWorldCupArticle = {
+  title: string
+  description: string
+  source: string
+  image: string
+  url: string
+  publishedAt: string
+  tag: string
+}
+type PolyWorldCupFeed = {
+  ok?: boolean
+  providerConfigured?: boolean
+  source?: string
+  updatedAt?: string
+  articles?: PolyWorldCupArticle[]
+}
 
 const FALLBACK_CREATOR_COVERS = [
   '/brand/africa-business-bg.jpeg',
@@ -89,13 +105,12 @@ const CREATOR_CATEGORIES: Array<{ id: CreatorCategory; label: string; disabled?:
   { id: 'general', label: 'General', visible: false },
   { id: 'sports', label: 'Sports', visible: false },
   { id: 'ebooks', label: 'Ebooks', disabled: true },
-  { id: 'news', label: 'News', disabled: true },
+  { id: 'news', label: 'News' },
   { id: 'crypto', label: 'Crypto' },
 ]
 
 const VISIBLE_CREATOR_CATEGORIES = CREATOR_CATEGORIES.filter(category => category.visible !== false)
 const OFFICIAL_CREATOR_ADDRESS = '0xcE5dF9e1115F81a2Fc2F65941B20B820d508e753'
-const OFFICIAL_WORLD_CUP_NEWS_GATE = `/gate?app=streampay&id=worldcup-news&cr=${OFFICIAL_CREATOR_ADDRESS}&r=1000&cap=100000&t=World%20Cup%20News%20Pulse&pay=x402`
 const OFFICIAL_WORLD_CUP_SCORES_GATE = `/gate?app=streampay&id=worldcup-scores&cr=${OFFICIAL_CREATOR_ADDRESS}&r=1000&cap=100000&t=Live%20Scores%20Pulse&pay=x402`
 
 const OFFICIAL_DISCOVER_CONTENT: PublishedContent[] = [
@@ -110,21 +125,6 @@ const OFFICIAL_DISCOVER_CONTENT: PublishedContent[] = [
     image: '/brand/world-globe.png',
     action: 'create',
     cta: 'Create',
-  },
-  {
-    id: 'worldcup-news-pulse',
-    contentId: 'worldcup-news',
-    creator: OFFICIAL_CREATOR_ADDRESS,
-    title: 'World Cup News Pulse',
-    description: 'Paid tournament context and market-moving headlines for readers who want the full source.',
-    category: 'news',
-    price: '0.10',
-    tag: 'World Cup',
-    source: 'Hash PayLink Pulse',
-    image: '/brand/world-globe.png',
-    gateLink: OFFICIAL_WORLD_CUP_NEWS_GATE,
-    action: 'gate',
-    cta: 'Unlock',
   },
   {
     id: 'worldcup-live-scores',
@@ -142,6 +142,49 @@ const OFFICIAL_DISCOVER_CONTENT: PublishedContent[] = [
     cta: 'Unlock',
   },
 ]
+
+function worldCupArticleId(article: Pick<PolyWorldCupArticle, 'title' | 'url'>, index = 0) {
+  const input = `${article.title}|${article.url}|${index}`.toLowerCase()
+  let hash = 2166136261
+  for (let i = 0; i < input.length; i += 1) {
+    hash ^= input.charCodeAt(i)
+    hash = Math.imul(hash, 16777619)
+  }
+  const slug = article.title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 42) || 'headline'
+  return `worldcup-news-${slug}-${(hash >>> 0).toString(36)}`
+}
+
+function worldCupNewsCard(article: PolyWorldCupArticle, index: number): PublishedContent {
+  const contentId = worldCupArticleId(article, index)
+  const params = new URLSearchParams({
+    app: 'streampay',
+    id: contentId,
+    cr: OFFICIAL_CREATOR_ADDRESS,
+    r: '1000',
+    cap: '100000',
+    t: article.title,
+    pay: 'x402',
+  })
+  return {
+    id: contentId,
+    contentId,
+    creator: OFFICIAL_CREATOR_ADDRESS,
+    title: article.title,
+    description: article.description || 'World Cup update for paid readers.',
+    category: 'news',
+    price: '0.10',
+    tag: article.tag || 'World Cup',
+    source: article.source || 'Hash PayLink Pulse',
+    image: article.image || '/brand/world-globe.png',
+    gateLink: `/gate?${params.toString()}`,
+    action: 'gate',
+    cta: 'Unlock',
+  }
+}
 
 function parseContentId(input: string): string {
   try {
@@ -268,6 +311,7 @@ function DiscoverContent({
   onEdit: (content: PublishedContent) => void
 }) {
   const [approvedPosts, setApprovedPosts] = useState<PublishedContent[]>([])
+  const [worldCupNewsCards, setWorldCupNewsCards] = useState<PublishedContent[]>([])
   const [categoryFilter, setCategoryFilter] = useState<CreatorCategory | 'all'>('all')
   const [heroIndex, setHeroIndex] = useState(0)
   const [now, setNow] = useState(Date.now())
@@ -287,12 +331,39 @@ function DiscoverContent({
   }, [])
 
   useEffect(() => {
+    let cancelled = false
+    async function loadWorldCupNews() {
+      try {
+        const res = await fetch('/api/poly-worldcup-news')
+        const data = await res.json() as PolyWorldCupFeed
+        if (cancelled || !res.ok || !data.ok || !Array.isArray(data.articles)) return
+        setWorldCupNewsCards(data.articles.filter(article => article.url).slice(0, 8).map(worldCupNewsCard))
+      } catch {
+        if (!cancelled) setWorldCupNewsCards([])
+      }
+    }
+    void loadWorldCupNews()
+    const timer = window.setInterval(() => {
+      void loadWorldCupNews()
+    }, 60_000)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [])
+
+  useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 30000)
     return () => window.clearInterval(timer)
   }, [])
 
   const approvedSessionPosts = published.filter(card => card.reviewStatus === 'approved')
-  const allCards = [...OFFICIAL_DISCOVER_CONTENT, ...approvedSessionPosts, ...approvedPosts]
+  const officialCards = [
+    OFFICIAL_DISCOVER_CONTENT[0],
+    ...worldCupNewsCards,
+    OFFICIAL_DISCOVER_CONTENT[1],
+  ].filter(Boolean) as PublishedContent[]
+  const allCards = [...officialCards, ...approvedSessionPosts, ...approvedPosts]
   const cards = allCards
     .filter(card => categoryFilter === 'all' || card.category === categoryFilter)
     .slice(0, 8)

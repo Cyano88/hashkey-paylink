@@ -2,7 +2,7 @@ import type { Request, Response } from 'express'
 
 type ProviderArticle = Record<string, unknown>
 
-type PolyWorldCupArticle = {
+export type PolyWorldCupArticle = {
   title: string
   description: string
   source: string
@@ -28,6 +28,21 @@ const DEFAULT_CACHE_MS = 15 * 60 * 1000
 const FALLBACK_IMAGE = '/brand/polymarket-logo.png'
 
 let cache: CacheEntry | null = null
+
+export function polyWorldcupArticleId(article: Pick<PolyWorldCupArticle, 'title' | 'url'>, index = 0) {
+  const input = `${article.title}|${article.url}|${index}`.toLowerCase()
+  let hash = 2166136261
+  for (let i = 0; i < input.length; i += 1) {
+    hash ^= input.charCodeAt(i)
+    hash = Math.imul(hash, 16777619)
+  }
+  const slug = article.title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 42) || 'headline'
+  return `worldcup-news-${slug}-${(hash >>> 0).toString(36)}`
+}
 
 function envValue(primary: string, fallback: string) {
   return process.env[primary]?.trim() || process.env[fallback]?.trim() || ''
@@ -163,15 +178,10 @@ async function fetchProviderArticles(): Promise<PolyWorldCupArticle[]> {
   }
 }
 
-export default async function polyWorldcupNewsHandler(req: Request, res: Response) {
-  if (req.method !== 'GET') {
-    res.setHeader('Allow', 'GET')
-    return res.status(405).json({ ok: false, error: 'Method not allowed' })
-  }
-
+export async function getPolyWorldcupNewsFeed() {
   const cacheMs = Number(envValue('POLY_NEWS_CACHE_MS', 'NEWS_CACHE_MS') || DEFAULT_CACHE_MS)
   const ttl = Number.isFinite(cacheMs) && cacheMs > 0 ? cacheMs : DEFAULT_CACHE_MS
-  if (cache && cache.expiresAt > Date.now()) return res.json(cache.feed)
+  if (cache && cache.expiresAt > Date.now()) return cache.feed
 
   const providerConfigured = Boolean(envValue('POLY_NEWS_API_URL', 'NEWS_API_URL'))
   try {
@@ -185,8 +195,8 @@ export default async function polyWorldcupNewsHandler(req: Request, res: Respons
       articles,
     }
     cache = { expiresAt: Date.now() + ttl, feed }
-    return res.json(feed)
-  } catch (err) {
+    return feed
+  } catch {
     const feed = {
       ok: true as const,
       providerConfigured,
@@ -195,6 +205,15 @@ export default async function polyWorldcupNewsHandler(req: Request, res: Respons
       articles: fallbackArticles(),
     }
     cache = { expiresAt: Date.now() + Math.min(ttl, 60_000), feed }
-    return res.json(feed)
+    return feed
   }
+}
+
+export default async function polyWorldcupNewsHandler(req: Request, res: Response) {
+  if (req.method !== 'GET') {
+    res.setHeader('Allow', 'GET')
+    return res.status(405).json({ ok: false, error: 'Method not allowed' })
+  }
+
+  return res.json(await getPolyWorldcupNewsFeed())
 }
