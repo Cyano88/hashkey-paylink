@@ -13,6 +13,7 @@ import {
   type Address, type Hex,
 } from 'viem'
 import type { NextFunction } from 'express'
+import { payAgentX402Service } from '../../../api/agent-wallet.js'
 
 const arcChain = defineChain({
   id:             5042002,
@@ -55,6 +56,7 @@ const CREATOR_X402_NETWORKS = (process.env.X402_CREATOR_ACCEPT_NETWORKS ?? 'eip1
 const CREATOR_X402_FACILITATOR_URL = process.env.X402_CREATOR_FACILITATOR_URL?.trim()
   || process.env.X402_FACILITATOR_URL?.trim()
   || 'https://gateway-api-testnet.circle.com'
+const CREATOR_AGENT_X402_PAY_CHAIN = process.env.CREATOR_AGENT_X402_PAY_CHAIN?.trim() || 'ARC-TESTNET'
 
 type PaidRequest = Request & {
   payment?: {
@@ -64,6 +66,14 @@ type PaidRequest = Request & {
     network: string
     transaction?: string
   }
+}
+
+type CreatorUnlockResponse = {
+  ok?: boolean
+  type?: 'text' | 'url'
+  content?: string
+  payment?: PaidRequest['payment'] | null
+  error?: string
 }
 
 const gatewayCache = new Map<string, (req: Request, res: Response, next: NextFunction) => void | Promise<void>>()
@@ -157,6 +167,14 @@ function isHexSignature(value: unknown): value is Hex {
 
 function shortId(value: string) {
   return value.length > 12 ? `${value.slice(0, 6)}...${value.slice(-4)}` : value
+}
+
+function normalizeAgentSlug(value: unknown) {
+  return String(value ?? '').trim().toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').slice(0, 32)
+}
+
+function baseUrl() {
+  return (process.env.HASH_PAYLINK_BASE_URL ?? process.env.PUBLIC_APP_URL ?? 'https://hashpaylink.com').replace(/\/+$/, '')
 }
 
 function creatorProofMessage(params: {
@@ -387,4 +405,64 @@ export async function getContentX402(req: PaidRequest, res: Response) {
       payment: req.payment ?? null,
     })
   })
+}
+
+export async function unlockContentX402WithAgent(req: Request, res: Response) {
+  if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed' })
+  const { contentId, agentSlug } = (req.body ?? {}) as { contentId?: string; agentSlug?: string }
+  const safeAgentSlug = normalizeAgentSlug(agentSlug)
+
+  if (!contentId || contentId.length > MAX_CONTENT_ID_LENGTH) {
+    return res.status(400).json({ ok: false, error: 'Valid content ID is required.' })
+  }
+  if (!safeAgentSlug) {
+    return res.status(400).json({ ok: false, error: 'Choose an agent wallet before unlocking.' })
+  }
+
+  const entry = await readContentEntry(contentId)
+  if (!entry) {
+    return res.status(404).json({
+      ok: false,
+      error: 'Content not found. Ask the creator to re-generate the link.',
+    })
+  }
+
+  const maxAmount = Math.max(0.000001, Math.ceil(Math.max(1, Number(entry.capRaw) || 0)) / 1_000_000)
+  const serviceUrl = `${baseUrl()}/api/get-content-x402?id=${encodeURIComponent(contentId)}`
+
+  try {
+    const paid = await payAgentX402Service({
+      agentSlug: safeAgentSlug,
+      sellerAgentSlug: '',
+      serviceUrl,
+      maxAmount,
+      paymentChain: CREATOR_AGENT_X402_PAY_CHAIN,
+      spendTitle: 'Unlocked creator content',
+      spendDetail: `Paid ${maxAmount.toFixed(6).replace(/0+$/, '').replace(/\.$/, '')} USDC to unlock ${shortId(contentId)}`,
+      resultTitle: 'Creator content unlocked',
+      resultDetail: entry.type === 'url' ? 'Private link revealed after x402 payment' : 'Article revealed after x402 payment',
+      result: { contentId, type: entry.type, creator: entry.creator },
+      appendResultActivity: true,
+    })
+    const response = paid.response as CreatorUnlockResponse | undefined
+    if (response?.ok === false) {
+      return res.status(502).json({ ok: false, error: response.error ?? 'Creator content service rejected the payment.' })
+    }
+
+    return res.status(200).json({
+      ok: true,
+      type: response?.type ?? entry.type,
+      content: response?.content ?? entry.content,
+      payment: response?.payment ?? null,
+      walletAddress: paid.walletAddress,
+    })
+  } catch (err) {
+    const error = err as Error & { status?: number; code?: string }
+    const status = error.status && error.status >= 400 && error.status < 600 ? error.status : 502
+    return res.status(status).json({
+      ok: false,
+      code: error.code,
+      error: error.message || 'Circle Gateway payment failed.',
+    })
+  }
 }

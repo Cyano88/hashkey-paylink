@@ -69,12 +69,26 @@ type X402ServiceResponse = {
   scout?: Record<string, unknown>
 }
 
-async function payX402Service(params: {
+export async function payAgentX402Service(params: {
   agentSlug: string
   sellerAgentSlug: string
   serviceUrl: string
   maxAmount: number
+  paymentChain?: string
+  spendTitle?: string
+  spendDetail?: string
+  resultTitle?: string
+  resultDetail?: string
+  sellerTitle?: string
+  sellerDetail?: string
+  result?: Record<string, unknown>
+  appendResultActivity?: boolean
 }) {
+  if (!CIRCLE_CLI_ENABLED) {
+    const error = new Error('Circle Agent Wallet payments are not enabled on this server.') as Error & { status?: number }
+    error.status = 503
+    throw error
+  }
   const store = await readStore()
   const record = resolveAgentRecord(store, params.agentSlug)
   if (!record?.walletAddress || !record.sessionId) {
@@ -93,13 +107,13 @@ async function payX402Service(params: {
       '--address',
       record.walletAddress,
       '--chain',
-      'BASE',
+      params.paymentChain ?? 'BASE',
       '--max-amount',
       String(params.maxAmount),
     ], serviceKey)
   } catch (err) {
     if (isCircleLoginExpired(err)) {
-      const error = new Error('Circle Agent Wallet is connected, but the secure spending session expired. Reconnect the wallet on the agent dashboard, then retry /lp x402.') as Error & { status?: number; code?: string }
+      const error = new Error('Circle Agent Wallet is connected, but the secure spending session expired. Reconnect the wallet on the agent dashboard, then retry.') as Error & { status?: number; code?: string }
       error.status = 409
       error.code = 'circle_session_expired'
       throw error
@@ -120,41 +134,43 @@ async function payX402Service(params: {
   await appendAgentActivity({
     agentSlug: params.agentSlug,
     type: 'x402_spent',
-    title: 'Bought LP Scout API',
+    title: params.spendTitle ?? 'Bought LP Scout API',
     amount: String(params.maxAmount),
     asset: 'USDC',
     direction: 'out',
     network: 'Circle Gateway x402',
     wallet: record.walletAddress,
     serviceUrl: params.serviceUrl,
-    detail: 'Agent paid a machine-to-machine service',
+    detail: params.spendDetail ?? 'Agent paid a machine-to-machine service',
     proof,
   })
-  await appendAgentActivity({
-    agentSlug: params.agentSlug,
-    type: 'scout_returned',
-    title: 'Live Polymarket scout returned',
-    direction: 'result',
-    network: 'Polymarket CLOB',
-    wallet: record.walletAddress,
-    serviceUrl: params.serviceUrl,
-    detail: typeof parsedResponse?.scout?.summary === 'string'
-      ? parsedResponse.scout.summary
-      : 'API returned one conservative LP candidate',
-    result: parsedResponse?.scout,
-  })
+  if (params.appendResultActivity !== false) {
+    await appendAgentActivity({
+      agentSlug: params.agentSlug,
+      type: 'scout_returned',
+      title: params.resultTitle ?? 'Live Polymarket scout returned',
+      direction: 'result',
+      network: params.resultTitle ? 'Circle Gateway x402' : 'Polymarket CLOB',
+      wallet: record.walletAddress,
+      serviceUrl: params.serviceUrl,
+      detail: params.resultDetail ?? (typeof parsedResponse?.scout?.summary === 'string'
+        ? parsedResponse.scout.summary
+        : 'API returned one conservative LP candidate'),
+      result: params.result ?? parsedResponse?.scout,
+    })
+  }
   if (params.sellerAgentSlug && params.sellerAgentSlug !== params.agentSlug) {
     await appendAgentActivity({
       agentSlug: params.sellerAgentSlug,
       type: 'x402_sold',
-      title: 'Sold LP Scout API',
+      title: params.sellerTitle ?? 'Sold LP Scout API',
       amount: String(params.maxAmount),
       asset: 'USDC',
       direction: 'in',
       network: 'Circle Gateway x402',
       wallet: parsedResponse?.receipt?.seller ?? '',
       serviceUrl: params.serviceUrl,
-      detail: `${params.agentSlug} bought live Polymarket scout data`,
+      detail: params.sellerDetail ?? `${params.agentSlug} bought live Polymarket scout data`,
       proof,
     })
   }
@@ -836,7 +852,7 @@ export default async function handler(req: Request, res: Response) {
       if (!maxAmount || maxAmount <= 0) return res.status(400).json({ ok: false, error: 'Invalid max amount.' })
 
       try {
-        const result = await payX402Service({
+        const result = await payAgentX402Service({
           agentSlug,
           sellerAgentSlug,
           serviceUrl,
