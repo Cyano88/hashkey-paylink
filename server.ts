@@ -24,7 +24,16 @@ import setupRelayerHandler    from './api/setup-relayer.js'
 import relayStreamHandler               from './modules/streampay/api/relay-stream.js'
 import streamOgHandler                 from './modules/streampay/api/stream-og.js'
 import settlePoaHandler                from './modules/streampay/api/settle-poa.js'
-import { storeContent, getContent, getContentX402, unlockContentX402WithAgent } from './modules/streampay/api/content.js'
+import {
+  storeContent,
+  getContent,
+  getContentX402,
+  listCreatorContent,
+  listApprovedCreatorContent,
+  listCreatorAdminContent,
+  reviewCreatorContent,
+  unlockContentX402WithAgent,
+} from './modules/streampay/api/content.js'
 import { registerVault, getVault, listViewers } from './modules/streampay/api/vault-registry.js'
 import { registerEventPayment, listEventPayments } from './api/event-registry.js'
 import {
@@ -114,6 +123,10 @@ app.post('/api/recover-starknet',      recoverStarknetHandler)
 app.post('/api/relay-stream',          relayLimiter, relayStreamHandler)
 app.post('/api/settle-poa',            relayLimiter, settlePoaHandler)
 app.post('/api/store-content',         strictLimiter, storeContent)
+app.get('/api/list-creator-content',   readLimiter, listCreatorContent)
+app.get('/api/creator-discover-content', readLimiter, listApprovedCreatorContent)
+app.get('/api/admin/creator-content',  strictLimiter, listCreatorAdminContent)
+app.post('/api/admin/creator-content', strictLimiter, reviewCreatorContent)
 app.get('/api/get-content',            readLimiter, getContent)
 app.get('/api/get-content-x402',       readLimiter, getContentX402)
 app.post('/api/creator-unlock-x402',   strictLimiter, unlockContentX402WithAgent)

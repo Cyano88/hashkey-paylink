@@ -52,10 +52,10 @@ export function StreamPayHeader() {
   })
   const arenaTo = useModePath('/arena')
   const navItems = [
-    { label: 'Payroll', to: payrollTo, active: !isCreatorMode && !isAgenticMode && !isArenaMode },
-    { label: 'Creator', to: creatorTo, active: isCreatorMode },
-    { label: 'Agentic', to: agenticTo, active: isAgenticMode },
-    { label: 'Arena', to: arenaTo, active: isArenaMode },
+    { label: 'Payroll', to: payrollTo, active: !isCreatorMode && !isAgenticMode && !isArenaMode, status: 'Soon' },
+    { label: 'Creator', to: creatorTo, active: isCreatorMode, status: '' },
+    { label: 'Agentic', to: agenticTo, active: isAgenticMode, status: 'Soon' },
+    { label: 'Arena', to: arenaTo, active: isArenaMode, status: '' },
   ] as const
 
   return (
@@ -80,7 +80,12 @@ export function StreamPayHeader() {
                     ? { background: '#ffffff', color: '#111827', boxShadow: '0 1px 2px rgba(0,0,0,0.06)' }
                     : { color: '#9ca3af' }}
                 >
-                  {item.label}
+                  <span>{item.label}</span>
+                  {item.status && (
+                    <span className="ml-1 align-middle text-[8px] font-black uppercase tracking-wide opacity-55">
+                      {item.status}
+                    </span>
+                  )}
                 </Link>
               ))}
             </div>
@@ -104,13 +109,18 @@ export function StreamPayHeader() {
                 key={item.label}
                 to={item.to}
                 className={[
-                  'rounded-full px-2 py-1.5 text-center text-[11px] font-semibold transition-all',
+                  'rounded-full px-2 py-1.5 text-center text-[10px] font-semibold transition-all',
                   item.active
                     ? 'bg-white text-gray-900 shadow-sm dark:bg-white dark:text-gray-950'
                     : 'text-gray-400',
                 ].join(' ')}
               >
-                {item.label}
+                <span>{item.label}</span>
+                {item.status && (
+                  <span className="ml-0.5 text-[7px] font-black uppercase tracking-wide opacity-55">
+                    {item.status}
+                  </span>
+                )}
               </Link>
             ))}
           </div>

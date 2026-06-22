@@ -2,7 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes, useLocation, useParams, useSear
 import { StreamPayLayout } from './components/StreamPayLayout'
 import { StreamView }      from './components/StreamView'
 import { RecipientWalletSetup } from './components/RecipientWalletSetup'
-import { CreatorPage }     from './components/creator/CreatorPage'
+import { CreatorAdminPage, CreatorPage } from './components/creator/CreatorPage'
 import { StreamGate }      from './components/creator/StreamGate'
 import { ArenaPage }       from './components/ArenaPage'
 
@@ -30,6 +30,7 @@ export default function StreamPayApp() {
           <Route path="recipient"                element={<RecipientWalletSetup />} />
           {/* Creator / Event-Sovereign flows */}
           <Route path="creator"                  element={<CreatorPage />} />
+          <Route path="creator-admin"            element={<CreatorAdminPage />} />
           <Route path="gate"                     element={<StreamGate />} />
           {/* Fallback */}
           <Route path="*"                        element={<Navigate to="/" replace />} />

@@ -41,12 +41,24 @@ type ContentEntry = {
   content: string
   creator: string
   capRaw: number
+  rateRaw: number
+  mode: 'unlock' | 'stream'
+  title: string
+  description: string
+  authorName: string
+  xHandle: string
+  coverImage: string
+  category: string
+  reviewStatus: 'pending' | 'approved' | 'rejected'
+  reviewedAt: number | null
+  reviewNote: string
   ts: number
 }
 
 const store = new Map<string, ContentEntry>()
 const MAX_CONTENT_ID_LENGTH = 128
 const MAX_CONTENT_LENGTH = 100_000
+const MAX_META_TEXT_LENGTH = 2_000
 const MAX_CREATOR_PROOF_AGE_MS = 10 * 60 * 1000
 const DATABASE_URL = (process.env.DATABASE_URL ?? process.env.POSTGRES_URL ?? '').trim()
 const CREATOR_X402_NETWORKS = (process.env.X402_CREATOR_ACCEPT_NETWORKS ?? 'eip155:5042002')
@@ -57,6 +69,7 @@ const CREATOR_X402_FACILITATOR_URL = process.env.X402_CREATOR_FACILITATOR_URL?.t
   || process.env.X402_FACILITATOR_URL?.trim()
   || 'https://gateway-api-testnet.circle.com'
 const CREATOR_AGENT_X402_PAY_CHAIN = process.env.CREATOR_AGENT_X402_PAY_CHAIN?.trim() || 'ARC-TESTNET'
+const CREATOR_ADMIN_KEY = (process.env.CREATOR_ADMIN_KEY ?? '').trim()
 
 type PaidRequest = Request & {
   payment?: {
@@ -108,13 +121,41 @@ function ensureSchema() {
         type text not null,
         content text not null,
         cap_raw integer not null default 0,
+        rate_raw integer not null default 0,
+        mode text not null default 'unlock',
+        title text not null default '',
+        description text not null default '',
+        author_name text not null default '',
+        x_handle text not null default '',
+        cover_image text not null default '',
+        category text not null default 'general',
+        review_status text not null default 'pending',
+        reviewed_at timestamptz,
+        review_note text not null default '',
         created_at timestamptz not null default now(),
         updated_at timestamptz not null default now()
       );
       create index if not exists streampay_creator_content_creator_idx on streampay_creator_content (creator);
+      alter table streampay_creator_content add column if not exists rate_raw integer not null default 0;
+      alter table streampay_creator_content add column if not exists mode text not null default 'unlock';
+      alter table streampay_creator_content add column if not exists title text not null default '';
+      alter table streampay_creator_content add column if not exists description text not null default '';
+      alter table streampay_creator_content add column if not exists author_name text not null default '';
+      alter table streampay_creator_content add column if not exists x_handle text not null default '';
+      alter table streampay_creator_content add column if not exists cover_image text not null default '';
+      alter table streampay_creator_content add column if not exists category text not null default 'general';
+      alter table streampay_creator_content add column if not exists review_status text not null default 'pending';
+      alter table streampay_creator_content add column if not exists reviewed_at timestamptz;
+      alter table streampay_creator_content add column if not exists review_note text not null default '';
+      create index if not exists streampay_creator_content_review_idx on streampay_creator_content (review_status, updated_at desc);
     `).then(() => undefined)
   }
   return schemaReady
+}
+
+function cleanReviewStatus(value: unknown): ContentEntry['reviewStatus'] {
+  const status = String(value ?? 'pending').trim().toLowerCase()
+  return status === 'approved' || status === 'rejected' ? status : 'pending'
 }
 
 function rowToContentEntry(row: Record<string, unknown>): ContentEntry {
@@ -123,6 +164,17 @@ function rowToContentEntry(row: Record<string, unknown>): ContentEntry {
     content: String(row.content ?? ''),
     creator: String(row.creator ?? ''),
     capRaw: Number(row.cap_raw ?? 0),
+    rateRaw: Number(row.rate_raw ?? 0),
+    mode: String(row.mode) === 'stream' ? 'stream' : 'unlock',
+    title: String(row.title ?? ''),
+    description: String(row.description ?? ''),
+    authorName: String(row.author_name ?? ''),
+    xHandle: String(row.x_handle ?? ''),
+    coverImage: String(row.cover_image ?? ''),
+    category: String(row.category ?? 'general'),
+    reviewStatus: cleanReviewStatus(row.review_status),
+    reviewedAt: row.reviewed_at instanceof Date ? row.reviewed_at.getTime() : null,
+    reviewNote: String(row.review_note ?? ''),
     ts: row.updated_at instanceof Date ? row.updated_at.getTime() : Date.now(),
   }
 }
@@ -141,15 +193,49 @@ async function writeContentEntry(contentId: string, entry: ContentEntry) {
   if (pool) {
     await ensureSchema()
     await pool.query(
-      `insert into streampay_creator_content (content_id, creator, type, content, cap_raw, created_at, updated_at)
-       values ($1, $2, $3, $4, $5, to_timestamp($6 / 1000.0), now())
+      `insert into streampay_creator_content (
+         content_id, creator, type, content, cap_raw, rate_raw, mode,
+         title, description, author_name, x_handle, cover_image, category,
+         review_status, reviewed_at, review_note,
+         created_at, updated_at
+       )
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, to_timestamp($17 / 1000.0), now())
        on conflict (content_id) do update set
          creator = excluded.creator,
          type = excluded.type,
          content = excluded.content,
          cap_raw = excluded.cap_raw,
+         rate_raw = excluded.rate_raw,
+         mode = excluded.mode,
+         title = excluded.title,
+         description = excluded.description,
+         author_name = excluded.author_name,
+         x_handle = excluded.x_handle,
+         cover_image = excluded.cover_image,
+         category = excluded.category,
+         review_status = excluded.review_status,
+         reviewed_at = excluded.reviewed_at,
+         review_note = excluded.review_note,
          updated_at = now()`,
-      [contentId, entry.creator, entry.type, entry.content, entry.capRaw, entry.ts],
+      [
+        contentId,
+        entry.creator,
+        entry.type,
+        entry.content,
+        entry.capRaw,
+        entry.rateRaw,
+        entry.mode,
+        entry.title,
+        entry.description,
+        entry.authorName,
+        entry.xHandle,
+        entry.coverImage,
+        entry.category,
+        entry.reviewStatus,
+        entry.reviewedAt ? new Date(entry.reviewedAt) : null,
+        entry.reviewNote,
+        entry.ts,
+      ],
     )
     return
   }
@@ -173,8 +259,81 @@ function normalizeAgentSlug(value: unknown) {
   return String(value ?? '').trim().toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').slice(0, 32)
 }
 
+function cleanMetaText(value: unknown, max = MAX_META_TEXT_LENGTH) {
+  return String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, max)
+}
+
+function cleanCategory(value: unknown) {
+  const category = String(value ?? 'general').trim().toLowerCase()
+  return ['general', 'sports', 'ebooks', 'news', 'crypto'].includes(category) ? category : 'general'
+}
+
 function baseUrl() {
   return (process.env.HASH_PAYLINK_BASE_URL ?? process.env.PUBLIC_APP_URL ?? 'https://hashpaylink.com').replace(/\/+$/, '')
+}
+
+function buildGateLink(params: {
+  contentId: string
+  creator: string
+  rateRaw: number
+  capRaw: number
+  title: string
+  mode: 'unlock' | 'stream'
+}) {
+  const p = new URLSearchParams()
+  p.set('app', 'streampay')
+  p.set('id', params.contentId)
+  p.set('cr', params.creator)
+  p.set('r', String(params.rateRaw))
+  p.set('cap', String(params.capRaw))
+  if (params.mode === 'unlock') p.set('pay', 'x402')
+  if (params.title.trim()) p.set('t', params.title.trim())
+  return `${baseUrl()}/gate?${p.toString()}`
+}
+
+function entryToPost(contentId: string, entry: ContentEntry) {
+  return {
+    id: contentId,
+    contentId,
+    creator: entry.creator,
+    title: entry.title,
+    description: entry.description,
+    authorName: entry.authorName,
+    xHandle: entry.xHandle,
+    coverImage: entry.coverImage,
+    category: entry.category,
+    reviewStatus: entry.reviewStatus,
+    reviewedAt: entry.reviewedAt,
+    reviewNote: entry.reviewNote,
+    type: entry.type,
+    mode: entry.mode,
+    capRaw: entry.capRaw,
+    rateRaw: entry.rateRaw,
+    createdAt: entry.ts,
+    gateLink: buildGateLink({
+      contentId,
+      creator: entry.creator,
+      rateRaw: entry.rateRaw,
+      capRaw: entry.capRaw,
+      title: entry.title,
+      mode: entry.mode,
+    }),
+  }
+}
+
+function requireCreatorAdmin(req: Request, res: Response) {
+  if (!CREATOR_ADMIN_KEY) {
+    res.status(503).json({ ok: false, error: 'Creator admin approval is not configured.' })
+    return false
+  }
+  const headerKey = String(req.headers['x-creator-admin-key'] ?? '').trim()
+  const bodyKey = String((req.body as { adminKey?: unknown } | undefined)?.adminKey ?? '').trim()
+  const queryKey = String((req.query as { adminKey?: string }).adminKey ?? '').trim()
+  if (headerKey !== CREATOR_ADMIN_KEY && bodyKey !== CREATOR_ADMIN_KEY && queryKey !== CREATOR_ADMIN_KEY) {
+    res.status(401).json({ ok: false, error: 'Admin approval key is invalid.' })
+    return false
+  }
+  return true
 }
 
 function creatorProofMessage(params: {
@@ -185,7 +344,7 @@ function creatorProofMessage(params: {
   issuedAt: number
 }) {
   return [
-    'Create a Hash PayLink Creator Studio gate',
+    'Publish Hash PayLink Creator Studio content',
     '',
     `Content ID: ${shortId(params.contentId)}`,
     `Creator wallet: ${params.creator}`,
@@ -286,12 +445,37 @@ async function creatorGatewayMiddleware(entry: ContentEntry) {
 }
 
 export async function storeContent(req: Request, res: Response) {
-  const { contentId, creator, type, content, capRaw, issuedAt, signature, proofType } = (req.body ?? {}) as {
+  const {
+    contentId,
+    creator,
+    type,
+    content,
+    capRaw,
+    rateRaw,
+    mode,
+    title,
+    description,
+    authorName,
+    xHandle,
+    coverImage,
+    category,
+    issuedAt,
+    signature,
+    proofType,
+  } = (req.body ?? {}) as {
     contentId?: string
     creator?: string
     type?: string
     content?: string
     capRaw?: number
+    rateRaw?: number
+    mode?: string
+    title?: string
+    description?: string
+    authorName?: string
+    xHandle?: string
+    coverImage?: string
+    category?: string
     issuedAt?: number
     signature?: string
     proofType?: string
@@ -313,6 +497,8 @@ export async function storeContent(req: Request, res: Response) {
   if (!isHexSignature(signature)) {
     return res.status(400).json({ ok: false, error: 'creator signature is invalid' })
   }
+  const safeRateRaw = Math.max(0, Number(rateRaw) || 0)
+  const safeMode = mode === 'stream' ? 'stream' : 'unlock'
   const creatorVerified = await verifyCreatorProof({
     contentId,
     creator,
@@ -336,10 +522,128 @@ export async function storeContent(req: Request, res: Response) {
     content,
     creator,
     capRaw: safeCapRaw,
+    rateRaw: safeRateRaw,
+    mode: safeMode,
+    title: cleanMetaText(title, 100),
+    description: cleanMetaText(description, 180),
+    authorName: cleanMetaText(authorName, 80),
+    xHandle: cleanMetaText(xHandle, 40).replace(/^@+/, ''),
+    coverImage: String(coverImage ?? '').trim().slice(0, 120_000),
+    category: cleanCategory(category),
+    reviewStatus: existing?.reviewStatus ?? 'pending',
+    reviewedAt: existing?.reviewedAt ?? null,
+    reviewNote: existing?.reviewNote ?? '',
     ts: Date.now(),
   })
 
-  return res.status(200).json({ ok: true })
+  return res.status(200).json({ ok: true, reviewStatus: existing?.reviewStatus ?? 'pending' })
+}
+
+export async function listCreatorContent(req: Request, res: Response) {
+  const { creator } = req.query as { creator?: string }
+  if (!creator || !isAddress(creator)) {
+    return res.status(400).json({ ok: false, error: 'creator must be a valid EVM address' })
+  }
+
+  if (pool) {
+    await ensureSchema()
+    const result = await pool.query(
+      'select * from streampay_creator_content where lower(creator) = lower($1) order by updated_at desc limit 50',
+      [creator],
+    )
+    return res.status(200).json({
+      ok: true,
+      posts: result.rows.map(row => entryToPost(String(row.content_id), rowToContentEntry(row))),
+    })
+  }
+
+  const posts = Array.from(store.entries())
+    .filter(([, entry]) => entry.creator.toLowerCase() === creator.toLowerCase())
+    .sort((a, b) => b[1].ts - a[1].ts)
+    .slice(0, 50)
+    .map(([contentId, entry]) => entryToPost(contentId, entry))
+
+  return res.status(200).json({ ok: true, posts })
+}
+
+export async function listApprovedCreatorContent(_req: Request, res: Response) {
+  if (pool) {
+    await ensureSchema()
+    const result = await pool.query(
+      `select * from streampay_creator_content
+       where review_status = 'approved'
+       order by coalesce(reviewed_at, updated_at) desc, updated_at desc
+       limit 50`,
+    )
+    return res.status(200).json({
+      ok: true,
+      posts: result.rows.map(row => entryToPost(String(row.content_id), rowToContentEntry(row))),
+    })
+  }
+
+  const posts = Array.from(store.entries())
+    .filter(([, entry]) => entry.reviewStatus === 'approved')
+    .sort((a, b) => (b[1].reviewedAt ?? b[1].ts) - (a[1].reviewedAt ?? a[1].ts))
+    .slice(0, 50)
+    .map(([contentId, entry]) => entryToPost(contentId, entry))
+
+  return res.status(200).json({ ok: true, posts })
+}
+
+export async function listCreatorAdminContent(req: Request, res: Response) {
+  if (!requireCreatorAdmin(req, res)) return
+  const status = cleanReviewStatus((req.query as { status?: string }).status || 'pending')
+
+  if (pool) {
+    await ensureSchema()
+    const result = await pool.query(
+      `select * from streampay_creator_content
+       where review_status = $1
+       order by updated_at desc
+       limit 100`,
+      [status],
+    )
+    return res.status(200).json({
+      ok: true,
+      posts: result.rows.map(row => entryToPost(String(row.content_id), rowToContentEntry(row))),
+    })
+  }
+
+  const posts = Array.from(store.entries())
+    .filter(([, entry]) => entry.reviewStatus === status)
+    .sort((a, b) => b[1].ts - a[1].ts)
+    .slice(0, 100)
+    .map(([contentId, entry]) => entryToPost(contentId, entry))
+
+  return res.status(200).json({ ok: true, posts })
+}
+
+export async function reviewCreatorContent(req: Request, res: Response) {
+  if (!requireCreatorAdmin(req, res)) return
+  const { contentId, action, note } = (req.body ?? {}) as {
+    contentId?: string
+    action?: string
+    note?: string
+  }
+  if (!contentId || contentId.length > MAX_CONTENT_ID_LENGTH) {
+    return res.status(400).json({ ok: false, error: 'contentId is required.' })
+  }
+  const reviewStatus = action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : null
+  if (!reviewStatus) {
+    return res.status(400).json({ ok: false, error: 'action must be approve or reject.' })
+  }
+
+  const existing = await readContentEntry(contentId)
+  if (!existing) return res.status(404).json({ ok: false, error: 'Content not found.' })
+  const updated: ContentEntry = {
+    ...existing,
+    reviewStatus,
+    reviewedAt: Date.now(),
+    reviewNote: cleanMetaText(note, 240),
+    ts: Date.now(),
+  }
+  await writeContentEntry(contentId, updated)
+  return res.status(200).json({ ok: true, post: entryToPost(contentId, updated) })
 }
 
 export async function getContent(req: Request, res: Response) {

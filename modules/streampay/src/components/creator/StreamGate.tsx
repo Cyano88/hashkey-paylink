@@ -55,6 +55,60 @@ type AgentOption = AgentProfile & {
 type UnlockStep = 'intro' | 'choose' | 'email' | 'otp' | 'fund'
 type FundingChain = 'BASE' | 'ARBITRUM'
 
+const ALLOWED_ARTICLE_TAGS = new Set(['P', 'BR', 'STRONG', 'B', 'EM', 'I', 'U', 'H2', 'H3', 'BLOCKQUOTE', 'UL', 'OL', 'LI', 'A'])
+
+function sanitizeArticleHtml(input: string) {
+  if (typeof window === 'undefined') return input
+  const doc = new DOMParser().parseFromString(`<div>${input || ''}</div>`, 'text/html')
+  const root = doc.body.firstElementChild || doc.createElement('div')
+
+  function clean(node: Node): Node | null {
+    if (node.nodeType === Node.TEXT_NODE) return doc.createTextNode(node.textContent || '')
+    if (node.nodeType !== Node.ELEMENT_NODE) return null
+
+    const element = node as HTMLElement
+    if (!ALLOWED_ARTICLE_TAGS.has(element.tagName)) {
+      const fragment = doc.createDocumentFragment()
+      Array.from(element.childNodes).forEach(child => {
+        const cleaned = clean(child)
+        if (cleaned) fragment.appendChild(cleaned)
+      })
+      return fragment
+    }
+
+    const tagName =
+      element.tagName === 'B' ? 'strong' :
+      element.tagName === 'I' ? 'em' :
+      element.tagName.toLowerCase()
+    const next = doc.createElement(tagName)
+    if (element.tagName === 'A') {
+      const href = element.getAttribute('href') || ''
+      try {
+        const url = new URL(href, window.location.origin)
+        if (url.protocol === 'http:' || url.protocol === 'https:') {
+          next.setAttribute('href', url.href)
+          next.setAttribute('target', '_blank')
+          next.setAttribute('rel', 'noopener noreferrer')
+        }
+      } catch {
+        // Keep text, drop unsafe href.
+      }
+    }
+    Array.from(element.childNodes).forEach(child => {
+      const cleaned = clean(child)
+      if (cleaned) next.appendChild(cleaned)
+    })
+    return next
+  }
+
+  const output = doc.createElement('div')
+  Array.from(root.childNodes).forEach(child => {
+    const cleaned = clean(child)
+    if (cleaned) output.appendChild(cleaned)
+  })
+  return output.innerHTML
+}
+
 function cleanEmail(value: string) {
   return value.trim().toLowerCase()
 }
@@ -1087,9 +1141,10 @@ export function StreamGate() {
               <h2 className="text-[18px] font-bold text-gray-900 leading-snug">{title}</h2>
             )}
             <div className="max-h-[480px] overflow-y-auto pr-1">
-              <p className="text-[13px] text-gray-700 leading-relaxed whitespace-pre-wrap">
-                {fetchedContent.content}
-              </p>
+              <div
+                className="text-[14px] leading-7 text-gray-700 [&_a]:font-semibold [&_a]:text-blue-600 [&_blockquote]:my-4 [&_blockquote]:border-l-2 [&_blockquote]:border-gray-300 [&_blockquote]:pl-3 [&_blockquote]:text-gray-500 [&_h2]:mb-2 [&_h2]:mt-5 [&_h2]:text-[18px] [&_h2]:font-black [&_h3]:mb-2 [&_h3]:mt-4 [&_h3]:text-[16px] [&_h3]:font-bold [&_li]:ml-5 [&_li]:list-disc [&_p]:mb-3 [&_strong]:font-black"
+                dangerouslySetInnerHTML={{ __html: sanitizeArticleHtml(fetchedContent.content) }}
+              />
             </div>
           </div>
         )}
@@ -1131,12 +1186,7 @@ export function StreamGate() {
         {paymentMode === 'poa' && fullyAuthorised && contentState === 'ready' && !ended && (
           <div className="border-t border-gray-100 bg-gray-50/60 px-4 py-3 space-y-2">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5">
-                {poa.isActive && !poa.isPaused
-                  ? <span className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse" />
-                  : poa.isPaused
-                  ? <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-                  : <span className="h-1.5 w-1.5 rounded-full bg-gray-300" />}
+              <div className="flex items-center">
                 <span className="text-[11px] font-semibold text-gray-500">
                   {poa.isPaused  ? 'Idle — move to resume'
                    : poa.isActive ? 'Session Active'
@@ -1272,7 +1322,6 @@ function OverlayShell({
       </div>
       {children}
       <div className="flex items-center gap-1.5 text-[10px] text-gray-400">
-        <span className="h-1.5 w-1.5 rounded-full bg-blue-400" />
         {paymentMode === 'x402' ? 'Powered by Circle Gateway on Arc' : 'Powered by Arc Network'}
       </div>
     </div>
