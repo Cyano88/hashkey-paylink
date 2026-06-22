@@ -61,6 +61,10 @@ function cleanAgentSlug(value: string) {
   return value.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').slice(0, 32)
 }
 
+function formatUsdc(value: number) {
+  return value.toFixed(6).replace(/0+$/, '').replace(/\.$/, '')
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function StreamGate() {
@@ -68,7 +72,7 @@ export function StreamGate() {
 
   const contentId = params.get('id')   ?? ''
   const creator   = (params.get('cr')  ?? '') as `0x${string}`
-  const initialAgentSlug = cleanAgentSlug(params.get('agent') ?? params.get('agentSlug') ?? 'hashpaylink-agent')
+  const initialAgentSlug = cleanAgentSlug(params.get('agent') ?? params.get('agentSlug') ?? '')
   const rateRaw   = parseInt(params.get('r')   ?? '1000',   10)
   const capRaw    = parseInt(params.get('cap') ?? '100000', 10)
   const title     = params.get('t')    ?? ''
@@ -130,6 +134,7 @@ export function StreamGate() {
   const [approveTx,      setApproveTx]      = useState<`0x${string}` | null>(null)
   const [approveError,   setApproveError]   = useState<string | null>(null)
   const [approvePending, setApprovePending] = useState(false)
+  const safeAgentSlug = cleanAgentSlug(agentSlug)
 
   async function handleApprove() {
     if (!POA_CONTRACT || !isConnected || !isOnArc) return
@@ -179,7 +184,6 @@ export function StreamGate() {
 
   async function unlockWithAgentX402() {
     if (gatewayPaying) return
-    const safeAgentSlug = cleanAgentSlug(agentSlug)
     if (!safeAgentSlug) {
       setContentError('Enter the agent wallet name that has x402 balance.')
       setContentState('error')
@@ -282,38 +286,38 @@ export function StreamGate() {
   }
 
   return (
-    <div className="w-full max-w-[480px] mx-auto mt-8 space-y-4">
+    <div className="w-full max-w-[560px] mx-auto mt-6 px-3 sm:mt-8 sm:px-0 space-y-4">
 
       {/* ── Content card ── */}
       <div ref={contentRef} className="relative overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
 
         {/* Blurred placeholder shown behind the auth overlay */}
-        {!fullyAuthorised && <ContentPlaceholder title={title} />}
+        {!fullyAuthorised && paymentMode !== 'x402' && <ContentPlaceholder title={title} />}
 
         {/* ── Auth steps overlay ── */}
         {!fullyAuthorised && (
           <OverlayShell dripRate={dripRate} sessionCap={sessionCap} paymentMode={paymentMode}>
 
             {paymentMode === 'x402' ? (
-              <div className="w-full max-w-[320px] space-y-3">
-                <div className="rounded-2xl border border-gray-100 bg-white/85 p-3.5 text-left shadow-sm">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 space-y-0.5">
-                      <p className="text-[12px] font-bold text-gray-900">
+              <div className="w-full space-y-4">
+                <div className="rounded-2xl border border-gray-100 bg-white p-4 text-left shadow-sm">
+                  <div className="flex items-start justify-between gap-3 border-b border-gray-100 pb-3">
+                    <div className="min-w-0 space-y-1">
+                      <p className="text-[13px] font-bold text-gray-900">
                         {privyAuthenticated ? 'Ready to unlock' : 'Sign in to continue'}
                       </p>
-                      <p className="truncate text-[11px] text-gray-500">
+                      <p className="truncate text-[12px] text-gray-500">
                         {PRIVY_AUTH_ENABLED
                           ? privyAuthenticated
                             ? privyEmail || 'Wallet connected'
                             : 'Email or wallet through Privy'
                           : 'Use a funded agent wallet'}
                       </p>
-                      <p className="font-mono text-[10px] text-blue-600">
-                        {cleanAgentSlug(agentSlug) || 'agent-wallet'}
+                      <p className="font-mono text-[11px] text-blue-600">
+                        {safeAgentSlug || 'No agent wallet selected'}
                       </p>
                     </div>
-                    <span className="shrink-0 rounded-full bg-blue-50 px-2 py-1 text-[10px] font-bold text-blue-600 ring-1 ring-blue-100">
+                    <span className="shrink-0 rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-bold text-blue-600 ring-1 ring-blue-100">
                       x402
                     </span>
                   </div>
@@ -325,14 +329,14 @@ export function StreamGate() {
                       type="text"
                       value={agentSlug}
                       onChange={event => setAgentSlug(cleanAgentSlug(event.target.value))}
-                      placeholder="hashpaylink-agent"
-                      className="w-full rounded-xl border border-blue-100 bg-white px-3 py-2.5 font-mono text-[13px] text-gray-900 outline-none placeholder:text-gray-300 focus:border-blue-300"
+                      placeholder="your-agent-wallet"
+                      className="w-full rounded-xl border border-blue-100 bg-white px-3 py-3 font-mono text-[14px] text-gray-900 outline-none placeholder:text-gray-300 focus:border-blue-300"
                     />
                   </label>
                 </div>
                 <button
                   onClick={handlePrimaryGatewayPay}
-                  disabled={gatewayPaying}
+                  disabled={gatewayPaying || (privyAuthenticated && !safeAgentSlug)}
                   className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl px-5 py-3 text-[13px] font-semibold text-white transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
                   style={{ background: '#111827' }}
                 >
@@ -345,17 +349,26 @@ export function StreamGate() {
                 {contentState === 'error' && /agent wallet session|reconnect|not enabled/i.test(contentError ?? '') && (
                   <button
                     type="button"
-                    onClick={() => window.open(`/agent?profile=agent&agent=${encodeURIComponent(cleanAgentSlug(agentSlug) || 'hashpaylink-agent')}`, '_blank', 'noopener,noreferrer')}
+                    onClick={() => window.open(`/agent?profile=agent&agent=${encodeURIComponent(safeAgentSlug || 'hashpaylink-agent')}`, '_blank', 'noopener,noreferrer')}
                     className="w-full text-center text-[11px] font-semibold text-blue-600 underline underline-offset-2"
                   >
                     Open Agent Wallet setup
                   </button>
                 )}
                 {circleNotice && (
-                  <p className="text-center text-[11px] text-gray-500">{circleNotice}</p>
+                  <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2.5 text-center text-[12px] font-medium text-emerald-700">
+                    {circleNotice}
+                  </div>
                 )}
                 {contentState === 'error' && contentError && (
-                  <p className="text-center text-[11px] text-red-500">{contentError}</p>
+                  <div className="rounded-xl border border-red-100 bg-red-50 px-3 py-2.5 text-center text-[12px] font-medium text-red-600">
+                    {contentError}
+                  </div>
+                )}
+                {privyAuthenticated && !safeAgentSlug && (
+                  <p className="text-center text-[11px] text-gray-400">
+                    Use the same agent name you funded and activated for x402 in Agent Wallets.
+                  </p>
                 )}
               </div>
             ) : (
@@ -603,7 +616,7 @@ export function StreamGate() {
             {paymentMode === 'x402' ? 'Access Price' : 'Drip Rate'}
           </p>
           <p className="text-[12px] font-semibold text-gray-700">
-            {paymentMode === 'x402' ? `${sessionCap.toFixed(6)} USDC` : `$${dripRate.toFixed(4)}/sec`}
+            {paymentMode === 'x402' ? `${formatUsdc(sessionCap)} USDC` : `$${dripRate.toFixed(4)}/sec`}
           </p>
         </div>
       </div>
@@ -624,14 +637,21 @@ function OverlayShell({
 }) {
   return (
     <div
-      className="absolute inset-0 flex flex-col items-center justify-center p-6 space-y-4"
-      style={{ background: 'rgba(255,255,255,0.75)', backdropFilter: 'blur(3px)' }}
+      className={[
+        'flex flex-col items-center justify-center space-y-4',
+        paymentMode === 'x402'
+          ? 'relative min-h-[520px] p-5 sm:p-7'
+          : 'absolute inset-0 p-6',
+      ].join(' ')}
+      style={paymentMode === 'x402'
+        ? { background: 'linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.92))' }
+        : { background: 'rgba(255,255,255,0.75)', backdropFilter: 'blur(3px)' }}
     >
       <div className="text-center space-y-1.5">
-        <p className="text-[15px] font-bold text-gray-900">Content Locked</p>
+        <p className="text-[17px] font-bold text-gray-900">Content Locked</p>
         {paymentMode === 'x402' && (
-          <p className="text-[12px] text-gray-500 max-w-[260px]">
-            Pay <span className="font-semibold">{sessionCap.toFixed(6)} USDC</span> to unlock this creator content.
+          <p className="text-[13px] text-gray-500 max-w-[320px]">
+            Pay <span className="font-semibold">{formatUsdc(sessionCap)} USDC</span> to unlock this creator content.
           </p>
         )}
         <p className={paymentMode === 'x402' ? 'hidden' : 'text-[12px] text-gray-500 max-w-[260px]'}>
