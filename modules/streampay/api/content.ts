@@ -37,7 +37,7 @@ const ERC1271_ABI = parseAbi([
 const ERC1271_MAGIC_VALUE = '0x1626ba7e'
 
 type ContentEntry = {
-  type: 'text' | 'url'
+  type: 'text' | 'url' | 'scores'
   content: string
   creator: string
   capRaw: number
@@ -83,7 +83,7 @@ type PaidRequest = Request & {
 
 type CreatorUnlockResponse = {
   ok?: boolean
-  type?: 'text' | 'url'
+  type?: 'text' | 'url' | 'scores'
   content?: string
   payment?: PaidRequest['payment'] | null
   error?: string
@@ -99,6 +99,33 @@ const CREATOR_PROOF_TYPES = {
     { name: 'issuedAt', type: 'uint256' },
   ],
 } as const
+
+const OFFICIAL_CREATOR_ADDRESS = (
+  process.env.CREATOR_OFFICIAL_WALLET
+  ?? process.env.TREASURY_ADDRESS
+  ?? '0xcE5dF9e1115F81a2Fc2F65941B20B820d508e753'
+).trim()
+
+const OFFICIAL_CONTENT: Record<string, ContentEntry> = {
+  'worldcup-scores': {
+    type: 'scores',
+    content: 'worldcup-scores',
+    creator: isAddress(OFFICIAL_CREATOR_ADDRESS) ? OFFICIAL_CREATOR_ADDRESS : '0xcE5dF9e1115F81a2Fc2F65941B20B820d508e753',
+    capRaw: Number(process.env.CREATOR_WORLD_CUP_SCORES_PRICE_RAW ?? '100000'),
+    rateRaw: 1000,
+    mode: 'unlock',
+    title: 'World Cup Scores',
+    description: 'Live World Cup scores with exact Polymarket market routes when a fixture is confidently matched.',
+    authorName: 'Hash PayLink desk',
+    xHandle: 'Hash_PayLink',
+    coverImage: '/brand/world-globe.png',
+    category: 'sports',
+    reviewStatus: 'approved',
+    reviewedAt: Date.now(),
+    reviewNote: '',
+    ts: Date.now(),
+  },
+}
 const { Pool } = pg
 const pool = DATABASE_URL
   ? new Pool({
@@ -180,6 +207,7 @@ function rowToContentEntry(row: Record<string, unknown>): ContentEntry {
 }
 
 async function readContentEntry(contentId: string): Promise<ContentEntry | null> {
+  if (OFFICIAL_CONTENT[contentId]) return OFFICIAL_CONTENT[contentId]
   if (pool) {
     await ensureSchema()
     const result = await pool.query('select * from streampay_creator_content where content_id = $1 limit 1', [contentId])

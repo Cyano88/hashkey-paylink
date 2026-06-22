@@ -23,14 +23,34 @@ const arcClient = createPublicClient({
 const ARC_CHAIN_ID = 5042002
 const ARC_USDC     = '0x3600000000000000000000000000000000000000' as const
 const POA_CONTRACT = (import.meta.env.VITE_POA_CONTRACT ?? '') as `0x${string}`
+const POLYMARKET_LOGO = '/brand/polymarket-logo.png'
 
 const ERC20_ABI = parseAbi([
   'function allowance(address owner, address spender) view returns (uint256)',
   'function approve(address spender, uint256 amount) returns (bool)',
 ])
 
-type FetchedContent = { type: 'text' | 'url'; content: string }
+type FetchedContent = { type: 'text' | 'url' | 'scores'; content: string }
 type ContentState   = 'idle' | 'loading' | 'ready' | 'error'
+type WorldCupScoreMatch = {
+  fixtureId?: string
+  tag: string
+  title: string
+  time: string
+  status: string
+  homeScore?: number | string
+  awayScore?: number | string
+  probability?: string
+  polymarketUrl?: string
+  marketStatus?: 'matched' | 'pending'
+}
+type WorldCupScoreFeed = {
+  ok?: boolean
+  providerConfigured?: boolean
+  providerStatus?: string
+  updatedAt?: string
+  matches?: WorldCupScoreMatch[]
+}
 type AgentProfile = {
   slug: string
   name: string
@@ -466,7 +486,7 @@ export function StreamGate() {
         code?: string
       }
       if (!data.ok || !data.type || !data.content) throw new Error(data.error ?? 'Could not unlock content')
-      setFetchedContent({ type: data.type as 'text' | 'url', content: data.content })
+      setFetchedContent({ type: data.type as 'text' | 'url' | 'scores', content: data.content })
       setGatewayTx(data.payment?.transaction ?? null)
       setContentState('ready')
       setCircleNotice(data.walletAddress ? `Paid by ${shortAddress(data.walletAddress)}` : 'Payment complete')
@@ -665,7 +685,7 @@ export function StreamGate() {
       .then(r => r.json())
       .then((data: { ok: boolean; type?: string; content?: string; error?: string }) => {
         if (data.ok && data.type && data.content) {
-          setFetchedContent({ type: data.type as 'text' | 'url', content: data.content })
+          setFetchedContent({ type: data.type as 'text' | 'url' | 'scores', content: data.content })
           setContentState('ready')
         } else {
           setContentError(data.error ?? 'Could not retrieve content')
@@ -1169,6 +1189,10 @@ export function StreamGate() {
           </div>
         )}
 
+        {fullyAuthorised && contentState === 'ready' && fetchedContent?.type === 'scores' && (
+          <WorldCupScoresUnlocked />
+        )}
+
         {/* ── Content error ── */}
         {fullyAuthorised && contentState === 'error' && (
           <div className="p-6 text-center space-y-3">
@@ -1287,6 +1311,149 @@ export function StreamGate() {
 }
 
 // ── Shared overlay shell ──────────────────────────────────────────────────────
+
+function WorldCupScoresUnlocked() {
+  const [feed, setFeed] = useState<WorldCupScoreFeed | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  const matches = feed?.matches ?? []
+  const providerReady = Boolean(feed?.providerConfigured && feed.providerStatus === 'connected' && matches.length)
+  const status = loading
+    ? 'Refreshing'
+    : error
+    ? 'Provider error'
+    : providerReady
+    ? 'Live'
+    : 'Waiting'
+
+  const loadScores = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const res = await fetch('/api/poly-stream')
+      const data = await res.json() as WorldCupScoreFeed
+      if (!res.ok || !data.ok) throw new Error('Live scores are not available.')
+      setFeed(data)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Live scores are not available.')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadScores()
+  }, [loadScores])
+
+  return (
+    <div className="space-y-3 p-4 sm:p-5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-400">Unlocked</p>
+          <h2 className="mt-1 text-[18px] font-black tracking-tight text-gray-950">World Cup Scores</h2>
+          <p className="mt-1 text-[12px] leading-5 text-gray-500">
+            Live score context with Polymarket routes when an exact market is matched.
+          </p>
+        </div>
+        <span className={[
+          'shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black uppercase',
+          providerReady ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100' : 'bg-gray-100 text-gray-500',
+        ].join(' ')}>
+          {status}
+        </span>
+      </div>
+
+      {loading && (
+        <div className="flex items-center justify-center gap-2 rounded-2xl border border-gray-100 bg-gray-50 py-10 text-[12px] font-semibold text-gray-500">
+          <Spinner />
+          Loading scores
+        </div>
+      )}
+
+      {!loading && error && (
+        <div className="rounded-2xl border border-rose-100 bg-rose-50 p-4 text-center">
+          <p className="text-[13px] font-bold text-rose-700">{error}</p>
+          <button
+            type="button"
+            onClick={() => void loadScores()}
+            className="mt-3 rounded-xl bg-white px-4 py-2 text-[12px] font-bold text-rose-700 shadow-sm"
+          >
+            Refresh
+          </button>
+        </div>
+      )}
+
+      {!loading && !error && matches.length === 0 && (
+        <div className="rounded-2xl border border-gray-100 bg-gray-50 p-4 text-center">
+          <p className="text-[13px] font-bold text-gray-900">Live board is waiting for match data</p>
+          <p className="mx-auto mt-1 max-w-xs text-[12px] leading-5 text-gray-500">
+            Scores appear when the provider returns live, upcoming, or completed World Cup fixtures.
+          </p>
+          <button
+            type="button"
+            onClick={() => void loadScores()}
+            className="mt-3 rounded-xl bg-gray-950 px-4 py-2 text-[12px] font-bold text-white"
+          >
+            Refresh
+          </button>
+        </div>
+      )}
+
+      {!loading && !error && matches.length > 0 && (
+        <div className="max-h-[460px] space-y-2 overflow-y-auto pr-1 [scrollbar-width:none]">
+          {matches.slice(0, 16).map(match => {
+            const hasScore = match.homeScore !== undefined && match.awayScore !== undefined
+            const marketUrl = match.marketStatus === 'matched' && match.polymarketUrl ? match.polymarketUrl : ''
+            const matched = Boolean(marketUrl)
+            return (
+              <div
+                key={match.fixtureId || `${match.title}-${match.time}`}
+                className="rounded-2xl border border-gray-100 bg-white p-3 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[9px] font-black uppercase text-gray-600">{match.tag || 'Fixture'}</span>
+                      <span className="text-[10px] font-semibold text-gray-400">{match.time}</span>
+                    </div>
+                    <p className="mt-1.5 line-clamp-2 text-[13px] font-black leading-snug text-gray-950">{match.title}</p>
+                    <p className="mt-1 text-[11px] leading-4 text-gray-500">{match.status}</p>
+                    {match.probability && <p className="mt-1 text-[11px] font-semibold text-gray-600">{match.probability}</p>}
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="rounded-xl bg-gray-950 px-3 py-2 text-[14px] font-black tabular-nums text-white">
+                      {hasScore ? `${match.homeScore}-${match.awayScore}` : 'vs'}
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-3 flex items-center justify-between gap-2 border-t border-gray-100 pt-3">
+                  <span className="text-[10px] font-semibold text-gray-400">
+                    {matched ? 'Exact market matched' : 'Market pending'}
+                  </span>
+                  {matched ? (
+                    <button
+                      type="button"
+                      onClick={() => window.open(marketUrl, '_blank', 'noopener,noreferrer')}
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-gray-950 px-3 py-2 text-[11px] font-black text-white transition-all active:scale-[0.98]"
+                    >
+                      <img src={POLYMARKET_LOGO} alt="" className="h-3.5 w-3.5" />
+                      Trade
+                    </button>
+                  ) : (
+                    <span className="rounded-xl border border-gray-100 px-3 py-2 text-[11px] font-bold text-gray-400">
+                      Pending
+                    </span>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
 
 function OverlayShell({
   dripRate, sessionCap, paymentMode, children,

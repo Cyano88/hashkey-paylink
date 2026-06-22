@@ -21,6 +21,7 @@ type PublishedContent = {
   author?: string
   xHandle?: string
   gateLink?: string
+  startsAt?: string | number
   editable?: boolean
   reviewStatus?: 'pending' | 'approved' | 'rejected'
   reviewNote?: string
@@ -39,15 +40,6 @@ type CreatorDraft = {
   capStr: string
   mode: 'unlock' | 'stream'
   contentType: 'text' | 'url'
-}
-type WorldCupArticle = {
-  title: string
-  description: string
-  source: string
-  image: string
-  url: string
-  publishedAt: string
-  tag: string
 }
 type GateCreatedMeta = {
   creator: string
@@ -80,6 +72,7 @@ type ServerCreatorPost = {
   capRaw: number
   rateRaw: number
   gateLink: string
+  startsAt?: string | number
   reviewStatus?: 'pending' | 'approved' | 'rejected'
   reviewNote?: string
 }
@@ -108,16 +101,6 @@ const OFFICIAL_DISCOVER_CONTENT: PublishedContent[] = [
     tag: 'Hash PayLink',
     source: 'Hash PayLink desk',
     image: '/brand/world-globe.png',
-  },
-  {
-    id: 'world-cup-pulse',
-    title: 'World Cup market pulse for paid readers',
-    description: 'Sports headlines, fixture context, and market-moving notes packaged as unlockable creator analysis.',
-    category: 'sports',
-    price: '0.10',
-    tag: 'World Cup',
-    source: 'Hash PayLink Pulse',
-    image: '/brand/polymarket-logo.png',
   },
 ]
 
@@ -152,6 +135,22 @@ function formatPrice(raw: string) {
   const n = Number(raw)
   if (!Number.isFinite(n) || n <= 0) return '0.10'
   return n.toFixed(6).replace(/0+$/, '').replace(/\.$/, '')
+}
+
+function getSportsCountdown(card: PublishedContent, now: number) {
+  if (card.category !== 'sports') return null
+  if (!card.startsAt) return null
+  const startsAt = typeof card.startsAt === 'number' ? card.startsAt : new Date(card.startsAt).getTime()
+  if (!Number.isFinite(startsAt)) return null
+  const ms = startsAt - now
+  if (ms <= 0) return { label: 'Live now', isLive: true }
+  const totalMinutes = Math.max(1, Math.ceil(ms / 60000))
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  return {
+    label: hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`,
+    isLive: false,
+  }
 }
 
 function contentFromGate(link: string, meta: GateCreatedMeta, index: number): PublishedContent {
@@ -213,6 +212,7 @@ function contentFromServerPost(post: ServerCreatorPost, index: number): Publishe
     author,
     xHandle,
     gateLink: post.gateLink,
+    startsAt: post.startsAt,
     editable: false,
     reviewStatus: post.reviewStatus || 'pending',
     reviewNote: post.reviewNote || '',
@@ -228,29 +228,9 @@ function DiscoverContent({
   onCreate: () => void
   onEdit: (content: PublishedContent) => void
 }) {
-  const [articles, setArticles] = useState<WorldCupArticle[]>([])
   const [approvedPosts, setApprovedPosts] = useState<PublishedContent[]>([])
-  const [loading, setLoading] = useState(false)
   const [categoryFilter, setCategoryFilter] = useState<CreatorCategory | 'all'>('all')
-
-  useEffect(() => {
-    let cancelled = false
-    setLoading(true)
-    fetch('/api/poly-worldcup-news')
-      .then(res => res.json())
-      .then((data: { ok?: boolean; articles?: WorldCupArticle[] }) => {
-        if (!cancelled && data.ok && Array.isArray(data.articles)) {
-          setArticles(data.articles.slice(0, 4))
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setArticles([])
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-    return () => { cancelled = true }
-  }, [])
+  const [now, setNow] = useState(Date.now())
 
   useEffect(() => {
     let cancelled = false
@@ -266,28 +246,19 @@ function DiscoverContent({
     return () => { cancelled = true }
   }, [])
 
-  const newsCards: PublishedContent[] = articles.map((article, index) => ({
-    id: `worldcup-${index}-${article.title}`,
-    title: article.title,
-    description: article.description,
-    category: 'sports',
-    price: '0.10',
-    tag: article.tag || 'World Cup',
-    source: article.source || 'World Cup feed',
-    image: article.image || '/brand/polymarket-logo.png',
-  }))
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 30000)
+    return () => window.clearInterval(timer)
+  }, [])
+
   const approvedSessionPosts = published.filter(card => card.reviewStatus === 'approved')
-  const allCards = [...approvedSessionPosts, ...approvedPosts, ...OFFICIAL_DISCOVER_CONTENT, ...newsCards]
+  const allCards = [...OFFICIAL_DISCOVER_CONTENT, ...approvedSessionPosts, ...approvedPosts]
   const cards = allCards
     .filter(card => categoryFilter === 'all' || card.category === categoryFilter)
     .slice(0, 8)
-  const hero = cards[0] || published[0] || newsCards[0] || OFFICIAL_DISCOVER_CONTENT[0]
+  const hero = cards[0] || published[0] || OFFICIAL_DISCOVER_CONTENT[0]
 
-  function openContent(card: PublishedContent) {
-    if (card.gateLink) {
-      window.open(card.gateLink, '_blank', 'noopener,noreferrer')
-      return
-    }
+  function openContent(_card: PublishedContent) {
     onCreate()
   }
 
@@ -325,7 +296,7 @@ function DiscoverContent({
             <div className="mt-5 flex items-center justify-between gap-3">
               <span className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-3 text-[12px] font-black text-gray-950 shadow-sm">
                 <LockKeyhole className="h-4 w-4" />
-                {hero.gateLink ? 'Unlock' : 'Create'}
+                Create
               </span>
               <span className="rounded-full border border-white/20 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-white/75">
                 {hero.tag}
@@ -392,25 +363,38 @@ function DiscoverContent({
         </div>
 
         <div className="max-h-[430px] space-y-2 overflow-y-auto px-4 pb-4 pt-2 [scrollbar-width:none]">
-          {cards.map((card, index) => (
-            <button
-              key={card.id}
-              type="button"
-              onClick={() => openContent(card)}
-              className="group flex w-full gap-3 rounded-2xl border border-gray-100 bg-white p-2 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
-            >
-              <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-xl bg-gray-100">
-                <img
-                  src={card.image}
-                  alt=""
-                  className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-gray-950/70 to-transparent" />
-                <span className="absolute bottom-1.5 left-1.5 right-1.5 truncate rounded-full bg-white/90 px-2 py-1 text-center text-[8px] font-bold uppercase tracking-[0.12em] text-gray-950">
-                  {card.tag}
-                </span>
-              </div>
-              <div className="min-w-0 flex-1 py-1 pr-1">
+          {cards.map((card, index) => {
+            const countdown = getSportsCountdown(card, now)
+            return (
+              <button
+                key={card.id}
+                type="button"
+                onClick={() => openContent(card)}
+                className="group flex w-full gap-3 rounded-2xl border border-gray-100 bg-white p-2 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
+              >
+                <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-xl bg-gray-100">
+                  <img
+                    src={card.image}
+                    alt=""
+                    className={[
+                      'h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]',
+                      countdown?.isLive ? 'blur-[1.5px] saturate-75' : '',
+                    ].join(' ')}
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-gray-950/70 to-transparent" />
+                  {countdown && (
+                    <div className="absolute inset-x-1.5 top-1.5 rounded-full bg-white/90 px-2 py-1 text-center text-[8px] font-black uppercase tracking-[0.12em] text-gray-950 backdrop-blur">
+                      {countdown.isLive ? 'Pay to view live' : `Starts in ${countdown.label}`}
+                    </div>
+                  )}
+                  {countdown?.isLive && (
+                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.18),transparent_22%),radial-gradient(circle_at_80%_30%,rgba(255,255,255,0.14),transparent_20%),linear-gradient(135deg,rgba(17,24,39,0.18),rgba(17,24,39,0.52))]" />
+                  )}
+                  <span className="absolute bottom-1.5 left-1.5 right-1.5 truncate rounded-full bg-white/90 px-2 py-1 text-center text-[8px] font-bold uppercase tracking-[0.12em] text-gray-950">
+                    {card.tag}
+                  </span>
+                </div>
+                <div className="min-w-0 flex-1 py-1 pr-1">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="truncate text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-400">
@@ -453,7 +437,7 @@ function DiscoverContent({
                     )}
                     <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-gray-950">
                       <LockKeyhole className="h-3.5 w-3.5" />
-                      {card.gateLink ? 'Unlock' : 'Monetize'}
+                        Create
                     </span>
                   </span>
                 </div>
@@ -464,14 +448,10 @@ function DiscoverContent({
                 )}
               </div>
             </button>
-          ))}
+            )
+          })}
         </div>
 
-        {loading && (
-          <div className="border-t border-gray-100 px-5 py-3 text-center text-[11px] text-gray-400">
-            Loading World Cup pulse...
-          </div>
-        )}
       </section>
 
       <div className="border-t border-gray-100 pt-4 pb-2 flex flex-wrap items-center justify-center gap-x-8 gap-y-2">
