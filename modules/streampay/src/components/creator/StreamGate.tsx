@@ -49,6 +49,7 @@ type AgentOption = AgentProfile & {
   connected?: boolean
   gatewayBalance?: string
   gatewayBalanceError?: string
+  source?: 'platform' | 'saved' | 'linked'
 }
 
 function cleanEmail(value: string) {
@@ -132,11 +133,12 @@ export function StreamGate() {
   const { sessionStart, sessionStop, setVisible, forceSign } = poa
   const [ending,  setEnding]  = useState(false)
   const [ended,   setEnded]   = useState(false)
-  const [agentSlug, setAgentSlug] = useState(initialAgentSlug)
+  const [agentSlug, setAgentSlug] = useState(initialAgentSlug || (paymentMode === 'x402' ? 'hashpaylink-agent' : ''))
   const [agentOptions, setAgentOptions] = useState<AgentOption[]>([])
   const [agentOptionsLoading, setAgentOptionsLoading] = useState(false)
   const [agentOptionsError, setAgentOptionsError] = useState<string | null>(null)
   const [circleNotice, setCircleNotice] = useState<string | null>(null)
+  const [agentManaging, setAgentManaging] = useState(false)
 
   async function handleEndSession() {
     setEnding(true)
@@ -180,6 +182,17 @@ export function StreamGate() {
     return `/agent?${params.toString()}`
   }
 
+  function agentTelegramManageUrl() {
+    const slug = safeAgentSlug || 'hashpaylink-agent'
+    const params = new URLSearchParams({
+      section: 'agent-wallets',
+      service: 'agent-dashboard',
+      agent: slug,
+      open: '1',
+    })
+    return `/telegram/payment-links?${params.toString()}`
+  }
+
   useEffect(() => {
     if (paymentMode !== 'x402') return
     let cancelled = false
@@ -197,6 +210,7 @@ export function StreamGate() {
           name: fallback?.name || cleanSlug,
           purpose: fallback?.purpose,
           walletAddress: fallback?.walletAddress,
+          source: fallback?.source,
         }
         try {
           const profileRes = await fetch(`/api/agent-profile?agent=${encodeURIComponent(cleanSlug)}`)
@@ -226,7 +240,11 @@ export function StreamGate() {
       }
 
       try {
-        if (initialAgentSlug) await addBySlug(initialAgentSlug)
+        await addBySlug(initialAgentSlug || 'hashpaylink-agent', {
+          name: initialAgentSlug ? initialAgentSlug : 'Hash PayLink Agent',
+          purpose: initialAgentSlug ? undefined : 'Platform agent for x402 creator unlocks',
+          source: initialAgentSlug ? 'saved' : 'platform',
+        })
 
         if (PRIVY_AUTH_ENABLED && privyAuthenticated) {
           const token = await getAccessToken()
@@ -251,7 +269,7 @@ export function StreamGate() {
               const res = await fetch(`/api/agent-profile?owner=${encodeURIComponent(privyEmail)}`)
               const data = await res.json().catch(() => ({})) as { ok?: boolean; agents?: AgentProfile[] }
               if (res.ok && data.ok && Array.isArray(data.agents)) {
-                for (const agent of data.agents) await addBySlug(agent.slug, agent)
+                for (const agent of data.agents) await addBySlug(agent.slug, { ...agent, source: 'saved' })
               }
             } catch {
               // Older Telegram-owned profiles may not be keyed by email yet.
@@ -273,6 +291,32 @@ export function StreamGate() {
     void hydrateAgentOptions()
     return () => { cancelled = true }
   }, [paymentMode, initialAgentSlug, privyAuthenticated, privyEmail, getAccessToken]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function logoutSelectedAgent() {
+    if (!safeAgentSlug || agentManaging) return
+    setAgentManaging(true)
+    setContentError(null)
+    setCircleNotice(null)
+    try {
+      const res = await fetch('/api/agent-wallet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'disconnect', agentSlug: safeAgentSlug }),
+      })
+      const data = await res.json().catch(() => ({})) as { ok?: boolean; error?: string; code?: string }
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Could not log out this agent session.')
+      setAgentOptions(current => current.map(agent => (
+        agent.slug === safeAgentSlug ? { ...agent, connected: false, gatewayBalance: undefined } : agent
+      )))
+      setCircleNotice('Agent session logged out. Select another agent or reconnect when ready.')
+      if (contentState === 'error') setContentState('idle')
+    } catch (err) {
+      setContentError(err instanceof Error ? err.message.slice(0, 180) : 'Could not log out this agent session.')
+      setContentState('error')
+    } finally {
+      setAgentManaging(false)
+    }
+  }
 
   async function handleApprove() {
     if (!POA_CONTRACT || !isConnected || !isOnArc) return
@@ -522,6 +566,42 @@ export function StreamGate() {
                       className="w-full rounded-xl border border-blue-100 bg-white px-3 py-3 font-mono text-[14px] text-gray-900 outline-none placeholder:text-gray-300 focus:border-blue-300"
                     />
                   </label>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => window.open(selectedAgentSetupUrl(), '_blank', 'noopener,noreferrer')}
+                      className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-[11px] font-bold text-gray-700 transition-all hover:border-gray-300 hover:bg-white"
+                    >
+                      Manage agent
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => window.open(agentTelegramManageUrl(), '_blank', 'noopener,noreferrer')}
+                      className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-[11px] font-bold text-gray-700 transition-all hover:border-gray-300 hover:bg-white"
+                    >
+                      Agent dashboard
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAgentSlug('')
+                        setContentError(null)
+                        setCircleNotice(null)
+                        if (contentState === 'error') setContentState('idle')
+                      }}
+                      className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-[11px] font-bold text-gray-500 transition-all hover:border-gray-300 hover:text-gray-800"
+                    >
+                      Switch agent
+                    </button>
+                    <button
+                      type="button"
+                      onClick={logoutSelectedAgent}
+                      disabled={!safeAgentSlug || agentManaging}
+                      className="rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-[11px] font-bold text-red-600 transition-all hover:border-red-200 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {agentManaging ? 'Logging out...' : 'Log out agent'}
+                    </button>
+                  </div>
                 </div>
                 <button
                   onClick={handlePrimaryGatewayPay}
