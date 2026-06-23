@@ -337,6 +337,10 @@ function hasActivatedGatewayBalance(agent: AgentOption | undefined, requiredAmou
   return numericBalance(agent.gatewayBalance) >= requiredAmount
 }
 
+function isGatewayPendingMessage(message: string | null) {
+  return /gateway deposit|pending|not made/i.test(message || '')
+}
+
 function unlockRecoveryStep(message: string): UnlockStep | null {
   if (/balance|fund|insufficient|gateway|deposit|activation/i.test(message)) return 'fund'
   if (/session|reconnect|login|wallet session|not found|not enabled|create the wallet/i.test(message)) return 'email'
@@ -408,6 +412,7 @@ export function StreamGate() {
   const [fundChain] = useState<FundingChain>('BASE-SEPOLIA')
   const [fundBusy, setFundBusy] = useState(false)
   const [fundMessage, setFundMessage] = useState<string | null>(null)
+  const gatewayActivationPending = isGatewayPendingMessage(fundMessage)
   const [copiedWallet, setCopiedWallet] = useState(false)
 
   async function handleEndSession() {
@@ -839,6 +844,7 @@ export function StreamGate() {
       if (!res.ok || data.ok === false) return
       const walletAddress = data.walletAddress
       const baseSepoliaStatus = await lookupBaseSepoliaUsdcBalance(walletAddress)
+      const status = { ...data, ...(baseSepoliaStatus || {}) }
       setAgentOptions(current => current.map(agent => (
         agent.slug === cleanSlug
           ? {
@@ -855,6 +861,7 @@ export function StreamGate() {
             }
           : agent
       )))
+      return status
     } catch {
       // Balance refresh is non-blocking; the unlock path will still return a clear error if payment fails.
     }
@@ -891,6 +898,8 @@ export function StreamGate() {
       if (res.status === 202 && data.code === 'gateway_deposit_pending') {
         await refreshPaymentWalletStatus(paymentSlug)
         setFundMessage(data.error || 'Gateway deposit is pending. Wait a moment, then check activation again.')
+        setWalletError(null)
+        setContentError(null)
         return
       }
       if (!res.ok || !data.ok) throw new Error(data.error || 'Could not activate the payment balance.')
@@ -917,6 +926,29 @@ export function StreamGate() {
       } else {
         if (recoveryStep === 'fund') setUnlockStep('fund')
         setWalletError(message.slice(0, 180))
+      }
+    } finally {
+      setFundBusy(false)
+    }
+  }
+
+  async function checkPaymentActivation() {
+    const paymentSlug = selectedAgent?.slug || safeAgentSlug
+    if (!paymentSlug) {
+      setWalletError('Choose a payment wallet first.')
+      setUnlockStep('choose')
+      return
+    }
+    setFundBusy(true)
+    setWalletError(null)
+    setContentError(null)
+    try {
+      const fresh = await refreshPaymentWalletStatus(paymentSlug)
+      if (numericBalance(fresh?.gatewayBalance) >= sessionCap) {
+        setFundMessage('Payment balance activated. You can unlock now.')
+        setUnlockStep('choose')
+      } else {
+        setFundMessage('Gateway activation is still pending. Wait a moment, then check again. Do not activate again yet.')
       }
     } finally {
       setFundBusy(false)
@@ -1296,11 +1328,11 @@ export function StreamGate() {
                         </button>
                         <button
                           type="button"
-                          onClick={activatePaymentBalance}
+                          onClick={gatewayActivationPending ? checkPaymentActivation : activatePaymentBalance}
                           disabled={fundBusy}
                           className="rounded-xl bg-gray-950 px-3 py-3 text-[12px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                          {fundBusy ? 'Activating...' : 'Activate'}
+                          {fundBusy ? (gatewayActivationPending ? 'Checking...' : 'Activating...') : gatewayActivationPending ? 'Check x402' : 'Activate'}
                         </button>
                       </div>
                       {walletError && /reconnect|sign in|activation did not complete/i.test(walletError) && (
@@ -1341,7 +1373,12 @@ export function StreamGate() {
                   </div>
                 )}
                 {fundMessage && (
-                  <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2.5 text-center text-[12px] font-medium text-emerald-700">
+                  <div className={[
+                    'rounded-xl border px-3 py-2.5 text-center text-[12px] font-medium',
+                    gatewayActivationPending
+                      ? 'border-amber-100 bg-amber-50 text-amber-700'
+                      : 'border-emerald-100 bg-emerald-50 text-emerald-700',
+                  ].join(' ')}>
                     {fundMessage}
                   </div>
                 )}
