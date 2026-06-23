@@ -299,8 +299,8 @@ function numericBalance(value?: string) {
 }
 
 function unlockRecoveryStep(message: string): UnlockStep | null {
-  if (/balance|fund|insufficient|gateway|deposit|activation/i.test(message)) return 'fund'
   if (/session|reconnect|login|wallet session|not found|not enabled|create the wallet/i.test(message)) return 'email'
+  if (/balance|fund|insufficient|gateway|deposit|activation/i.test(message)) return 'fund'
   return null
 }
 
@@ -1246,6 +1246,19 @@ export function StreamGate() {
                           {fundBusy ? 'Activating...' : 'Activate'}
                         </button>
                       </div>
+                      {walletError && /reconnect|sign in|activation did not complete/i.test(walletError) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setWalletError(null)
+                            setContentError(null)
+                            setUnlockStep('email')
+                          }}
+                          className="w-full rounded-xl border border-blue-100 bg-blue-50 px-3 py-3 text-[12px] font-bold text-blue-700 transition-all hover:border-blue-200 hover:bg-blue-100"
+                        >
+                          Reconnect reader wallet
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
