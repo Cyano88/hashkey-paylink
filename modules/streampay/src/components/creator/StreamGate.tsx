@@ -628,6 +628,7 @@ export function StreamGate() {
   async function startPaymentWalletLogin(slugOverride?: string) {
     const email = cleanEmail(walletEmail || privyEmail)
     const slug = walletSlugForEmail(email, slugOverride || safeAgentSlug)
+    const expectedWallet = agentOptions.find(agent => agent.slug === slug)?.walletAddress
     setWalletError(null)
     setContentError(null)
     setCircleNotice(null)
@@ -641,7 +642,7 @@ export function StreamGate() {
       const res = await fetch('/api/agent-wallet', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'init', agentSlug: slug, email, testnet: true }),
+        body: JSON.stringify({ action: 'init', agentSlug: slug, email, testnet: true, expectedWallet }),
       })
       const data = await res.json().catch(() => ({})) as { ok?: boolean; error?: string }
       if (!res.ok || !data.ok) throw new Error(data.error || 'Could not send the sign-in code.')
@@ -677,7 +678,14 @@ export function StreamGate() {
       const res = await fetch('/api/agent-wallet', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'complete', agentSlug: context.slug, email: context.email, otp, testnet: true }),
+        body: JSON.stringify({
+          action: 'complete',
+          agentSlug: context.slug,
+          email: context.email,
+          otp,
+          testnet: true,
+          expectedWallet: agentOptions.find(agent => agent.slug === context.slug)?.walletAddress,
+        }),
       })
       const data = await res.json().catch(() => ({})) as {
         ok?: boolean

@@ -138,7 +138,11 @@ const CREATOR_CATEGORIES: Array<{ id: CreatorCategory; label: string; disabled?:
 ]
 
 const VISIBLE_CREATOR_CATEGORIES = CREATOR_CATEGORIES.filter(category => category.visible !== false)
-const OFFICIAL_CREATOR_ADDRESS = '0xcE5dF9e1115F81a2Fc2F65941B20B820d508e753'
+const OFFICIAL_CREATOR_ADDRESS = (
+  import.meta.env.VITE_CREATOR_OFFICIAL_WALLET
+  || import.meta.env.VITE_DEFAULT_AGENT_WALLET_ADDRESS
+  || '0x823c31d5e373dd3fa7cad59af05fa45e3858556c'
+)
 const OFFICIAL_WORLD_CUP_SCORES_GATE = `/gate?app=streampay&id=worldcup-scores&cr=${OFFICIAL_CREATOR_ADDRESS}&r=1000&cap=100000&t=Live%20Scores%20Pulse&pay=x402`
 
 const OFFICIAL_DISCOVER_CONTENT: PublishedContent[] = [
