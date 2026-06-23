@@ -311,11 +311,11 @@ function readableUnlockError(message: string) {
   if (/OTP expired|Resend OTP/i.test(message)) {
     return 'That code expired. Resend the code and use the newest email code.'
   }
-  if (/balance|fund|insufficient|gateway|deposit|activation/i.test(message)) {
-    return 'This payment wallet needs USDC added before it can unlock content.'
-  }
   if (/session|reconnect|login|wallet session|not found|not enabled|create the wallet/i.test(message)) {
-    return 'Sign in to this payment wallet again to continue.'
+    return 'Sign in to this reader wallet again to continue.'
+  }
+  if (/balance|fund|insufficient|gateway|deposit|activation/i.test(message)) {
+    return 'Arc USDC is funded, but x402 activation did not complete. Reconnect the reader wallet, then try again.'
   }
   return message.slice(0, 180)
 }
@@ -833,6 +833,7 @@ export function StreamGate() {
       })
       const data = await res.json().catch(() => ({})) as {
         ok?: boolean
+        code?: string
         error?: string
         gatewayBalance?: string
         walletAddress?: string
@@ -848,7 +849,11 @@ export function StreamGate() {
       setUnlockStep('choose')
       setContentState('idle')
     } catch (err) {
-      setWalletError(err instanceof Error ? readableUnlockError(err.message) : 'Could not activate the payment balance.')
+      const message = err instanceof Error ? err.message : 'Could not activate the payment balance.'
+      const recoveryStep = unlockRecoveryStep(message)
+      if (recoveryStep === 'email') setUnlockStep('email')
+      else if (recoveryStep === 'fund') setUnlockStep('fund')
+      setWalletError(readableUnlockError(message))
     } finally {
       setFundBusy(false)
     }
