@@ -29,6 +29,8 @@ const MAX_SERVICE_AMOUNT = Number(process.env.AGENT_WALLET_MAX_SERVICE_AMOUNT ??
 const MAX_GATEWAY_DEPOSIT_AMOUNT = Number(process.env.AGENT_WALLET_MAX_GATEWAY_DEPOSIT_AMOUNT ?? '5')
 const GATEWAY_BALANCE_CHAIN = process.env.AGENT_WALLET_GATEWAY_BALANCE_CHAIN ?? 'MATIC'
 const GATEWAY_DEPOSIT_CHAIN = process.env.AGENT_WALLET_GATEWAY_DEPOSIT_CHAIN ?? 'BASE'
+const GATEWAY_DEPOSIT_VERIFY_ATTEMPTS = Math.max(1, Number(process.env.AGENT_WALLET_GATEWAY_DEPOSIT_VERIFY_ATTEMPTS ?? '6') || 6)
+const GATEWAY_DEPOSIT_VERIFY_DELAY_MS = Math.max(500, Number(process.env.AGENT_WALLET_GATEWAY_DEPOSIT_VERIFY_DELAY_MS ?? '5000') || 5000)
 
 const ARC_TESTNET = defineChain({
   id: 5042002,
@@ -75,6 +77,10 @@ const USDC_CHAIN_CONFIG = {
     fallbackRpc: 'https://rpc.testnet.arc.network',
   },
 } as const
+
+function delay(ms: number) {
+  return new Promise(resolveDelay => setTimeout(resolveDelay, ms))
+}
 
 type PendingSession = {
   agentSlug: string
@@ -891,28 +897,38 @@ export default async function handler(req: Request, res: Response) {
 
       let balanceOutput = ''
       let gatewayBalance: string | undefined
-      try {
+      let balanceError: unknown
+      for (let attempt = 1; attempt <= GATEWAY_DEPOSIT_VERIFY_ATTEMPTS; attempt += 1) {
         try {
-          balanceOutput = await runCircle(['gateway', 'balance', '--address', record.walletAddress, '--chain', depositChain, '--output', 'json'], serviceKey, 30_000)
-        } catch {
-          balanceOutput = await runCircle(['gateway', 'balance', '--address', record.walletAddress, '--chain', depositChain], serviceKey, 30_000)
+          try {
+            balanceOutput = await runCircle(['gateway', 'balance', '--address', record.walletAddress, '--chain', depositChain, '--output', 'json'], serviceKey, 30_000)
+          } catch {
+            balanceOutput = await runCircle(['gateway', 'balance', '--address', record.walletAddress, '--chain', depositChain], serviceKey, 30_000)
+          }
+          gatewayBalance = parseBalance(balanceOutput)
+          balanceError = undefined
+          if (Number(gatewayBalance ?? '0') >= Number(amount)) break
+        } catch (err) {
+          balanceError = err
         }
-        gatewayBalance = parseBalance(balanceOutput)
-      } catch (err) {
+        if (attempt < GATEWAY_DEPOSIT_VERIFY_ATTEMPTS) await delay(GATEWAY_DEPOSIT_VERIFY_DELAY_MS)
+      }
+
+      if (balanceError && !balanceOutput) {
         return res.status(502).json({
           ok: false,
           code: 'gateway_balance_verify_failed',
-          error: err instanceof Error ? err.message.slice(0, 240) : 'Gateway balance verification failed after deposit.',
+          error: balanceError instanceof Error ? balanceError.message.slice(0, 240) : 'Gateway balance verification failed after deposit.',
           depositChain,
           raw: output.slice(0, 3000),
         })
       }
 
       if (Number(gatewayBalance ?? '0') < Number(amount)) {
-        return res.status(409).json({
+        return res.status(202).json({
           ok: false,
-          code: 'gateway_deposit_not_available',
-          error: `Gateway deposit did not make ${amount} USDC available on ${depositChain}. Fund this wallet with test USDC on ${depositChain}, then try Activate again.`,
+          code: 'gateway_deposit_pending',
+          error: `Gateway deposit was submitted, but Circle Gateway has not made ${amount} USDC available on ${depositChain} yet. Wait a moment, then check activation again.`,
           gatewayBalance: gatewayBalance ?? '0',
           gatewayBalanceChain: depositChain,
           raw: output.slice(0, 3000),

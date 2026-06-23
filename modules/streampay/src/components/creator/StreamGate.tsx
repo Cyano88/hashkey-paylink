@@ -878,6 +878,11 @@ export function StreamGate() {
         gatewayBalance?: string
         walletAddress?: string
       }
+      if (res.status === 202 && data.code === 'gateway_deposit_pending') {
+        await refreshPaymentWalletStatus(paymentSlug)
+        setFundMessage(data.error || 'Gateway deposit is pending. Wait a moment, then check activation again.')
+        return
+      }
       if (!res.ok || !data.ok) throw new Error(data.error || 'Could not activate the payment balance.')
       setAgentOptions(current => current.map(agent => (
         agent.slug === paymentSlug
