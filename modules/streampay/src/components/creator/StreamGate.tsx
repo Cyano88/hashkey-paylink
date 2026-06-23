@@ -275,6 +275,15 @@ function paymentWalletStatusText(agent?: AgentOption | null) {
   return 'Set up required'
 }
 
+function paymentWalletSourceText(agent?: AgentOption | null) {
+  if (!agent) return 'No wallet selected'
+  if (agent.source === 'env') return 'Pinned platform wallet'
+  if (agent.source === 'saved') return 'Saved wallet'
+  if (agent.source === 'store') return 'Email wallet'
+  if (agent.source === 'platform') return 'Platform wallet'
+  return 'x402 unlock wallet'
+}
+
 function unlockRecoveryStep(message: string): UnlockStep | null {
   if (/balance|fund|insufficient|gateway|deposit|activation/i.test(message)) return 'fund'
   if (/session|reconnect|login|wallet session|not found|not enabled|create the wallet/i.test(message)) return 'email'
@@ -714,6 +723,7 @@ export function StreamGate() {
       n: 'arc',
       f: '1',
       v: '1',
+      a: fundAmount,
       src: 'creator',
       agent: safeAgentSlug || 'hashpaylink-agent',
       returnTo: `${window.location.pathname}${window.location.search}`,
@@ -1070,14 +1080,44 @@ export function StreamGate() {
                   {unlockStep === 'fund' && (
                     <div className="space-y-3">
                       <div className="border-b border-gray-100 pb-3">
-                        <p className="text-[13px] font-bold text-gray-900">Add USDC</p>
-                        <p className="mt-1 text-[12px] leading-relaxed text-gray-500">
-                          Add Arc USDC to this payment wallet, then activate the balance for unlocks.
-                        </p>
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-[13px] font-bold text-gray-900">Add Arc USDC</p>
+                            <p className="mt-1 text-[12px] leading-relaxed text-gray-500">
+                              Fund the selected x402 unlock wallet, then activate the balance.
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setWalletError(null)
+                              setContentError(null)
+                              setUnlockStep(agentOptions.length > 0 ? 'choose' : 'email')
+                            }}
+                            className="shrink-0 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-[11px] font-bold text-gray-700"
+                          >
+                            Switch
+                          </button>
+                        </div>
                       </div>
+                      {selectedAgent && (
+                        <div className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-2.5">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="truncate text-[12px] font-bold text-blue-900">{paymentWalletName(selectedAgent)}</p>
+                              <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-blue-500">
+                                {paymentWalletSourceText(selectedAgent)}
+                              </p>
+                            </div>
+                            <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-[10px] font-bold text-blue-700 ring-1 ring-blue-100">
+                              Arc Network
+                            </span>
+                          </div>
+                        </div>
+                      )}
                       {selectedAgent?.walletAddress && (
                         <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-3">
-                          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-gray-400">Wallet address</p>
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-gray-400">Selected wallet address</p>
                           <div className="mt-1 flex items-center justify-between gap-2">
                             <p className="min-w-0 truncate font-mono text-[12px] text-gray-700">{selectedAgent.walletAddress}</p>
                             <button
@@ -1110,9 +1150,6 @@ export function StreamGate() {
                           </div>
                         </div>
                       )}
-                      <div className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-2.5 text-[11px] font-bold text-blue-700">
-                        Arc Network
-                      </div>
                       <label className="block space-y-1.5">
                         <span className="text-[11px] font-semibold text-gray-600">Amount to activate</span>
                         <div className="relative">
