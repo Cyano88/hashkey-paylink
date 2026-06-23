@@ -5,7 +5,7 @@ import { dirname, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import crypto from 'node:crypto'
 import { createPublicClient, defineChain, formatUnits, http } from 'viem'
-import { arbitrum, base } from 'viem/chains'
+import { arbitrum, base, baseSepolia } from 'viem/chains'
 import { appendAgentActivity, listAgentActivity } from './agent-activity.js'
 import { setAgentProfileWallet } from './agent-profile.js'
 import { getAgentGovernanceProfile, getAgentLegalProfile } from './agent-legal.js'
@@ -55,6 +55,12 @@ const USDC_CHAIN_CONFIG = {
     token: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
     rpcEnv: 'PRIVATE_RPC_URL',
     fallbackRpc: 'https://mainnet.base.org',
+  },
+  'BASE-SEPOLIA': {
+    chain: baseSepolia,
+    token: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+    rpcEnv: 'PRIVATE_RPC_URL_BASE_SEPOLIA',
+    fallbackRpc: 'https://sepolia.base.org',
   },
   ARBITRUM: {
     chain: arbitrum,
@@ -269,10 +275,11 @@ function clampAmount(value: unknown, max: number) {
 function normalizeBalanceChain(value: unknown, fallback = 'BASE') {
   const key = String(value ?? '').trim().toLowerCase()
   if (key === 'base') return 'BASE'
+  if (key === 'base-sepolia' || key === 'base_sepolia' || key === 'basesepolia') return 'BASE-SEPOLIA'
   if (key === 'arbitrum' || key === 'arb') return 'ARBITRUM'
   if (key === 'arc' || key === 'arc-testnet' || key === 'arc_testnet') return 'ARC-TESTNET'
   const upper = key.toUpperCase()
-  if (upper === 'BASE' || upper === 'ARBITRUM' || upper === 'ARC-TESTNET') return upper
+  if (upper === 'BASE' || upper === 'BASE-SEPOLIA' || upper === 'ARBITRUM' || upper === 'ARC-TESTNET') return upper
   return fallback
 }
 

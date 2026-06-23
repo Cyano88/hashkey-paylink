@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express'
 import { createPublicClient, defineChain, http } from 'viem'
-import { base, arbitrum } from 'viem/chains'
+import { base, baseSepolia, arbitrum } from 'viem/chains'
 
 const ERC20_BALANCE_OF_ABI = [{
   name: 'balanceOf',
@@ -30,6 +30,14 @@ const CHAIN_CONFIG = {
     rpcEnv: 'PRIVATE_RPC_URL',
     fallbackRpc: 'https://mainnet.base.org',
   },
+  'base-sepolia': {
+    chain: baseSepolia,
+    label: 'Base Sepolia',
+    tokenAddress: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+    decimals: 6,
+    rpcEnv: 'PRIVATE_RPC_URL_BASE_SEPOLIA',
+    fallbackRpc: 'https://sepolia.base.org',
+  },
   arc: {
     chain: arc,
     label: 'Arc Testnet',
@@ -51,7 +59,7 @@ const CHAIN_CONFIG = {
 type EvmBalanceChain = keyof typeof CHAIN_CONFIG
 
 function isEvmBalanceChain(value: unknown): value is EvmBalanceChain {
-  return value === 'base' || value === 'arc' || value === 'arbitrum'
+  return value === 'base' || value === 'base-sepolia' || value === 'arc' || value === 'arbitrum'
 }
 
 function isAddress(value: unknown): value is `0x${string}` {

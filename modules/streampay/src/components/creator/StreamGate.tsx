@@ -83,9 +83,9 @@ type AgentOption = AgentProfile & {
   balance?: string
   balanceError?: string
   balanceChecked?: boolean
-  baseBalance?: string
-  baseBalanceChecked?: boolean
-  baseBalanceError?: string
+  baseSepoliaBalance?: string
+  baseSepoliaBalanceChecked?: boolean
+  baseSepoliaBalanceError?: string
   gatewayBalance?: string
   gatewayBalanceError?: string
   gatewayBalanceChecked?: boolean
@@ -482,7 +482,7 @@ export function StreamGate() {
           const statusRes = await fetch(`/api/agent-wallet?agent=${encodeURIComponent(cleanSlug)}&balance=1&chain=arc&x402=1&gatewayChain=base-sepolia`)
           const status = await statusRes.json().catch(() => ({})) as AgentWalletStatus
           if (statusRes.ok && status.ok !== false) {
-            const baseStatus = await lookupBaseUsdcBalance(status.walletAddress || option.walletAddress)
+            const baseSepoliaStatus = await lookupBaseSepoliaUsdcBalance(status.walletAddress || option.walletAddress)
             option = {
               ...option,
               walletAddress: status.walletAddress || option.walletAddress,
@@ -491,7 +491,7 @@ export function StreamGate() {
               balance: status.balance,
               balanceError: status.balanceError,
               balanceChecked: status.balanceChecked,
-              ...(baseStatus || {}),
+              ...(baseSepoliaStatus || {}),
               gatewayBalance: status.gatewayBalance,
               gatewayBalanceError: status.gatewayBalanceError,
               gatewayBalanceChecked: status.gatewayBalanceChecked,
@@ -802,21 +802,21 @@ export function StreamGate() {
     window.setTimeout(() => setCopiedWallet(false), 1500)
   }
 
-  async function lookupBaseUsdcBalance(walletAddress?: string) {
+  async function lookupBaseSepoliaUsdcBalance(walletAddress?: string) {
     if (!walletAddress) return null
     try {
       const res = await fetch('/api/evm-balance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chain: 'base', address: walletAddress }),
+        body: JSON.stringify({ chain: 'base-sepolia', address: walletAddress }),
       })
       const data = await res.json().catch(() => ({})) as EvmBalanceResponse
       if (!res.ok || !data.ok) {
-        return { baseBalanceChecked: true, baseBalanceError: data.error || 'Base balance unavailable.' }
+        return { baseSepoliaBalanceChecked: true, baseSepoliaBalanceError: data.error || 'Base Sepolia balance unavailable.' }
       }
-      return { baseBalance: data.balance, baseBalanceChecked: true, baseBalanceError: undefined }
+      return { baseSepoliaBalance: data.balance, baseSepoliaBalanceChecked: true, baseSepoliaBalanceError: undefined }
     } catch {
-      return { baseBalanceChecked: true, baseBalanceError: 'Base balance unavailable.' }
+      return { baseSepoliaBalanceChecked: true, baseSepoliaBalanceError: 'Base Sepolia balance unavailable.' }
     }
   }
 
@@ -828,7 +828,7 @@ export function StreamGate() {
       const data = await res.json().catch(() => ({})) as AgentWalletStatus
       if (!res.ok || data.ok === false) return
       const walletAddress = data.walletAddress
-      const baseStatus = await lookupBaseUsdcBalance(walletAddress)
+      const baseSepoliaStatus = await lookupBaseSepoliaUsdcBalance(walletAddress)
       setAgentOptions(current => current.map(agent => (
         agent.slug === cleanSlug
           ? {
@@ -838,7 +838,7 @@ export function StreamGate() {
               balance: data.balance,
               balanceError: data.balanceError,
               balanceChecked: data.balanceChecked,
-              ...(baseStatus || {}),
+              ...(baseSepoliaStatus || {}),
               gatewayBalance: data.gatewayBalance,
               gatewayBalanceError: data.gatewayBalanceError,
               gatewayBalanceChecked: data.gatewayBalanceChecked,
@@ -1217,7 +1217,7 @@ export function StreamGate() {
                               {copiedWallet ? 'Copied' : 'Copy'}
                             </button>
                           </div>
-                          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
                             <div className="rounded-lg border border-white bg-white px-3 py-2">
                               <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400">Arc wallet</p>
                               <p className="mt-0.5 truncate text-[12px] font-bold text-gray-900">
@@ -1225,6 +1225,15 @@ export function StreamGate() {
                               </p>
                               {selectedAgent.balanceError && (
                                 <p className="mt-1 text-[10px] font-medium text-amber-600">{selectedAgent.balanceError}</p>
+                              )}
+                            </div>
+                            <div className="rounded-lg border border-white bg-white px-3 py-2">
+                              <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400">Base Sepolia</p>
+                              <p className="mt-0.5 truncate text-[12px] font-bold text-gray-900">
+                                {formatBalanceLabel(selectedAgent.baseSepoliaBalance) || (selectedAgent.baseSepoliaBalanceChecked ? '0 USDC' : 'Checking...')}
+                              </p>
+                              {selectedAgent.baseSepoliaBalanceError && (
+                                <p className="mt-1 text-[10px] font-medium text-amber-600">{selectedAgent.baseSepoliaBalanceError}</p>
                               )}
                             </div>
                             <div className="rounded-lg border border-white bg-white px-3 py-2">
@@ -1237,9 +1246,9 @@ export function StreamGate() {
                               )}
                             </div>
                           </div>
-                          {numericBalance(selectedAgent.baseBalance) > 0 && numericBalance(selectedAgent.balance) <= 0 && (
+                          {selectedAgent.baseSepoliaBalanceChecked && numericBalance(selectedAgent.baseSepoliaBalance) <= 0 && (
                             <p className="mt-2 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-[11px] font-medium leading-relaxed text-amber-700">
-                              {formatBalanceLabel(selectedAgent.baseBalance)} detected on Base. Gateway activation in this test flow uses Base Sepolia, so use test USDC on Base Sepolia for activation.
+                              Gateway activation needs test USDC on Base Sepolia. Arc USDC can settle content, but it cannot activate Circle Gateway in this test flow.
                             </p>
                           )}
                         </div>
