@@ -881,6 +881,38 @@ export default async function handler(req: Request, res: Response) {
         }
         throw err
       }
+
+      let balanceOutput = ''
+      let gatewayBalance: string | undefined
+      try {
+        try {
+          balanceOutput = await runCircle(['gateway', 'balance', '--address', record.walletAddress, '--chain', depositChain, '--output', 'json'], serviceKey, 30_000)
+        } catch {
+          balanceOutput = await runCircle(['gateway', 'balance', '--address', record.walletAddress, '--chain', depositChain], serviceKey, 30_000)
+        }
+        gatewayBalance = parseBalance(balanceOutput)
+      } catch (err) {
+        return res.status(502).json({
+          ok: false,
+          code: 'gateway_balance_verify_failed',
+          error: err instanceof Error ? err.message.slice(0, 240) : 'Gateway balance verification failed after deposit.',
+          depositChain,
+          raw: output.slice(0, 3000),
+        })
+      }
+
+      if (Number(gatewayBalance ?? '0') < Number(amount)) {
+        return res.status(409).json({
+          ok: false,
+          code: 'gateway_deposit_not_available',
+          error: `Gateway deposit did not make ${amount} USDC available on ${depositChain}. Fund this wallet with test USDC on ${depositChain}, then try Activate again.`,
+          gatewayBalance: gatewayBalance ?? '0',
+          gatewayBalanceChain: depositChain,
+          raw: output.slice(0, 3000),
+          balanceRaw: balanceOutput.slice(0, 1200),
+        })
+      }
+
       await appendAgentActivity({
         agentSlug,
         type: 'gateway_activated',
@@ -900,6 +932,7 @@ export default async function handler(req: Request, res: Response) {
         amount: String(amount),
         depositChain,
         gatewayBalanceChain: depositChain,
+        gatewayBalance,
         response: extractJsonFromCliOutput(output),
         raw: output.slice(0, 3000),
       })
