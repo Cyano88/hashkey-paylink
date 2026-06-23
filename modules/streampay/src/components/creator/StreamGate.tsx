@@ -610,8 +610,15 @@ export function StreamGate() {
     } catch (err) {
       const rawMessage = err instanceof Error ? err.message : 'Payment failed.'
       const nextStep = unlockRecoveryStep(rawMessage)
-      if (nextStep) setUnlockStep(nextStep)
-      setContentError(readableUnlockError(rawMessage))
+      if (nextStep === 'email') {
+        setUnlockStep('email')
+        setCircleNotice('Reconnect this reader wallet with a fresh email code.')
+        setWalletError(null)
+        setContentError(null)
+      } else {
+        if (nextStep) setUnlockStep(nextStep)
+        setContentError(readableUnlockError(rawMessage))
+      }
       setContentState('error')
     } finally {
       setGatewayPaying(false)
@@ -851,9 +858,15 @@ export function StreamGate() {
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Could not activate the payment balance.'
       const recoveryStep = unlockRecoveryStep(message)
-      if (recoveryStep === 'email') setUnlockStep('email')
-      else if (recoveryStep === 'fund') setUnlockStep('fund')
-      setWalletError(readableUnlockError(message))
+      if (recoveryStep === 'email') {
+        setUnlockStep('email')
+        setCircleNotice('Reconnect this reader wallet with a fresh email code.')
+        setWalletError(null)
+        setContentError(null)
+      } else {
+        if (recoveryStep === 'fund') setUnlockStep('fund')
+        setWalletError(readableUnlockError(message))
+      }
     } finally {
       setFundBusy(false)
     }
@@ -1046,7 +1059,11 @@ export function StreamGate() {
                         <input
                           type="email"
                           value={walletEmail}
-                          onChange={event => setWalletEmail(event.target.value)}
+                          onChange={event => {
+                            setWalletEmail(event.target.value)
+                            setWalletError(null)
+                            setContentError(null)
+                          }}
                           placeholder="you@example.com"
                           className="w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-[14px] text-gray-900 outline-none placeholder:text-gray-300 focus:border-blue-300"
                         />
