@@ -275,6 +275,35 @@ function mergeAgentOptions(existing: AgentOption[], next: AgentOption) {
   return existing.map(item => item.slug === slug ? { ...item, ...next, slug } : item)
 }
 
+function normalizePaymentWalletOptions(options: AgentOption[]) {
+  const bySlug = new Map<string, AgentOption>()
+  for (const option of options) {
+    const slug = cleanAgentSlug(option.slug)
+    if (!slug) continue
+    const existing = bySlug.get(slug)
+    bySlug.set(slug, existing ? { ...existing, ...option, slug } : { ...option, slug })
+  }
+
+  const deduped = [...bySlug.values()]
+  const hasConnectedReader = deduped.some(option =>
+    option.connected &&
+    option.walletAddress &&
+    (option.source === 'store' || option.slug.startsWith('creator-'))
+  )
+
+  return deduped
+    .filter(option => {
+      if (!hasConnectedReader) return true
+      if (option.connected || option.walletAddress) return true
+      return !(option.source === 'store' || option.slug.startsWith('creator-'))
+    })
+    .sort((a, b) => {
+      if (Boolean(a.connected) !== Boolean(b.connected)) return a.connected ? -1 : 1
+      if (Boolean(a.walletAddress) !== Boolean(b.walletAddress)) return a.walletAddress ? -1 : 1
+      return a.slug.localeCompare(b.slug)
+    })
+}
+
 function paymentWalletName(agent?: AgentOption | null) {
   if (!agent) return 'Reader wallet'
   if (agent.slug === 'hashpaylink-agent' || agent.source === 'platform' || agent.source === 'env') return 'Hash PayLink wallet'
@@ -514,8 +543,13 @@ export function StreamGate() {
         }
 
         if (!cancelled) {
-          setAgentOptions(options)
-          if (!safeAgentSlug && options.length === 1) setAgentSlug(options[0].slug)
+          const normalizedOptions = normalizePaymentWalletOptions(options)
+          const selected = normalizedOptions.find(option => option.slug === safeAgentSlug)
+          const preferred = selected?.connected
+            ? selected
+            : normalizedOptions.find(option => option.connected && option.walletAddress) || selected || normalizedOptions[0]
+          setAgentOptions(normalizedOptions)
+          if (preferred && preferred.slug !== safeAgentSlug) setAgentSlug(preferred.slug)
         }
       } catch (err) {
         if (!cancelled) setAgentOptionsError(err instanceof Error ? err.message.slice(0, 140) : 'Could not load saved agents.')
@@ -724,13 +758,13 @@ export function StreamGate() {
       if (!res.ok || !data.ok) throw new Error(data.error || 'Could not verify the wallet code.')
       const slug = cleanAgentSlug(data.agentSlug || context.slug)
       setAgentSlug(slug)
-      setAgentOptions(current => mergeAgentOptions(current, {
-        slug,
-        name: slug === 'hashpaylink-agent' ? 'Hash PayLink wallet' : slug,
-        walletAddress: data.walletAddress,
-        connected: true,
-        source: 'store',
-      }))
+      setAgentOptions(current => normalizePaymentWalletOptions(mergeAgentOptions(current, {
+          slug,
+          name: slug === 'hashpaylink-agent' ? 'Hash PayLink wallet' : 'Reader wallet',
+          walletAddress: data.walletAddress,
+          connected: true,
+          source: 'store',
+        })))
       setWalletOtp('')
       setWalletOtpContext(null)
       setCircleNotice('Payment wallet connected.')
@@ -999,6 +1033,7 @@ export function StreamGate() {
                               setAgentSlug(agent.slug)
                               setWalletError(null)
                               setContentError(null)
+                              setCircleNotice(null)
                               if (contentState === 'error') setContentState('idle')
                               if (ready) {
                                 await unlockWithAgentX402(agent.slug)
