@@ -4,6 +4,8 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import crypto from 'node:crypto'
+import { createPublicClient, defineChain, formatUnits, http } from 'viem'
+import { arbitrum, base } from 'viem/chains'
 import { appendAgentActivity, listAgentActivity } from './agent-activity.js'
 import { setAgentProfileWallet } from './agent-profile.js'
 import { getAgentGovernanceProfile, getAgentLegalProfile } from './agent-legal.js'
@@ -27,6 +29,46 @@ const MAX_SERVICE_AMOUNT = Number(process.env.AGENT_WALLET_MAX_SERVICE_AMOUNT ??
 const MAX_GATEWAY_DEPOSIT_AMOUNT = Number(process.env.AGENT_WALLET_MAX_GATEWAY_DEPOSIT_AMOUNT ?? '5')
 const GATEWAY_BALANCE_CHAIN = process.env.AGENT_WALLET_GATEWAY_BALANCE_CHAIN ?? 'MATIC'
 const GATEWAY_DEPOSIT_CHAIN = process.env.AGENT_WALLET_GATEWAY_DEPOSIT_CHAIN ?? 'BASE'
+
+const ARC_TESTNET = defineChain({
+  id: 5042002,
+  name: 'Arc Testnet',
+  nativeCurrency: { decimals: 18, name: 'USD Coin', symbol: 'USDC' },
+  rpcUrls: {
+    default: { http: ['https://rpc.testnet.arc.network'] },
+    public: { http: ['https://rpc.testnet.arc.network'] },
+  },
+  testnet: true,
+})
+
+const USDC_BALANCE_ABI = [{
+  name: 'balanceOf',
+  type: 'function' as const,
+  stateMutability: 'view' as const,
+  inputs: [{ name: 'account', type: 'address' }],
+  outputs: [{ name: '', type: 'uint256' }],
+}] as const
+
+const USDC_CHAIN_CONFIG = {
+  BASE: {
+    chain: base,
+    token: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+    rpcEnv: 'PRIVATE_RPC_URL',
+    fallbackRpc: 'https://mainnet.base.org',
+  },
+  ARBITRUM: {
+    chain: arbitrum,
+    token: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',
+    rpcEnv: 'PRIVATE_RPC_URL_ARB',
+    fallbackRpc: 'https://arb1.arbitrum.io/rpc',
+  },
+  'ARC-TESTNET': {
+    chain: ARC_TESTNET,
+    token: '0x3600000000000000000000000000000000000000',
+    rpcEnv: 'PRIVATE_RPC_URL_ARC',
+    fallbackRpc: 'https://rpc.testnet.arc.network',
+  },
+} as const
 
 type PendingSession = {
   agentSlug: string
@@ -242,6 +284,32 @@ function normalizeGatewayDepositChain(value: unknown) {
   const fallback = GATEWAY_DEPOSIT_CHAIN.toUpperCase()
   if (fallback === 'ARC-TESTNET' || fallback === 'ARC_TESTNET' || fallback === 'ARC') return 'ARC-TESTNET'
   return fallback === 'ARBITRUM' ? 'ARBITRUM' : 'BASE'
+}
+
+function normalizeGatewayBalanceChain(value: unknown) {
+  const key = String(value ?? '').trim().toLowerCase()
+  if (key === 'arc' || key === 'arc-testnet' || key === 'arc_testnet') return 'ARC-TESTNET'
+  if (key === 'base') return 'BASE'
+  if (key === 'arbitrum' || key === 'arb') return 'ARBITRUM'
+  const fallback = String(value || GATEWAY_BALANCE_CHAIN).trim().toUpperCase()
+  if (fallback === 'ARC-TESTNET' || fallback === 'ARC_TESTNET' || fallback === 'ARC') return 'ARC-TESTNET'
+  if (fallback === 'ARBITRUM' || fallback === 'ARB') return 'ARBITRUM'
+  if (fallback === 'BASE') return 'BASE'
+  return fallback || 'MATIC'
+}
+
+async function queryUsdcWalletBalance(address: string, chain: string) {
+  const config = USDC_CHAIN_CONFIG[chain as keyof typeof USDC_CHAIN_CONFIG]
+  if (!config) return undefined
+  const rpcUrl = process.env[config.rpcEnv]?.trim() || config.fallbackRpc
+  const client = createPublicClient({ chain: config.chain, transport: http(rpcUrl) })
+  const raw = await client.readContract({
+    address: config.token as `0x${string}`,
+    abi: USDC_BALANCE_ABI,
+    functionName: 'balanceOf',
+    args: [address as `0x${string}`],
+  })
+  return formatUnits(raw, 6)
 }
 
 function extractJsonFromCliOutput(output: string) {
@@ -532,30 +600,34 @@ export default async function handler(req: Request, res: Response) {
     const store = await readStore()
     const record = resolveAgentRecord(store, agentSlug)
     const balanceChain = normalizeBalanceChain(req.query.chain, record?.chain ?? 'BASE')
+    const gatewayBalanceChain = normalizeGatewayBalanceChain(req.query.gatewayChain ?? req.query.x402Chain)
     let balance: string | undefined
     let balanceError: string | undefined
     let balanceChecked = false
     let gatewayBalance: string | undefined
     let gatewayBalanceError: string | undefined
     let gatewayBalanceChecked = false
-    if (record?.walletAddress && req.query.balance === '1' && !record.sessionId) {
-      balanceChecked = true
-      balanceError = 'Reconnect this agent wallet to enable balance lookup.'
-    } else if (record?.walletAddress && req.query.balance === '1' && !CIRCLE_CLI_ENABLED) {
-      balanceChecked = true
-      balanceError = 'Circle CLI balance lookup is not enabled on this server.'
-    } else if (record?.walletAddress && record.sessionId && req.query.balance === '1' && CIRCLE_CLI_ENABLED) {
+    if (record?.walletAddress && req.query.balance === '1') {
       balanceChecked = true
       try {
-        const key = `${agentSlug}_${record.sessionId}`
-        let output = ''
-        try {
-          output = await runCircle(['wallet', 'balance', '--address', record.walletAddress, '--chain', balanceChain, '--output', 'json'], key, 30_000)
-        } catch {
-          output = await runCircle(['wallet', 'balance', '--address', record.walletAddress, '--chain', balanceChain], key, 30_000)
+        balance = await queryUsdcWalletBalance(record.walletAddress, balanceChain)
+        if (balance === undefined) {
+          if (!record.sessionId) {
+            balanceError = 'Reconnect this agent wallet to enable balance lookup.'
+          } else if (!CIRCLE_CLI_ENABLED) {
+            balanceError = 'Circle CLI balance lookup is not enabled on this server.'
+          } else {
+            const key = `${agentSlug}_${record.sessionId}`
+            let output = ''
+            try {
+              output = await runCircle(['wallet', 'balance', '--address', record.walletAddress, '--chain', balanceChain, '--output', 'json'], key, 30_000)
+            } catch {
+              output = await runCircle(['wallet', 'balance', '--address', record.walletAddress, '--chain', balanceChain], key, 30_000)
+            }
+            balance = parseBalance(output)
+            if (balance === undefined) balanceError = 'Circle CLI returned no parseable USDC balance.'
+          }
         }
-        balance = parseBalance(output)
-        if (balance === undefined) balanceError = 'Circle CLI returned no parseable USDC balance.'
       } catch (err) {
         balanceError = err instanceof Error ? err.message.slice(0, 240) : 'Balance lookup failed.'
       }
@@ -572,9 +644,9 @@ export default async function handler(req: Request, res: Response) {
         const key = `${agentSlug}_${record.sessionId}`
         let output = ''
         try {
-          output = await runCircle(['gateway', 'balance', '--address', record.walletAddress, '--chain', GATEWAY_BALANCE_CHAIN, '--output', 'json'], key, 30_000)
+          output = await runCircle(['gateway', 'balance', '--address', record.walletAddress, '--chain', gatewayBalanceChain, '--output', 'json'], key, 30_000)
         } catch {
-          output = await runCircle(['gateway', 'balance', '--address', record.walletAddress, '--chain', GATEWAY_BALANCE_CHAIN], key, 30_000)
+          output = await runCircle(['gateway', 'balance', '--address', record.walletAddress, '--chain', gatewayBalanceChain], key, 30_000)
         }
         gatewayBalance = parseBalance(output)
         if (gatewayBalance === undefined) gatewayBalanceError = 'Circle CLI returned no parseable x402 balance.'
@@ -597,7 +669,7 @@ export default async function handler(req: Request, res: Response) {
       gatewayBalance,
       gatewayBalanceChecked,
       gatewayBalanceError,
-      gatewayBalanceChain: GATEWAY_BALANCE_CHAIN,
+      gatewayBalanceChain,
       activity: await listAgentActivity(agentSlug),
       updatedAt: record?.updatedAt,
     })
@@ -755,11 +827,12 @@ export default async function handler(req: Request, res: Response) {
       }
 
       const serviceKey = `${agentSlug}_${record.sessionId}`
+      const gatewayBalanceChain = normalizeGatewayBalanceChain(req.body?.chain ?? req.body?.gatewayChain)
       let output = ''
       try {
-        output = await runCircle(['gateway', 'balance', '--address', record.walletAddress, '--chain', GATEWAY_BALANCE_CHAIN, '--output', 'json'], serviceKey, 30_000)
+        output = await runCircle(['gateway', 'balance', '--address', record.walletAddress, '--chain', gatewayBalanceChain, '--output', 'json'], serviceKey, 30_000)
       } catch {
-        output = await runCircle(['gateway', 'balance', '--address', record.walletAddress, '--chain', GATEWAY_BALANCE_CHAIN], serviceKey, 30_000)
+        output = await runCircle(['gateway', 'balance', '--address', record.walletAddress, '--chain', gatewayBalanceChain], serviceKey, 30_000)
       }
       const gatewayBalance = parseBalance(output)
       return res.json({
@@ -767,7 +840,7 @@ export default async function handler(req: Request, res: Response) {
         agentSlug,
         walletAddress: record.walletAddress,
         gatewayBalance,
-        gatewayBalanceChain: GATEWAY_BALANCE_CHAIN,
+        gatewayBalanceChain,
         raw: output.slice(0, 1200),
       })
     }
@@ -815,7 +888,7 @@ export default async function handler(req: Request, res: Response) {
         amount: String(amount),
         asset: 'USDC',
         direction: 'in',
-        network: GATEWAY_BALANCE_CHAIN,
+        network: depositChain,
         wallet: record.walletAddress,
         detail: `Deposited from ${depositChain}`,
       })
@@ -826,7 +899,7 @@ export default async function handler(req: Request, res: Response) {
         walletAddress: record.walletAddress,
         amount: String(amount),
         depositChain,
-        gatewayBalanceChain: GATEWAY_BALANCE_CHAIN,
+        gatewayBalanceChain: depositChain,
         response: extractJsonFromCliOutput(output),
         raw: output.slice(0, 3000),
       })

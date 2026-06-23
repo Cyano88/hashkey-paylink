@@ -66,13 +66,21 @@ type AgentWalletStatus = {
   connected?: boolean
   source?: 'env' | 'store'
   walletAddress?: string
+  balance?: string
+  balanceError?: string
+  balanceChecked?: boolean
   gatewayBalance?: string
   gatewayBalanceError?: string
+  gatewayBalanceChecked?: boolean
 }
 type AgentOption = AgentProfile & {
   connected?: boolean
+  balance?: string
+  balanceError?: string
+  balanceChecked?: boolean
   gatewayBalance?: string
   gatewayBalanceError?: string
+  gatewayBalanceChecked?: boolean
   source?: 'platform' | 'saved' | 'linked' | 'env' | 'store'
 }
 type UnlockStep = 'intro' | 'choose' | 'email' | 'otp' | 'fund'
@@ -234,6 +242,13 @@ function agentSlugFromCircleWalletId(value?: string) {
 
 function formatUsdc(value: number) {
   return value.toFixed(6).replace(/0+$/, '').replace(/\.$/, '')
+}
+
+function formatBalanceLabel(value?: string) {
+  if (value === undefined || value === null || value === '') return null
+  const amount = Number(value)
+  if (!Number.isFinite(amount)) return value
+  return `${amount.toLocaleString(undefined, { maximumFractionDigits: 6 })} USDC`
 }
 
 function mergeAgentOptions(existing: AgentOption[], next: AgentOption) {
@@ -400,7 +415,7 @@ export function StreamGate() {
           // Status lookup below still gives enough information to let the user reconnect.
         }
         try {
-          const statusRes = await fetch(`/api/agent-wallet?agent=${encodeURIComponent(cleanSlug)}&x402=1`)
+          const statusRes = await fetch(`/api/agent-wallet?agent=${encodeURIComponent(cleanSlug)}&balance=1&chain=arc&x402=1&gatewayChain=arc`)
           const status = await statusRes.json().catch(() => ({})) as AgentWalletStatus
           if (statusRes.ok && status.ok !== false) {
             option = {
@@ -408,8 +423,12 @@ export function StreamGate() {
               walletAddress: status.walletAddress || option.walletAddress,
               connected: Boolean(status.connected),
               source: status.source === 'env' ? 'env' : option.source,
+              balance: status.balance,
+              balanceError: status.balanceError,
+              balanceChecked: status.balanceChecked,
               gatewayBalance: status.gatewayBalance,
               gatewayBalanceError: status.gatewayBalanceError,
+              gatewayBalanceChecked: status.gatewayBalanceChecked,
             }
           }
         } catch {
@@ -670,6 +689,7 @@ export function StreamGate() {
       setCircleNotice('Payment wallet connected.')
       setUnlockStep('choose')
       setContentState('idle')
+      void refreshPaymentWalletStatus(slug)
     } catch (err) {
       setWalletError(err instanceof Error ? readableUnlockError(err.message) : 'Could not verify the wallet code.')
     } finally {
@@ -707,6 +727,33 @@ export function StreamGate() {
     window.setTimeout(() => setCopiedWallet(false), 1500)
   }
 
+  async function refreshPaymentWalletStatus(slug: string) {
+    const cleanSlug = cleanAgentSlug(slug)
+    if (!cleanSlug) return
+    try {
+      const res = await fetch(`/api/agent-wallet?agent=${encodeURIComponent(cleanSlug)}&balance=1&chain=arc&x402=1&gatewayChain=arc`)
+      const data = await res.json().catch(() => ({})) as AgentWalletStatus
+      if (!res.ok || data.ok === false) return
+      setAgentOptions(current => current.map(agent => (
+        agent.slug === cleanSlug
+          ? {
+              ...agent,
+              walletAddress: data.walletAddress || agent.walletAddress,
+              connected: Boolean(data.connected),
+              balance: data.balance,
+              balanceError: data.balanceError,
+              balanceChecked: data.balanceChecked,
+              gatewayBalance: data.gatewayBalance,
+              gatewayBalanceError: data.gatewayBalanceError,
+              gatewayBalanceChecked: data.gatewayBalanceChecked,
+            }
+          : agent
+      )))
+    } catch {
+      // Balance refresh is non-blocking; the unlock path will still return a clear error if payment fails.
+    }
+  }
+
   async function activatePaymentBalance() {
     const amountNumber = Number(fundAmount)
     setFundMessage(null)
@@ -739,6 +786,7 @@ export function StreamGate() {
           ? { ...agent, connected: true, walletAddress: data.walletAddress || agent.walletAddress, gatewayBalance: data.gatewayBalance }
           : agent
       )))
+      await refreshPaymentWalletStatus(safeAgentSlug)
       setFundMessage('Payment balance activated. You can unlock now.')
       setUnlockStep('choose')
       setContentState('idle')
@@ -1037,6 +1085,26 @@ export function StreamGate() {
                             >
                               {copiedWallet ? 'Copied' : 'Copy'}
                             </button>
+                          </div>
+                          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                            <div className="rounded-lg border border-white bg-white px-3 py-2">
+                              <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400">Arc wallet</p>
+                              <p className="mt-0.5 truncate text-[12px] font-bold text-gray-900">
+                                {formatBalanceLabel(selectedAgent.balance) || (selectedAgent.balanceChecked ? '0 USDC' : 'Checking...')}
+                              </p>
+                              {selectedAgent.balanceError && (
+                                <p className="mt-1 text-[10px] font-medium text-amber-600">{selectedAgent.balanceError}</p>
+                              )}
+                            </div>
+                            <div className="rounded-lg border border-white bg-white px-3 py-2">
+                              <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400">Activated x402</p>
+                              <p className="mt-0.5 truncate text-[12px] font-bold text-gray-900">
+                                {formatBalanceLabel(selectedAgent.gatewayBalance) || (selectedAgent.gatewayBalanceChecked ? '0 USDC' : 'Checking...')}
+                              </p>
+                              {selectedAgent.gatewayBalanceError && (
+                                <p className="mt-1 text-[10px] font-medium text-amber-600">{selectedAgent.gatewayBalanceError}</p>
+                              )}
+                            </div>
                           </div>
                         </div>
                       )}
