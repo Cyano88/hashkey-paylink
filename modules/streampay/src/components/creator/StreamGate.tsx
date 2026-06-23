@@ -73,11 +73,19 @@ type AgentWalletStatus = {
   gatewayBalanceError?: string
   gatewayBalanceChecked?: boolean
 }
+type EvmBalanceResponse = {
+  ok?: boolean
+  balance?: string
+  error?: string
+}
 type AgentOption = AgentProfile & {
   connected?: boolean
   balance?: string
   balanceError?: string
   balanceChecked?: boolean
+  baseBalance?: string
+  baseBalanceChecked?: boolean
+  baseBalanceError?: string
   gatewayBalance?: string
   gatewayBalanceError?: string
   gatewayBalanceChecked?: boolean
@@ -265,6 +273,7 @@ function paymentWalletName(agent?: AgentOption | null) {
   if (!agent || agent.slug === 'hashpaylink-agent' || agent.source === 'platform' || agent.source === 'env') {
     return 'Hash PayLink wallet'
   }
+  if (agent.source === 'store' || agent.slug.startsWith('creator-')) return 'Reader wallet'
   return agent.name || agent.slug.replace(/-/g, ' ')
 }
 
@@ -279,9 +288,14 @@ function paymentWalletSourceText(agent?: AgentOption | null) {
   if (!agent) return 'No wallet selected'
   if (agent.source === 'env') return 'Pinned platform wallet'
   if (agent.source === 'saved') return 'Saved wallet'
-  if (agent.source === 'store') return 'Email wallet'
+  if (agent.source === 'store') return 'Email payment wallet'
   if (agent.source === 'platform') return 'Platform wallet'
   return 'x402 unlock wallet'
+}
+
+function numericBalance(value?: string) {
+  const amount = Number(value)
+  return Number.isFinite(amount) ? amount : 0
 }
 
 function unlockRecoveryStep(message: string): UnlockStep | null {
@@ -429,6 +443,7 @@ export function StreamGate() {
           const statusRes = await fetch(`/api/agent-wallet?agent=${encodeURIComponent(cleanSlug)}&balance=1&chain=arc&x402=1&gatewayChain=arc`)
           const status = await statusRes.json().catch(() => ({})) as AgentWalletStatus
           if (statusRes.ok && status.ok !== false) {
+            const baseStatus = await lookupBaseUsdcBalance(status.walletAddress || option.walletAddress)
             option = {
               ...option,
               walletAddress: status.walletAddress || option.walletAddress,
@@ -437,6 +452,7 @@ export function StreamGate() {
               balance: status.balance,
               balanceError: status.balanceError,
               balanceChecked: status.balanceChecked,
+              ...(baseStatus || {}),
               gatewayBalance: status.gatewayBalance,
               gatewayBalanceError: status.gatewayBalanceError,
               gatewayBalanceChecked: status.gatewayBalanceChecked,
@@ -747,6 +763,24 @@ export function StreamGate() {
     window.setTimeout(() => setCopiedWallet(false), 1500)
   }
 
+  async function lookupBaseUsdcBalance(walletAddress?: string) {
+    if (!walletAddress) return null
+    try {
+      const res = await fetch('/api/evm-balance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chain: 'base', address: walletAddress }),
+      })
+      const data = await res.json().catch(() => ({})) as EvmBalanceResponse
+      if (!res.ok || !data.ok) {
+        return { baseBalanceChecked: true, baseBalanceError: data.error || 'Base balance unavailable.' }
+      }
+      return { baseBalance: data.balance, baseBalanceChecked: true, baseBalanceError: undefined }
+    } catch {
+      return { baseBalanceChecked: true, baseBalanceError: 'Base balance unavailable.' }
+    }
+  }
+
   async function refreshPaymentWalletStatus(slug: string) {
     const cleanSlug = cleanAgentSlug(slug)
     if (!cleanSlug) return
@@ -754,15 +788,18 @@ export function StreamGate() {
       const res = await fetch(`/api/agent-wallet?agent=${encodeURIComponent(cleanSlug)}&balance=1&chain=arc&x402=1&gatewayChain=arc`)
       const data = await res.json().catch(() => ({})) as AgentWalletStatus
       if (!res.ok || data.ok === false) return
+      const walletAddress = data.walletAddress
+      const baseStatus = await lookupBaseUsdcBalance(walletAddress)
       setAgentOptions(current => current.map(agent => (
         agent.slug === cleanSlug
           ? {
               ...agent,
-              walletAddress: data.walletAddress || agent.walletAddress,
+              walletAddress: walletAddress || agent.walletAddress,
               connected: Boolean(data.connected),
               balance: data.balance,
               balanceError: data.balanceError,
               balanceChecked: data.balanceChecked,
+              ...(baseStatus || {}),
               gatewayBalance: data.gatewayBalance,
               gatewayBalanceError: data.gatewayBalanceError,
               gatewayBalanceChecked: data.gatewayBalanceChecked,
@@ -907,10 +944,13 @@ export function StreamGate() {
                     <div className="space-y-3">
                       <div className="flex items-start justify-between gap-3 border-b border-gray-100 pb-3">
                         <div className="min-w-0">
-                          <p className="text-[13px] font-bold text-gray-900">Choose payment wallet</p>
-                          <p className="mt-1 truncate text-[12px] text-gray-500">
-                            {privyEmail || 'Signed in through Hash PayLink'}
+                          <p className="text-[13px] font-bold text-gray-900">Choose reader wallet</p>
+                          <p className="mt-1 text-[12px] leading-relaxed text-gray-500">
+                            Select the reader wallet paying to unlock. Creator: {creator ? shortAddress(creator) : 'verified gate'}.
                           </p>
+                          {privyEmail && (
+                            <p className="mt-1 truncate text-[11px] text-gray-400">Signed in: {privyEmail}</p>
+                          )}
                         </div>
                         <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-bold text-emerald-700 ring-1 ring-emerald-100">
                           Secure
@@ -958,6 +998,9 @@ export function StreamGate() {
                               <span className="mt-0.5 block truncate font-mono text-[11px] text-gray-500">
                                 {agent.walletAddress ? shortAddress(agent.walletAddress) : 'Email sign-in'}
                               </span>
+                              <span className="mt-0.5 block truncate text-[10px] font-semibold uppercase tracking-[0.12em] text-gray-400">
+                                {paymentWalletSourceText(agent)}
+                              </span>
                             </span>
                             <span className={[
                               'shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold',
@@ -988,9 +1031,9 @@ export function StreamGate() {
                   {unlockStep === 'email' && (
                     <div className="space-y-3">
                       <div className="border-b border-gray-100 pb-3">
-                        <p className="text-[13px] font-bold text-gray-900">Open payment wallet</p>
+                        <p className="text-[13px] font-bold text-gray-900">Open reader wallet</p>
                         <p className="mt-1 text-[12px] leading-relaxed text-gray-500">
-                          Enter the email used for this Hash PayLink wallet. We will send a one-time code.
+                          Enter the reader email that owns the wallet paying for this unlock. We will send a one-time code.
                         </p>
                       </div>
                       <label className="block space-y-1.5">
@@ -1005,15 +1048,15 @@ export function StreamGate() {
                       </label>
                       <details className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2">
                         <summary className="cursor-pointer text-[11px] font-semibold text-gray-500">
-                          Use a different wallet profile
+                          Advanced wallet name
                         </summary>
                         <label className="mt-2 block space-y-1.5">
-                          <span className="text-[11px] font-semibold text-gray-600">Payment wallet name</span>
+                          <span className="text-[11px] font-semibold text-gray-600">Reader wallet name</span>
                           <input
                             type="text"
                             value={agentSlug}
                             onChange={event => setAgentSlug(cleanAgentSlug(event.target.value))}
-                            placeholder={walletEmail ? walletSlugFromEmail(walletEmail) : 'creator-wallet'}
+                            placeholder={walletEmail ? walletSlugFromEmail(walletEmail) : 'reader-wallet'}
                             className="w-full rounded-xl border border-gray-200 bg-white px-3 py-3 font-mono text-[13px] text-gray-900 outline-none placeholder:text-gray-300 focus:border-blue-300"
                           />
                         </label>
@@ -1156,6 +1199,11 @@ export function StreamGate() {
                               )}
                             </div>
                           </div>
+                          {numericBalance(selectedAgent.baseBalance) > 0 && numericBalance(selectedAgent.balance) <= 0 && (
+                            <p className="mt-2 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-[11px] font-medium leading-relaxed text-amber-700">
+                              {formatBalanceLabel(selectedAgent.baseBalance)} detected on Base. Creator unlocks use Arc USDC, so fund or bridge this reader wallet on Arc before activating.
+                            </p>
+                          )}
                         </div>
                       )}
                       <label className="block space-y-1.5">
