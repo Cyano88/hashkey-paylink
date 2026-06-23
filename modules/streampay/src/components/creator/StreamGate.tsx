@@ -661,8 +661,11 @@ export function StreamGate() {
       const rawMessage = err instanceof Error ? err.message : 'Payment failed.'
       const nextStep = unlockRecoveryStep(rawMessage)
       if (nextStep === 'email') {
-        setUnlockStep('email')
-        setCircleNotice('Reconnect this reader wallet with a fresh email code.')
+        setAgentOptions(current => current.map(agent => (
+          agent.slug === paymentSlug ? { ...agent, connected: false } : agent
+        )))
+        setUnlockStep(agentOptions.length > 0 ? 'choose' : 'email')
+        setCircleNotice('Reader wallet session needs a fresh code. Select the wallet to reconnect.')
         setWalletError(null)
         setContentError(null)
       } else {
@@ -706,6 +709,13 @@ export function StreamGate() {
     setCircleNotice(null)
     if (!email) {
       setWalletError('Enter your email to open your payment wallet.')
+      return
+    }
+    const savedWallet = agentOptions.find(agent => agent.slug === slug && agent.connected && agent.walletAddress)
+    if (savedWallet && !slugOverride) {
+      setAgentSlug(savedWallet.slug)
+      setUnlockStep('choose')
+      setCircleNotice('Reader wallet already open. Select it to continue.')
       return
     }
     setAgentSlug(slug)
@@ -897,8 +907,11 @@ export function StreamGate() {
       const message = err instanceof Error ? err.message : 'Could not activate the payment balance.'
       const recoveryStep = unlockRecoveryStep(message)
       if (recoveryStep === 'email') {
-        setUnlockStep('email')
-        setCircleNotice('Reconnect this reader wallet with a fresh email code.')
+        setAgentOptions(current => current.map(agent => (
+          agent.slug === paymentSlug ? { ...agent, connected: false } : agent
+        )))
+        setUnlockStep(agentOptions.length > 0 ? 'choose' : 'email')
+        setCircleNotice('Reader wallet session needs a fresh code. Select the wallet to reconnect.')
         setWalletError(null)
         setContentError(null)
       } else {
