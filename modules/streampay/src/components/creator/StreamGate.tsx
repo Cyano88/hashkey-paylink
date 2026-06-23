@@ -83,16 +83,21 @@ type AgentOption = AgentProfile & {
   balance?: string
   balanceError?: string
   balanceChecked?: boolean
-  baseSepoliaBalance?: string
-  baseSepoliaBalanceChecked?: boolean
-  baseSepoliaBalanceError?: string
+  fundingBalance?: string
+  fundingBalanceChecked?: boolean
+  fundingBalanceError?: string
   gatewayBalance?: string
   gatewayBalanceError?: string
   gatewayBalanceChecked?: boolean
   source?: 'platform' | 'saved' | 'linked' | 'env' | 'store'
 }
 type UnlockStep = 'intro' | 'choose' | 'email' | 'otp' | 'fund'
-type FundingChain = 'BASE-SEPOLIA'
+type FundingChain = 'BASE' | 'ARBITRUM'
+
+const GATEWAY_FUNDING_CHAINS: Array<{ key: FundingChain; label: string; apiChain: 'base' | 'arbitrum' }> = [
+  { key: 'BASE', label: 'Base', apiChain: 'base' },
+  { key: 'ARBITRUM', label: 'Arbitrum', apiChain: 'arbitrum' },
+]
 
 function hasWorldCupScore(match: WorldCupScoreMatch) {
   const home = String(match.homeScore ?? '').trim().toLowerCase()
@@ -409,7 +414,7 @@ export function StreamGate() {
   const [walletBusy, setWalletBusy] = useState(false)
   const [walletError, setWalletError] = useState<string | null>(null)
   const [fundAmount, setFundAmount] = useState('0.5')
-  const [fundChain] = useState<FundingChain>('BASE-SEPOLIA')
+  const [fundChain, setFundChain] = useState<FundingChain>('BASE')
   const [fundBusy, setFundBusy] = useState(false)
   const [fundMessage, setFundMessage] = useState<string | null>(null)
   const gatewayActivationPending = isGatewayPendingMessage(fundMessage)
@@ -451,6 +456,15 @@ export function StreamGate() {
   const safeAgentSlug = cleanAgentSlug(agentSlug)
   const selectedAgent = agentOptions.find(agent => agent.slug === safeAgentSlug)
   const selectedWalletNeedsReconnect = Boolean(selectedAgent?.walletAddress && !selectedAgent.connected)
+  const readerWalletSessionError = /reconnect|sign in|session|wallet session|activation did not complete/i.test(walletError || '')
+  const fundingNeedsReconnect = selectedWalletNeedsReconnect || readerWalletSessionError
+  const fundingChainMeta = GATEWAY_FUNDING_CHAINS.find(chain => chain.key === fundChain) || GATEWAY_FUNDING_CHAINS[0]
+  const fundAmountNumber = Number(fundAmount)
+  const fundingBalanceNumber = selectedAgent?.fundingBalance !== undefined ? Number(selectedAgent.fundingBalance) : null
+  const fundingBalanceKnown = Boolean(selectedAgent?.fundingBalanceChecked && fundingBalanceNumber !== null && Number.isFinite(fundingBalanceNumber))
+  const fundingAmountInvalid = !Number.isFinite(fundAmountNumber) || fundAmountNumber <= 0
+  const fundingAmountExceedsBalance = Boolean(fundingBalanceKnown && Number.isFinite(fundAmountNumber) && fundAmountNumber > Number(fundingBalanceNumber))
+  const gatewayActivationBlocked = fundingNeedsReconnect || fundingAmountInvalid || fundingAmountExceedsBalance
 
   useEffect(() => {
     if (privyEmail && !walletEmail) setWalletEmail(privyEmail)
@@ -485,10 +499,10 @@ export function StreamGate() {
           // Status lookup below still gives enough information to let the user reconnect.
         }
         try {
-          const statusRes = await fetch(`/api/agent-wallet?agent=${encodeURIComponent(cleanSlug)}&balance=1&chain=arc&x402=1&gatewayChain=base-sepolia`)
+          const statusRes = await fetch(`/api/agent-wallet?agent=${encodeURIComponent(cleanSlug)}&balance=1&chain=arc&x402=1&gatewayChain=${encodeURIComponent(fundChain)}`)
           const status = await statusRes.json().catch(() => ({})) as AgentWalletStatus
           if (statusRes.ok && status.ok !== false) {
-            const baseSepoliaStatus = await lookupBaseSepoliaUsdcBalance(status.walletAddress || option.walletAddress)
+            const fundingStatus = await lookupGatewayFundingUsdcBalance(status.walletAddress || option.walletAddress)
             option = {
               ...option,
               walletAddress: status.walletAddress || option.walletAddress,
@@ -497,7 +511,7 @@ export function StreamGate() {
               balance: status.balance,
               balanceError: status.balanceError,
               balanceChecked: status.balanceChecked,
-              ...(baseSepoliaStatus || {}),
+              ...(fundingStatus || {}),
               gatewayBalance: status.gatewayBalance,
               gatewayBalanceError: status.gatewayBalanceError,
               gatewayBalanceChecked: status.gatewayBalanceChecked,
@@ -818,21 +832,21 @@ export function StreamGate() {
     window.setTimeout(() => setCopiedWallet(false), 1500)
   }
 
-  async function lookupBaseSepoliaUsdcBalance(walletAddress?: string) {
+  async function lookupGatewayFundingUsdcBalance(walletAddress?: string) {
     if (!walletAddress) return null
     try {
       const res = await fetch('/api/evm-balance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chain: 'base-sepolia', address: walletAddress }),
+        body: JSON.stringify({ chain: fundingChainMeta.apiChain, address: walletAddress }),
       })
       const data = await res.json().catch(() => ({})) as EvmBalanceResponse
       if (!res.ok || !data.ok) {
-        return { baseSepoliaBalanceChecked: true, baseSepoliaBalanceError: data.error || 'Base Sepolia balance unavailable.' }
+        return { fundingBalanceChecked: true, fundingBalanceError: data.error || `${fundingChainMeta.label} balance unavailable.` }
       }
-      return { baseSepoliaBalance: data.balance, baseSepoliaBalanceChecked: true, baseSepoliaBalanceError: undefined }
+      return { fundingBalance: data.balance, fundingBalanceChecked: true, fundingBalanceError: undefined }
     } catch {
-      return { baseSepoliaBalanceChecked: true, baseSepoliaBalanceError: 'Base Sepolia balance unavailable.' }
+      return { fundingBalanceChecked: true, fundingBalanceError: `${fundingChainMeta.label} balance unavailable.` }
     }
   }
 
@@ -840,12 +854,12 @@ export function StreamGate() {
     const cleanSlug = cleanAgentSlug(slug)
     if (!cleanSlug) return
     try {
-      const res = await fetch(`/api/agent-wallet?agent=${encodeURIComponent(cleanSlug)}&balance=1&chain=arc&x402=1&gatewayChain=base-sepolia`)
+      const res = await fetch(`/api/agent-wallet?agent=${encodeURIComponent(cleanSlug)}&balance=1&chain=arc&x402=1&gatewayChain=${encodeURIComponent(fundChain)}`)
       const data = await res.json().catch(() => ({})) as AgentWalletStatus
       if (!res.ok || data.ok === false) return
       const walletAddress = data.walletAddress
-      const baseSepoliaStatus = await lookupBaseSepoliaUsdcBalance(walletAddress)
-      const status = { ...data, ...(baseSepoliaStatus || {}) }
+      const fundingStatus = await lookupGatewayFundingUsdcBalance(walletAddress)
+      const status = { ...data, ...(fundingStatus || {}) }
       setAgentOptions(current => current.map(agent => (
         agent.slug === cleanSlug
           ? {
@@ -855,7 +869,7 @@ export function StreamGate() {
               balance: data.balance,
               balanceError: data.balanceError,
               balanceChecked: data.balanceChecked,
-              ...(baseSepoliaStatus || {}),
+              ...(fundingStatus || {}),
               gatewayBalance: data.gatewayBalance,
               gatewayBalanceError: data.gatewayBalanceError,
               gatewayBalanceChecked: data.gatewayBalanceChecked,
@@ -868,8 +882,12 @@ export function StreamGate() {
     }
   }
 
+  useEffect(() => {
+    if (paymentMode !== 'x402' || !safeAgentSlug || !selectedAgent?.walletAddress) return
+    void refreshPaymentWalletStatus(safeAgentSlug)
+  }, [fundChain]) // eslint-disable-line react-hooks/exhaustive-deps
+
   async function activatePaymentBalance() {
-    const amountNumber = Number(fundAmount)
     const paymentSlug = selectedAgent?.slug || safeAgentSlug
     setFundMessage(null)
     setWalletError(null)
@@ -878,12 +896,16 @@ export function StreamGate() {
       setUnlockStep('choose')
       return
     }
-    if (selectedWalletNeedsReconnect) {
+    if (fundingNeedsReconnect) {
       setWalletError('Reconnect this reader wallet before activating Gateway balance.')
       return
     }
-    if (!Number.isFinite(amountNumber) || amountNumber <= 0) {
+    if (fundingAmountInvalid) {
       setWalletError('Enter a valid USDC amount.')
+      return
+    }
+    if (fundingAmountExceedsBalance) {
+      setWalletError(`Fund this wallet with more USDC on ${fundingChainMeta.label}, then activate x402.`)
       return
     }
     setFundBusy(true)
@@ -944,7 +966,7 @@ export function StreamGate() {
       setUnlockStep('choose')
       return
     }
-    if (selectedWalletNeedsReconnect) {
+    if (fundingNeedsReconnect) {
       setWalletError('Reconnect this reader wallet before checking Gateway balance.')
       return
     }
@@ -1232,7 +1254,7 @@ export function StreamGate() {
                           <div className="min-w-0">
                             <p className="text-[13px] font-bold text-gray-900">Activate Gateway balance</p>
                             <p className="mt-1 text-[12px] leading-relaxed text-gray-500">
-                              Circle Gateway activation currently uses Base Sepolia in test mode. Content unlocks still settle through Arc.
+                              Add x402 balance from a supported Gateway rail. Content access remains built for Arc.
                             </p>
                           </div>
                           <button
@@ -1258,11 +1280,36 @@ export function StreamGate() {
                               </p>
                             </div>
                             <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-[10px] font-bold text-blue-700 ring-1 ring-blue-100">
-                              Base Sepolia activation
+                              {fundingChainMeta.label} activation
                             </span>
                           </div>
                         </div>
                       )}
+                      <div className="grid grid-cols-2 gap-2 rounded-xl border border-gray-100 bg-gray-50 p-1">
+                        {GATEWAY_FUNDING_CHAINS.map(chain => {
+                          const active = chain.key === fundChain
+                          return (
+                            <button
+                              key={chain.key}
+                              type="button"
+                              onClick={() => {
+                                setFundChain(chain.key)
+                                setFundMessage(null)
+                                setWalletError(null)
+                                setContentError(null)
+                              }}
+                              className={[
+                                'rounded-lg px-3 py-2 text-[11px] font-bold transition-all',
+                                active
+                                  ? 'bg-white text-gray-950 shadow-sm ring-1 ring-gray-200'
+                                  : 'text-gray-500 hover:text-gray-800',
+                              ].join(' ')}
+                            >
+                              {chain.label}
+                            </button>
+                          )
+                        })}
+                      </div>
                       {selectedAgent?.walletAddress && (
                         <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-3">
                           <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-gray-400">Selected wallet address</p>
@@ -1287,12 +1334,12 @@ export function StreamGate() {
                               )}
                             </div>
                             <div className="rounded-lg border border-white bg-white px-3 py-2">
-                              <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400">Base Sepolia</p>
+                              <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400">{fundingChainMeta.label}</p>
                               <p className="mt-0.5 truncate text-[12px] font-bold text-gray-900">
-                                {formatBalanceLabel(selectedAgent.baseSepoliaBalance) || (selectedAgent.baseSepoliaBalanceChecked ? '0 USDC' : 'Checking...')}
+                                {formatBalanceLabel(selectedAgent.fundingBalance) || (selectedAgent.fundingBalanceChecked ? '0 USDC' : 'Checking...')}
                               </p>
-                              {selectedAgent.baseSepoliaBalanceError && (
-                                <p className="mt-1 text-[10px] font-medium text-amber-600">{selectedAgent.baseSepoliaBalanceError}</p>
+                              {selectedAgent.fundingBalanceError && (
+                                <p className="mt-1 text-[10px] font-medium text-amber-600">{selectedAgent.fundingBalanceError}</p>
                               )}
                             </div>
                             <div className="rounded-lg border border-white bg-white px-3 py-2">
@@ -1305,14 +1352,19 @@ export function StreamGate() {
                               )}
                             </div>
                           </div>
-                          {selectedAgent.baseSepoliaBalanceChecked && numericBalance(selectedAgent.baseSepoliaBalance) <= 0 && (
+                          {selectedAgent.fundingBalanceChecked && numericBalance(selectedAgent.fundingBalance) <= 0 && (
                             <p className="mt-2 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-[11px] font-medium leading-relaxed text-amber-700">
-                              Gateway activation needs test USDC on Base Sepolia. Arc USDC can settle content, but it cannot activate Circle Gateway in this test flow.
+                              Gateway activation needs USDC on {fundingChainMeta.label}. Arc USDC remains separate from x402 activation.
+                            </p>
+                          )}
+                          {fundingAmountExceedsBalance && (
+                            <p className="mt-2 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-[11px] font-medium leading-relaxed text-amber-700">
+                              Amount is higher than the current {fundingChainMeta.label} balance.
                             </p>
                           )}
                         </div>
                       )}
-                      {selectedWalletNeedsReconnect ? (
+                      {fundingNeedsReconnect ? (
                         <button
                           type="button"
                           onClick={() => {
@@ -1352,7 +1404,7 @@ export function StreamGate() {
                             <button
                               type="button"
                               onClick={gatewayActivationPending ? checkPaymentActivation : activatePaymentBalance}
-                              disabled={fundBusy}
+                              disabled={fundBusy || (gatewayActivationPending ? fundingNeedsReconnect : gatewayActivationBlocked)}
                               className="rounded-xl bg-gray-950 px-3 py-3 text-[12px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
                             >
                               {fundBusy ? (gatewayActivationPending ? 'Checking...' : 'Activating...') : gatewayActivationPending ? 'Check x402' : 'Activate'}
