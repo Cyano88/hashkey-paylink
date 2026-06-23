@@ -76,7 +76,7 @@ type AgentOption = AgentProfile & {
   source?: 'platform' | 'saved' | 'linked' | 'env' | 'store'
 }
 type UnlockStep = 'intro' | 'choose' | 'email' | 'otp' | 'fund'
-type FundingChain = 'BASE' | 'ARBITRUM'
+type FundingChain = 'ARC-TESTNET'
 
 function hasWorldCupScore(match: WorldCupScoreMatch) {
   return match.homeScore !== undefined && match.homeScore !== '' && match.awayScore !== undefined && match.awayScore !== ''
@@ -326,7 +326,7 @@ export function StreamGate() {
   const [walletBusy, setWalletBusy] = useState(false)
   const [walletError, setWalletError] = useState<string | null>(null)
   const [fundAmount, setFundAmount] = useState('0.5')
-  const [fundChain, setFundChain] = useState<FundingChain>('BASE')
+  const [fundChain] = useState<FundingChain>('ARC-TESTNET')
   const [fundBusy, setFundBusy] = useState(false)
   const [fundMessage, setFundMessage] = useState<string | null>(null)
   const [copiedWallet, setCopiedWallet] = useState(false)
@@ -689,7 +689,7 @@ export function StreamGate() {
     const params = new URLSearchParams({
       e: wallet,
       m: 'Fund payment wallet',
-      n: fundChain === 'ARBITRUM' ? 'arbitrum' : 'base',
+      n: 'arc',
       f: '1',
       v: '1',
       src: 'creator',
@@ -1022,7 +1022,7 @@ export function StreamGate() {
                       <div className="border-b border-gray-100 pb-3">
                         <p className="text-[13px] font-bold text-gray-900">Add USDC</p>
                         <p className="mt-1 text-[12px] leading-relaxed text-gray-500">
-                          Add USDC to this payment wallet, then activate the balance for unlocks.
+                          Add Arc USDC to this payment wallet, then activate the balance for unlocks.
                         </p>
                       </div>
                       {selectedAgent?.walletAddress && (
@@ -1040,22 +1040,8 @@ export function StreamGate() {
                           </div>
                         </div>
                       )}
-                      <div className="grid grid-cols-2 gap-2">
-                        {(['BASE', 'ARBITRUM'] as FundingChain[]).map(chain => (
-                          <button
-                            key={chain}
-                            type="button"
-                            onClick={() => setFundChain(chain)}
-                            className={[
-                              'rounded-xl border px-3 py-2.5 text-[11px] font-bold transition-all',
-                              fundChain === chain
-                                ? 'border-blue-200 bg-blue-50 text-blue-700'
-                                : 'border-gray-200 bg-white text-gray-500',
-                            ].join(' ')}
-                          >
-                            {chain === 'BASE' ? 'Base' : 'Arbitrum'}
-                          </button>
-                        ))}
+                      <div className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-2.5 text-[11px] font-bold text-blue-700">
+                        Arc Network
                       </div>
                       <label className="block space-y-1.5">
                         <span className="text-[11px] font-semibold text-gray-600">Amount to activate</span>

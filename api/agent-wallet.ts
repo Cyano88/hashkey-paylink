@@ -236,9 +236,11 @@ function normalizeBalanceChain(value: unknown, fallback = 'BASE') {
 
 function normalizeGatewayDepositChain(value: unknown) {
   const key = String(value ?? '').trim().toLowerCase()
+  if (key === 'arc' || key === 'arc-testnet' || key === 'arc_testnet') return 'ARC-TESTNET'
   if (key === 'base') return 'BASE'
   if (key === 'arbitrum' || key === 'arb') return 'ARBITRUM'
   const fallback = GATEWAY_DEPOSIT_CHAIN.toUpperCase()
+  if (fallback === 'ARC-TESTNET' || fallback === 'ARC_TESTNET' || fallback === 'ARC') return 'ARC-TESTNET'
   return fallback === 'ARBITRUM' ? 'ARBITRUM' : 'BASE'
 }
 
