@@ -87,7 +87,9 @@ type UnlockStep = 'intro' | 'choose' | 'email' | 'otp' | 'fund'
 type FundingChain = 'ARC-TESTNET'
 
 function hasWorldCupScore(match: WorldCupScoreMatch) {
-  return match.homeScore !== undefined && match.homeScore !== '' && match.awayScore !== undefined && match.awayScore !== ''
+  const home = String(match.homeScore ?? '').trim().toLowerCase()
+  const away = String(match.awayScore ?? '').trim().toLowerCase()
+  return Boolean(home && away && home !== 'undefined' && away !== 'undefined' && home !== 'null' && away !== 'null')
 }
 
 function readableWorldCupClock(value?: string) {
@@ -132,7 +134,7 @@ function worldCupMatchDisplayState(match: WorldCupScoreMatch) {
   if (/(half|ht)/.test(status)) {
     return { tag: 'HT', center: scored ? `${match.homeScore}-${match.awayScore}` : 'HT', sub: clock || 'Half time' }
   }
-  if (/(ft|full time|full-time|finished|result|complete|ended|after extra time|pen)/.test(status) || (scored && isPast)) {
+  if ((scored && /(ft|full time|full-time|finished|result|complete|ended|after extra time|pen)/.test(status)) || (scored && isPast)) {
     return { tag: 'FT', center: `${match.homeScore}-${match.awayScore}`, sub: clock || 'Full time' }
   }
   return { tag: 'NS', center: 'vs', sub: worldCupCountdown(match) }

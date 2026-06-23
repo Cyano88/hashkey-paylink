@@ -117,7 +117,12 @@ function asText(value: unknown) {
 }
 
 function asScore(value: unknown) {
-  return typeof value === 'number' || typeof value === 'string' ? value : undefined
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string') {
+    const text = value.trim()
+    if (text && text.toLowerCase() !== 'undefined' && text.toLowerCase() !== 'null') return text
+  }
+  return undefined
 }
 
 function asNumber(value: unknown) {
@@ -549,6 +554,7 @@ function fanVibeStatusText(fixtureStatus: string, stateStatus: string) {
   if (/(live|in[- ]?play|1h|2h|first half|second half)/.test(status)) return 'Live'
   if (/(half|halftime|half time|ht)/.test(status)) return 'Half time'
   if (/(finished|settled|result|complete|ended|full time|full-time|ft)/.test(status)) return 'Finished'
+  if (/(open|scheduled|fixture|not started|not-started|pending|upcoming)/.test(status)) return 'Scheduled'
   return fixtureStatus || 'Scheduled'
 }
 
@@ -602,7 +608,8 @@ function fanVibeEvents(events: unknown[]) {
 
 function normalizeFanVibeFixture(fixture: ProviderMatch, matchStates: Record<string, unknown>): ScoreMatch | null {
   const fixtureId = asString(fixture.id) || asString(fixture.providerId)
-  const state = asRecord(matchStates[fixtureId])
+  const fixtureProviderId = asString(fixture.providerId)
+  const state = asRecord(matchStates[fixtureId] || matchStates[fixtureProviderId])
   const home = asRecord(fixture.home)
   const away = asRecord(fixture.away)
   const homeName = asString(home.name) || asString(home.code)
@@ -618,8 +625,10 @@ function normalizeFanVibeFixture(fixture: ProviderMatch, matchStates: Record<str
   const homeProbability = asNumber(baseOdds.home)
   const drawProbability = asNumber(baseOdds.draw)
   const awayProbability = asNumber(baseOdds.away)
-  const fixtureProviderId = asString(fixture.providerId)
-  const exposeScore = tag === 'Live' || tag === 'Result' || shouldExposeScore(status)
+  const homeScore = asScore(state.homeScore)
+  const awayScore = asScore(state.awayScore)
+  const hasScore = homeScore !== undefined && awayScore !== undefined
+  const exposeScore = hasScore && (tag === 'Live' || tag === 'Result' || shouldExposeScore(status))
 
   return {
     fixtureId,
@@ -629,8 +638,8 @@ function normalizeFanVibeFixture(fixture: ProviderMatch, matchStates: Record<str
     kickoffAt,
     venue: asString(fixture.venue) || 'World Cup venue',
     status,
-    homeScore: exposeScore ? asScore(state.homeScore) : undefined,
-    awayScore: exposeScore ? asScore(state.awayScore) : undefined,
+    homeScore: exposeScore ? homeScore : undefined,
+    awayScore: exposeScore ? awayScore : undefined,
     clock: fanVibeClock(state, status),
     probability: [homeProbability !== undefined ? `${homeName} ${Math.round(homeProbability)}%` : '', drawProbability !== undefined ? `Draw ${Math.round(drawProbability)}%` : '', awayProbability !== undefined ? `${awayName} ${Math.round(awayProbability)}%` : ''].filter(Boolean).join(' / '),
     homeMarketPrice: homeProbability !== undefined ? `${Math.round(homeProbability)}%` : '',
@@ -1169,7 +1178,24 @@ function matchTimeValue(match: ScoreMatch) {
 function selectMatchday(matches: ScoreMatch[], selectedDate: string) {
   const dated = matches.filter(match => matchDateKey(match))
   const exact = dated.filter(match => matchDateKey(match) === selectedDate)
-  if (exact.length) return exact
+  if (exact.length) {
+    const selectedTs = Date.parse(`${selectedDate}T00:00:00Z`)
+    const previousResults = dated
+      .filter(match => match.tag === 'Result' && matchDateKey(match) < selectedDate)
+      .sort((a, b) => matchTimeValue(b) - matchTimeValue(a))
+      .slice(0, 3)
+    const nextFixtures = dated
+      .filter(match => match.tag !== 'Result' && matchDateKey(match) > selectedDate)
+      .sort((a, b) => matchTimeValue(a) - matchTimeValue(b))
+      .slice(0, 5)
+    const nearSelected = Number.isFinite(selectedTs)
+      ? dated.filter(match => {
+          const ts = matchTimeValue(match)
+          return ts >= selectedTs - 6 * 60 * 60 * 1000 && ts < selectedTs
+        }).slice(0, 2)
+      : []
+    return dedupeMatches([...exact, ...nearSelected, ...previousResults, ...nextFixtures])
+  }
 
   const live = dated.filter(match => match.tag === 'Live')
   if (live.length) return live

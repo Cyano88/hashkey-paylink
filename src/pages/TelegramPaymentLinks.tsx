@@ -2663,7 +2663,9 @@ type MatchEventDetail = {
 }
 
 function hasMatchScore(match: PolyStreamMatch) {
-  return match.homeScore !== undefined && match.homeScore !== '' && match.awayScore !== undefined && match.awayScore !== ''
+  const home = String(match.homeScore ?? '').trim().toLowerCase()
+  const away = String(match.awayScore ?? '').trim().toLowerCase()
+  return Boolean(home && away && home !== 'undefined' && away !== 'undefined' && home !== 'null' && away !== 'null')
 }
 
 function splitFixtureTitle(title: string) {
@@ -2797,7 +2799,7 @@ function matchDisplayState(match: PolyStreamMatch) {
   if (/(half|ht)/.test(status)) {
     return { tag: 'HT', phase: 'Half time', center: hasScore ? `${match.homeScore}-${match.awayScore}` : 'HT', sub: clock || 'Half time' }
   }
-  if (/(ft|full time|full-time|finished|result|complete|ended|after extra time|pen)/.test(status) || (hasScore && isPast)) {
+  if ((hasScore && /(ft|full time|full-time|finished|result|complete|ended|after extra time|pen)/.test(status)) || (hasScore && isPast)) {
     return { tag: 'FT', phase: 'Full time', center: `${match.homeScore}-${match.awayScore}`, sub: clock || 'Full time' }
   }
   return { tag: 'NS', phase: '', center: 'vs', sub: matchCountdown(match) }
@@ -5123,7 +5125,7 @@ function PolyWorldCupHubPanel({
       </div>
       <h2 className="mt-2 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Live scores, market odds, direct trade routes.</h2>
       <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-        Live scores come from Sportmonks. Market odds and trade routes come from Polymarket. No stale fallbacks.
+        Live scores come from the matchday feed. Market odds and trade routes come from Polymarket. No stale fallbacks.
       </p>
 
       {hasProfile && (
@@ -5147,7 +5149,7 @@ function PolyWorldCupHubPanel({
           </span>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold text-gray-900 dark:text-white">Live Scores</p>
-            <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">Sportmonks match centre with exact Polymarket fixture routing.</p>
+            <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">Live match centre with exact Polymarket fixture routing.</p>
           </div>
           <ArrowRight className="mt-1 h-4 w-4 text-gray-400" />
         </button>

@@ -286,7 +286,9 @@ function compactMatchTitle(title: string) {
 }
 
 function hasMatchScore(match: PolyStreamMatch) {
-  return match.homeScore !== undefined && match.homeScore !== '' && match.awayScore !== undefined && match.awayScore !== ''
+  const home = String(match.homeScore ?? '').trim().toLowerCase()
+  const away = String(match.awayScore ?? '').trim().toLowerCase()
+  return Boolean(home && away && home !== 'undefined' && away !== 'undefined' && home !== 'null' && away !== 'null')
 }
 
 function splitFixtureTitle(title: string) {
@@ -437,7 +439,7 @@ function matchDisplayState(match: PolyStreamMatch) {
   if (/(half|ht)/.test(status)) {
     return { tag: 'HT', phase: 'Half time', center: scored ? `${match.homeScore}-${match.awayScore}` : 'HT', sub: clock || 'Half time' }
   }
-  if (/(ft|full time|full-time|finished|result|complete|ended|after extra time|pen)/.test(status) || (scored && isPast)) {
+  if ((scored && /(ft|full time|full-time|finished|result|complete|ended|after extra time|pen)/.test(status)) || (scored && isPast)) {
     return { tag: 'FT', phase: 'Full time', center: `${match.homeScore}-${match.awayScore}`, sub: clock || 'Full time' }
   }
   return { tag: 'NS', phase: '', center: 'vs', sub: matchCountdown(match) }
@@ -669,8 +671,8 @@ function DiscoverContent({
   const scoresEmptyDetail = scoreError
     || scoreFeed?.providerError
     || (scoreFeed?.providerConfigured
-      ? 'Sportmonks returned no live or upcoming World Cup fixtures for this matchday.'
-      : 'Connect Sportmonks to show live and upcoming World Cup fixtures.')
+      ? 'No live or upcoming World Cup fixtures are available for this matchday.'
+      : 'Connect a live score provider to show World Cup fixtures.')
 
   useEffect(() => {
     setScoreIndex(0)
@@ -717,7 +719,7 @@ function DiscoverContent({
               <div className="relative z-10 flex h-[320px] flex-col justify-between p-4 sm:p-6">
                 <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
                   <span className="truncate text-[10px] font-semibold text-white/68">
-                    {scoreLoading ? 'Syncing live board' : featuredScore?.time || scoreFeed?.displayDate || 'Sportmonks matchday board'}
+                    {scoreLoading ? 'Syncing live board' : featuredScore?.time || scoreFeed?.displayDate || 'World Cup matchday board'}
                   </span>
                   {scoreMarketMatched ? (
                     <span className="inline-flex items-center justify-center gap-1.5 rounded-full border border-white/15 bg-black/35 px-3 py-1.5 text-[10px] font-black leading-none text-white shadow-sm backdrop-blur-sm">
@@ -794,7 +796,7 @@ function DiscoverContent({
                         ? 'Scores temporarily unavailable'
                         : featuredScore
                           ? 'Unlock direct Polymarket trading routes'
-                          : 'Refresh when Sportmonks publishes matchday rows'}
+                          : 'Refresh when the matchday feed updates'}
                     </p>
                   </div>
                   <span className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-white px-3 py-2 text-[12px] font-black text-gray-950 shadow-sm">
