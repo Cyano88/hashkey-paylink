@@ -117,6 +117,7 @@ type PolyStreamFeed = {
   selectedDate?: string
   displayDate?: string
   updatedAt?: string
+  providerError?: string
   matches?: PolyStreamMatch[]
 }
 
@@ -223,6 +224,19 @@ function parseContentId(input: string): string {
 function articleTimeValue(article: PolyWorldCupArticle) {
   const timestamp = Date.parse(article.publishedAt)
   return Number.isFinite(timestamp) ? timestamp : 0
+}
+
+function relativeNewsTime(value: string) {
+  const timestamp = Date.parse(value)
+  if (!Number.isFinite(timestamp)) return 'recently'
+  const diffMs = Date.now() - timestamp
+  const minutes = Math.max(0, Math.floor(diffMs / 60_000))
+  if (minutes < 1) return 'just now'
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  return `${days}d ago`
 }
 
 // Scan localStorage for any ghost vaults matching this contentId.
@@ -519,6 +533,24 @@ function DiscoverContent({
   const [heroIndex, setHeroIndex] = useState(0)
   const [now, setNow] = useState(Date.now())
 
+  const loadScores = useCallback(async (silent = false) => {
+    if (!silent) {
+      setScoreLoading(true)
+      setScoreError('')
+    }
+    try {
+      const matchday = new Date().toISOString().slice(0, 10)
+      const res = await fetch(`/api/poly-stream?date=${matchday}&debug=1`)
+      const data = await res.json() as PolyStreamFeed
+      if (!res.ok || !data.ok) throw new Error('Live scores are not available.')
+      setScoreFeed(data)
+    } catch (err) {
+      if (!silent) setScoreError(err instanceof Error ? err.message : 'Live scores are not available.')
+    } finally {
+      setScoreLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
     let cancelled = false
     fetch('/api/creator-discover-content')
@@ -535,33 +567,15 @@ function DiscoverContent({
 
   useEffect(() => {
     let cancelled = false
-    async function loadScores(silent = false) {
-      if (!silent) {
-        setScoreLoading(true)
-        setScoreError('')
-      }
-      try {
-        const matchday = new Date().toISOString().slice(0, 10)
-        const res = await fetch(`/api/poly-stream?date=${matchday}`)
-        const data = await res.json() as PolyStreamFeed
-        if (cancelled) return
-        if (!res.ok || !data.ok) throw new Error('Live scores are not available.')
-        setScoreFeed(data)
-      } catch (err) {
-        if (!cancelled && !silent) setScoreError(err instanceof Error ? err.message : 'Live scores are not available.')
-      } finally {
-        if (!cancelled) setScoreLoading(false)
-      }
-    }
     void loadScores()
     const timer = window.setInterval(() => {
-      void loadScores(true)
+      if (!cancelled) void loadScores(true)
     }, 60_000)
     return () => {
       cancelled = true
       window.clearInterval(timer)
     }
-  }, [])
+  }, [loadScores])
 
   useEffect(() => {
     let cancelled = false
@@ -626,6 +640,10 @@ function DiscoverContent({
   }, [heroCards.length])
 
   function openContent(card: PublishedContent) {
+    if (card.id === 'worldcup-live-scores' && !scoreMatches.length) {
+      void loadScores()
+      return
+    }
     if (card.action === 'gate' && card.gateLink) {
       window.location.href = card.gateLink
       return
@@ -642,6 +660,17 @@ function DiscoverContent({
   const homeFlag = featuredScore ? flagUrlForTeam(scoreHome) : ''
   const awayFlag = featuredScore ? flagUrlForTeam(scoreAway) : ''
   const scoreMarketMatched = Boolean(featuredScore?.marketStatus === 'matched' && featuredScore.polymarketUrl)
+  const scoresEmpty = !scoreLoading && !scoreMatches.length
+  const scoresEmptyTitle = !scoreFeed?.providerConfigured
+    ? 'Score provider not connected'
+    : scoreError
+      ? 'Scores temporarily unavailable'
+      : 'No matchday data yet'
+  const scoresEmptyDetail = scoreError
+    || scoreFeed?.providerError
+    || (scoreFeed?.providerConfigured
+      ? 'Sportmonks returned no live or upcoming World Cup fixtures for this matchday.'
+      : 'Connect Sportmonks to show live and upcoming World Cup fixtures.')
 
   useEffect(() => {
     setScoreIndex(0)
@@ -677,11 +706,18 @@ function DiscoverContent({
                   style={{ backgroundImage: `linear-gradient(rgba(0,0,0,.52), rgba(0,0,0,.82)), url(${awayFlag})` }}
                 />
               )}
+              {!featuredScore && (
+                <img
+                  src={WORLD_GLOBE_IMAGE}
+                  alt=""
+                  className="absolute inset-0 h-full w-full object-cover opacity-80"
+                />
+              )}
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,.18),transparent_36%),linear-gradient(180deg,rgba(0,0,0,.12),rgba(0,0,0,.64))]" />
               <div className="relative z-10 flex h-[320px] flex-col justify-between p-4 sm:p-6">
                 <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
                   <span className="truncate text-[10px] font-semibold text-white/68">
-                    {scoreLoading ? 'Syncing live board' : featuredScore?.time || 'Sportmonks matchday board'}
+                    {scoreLoading ? 'Syncing live board' : featuredScore?.time || scoreFeed?.displayDate || 'Sportmonks matchday board'}
                   </span>
                   {scoreMarketMatched ? (
                     <span className="inline-flex items-center justify-center gap-1.5 rounded-full border border-white/15 bg-black/35 px-3 py-1.5 text-[10px] font-black leading-none text-white shadow-sm backdrop-blur-sm">
@@ -700,43 +736,55 @@ function DiscoverContent({
                       ? 'bg-emerald-400/15 text-emerald-100 ring-emerald-300/30'
                       : 'bg-white/12 text-white/85 ring-white/15',
                   ].join(' ')}>
-                    {scoreLoading ? 'SYNC' : scoreState?.tag || (scoresReady ? 'LIVE' : 'WAIT')}
+                    {scoreLoading ? 'SYNC' : scoreState?.tag || (scoresReady ? 'LIVE' : 'EMPTY')}
                   </span>
                 </div>
 
-                <div className="grid min-h-[160px] grid-cols-[minmax(0,1fr)_78px_minmax(0,1fr)] items-center gap-2">
-                  <div className="min-w-0 text-center">
-                    <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-black/30 shadow-xl ring-1 ring-white/15 backdrop-blur-sm">
-                      <TeamFlagMark name={scoreHome} />
+                {scoresEmpty ? (
+                  <div className="flex min-h-[160px] items-center justify-center text-center">
+                    <div className="mx-auto max-w-[300px] rounded-2xl border border-white/12 bg-black/35 px-4 py-4 shadow-2xl backdrop-blur-sm">
+                      <p className="text-[18px] font-black tracking-tight text-white">{scoresEmptyTitle}</p>
+                      <p className="mt-2 text-[11px] font-semibold leading-5 text-white/62">{scoresEmptyDetail}</p>
+                      <p className="mt-3 text-[10px] font-bold uppercase tracking-[0.16em] text-white/45">
+                        {scoreFeed?.updatedAt ? `Updated ${relativeNewsTime(scoreFeed.updatedAt)}` : 'Waiting for provider'}
+                      </p>
                     </div>
-                    <p className="mx-auto mt-2 max-w-[8rem] truncate text-[12px] font-black tracking-wide text-white">{scoreHome}</p>
-                    {featuredScore?.homeMarketPrice && (
-                      <p className="mt-1 text-[9px] font-black uppercase tabular-nums text-white/55">{featuredScore.homeMarketPrice}</p>
-                    )}
                   </div>
-                  <div className="rounded-2xl border border-white/12 bg-black/35 px-2 py-3 text-center shadow-2xl backdrop-blur-sm">
-                    {scoreLoading ? (
-                      <Loader2 className="mx-auto h-6 w-6 animate-spin text-white/80" />
-                    ) : (
-                      <p className="text-[22px] font-black tabular-nums text-white">{scoreState?.center || 'vs'}</p>
-                    )}
-                    <p className="mt-1 truncate text-[9px] font-bold uppercase text-white/55">
-                      {scoreError ? 'Retry shortly' : scoreState?.sub || scoreFeed?.displayDate || 'Matchday'}
-                    </p>
-                    {featuredScore?.drawMarketPrice && (
-                      <p className="mt-1.5 text-[9px] font-black uppercase tabular-nums text-white/55">Draw {featuredScore.drawMarketPrice}</p>
-                    )}
-                  </div>
-                  <div className="min-w-0 text-center">
-                    <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-black/30 shadow-xl ring-1 ring-white/15 backdrop-blur-sm">
-                      <TeamFlagMark name={scoreAway || 'Scores'} />
+                ) : (
+                  <div className="grid min-h-[160px] grid-cols-[minmax(0,1fr)_78px_minmax(0,1fr)] items-center gap-2">
+                    <div className="min-w-0 text-center">
+                      <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-black/30 shadow-xl ring-1 ring-white/15 backdrop-blur-sm">
+                        <TeamFlagMark name={scoreHome} />
+                      </div>
+                      <p className="mx-auto mt-2 max-w-[8rem] truncate text-[12px] font-black tracking-wide text-white">{scoreHome}</p>
+                      {featuredScore?.homeMarketPrice && (
+                        <p className="mt-1 text-[9px] font-black uppercase tabular-nums text-white/55">{featuredScore.homeMarketPrice}</p>
+                      )}
                     </div>
-                    <p className="mx-auto mt-2 max-w-[8rem] truncate text-[12px] font-black tracking-wide text-white">{scoreAway || 'Opponent'}</p>
-                    {featuredScore?.awayMarketPrice && (
-                      <p className="mt-1 text-[9px] font-black uppercase tabular-nums text-white/55">{featuredScore.awayMarketPrice}</p>
-                    )}
+                    <div className="rounded-2xl border border-white/12 bg-black/35 px-2 py-3 text-center shadow-2xl backdrop-blur-sm">
+                      {scoreLoading ? (
+                        <Loader2 className="mx-auto h-6 w-6 animate-spin text-white/80" />
+                      ) : (
+                        <p className="text-[22px] font-black tabular-nums text-white">{scoreState?.center || 'vs'}</p>
+                      )}
+                      <p className="mt-1 truncate text-[9px] font-bold uppercase text-white/55">
+                        {scoreError ? 'Retry shortly' : scoreState?.sub || scoreFeed?.displayDate || 'Matchday'}
+                      </p>
+                      {featuredScore?.drawMarketPrice && (
+                        <p className="mt-1.5 text-[9px] font-black uppercase tabular-nums text-white/55">Draw {featuredScore.drawMarketPrice}</p>
+                      )}
+                    </div>
+                    <div className="min-w-0 text-center">
+                      <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-black/30 shadow-xl ring-1 ring-white/15 backdrop-blur-sm">
+                        <TeamFlagMark name={scoreAway || 'Scores'} />
+                      </div>
+                      <p className="mx-auto mt-2 max-w-[8rem] truncate text-[12px] font-black tracking-wide text-white">{scoreAway || 'Opponent'}</p>
+                      {featuredScore?.awayMarketPrice && (
+                        <p className="mt-1 text-[9px] font-black uppercase tabular-nums text-white/55">{featuredScore.awayMarketPrice}</p>
+                      )}
+                    </div>
                   </div>
-                </div>
+                )}
 
                 <div className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/25 px-3 py-2.5 backdrop-blur-sm">
                   <div className="min-w-0">
@@ -746,12 +794,12 @@ function DiscoverContent({
                         ? 'Scores temporarily unavailable'
                         : featuredScore
                           ? 'Unlock direct Polymarket trading routes'
-                          : 'Provider-backed World Cup board'}
+                          : 'Refresh when Sportmonks publishes matchday rows'}
                     </p>
                   </div>
                   <span className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-white px-3 py-2 text-[12px] font-black text-gray-950 shadow-sm">
-                    <LockKeyhole className="h-4 w-4" />
-                    Unlock
+                    {featuredScore ? <LockKeyhole className="h-4 w-4" /> : <Loader2 className={['h-4 w-4', scoreLoading ? 'animate-spin' : ''].join(' ')} />}
+                    {featuredScore ? 'Unlock' : 'Refresh'}
                   </span>
                 </div>
               </div>
