@@ -56,9 +56,11 @@ const DEFAULT_FIXTURE_LIMIT = 64
 const DEFAULT_SPORTMONKS_BASE = 'https://api.sportmonks.com/v3/football'
 const DEFAULT_API_FOOTBALL_BASE = 'https://v3.football.api-sports.io'
 const DEFAULT_WORLD_CUP_START_DATE = '2026-06-11'
+const DEFAULT_FANVIBE_WORLD_CUP_FEED_URL = 'https://xcup-fanvibe-production.up.railway.app/worldcup/feed'
 
 let cache: CacheEntry | null = null
 let lastProviderError = ''
+let lastProviderSource = ''
 
 function envValue(primary: string, fallback = '') {
   return process.env[primary]?.trim() || (fallback ? process.env[fallback]?.trim() || '' : '')
@@ -395,7 +397,7 @@ function sportmonksStats(match: ProviderMatch) {
 }
 
 function publicMarketContext(title: string, status: string) {
-  return `${title}. ${status}. Live scores from Sportmonks with Polymarket prices when the main match market is confidently matched.`
+  return `${title}. ${status}. Live World Cup board with Polymarket prices when the main match market is confidently matched.`
 }
 
 function withMarketStatus(match: ScoreMatch): ScoreMatch {
@@ -535,6 +537,111 @@ function normalizeApiFootball(match: ProviderMatch): ScoreMatch | null {
     marketContext: publicMarketContext(title, asString(status.long) || 'Scheduled'),
     sourceUrl: '',
     polymarketUrl: exactPolymarketUrl(title, [`api-football:${fixtureId}`, `league:${leagueId}:${home}:${away}`]),
+  }
+}
+
+function fanVibeFeedUrl() {
+  return envValue('FANVIBE_WORLD_CUP_FEED_URL') || DEFAULT_FANVIBE_WORLD_CUP_FEED_URL
+}
+
+function fanVibeStatusText(fixtureStatus: string, stateStatus: string) {
+  const status = (stateStatus || fixtureStatus || 'scheduled').toLowerCase()
+  if (/(live|in[- ]?play|1h|2h|first half|second half)/.test(status)) return 'Live'
+  if (/(half|halftime|half time|ht)/.test(status)) return 'Half time'
+  if (/(finished|settled|result|complete|ended|full time|full-time|ft)/.test(status)) return 'Finished'
+  return fixtureStatus || 'Scheduled'
+}
+
+function fanVibeTag(status: string, kickoffAt: string) {
+  const text = status.toLowerCase()
+  if (/(live|half time)/.test(text)) return 'Live'
+  if (/(finished|settled|result|complete|ended|full time|full-time|ft)/.test(text)) return 'Result'
+  const ts = Date.parse(kickoffAt)
+  if (Number.isFinite(ts)) {
+    const hours = (ts - Date.now()) / 36e5
+    if (hours >= 0 && hours <= 24) return 'Today'
+  }
+  return 'Fixture'
+}
+
+function fanVibeClock(state: ProviderMatch, status: string) {
+  if (!/(live|half time)/i.test(status)) return ''
+  const minute = asNumber(state.minute)
+  if (minute === undefined) return ''
+  if (minute > 90) return `90+${Math.min(minute - 90, 15)}'`
+  return `${Math.max(0, minute)}'`
+}
+
+function fanVibeEventLabel(event: ProviderMatch) {
+  const minute = asNumber(event.minute)
+  const minuteText = minute === undefined ? '' : minute > 90 ? `90+${Math.min(minute - 90, 15)}'` : `${minute}'`
+  const type = asString(event.type)
+  const player = asString(event.player)
+  const player2 = asString(event.player2)
+  const commentary = asString(event.commentary)
+  const cleanCommentary = commentary.replace(/^event-\d+\s+/i, '').trim()
+  return [minuteText, player || cleanCommentary, player2 ? `(${player2})` : '', type && !/^event-\d+$/i.test(type) ? type : ''].filter(Boolean).join(' ')
+}
+
+function fanVibeGoalScorers(events: unknown[]) {
+  return events
+    .map(asRecord)
+    .filter(event => /event-14|goal/i.test(asString(event.type) || asString(event.commentary)))
+    .map(fanVibeEventLabel)
+    .filter(Boolean)
+    .slice(0, 8)
+}
+
+function fanVibeEvents(events: unknown[]) {
+  return events
+    .map(asRecord)
+    .map(fanVibeEventLabel)
+    .filter(Boolean)
+    .slice(0, 16)
+}
+
+function normalizeFanVibeFixture(fixture: ProviderMatch, matchStates: Record<string, unknown>): ScoreMatch | null {
+  const fixtureId = asString(fixture.id) || asString(fixture.providerId)
+  const state = asRecord(matchStates[fixtureId])
+  const home = asRecord(fixture.home)
+  const away = asRecord(fixture.away)
+  const homeName = asString(home.name) || asString(home.code)
+  const awayName = asString(away.name) || asString(away.code)
+  const title = homeName && awayName ? `${homeName} vs ${awayName}` : asString(fixture.title)
+  if (!title) return null
+
+  const kickoffAt = utcDateString(fixture.kickoff)
+  const status = fanVibeStatusText(asString(fixture.status), asString(state.status))
+  const tag = fanVibeTag(status, kickoffAt)
+  const events = Array.isArray(state.events) ? state.events : []
+  const baseOdds = asRecord(fixture.baseOdds)
+  const homeProbability = asNumber(baseOdds.home)
+  const drawProbability = asNumber(baseOdds.draw)
+  const awayProbability = asNumber(baseOdds.away)
+  const fixtureProviderId = asString(fixture.providerId)
+  const exposeScore = tag === 'Live' || tag === 'Result' || shouldExposeScore(status)
+
+  return {
+    fixtureId,
+    tag,
+    title,
+    time: readableTime(kickoffAt),
+    kickoffAt,
+    venue: asString(fixture.venue) || 'World Cup venue',
+    status,
+    homeScore: exposeScore ? asScore(state.homeScore) : undefined,
+    awayScore: exposeScore ? asScore(state.awayScore) : undefined,
+    clock: fanVibeClock(state, status),
+    probability: [homeProbability !== undefined ? `${homeName} ${Math.round(homeProbability)}%` : '', drawProbability !== undefined ? `Draw ${Math.round(drawProbability)}%` : '', awayProbability !== undefined ? `${awayName} ${Math.round(awayProbability)}%` : ''].filter(Boolean).join(' / '),
+    homeMarketPrice: homeProbability !== undefined ? `${Math.round(homeProbability)}%` : '',
+    drawMarketPrice: drawProbability !== undefined ? `${Math.round(drawProbability)}%` : '',
+    awayMarketPrice: awayProbability !== undefined ? `${Math.round(awayProbability)}%` : '',
+    goalScorers: fanVibeGoalScorers(events),
+    events: fanVibeEvents(events),
+    stats: asNumber(state.possession) !== undefined ? [`Possession ${Math.round(asNumber(state.possession) || 0)}%`] : [],
+    marketContext: publicMarketContext(title, status),
+    sourceUrl: '',
+    polymarketUrl: exactPolymarketUrl(title, [`fanvibe:${fixtureId}`, `sportmonks:${fixtureProviderId}`, `${homeName}:${awayName}`]),
   }
 }
 
@@ -958,7 +1065,7 @@ async function fetchProviderUrl(provider: string, apiKey: string, url: string): 
   }
 
   const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 10_000)
+  const timeout = setTimeout(() => controller.abort(), 20_000)
   try {
     const response = await fetch(requestUrl, { headers, signal: controller.signal })
     const text = await response.text()
@@ -983,7 +1090,7 @@ async function fetchSportmonksFixtureDetail(apiKey: string, fixtureId: string) {
   if (!requestUrl.searchParams.has('api_token')) requestUrl.searchParams.set('api_token', apiKey)
 
   const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 10_000)
+  const timeout = setTimeout(() => controller.abort(), 20_000)
   try {
     const response = await fetch(requestUrl, { headers: { Accept: 'application/json' }, signal: controller.signal })
     const text = await response.text()
@@ -1064,14 +1171,74 @@ function selectMatchday(matches: ScoreMatch[], selectedDate: string) {
   const exact = dated.filter(match => matchDateKey(match) === selectedDate)
   if (exact.length) return exact
 
+  const live = dated.filter(match => match.tag === 'Live')
+  if (live.length) return live
+
   const nextDate = dated
     .map(matchDateKey)
     .filter(date => date >= selectedDate)
     .sort()[0]
-  return nextDate ? dated.filter(match => matchDateKey(match) === nextDate) : []
+  if (nextDate) return dated.filter(match => matchDateKey(match) === nextDate)
+
+  const today = todayKey()
+  const upcomingDate = dated
+    .filter(match => match.tag === 'Today' || match.tag === 'Fixture')
+    .map(matchDateKey)
+    .filter(date => date >= today)
+    .sort()[0]
+  if (upcomingDate) return dated.filter(match => matchDateKey(match) === upcomingDate)
+
+  const latestResultDate = dated
+    .map(matchDateKey)
+    .sort()
+    .at(-1)
+  return latestResultDate ? dated.filter(match => matchDateKey(match) === latestResultDate) : []
+}
+
+async function fetchFanVibeMatches(selectedDate: string): Promise<ScoreMatch[]> {
+  const url = fanVibeFeedUrl()
+  if (!url) return []
+
+  const requestUrl = new URL(url)
+  requestUrl.searchParams.set('force', '1')
+
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 20_000)
+  try {
+    const response = await fetch(requestUrl, { headers: { Accept: 'application/json' }, signal: controller.signal })
+    const text = await response.text()
+    if (!response.ok) throw new Error(`FanVibe feed returned ${response.status}: ${safeProviderMessage(text)}`)
+    const payload = JSON.parse(text)
+    const record = asRecord(payload)
+    const fixtures = Array.isArray(record.fixtures) ? record.fixtures.map(asRecord) : []
+    const matchStates = asRecord(record.matchStates)
+    const normalized = fixtures
+      .map(fixture => normalizeFanVibeFixture(fixture, matchStates))
+      .filter(Boolean) as ScoreMatch[]
+    const selected = selectMatchday(dedupeMatches(normalized), selectedDate)
+      .sort((a, b) => matchRank(a) - matchRank(b) || matchTimeValue(a) - matchTimeValue(b))
+      .slice(0, fixtureLimit())
+    return enrichMatchesWithPolymarket(selected)
+  } finally {
+    clearTimeout(timeout)
+  }
 }
 
 async function fetchProviderMatches(selectedDate: string): Promise<ScoreMatch[]> {
+  const fanVibeUrl = fanVibeFeedUrl()
+  if (fanVibeUrl) {
+    try {
+      const matches = await fetchFanVibeMatches(selectedDate)
+      if (matches.length) {
+        lastProviderSource = 'fanvibe-worldcup'
+        return matches
+      }
+      lastProviderError = 'FanVibe feed returned no World Cup fixtures.'
+    } catch (err) {
+      lastProviderError = err instanceof Error ? err.message : 'FanVibe feed failed.'
+    }
+  }
+
   const provider = providerName()
   const apiKey = envValue('POLY_STREAM_API_KEY', 'SPORTS_API_KEY')
   if (!apiKey) return []
@@ -1088,6 +1255,7 @@ async function fetchProviderMatches(selectedDate: string): Promise<ScoreMatch[]>
   const detailedMatches = provider === 'api-football' || provider === 'api-sports'
     ? matches
     : await enrichSportmonksDetails(matches, apiKey)
+  if (detailedMatches.length) lastProviderSource = provider
   return enrichMatchesWithPolymarket(detailedMatches)
 }
 
@@ -1101,16 +1269,19 @@ export default async function polyStreamHandler(req: Request, res: Response) {
   if (ttl > 0 && cache && cache.expiresAt > Date.now()) return res.json(req.query.debug === '1' ? { ...cache.feed, providerError: lastProviderError } : cache.feed)
 
   const provider = providerName()
-  const providerConfigured = Boolean(envValue('POLY_STREAM_API_KEY', 'SPORTS_API_KEY'))
+  const fanVibeConfigured = Boolean(fanVibeFeedUrl())
+  const providerConfigured = fanVibeConfigured || Boolean(envValue('POLY_STREAM_API_KEY', 'SPORTS_API_KEY'))
   const selectedDate = requestDate(req)
 
   try {
+    lastProviderSource = ''
     const matches = providerConfigured ? await fetchProviderMatches(selectedDate) : []
-    lastProviderError = providerConfigured && !matches.length ? 'Provider returned no live or upcoming World Cup matches.' : ''
+    if (matches.length) lastProviderError = ''
+    else if (providerConfigured && !lastProviderError) lastProviderError = 'Provider returned no live or upcoming World Cup matches.'
     const feed: ScoreFeed = {
       ok: true,
       providerConfigured,
-      source: providerConfigured ? provider : 'not_configured',
+      source: providerConfigured ? lastProviderSource || provider : 'not_configured',
       providerStatus: matches.length ? 'connected' : providerConfigured ? 'empty' : 'not_configured',
       selectedDate,
       displayDate: matches[0] ? matchDateKey(matches[0]) || selectedDate : selectedDate,

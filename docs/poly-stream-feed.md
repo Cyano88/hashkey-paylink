@@ -2,13 +2,13 @@
 
 The Polymarket Tools -> World Cup Scores section is provider-only. It does not use committed fixture rows or stale local fallback data.
 
-`/api/poly-stream` returns Sportmonks/API-FOOTBALL fixture data for the Hash PayLink live score widget, then enriches each fixture with live Polymarket Gamma market data when a main match market can be found.
+`/api/poly-stream` returns World Cup fixture data for the Hash PayLink live score widget, then enriches each fixture with live Polymarket Gamma market data when a main match market can be found.
 
 If no exact market URL is mapped, the UI does not route users to a loose Polymarket search page.
 
 ## Recommended Provider
 
-Use Sportmonks first for football truth. It has World Cup-focused live score endpoints, fixture filters, participants, scores, states, venues, and lineups/events through includes. Polymarket routing and prices must come from Polymarket Gamma, not from the sports provider.
+Use the FanVibe World Cup feed first for football truth. FanVibe already maps Sportmonks fixtures into the tournament board, including match states, scores, and events. If FanVibe is unavailable, `/api/poly-stream` falls back to direct Sportmonks/API-FOOTBALL provider calls. Polymarket routing and prices must come from Polymarket Gamma, not from the sports provider.
 
 Live-score requests use the Sportmonks livescores endpoint with participants, scores, venue, periods, events, state, and league included:
 
@@ -21,6 +21,7 @@ Sportmonks `starting_at` is treated as UTC. When `starting_at_timestamp` is pres
 Render env:
 
 ```env
+FANVIBE_WORLD_CUP_FEED_URL=https://xcup-fanvibe-production.up.railway.app/worldcup/feed
 POLY_STREAM_PROVIDER=sportmonks
 POLY_STREAM_API_KEY=your_sportmonks_token
 POLY_STREAM_LEAGUE_ID=732

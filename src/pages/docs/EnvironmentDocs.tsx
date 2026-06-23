@@ -86,6 +86,7 @@ export default function EnvironmentDocs() {
           headers={['Variable', 'Required', 'Description']}
           rows={[
             ['POLYMARKET_BUILDER_CODE', 'Optional', 'Builder attribution code for Polymarket bridge calls.'],
+            ['FANVIBE_WORLD_CUP_FEED_URL', 'World Cup board', 'FanVibe World Cup feed used as the source of truth before direct sports-provider fallback.'],
             ['SPORTMONKS_API_KEY', 'World Cup board', 'Sportmonks API key for live fixtures and scores.'],
             ['NEWS_API_KEY', 'News feed', 'News provider API key.'],
             ['RESEND_API_KEY', 'Email alerts', 'Resend API key for portfolio and LP Scout email notifications.'],
