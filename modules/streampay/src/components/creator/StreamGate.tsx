@@ -450,6 +450,7 @@ export function StreamGate() {
   const [approvePending, setApprovePending] = useState(false)
   const safeAgentSlug = cleanAgentSlug(agentSlug)
   const selectedAgent = agentOptions.find(agent => agent.slug === safeAgentSlug)
+  const selectedWalletNeedsReconnect = Boolean(selectedAgent?.walletAddress && !selectedAgent.connected)
 
   useEffect(() => {
     if (privyEmail && !walletEmail) setWalletEmail(privyEmail)
@@ -877,6 +878,10 @@ export function StreamGate() {
       setUnlockStep('choose')
       return
     }
+    if (selectedWalletNeedsReconnect) {
+      setWalletError('Reconnect this reader wallet before activating Gateway balance.')
+      return
+    }
     if (!Number.isFinite(amountNumber) || amountNumber <= 0) {
       setWalletError('Enter a valid USDC amount.')
       return
@@ -937,6 +942,10 @@ export function StreamGate() {
     if (!paymentSlug) {
       setWalletError('Choose a payment wallet first.')
       setUnlockStep('choose')
+      return
+    }
+    if (selectedWalletNeedsReconnect) {
+      setWalletError('Reconnect this reader wallet before checking Gateway balance.')
       return
     }
     setFundBusy(true)
@@ -1303,39 +1312,7 @@ export function StreamGate() {
                           )}
                         </div>
                       )}
-                      <label className="block space-y-1.5">
-                        <span className="text-[11px] font-semibold text-gray-600">Amount to activate</span>
-                        <div className="relative">
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.1"
-                            value={fundAmount}
-                            onChange={event => setFundAmount(event.target.value)}
-                            className="w-full rounded-xl border border-gray-200 bg-white px-3 py-3 pr-16 text-[14px] text-gray-900 outline-none focus:border-blue-300"
-                          />
-                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-bold text-gray-400">USDC</span>
-                        </div>
-                      </label>
-                      <div className="grid grid-cols-2 gap-2">
-                        <button
-                          type="button"
-                          onClick={copyPaymentWalletAddress}
-                          disabled={!selectedAgent?.walletAddress}
-                          className="rounded-xl border border-gray-200 bg-white px-3 py-3 text-[12px] font-bold text-gray-600 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          {copiedWallet ? 'Copied' : 'Copy wallet'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={gatewayActivationPending ? checkPaymentActivation : activatePaymentBalance}
-                          disabled={fundBusy}
-                          className="rounded-xl bg-gray-950 px-3 py-3 text-[12px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {fundBusy ? (gatewayActivationPending ? 'Checking...' : 'Activating...') : gatewayActivationPending ? 'Check x402' : 'Activate'}
-                        </button>
-                      </div>
-                      {walletError && /reconnect|sign in|activation did not complete/i.test(walletError) && (
+                      {selectedWalletNeedsReconnect ? (
                         <button
                           type="button"
                           onClick={() => {
@@ -1347,6 +1324,41 @@ export function StreamGate() {
                         >
                           Reconnect reader wallet
                         </button>
+                      ) : (
+                        <>
+                          <label className="block space-y-1.5">
+                            <span className="text-[11px] font-semibold text-gray-600">Amount to activate</span>
+                            <div className="relative">
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.1"
+                                value={fundAmount}
+                                onChange={event => setFundAmount(event.target.value)}
+                                className="w-full rounded-xl border border-gray-200 bg-white px-3 py-3 pr-16 text-[14px] text-gray-900 outline-none focus:border-blue-300"
+                              />
+                              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-bold text-gray-400">USDC</span>
+                            </div>
+                          </label>
+                          <div className="grid grid-cols-2 gap-2">
+                            <button
+                              type="button"
+                              onClick={copyPaymentWalletAddress}
+                              disabled={!selectedAgent?.walletAddress}
+                              className="rounded-xl border border-gray-200 bg-white px-3 py-3 text-[12px] font-bold text-gray-600 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              {copiedWallet ? 'Copied' : 'Copy wallet'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={gatewayActivationPending ? checkPaymentActivation : activatePaymentBalance}
+                              disabled={fundBusy}
+                              className="rounded-xl bg-gray-950 px-3 py-3 text-[12px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {fundBusy ? (gatewayActivationPending ? 'Checking...' : 'Activating...') : gatewayActivationPending ? 'Check x402' : 'Activate'}
+                            </button>
+                          </div>
+                        </>
                       )}
                     </div>
                   )}
