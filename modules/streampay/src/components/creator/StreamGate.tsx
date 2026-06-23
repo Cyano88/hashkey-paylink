@@ -332,9 +332,14 @@ function numericBalance(value?: string) {
   return Number.isFinite(amount) ? amount : 0
 }
 
+function hasActivatedGatewayBalance(agent: AgentOption | undefined, requiredAmount: number) {
+  if (!agent?.gatewayBalanceChecked) return true
+  return numericBalance(agent.gatewayBalance) >= requiredAmount
+}
+
 function unlockRecoveryStep(message: string): UnlockStep | null {
-  if (/session|reconnect|login|wallet session|not found|not enabled|create the wallet/i.test(message)) return 'email'
   if (/balance|fund|insufficient|gateway|deposit|activation/i.test(message)) return 'fund'
+  if (/session|reconnect|login|wallet session|not found|not enabled|create the wallet/i.test(message)) return 'email'
   return null
 }
 
@@ -682,6 +687,11 @@ export function StreamGate() {
     }
     if (!selectedAgent?.connected) {
       setUnlockStep(agentOptions.length > 0 ? 'choose' : 'email')
+      return
+    }
+    if (!hasActivatedGatewayBalance(selectedAgent, sessionCap)) {
+      setUnlockStep('fund')
+      setFundMessage('Activate Arc USDC for this reader wallet before unlocking.')
       return
     }
     await unlockWithAgentX402(selectedAgent.slug)
