@@ -245,6 +245,12 @@ function walletSlugFromEmail(email: string) {
   return `creator-${Math.abs(hash).toString(36)}`
 }
 
+function readerWalletSlug(email: string, selectedSlug?: string) {
+  const explicit = cleanAgentSlug(selectedSlug || '')
+  if (explicit && explicit !== 'hashpaylink-agent') return explicit
+  return walletSlugFromEmail(email)
+}
+
 function agentSlugFromCircleWalletId(value?: string) {
   const match = String(value ?? '').match(/^agent:([a-z0-9-]+):/i)
   return cleanAgentSlug(match?.[1] ?? '')
@@ -270,9 +276,8 @@ function mergeAgentOptions(existing: AgentOption[], next: AgentOption) {
 }
 
 function paymentWalletName(agent?: AgentOption | null) {
-  if (!agent || agent.slug === 'hashpaylink-agent' || agent.source === 'platform' || agent.source === 'env') {
-    return 'Hash PayLink wallet'
-  }
+  if (!agent) return 'Reader wallet'
+  if (agent.slug === 'hashpaylink-agent' || agent.source === 'platform' || agent.source === 'env') return 'Hash PayLink wallet'
   if (agent.source === 'store' || agent.slug.startsWith('creator-')) return 'Reader wallet'
   return agent.name || agent.slug.replace(/-/g, ' ')
 }
@@ -354,7 +359,7 @@ export function StreamGate() {
   const { sessionStart, sessionStop, setVisible, forceSign } = poa
   const [ending,  setEnding]  = useState(false)
   const [ended,   setEnded]   = useState(false)
-  const [agentSlug, setAgentSlug] = useState(initialAgentSlug || (paymentMode === 'x402' ? 'hashpaylink-agent' : ''))
+  const [agentSlug, setAgentSlug] = useState(initialAgentSlug)
   const [agentOptions, setAgentOptions] = useState<AgentOption[]>([])
   const [agentOptionsLoading, setAgentOptionsLoading] = useState(false)
   const [agentOptionsError, setAgentOptionsError] = useState<string | null>(null)
@@ -465,11 +470,12 @@ export function StreamGate() {
       }
 
       try {
-        await addBySlug(initialAgentSlug || 'hashpaylink-agent', {
-          name: initialAgentSlug ? initialAgentSlug : 'Hash PayLink Agent',
-          purpose: initialAgentSlug ? undefined : 'Platform agent for x402 creator unlocks',
-          source: initialAgentSlug ? 'saved' : 'platform',
-        })
+        if (initialAgentSlug) {
+          await addBySlug(initialAgentSlug, {
+            name: 'Reader wallet',
+            source: 'saved',
+          })
+        }
 
         if (PRIVY_AUTH_ENABLED && privyAuthenticated) {
           const token = await getAccessToken()
@@ -490,6 +496,11 @@ export function StreamGate() {
           }
 
           if (privyEmail) {
+            await addBySlug(walletSlugFromEmail(privyEmail), {
+              name: 'Reader wallet',
+              purpose: 'Email payment wallet',
+              source: 'store',
+            })
             try {
               const res = await fetch(`/api/agent-profile?owner=${encodeURIComponent(privyEmail)}`)
               const data = await res.json().catch(() => ({})) as { ok?: boolean; agents?: AgentProfile[] }
@@ -642,15 +653,9 @@ export function StreamGate() {
     await unlockWithAgentX402(selectedAgent.slug)
   }
 
-  function walletSlugForEmail(email: string, preferredSlug?: string) {
-    const cleanPreferred = cleanAgentSlug(preferredSlug || '')
-    if (cleanPreferred && cleanPreferred !== 'hashpaylink-agent') return cleanPreferred
-    return walletSlugFromEmail(email)
-  }
-
   async function startPaymentWalletLogin(slugOverride?: string) {
     const email = cleanEmail(walletEmail || privyEmail)
-    const slug = walletSlugForEmail(email, slugOverride || safeAgentSlug)
+    const slug = readerWalletSlug(email, slugOverride)
     const expectedWallet = agentOptions.find(agent => agent.slug === slug)?.walletAddress
     setWalletError(null)
     setContentError(null)
@@ -674,7 +679,7 @@ export function StreamGate() {
       setUnlockStep('otp')
       setCircleNotice('Check your email for the wallet code.')
     } catch (err) {
-      setWalletError(err instanceof Error ? readableUnlockError(err.message) : 'Could not send the sign-in code.')
+      setWalletError(err instanceof Error ? err.message.slice(0, 180) : 'Could not send the sign-in code.')
     } finally {
       setWalletBusy(false)
     }
@@ -682,7 +687,7 @@ export function StreamGate() {
 
   async function completePaymentWalletLogin() {
     const fallbackEmail = cleanEmail(walletEmail || privyEmail)
-    const context = walletOtpContext || { email: fallbackEmail, slug: walletSlugForEmail(fallbackEmail, safeAgentSlug) }
+    const context = walletOtpContext || { email: fallbackEmail, slug: readerWalletSlug(fallbackEmail) }
     const otp = walletOtp.trim()
     setWalletError(null)
     setContentError(null)
@@ -733,20 +738,21 @@ export function StreamGate() {
       setContentState('idle')
       void refreshPaymentWalletStatus(slug)
     } catch (err) {
-      setWalletError(err instanceof Error ? readableUnlockError(err.message) : 'Could not verify the wallet code.')
+      setWalletError(err instanceof Error ? err.message.slice(0, 180) : 'Could not verify the wallet code.')
     } finally {
       setWalletBusy(false)
     }
   }
 
   async function resendPaymentWalletCode() {
-    const slug = walletOtpContext?.slug || safeAgentSlug
+    const slug = walletOtpContext?.slug || readerWalletSlug(cleanEmail(walletEmail || privyEmail))
     setWalletOtp('')
     await startPaymentWalletLogin(slug)
   }
 
   function paymentWalletFundUrl() {
     const wallet = selectedAgent?.walletAddress
+    const slug = selectedAgent?.slug || safeAgentSlug
     if (!wallet) return ''
     const params = new URLSearchParams({
       e: wallet,
@@ -756,7 +762,7 @@ export function StreamGate() {
       v: '1',
       a: fundAmount,
       src: 'creator',
-      agent: safeAgentSlug || 'hashpaylink-agent',
+      agent: slug,
       returnTo: `${window.location.pathname}${window.location.search}`,
     })
     return `/pay?${params.toString()}`
@@ -820,9 +826,10 @@ export function StreamGate() {
 
   async function activatePaymentBalance() {
     const amountNumber = Number(fundAmount)
+    const paymentSlug = selectedAgent?.slug || safeAgentSlug
     setFundMessage(null)
     setWalletError(null)
-    if (!safeAgentSlug) {
+    if (!paymentSlug) {
       setWalletError('Choose a payment wallet first.')
       setUnlockStep('choose')
       return
@@ -836,7 +843,7 @@ export function StreamGate() {
       const res = await fetch('/api/agent-wallet', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'gateway-deposit', agentSlug: safeAgentSlug, amount: fundAmount, chain: fundChain }),
+        body: JSON.stringify({ action: 'gateway-deposit', agentSlug: paymentSlug, amount: fundAmount, chain: fundChain }),
       })
       const data = await res.json().catch(() => ({})) as {
         ok?: boolean
@@ -847,11 +854,11 @@ export function StreamGate() {
       }
       if (!res.ok || !data.ok) throw new Error(data.error || 'Could not activate the payment balance.')
       setAgentOptions(current => current.map(agent => (
-        agent.slug === safeAgentSlug
+        agent.slug === paymentSlug
           ? { ...agent, connected: true, walletAddress: data.walletAddress || agent.walletAddress, gatewayBalance: data.gatewayBalance }
           : agent
       )))
-      await refreshPaymentWalletStatus(safeAgentSlug)
+      await refreshPaymentWalletStatus(paymentSlug)
       setFundMessage('Payment balance activated. You can unlock now.')
       setUnlockStep('choose')
       setContentState('idle')
@@ -865,7 +872,7 @@ export function StreamGate() {
         setContentError(null)
       } else {
         if (recoveryStep === 'fund') setUnlockStep('fund')
-        setWalletError(readableUnlockError(message))
+        setWalletError(message.slice(0, 180))
       }
     } finally {
       setFundBusy(false)
@@ -966,9 +973,6 @@ export function StreamGate() {
                           <p className="mt-1 text-[12px] leading-relaxed text-gray-500">
                             Select the reader wallet paying to unlock. Creator: {creator ? shortAddress(creator) : 'verified gate'}.
                           </p>
-                          {privyEmail && (
-                            <p className="mt-1 truncate text-[11px] text-gray-400">Signed in: {privyEmail}</p>
-                          )}
                         </div>
                         <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-bold text-emerald-700 ring-1 ring-emerald-100">
                           Secure
@@ -1068,21 +1072,6 @@ export function StreamGate() {
                           className="w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-[14px] text-gray-900 outline-none placeholder:text-gray-300 focus:border-blue-300"
                         />
                       </label>
-                      <details className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2">
-                        <summary className="cursor-pointer text-[11px] font-semibold text-gray-500">
-                          Advanced wallet name
-                        </summary>
-                        <label className="mt-2 block space-y-1.5">
-                          <span className="text-[11px] font-semibold text-gray-600">Reader wallet name</span>
-                          <input
-                            type="text"
-                            value={agentSlug}
-                            onChange={event => setAgentSlug(cleanAgentSlug(event.target.value))}
-                            placeholder={walletEmail ? walletSlugFromEmail(walletEmail) : 'reader-wallet'}
-                            className="w-full rounded-xl border border-gray-200 bg-white px-3 py-3 font-mono text-[13px] text-gray-900 outline-none placeholder:text-gray-300 focus:border-blue-300"
-                          />
-                        </label>
-                      </details>
                       <div className="grid grid-cols-2 gap-2">
                         <button
                           type="button"
