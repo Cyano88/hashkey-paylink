@@ -92,7 +92,7 @@ type AgentOption = AgentProfile & {
   source?: 'platform' | 'saved' | 'linked' | 'env' | 'store'
 }
 type UnlockStep = 'intro' | 'choose' | 'email' | 'otp' | 'fund'
-type FundingChain = 'ARC-TESTNET'
+type FundingChain = 'BASE-SEPOLIA'
 
 function hasWorldCupScore(match: WorldCupScoreMatch) {
   const home = String(match.homeScore ?? '').trim().toLowerCase()
@@ -405,7 +405,7 @@ export function StreamGate() {
   const [walletBusy, setWalletBusy] = useState(false)
   const [walletError, setWalletError] = useState<string | null>(null)
   const [fundAmount, setFundAmount] = useState('0.5')
-  const [fundChain] = useState<FundingChain>('ARC-TESTNET')
+  const [fundChain] = useState<FundingChain>('BASE-SEPOLIA')
   const [fundBusy, setFundBusy] = useState(false)
   const [fundMessage, setFundMessage] = useState<string | null>(null)
   const [copiedWallet, setCopiedWallet] = useState(false)
@@ -691,7 +691,7 @@ export function StreamGate() {
     }
     if (!hasActivatedGatewayBalance(selectedAgent, sessionCap)) {
       setUnlockStep('fund')
-      setFundMessage('Activate Arc USDC for this reader wallet before unlocking.')
+      setFundMessage('Activate Gateway balance for this reader wallet before unlocking.')
       return
     }
     await unlockWithAgentX402(selectedAgent.slug)
@@ -792,24 +792,6 @@ export function StreamGate() {
     const slug = walletOtpContext?.slug || readerWalletSlug(cleanEmail(walletEmail || privyEmail))
     setWalletOtp('')
     await startPaymentWalletLogin(slug)
-  }
-
-  function paymentWalletFundUrl() {
-    const wallet = selectedAgent?.walletAddress
-    const slug = selectedAgent?.slug || safeAgentSlug
-    if (!wallet) return ''
-    const params = new URLSearchParams({
-      e: wallet,
-      m: 'Fund payment wallet',
-      n: 'arc',
-      f: '1',
-      v: '1',
-      a: fundAmount,
-      src: 'creator',
-      agent: slug,
-      returnTo: `${window.location.pathname}${window.location.search}`,
-    })
-    return `/pay?${params.toString()}`
   }
 
   async function copyPaymentWalletAddress() {
@@ -1189,9 +1171,9 @@ export function StreamGate() {
                       <div className="border-b border-gray-100 pb-3">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <p className="text-[13px] font-bold text-gray-900">Add Arc USDC</p>
+                            <p className="text-[13px] font-bold text-gray-900">Activate Gateway balance</p>
                             <p className="mt-1 text-[12px] leading-relaxed text-gray-500">
-                              Fund the selected x402 unlock wallet, then activate the balance.
+                              Circle Gateway activation currently uses Base Sepolia in test mode. Content unlocks still settle through Arc.
                             </p>
                           </div>
                           <button
@@ -1217,7 +1199,7 @@ export function StreamGate() {
                               </p>
                             </div>
                             <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-[10px] font-bold text-blue-700 ring-1 ring-blue-100">
-                              Arc Network
+                              Base Sepolia activation
                             </span>
                           </div>
                         </div>
@@ -1257,7 +1239,7 @@ export function StreamGate() {
                           </div>
                           {numericBalance(selectedAgent.baseBalance) > 0 && numericBalance(selectedAgent.balance) <= 0 && (
                             <p className="mt-2 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-[11px] font-medium leading-relaxed text-amber-700">
-                              {formatBalanceLabel(selectedAgent.baseBalance)} detected on Base. Creator unlocks use Arc USDC, so fund or bridge this reader wallet on Arc before activating.
+                              {formatBalanceLabel(selectedAgent.baseBalance)} detected on Base. Gateway activation in this test flow uses Base Sepolia, so use test USDC on Base Sepolia for activation.
                             </p>
                           )}
                         </div>
@@ -1279,14 +1261,11 @@ export function StreamGate() {
                       <div className="grid grid-cols-2 gap-2">
                         <button
                           type="button"
-                          onClick={() => {
-                            const url = paymentWalletFundUrl()
-                            if (url) window.open(url, '_blank', 'noopener,noreferrer')
-                          }}
+                          onClick={copyPaymentWalletAddress}
                           disabled={!selectedAgent?.walletAddress}
                           className="rounded-xl border border-gray-200 bg-white px-3 py-3 text-[12px] font-bold text-gray-600 disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                          Fund wallet
+                          {copiedWallet ? 'Copied' : 'Copy wallet'}
                         </button>
                         <button
                           type="button"
