@@ -84,7 +84,6 @@ function buildGateLink(params: {
   p.set('cr',  params.creator)
   p.set('r',   params.rateRaw.toString())
   p.set('cap', params.capRaw.toString())
-  if (params.mode === 'unlock') p.set('pay', 'x402')
   if (params.title.trim()) p.set('t', params.title.trim())
   return `${origin}/gate?${p.toString()}`
 }
@@ -1157,7 +1156,7 @@ export function LinkFactory({
                 : { n: '1', title: 'Publish', desc: 'Set a per-second price and max cap' },
               { n: '2', title: 'Share', desc: 'Send one paid link to viewers' },
               mode === 'unlock'
-                ? { n: '3', title: 'Unlock', desc: 'Circle Gateway clears USDC on Arc' }
+                ? { n: '3', title: 'Unlock', desc: 'Arc USDC authorizes access' }
                 : { n: '3', title: 'Stream', desc: 'USDC accrues while content is active' },
             ] as const).map(s => (
               <div key={s.n} className="rounded-2xl border border-gray-100 bg-white p-3 sm:p-4 text-center shadow-sm space-y-1.5">
