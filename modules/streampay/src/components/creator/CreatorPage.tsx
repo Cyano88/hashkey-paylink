@@ -722,7 +722,7 @@ function DiscoverContent({
 
   return (
     <div className="w-full space-y-4">
-      <section className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+      <section className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-[#111216]">
         <button
           type="button"
           onClick={() => openContent(hero)}
@@ -881,16 +881,16 @@ function DiscoverContent({
         </button>
       </section>
 
-      <section className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+      <section className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-[#111216]">
         <button
           type="button"
           onClick={onCreate}
-          className="flex w-full items-center justify-between gap-4 border-b border-gray-100 px-5 py-4 text-left transition-colors hover:bg-gray-50"
+          className="flex w-full items-center justify-between gap-4 border-b border-gray-100 px-5 py-4 text-left transition-colors hover:bg-gray-50 dark:border-white/10 dark:hover:bg-white/[0.06]"
         >
           <div className="min-w-0">
             <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-blue-500">Create</p>
-            <p className="mt-1 text-[14px] font-black tracking-tight text-gray-950">Monetize with USDC</p>
-            <p className="mt-1 text-[12px] leading-5 text-gray-400">Articles, private links, sports notes, and streaming gates.</p>
+            <p className="mt-1 text-[14px] font-black tracking-tight text-gray-950 dark:text-white">Monetize with USDC</p>
+            <p className="mt-1 text-[12px] leading-5 text-gray-400 dark:text-gray-500">Articles, private links, sports notes, and streaming gates.</p>
           </div>
           <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gray-950 text-white">
             <Plus className="h-5 w-5" />
@@ -899,16 +899,16 @@ function DiscoverContent({
 
         <div className="flex items-center justify-between gap-3 px-5 pb-2 pt-4">
           <div>
-            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-gray-400">Creator library</p>
-            <p className="mt-0.5 text-[12px] text-gray-400">Approved creator posts and official drops.</p>
+            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Creator library</p>
+            <p className="mt-0.5 text-[12px] text-gray-400 dark:text-gray-500">Approved creator posts and official drops.</p>
           </div>
-          <span className="rounded-full bg-gray-100 px-2.5 py-1 text-[10px] font-bold text-gray-500">
+          <span className="rounded-full bg-gray-100 px-2.5 py-1 text-[10px] font-bold text-gray-500 dark:bg-white/[0.06] dark:text-gray-400">
             {cards.length}
           </span>
         </div>
 
         <div className="overflow-x-auto px-4 pb-2 [scrollbar-width:none]">
-          <div className="flex w-max gap-1 rounded-xl border border-gray-100 bg-gray-50 p-1">
+          <div className="flex w-max gap-1 rounded-xl border border-gray-100 bg-gray-50 p-1 dark:border-white/10 dark:bg-white/[0.04]">
             {([{ id: 'all', label: 'All' }, ...CREATOR_CATEGORIES] as Array<{ id: CreatorCategory | 'all'; label: string; disabled?: boolean }>).map(category => {
               const selected = categoryFilter === category.id
               return (
@@ -923,10 +923,10 @@ function DiscoverContent({
                   className={[
                     'rounded-lg px-3 py-2 text-[11px] font-bold transition-colors',
                     category.disabled
-                      ? 'cursor-not-allowed text-gray-300'
+                      ? 'cursor-not-allowed text-gray-300 dark:text-gray-700'
                       : selected
-                        ? 'bg-gray-950 text-white'
-                        : 'text-gray-500 hover:bg-white hover:text-gray-900',
+                        ? 'bg-gray-950 text-white dark:bg-white dark:text-gray-950'
+                        : 'text-gray-500 hover:bg-white hover:text-gray-900 dark:text-gray-400 dark:hover:bg-white/[0.08] dark:hover:text-gray-100',
                   ].join(' ')}
                 >
                   {category.label}
@@ -939,11 +939,11 @@ function DiscoverContent({
 
         <div className="max-h-[430px] space-y-2 overflow-y-auto px-4 pb-4 pt-2 [scrollbar-width:none]">
           {cards.length === 0 && (
-            <div className="rounded-2xl border border-gray-100 bg-gray-50 px-4 py-5 text-center">
-              <p className="text-sm font-black text-gray-950">
+            <div className="rounded-2xl border border-gray-100 bg-gray-50 px-4 py-5 text-center dark:border-white/10 dark:bg-white/[0.04]">
+              <p className="text-sm font-black text-gray-950 dark:text-white">
                 {categoryFilter === 'live-scores' ? 'Live scores are syncing' : 'No published posts yet'}
               </p>
-              <p className="mx-auto mt-1 max-w-xs text-[12px] leading-5 text-gray-400">
+              <p className="mx-auto mt-1 max-w-xs text-[12px] leading-5 text-gray-400 dark:text-gray-500">
                 {categoryFilter === 'live-scores'
                   ? 'Refresh shortly. Hash PayLink only shows current matchday data from the live feed.'
                   : 'Approved creator posts will appear here.'}
@@ -963,43 +963,43 @@ function DiscoverContent({
                   key={card.id}
                   type="button"
                   onClick={() => openContent(card)}
-                  className="group grid h-[132px] w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-2xl border border-gray-100 bg-white p-3 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
+                  className="group grid h-[132px] w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-2xl border border-gray-100 bg-white p-3 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-white/10 dark:bg-white/[0.04] dark:hover:border-white/20"
                 >
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <span className={[
                         'rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-[0.12em]',
                         state.tag === 'LIVE'
-                          ? 'bg-emerald-50 text-emerald-700'
+                          ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300'
                           : state.tag === 'FT'
-                            ? 'bg-gray-100 text-gray-600'
-                            : 'bg-blue-50 text-blue-700',
+                            ? 'bg-gray-100 text-gray-600 dark:bg-white/[0.08] dark:text-gray-300'
+                            : 'bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300',
                       ].join(' ')}>
                         {state.tag}
                       </span>
-                      <span className="truncate text-[10px] font-semibold text-gray-400">{match.time || scoreFeed?.displayDate}</span>
+                      <span className="truncate text-[10px] font-semibold text-gray-400 dark:text-gray-500">{match.time || scoreFeed?.displayDate}</span>
                     </div>
                     <div className="mt-3 grid grid-cols-[minmax(0,1fr)_56px_minmax(0,1fr)] items-center gap-2">
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5">
-                          {homeFlag ? <img src={homeFlag} alt="" className="h-3.5 w-5 rounded-[3px] object-cover ring-1 ring-gray-200" /> : <span className="text-[10px] font-black text-gray-500">{flagEmojiForTeam(home)}</span>}
-                          <p className="truncate text-[12px] font-black text-gray-950">{home}</p>
+                          {homeFlag ? <img src={homeFlag} alt="" className="h-3.5 w-5 rounded-[3px] object-cover ring-1 ring-gray-200 dark:ring-white/10" /> : <span className="text-[10px] font-black text-gray-500 dark:text-gray-400">{flagEmojiForTeam(home)}</span>}
+                          <p className="truncate text-[12px] font-black text-gray-950 dark:text-gray-100">{home}</p>
                         </div>
-                        {match.homeMarketPrice && <p className="mt-1 truncate text-[9px] font-black uppercase text-gray-400">{match.homeMarketPrice}</p>}
+                        {match.homeMarketPrice && <p className="mt-1 truncate text-[9px] font-black uppercase text-gray-400 dark:text-gray-500">{match.homeMarketPrice}</p>}
                       </div>
-                      <div className="rounded-xl bg-gray-50 px-2 py-2 text-center">
-                        <p className="text-[15px] font-black tabular-nums text-gray-950">{state.center}</p>
-                        <p className="mt-0.5 truncate text-[8px] font-black uppercase text-gray-400">{state.sub}</p>
+                      <div className="rounded-xl bg-gray-50 px-2 py-2 text-center dark:bg-[#111216]">
+                        <p className="text-[15px] font-black tabular-nums text-gray-950 dark:text-white">{state.center}</p>
+                        <p className="mt-0.5 truncate text-[8px] font-black uppercase text-gray-400 dark:text-gray-500">{state.sub}</p>
                       </div>
                       <div className="min-w-0 text-right">
                         <div className="flex items-center justify-end gap-1.5">
-                          <p className="truncate text-[12px] font-black text-gray-950">{away || 'Opponent'}</p>
-                          {awayFlag ? <img src={awayFlag} alt="" className="h-3.5 w-5 rounded-[3px] object-cover ring-1 ring-gray-200" /> : <span className="text-[10px] font-black text-gray-500">{flagEmojiForTeam(away)}</span>}
+                          <p className="truncate text-[12px] font-black text-gray-950 dark:text-gray-100">{away || 'Opponent'}</p>
+                          {awayFlag ? <img src={awayFlag} alt="" className="h-3.5 w-5 rounded-[3px] object-cover ring-1 ring-gray-200 dark:ring-white/10" /> : <span className="text-[10px] font-black text-gray-500 dark:text-gray-400">{flagEmojiForTeam(away)}</span>}
                         </div>
-                        {match.awayMarketPrice && <p className="mt-1 truncate text-[9px] font-black uppercase text-gray-400">{match.awayMarketPrice}</p>}
+                        {match.awayMarketPrice && <p className="mt-1 truncate text-[9px] font-black uppercase text-gray-400 dark:text-gray-500">{match.awayMarketPrice}</p>}
                       </div>
                     </div>
-                    <p className="mt-3 truncate text-[10px] font-semibold text-gray-400">
+                    <p className="mt-3 truncate text-[10px] font-semibold text-gray-400 dark:text-gray-500">
                       {match.marketStatus === 'matched' ? 'Polymarket route available' : 'Trading route pending'}
                     </p>
                   </div>
@@ -1015,9 +1015,9 @@ function DiscoverContent({
                 key={card.id}
                 type="button"
                 onClick={() => openContent(card)}
-                className="group flex h-[132px] w-full gap-3 rounded-2xl border border-gray-100 bg-white p-2 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
+                className="group flex h-[132px] w-full gap-3 rounded-2xl border border-gray-100 bg-white p-2 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-white/10 dark:bg-white/[0.04] dark:hover:border-white/20"
               >
-                <div className="relative h-full w-24 shrink-0 overflow-hidden rounded-xl bg-gray-100">
+                <div className="relative h-full w-24 shrink-0 overflow-hidden rounded-xl bg-gray-100 dark:bg-white/[0.06]">
                   <img
                     src={brokenImages[card.id] ? WORLD_GLOBE_IMAGE : card.image || WORLD_GLOBE_IMAGE}
                     alt=""
@@ -1038,10 +1038,10 @@ function DiscoverContent({
                   <div className="min-w-0">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="truncate text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-400">
+                    <p className="truncate text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-400 dark:text-gray-500">
                       {card.author || card.source}
                     </p>
-                    <h3 className="mt-1 line-clamp-2 text-[13px] font-black leading-[1.2] text-gray-950">
+                    <h3 className="mt-1 line-clamp-2 text-[13px] font-black leading-[1.2] text-gray-950 dark:text-gray-100">
                       {card.title}
                     </h3>
                   </div>
@@ -1049,12 +1049,12 @@ function DiscoverContent({
                     {card.price}
                   </span>
                 </div>
-                <p className="mt-1.5 line-clamp-2 text-[11px] leading-4 text-gray-400">
+                <p className="mt-1.5 line-clamp-2 text-[11px] leading-4 text-gray-400 dark:text-gray-500">
                   {card.description}
                 </p>
                   </div>
                 <div className="mt-2 flex items-center justify-between gap-2">
-                  <span className="min-w-0 truncate text-[10px] font-semibold text-gray-400">
+                  <span className="min-w-0 truncate text-[10px] font-semibold text-gray-400 dark:text-gray-500">
                     {card.xHandle ? `@${card.xHandle.replace(/^@/, '')}` : card.source}
                   </span>
                   <span className="inline-flex shrink-0 items-center gap-2">
@@ -1072,12 +1072,12 @@ function DiscoverContent({
                           event.stopPropagation()
                           onEdit(card)
                         }}
-                        className="rounded-full border border-gray-200 px-2 py-1 text-[10px] font-bold text-gray-500 hover:bg-gray-50"
+                        className="rounded-full border border-gray-200 px-2 py-1 text-[10px] font-bold text-gray-500 hover:bg-gray-50 dark:border-white/10 dark:text-gray-300 dark:hover:bg-white/[0.06]"
                       >
                         Edit
                       </span>
                     )}
-                  <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-gray-950">
+                  <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-gray-950 dark:text-gray-100">
                       <LockKeyhole className="h-3.5 w-3.5" />
                       {card.cta || (card.action === 'gate' ? 'Unlock' : 'Create')}
                     </span>
@@ -1096,10 +1096,10 @@ function DiscoverContent({
 
       </section>
 
-      <div className="border-t border-gray-100 pt-4 pb-2 flex flex-wrap items-center justify-center gap-x-8 gap-y-2">
+      <div className="border-t border-gray-100 pt-4 pb-2 flex flex-wrap items-center justify-center gap-x-8 gap-y-2 dark:border-white/10">
         <a
           href="mailto:support@hashpaylink.com"
-          className="flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-gray-900 transition-colors"
+          className="flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-gray-900 transition-colors dark:text-gray-500 dark:hover:text-gray-200"
         >
           <Mail className="h-3.5 w-3.5" />
           support@hashpaylink.com
@@ -1108,7 +1108,7 @@ function DiscoverContent({
           href="https://x.com/Streampay_"
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-gray-900 transition-colors"
+          className="flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-gray-900 transition-colors dark:text-gray-500 dark:hover:text-gray-200"
         >
           <XIcon className="h-3.5 w-3.5" />
           @Streampay_
@@ -1217,28 +1217,28 @@ function SettlementDashboard({
 
   return (
     <div className="w-full">
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden dark:border-white/10 dark:bg-[#111216]">
         <div className="px-5 py-5 sm:px-7 sm:py-6 space-y-5">
 
           <div className="flex items-center gap-1.5">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-500">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-500 dark:text-gray-400">
               Creator earnings
             </span>
           </div>
-          <div className="rounded-2xl border border-blue-100 bg-blue-50/60 px-4 py-3">
-            <p className="text-[13px] font-bold text-gray-900">My posts and earnings</p>
-            <p className="mt-1 text-[12px] leading-5 text-gray-500">
+          <div className="rounded-2xl border border-blue-100 bg-blue-50/60 px-4 py-3 dark:border-blue-400/20 dark:bg-blue-500/10">
+            <p className="text-[13px] font-bold text-gray-900 dark:text-blue-100">My posts and earnings</p>
+            <p className="mt-1 text-[12px] leading-5 text-gray-500 dark:text-blue-200/70">
               Select a post to review viewers and claim to the creator wallet on Arc.
             </p>
           </div>
 
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-[13px] font-semibold text-gray-700">My posts</span>
-              <span className="text-[11px] text-gray-400">{published.length} published</span>
+              <span className="text-[13px] font-semibold text-gray-700 dark:text-gray-200">My posts</span>
+              <span className="text-[11px] text-gray-400 dark:text-gray-500">{published.length} published</span>
             </div>
             {published.length > 0 ? (
-              <div className="max-h-[250px] space-y-2 overflow-y-auto rounded-2xl border border-gray-100 bg-gray-50/70 p-2 [scrollbar-width:none]">
+              <div className="max-h-[250px] space-y-2 overflow-y-auto rounded-2xl border border-gray-100 bg-gray-50/70 p-2 [scrollbar-width:none] dark:border-white/10 dark:bg-white/[0.04]">
                 {published.map(post => {
                   const selected = !!post.gateLink && parseContentId(post.gateLink) === contentId
                   return (
@@ -1248,40 +1248,42 @@ function SettlementDashboard({
                       onClick={() => selectPublishedGate(post)}
                       className={[
                         'flex w-full items-center gap-3 rounded-xl border p-2 text-left transition-all',
-                        selected ? 'border-gray-950 bg-white shadow-sm' : 'border-transparent bg-white/70 hover:border-gray-200',
+                        selected
+                          ? 'border-gray-950 bg-white shadow-sm dark:border-white/40 dark:bg-white/[0.08]'
+                          : 'border-transparent bg-white/70 hover:border-gray-200 dark:bg-[#111216] dark:hover:border-white/20',
                       ].join(' ')}
                     >
-                      <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-gray-100">
+                      <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-gray-100 dark:bg-white/[0.06]">
                         <img src={post.image} alt="" className="h-full w-full object-cover" />
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-gray-500">
+                          <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-gray-500 dark:bg-white/[0.06] dark:text-gray-300">
                             {post.tag}
                           </span>
                           <span className={[
                             'rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em]',
                             post.reviewStatus === 'approved'
-                              ? 'bg-emerald-50 text-emerald-600'
+                              ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-300'
                               : post.reviewStatus === 'rejected'
-                                ? 'bg-red-50 text-red-500'
-                                : 'bg-amber-50 text-amber-600',
+                                ? 'bg-red-50 text-red-500 dark:bg-red-500/10 dark:text-red-300'
+                                : 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-300',
                           ].join(' ')}>
                             {post.reviewStatus || 'pending'}
                           </span>
-                          <span className="text-[10px] font-semibold text-gray-400">{post.price} USDC</span>
+                          <span className="text-[10px] font-semibold text-gray-400 dark:text-gray-500">{post.price} USDC</span>
                         </div>
-                        <p className="mt-1 truncate text-[13px] font-black text-gray-950">{post.title}</p>
-                        <p className="mt-0.5 truncate text-[11px] text-gray-400">{post.source}</p>
+                        <p className="mt-1 truncate text-[13px] font-black text-gray-950 dark:text-gray-100">{post.title}</p>
+                        <p className="mt-0.5 truncate text-[11px] text-gray-400 dark:text-gray-500">{post.source}</p>
                       </div>
                     </button>
                   )
                 })}
               </div>
             ) : (
-              <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-4 py-4 text-center">
-                <p className="text-[12px] font-semibold text-gray-600">No published posts in this session yet.</p>
-                <p className="mt-1 text-[11px] leading-5 text-gray-400">
+              <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-4 py-4 text-center dark:border-white/10 dark:bg-white/[0.04]">
+                <p className="text-[12px] font-semibold text-gray-600 dark:text-gray-300">No published posts in this session yet.</p>
+                <p className="mt-1 text-[11px] leading-5 text-gray-400 dark:text-gray-500">
                   Publish a post first, or paste a gate link below.
                 </p>
               </div>
@@ -1291,23 +1293,23 @@ function SettlementDashboard({
           {/* Gate link input */}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <span className="text-[13px] font-semibold text-gray-700">Published gate</span>
-              <span className="text-[11px] text-gray-400">Auto-detects ID</span>
+              <span className="text-[13px] font-semibold text-gray-700 dark:text-gray-200">Published gate</span>
+              <span className="text-[11px] text-gray-400 dark:text-gray-500">Auto-detects ID</span>
             </div>
             <input
               type="text"
               placeholder="Paste gate link or content ID"
               value={gateInput}
               onChange={e => handleGateInput(e.target.value)}
-              className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-[13px] placeholder:text-gray-300 focus:outline-none focus:border-gray-400 transition-colors min-h-[48px]"
+              className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-[13px] text-gray-800 placeholder:text-gray-300 focus:outline-none focus:border-gray-400 transition-colors min-h-[48px] dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-100 dark:placeholder:text-gray-600 dark:focus:border-white/30"
             />
             {contentId && (
-              <p className="text-[11px] text-gray-400">
-                Tracking: <span className="font-mono font-semibold text-gray-600">{contentId}</span>
+              <p className="text-[11px] text-gray-400 dark:text-gray-500">
+                Tracking: <span className="font-mono font-semibold text-gray-600 dark:text-gray-300">{contentId}</span>
                 {' '}
                 <button
                   onClick={() => fetchViewers(contentId)}
-                  className="text-blue-500 hover:text-blue-700 underline underline-offset-2 transition-colors"
+                  className="text-blue-500 hover:text-blue-700 underline underline-offset-2 transition-colors dark:text-blue-300 dark:hover:text-blue-200"
                 >
                   Refresh
                 </button>
@@ -1317,20 +1319,20 @@ function SettlementDashboard({
 
           {/* Viewers list */}
           {loading && (
-            <div className="flex items-center justify-center gap-2 rounded-xl border border-gray-100 bg-gray-50 px-4 py-4 text-[12px] text-gray-400">
+            <div className="flex items-center justify-center gap-2 rounded-xl border border-gray-100 bg-gray-50 px-4 py-4 text-[12px] text-gray-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-500">
               <VaultSpinner />Looking up payments...
             </div>
           )}
 
           {!loading && contentId && viewers.length === 0 && (
-            <div className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-4 text-center text-[12px] text-gray-400">
+            <div className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-4 text-center text-[12px] text-gray-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-500">
               No payments yet. Share your gated link and check back here.
             </div>
           )}
 
           {!loading && viewers.length > 0 && (
             <div className="space-y-2">
-              <p className="text-[11px] font-semibold text-gray-500">
+              <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">
                 {viewers.length} payment{viewers.length > 1 ? 's' : ''} ready
               </p>
               {viewers.map(v => {
@@ -1340,18 +1342,18 @@ function SettlementDashboard({
                 const busy   = settlingFor === v.viewer
 
                 return (
-                  <div key={v.viewer} className="rounded-xl border border-gray-100 bg-gray-50/60 px-4 py-3 space-y-2">
+                  <div key={v.viewer} className="rounded-xl border border-gray-100 bg-gray-50/60 px-4 py-3 space-y-2 dark:border-white/10 dark:bg-white/[0.04]">
                     <div className="flex items-center justify-between">
                       <div className="space-y-0.5">
-                        <p className="font-mono text-[12px] text-gray-700">
+                        <p className="font-mono text-[12px] text-gray-700 dark:text-gray-200">
                           {v.viewer.slice(0, 8)}...{v.viewer.slice(-6)}
                         </p>
-                        <p className="text-[10px] text-gray-400">
+                        <p className="text-[10px] text-gray-400 dark:text-gray-500">
                           {new Date(v.ts).toLocaleString()}
                         </p>
                       </div>
-                      <p className="font-mono text-[13px] font-semibold text-gray-800">
-                        ${amt} <span className="text-[10px] font-normal text-gray-400">USDC</span>
+                      <p className="font-mono text-[13px] font-semibold text-gray-800 dark:text-gray-100">
+                        ${amt} <span className="text-[10px] font-normal text-gray-400 dark:text-gray-500">USDC</span>
                       </p>
                     </div>
 
@@ -1389,10 +1391,10 @@ function SettlementDashboard({
       </div>
 
       {/* ── Footer links ── */}
-      <div className="border-t border-gray-100 pt-4 pb-2 flex flex-wrap items-center justify-center gap-x-8 gap-y-2">
+      <div className="border-t border-gray-100 pt-4 pb-2 flex flex-wrap items-center justify-center gap-x-8 gap-y-2 dark:border-white/10">
         <a
           href="mailto:support@hashpaylink.com"
-          className="flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-gray-900 transition-colors"
+          className="flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-gray-900 transition-colors dark:text-gray-500 dark:hover:text-gray-200"
         >
           <Mail className="h-3.5 w-3.5" />
           support@hashpaylink.com
@@ -1401,7 +1403,7 @@ function SettlementDashboard({
           href="https://x.com/Streampay_"
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-gray-900 transition-colors"
+          className="flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-gray-900 transition-colors dark:text-gray-500 dark:hover:text-gray-200"
         >
           <XIcon className="h-3.5 w-3.5" />
           @Streampay_
@@ -1622,7 +1624,7 @@ export function CreatorPage() {
         <h1 className="text-[22px] font-black tracking-tight text-gray-950 dark:text-white">Creator Hub</h1>
         <p className="mt-1 text-[13px] leading-5 text-gray-500 dark:text-gray-400">Discover, publish, and earn with USDC.</p>
       </div>
-      <div className="mb-5 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+      <div className="mb-5 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-[#111216]">
         <div className="grid grid-cols-3">
           {([
             { id: 'discover', label: 'Discover', helper: 'Paid posts' },
@@ -1637,11 +1639,13 @@ export function CreatorPage() {
                 onClick={() => setActiveTab(tab.id)}
                 className={[
                   'min-h-[58px] px-3 py-3 text-left transition-colors',
-                  selected ? 'bg-gray-950 text-white' : 'bg-white text-gray-500 hover:bg-gray-50',
+                  selected
+                    ? 'bg-gray-950 text-white dark:bg-white dark:text-gray-950'
+                    : 'bg-white text-gray-500 hover:bg-gray-50 dark:bg-[#111216] dark:text-gray-400 dark:hover:bg-white/[0.06]',
                 ].join(' ')}
               >
                 <span className="block text-[13px] font-bold">{tab.label}</span>
-                <span className={['block text-[10px]', selected ? 'text-white/65' : 'text-gray-400'].join(' ')}>
+                <span className={['block text-[10px]', selected ? 'text-white/65 dark:text-gray-950/55' : 'text-gray-400 dark:text-gray-500'].join(' ')}>
                   {tab.helper}
                 </span>
               </button>

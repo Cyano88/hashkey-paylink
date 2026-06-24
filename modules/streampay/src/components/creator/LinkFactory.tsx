@@ -649,14 +649,14 @@ export function LinkFactory({
       <div className="space-y-6">
 
         {/* Factory card */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-[#111216]">
           <div className="px-5 py-5 sm:px-7 sm:py-6 space-y-5">
 
             <div className="flex items-center gap-1.5">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-500">Publish content</span>
+              <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-500 dark:text-gray-400">Publish content</span>
             </div>
 
-            <div className="grid grid-cols-2 overflow-hidden rounded-xl border border-gray-200 bg-gray-50 p-1">
+            <div className="grid grid-cols-2 overflow-hidden rounded-xl border border-gray-200 bg-gray-50 p-1 dark:border-white/10 dark:bg-white/[0.04]">
               {([
                 { id: 'unlock', label: 'Unlock', desc: 'Fixed price' },
                 { id: 'stream', label: 'Stream', desc: 'Pay while viewing' },
@@ -681,24 +681,24 @@ export function LinkFactory({
               })}
             </div>
 
-            <div className="space-y-3 rounded-2xl border border-gray-100 bg-gray-50/70 p-3.5">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-[13px] font-bold text-gray-800">Marketplace card</p>
-                  <p className="text-[11px] text-gray-400">Shown in Discover before payment.</p>
+              <div className="space-y-3 rounded-2xl border border-gray-100 bg-gray-50/70 p-3.5 dark:border-white/10 dark:bg-white/[0.04]">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                  <p className="text-[13px] font-bold text-gray-800 dark:text-gray-100">Marketplace card</p>
+                  <p className="text-[11px] text-gray-400 dark:text-gray-500">Shown in Discover before payment.</p>
                 </div>
-                <span className="rounded-full bg-white px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-gray-400">
+                <span className="rounded-full bg-white px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-gray-400 dark:bg-white/[0.08] dark:text-gray-500">
                   16:9 cover
                 </span>
               </div>
 
-              <label className="group relative mx-auto block aspect-video w-full max-w-[240px] cursor-pointer overflow-hidden rounded-xl border border-dashed border-gray-200 bg-white transition-colors hover:border-gray-300">
+              <label className="group relative mx-auto block aspect-video w-full max-w-[240px] cursor-pointer overflow-hidden rounded-xl border border-dashed border-gray-200 bg-white transition-colors hover:border-gray-300 dark:border-white/10 dark:bg-[#111216] dark:hover:border-white/20">
                 {coverImage ? (
                   <img src={coverImage} alt="" className="h-full w-full object-cover" />
                 ) : (
                   <div className="flex h-full flex-col items-center justify-center px-4 text-center">
-                    <span className="text-[11px] font-bold text-gray-700">Upload cover</span>
-                    <span className="mt-1 text-[9px] text-gray-400">16:9 JPG, PNG, or WebP</span>
+                    <span className="text-[11px] font-bold text-gray-700 dark:text-gray-200">Upload cover</span>
+                    <span className="mt-1 text-[9px] text-gray-400 dark:text-gray-500">16:9 JPG, PNG, or WebP</span>
                   </div>
                 )}
                 <input
@@ -716,8 +716,8 @@ export function LinkFactory({
               {coverError && <p className="text-[11px] text-red-400">{coverError}</p>}
 
               <div className="space-y-1.5">
-                <span className="text-[13px] font-semibold text-gray-700">Category</span>
-                <div className="flex overflow-x-auto rounded-xl border border-gray-200 bg-white p-1 [scrollbar-width:none]">
+                <span className="text-[13px] font-semibold text-gray-700 dark:text-gray-200">Category</span>
+                <div className="flex overflow-x-auto rounded-xl border border-gray-200 bg-white p-1 [scrollbar-width:none] dark:border-white/10 dark:bg-[#111216]">
                   <div className="flex min-w-max gap-1">
                     {CREATOR_CATEGORIES.map(option => {
                       const selected = category === option.id
@@ -734,10 +734,10 @@ export function LinkFactory({
                           className={[
                             'rounded-lg px-3 py-2 text-[11px] font-bold transition-colors',
                             option.disabled
-                              ? 'cursor-not-allowed bg-gray-50 text-gray-300'
+                              ? 'cursor-not-allowed bg-gray-50 text-gray-300 dark:bg-white/[0.03] dark:text-gray-600'
                               : selected
-                                ? 'bg-gray-950 text-white'
-                                : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900',
+                                ? 'bg-gray-950 text-white dark:bg-white dark:text-gray-950'
+                                : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-white/[0.06] dark:hover:text-gray-100',
                           ].join(' ')}
                         >
                           {option.label}
@@ -751,19 +751,19 @@ export function LinkFactory({
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
-                  <span className="text-[13px] font-semibold text-gray-700">Author</span>
+                  <span className="text-[13px] font-semibold text-gray-700 dark:text-gray-200">Author</span>
                   <input
                     type="text"
                     placeholder="e.g., A. Wills"
                     value={authorName}
                     onChange={e => { setAuthorName(e.target.value); setGateLink(null) }}
                     maxLength={48}
-                    className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-[13px] placeholder:text-gray-300 focus:outline-none focus:border-gray-400 transition-colors min-h-[48px]"
+                    className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-[13px] text-gray-800 placeholder:text-gray-300 transition-colors min-h-[48px] focus:outline-none focus:border-gray-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-100 dark:placeholder:text-gray-600 dark:focus:border-white/30"
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <span className="text-[13px] font-semibold text-gray-700">
-                    X handle <span className="text-[11px] font-normal text-gray-400">optional</span>
+                  <span className="text-[13px] font-semibold text-gray-700 dark:text-gray-200">
+                    X handle <span className="text-[11px] font-normal text-gray-400 dark:text-gray-500">optional</span>
                   </span>
                   <input
                     type="text"
@@ -771,27 +771,27 @@ export function LinkFactory({
                     value={xHandle}
                     onChange={e => { setXHandle(e.target.value.replace(/\s/g, '')); setGateLink(null) }}
                     maxLength={32}
-                    className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-[13px] placeholder:text-gray-300 focus:outline-none focus:border-gray-400 transition-colors min-h-[48px]"
+                    className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-[13px] text-gray-800 placeholder:text-gray-300 transition-colors min-h-[48px] focus:outline-none focus:border-gray-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-100 dark:placeholder:text-gray-600 dark:focus:border-white/30"
                   />
                 </div>
               </div>
 
               <div className="space-y-1.5">
-                <span className="text-[13px] font-semibold text-gray-700">Title</span>
+                <span className="text-[13px] font-semibold text-gray-700 dark:text-gray-200">Title</span>
                 <input
                   type="text"
                   placeholder="e.g., World Cup betting pulse"
                   value={title}
                   onChange={e => { setTitle(e.target.value); setGateLink(null) }}
                   maxLength={80}
-                  className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-[13px] placeholder:text-gray-300 focus:outline-none focus:border-gray-400 transition-colors min-h-[48px]"
+                  className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-[13px] text-gray-800 placeholder:text-gray-300 transition-colors min-h-[48px] focus:outline-none focus:border-gray-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-100 dark:placeholder:text-gray-600 dark:focus:border-white/30"
                 />
               </div>
 
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-[13px] font-semibold text-gray-700">Short description</span>
-                  <span className="text-[11px] text-gray-400">{description.length}/140</span>
+                  <span className="text-[13px] font-semibold text-gray-700 dark:text-gray-200">Short description</span>
+                  <span className="text-[11px] text-gray-400 dark:text-gray-500">{description.length}/140</span>
                 </div>
                 <textarea
                   placeholder="A clear teaser that tells viewers what they unlock after paying."
@@ -799,15 +799,15 @@ export function LinkFactory({
                   onChange={e => { setDescription(e.target.value); setGateLink(null) }}
                   maxLength={140}
                   rows={3}
-                  className="w-full resize-none rounded-xl border-2 border-gray-200 px-4 py-3 text-[13px] placeholder:text-gray-300 focus:outline-none focus:border-gray-400 transition-colors"
+                  className="w-full resize-none rounded-xl border-2 border-gray-200 px-4 py-3 text-[13px] text-gray-800 placeholder:text-gray-300 transition-colors focus:outline-none focus:border-gray-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-100 dark:placeholder:text-gray-600 dark:focus:border-white/30"
                 />
               </div>
             </div>
 
             {/* Content type toggle */}
             <div className="space-y-1.5">
-              <span className="text-[13px] font-semibold text-gray-700">Content</span>
-              <div className="grid grid-cols-2 overflow-hidden rounded-xl border border-gray-200 bg-gray-50 p-1">
+              <span className="text-[13px] font-semibold text-gray-700 dark:text-gray-200">Content</span>
+              <div className="grid grid-cols-2 overflow-hidden rounded-xl border border-gray-200 bg-gray-50 p-1 dark:border-white/10 dark:bg-white/[0.04]">
                 <button
                   type="button"
                   onClick={() => { setContentType('text'); setGateLink(null) }}
@@ -829,7 +829,7 @@ export function LinkFactory({
                   Private Link
                 </button>
               </div>
-              <p className="text-[11px] text-gray-400">
+              <p className="text-[11px] text-gray-400 dark:text-gray-500">
                 {contentType === 'text'
                   ? mode === 'unlock'
                     ? 'Paste the content viewers unlock after payment.'
@@ -844,11 +844,11 @@ export function LinkFactory({
             {contentType === 'text' && (
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-[13px] font-semibold text-gray-700">Article Content</span>
-                  <span className="text-[11px] text-gray-400">{articleTextLength(contentBody)} chars</span>
+                  <span className="text-[13px] font-semibold text-gray-700 dark:text-gray-200">Article Content</span>
+                  <span className="text-[11px] text-gray-400 dark:text-gray-500">{articleTextLength(contentBody)} chars</span>
                 </div>
-                <div className="overflow-hidden rounded-2xl border-2 border-gray-200 bg-white shadow-sm transition-colors focus-within:border-gray-400">
-                  <div className="flex flex-wrap items-center gap-1 border-b border-gray-100 bg-gray-50 px-2 py-2">
+                <div className="overflow-hidden rounded-2xl border-2 border-gray-200 bg-white shadow-sm transition-colors focus-within:border-gray-400 dark:border-white/10 dark:bg-[#111216] dark:focus-within:border-white/30">
+                  <div className="flex flex-wrap items-center gap-1 border-b border-gray-100 bg-gray-50 px-2 py-2 dark:border-white/10 dark:bg-white/[0.04]">
                     {([
                       ['heading', 'H'],
                       ['bold', 'B'],
@@ -862,7 +862,7 @@ export function LinkFactory({
                         key={kind}
                         type="button"
                         onClick={() => applyArticleFormat(kind)}
-                        className="inline-flex h-8 min-w-8 items-center justify-center rounded-lg border border-gray-200 bg-white px-2 text-[11px] font-black text-gray-700 transition-colors hover:bg-gray-100"
+                        className="inline-flex h-8 min-w-8 items-center justify-center rounded-lg border border-gray-200 bg-white px-2 text-[11px] font-black text-gray-700 transition-colors hover:bg-gray-100 dark:border-white/10 dark:bg-[#111216] dark:text-gray-200 dark:hover:bg-white/[0.08]"
                         title={kind}
                       >
                         {label}
@@ -871,13 +871,13 @@ export function LinkFactory({
                     <button
                       type="button"
                       onClick={clearArticle}
-                      className="ml-auto rounded-lg px-2 py-1 text-[10px] font-bold text-gray-400 transition-colors hover:bg-white hover:text-gray-600"
+                      className="ml-auto rounded-lg px-2 py-1 text-[10px] font-bold text-gray-400 transition-colors hover:bg-white hover:text-gray-600 dark:text-gray-500 dark:hover:bg-white/[0.06] dark:hover:text-gray-200"
                     >
                       Clear
                     </button>
                   </div>
                   {showLinkComposer && (
-                    <div className="border-b border-gray-100 bg-white px-2 py-2">
+                    <div className="border-b border-gray-100 bg-white px-2 py-2 dark:border-white/10 dark:bg-[#111216]">
                       <div className="flex items-center gap-2">
                         <input
                           type="url"
@@ -900,7 +900,7 @@ export function LinkFactory({
                           }}
                           autoFocus
                           placeholder="https://example.com"
-                          className="min-h-9 min-w-0 flex-1 rounded-lg border border-gray-200 px-3 text-[12px] font-medium text-gray-700 outline-none transition-colors placeholder:text-gray-300 focus:border-gray-400"
+                          className="min-h-9 min-w-0 flex-1 rounded-lg border border-gray-200 px-3 text-[12px] font-medium text-gray-700 outline-none transition-colors placeholder:text-gray-300 focus:border-gray-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-100 dark:placeholder:text-gray-600 dark:focus:border-white/30"
                         />
                         <button
                           type="button"
@@ -917,7 +917,7 @@ export function LinkFactory({
                             setArticleLinkError('')
                             pendingLinkRange.current = null
                           }}
-                          className="min-h-9 rounded-lg px-2 text-[11px] font-bold text-gray-400 transition-colors hover:bg-gray-50 hover:text-gray-600"
+                          className="min-h-9 rounded-lg px-2 text-[11px] font-bold text-gray-400 transition-colors hover:bg-gray-50 hover:text-gray-600 dark:text-gray-500 dark:hover:bg-white/[0.06] dark:hover:text-gray-200"
                         >
                           Cancel
                         </button>
@@ -934,7 +934,7 @@ export function LinkFactory({
                     data-placeholder="Write or paste the paid article here. Use the toolbar for headings, links, quotes, and emphasis."
                     onInput={handleArticleInput}
                     onPaste={handleArticlePaste}
-                    className="min-h-[240px] max-h-[430px] overflow-y-auto px-4 py-4 text-[14px] leading-7 text-gray-800 outline-none empty:before:block empty:before:text-[13px] empty:before:leading-6 empty:before:text-gray-300 empty:before:content-[attr(data-placeholder)] [&_a]:font-semibold [&_a]:text-blue-600 [&_blockquote]:border-l-2 [&_blockquote]:border-gray-300 [&_blockquote]:pl-3 [&_blockquote]:text-gray-500 [&_h2]:mb-2 [&_h2]:mt-4 [&_h2]:text-[18px] [&_h2]:font-black [&_li]:ml-5 [&_li]:list-disc [&_p]:mb-3 [&_strong]:font-black"
+                    className="min-h-[240px] max-h-[430px] overflow-y-auto px-4 py-4 text-[14px] leading-7 text-gray-800 outline-none empty:before:block empty:before:text-[13px] empty:before:leading-6 empty:before:text-gray-300 empty:before:content-[attr(data-placeholder)] dark:text-gray-100 empty:before:dark:text-gray-600 [&_a]:font-semibold [&_a]:text-blue-600 [&_a]:dark:text-blue-300 [&_blockquote]:border-l-2 [&_blockquote]:border-gray-300 [&_blockquote]:pl-3 [&_blockquote]:text-gray-500 [&_blockquote]:dark:border-white/20 [&_blockquote]:dark:text-gray-400 [&_h2]:mb-2 [&_h2]:mt-4 [&_h2]:text-[18px] [&_h2]:font-black [&_li]:ml-5 [&_li]:list-disc [&_p]:mb-3 [&_strong]:font-black"
                   />
                 </div>
                 {articleTextLength(contentBody) > 0 && articleTextLength(contentBody) <= 10 && (
@@ -947,8 +947,8 @@ export function LinkFactory({
             {contentType === 'url' && (
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-[13px] font-semibold text-gray-700">Private Link</span>
-                  <span className="text-[11px] text-gray-400">stored server-side only</span>
+                  <span className="text-[13px] font-semibold text-gray-700 dark:text-gray-200">Private Link</span>
+                  <span className="text-[11px] text-gray-400 dark:text-gray-500">stored server-side only</span>
                 </div>
                 <input
                   type="url"
@@ -956,11 +956,11 @@ export function LinkFactory({
                   value={privateUrl}
                   onChange={e => { setPrivateUrl(e.target.value); setGateLink(null) }}
                   className={[
-                    'w-full rounded-xl border-2 px-4 py-3 text-[13px] focus:outline-none transition-colors min-h-[48px]',
-                    'placeholder:text-gray-300',
-                    privateUrl && !privateUrlValid ? 'border-red-200 bg-red-50/30'
-                      : privateUrlValid            ? 'border-blue-200 bg-blue-50/20'
-                      :                              'border-gray-200 focus:border-gray-400',
+                    'w-full rounded-xl border-2 px-4 py-3 text-[13px] text-gray-800 focus:outline-none transition-colors min-h-[48px] dark:text-gray-100',
+                    'placeholder:text-gray-300 dark:placeholder:text-gray-600',
+                    privateUrl && !privateUrlValid ? 'border-red-200 bg-red-50/30 dark:border-red-400/30 dark:bg-red-500/10'
+                      : privateUrlValid            ? 'border-blue-200 bg-blue-50/20 dark:border-blue-400/30 dark:bg-blue-500/10'
+                      :                              'border-gray-200 focus:border-gray-400 dark:border-white/10 dark:bg-white/[0.04] dark:focus:border-white/30',
                   ].join(' ')}
                 />
                 {privateUrl && !privateUrlValid && (
@@ -971,46 +971,46 @@ export function LinkFactory({
 
             {mode === 'unlock' ? (
               <div className="space-y-1.5">
-                <span className="text-[13px] font-semibold text-gray-700">Access price</span>
-                <div className="flex overflow-hidden rounded-xl border-2 border-gray-200 focus-within:border-gray-400 transition-colors">
+                <span className="text-[13px] font-semibold text-gray-700 dark:text-gray-200">Access price</span>
+                <div className="flex overflow-hidden rounded-xl border-2 border-gray-200 focus-within:border-gray-400 transition-colors dark:border-white/10 dark:focus-within:border-white/30">
                   <input
                     type="number" min="0.01" step="0.01"
                     value={capStr}
                     onChange={e => { setCapStr(e.target.value); setGateLink(null) }}
-                    className="min-w-0 flex-1 bg-transparent px-3 py-3 text-[13px] font-semibold focus:outline-none min-h-[48px]"
+                    className="min-w-0 flex-1 bg-transparent px-3 py-3 text-[13px] font-semibold text-gray-800 focus:outline-none min-h-[48px] dark:text-gray-100"
                   />
-                  <div className="flex items-center px-2 border-l-2 border-gray-200 bg-gray-50 shrink-0">
-                    <span className="text-[10px] font-bold text-gray-400 select-none">USDC</span>
+                  <div className="flex items-center px-2 border-l-2 border-gray-200 bg-gray-50 shrink-0 dark:border-white/10 dark:bg-white/[0.04]">
+                    <span className="text-[10px] font-bold text-gray-400 select-none dark:text-gray-500">USDC</span>
                   </div>
                 </div>
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <span className="text-[13px] font-semibold text-gray-700">Per second</span>
-                  <div className="flex overflow-hidden rounded-xl border-2 border-gray-200 focus-within:border-gray-400 transition-colors">
+                  <span className="text-[13px] font-semibold text-gray-700 dark:text-gray-200">Per second</span>
+                  <div className="flex overflow-hidden rounded-xl border-2 border-gray-200 focus-within:border-gray-400 transition-colors dark:border-white/10 dark:focus-within:border-white/30">
                     <input
                       type="number" min="0.0001" step="0.0001"
                       value={rateStr}
                       onChange={e => { setRateStr(e.target.value); setGateLink(null) }}
-                      className="min-w-0 flex-1 bg-transparent px-3 py-3 text-[13px] font-semibold focus:outline-none min-h-[48px]"
+                      className="min-w-0 flex-1 bg-transparent px-3 py-3 text-[13px] font-semibold text-gray-800 focus:outline-none min-h-[48px] dark:text-gray-100"
                     />
-                    <div className="flex items-center px-2 border-l-2 border-gray-200 bg-gray-50 shrink-0">
-                      <span className="text-[10px] font-bold text-gray-400 select-none">USDC</span>
+                    <div className="flex items-center px-2 border-l-2 border-gray-200 bg-gray-50 shrink-0 dark:border-white/10 dark:bg-white/[0.04]">
+                      <span className="text-[10px] font-bold text-gray-400 select-none dark:text-gray-500">USDC</span>
                     </div>
                   </div>
                 </div>
                 <div className="space-y-1.5">
-                  <span className="text-[13px] font-semibold text-gray-700">Max cap</span>
-                  <div className="flex overflow-hidden rounded-xl border-2 border-gray-200 focus-within:border-gray-400 transition-colors">
+                  <span className="text-[13px] font-semibold text-gray-700 dark:text-gray-200">Max cap</span>
+                  <div className="flex overflow-hidden rounded-xl border-2 border-gray-200 focus-within:border-gray-400 transition-colors dark:border-white/10 dark:focus-within:border-white/30">
                     <input
                       type="number" min="0.01" step="0.01"
                       value={capStr}
                       onChange={e => { setCapStr(e.target.value); setGateLink(null) }}
-                      className="min-w-0 flex-1 bg-transparent px-3 py-3 text-[13px] font-semibold focus:outline-none min-h-[48px]"
+                      className="min-w-0 flex-1 bg-transparent px-3 py-3 text-[13px] font-semibold text-gray-800 focus:outline-none min-h-[48px] dark:text-gray-100"
                     />
-                    <div className="flex items-center px-2 border-l-2 border-gray-200 bg-gray-50 shrink-0">
-                      <span className="text-[10px] font-bold text-gray-400 select-none">USDC</span>
+                    <div className="flex items-center px-2 border-l-2 border-gray-200 bg-gray-50 shrink-0 dark:border-white/10 dark:bg-white/[0.04]">
+                      <span className="text-[10px] font-bold text-gray-400 select-none dark:text-gray-500">USDC</span>
                     </div>
                   </div>
                 </div>
@@ -1018,14 +1018,14 @@ export function LinkFactory({
             )}
 
             {capNum > 0 && (
-              <p className="text-[11px] text-gray-400 text-center">
+              <p className="text-[11px] text-gray-400 text-center dark:text-gray-500">
                 {mode === 'unlock' ? (
                   <>
-                    Viewers pay <span className="font-semibold text-gray-600">${capStr} USDC</span> to unlock.
+                    Viewers pay <span className="font-semibold text-gray-600 dark:text-gray-300">${capStr} USDC</span> to unlock.
                   </>
                 ) : streamReady ? (
                   <>
-                    Viewers stream <span className="font-semibold text-gray-600">${rateStr} USDC/sec</span> up to <span className="font-semibold text-gray-600">${capStr}</span> - {streamDurationLabel}.
+                    Viewers stream <span className="font-semibold text-gray-600 dark:text-gray-300">${rateStr} USDC/sec</span> up to <span className="font-semibold text-gray-600 dark:text-gray-300">${capStr}</span> - {streamDurationLabel}.
                   </>
                 ) : (
                   <>Max cap must be greater than the per-second price.</>
@@ -1033,7 +1033,7 @@ export function LinkFactory({
               </p>
             )}
             {!hasListingDetails && (
-              <p className="text-center text-[11px] text-gray-400">
+              <p className="text-center text-[11px] text-gray-400 dark:text-gray-500">
                 Add author, title, and a short description to publish.
               </p>
             )}
@@ -1068,37 +1068,37 @@ export function LinkFactory({
                   </button>
                 )}
                 {storeError && (
-                  <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-[12px] text-red-500 text-center">
+                  <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-[12px] text-red-500 text-center dark:border-red-400/20 dark:bg-red-500/10 dark:text-red-300">
                     {storeError}
                   </div>
                 )}
               </>
             ) : (
               <div className="space-y-2">
-                <div className="rounded-xl bg-gray-50 border border-gray-200 p-3.5 space-y-2">
+                <div className="rounded-xl bg-gray-50 border border-gray-200 p-3.5 space-y-2 dark:border-white/10 dark:bg-white/[0.04]">
                   <div className="flex items-center gap-2">
                     <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-emerald-100">
                       <svg className="h-2.5 w-2.5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
                       </svg>
                     </span>
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                       {mode === 'unlock' ? 'Content published' : 'Stream published'}
                     </p>
                   </div>
-                  <div className="grid grid-cols-2 gap-2 rounded-lg border border-gray-100 bg-white p-2">
+                  <div className="grid grid-cols-2 gap-2 rounded-lg border border-gray-100 bg-white p-2 dark:border-white/10 dark:bg-[#111216]">
                     <div className="min-w-0">
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-gray-400">Content</p>
-                      <p className="truncate text-[12px] font-semibold text-gray-700">{title.trim() || (contentType === 'text' ? 'Article' : 'Private link')}</p>
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-gray-400 dark:text-gray-500">Content</p>
+                      <p className="truncate text-[12px] font-semibold text-gray-700 dark:text-gray-200">{title.trim() || (contentType === 'text' ? 'Article' : 'Private link')}</p>
                     </div>
                     <div className="min-w-0 text-right">
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-gray-400">{mode === 'unlock' ? 'Price' : 'Stream'}</p>
-                      <p className="text-[12px] font-semibold text-gray-700">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-gray-400 dark:text-gray-500">{mode === 'unlock' ? 'Price' : 'Stream'}</p>
+                      <p className="text-[12px] font-semibold text-gray-700 dark:text-gray-200">
                         {mode === 'unlock' ? `${capStr} USDC` : `${rateStr}/sec`}
                       </p>
                     </div>
                   </div>
-                  <p className="break-all font-mono text-[10px] leading-relaxed text-gray-500">{gateLink}</p>
+                  <p className="break-all font-mono text-[10px] leading-relaxed text-gray-500 dark:text-gray-400">{gateLink}</p>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <button
@@ -1114,7 +1114,7 @@ export function LinkFactory({
                     href={gateLink}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center justify-center gap-1.5 rounded-xl py-3 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 transition-colors min-h-[48px]"
+                    className="flex items-center justify-center gap-1.5 rounded-xl py-3 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 transition-colors min-h-[48px] dark:text-gray-200 dark:hover:bg-white/[0.06]"
                     style={{ border: '2px solid #e5e7eb' }}
                   >
                     Test Gate
@@ -1122,14 +1122,14 @@ export function LinkFactory({
                 </div>
                 <button
                   onClick={() => { setGateLink(null); setStoreError(null) }}
-                  className="w-full text-[11px] text-gray-400 hover:text-gray-600 transition-colors py-1"
+                  className="w-full text-[11px] text-gray-400 hover:text-gray-600 transition-colors py-1 dark:text-gray-500 dark:hover:text-gray-200"
                 >
                   Edit post
                 </button>
                 <button
                   type="button"
                   onClick={onTrackEarnings}
-                  className="w-full rounded-xl border border-gray-200 bg-white py-3 text-[12px] font-semibold text-gray-600 transition-colors hover:bg-gray-50"
+                  className="w-full rounded-xl border border-gray-200 bg-white py-3 text-[12px] font-semibold text-gray-600 transition-colors hover:bg-gray-50 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:bg-white/[0.08]"
                 >
                   Track earnings
                 </button>
@@ -1137,7 +1137,7 @@ export function LinkFactory({
             )}
 
             {!hasCreatorAddress && (
-              <p className="text-center text-[12px] text-gray-400">
+              <p className="text-center text-[12px] text-gray-400 dark:text-gray-500">
                 {creatorAuthHint}
               </p>
             )}
@@ -1146,7 +1146,7 @@ export function LinkFactory({
 
         {/* How It Works */}
         <div className="space-y-3 pt-1">
-          <p className="text-center text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-400">
+          <p className="text-center text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
             Flow
           </p>
           <div className="grid grid-cols-3 gap-2 sm:gap-3">
@@ -1159,12 +1159,12 @@ export function LinkFactory({
                 ? { n: '3', title: 'Unlock', desc: 'Arc USDC authorizes access' }
                 : { n: '3', title: 'Stream', desc: 'USDC accrues while content is active' },
             ] as const).map(s => (
-              <div key={s.n} className="rounded-2xl border border-gray-100 bg-white p-3 sm:p-4 text-center shadow-sm space-y-1.5">
-                <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-gray-200 text-[11px] font-semibold text-gray-500">
+              <div key={s.n} className="rounded-2xl border border-gray-100 bg-white p-3 sm:p-4 text-center shadow-sm space-y-1.5 dark:border-white/10 dark:bg-white/[0.04]">
+                <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-gray-200 text-[11px] font-semibold text-gray-500 dark:border-white/10 dark:text-gray-300">
                   {s.n}
                 </span>
-                <p className="text-[11px] sm:text-[12px] font-bold text-gray-800">{s.title}</p>
-                <p className="text-[10px] sm:text-[11px] leading-snug text-gray-400">{s.desc}</p>
+                <p className="text-[11px] sm:text-[12px] font-bold text-gray-800 dark:text-gray-100">{s.title}</p>
+                <p className="text-[10px] sm:text-[11px] leading-snug text-gray-400 dark:text-gray-500">{s.desc}</p>
               </div>
             ))}
           </div>
