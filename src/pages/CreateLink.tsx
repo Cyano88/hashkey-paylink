@@ -2579,11 +2579,9 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
       {/* ── Last event dashboard recovery ────────────────────────────── */}
       {!generatedLink && chatCta && (
         <div className="mt-4 flex flex-col items-center gap-2">
-          {chatCta.label === 'Open payments in Telegram' && (
-            <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
-              Or at your convenience
-            </p>
-          )}
+          <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
+            Or at your convenience
+          </p>
           <a
             href={chatCta.url}
             target="_blank"

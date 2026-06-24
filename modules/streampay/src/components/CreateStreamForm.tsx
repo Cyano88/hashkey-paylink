@@ -1208,28 +1208,28 @@ export function CreateStreamForm() {
     const overviewCards = [
       {
         icon: Wallet,
-        title: 'Wallet balance',
-        body: 'Fund USDC, activate x402, and view receipts.',
+        title: 'Fund & manage x402',
+        body: 'Wallet balance, activation, and receipts.',
         action: () => { window.location.href = HASH_PAYLINK_X402_MANAGER_URL },
       },
       {
         icon: Bot,
-        title: 'Available services',
-        body: 'Use x402 for creator and Polymarket actions.',
+        title: 'Services',
+        body: 'Creator and Polymarket actions.',
         action: () => setX402View('services'),
       },
     ] as const
     const serviceCards = [
       {
         icon: Bot,
-        title: 'Creator',
-        body: 'Paid posts, unlock links, and creator earnings.',
+        title: 'Creator Studio',
+        body: 'Paid posts, unlock links, and earnings.',
         href: '/creator?app=streampay',
       },
       {
         icon: MessageCircle,
-        title: 'Polymarket',
-        body: 'LP Scout and market actions through Telegram.',
+        title: 'Polymarket chat',
+        body: 'LP Scout and market actions in Telegram.',
         href: TELEGRAM_POLYDESK_URL,
       },
     ] as const
@@ -1245,34 +1245,37 @@ export function CreateStreamForm() {
             </p>
           </div>
 
-          <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-card dark:border-white/10 dark:bg-[#111216]">
+          <div className="space-y-3">
             {x402View === 'services' && (
-              <div className="border-b border-gray-100 p-3 dark:border-white/10">
-                <button
-                  type="button"
-                  onClick={() => setX402View('overview')}
-                  className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[12px] font-semibold text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.06] dark:hover:text-gray-200"
-                >
-                  <ChevronDown className="h-3.5 w-3.5 rotate-90" />
-                  Back
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => setX402View('overview')}
+                className="inline-flex items-center gap-1.5 px-1 text-[12px] font-bold text-gray-400 transition-colors hover:text-gray-800 dark:hover:text-gray-200"
+              >
+                <ChevronDown className="h-3.5 w-3.5 rotate-90" />
+                Back
+              </button>
             )}
-            <div className="space-y-2 p-2">
+
+            <div className="space-y-2">
               {visibleCards.map(({ icon: Icon, title, body, ...card }) => {
                 const content = (
                   <>
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-gray-600 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300">
-                      <Icon className="h-[18px] w-[18px]" />
+                    <span className="flex min-w-0 items-center gap-3">
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-gray-600 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300">
+                        <Icon className="h-[18px] w-[18px]" />
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block text-[14px] font-black text-gray-950 dark:text-white">{title}</span>
+                        <span className="mt-1 block text-[12px] leading-5 text-gray-500 dark:text-gray-400">{body}</span>
+                      </span>
                     </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-[14px] font-bold text-gray-950 dark:text-white">{title}</span>
-                      <span className="mt-1 block text-[12px] leading-relaxed text-gray-500 dark:text-gray-400">{body}</span>
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gray-950 text-white transition-transform group-hover:translate-x-0.5 dark:bg-white dark:text-gray-950">
+                      <ChevronDown className="-rotate-90 h-4 w-4" />
                     </span>
-                    <ChevronDown className="-rotate-90 h-4 w-4 shrink-0 text-gray-400" />
                   </>
                 )
-                const className = 'group flex w-full items-center gap-3 rounded-xl p-3 text-left transition-all hover:bg-gray-50 dark:hover:bg-white/[0.05]'
+                const className = 'group flex w-full items-center justify-between gap-3 rounded-2xl border border-gray-100 bg-white p-3.5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-gray-200 hover:shadow-md active:scale-[0.99] dark:border-white/10 dark:bg-[#111216] dark:hover:border-white/20'
                 if ('href' in card) {
                   return (
                     <a key={title} href={card.href} className={className}>
@@ -1294,8 +1297,8 @@ export function CreateStreamForm() {
             </div>
           </div>
 
-          <p className="text-center text-[11px] leading-relaxed text-gray-400 dark:text-gray-500">
-            Wallet funding stays in Hash PayLink.
+          <p className="px-1 text-center text-[11px] leading-relaxed text-gray-400 dark:text-gray-500">
+            One wallet powers paid services across Hash PayLink.
           </p>
         </div>
       </div>
