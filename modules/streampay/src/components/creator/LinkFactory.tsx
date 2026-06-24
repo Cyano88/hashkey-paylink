@@ -12,19 +12,26 @@ import {
 import { PRIVY_AUTH_ENABLED } from '../../../../../src/lib/authMode'
 
 const ARC_CHAIN_ID = 5042002
-type CreatorCategory = 'general' | 'sports' | 'ebooks' | 'news' | 'crypto'
+type CreatorCategory = 'worldcup-news' | 'live-scores' | 'ebooks' | 'crypto'
 
 const CREATOR_CATEGORIES: Array<{ id: CreatorCategory; label: string; disabled?: boolean }> = [
-  { id: 'general', label: 'General' },
-  { id: 'sports', label: 'Sports' },
-  { id: 'ebooks', label: 'Ebooks', disabled: true },
-  { id: 'news', label: 'News', disabled: true },
+  { id: 'worldcup-news', label: 'World Cup News' },
+  { id: 'live-scores', label: 'Live Scores', disabled: true },
   { id: 'crypto', label: 'Crypto' },
+  { id: 'ebooks', label: 'Ebooks', disabled: true },
 ]
 
 const COVER_MAX_DATA_URL_BYTES = 28_000
 const COVER_TARGET_WIDTH = 360
 const COVER_TARGET_HEIGHT = 203
+
+function normalizeCreatorCategory(value: unknown): CreatorCategory {
+  const category = String(value ?? '').trim().toLowerCase()
+  if (category === 'news') return 'worldcup-news'
+  if (category === 'sports') return 'live-scores'
+  if (category === 'general') return 'crypto'
+  return CREATOR_CATEGORIES.some(item => item.id === category) ? category as CreatorCategory : 'crypto'
+}
 
 const CREATOR_PROOF_TYPES = {
   CreatorContent: [
@@ -281,7 +288,7 @@ export function LinkFactory({
   const [authorName,  setAuthorName]  = useState('')
   const [xHandle,     setXHandle]     = useState('')
   const [coverImage,  setCoverImage]  = useState('')
-  const [category,    setCategory]    = useState<CreatorCategory>('general')
+  const [category,    setCategory]    = useState<CreatorCategory>('crypto')
   const [coverError,  setCoverError]  = useState('')
   const [rateStr,     setRateStr]     = useState('0.001')
   const [capStr,      setCapStr]      = useState('0.10')
@@ -309,7 +316,7 @@ export function LinkFactory({
     setAuthorName(initialDraft.authorName)
     setXHandle(initialDraft.xHandle)
     setCoverImage(initialDraft.coverImage)
-    setCategory(initialDraft.category || 'general')
+    setCategory(normalizeCreatorCategory(initialDraft.category))
     setRateStr(initialDraft.rateStr)
     setCapStr(initialDraft.capStr)
     setGateLink(null)

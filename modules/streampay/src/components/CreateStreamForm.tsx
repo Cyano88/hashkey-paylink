@@ -53,7 +53,7 @@ const DURATIONS = [
 ]
 
 type Step = 'form' | 'funding' | 'creating' | 'success'
-type StreamTab = 'running' | 'new'
+type StreamTab = 'menu' | 'new' | 'running' | 'ended'
 type CircleWalletPanel = 'fund' | 'withdraw'
 type RecentStream = {
   url: string
@@ -252,7 +252,7 @@ export function CreateStreamForm() {
   const [salt] = useState<`0x${string}`>(genSalt)
 
   const [step,         setStep]         = useState<Step>('form')
-  const [activeTab,    setActiveTab]    = useState<StreamTab>('new')
+  const [activeTab,    setActiveTab]    = useState<StreamTab>('menu')
   const [statusMsg,    setStatusMsg]    = useState('')
   const [error,        setError]        = useState<string | null>(null)
   const [streamLink,   setStreamLink]   = useState<string | null>(null)
@@ -364,8 +364,8 @@ export function CreateStreamForm() {
                 : circleNeedsFunds
                   ? 'Add USDC to wallet'
                   : isAgenticStreaming
-                    ? 'Start agentic stream'
-                    : 'Start StreamPay'
+                    ? 'Start service stream'
+                    : 'Start stream'
   const agenticLinkParams = isAgenticStreaming ? {
     mode: 'agentic-streaming',
     service: agenticService,
@@ -373,6 +373,8 @@ export function CreateStreamForm() {
     agentSlug: prefill.agentSlug || 'hashpaylink-agent',
     amountPerDay: prefill.amountPerDay || '',
   } : undefined
+  const historyTabActive = activeTab === 'running' || activeTab === 'ended'
+  const visibleOnchainStreams = onchainStreams.filter(stream => activeTab === 'running' ? stream.active && !stream.cancelled : !stream.active || stream.cancelled)
 
   function rememberStream(streamUrl: string) {
     const stream = {
@@ -439,10 +441,10 @@ export function CreateStreamForm() {
         }),
       })
       const data = await res.json().catch(() => ({})) as { ok?: boolean; error?: string }
-      if (!res.ok || !data.ok) throw new Error(data.error ?? 'Could not register Agentic Streaming.')
+      if (!res.ok || !data.ok) throw new Error(data.error ?? 'Could not register x402 service.')
       setAgenticStatus('Registered. 0G proof appears in Agent activity after archive.')
     } catch (err) {
-      setAgenticError(err instanceof Error ? err.message.slice(0, 180) : 'Could not register Agentic Streaming.')
+      setAgenticError(err instanceof Error ? err.message.slice(0, 180) : 'Could not register x402 service.')
     }
   }
 
@@ -586,7 +588,7 @@ export function CreateStreamForm() {
   }, [recipientEmail])
 
   useEffect(() => {
-    if (!circleAvailable || activeTab !== 'running' || !recipientValid) return
+    if (!circleAvailable || (activeTab !== 'running' && activeTab !== 'ended') || !recipientValid) return
     if (!circleSession?.wallet.address) {
       setOnchainStreams([])
       setOnchainStreamsLoading(false)
@@ -1076,13 +1078,12 @@ export function CreateStreamForm() {
       <div className="w-full max-w-[480px] mx-auto mt-12">
         <div className="space-y-6">
 
-          {/* Page title */}
-          <div className="text-center space-y-1.5">
-            <h1 className="text-[26px] sm:text-[30px] font-bold tracking-tight text-gray-900 dark:text-gray-100">
-              {isAgenticStreaming ? <>Agentic<span style={{ color: '#3b82f6' }}> Streaming</span></> : <>Pay<span style={{ color: '#3b82f6' }}>roll</span></>}
+          <div className="px-1">
+            <h1 className="text-[22px] font-black tracking-tight text-gray-950 dark:text-white">
+              {isAgenticStreaming ? 'x402 Services' : 'Payroll'}
             </h1>
-            <p className="text-[13px] text-gray-400">
-              {isAgenticStreaming ? 'Daily Polymarket LP research by stream' : 'Stream USDC to anyone on Arc'}
+            <p className="mt-1 text-[13px] leading-5 text-gray-500 dark:text-gray-400">
+              {isAgenticStreaming ? 'Daily Polymarket LP research by stream.' : 'Stream USDC to anyone on Arc.'}
             </p>
           </div>
 
@@ -1207,14 +1208,14 @@ export function CreateStreamForm() {
     const overviewCards = [
       {
         icon: Wallet,
-        title: 'Wallet action',
-        body: 'Fund USDC and activate x402 in Hash PayLink.',
+        title: 'Wallet balance',
+        body: 'Fund USDC, activate x402, and view receipts.',
         action: () => { window.location.href = HASH_PAYLINK_X402_MANAGER_URL },
       },
       {
         icon: Bot,
-        title: 'Services available',
-        body: 'Creator and Polymarket services use this balance.',
+        title: 'Available services',
+        body: 'Use x402 for creator and Polymarket actions.',
         action: () => setX402View('services'),
       },
     ] as const
@@ -1222,7 +1223,7 @@ export function CreateStreamForm() {
       {
         icon: Bot,
         title: 'Creator',
-        body: 'Paid content, unlock links, and creator earnings.',
+        body: 'Paid posts, unlock links, and creator earnings.',
         href: '/creator?app=streampay',
       },
       {
@@ -1237,13 +1238,10 @@ export function CreateStreamForm() {
     return (
       <div className="mx-auto mt-8 w-full max-w-lg px-4 sm:px-0">
         <div className="space-y-5">
-          <div className="text-center">
-            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-400">x402</p>
-            <h1 className="mt-2 text-[28px] font-black tracking-tight text-gray-950 dark:text-white">
-              Service balance
-            </h1>
-            <p className="mx-auto mt-2 max-w-[360px] text-[13px] leading-relaxed text-gray-500 dark:text-gray-400">
-              One wallet balance for paid Hash PayLink services.
+          <div className="px-1">
+            <h1 className="text-[22px] font-black tracking-tight text-gray-950 dark:text-white">x402 Services</h1>
+            <p className="mt-1 text-[13px] leading-5 text-gray-500 dark:text-gray-400">
+              Fund once, then use paid services across Hash PayLink.
             </p>
           </div>
 
@@ -1297,7 +1295,7 @@ export function CreateStreamForm() {
           </div>
 
           <p className="text-center text-[11px] leading-relaxed text-gray-400 dark:text-gray-500">
-            Wallet funding stays in Hash PayLink. StreamPay creator and Arena flows remain Arc-native.
+            Wallet funding stays in Hash PayLink.
           </p>
         </div>
       </div>
@@ -1326,60 +1324,70 @@ export function CreateStreamForm() {
       <div className="space-y-6">
 
         {/* ── Page title (Rule 4: aligned to same 480px) ── */}
-        <div className="text-center space-y-2">
-          <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-gray-100 sm:text-[28px]">
-            {isAgenticStreaming ? <>Agentic<span style={{ color: '#3b82f6' }}> Streaming</span></> : <>Pay<span style={{ color: '#3b82f6' }}>roll</span></>}
+        <div className="px-1">
+          <h1 className="text-[22px] font-black tracking-tight text-gray-950 dark:text-white">
+            {isAgenticStreaming ? 'x402 Services' : 'Payroll'}
           </h1>
-          <p className="mx-auto max-w-[400px] text-[13px] leading-relaxed text-gray-400">
+          <p className="mt-1 text-[13px] leading-5 text-gray-500 dark:text-gray-400">
             {isAgenticStreaming ? 'Stream USDC for daily Polymarket LP research.' : 'Stream USDC to anyone on Arc.'}
           </p>
         </div>
 
-        {circleConfigured && (
-          <div className="mx-auto flex w-full max-w-[340px] items-center justify-center gap-1.5 rounded-full border border-gray-100 bg-white px-3 py-1.5 shadow-sm dark:border-white/10 dark:bg-[#111216]">
-            <img src="/hash-logo.png" alt="" className="h-3.5 w-3.5 object-contain" />
-            <span className="text-[11px] font-bold text-gray-600 dark:text-gray-300">Powered by Circle</span>
-          </div>
-        )}
-
         {circleAvailable && (
           <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-1 rounded-xl border border-gray-100 dark:border-white/10 bg-gray-50 dark:bg-white/5 p-1">
-              {([
-                ['new', 'New stream'],
-                ['running', 'Running streams'],
-              ] as const).map(([key, label]) => {
-                const active = activeTab === key
+            {activeTab !== 'menu' && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('menu')}
+                className="inline-flex items-center gap-1.5 px-1 text-[12px] font-bold text-gray-400 transition-colors hover:text-gray-800 dark:hover:text-gray-200"
+              >
+                <ChevronDown className="h-3.5 w-3.5 rotate-90" />
+                Back
+              </button>
+            )}
+
+            {activeTab === 'menu' && (
+              <div className="space-y-2">
+                {([
+                  ['new', 'New stream', 'Create a timed USDC stream on Arc.'],
+                  ['running', 'Running streams', 'View active streams tied to your wallet.'],
+                  ['ended', 'Ended streams', 'Review completed or cancelled streams.'],
+                ] as const).map(([key, label, body]) => {
                 return (
                   <button
                     key={key}
                     type="button"
                     onClick={() => setActiveTab(key)}
-                    className={[
-                      'rounded-lg px-3 py-2 text-[12px] font-bold transition-colors',
-                      active
-                        ? 'bg-white dark:bg-[#15151a] text-gray-900 dark:text-gray-100 shadow-sm'
-                        : 'text-gray-400 hover:text-gray-700 dark:hover:text-gray-200',
-                    ].join(' ')}
+                    className="group flex w-full items-center justify-between gap-3 rounded-2xl border border-gray-100 bg-white p-3.5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-gray-200 hover:shadow-md active:scale-[0.99] dark:border-white/10 dark:bg-[#111216] dark:hover:border-white/20"
                   >
-                    {label}
+                    <span className="min-w-0">
+                      <span className="block text-[14px] font-black text-gray-950 dark:text-white">{label}</span>
+                      <span className="mt-1 block text-[12px] leading-5 text-gray-500 dark:text-gray-400">{body}</span>
+                    </span>
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gray-950 text-white transition-transform group-hover:translate-x-0.5 dark:bg-white dark:text-gray-950">
+                      <ChevronDown className="-rotate-90 h-4 w-4" />
+                    </span>
                   </button>
                 )
               })}
-            </div>
+              </div>
+            )}
 
-            {activeTab === 'running' && (
+            {historyTabActive && (
               <div className="bg-white dark:bg-[#111216] rounded-2xl border border-gray-100 dark:border-white/10 shadow-sm overflow-hidden">
                 <div className="p-5 sm:p-7 space-y-4">
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
                       <StaticStreamMark />
                       <div>
-                        <p className="text-[13px] font-bold text-gray-800 dark:text-gray-100">Running streams</p>
-                        <p className="text-[11px] text-gray-400">Loaded from StreamPay on-chain events</p>
+                        <p className="text-[13px] font-bold text-gray-800 dark:text-gray-100">
+                          {activeTab === 'running' ? 'Running streams' : 'Ended streams'}
+                        </p>
+                        <p className="text-[11px] text-gray-400">
+                          {activeTab === 'running' ? 'Active wallet streams' : 'Completed and cancelled history'}
+                        </p>
                       </div>
                     </div>
-                    <span className="text-[11px] text-gray-400">Arc</span>
                   </div>
 
                   {!circleSession ? (
@@ -1431,9 +1439,9 @@ export function CreateStreamForm() {
                         <p className="text-[11px] text-gray-400">{recentStreams.length} browser-saved stream{recentStreams.length === 1 ? '' : 's'} available as fallback.</p>
                       )}
                     </div>
-                  ) : onchainStreams.length > 0 ? (
+                  ) : visibleOnchainStreams.length > 0 ? (
                     <div className="space-y-2">
-                      {onchainStreams.map(stream => {
+                      {visibleOnchainStreams.map(stream => {
                         const streamUrl = buildStreamLink(stream.vault, reason, true, streamRecipientEmail, agenticLinkParams)
                         const endMs = Number(BigInt(stream.endTime)) * 1000
                         const status = stream.cancelled ? 'Cancelled' : stream.active ? 'Live' : 'Complete'
@@ -1463,8 +1471,10 @@ export function CreateStreamForm() {
                     </div>
                   ) : (
                     <div className="rounded-xl border border-gray-100 dark:border-white/10 bg-gray-50/70 dark:bg-white/5 px-4 py-5 text-center space-y-2">
-                      <p className="text-[12px] font-semibold text-gray-500 dark:text-gray-300">No on-chain streams found for this recipient.</p>
-                      <p className="text-[11px] text-gray-400">Create a stream, then it can be found from any browser.</p>
+                      <p className="text-[12px] font-semibold text-gray-500 dark:text-gray-300">
+                        {activeTab === 'running' ? 'No running streams found.' : 'No ended streams found.'}
+                      </p>
+                      <p className="text-[11px] text-gray-400">Streams appear here after this wallet has used StreamPay.</p>
                     </div>
                   )}
 
@@ -1482,7 +1492,7 @@ export function CreateStreamForm() {
         )}
 
         {/* ── Vault Card + How It Works ── */}
-        <div className={circleAvailable && activeTab === 'running' ? 'hidden' : 'space-y-4'}>
+        <div className={circleAvailable && activeTab !== 'new' ? 'hidden' : 'space-y-4'}>
           {/* Vault Card */}
           <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-card dark:border-white/10 dark:bg-[#111216]">
             <div className="space-y-5 p-5 sm:p-6">
@@ -1948,7 +1958,7 @@ export function CreateStreamForm() {
                   >
                     {isWorking
                       ? <><Spinner /><span className="text-[13px] font-medium tracking-normal">{statusMsg}</span></>
-                      : circleAvailable ? 'Use Connected Wallet Instead' : 'START STREAMING'}
+                      : circleAvailable ? 'Use connected wallet' : 'Start stream'}
                   </button>
                 )}
 

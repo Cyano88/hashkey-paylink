@@ -1164,35 +1164,9 @@ export function ArenaPage() {
 
   return (
     <div className="mx-auto mt-4 w-full max-w-[940px] px-0 pb-6 sm:mt-5">
-      <div className="mb-3 rounded-[20px] border border-gray-100 bg-white p-3.5 shadow-sm dark:border-white/10 dark:bg-[#111216]">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-gray-400">StreamPay Arena</p>
-            <h1 className="mt-1.5 text-[23px] font-bold tracking-tight text-gray-950 dark:text-white sm:text-[26px]">
-              USDC games with recoverable risk.
-            </h1>
-            <p className="mt-1.5 max-w-[520px] text-[12px] leading-relaxed text-gray-500 dark:text-gray-400">
-              Create private USDC rooms with protected risk. Deposits open only through per-room Arena escrow.
-            </p>
-          </div>
-          <div className="hidden rounded-2xl bg-gray-950 px-2.5 py-1.5 text-right text-white dark:bg-white dark:text-gray-950 sm:block">
-            <p className="text-[10px] font-bold uppercase tracking-[0.12em] opacity-60">Asset</p>
-            <p className="text-[13px] font-bold">USDC</p>
-          </div>
-        </div>
-
-        <div className="mt-3 grid grid-cols-3 gap-2">
-          {[
-            ['Wallet', 'Embedded'],
-            ['Network', 'Arc'],
-            ['Mode', view === 'games' ? 'Lobby' : view === 'list' ? 'My rooms' : 'Private'],
-          ].map(([title, body]) => (
-            <div key={title} className="rounded-2xl bg-gray-50 p-2.5 dark:bg-white/[0.04]">
-              <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400">{title}</p>
-              <p className="mt-0.5 text-[12px] font-bold text-gray-950 dark:text-white">{body}</p>
-            </div>
-          ))}
-        </div>
+      <div className="mb-3 px-1">
+        <h1 className="text-[22px] font-black tracking-tight text-gray-950 dark:text-white">Arena</h1>
+        <p className="mt-1 text-[13px] leading-5 text-gray-500 dark:text-gray-400">Private USDC rooms with recoverable risk.</p>
       </div>
 
       {view === 'games' && (

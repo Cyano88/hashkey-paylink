@@ -6,7 +6,7 @@ import type { GhostVaultEntry }   from '../../hooks/usePoAStream'
 
 type ViewerRow = { viewer: string; amountRaw: string; ts: number }
 type CreatorTab = 'discover' | 'create' | 'earnings'
-type CreatorCategory = 'general' | 'sports' | 'ebooks' | 'news' | 'crypto'
+type CreatorCategory = 'worldcup-news' | 'live-scores' | 'crypto' | 'ebooks'
 type PublishedContent = {
   id: string
   contentId?: string
@@ -28,6 +28,7 @@ type PublishedContent = {
   reviewStatus?: 'pending' | 'approved' | 'rejected'
   reviewNote?: string
   draft?: CreatorDraft
+  match?: PolyStreamMatch
 }
 type CreatorDraft = {
   title: string
@@ -129,15 +130,21 @@ const FALLBACK_CREATOR_COVERS = [
 const POLYMARKET_LOGO = '/brand/polymarket-logo.png'
 const WORLD_GLOBE_IMAGE = '/brand/world-globe.png'
 
-const CREATOR_CATEGORIES: Array<{ id: CreatorCategory; label: string; disabled?: boolean; visible?: boolean }> = [
-  { id: 'general', label: 'General', visible: false },
-  { id: 'sports', label: 'Sports', visible: false },
-  { id: 'ebooks', label: 'Ebooks', disabled: true },
-  { id: 'news', label: 'News' },
+const CREATOR_CATEGORIES: Array<{ id: CreatorCategory; label: string; disabled?: boolean }> = [
+  { id: 'worldcup-news', label: 'World Cup News' },
+  { id: 'live-scores', label: 'Live Scores' },
   { id: 'crypto', label: 'Crypto' },
+  { id: 'ebooks', label: 'Ebooks', disabled: true },
 ]
 
-const VISIBLE_CREATOR_CATEGORIES = CREATOR_CATEGORIES.filter(category => category.visible !== false)
+function normalizeCreatorCategory(value: unknown): CreatorCategory {
+  const category = String(value ?? '').trim().toLowerCase()
+  if (category === 'news') return 'worldcup-news'
+  if (category === 'sports') return 'live-scores'
+  if (category === 'general') return 'crypto'
+  return CREATOR_CATEGORIES.some(item => item.id === category) ? category as CreatorCategory : 'crypto'
+}
+
 const OFFICIAL_CREATOR_ADDRESS = (
   import.meta.env.VITE_CREATOR_OFFICIAL_WALLET
   || import.meta.env.VITE_DEFAULT_AGENT_WALLET_ADDRESS
@@ -157,21 +164,6 @@ const OFFICIAL_DISCOVER_CONTENT: PublishedContent[] = [
     image: WORLD_GLOBE_IMAGE,
     action: 'create',
     cta: 'Create',
-  },
-  {
-    id: 'worldcup-live-scores',
-    contentId: 'worldcup-scores',
-    creator: OFFICIAL_CREATOR_ADDRESS,
-    title: 'Live Scores Pulse',
-    description: 'See the live score context first, then unlock the direct Polymarket trading route when a market is matched.',
-    category: 'sports',
-    price: '0.10',
-    tag: 'Live Scores',
-    source: 'Hash PayLink Pulse',
-    image: WORLD_GLOBE_IMAGE,
-    gateLink: OFFICIAL_WORLD_CUP_SCORES_GATE,
-    action: 'gate',
-    cta: 'Unlock',
   },
 ]
 
@@ -207,7 +199,7 @@ function worldCupNewsCard(article: PolyWorldCupArticle, index: number): Publishe
     creator: OFFICIAL_CREATOR_ADDRESS,
     title: article.title,
     description: article.description || 'World Cup update for paid readers.',
-    category: 'news',
+    category: 'worldcup-news',
     price: '0.10',
     tag: article.tag || 'World Cup',
     source: article.source || 'Hash PayLink Pulse',
@@ -215,6 +207,41 @@ function worldCupNewsCard(article: PolyWorldCupArticle, index: number): Publishe
     gateLink: `/gate?${params.toString()}`,
     action: 'gate',
     cta: 'Unlock',
+  }
+}
+
+function worldCupScoreCard(match: PolyStreamMatch, index: number): PublishedContent {
+  const fixtureId = match.fixtureId || `${match.title}-${match.kickoffAt || match.time}-${index}`
+  const contentId = `worldcup-score-${String(fixtureId).replace(/[^a-zA-Z0-9]+/g, '-').slice(0, 64)}`
+  const [home, away] = splitFixtureTitle(match.title)
+  const state = matchDisplayState(match)
+  const params = new URLSearchParams({
+    app: 'streampay',
+    id: contentId,
+    cr: OFFICIAL_CREATOR_ADDRESS,
+    r: '1000',
+    cap: '100000',
+    mode: 'unlock',
+    t: `${home}${away ? ` vs ${away}` : ''} route`,
+  })
+  return {
+    id: contentId,
+    contentId,
+    creator: OFFICIAL_CREATOR_ADDRESS,
+    title: match.title,
+    description: match.marketStatus === 'matched'
+      ? 'Live score context is visible. Unlock the direct Polymarket route for this fixture.'
+      : 'Live score context is visible. Market routing appears when a fixture is matched.',
+    category: 'live-scores',
+    price: '0.10',
+    tag: state.tag === 'LIVE' ? 'Live' : state.tag === 'FT' ? 'Result' : 'Fixture',
+    source: 'Live Scores Pulse',
+    image: flagUrlForTeam(home) || flagUrlForTeam(away) || WORLD_GLOBE_IMAGE,
+    gateLink: `/gate?${params.toString()}`,
+    startsAt: match.kickoffAt || match.time,
+    action: 'gate',
+    cta: match.marketStatus === 'matched' ? 'Unlock route' : 'View',
+    match,
   }
 }
 
@@ -270,7 +297,7 @@ function formatPrice(raw: string) {
 }
 
 function getSportsCountdown(card: PublishedContent, now: number) {
-  if (card.category !== 'sports') return null
+  if (card.category !== 'live-scores') return null
   if (!card.startsAt) return null
   const startsAt = typeof card.startsAt === 'number' ? card.startsAt : new Date(card.startsAt).getTime()
   if (!Number.isFinite(startsAt)) return null
@@ -457,6 +484,7 @@ function contentFromGate(link: string, meta: GateCreatedMeta, index: number): Pu
   const title = meta.title.trim() || (meta.contentType === 'url' ? 'Private creator drop' : 'Creator article')
   const author = meta.authorName.trim() || 'Creator Studio'
   const xHandle = meta.xHandle.trim()
+  const category = normalizeCreatorCategory(meta.category)
   return {
     id: `published-${Date.now()}-${index}`,
     contentId: parseContentId(link),
@@ -465,9 +493,9 @@ function contentFromGate(link: string, meta: GateCreatedMeta, index: number): Pu
     description: meta.description.trim() || (meta.mode === 'stream'
       ? 'Nano-streaming access is ready. Viewers pay while reading or watching.'
       : 'Fixed-price creator content is ready for paid unlock.'),
-    category: meta.category,
+    category,
     price: formatPrice(String(meta.capRaw / 1_000_000)),
-    tag: CREATOR_CATEGORIES.find(category => category.id === meta.category)?.label || 'General',
+    tag: CREATOR_CATEGORIES.find(item => item.id === category)?.label || 'Crypto',
     source: xHandle ? `@${xHandle.replace(/^@/, '')}` : author,
     image: meta.coverImage || FALLBACK_CREATOR_COVERS[index % FALLBACK_CREATOR_COVERS.length],
     author,
@@ -483,7 +511,7 @@ function contentFromGate(link: string, meta: GateCreatedMeta, index: number): Pu
       coverImage: meta.coverImage,
       contentBody: meta.contentBody,
       privateUrl: meta.privateUrl,
-      category: meta.category,
+      category,
       rateStr: meta.rateStr,
       capStr: meta.capStr,
       mode: meta.mode,
@@ -493,7 +521,7 @@ function contentFromGate(link: string, meta: GateCreatedMeta, index: number): Pu
 }
 
 function contentFromServerPost(post: ServerCreatorPost, index: number): PublishedContent {
-  const category = CREATOR_CATEGORIES.some(item => item.id === post.category) ? post.category : 'general'
+  const category = normalizeCreatorCategory(post.category)
   const author = post.authorName.trim() || 'Creator Studio'
   const xHandle = post.xHandle.trim()
   return {
@@ -506,7 +534,7 @@ function contentFromServerPost(post: ServerCreatorPost, index: number): Publishe
       : 'Fixed-price creator content is ready for paid unlock.'),
     category,
     price: formatPrice(String((Number(post.capRaw) || 0) / 1_000_000)),
-    tag: CREATOR_CATEGORIES.find(item => item.id === category)?.label || 'General',
+    tag: CREATOR_CATEGORIES.find(item => item.id === category)?.label || 'Crypto',
     source: xHandle ? `@${xHandle.replace(/^@/, '')}` : author,
     image: post.coverImage || FALLBACK_CREATOR_COVERS[index % FALLBACK_CREATOR_COVERS.length],
     author,
@@ -615,14 +643,17 @@ function DiscoverContent({
   }, [])
 
   const approvedSessionPosts = published.filter(card => card.reviewStatus === 'approved')
+  const scoreMatches = [...(scoreFeed?.matches ?? [])].sort((a, b) => Number(isLiveMatch(b)) - Number(isLiveMatch(a)))
+  const scoreCards = scoreMatches.slice(0, 16).map(worldCupScoreCard)
   const officialCards = [
     OFFICIAL_DISCOVER_CONTENT[0],
     ...worldCupNewsCards,
+    ...scoreCards,
   ].filter(Boolean) as PublishedContent[]
   const heroCards = [
     OFFICIAL_DISCOVER_CONTENT[0],
-    OFFICIAL_DISCOVER_CONTENT[1],
     ...worldCupNewsCards,
+    ...scoreCards,
     ...approvedSessionPosts,
     ...approvedPosts,
   ].filter(card => categoryFilter === 'all' || card.category === categoryFilter)
@@ -631,7 +662,7 @@ function DiscoverContent({
     .filter(card => categoryFilter === 'all' || card.category === categoryFilter)
     .slice(0, 8)
   const hero = heroCards[heroIndex % Math.max(heroCards.length, 1)] || published[0] || OFFICIAL_DISCOVER_CONTENT[0]
-  const heroIsScores = hero.id === 'worldcup-live-scores'
+  const heroIsScores = Boolean(hero.match)
 
   useEffect(() => {
     setHeroIndex(0)
@@ -646,7 +677,7 @@ function DiscoverContent({
   }, [heroCards.length])
 
   function openContent(card: PublishedContent) {
-    if (card.id === 'worldcup-live-scores' && !scoreMatches.length) {
+    if (card.category === 'live-scores' && !scoreMatches.length) {
       void loadScores()
       return
     }
@@ -658,8 +689,7 @@ function DiscoverContent({
   }
 
   const heroCta = hero.cta || (hero.action === 'gate' ? 'Unlock' : 'Create')
-  const scoreMatches = [...(scoreFeed?.matches ?? [])].sort((a, b) => Number(isLiveMatch(b)) - Number(isLiveMatch(a)))
-  const featuredScore = scoreMatches[scoreIndex % Math.max(scoreMatches.length, 1)]
+  const featuredScore = hero.match || scoreMatches[scoreIndex % Math.max(scoreMatches.length, 1)]
   const scoresReady = Boolean(scoreFeed?.providerConfigured && scoreFeed.providerStatus === 'connected' && scoreMatches.length)
   const [scoreHome, scoreAway] = featuredScore ? splitFixtureTitle(featuredScore.title) : ['World Cup', 'Scores']
   const scoreState = featuredScore ? matchDisplayState(featuredScore) : null
@@ -879,7 +909,7 @@ function DiscoverContent({
 
         <div className="overflow-x-auto px-4 pb-2 [scrollbar-width:none]">
           <div className="flex w-max gap-1 rounded-xl border border-gray-100 bg-gray-50 p-1">
-            {([{ id: 'all', label: 'All' }, ...VISIBLE_CREATOR_CATEGORIES] as Array<{ id: CreatorCategory | 'all'; label: string; disabled?: boolean }>).map(category => {
+            {([{ id: 'all', label: 'All' }, ...CREATOR_CATEGORIES] as Array<{ id: CreatorCategory | 'all'; label: string; disabled?: boolean }>).map(category => {
               const selected = categoryFilter === category.id
               return (
                 <button
@@ -908,8 +938,78 @@ function DiscoverContent({
         </div>
 
         <div className="max-h-[430px] space-y-2 overflow-y-auto px-4 pb-4 pt-2 [scrollbar-width:none]">
+          {cards.length === 0 && (
+            <div className="rounded-2xl border border-gray-100 bg-gray-50 px-4 py-5 text-center">
+              <p className="text-sm font-black text-gray-950">
+                {categoryFilter === 'live-scores' ? 'Live scores are syncing' : 'No published posts yet'}
+              </p>
+              <p className="mx-auto mt-1 max-w-xs text-[12px] leading-5 text-gray-400">
+                {categoryFilter === 'live-scores'
+                  ? 'Refresh shortly. Hash PayLink only shows current matchday data from the live feed.'
+                  : 'Approved creator posts will appear here.'}
+              </p>
+            </div>
+          )}
           {cards.map((card, index) => {
             const countdown = getSportsCountdown(card, now)
+            const match = card.match
+            if (match) {
+              const [home, away] = splitFixtureTitle(match.title)
+              const state = matchDisplayState(match)
+              const homeFlag = flagUrlForTeam(home, 80)
+              const awayFlag = flagUrlForTeam(away, 80)
+              return (
+                <button
+                  key={card.id}
+                  type="button"
+                  onClick={() => openContent(card)}
+                  className="group grid h-[132px] w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-2xl border border-gray-100 bg-white p-3 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
+                >
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className={[
+                        'rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-[0.12em]',
+                        state.tag === 'LIVE'
+                          ? 'bg-emerald-50 text-emerald-700'
+                          : state.tag === 'FT'
+                            ? 'bg-gray-100 text-gray-600'
+                            : 'bg-blue-50 text-blue-700',
+                      ].join(' ')}>
+                        {state.tag}
+                      </span>
+                      <span className="truncate text-[10px] font-semibold text-gray-400">{match.time || scoreFeed?.displayDate}</span>
+                    </div>
+                    <div className="mt-3 grid grid-cols-[minmax(0,1fr)_56px_minmax(0,1fr)] items-center gap-2">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          {homeFlag ? <img src={homeFlag} alt="" className="h-3.5 w-5 rounded-[3px] object-cover ring-1 ring-gray-200" /> : <span className="text-[10px] font-black text-gray-500">{flagEmojiForTeam(home)}</span>}
+                          <p className="truncate text-[12px] font-black text-gray-950">{home}</p>
+                        </div>
+                        {match.homeMarketPrice && <p className="mt-1 truncate text-[9px] font-black uppercase text-gray-400">{match.homeMarketPrice}</p>}
+                      </div>
+                      <div className="rounded-xl bg-gray-50 px-2 py-2 text-center">
+                        <p className="text-[15px] font-black tabular-nums text-gray-950">{state.center}</p>
+                        <p className="mt-0.5 truncate text-[8px] font-black uppercase text-gray-400">{state.sub}</p>
+                      </div>
+                      <div className="min-w-0 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <p className="truncate text-[12px] font-black text-gray-950">{away || 'Opponent'}</p>
+                          {awayFlag ? <img src={awayFlag} alt="" className="h-3.5 w-5 rounded-[3px] object-cover ring-1 ring-gray-200" /> : <span className="text-[10px] font-black text-gray-500">{flagEmojiForTeam(away)}</span>}
+                        </div>
+                        {match.awayMarketPrice && <p className="mt-1 truncate text-[9px] font-black uppercase text-gray-400">{match.awayMarketPrice}</p>}
+                      </div>
+                    </div>
+                    <p className="mt-3 truncate text-[10px] font-semibold text-gray-400">
+                      {match.marketStatus === 'matched' ? 'Polymarket route available' : 'Trading route pending'}
+                    </p>
+                  </div>
+                  <span className="inline-flex shrink-0 flex-col items-center justify-center gap-1 rounded-xl bg-gray-950 px-3 py-2 text-white">
+                    <LockKeyhole className="h-4 w-4" />
+                    <span className="text-[10px] font-black">{card.cta || 'Unlock'}</span>
+                  </span>
+                </button>
+              )
+            }
             return (
               <button
                 key={card.id}
@@ -1518,6 +1618,10 @@ export function CreatorPage() {
 
   return (
     <div className="w-full max-w-[480px] mx-auto mt-12 mb-12">
+      <div className="mb-3 px-1">
+        <h1 className="text-[22px] font-black tracking-tight text-gray-950 dark:text-white">Creator Hub</h1>
+        <p className="mt-1 text-[13px] leading-5 text-gray-500 dark:text-gray-400">Discover, publish, and earn with USDC.</p>
+      </div>
       <div className="mb-5 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
         <div className="grid grid-cols-3">
           {([

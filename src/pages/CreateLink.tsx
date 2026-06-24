@@ -1088,13 +1088,13 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   return (
     <div className="mx-auto w-[calc(100vw-2rem)] max-w-lg min-w-0 animate-fade-in sm:w-[32rem]">
       {/* ── Hero ──────────────────────────────────────────────────────── */}
-      <div className="mb-8 text-center">
-        <span className="mb-4 inline-flex items-center justify-center gap-1 text-sm font-semibold leading-none text-[#0071E3] dark:text-blue-200">
-          <UsdcMark className="h-7 w-7 shrink-0 text-gray-950 dark:text-white" />
+      <div className="mb-6 flex flex-col items-center text-center">
+        <span className="mb-4 inline-flex items-center justify-center gap-0.5 text-sm font-semibold leading-none text-[#0071E3] dark:text-blue-200">
+          <UsdcMark className="h-6 w-6 shrink-0 text-gray-950 dark:text-white" />
           Payment Hub
         </span>
         <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-[2.25rem]">
-          {polymarketMode ? 'PolyDesk' : posMode ? 'Retail POS' : streamMode ? 'StreamPay' : accessMode ? 'x402 Wallet Manager' : 'Create a Hash PayLink'}
+          {polymarketMode ? 'PolyDesk' : posMode ? 'Retail POS' : streamMode ? 'StreamPay' : accessMode ? 'x402 Wallet Manager' : 'Request a payment'}
         </h1>
         <p className="mt-2 text-[15px] text-gray-500 text-balance dark:text-gray-400">
           {polymarketMode
@@ -1105,7 +1105,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               ? 'Stream USDC for payroll, agent services, and Arena games.'
               : accessMode
                 ? 'Fund and activate the Circle wallet your agents use for x402 services.'
-                : 'Create links and request USDC payments.'}
+                : 'Create a secure USDC PayLink in seconds.'}
         </p>
 
         {/* ── Chain preview toggle — hidden in multi-chain mode (all chains active) */}
@@ -2486,12 +2486,12 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
 
       {/* ── Last event dashboard recovery ────────────────────────────── */}
       {!generatedLink && chatCta && (
-        <div className="mt-4 grid gap-2">
+        <div className="mt-4 flex flex-col items-center gap-2">
           <a
             href={chatCta.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+            className="inline-flex w-full max-w-[18rem] items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200 sm:max-w-[20rem]"
           >
             <MessageCircle className="h-4 w-4" />
             {chatCta.label}

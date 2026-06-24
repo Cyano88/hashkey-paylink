@@ -128,7 +128,7 @@ const OFFICIAL_CONTENT: Record<string, ContentEntry> = {
     authorName: 'Hash PayLink Pulse',
     xHandle: 'Hash_PayLink',
     coverImage: '/brand/world-globe.png',
-    category: 'news',
+    category: 'worldcup-news',
     reviewStatus: 'approved',
     reviewedAt: Date.now(),
     reviewNote: '',
@@ -146,7 +146,7 @@ const OFFICIAL_CONTENT: Record<string, ContentEntry> = {
     authorName: 'Hash PayLink desk',
     xHandle: 'Hash_PayLink',
     coverImage: '/brand/world-globe.png',
-    category: 'sports',
+    category: 'live-scores',
     reviewStatus: 'approved',
     reviewedAt: Date.now(),
     reviewNote: '',
@@ -172,7 +172,7 @@ async function readOfficialWorldCupNewsEntry(contentId: string): Promise<Content
     authorName: match.source || 'Hash PayLink Pulse',
     xHandle: 'Hash_PayLink',
     coverImage: match.image || '/brand/world-globe.png',
-    category: 'news',
+    category: 'worldcup-news',
     reviewStatus: 'approved',
     reviewedAt: Date.now(),
     reviewNote: '',
@@ -208,7 +208,7 @@ function ensureSchema() {
         author_name text not null default '',
         x_handle text not null default '',
         cover_image text not null default '',
-        category text not null default 'general',
+        category text not null default 'crypto',
         review_status text not null default 'pending',
         reviewed_at timestamptz,
         review_note text not null default '',
@@ -223,7 +223,7 @@ function ensureSchema() {
       alter table streampay_creator_content add column if not exists author_name text not null default '';
       alter table streampay_creator_content add column if not exists x_handle text not null default '';
       alter table streampay_creator_content add column if not exists cover_image text not null default '';
-      alter table streampay_creator_content add column if not exists category text not null default 'general';
+      alter table streampay_creator_content add column if not exists category text not null default 'crypto';
       alter table streampay_creator_content add column if not exists review_status text not null default 'pending';
       alter table streampay_creator_content add column if not exists reviewed_at timestamptz;
       alter table streampay_creator_content add column if not exists review_note text not null default '';
@@ -251,7 +251,7 @@ function rowToContentEntry(row: Record<string, unknown>): ContentEntry {
     authorName: String(row.author_name ?? ''),
     xHandle: String(row.x_handle ?? ''),
     coverImage: String(row.cover_image ?? ''),
-    category: String(row.category ?? 'general'),
+    category: String(row.category ?? 'crypto'),
     reviewStatus: cleanReviewStatus(row.review_status),
     reviewedAt: row.reviewed_at instanceof Date ? row.reviewed_at.getTime() : null,
     reviewNote: String(row.review_note ?? ''),
@@ -347,8 +347,11 @@ function cleanMetaText(value: unknown, max = MAX_META_TEXT_LENGTH) {
 }
 
 function cleanCategory(value: unknown) {
-  const category = String(value ?? 'general').trim().toLowerCase()
-  return ['general', 'sports', 'ebooks', 'news', 'crypto'].includes(category) ? category : 'general'
+  const category = String(value ?? 'crypto').trim().toLowerCase()
+  if (category === 'news') return 'worldcup-news'
+  if (category === 'sports') return 'live-scores'
+  if (category === 'general') return 'crypto'
+  return ['worldcup-news', 'live-scores', 'ebooks', 'crypto'].includes(category) ? category : 'crypto'
 }
 
 function baseUrl() {
