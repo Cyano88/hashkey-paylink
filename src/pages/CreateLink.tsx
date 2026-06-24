@@ -13,6 +13,7 @@ import {
   Share2,
   ArrowLeft,
   ArrowRight,
+  ChevronDown,
   Activity,
   MessageCircle,
   Send,
@@ -96,6 +97,41 @@ function UsdcMark({ className }: { className?: string }) {
         strokeWidth="1.55"
         strokeLinecap="round"
         strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+function PaymentHubMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 32 32" aria-hidden="true" className={className} fill="none">
+      <path
+        d="M3.5 23.2h5.2c1.1 0 2 .28 3.05.72l3.05 1.28c.72.3 1.5.45 2.28.45h5.04c.78 0 1.42-.58 1.5-1.35.08-.83-.57-1.55-1.4-1.55h-4.34c-.72 0-1.43-.16-2.08-.46l-2.26-1.04"
+        stroke="currentColor"
+        strokeWidth="1.9"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="m23.3 24.2 4.42-3.15a1.82 1.82 0 0 1 2.47.32c.68.82.52 2.04-.36 2.64l-5.64 3.84a5.75 5.75 0 0 1-3.22 1H16.1c-.78 0-1.56-.14-2.3-.43l-4.1-1.57H3.5"
+        stroke="currentColor"
+        strokeWidth="1.9"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <circle cx="20.9" cy="11.7" r="6.5" stroke="currentColor" strokeWidth="1.9" />
+      <path
+        d="M20.9 7.95v7.5M22.75 9.55c-.32-.5-.86-.76-1.66-.76-.94 0-1.58.4-1.58 1.12 0 1.68 3.43.8 3.43 2.84 0 .8-.68 1.38-1.78 1.38-.93 0-1.62-.31-2.08-.9"
+        stroke="currentColor"
+        strokeWidth="1.55"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M13.1 11.45a4.6 4.6 0 1 1 5.18-6.93M16.05 5.05a4.6 4.6 0 0 1 8.02 1.18"
+        stroke="currentColor"
+        strokeWidth="1.9"
+        strokeLinecap="round"
       />
     </svg>
   )
@@ -670,7 +706,28 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     toggleEventMode(nextMode === 'business')
   }
 
-  function toggleAccessMode(on: boolean) {
+  function pushProductHistory(product: CreateProduct | 'hub') {
+    if (typeof window === 'undefined') return
+    const url = new URL(window.location.href)
+    if (product === 'hub') url.searchParams.delete('product')
+    else url.searchParams.set('product', product)
+    window.history.pushState({ hpCreateProduct: product }, '', `${url.pathname}${url.search}${url.hash}`)
+  }
+
+  function openHubMode(push = true) {
+    if (push) pushProductHistory('hub')
+    setProductHubOpen(true)
+    setAccessMode(false)
+    setPosMode(false)
+    setStreamMode(false)
+    setPolymarketMode(false)
+    setAccessView('overview')
+    setAgentUrl('')
+    setAgentUrlStatus('idle')
+  }
+
+  function toggleAccessMode(on: boolean, push = true) {
+    if (on && push) pushProductHistory('agent')
     setProductHubOpen(false)
     setPosMode(false)
     setStreamMode(false)
@@ -688,14 +745,11 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   }
 
   function closeAccessMode() {
-    setProductHubOpen(true)
-    setAccessMode(false)
-    setAccessView('overview')
-    setAgentUrl('')
-    setAgentUrlStatus('idle')
+    openHubMode()
   }
 
-  function openPaymentMode() {
+  function openPaymentMode(push = true) {
+    if (push) pushProductHistory('payment')
     setProductHubOpen(false)
     setAccessMode(false)
     setPosMode(false)
@@ -707,7 +761,8 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     setVaultStep('idle')
   }
 
-  function openPosMode() {
+  function openPosMode(push = true) {
+    if (push) pushProductHistory('pos')
     setProductHubOpen(false)
     setPosMode(true)
     setAccessMode(false)
@@ -721,6 +776,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   }
 
   function closePosMode() {
+    pushProductHistory('hub')
     setProductHubOpen(true)
     setPosMode(false)
     setPosCountry(null)
@@ -730,7 +786,8 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     setPosError('')
   }
 
-  function openStreamMode() {
+  function openStreamMode(push = true) {
+    if (push) pushProductHistory('streampay')
     setProductHubOpen(false)
     setStreamMode(true)
     setPosMode(false)
@@ -743,11 +800,12 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   }
 
   function closeStreamMode() {
-    setProductHubOpen(true)
+    openHubMode()
     setStreamMode(false)
   }
 
-  function openPolymarketMode() {
+  function openPolymarketMode(push = true) {
+    if (push) pushProductHistory('polymarket')
     setProductHubOpen(false)
     setPolymarketMode(true)
     setStreamMode(false)
@@ -760,8 +818,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   }
 
   function closePolymarketMode() {
-    setProductHubOpen(true)
-    setPolymarketMode(false)
+    openHubMode()
   }
 
   useEffect(() => {
@@ -781,24 +838,41 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     }
 
     if (product === 'agent') {
-      toggleAccessMode(true)
+      toggleAccessMode(true, false)
       return
     }
 
     if (product === 'pos') {
-      openPosMode()
+      openPosMode(false)
       return
     }
 
     if (product === 'streampay') {
-      openStreamMode()
+      openStreamMode(false)
       return
     }
 
     if (product === 'polymarket') {
-      openPolymarketMode()
+      openPolymarketMode(false)
     }
   }, [productParam]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const onPopState = () => {
+      const product = (new URL(window.location.href).searchParams.get('product') ?? '').toLowerCase() as CreateProduct | ''
+      if (!product) {
+        openHubMode(false)
+        return
+      }
+      if (product === 'payment') openPaymentMode(false)
+      if (product === 'agent') toggleAccessMode(true, false)
+      if (product === 'pos') openPosMode(false)
+      if (product === 'streampay') openStreamMode(false)
+      if (product === 'polymarket') openPolymarketMode(false)
+    }
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   function handlePosBack() {
     if (posMerchant) {
@@ -1090,7 +1164,13 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
       ? { label: 'Open PolyDesk in Telegram', url: telegramStartUrl('polymarket') }
       : { label: 'Open payments in Telegram', url: telegramStartUrl('payment_links') }
   const isPaymentView = !productHubOpen && !accessMode && !posMode && !streamMode && !polymarketMode
-  const howItWorksSteps = polymarketMode
+  const howItWorksSteps = productHubOpen
+    ? [
+        { n: '1', title: 'Create links', body: 'Personal, business, POS, and QR payment flows' },
+        { n: '2', title: 'Manage services', body: 'x402 balance, PolyDesk, and StreamPay entry points' },
+        { n: '3', title: 'Keep proof', body: 'Receipts, dashboards, and settlement records stay connected' },
+      ]
+    : polymarketMode
     ? [
         { n: '1', title: 'Open Telegram', body: 'Start Hash PayLink inside chat' },
         { n: '2', title: 'Save address', body: 'Link your Polymarket profile' },
@@ -1128,7 +1208,8 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
         isPaymentView ? 'items-center text-center' : 'items-start text-left',
       )}>
         {productHubOpen && (
-          <span className="mb-4 inline-flex items-center justify-center text-sm font-semibold leading-none text-[#0071E3] dark:text-blue-200">
+          <span className="mb-4 inline-flex items-center justify-center gap-2 text-sm font-bold leading-none text-[#0071E3] dark:text-blue-200">
+            <PaymentHubMark className="h-7 w-7 shrink-0 text-gray-950 dark:text-white" />
             Payment Hub
           </span>
         )}
@@ -1207,11 +1288,16 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
       </div>
       {/* ── Form card ─────────────────────────────────────────────────── */}
       <div
-        className="w-full min-w-0 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-card dark:border-white/10 dark:bg-[#111114]"
+        className={cn(
+          'w-full min-w-0',
+          productHubOpen
+            ? 'space-y-2'
+            : 'overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-card dark:border-white/10 dark:bg-[#111114]',
+        )}
         style={{ overflowX: 'hidden' }}
       >
         {productHubOpen ? (
-          <div className="space-y-2 p-2">
+          <div className="space-y-2">
             {[
               { icon: Coins, title: 'Payment', body: 'Create personal or business PayLinks.', action: openPaymentMode },
               { icon: Bot, title: 'x402', body: 'Fund service balance and use paid services.', action: () => toggleAccessMode(true) },
@@ -1223,16 +1309,20 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                 key={title}
                 type="button"
                 onClick={action}
-                className="group flex w-full items-center gap-3 rounded-xl p-3 text-left transition-all hover:bg-gray-50 active:scale-[0.99] dark:hover:bg-white/[0.05]"
+                className="group flex w-full items-center justify-between gap-3 rounded-2xl border border-gray-100 bg-white p-3.5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-gray-200 hover:shadow-md active:scale-[0.99] dark:border-white/10 dark:bg-[#111216] dark:hover:border-white/20"
               >
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-gray-600 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300">
-                  <Icon className="h-[18px] w-[18px]" />
+                <span className="flex min-w-0 items-center gap-3">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-gray-600 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300">
+                    <Icon className="h-[18px] w-[18px]" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-[14px] font-black text-gray-950 dark:text-white">{title}</span>
+                    <span className="mt-1 block text-[12px] leading-5 text-gray-500 dark:text-gray-400">{body}</span>
+                  </span>
                 </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block text-[14px] font-bold text-gray-950 dark:text-white">{title}</span>
-                  <span className="mt-1 block text-[12px] leading-relaxed text-gray-500 dark:text-gray-400">{body}</span>
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gray-950 text-white transition-transform group-hover:translate-x-0.5 dark:bg-white dark:text-gray-950">
+                  <ChevronDown className="-rotate-90 h-4 w-4" />
                 </span>
-                <ArrowRight className="h-4 w-4 shrink-0 text-gray-400 transition-transform group-hover:translate-x-0.5" />
               </button>
             ))}
           </div>
@@ -2559,10 +2649,10 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
 
 
       {/* ── How it works ─────────────────────────────────────────────── */}
-      {!generatedLink && !productHubOpen && (
+      {!generatedLink && (
         <div className="mt-10 animate-fade-in">
           <p className="mb-4 text-center text-[11px] font-semibold uppercase tracking-widest text-gray-400">
-            How it works
+            {productHubOpen ? 'What Hash PayLink powers' : 'How it works'}
           </p>
           <div className="grid grid-cols-3 gap-3">
             {howItWorksSteps.map(({ n, title, body }) => (
