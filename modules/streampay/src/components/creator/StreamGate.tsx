@@ -1252,9 +1252,9 @@ export function StreamGate() {
                       <div className="border-b border-gray-100 pb-3">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <p className="text-[13px] font-bold text-gray-900">Activate Gateway balance</p>
+                            <p className="text-[13px] font-bold text-gray-900">Manage x402 wallet</p>
                             <p className="mt-1 text-[12px] leading-relaxed text-gray-500">
-                              Add x402 balance from a supported Gateway rail. Content access remains built for Arc.
+                              Fund and activate x402 from the main Hash PayLink wallet manager, then return here to unlock.
                             </p>
                           </div>
                           <button
@@ -1280,36 +1280,11 @@ export function StreamGate() {
                               </p>
                             </div>
                             <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-[10px] font-bold text-blue-700 ring-1 ring-blue-100">
-                              {fundingChainMeta.label} activation
+                              x402 wallet
                             </span>
                           </div>
                         </div>
                       )}
-                      <div className="grid grid-cols-2 gap-2 rounded-xl border border-gray-100 bg-gray-50 p-1">
-                        {GATEWAY_FUNDING_CHAINS.map(chain => {
-                          const active = chain.key === fundChain
-                          return (
-                            <button
-                              key={chain.key}
-                              type="button"
-                              onClick={() => {
-                                setFundChain(chain.key)
-                                setFundMessage(null)
-                                setWalletError(null)
-                                setContentError(null)
-                              }}
-                              className={[
-                                'rounded-lg px-3 py-2 text-[11px] font-bold transition-all',
-                                active
-                                  ? 'bg-white text-gray-950 shadow-sm ring-1 ring-gray-200'
-                                  : 'text-gray-500 hover:text-gray-800',
-                              ].join(' ')}
-                            >
-                              {chain.label}
-                            </button>
-                          )
-                        })}
-                      </div>
                       {selectedAgent?.walletAddress && (
                         <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-3">
                           <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-gray-400">Selected wallet address</p>
@@ -1364,54 +1339,15 @@ export function StreamGate() {
                           )}
                         </div>
                       )}
-                      {fundingNeedsReconnect ? (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setWalletError(null)
-                            setContentError(null)
-                            setUnlockStep('email')
-                          }}
-                          className="w-full rounded-xl border border-blue-100 bg-blue-50 px-3 py-3 text-[12px] font-bold text-blue-700 transition-all hover:border-blue-200 hover:bg-blue-100"
-                        >
-                          Reconnect reader wallet
-                        </button>
-                      ) : (
-                        <>
-                          <label className="block space-y-1.5">
-                            <span className="text-[11px] font-semibold text-gray-600">Amount to activate</span>
-                            <div className="relative">
-                              <input
-                                type="number"
-                                min="0"
-                                step="0.1"
-                                value={fundAmount}
-                                onChange={event => setFundAmount(event.target.value)}
-                                className="w-full rounded-xl border border-gray-200 bg-white px-3 py-3 pr-16 text-[14px] text-gray-900 outline-none focus:border-blue-300"
-                              />
-                              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-bold text-gray-400">USDC</span>
-                            </div>
-                          </label>
-                          <div className="grid grid-cols-2 gap-2">
-                            <button
-                              type="button"
-                              onClick={copyPaymentWalletAddress}
-                              disabled={!selectedAgent?.walletAddress}
-                              className="rounded-xl border border-gray-200 bg-white px-3 py-3 text-[12px] font-bold text-gray-600 disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                              {copiedWallet ? 'Copied' : 'Copy wallet'}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={gatewayActivationPending ? checkPaymentActivation : activatePaymentBalance}
-                              disabled={fundBusy || (gatewayActivationPending ? fundingNeedsReconnect : gatewayActivationBlocked)}
-                              className="rounded-xl bg-gray-950 px-3 py-3 text-[12px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                              {fundBusy ? (gatewayActivationPending ? 'Checking...' : 'Activating...') : gatewayActivationPending ? 'Check x402' : 'Activate'}
-                            </button>
-                          </div>
-                        </>
-                      )}
+                      <a
+                        href="/app?product=agent"
+                        className="flex min-h-[48px] w-full items-center justify-center rounded-xl bg-gray-950 px-3 py-3 text-[12px] font-bold text-white"
+                      >
+                        Open x402 wallet manager
+                      </a>
+                      <p className="text-center text-[11px] leading-relaxed text-gray-400">
+                        After funding or activation, return to this content and tap Unlock content again.
+                      </p>
                     </div>
                   )}
                 </div>

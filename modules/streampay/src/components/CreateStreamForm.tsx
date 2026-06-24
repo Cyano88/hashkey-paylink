@@ -5,7 +5,7 @@ import {
   useReadContract, useWriteContract, usePublicClient,
 } from 'wagmi'
 import { encodeFunctionData, isAddress, parseAbi, parseEventLogs, stringToHex } from 'viem'
-import { ChevronDown, Mail, RefreshCw, X as XIcon } from 'lucide-react'
+import { Bot, ChevronDown, Mail, MessageCircle, RefreshCw, Wallet, X as XIcon } from 'lucide-react'
 import { STREAM_VAULT_ABI, STREAM_VAULT_FACTORY_ABI } from '../lib/streamVaultAbi'
 import { formatUsdcFull } from './TriStateBar'
 import {
@@ -41,6 +41,8 @@ const ERC20_ABI = parseAbi([
 const ARC_MEMO_ABI = parseAbi([
   'function memo(address target, bytes data, bytes32 memoId, bytes memoData)',
 ])
+const HASH_PAYLINK_X402_MANAGER_URL = '/app?product=agent'
+const TELEGRAM_POLYDESK_URL = '/telegram/payment-links?open=1&section=market-tools&service=poly-stream'
 
 const DURATIONS = [
   { label: '1 hr',    secs: 3_600n },
@@ -287,6 +289,7 @@ export function CreateStreamForm() {
   const [reportEmail, setReportEmail] = useState(prefill.reportEmail)
   const [agenticStatus, setAgenticStatus] = useState('')
   const [agenticError, setAgenticError] = useState<string | null>(null)
+  const [x402View, setX402View] = useState<'overview' | 'services'>('overview')
   const [useCircleWallet] = useState(true)
   const [recentStreams, setRecentStreams] = useState<RecentStream[]>(() => loadRecentStreams(prefill.recipient))
   const [onchainStreams, setOnchainStreams] = useState<OnchainStream[]>([])
@@ -1200,6 +1203,107 @@ export function CreateStreamForm() {
   }
 
   // ── Status hint ───────────────────────────────────────────────────────────
+  if (isAgenticStreaming) {
+    const overviewCards = [
+      {
+        icon: Wallet,
+        title: 'Wallet action',
+        body: 'Fund USDC and activate x402 in Hash PayLink.',
+        action: () => { window.location.href = HASH_PAYLINK_X402_MANAGER_URL },
+      },
+      {
+        icon: Bot,
+        title: 'Services available',
+        body: 'Creator and Polymarket services use this balance.',
+        action: () => setX402View('services'),
+      },
+    ] as const
+    const serviceCards = [
+      {
+        icon: Bot,
+        title: 'Creator',
+        body: 'Paid content, unlock links, and creator earnings.',
+        href: '/creator?app=streampay',
+      },
+      {
+        icon: MessageCircle,
+        title: 'Polymarket',
+        body: 'LP Scout and market actions through Telegram.',
+        href: TELEGRAM_POLYDESK_URL,
+      },
+    ] as const
+    const visibleCards = x402View === 'overview' ? overviewCards : serviceCards
+
+    return (
+      <div className="mx-auto mt-8 w-full max-w-lg px-4 sm:px-0">
+        <div className="space-y-5">
+          <div className="text-center">
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-400">x402</p>
+            <h1 className="mt-2 text-[28px] font-black tracking-tight text-gray-950 dark:text-white">
+              Service balance
+            </h1>
+            <p className="mx-auto mt-2 max-w-[360px] text-[13px] leading-relaxed text-gray-500 dark:text-gray-400">
+              One wallet balance for paid Hash PayLink services.
+            </p>
+          </div>
+
+          <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-card dark:border-white/10 dark:bg-[#111216]">
+            {x402View === 'services' && (
+              <div className="border-b border-gray-100 p-3 dark:border-white/10">
+                <button
+                  type="button"
+                  onClick={() => setX402View('overview')}
+                  className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[12px] font-semibold text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.06] dark:hover:text-gray-200"
+                >
+                  <ChevronDown className="h-3.5 w-3.5 rotate-90" />
+                  Back
+                </button>
+              </div>
+            )}
+            <div className="space-y-2 p-2">
+              {visibleCards.map(({ icon: Icon, title, body, ...card }) => {
+                const content = (
+                  <>
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-gray-600 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300">
+                      <Icon className="h-[18px] w-[18px]" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[14px] font-bold text-gray-950 dark:text-white">{title}</span>
+                      <span className="mt-1 block text-[12px] leading-relaxed text-gray-500 dark:text-gray-400">{body}</span>
+                    </span>
+                    <ChevronDown className="-rotate-90 h-4 w-4 shrink-0 text-gray-400" />
+                  </>
+                )
+                const className = 'group flex w-full items-center gap-3 rounded-xl p-3 text-left transition-all hover:bg-gray-50 dark:hover:bg-white/[0.05]'
+                if ('href' in card) {
+                  return (
+                    <a key={title} href={card.href} className={className}>
+                      {content}
+                    </a>
+                  )
+                }
+                return (
+                  <button
+                  key={title}
+                    type="button"
+                    onClick={card.action}
+                    className={className}
+                >
+                    {content}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          <p className="text-center text-[11px] leading-relaxed text-gray-400 dark:text-gray-500">
+            Wallet funding stays in Hash PayLink. StreamPay creator and Arena flows remain Arc-native.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   const hint = (() => {
     if (isWorking) return step === 'funding' ? 'Step 1 of 2 — funding vault' : 'Step 2 of 2 — deploying stream'
     if (isAgenticStreaming && !agenticReportEmailValid) return 'Enter the email that should receive daily LP research'

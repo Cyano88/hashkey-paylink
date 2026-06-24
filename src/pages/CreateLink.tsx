@@ -18,7 +18,6 @@ import {
   Tag,
   Coins,
   ExternalLink,
-  Sparkles,
   Info,
   XCircle,
   ShieldCheck,
@@ -81,6 +80,21 @@ function PolymarketMark({ className }: { className?: string }) {
       <path
         d="M7.2 8.45 17.2 5.9v5.35L7.2 8.45ZM7.2 15.55l10-2.8v5.35l-10-2.55Z"
         fill="currentColor"
+      />
+    </svg>
+  )
+}
+
+function UsdcMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className={className} fill="none">
+      <circle cx="12" cy="12" r="7.45" stroke="currentColor" strokeWidth="1.65" />
+      <path
+        d="M12 6.95v10.1M14.55 9.15c-.42-.7-1.18-1.08-2.3-1.08-1.3 0-2.18.58-2.18 1.55 0 2.32 4.73 1.1 4.73 3.92 0 1.1-.94 1.9-2.45 1.9-1.28 0-2.24-.43-2.88-1.25"
+        stroke="currentColor"
+        strokeWidth="1.55"
+        strokeLinecap="round"
+        strokeLinejoin="round"
       />
     </svg>
   )
@@ -1075,16 +1089,16 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     <div className="mx-auto w-[calc(100vw-2rem)] max-w-lg min-w-0 animate-fade-in sm:w-[32rem]">
       {/* ── Hero ──────────────────────────────────────────────────────── */}
       <div className="mb-8 text-center">
-        <span className="mb-4 inline-flex items-center gap-1.5 rounded-full border border-blue-100 bg-blue-50 px-3.5 py-1.5 text-xs font-semibold text-[#0071E3] dark:border-blue-400/25 dark:bg-blue-400/10 dark:text-blue-200">
-          <Sparkles className="h-3.5 w-3.5" />
-          Multi-Chain PayFi
+        <span className="mb-4 inline-flex items-center justify-center gap-1 text-sm font-semibold leading-none text-[#0071E3] dark:text-blue-200">
+          <UsdcMark className="h-7 w-7 shrink-0 text-gray-950 dark:text-white" />
+          Payment Hub
         </span>
         <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-[2.25rem]">
           {polymarketMode ? 'PolyDesk' : posMode ? 'Retail POS' : streamMode ? 'StreamPay' : accessMode ? 'x402 Wallet Manager' : 'Create a Hash PayLink'}
         </h1>
         <p className="mt-2 text-[15px] text-gray-500 text-balance dark:text-gray-400">
           {polymarketMode
-            ? 'Fund Polymarket, track positions, get alerts, and ask LP Scout from Telegram.'
+            ? 'Open the Telegram chat layer for Polymarket funding, positions, and LP Scout.'
             : posMode
             ? 'Choose a country, select settlement, and create one static QR.'
             : streamMode
@@ -1250,20 +1264,18 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                     <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">PolyDesk</p>
                     <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">Polymarket desk in chat</h2>
                     <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-                      Best for saved alerts, portfolio tracking, quick funding, and LP Scout memory.
+                      Available through the Telegram chat layer for funding, positions, and market checks.
                     </p>
                   </div>
                 </div>
 
-                <div className="mt-4 divide-y divide-gray-100 rounded-lg border border-gray-100 bg-white px-3 dark:divide-white/10 dark:border-white/10 dark:bg-white/[0.05]">
+                <div className="mt-4 space-y-2 rounded-lg border border-gray-100 bg-white p-2 dark:border-white/10 dark:bg-white/[0.05]">
                   {[
-                    { icon: Wallet, title: 'Fund Polymarket', body: 'Add USDC without copying deposit addresses.' },
-                    { icon: LayoutDashboard, title: 'Portfolio', body: 'Track open positions and claimable markets.' },
-                    { icon: AlertTriangle, title: 'Alerts', body: 'Get notified when a position needs attention.' },
-                    { icon: Radio, title: 'World Cup', body: 'Follow live scores and open related markets.' },
-                    { icon: Bot, title: 'LP Scout', body: 'Ask the agent to check market depth and LP rewards.' },
+                    { icon: Wallet, title: 'Funding', body: 'Add USDC from chat.' },
+                    { icon: LayoutDashboard, title: 'Portfolio', body: 'Track positions and claims.' },
+                    { icon: Bot, title: 'LP Scout', body: 'Check markets from Telegram.' },
                   ].map(({ icon: Icon, title, body }) => (
-                    <div key={title} className="flex items-center gap-3 py-3">
+                    <div key={title} className="flex items-center gap-3 rounded-lg px-3 py-3 transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.05]">
                       <Icon className="h-4 w-4 shrink-0 text-gray-400" />
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">{title}</p>
@@ -1679,14 +1691,14 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                     <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">x402 wallet</p>
                     <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">Manage service balance</h2>
                     <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-                      Sign in with email, fund USDC, activate x402, and use the same wallet across Hash PayLink services.
+                      Fund once, activate x402, and use the same wallet across Hash PayLink services.
                     </p>
                   </div>
                 </div>
 
                 <div className="mt-4 divide-y divide-gray-100 rounded-lg border border-gray-100 bg-white px-3 dark:divide-white/10 dark:border-white/10 dark:bg-white/[0.05]">
                   {[
-                    { icon: Wallet, title: 'Fund & manage x402', body: 'Email wallet, USDC balance, x402 activation, and receipts.', action: () => setAccessView('wallet') },
+                    { icon: Wallet, title: 'Fund & manage x402', body: 'Wallet balance, activation, and receipts.', action: () => setAccessView('wallet') },
                     { icon: Radio, title: 'Polymarket services', body: 'Run LP Scout and market actions from the chat layer.', action: openPolymarketMode },
                     { icon: Zap, title: 'StreamPay services', body: 'Creator, payroll, and Arena flows stay on Arc.', action: openStreamMode },
                   ].map(({ icon: Icon, title, body, action }) => {
@@ -1705,34 +1717,13 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                         key={title}
                         type="button"
                         onClick={action}
-                        className="flex w-full items-center gap-3 py-3 text-left transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.03]"
+                        className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.05]"
                       >
                         {row}
                       </button>
                     )
                   })}
                 </div>
-
-                <button
-                  type="button"
-                  onClick={() => setAccessView('wallet')}
-                  className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
-                >
-                  Manage x402 wallet
-                  <ArrowRight className="h-4 w-4" />
-                </button>
-              </div>
-
-              <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
-                <button type="button" onClick={() => setAccessView('wallet')} className="text-xs font-medium text-gray-400 transition-colors hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200">
-                  Fund and manage wallet
-                </button>
-                <button type="button" onClick={openStreamMode} className="text-xs font-medium text-gray-400 transition-colors hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200">
-                  Stream services
-                </button>
-                <button type="button" onClick={openPolymarketMode} className="text-xs font-medium text-gray-400 transition-colors hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200">
-                  PolyDesk services
-                </button>
               </div>
               </>
               )}

@@ -54,7 +54,7 @@ export function StreamPayHeader() {
   const navItems = [
     { label: 'Payroll', to: payrollTo, active: !isCreatorMode && !isAgenticMode && !isArenaMode, status: 'Soon' },
     { label: 'Creator', to: creatorTo, active: isCreatorMode, status: '' },
-    { label: 'Agentic', to: agenticTo, active: isAgenticMode, status: 'Soon' },
+    { label: 'x402', to: agenticTo, active: isAgenticMode, status: 'Soon' },
     { label: 'Arena', to: arenaTo, active: isArenaMode, status: '' },
   ] as const
 
