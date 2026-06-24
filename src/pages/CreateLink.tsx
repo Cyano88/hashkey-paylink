@@ -57,6 +57,7 @@ import { EVM_CLIENTS, ERC20_BALANCE_OF_ABI } from '../lib/router'
 import { canUseCircleEvmEmailWallet, connectCircleEvmEmailWallet } from '../lib/circleEvmEmailWallet'
 import { canUseCircleSolanaEmailWallet, connectCircleSolanaEmailWallet } from '../lib/circleSolanaEmailWallet'
 import { resolvePrivyCircleLink, savePrivyCircleLink } from '../lib/privyCircleLink'
+import AgentDemo from './AgentDemo'
 
 // ─── Starknet address: 0x followed by exactly 64 hex chars ──────────────────
 const isValidStarkAddr = (v: string) => /^0x[0-9a-fA-F]{64}$/.test(v)
@@ -92,6 +93,7 @@ type PosNetwork = 'base' | 'arbitrum' | 'arc' | 'solana'
 type PosCountry = 'NG' | 'KE' | 'GH'
 type PosSettlementPath = 'USDC_WALLET' | 'SPENDA_NAIRA'
 type CreateProduct = 'payment' | 'agent' | 'pos' | 'streampay' | 'polymarket'
+type AccessView = 'overview' | 'wallet'
 type PosMerchant = {
   merchant_id: string
   display_name: string
@@ -458,6 +460,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   const [multiChainMode, setMultiChainMode] = useState(false)
   const [flexAmount,     setFlexAmount]     = useState(false)
   const [accessMode,     setAccessMode]     = useState(false)
+  const [accessView,     setAccessView]     = useState<AccessView>('overview')
   const [agentUrl,       setAgentUrl]       = useState('')
   const [agentUrlStatus, setAgentUrlStatus] = useState<'idle' | 'checking' | 'ok' | 'incompatible'>('idle')
   const [receiveMode,    setReceiveMode]    = useState<ReceiveMode>('paste')
@@ -654,6 +657,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     setStreamMode(false)
     setPolymarketMode(false)
     setAccessMode(on)
+    setAccessView('overview')
     setAgentUrl('')
     setAgentUrlStatus('idle')
     if (on && !eventId) {
@@ -672,6 +676,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     setGeneratedLink('')
     setCopied(false)
     setVaultStep('idle')
+    setAccessView('overview')
     setPosError('')
   }
 
@@ -692,6 +697,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     setGeneratedLink('')
     setCopied(false)
     setVaultStep('idle')
+    setAccessView('overview')
   }
 
   function closeStreamMode() {
@@ -706,6 +712,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     setGeneratedLink('')
     setCopied(false)
     setVaultStep('idle')
+    setAccessView('overview')
   }
 
   useEffect(() => {
@@ -1027,6 +1034,13 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   }
 
   const linkReady = generatedLink !== ''
+  const chatCta = posMode || streamMode
+    ? null
+    : polymarketMode
+      ? { label: 'Open PolyDesk in Telegram', url: telegramStartUrl('polymarket') }
+      : accessMode
+        ? { label: 'Open x402 in Telegram', url: telegramStartUrl('x402') }
+        : { label: 'Open payments in Telegram', url: telegramStartUrl('payment_links') }
   const howItWorksSteps = polymarketMode
     ? [
         { n: '1', title: 'Open Telegram', body: 'Start Hash PayLink inside chat' },
@@ -1047,9 +1061,9 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
       ]
     : accessMode
     ? [
-        { n: '1', title: 'Open Telegram', body: 'Start the Hash PayLink bot' },
-        { n: '2', title: 'Choose flow', body: 'Wallet, market, or service' },
-        { n: '3', title: 'Confirm action', body: 'Track funds from dashboard' },
+        { n: '1', title: 'Sign in', body: 'Open your Circle wallet' },
+        { n: '2', title: 'Activate x402', body: 'Move USDC into service balance' },
+        { n: '3', title: 'Use services', body: 'Pay for agent-powered actions' },
       ]
     : [
         { n: '1', title: 'Enter details', body: 'Your wallet address' },
@@ -1066,7 +1080,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
           Multi-Chain PayFi
         </span>
         <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-[2.25rem]">
-          {polymarketMode ? 'PolyDesk' : posMode ? 'Retail POS' : streamMode ? 'StreamPay' : accessMode ? 'Hash PayLink Agent' : 'Create a Hash PayLink'}
+          {polymarketMode ? 'PolyDesk' : posMode ? 'Retail POS' : streamMode ? 'StreamPay' : accessMode ? 'x402 Wallet Manager' : 'Create a Hash PayLink'}
         </h1>
         <p className="mt-2 text-[15px] text-gray-500 text-balance dark:text-gray-400">
           {polymarketMode
@@ -1076,12 +1090,12 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
             : streamMode
               ? 'Stream USDC for payroll, agent services, and Arena games.'
               : accessMode
-                ? 'Tip, fund, and authorize agents to pay for services.'
+                ? 'Fund and activate the Circle wallet your agents use for x402 services.'
                 : 'Create links and request USDC payments.'}
         </p>
 
         {/* ── Chain preview toggle — hidden in multi-chain mode (all chains active) */}
-        {!multiChainMode && !posMode && !streamMode && !polymarketMode && <div className="mt-5 flex flex-col items-center gap-2.5">
+        {!multiChainMode && !accessMode && !posMode && !streamMode && !polymarketMode && <div className="mt-5 flex flex-col items-center gap-2.5">
           <div className="mx-auto flex w-[17.5rem] max-w-full items-center justify-start gap-0.5 overflow-x-auto rounded-xl border border-gray-200 bg-gray-100/80 p-1 [scrollbar-width:none] dark:border-white/10 dark:bg-white/[0.05] [&::-webkit-scrollbar]:hidden sm:inline-flex sm:w-auto sm:justify-center sm:gap-1">
             {VISIBLE_CREATE_CHAINS.map((c) => {
               const m = CHAIN_META[c]
@@ -1127,7 +1141,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
         </div>}
 
         {/* Multi-chain mode active badge */}
-        {multiChainMode && !posMode && !streamMode && !polymarketMode && (
+        {multiChainMode && !accessMode && !posMode && !streamMode && !polymarketMode && (
           <div className="mt-5 flex justify-center">
             <span className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-gray-700 shadow-sm dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200">
               <Globe className="h-3 w-3" />
@@ -1164,8 +1178,8 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
             <button
               type="button"
               onClick={() => toggleAccessMode(true)}
-              aria-label="Agent"
-              title="Agent"
+              aria-label="x402"
+              title="x402 wallet manager"
               className={cn(
                 'flex h-[52px] min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl text-[10px] font-semibold transition-all',
                 accessMode
@@ -1174,7 +1188,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               )}
             >
               <Bot className="h-5 w-5" />
-              <span>Agent</span>
+              <span>x402</span>
             </button>
             <button
               type="button"
@@ -1240,19 +1254,6 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                     </p>
                   </div>
                 </div>
-
-                <a
-                  href={telegramStartUrl('polymarket')}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
-                >
-                  <MessageCircle className="h-4 w-4" />
-                  Open PolyDesk in Telegram
-                </a>
-                <p className="mt-2 text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
-                  WhatsApp support coming soon.
-                </p>
 
                 <div className="mt-4 divide-y divide-gray-100 rounded-lg border border-gray-100 bg-white px-3 dark:divide-white/10 dark:border-white/10 dark:bg-white/[0.05]">
                   {[
@@ -1655,27 +1656,40 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
             </div>
           ) : accessMode ? (
             <div className="space-y-5 p-4 sm:p-5">
+              {accessView === 'wallet' ? (
+                <div className="space-y-4">
+                  <button
+                    type="button"
+                    onClick={() => setAccessView('overview')}
+                    className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 transition-colors hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
+                  >
+                    <ArrowLeft className="h-3.5 w-3.5" />
+                    Back
+                  </button>
+                  <AgentDemo embedded forceProfile />
+                </div>
+              ) : (
+              <>
               <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-4 dark:border-white/10 dark:bg-white/[0.04]">
                 <div className="flex items-start gap-3">
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white dark:border-white/10 dark:bg-white/[0.06]">
                     <Bot className="h-[18px] w-[18px] text-gray-700 dark:text-gray-200" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Agent</p>
-                    <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">Hash PayLink Agent</h2>
+                    <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">x402 wallet</p>
+                    <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">Manage service balance</h2>
                     <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-                      Create payment links, manage agent wallets, run market tools, and open StreamPay services from Telegram.
+                      Sign in with email, fund USDC, activate x402, and use the same wallet across Hash PayLink services.
                     </p>
                   </div>
                 </div>
 
                 <div className="mt-4 divide-y divide-gray-100 rounded-lg border border-gray-100 bg-white px-3 dark:divide-white/10 dark:border-white/10 dark:bg-white/[0.05]">
                   {[
-                    { icon: Link2, title: '/Payment Links', body: 'Request USDC, fund Polymarket, or fund a Circle CLI agent.', href: '/telegram/payment-links' },
-                    { icon: Wallet, title: 'Agent wallets', body: 'Create or sign in to manage Circle CLI agent wallets.' },
-                    { icon: Radio, title: 'Market tools', body: 'Run LP Scout and other market actions.' },
-                    { icon: Zap, title: 'StreamPay services', body: 'Create and manage USDC streaming flows.' },
-                  ].map(({ icon: Icon, title, body, href }) => {
+                    { icon: Wallet, title: 'Fund & manage x402', body: 'Email wallet, USDC balance, x402 activation, and receipts.', action: () => setAccessView('wallet') },
+                    { icon: Radio, title: 'Polymarket services', body: 'Run LP Scout and market actions from the chat layer.', action: openPolymarketMode },
+                    { icon: Zap, title: 'StreamPay services', body: 'Creator, payroll, and Arena flows stay on Arc.', action: openStreamMode },
+                  ].map(({ icon: Icon, title, body, action }) => {
                     const row = (
                       <>
                         <Icon className="h-4 w-4 shrink-0 text-gray-400" />
@@ -1683,40 +1697,45 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                           <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">{title}</p>
                           <p className="mt-0.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">{body}</p>
                         </div>
-                        {href && <ArrowRight className="h-4 w-4 text-gray-400" />}
+                        <ArrowRight className="h-4 w-4 text-gray-400" />
                       </>
                     )
-                    return href ? (
-                      <Link key={title} to={href} className="flex items-center gap-3 py-3 transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.03]">
+                    return (
+                      <button
+                        key={title}
+                        type="button"
+                        onClick={action}
+                        className="flex w-full items-center gap-3 py-3 text-left transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.03]"
+                      >
                         {row}
-                      </Link>
-                    ) : (
-                      <div key={title} className="flex items-center gap-3 py-3">
-                        {row}
-                      </div>
+                      </button>
                     )
                   })}
                 </div>
 
-                <a
-                  href={TELEGRAM_AGENT_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <button
+                  type="button"
+                  onClick={() => setAccessView('wallet')}
                   className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
                 >
-                  Open Telegram
+                  Manage x402 wallet
                   <ArrowRight className="h-4 w-4" />
-                </a>
+                </button>
               </div>
 
               <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
-                <Link to="/agent?profile=agent" className="text-xs font-medium text-gray-400 transition-colors hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200">
-                  Agent wallet dashboard
-                </Link>
-                <Link to="/docs/access-mode" className="text-xs font-medium text-gray-400 transition-colors hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200">
-                  Developer access docs
-                </Link>
+                <button type="button" onClick={() => setAccessView('wallet')} className="text-xs font-medium text-gray-400 transition-colors hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200">
+                  Fund and manage wallet
+                </button>
+                <button type="button" onClick={openStreamMode} className="text-xs font-medium text-gray-400 transition-colors hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200">
+                  Stream services
+                </button>
+                <button type="button" onClick={openPolymarketMode} className="text-xs font-medium text-gray-400 transition-colors hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200">
+                  PolyDesk services
+                </button>
               </div>
+              </>
+              )}
             </div>
           ) : (
             <>
@@ -2475,6 +2494,23 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
       </div>
 
       {/* ── Last event dashboard recovery ────────────────────────────── */}
+      {!generatedLink && chatCta && (
+        <div className="mt-4 grid gap-2">
+          <a
+            href={chatCta.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+          >
+            <MessageCircle className="h-4 w-4" />
+            {chatCta.label}
+          </a>
+          <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
+            WhatsApp support coming soon.
+          </p>
+        </div>
+      )}
+
       {!generatedLink && !posMode && !streamMode && savedEvent && (
         <div className="mt-6 animate-fade-in">
           <div className="flex items-center justify-between gap-3">

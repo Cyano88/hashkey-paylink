@@ -339,7 +339,12 @@ function nextHelperMemorySummary(existing: string, displayName: string, question
   return uniqueLines.slice(-8).join('\n').slice(-1600)
 }
 
-export default function AgentDemo() {
+type AgentDemoProps = {
+  embedded?: boolean
+  forceProfile?: boolean
+}
+
+export default function AgentDemo({ embedded = false, forceProfile = false }: AgentDemoProps = {}) {
   const { onNetworkSelect } = useOutletContext<LayoutOutletContext>()
   const navigate = useNavigate()
   const { authenticated: privyAuthenticated, user: privyUser, login: loginPrivy, logout: logoutPrivy, getAccessToken } = usePrivy()
@@ -366,7 +371,7 @@ export default function AgentDemo() {
   const initialAgentNetwork = isAgentTreasuryNetwork(urlAgentNetwork) ? urlAgentNetwork : 'base'
   const [agentNetwork, setAgentNetwork] = useState<AgentTreasuryNetwork>(initialAgentNetwork)
   const showHelperDemo = params.get('helper') === 'live' || params.get('helper') === 'demo' || params.get('demo') === 'ai'
-  const showAgentProfile = !showHelperDemo && (params.get('profile') === 'agent' || Boolean(agentSlug || agentWallet))
+  const showAgentProfile = !showHelperDemo && (forceProfile || params.get('profile') === 'agent' || Boolean(agentSlug || agentWallet))
   useEffect(() => {
     if (!showHelperDemo) return
     const next = new URLSearchParams({
@@ -1187,10 +1192,14 @@ export default function AgentDemo() {
     : ''
   const x402ActivationBlocked = Boolean(agentNetwork === 'arc' || !x402Amount || x402AmountInvalid || x402AmountBelowMinimum || treasuryEmpty || x402AmountExceedsTreasury)
   const displayAgentProfile = agentProfile ?? (agentSlug === PLATFORM_AGENT_SLUG || !agentSlug ? PLATFORM_AGENT_PROFILE : null)
-  const displayAgentName = displayAgentProfile?.name || agentSlug || 'Your agent wallet'
+  const displayAgentName = embedded
+    ? 'x402 Wallet Manager'
+    : displayAgentProfile?.name || agentSlug || 'Your agent wallet'
   const displayAgentPurpose = hasPendingLpScoutRequest
-    ? 'Selected paying agent for LP Scout x402 access.'
-    : displayAgentProfile?.purpose || 'Sign in, link a Circle agent wallet, fund treasury, and activate x402 from the dashboard.'
+    ? 'Selected paying wallet for LP Scout x402 access.'
+    : embedded
+    ? 'Fund USDC, activate x402, and use this wallet across Hash PayLink services.'
+    : displayAgentProfile?.purpose || 'Sign in, link a Circle wallet, fund USDC, and activate x402 from the dashboard.'
   const displayAgentImage = displayAgentProfile ? resolveAgentProfileImage(displayAgentProfile) : null
   const agentEmailConnected = Boolean(PRIVY_AUTH_ENABLED && privyAuthenticated)
   const agentWalletAccessConnected = Boolean(currentAgentWallet && agentWalletSessionConnected)
@@ -1223,10 +1232,13 @@ export default function AgentDemo() {
   }
 
   return (
-    <div className={cn('mx-auto w-full min-w-0 animate-slide-up space-y-6', showAgentProfile ? 'max-w-[calc(100vw-2rem)] sm:max-w-md' : 'max-w-2xl')}>
+    <div className={cn(
+      'mx-auto w-full min-w-0 animate-slide-up space-y-6',
+      embedded ? 'max-w-none' : showAgentProfile ? 'max-w-[calc(100vw-2rem)] sm:max-w-md' : 'max-w-2xl',
+    )}>
 
       {/* ── Back ──────────────────────────────────────────────────────────── */}
-      <button
+      {!embedded && <button
         type="button"
         onClick={() => {
           if (window.history.length > 1) navigate(-1)
@@ -1235,7 +1247,7 @@ export default function AgentDemo() {
         className="inline-flex items-center gap-1.5 text-sm text-gray-500 transition-colors hover:text-gray-700"
       >
         <ArrowLeft className="h-3.5 w-3.5" /> Back
-      </button>
+      </button>}
 
       {showAgentProfile && (
         <div
@@ -1254,7 +1266,7 @@ export default function AgentDemo() {
                 {displayAgentImage?.initials ?? <Bot className="h-[18px] w-[18px]" />}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Agent wallet</p>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">x402 wallet</p>
                 <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
                   <h1 className="min-w-0 truncate text-lg font-semibold tracking-tight text-gray-900 dark:text-white">
                     {displayAgentName}
@@ -1377,7 +1389,7 @@ export default function AgentDemo() {
                 <div className="flex items-center justify-between gap-4 rounded-lg border border-gray-100 bg-white px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">
                   <div>
                     <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Wallet access</p>
-                    <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">Confirm this agent wallet to view balances.</p>
+                    <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">Confirm this wallet to view balances.</p>
                   </div>
                   <span className="shrink-0 rounded-full bg-gray-100 px-2 py-1 text-[10px] font-semibold text-gray-500 dark:bg-white/[0.08] dark:text-gray-300">
                     Locked
@@ -1405,7 +1417,7 @@ export default function AgentDemo() {
             )}
             {!hasPendingLpScoutRequest && currentAgentWallet && !agentWalletAccessConnected && !connectedWalletNeedsAccess && (
               <p className="mt-3 text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
-                Fund the wallet treasury first. x402 activation moves part of that funded balance into Circle Gateway.
+                Fund the wallet treasury first. x402 activation moves part of that balance into Circle Gateway.
               </p>
             )}
             {!hasPendingLpScoutRequest && connectedWalletNeedsAccess && !showWalletAccessPanel && (
@@ -2178,12 +2190,12 @@ export default function AgentDemo() {
       {!showAgentProfile && !showHelperDemo && (
         <div className="space-y-3">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Agent Dashboard</p>
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">x402 Wallet Manager</p>
             <h1 className="mt-1 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">
-              Manage agents, balances, and paid helpers.
+              Fund wallets and activate service balance.
             </h1>
             <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-              Set up agent wallets, fund treasury, activate x402 from treasury balance, and launch paid agent services from one place.
+              Sign in with email, fund USDC, activate x402, and use the same wallet across Hash PayLink services.
             </p>
           </div>
           <div className="space-y-2">
@@ -2215,11 +2227,11 @@ export default function AgentDemo() {
               </span>
               <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-2">
-                  <span className="text-sm font-semibold text-gray-900 dark:text-white">Agent Setup</span>
+                  <span className="text-sm font-semibold text-gray-900 dark:text-white">Wallet setup</span>
                   <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-600 dark:bg-emerald-400/10 dark:text-emerald-300">Open</span>
                 </span>
                 <span className="mt-0.5 block text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                  Create, restore, edit, or delete agent profiles.
+                  Create or restore the email wallet used for x402 services.
                 </span>
               </span>
               <ArrowRight className="h-4 w-4 text-gray-400" />
@@ -2234,11 +2246,11 @@ export default function AgentDemo() {
               </span>
               <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-2">
-                  <span className="text-sm font-semibold text-gray-900 dark:text-white">Agent Dashboard</span>
+                  <span className="text-sm font-semibold text-gray-900 dark:text-white">Wallet dashboard</span>
                   <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-600 dark:bg-emerald-400/10 dark:text-emerald-300">Open</span>
                 </span>
                 <span className="mt-0.5 block text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                  Open a linked agent to fund treasury, activate x402, and view receipts.
+                  Open a linked wallet to fund USDC, activate x402, and view receipts.
                 </span>
               </span>
               <ArrowRight className="h-4 w-4 text-gray-400" />
