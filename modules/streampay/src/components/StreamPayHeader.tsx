@@ -52,10 +52,10 @@ export function StreamPayHeader() {
   })
   const arenaTo = useModePath('/arena')
   const navItems = [
-    { label: 'Payroll', to: payrollTo, active: !isCreatorMode && !isAgenticMode && !isArenaMode, status: 'Soon' },
-    { label: 'Creator', to: creatorTo, active: isCreatorMode, status: '' },
-    { label: 'x402', to: agenticTo, active: isAgenticMode, status: 'Soon' },
-    { label: 'Arena', to: arenaTo, active: isArenaMode, status: '' },
+    { label: 'Payroll', to: payrollTo, active: !isCreatorMode && !isAgenticMode && !isArenaMode },
+    { label: 'Creator', to: creatorTo, active: isCreatorMode },
+    { label: 'x402', to: agenticTo, active: isAgenticMode },
+    { label: 'Arena', to: arenaTo, active: isArenaMode },
   ] as const
 
   return (
@@ -81,11 +81,6 @@ export function StreamPayHeader() {
                     : { color: '#9ca3af' }}
                 >
                   <span>{item.label}</span>
-                  {item.status && (
-                    <span className="ml-1 align-middle text-[8px] font-black uppercase tracking-wide opacity-55">
-                      {item.status}
-                    </span>
-                  )}
                 </Link>
               ))}
             </div>

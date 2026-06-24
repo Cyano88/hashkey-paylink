@@ -648,20 +648,12 @@ export function LinkFactory({
     <div className="w-full">
       <div className="space-y-6">
 
-        {/* Page title */}
-        <div className="text-center space-y-1.5">
-          <h1 className="text-[26px] sm:text-[30px] font-bold tracking-tight text-gray-900">
-            Creator<span style={{ color: '#3b82f6' }}>Studio</span>
-          </h1>
-          <p className="text-[13px] text-gray-400">Paid articles, private drops, and streaming gates.</p>
-        </div>
-
         {/* Factory card */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="px-5 py-5 sm:px-7 sm:py-6 space-y-5">
 
             <div className="flex items-center gap-1.5">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-500">Content setup</span>
+              <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-500">Publish content</span>
             </div>
 
             <div className="grid grid-cols-2 overflow-hidden rounded-xl border border-gray-200 bg-gray-50 p-1">
