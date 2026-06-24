@@ -13,6 +13,7 @@ import {
   Share2,
   ArrowLeft,
   ArrowRight,
+  Activity,
   MessageCircle,
   Send,
   Tag,
@@ -459,6 +460,8 @@ function CircleReceiveSelector({
 export default function CreateLink({ initialProduct = 'payment' }: { initialProduct?: 'payment' | 'polymarket' } = {}) {
   const [searchParams] = useSearchParams()
   const productParam = searchParams.get('product')
+  const initialProductTarget = (productParam ?? '').toLowerCase()
+  const startsInProduct = Boolean(initialProductTarget) || initialProduct === 'polymarket' || window.location.pathname === '/polymarket'
   const { authenticated: privyAuthenticated, logout: logoutPrivy } = usePrivy()
   const [evmAddr,       setEvmAddr]       = useState('')
   const [starkAddr,     setStarkAddr]     = useState('')
@@ -481,6 +484,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   const [posMode,        setPosMode]        = useState(false)
   const [streamMode,     setStreamMode]     = useState(false)
   const [polymarketMode, setPolymarketMode] = useState(initialProduct === 'polymarket' || window.location.pathname === '/polymarket')
+  const [productHubOpen, setProductHubOpen] = useState(!startsInProduct)
   const [posCountry,     setPosCountry]     = useState<PosCountry | null>(null)
   const [posSettlementPath, setPosSettlementPath] = useState<PosSettlementPath | null>(null)
   const [posMerchantName, setPosMerchantName] = useState('')
@@ -667,6 +671,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   }
 
   function toggleAccessMode(on: boolean) {
+    setProductHubOpen(false)
     setPosMode(false)
     setStreamMode(false)
     setPolymarketMode(false)
@@ -682,7 +687,28 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     setVaultStep('idle')
   }
 
+  function closeAccessMode() {
+    setProductHubOpen(true)
+    setAccessMode(false)
+    setAccessView('overview')
+    setAgentUrl('')
+    setAgentUrlStatus('idle')
+  }
+
+  function openPaymentMode() {
+    setProductHubOpen(false)
+    setAccessMode(false)
+    setPosMode(false)
+    setStreamMode(false)
+    setPolymarketMode(false)
+    setAccessView('overview')
+    setGeneratedLink('')
+    setCopied(false)
+    setVaultStep('idle')
+  }
+
   function openPosMode() {
+    setProductHubOpen(false)
     setPosMode(true)
     setAccessMode(false)
     setStreamMode(false)
@@ -695,6 +721,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   }
 
   function closePosMode() {
+    setProductHubOpen(true)
     setPosMode(false)
     setPosCountry(null)
     setPosSettlementPath(null)
@@ -704,6 +731,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   }
 
   function openStreamMode() {
+    setProductHubOpen(false)
     setStreamMode(true)
     setPosMode(false)
     setAccessMode(false)
@@ -715,10 +743,12 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   }
 
   function closeStreamMode() {
+    setProductHubOpen(true)
     setStreamMode(false)
   }
 
   function openPolymarketMode() {
+    setProductHubOpen(false)
     setPolymarketMode(true)
     setStreamMode(false)
     setPosMode(false)
@@ -729,9 +759,15 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     setAccessView('overview')
   }
 
+  function closePolymarketMode() {
+    setProductHubOpen(true)
+    setPolymarketMode(false)
+  }
+
   useEffect(() => {
     const product = (productParam ?? '').toLowerCase() as CreateProduct | ''
     if (!product) return
+    setProductHubOpen(false)
 
     if (product === 'payment') {
       setAccessMode(false)
@@ -1048,13 +1084,12 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   }
 
   const linkReady = generatedLink !== ''
-  const chatCta = posMode || streamMode
+  const chatCta = productHubOpen || posMode || streamMode || accessMode
     ? null
     : polymarketMode
       ? { label: 'Open PolyDesk in Telegram', url: telegramStartUrl('polymarket') }
-      : accessMode
-        ? { label: 'Open x402 in Telegram', url: telegramStartUrl('x402') }
-        : { label: 'Open payments in Telegram', url: telegramStartUrl('payment_links') }
+      : { label: 'Open payments in Telegram', url: telegramStartUrl('payment_links') }
+  const isPaymentView = !productHubOpen && !accessMode && !posMode && !streamMode && !polymarketMode
   const howItWorksSteps = polymarketMode
     ? [
         { n: '1', title: 'Open Telegram', body: 'Start Hash PayLink inside chat' },
@@ -1088,16 +1123,22 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   return (
     <div className="mx-auto w-[calc(100vw-2rem)] max-w-lg min-w-0 animate-fade-in sm:w-[32rem]">
       {/* ── Hero ──────────────────────────────────────────────────────── */}
-      <div className="mb-6 flex flex-col items-center text-center">
-        <span className="mb-4 inline-flex items-center justify-center gap-0.5 text-sm font-semibold leading-none text-[#0071E3] dark:text-blue-200">
-          <UsdcMark className="h-6 w-6 shrink-0 text-gray-950 dark:text-white" />
-          Payment Hub
-        </span>
+      <div className={cn(
+        'mb-6 flex flex-col',
+        isPaymentView ? 'items-center text-center' : 'items-start text-left',
+      )}>
+        {productHubOpen && (
+          <span className="mb-4 inline-flex items-center justify-center text-sm font-semibold leading-none text-[#0071E3] dark:text-blue-200">
+            Payment Hub
+          </span>
+        )}
         <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-[2.25rem]">
-          {polymarketMode ? 'PolyDesk' : posMode ? 'Retail POS' : streamMode ? 'StreamPay' : accessMode ? 'x402 Wallet Manager' : 'Request a payment'}
+          {productHubOpen ? 'What do you want to do?' : polymarketMode ? 'PolyDesk' : posMode ? 'Retail POS' : streamMode ? 'StreamPay' : accessMode ? 'x402 Wallet Manager' : 'Request a payment'}
         </h1>
         <p className="mt-2 text-[15px] text-gray-500 text-balance dark:text-gray-400">
-          {polymarketMode
+          {productHubOpen
+            ? 'Create links, manage x402, run POS, StreamPay, or PolyDesk.'
+            : polymarketMode
             ? 'Open the Telegram chat layer for Polymarket funding, positions, and LP Scout.'
             : posMode
             ? 'Choose a country, select settlement, and create one static QR.'
@@ -1109,7 +1150,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
         </p>
 
         {/* ── Chain preview toggle — hidden in multi-chain mode (all chains active) */}
-        {!multiChainMode && !accessMode && !posMode && !streamMode && !polymarketMode && <div className="mt-5 flex flex-col items-center gap-2.5">
+        {!productHubOpen && !multiChainMode && !accessMode && !posMode && !streamMode && !polymarketMode && <div className="mt-5 flex w-full flex-col items-center gap-2.5">
           <div className="mx-auto flex w-[17.5rem] max-w-full items-center justify-start gap-0.5 overflow-x-auto rounded-xl border border-gray-200 bg-gray-100/80 p-1 [scrollbar-width:none] dark:border-white/10 dark:bg-white/[0.05] [&::-webkit-scrollbar]:hidden sm:inline-flex sm:w-auto sm:justify-center sm:gap-1">
             {VISIBLE_CREATE_CHAINS.map((c) => {
               const m = CHAIN_META[c]
@@ -1155,8 +1196,8 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
         </div>}
 
         {/* Multi-chain mode active badge */}
-        {multiChainMode && !accessMode && !posMode && !streamMode && !polymarketMode && (
-          <div className="mt-5 flex justify-center">
+        {!productHubOpen && multiChainMode && !accessMode && !posMode && !streamMode && !polymarketMode && (
+          <div className="mt-5 flex w-full justify-center">
             <span className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-gray-700 shadow-sm dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200">
               <Globe className="h-3 w-3" />
               Multi-Chain · All networks active
@@ -1164,123 +1205,77 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
           </div>
         )}
       </div>
-
       {/* ── Form card ─────────────────────────────────────────────────── */}
       <div
         className="w-full min-w-0 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-card dark:border-white/10 dark:bg-[#111114]"
         style={{ overflowX: 'hidden' }}
       >
-        <div className="border-b border-gray-100 bg-gray-50/70 p-1.5 dark:border-white/10 dark:bg-white/[0.03] sm:p-2">
-
-          {/* ── Payment / Access toggle ───────────────────────────────── */}
-          <div className="grid min-w-0 grid-cols-5">
-            <button
-              type="button"
-              onClick={() => toggleAccessMode(false)}
-              aria-label="Payment"
-              title="Payment"
-              className={cn(
-                'flex h-[52px] min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl text-[10px] font-semibold transition-all',
-                !accessMode && !posMode && !streamMode && !polymarketMode
-                  ? 'bg-gray-950 text-white shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:text-white dark:ring-white/10'
-                  : 'text-gray-400 hover:bg-white/70 hover:text-gray-700 dark:text-gray-500 dark:hover:bg-white/[0.06] dark:hover:text-gray-300',
-              )}
-            >
-              <Coins className="h-5 w-5" />
-              <span>Payment</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => toggleAccessMode(true)}
-              aria-label="x402"
-              title="x402 wallet manager"
-              className={cn(
-                'flex h-[52px] min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl text-[10px] font-semibold transition-all',
-                accessMode
-                  ? 'bg-gray-950 text-white shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:text-white dark:ring-white/10'
-                  : 'text-gray-400 hover:bg-white/70 hover:text-gray-700 dark:text-gray-500 dark:hover:bg-white/[0.06] dark:hover:text-gray-300',
-              )}
-            >
-              <Bot className="h-5 w-5" />
-              <span>x402</span>
-            </button>
-            <button
-              type="button"
-              onClick={openPosMode}
-              aria-label="Retail POS"
-              title="Retail POS"
-              className={cn(
-                'flex h-[52px] min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl text-[10px] font-semibold transition-all',
-                posMode
-                  ? 'bg-gray-950 text-white shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:text-white dark:ring-white/10'
-                  : 'text-gray-400 hover:bg-white/70 hover:text-gray-700 dark:text-gray-500 dark:hover:bg-white/[0.06] dark:hover:text-gray-300',
-              )}
-            >
-              <Store className="h-5 w-5" />
-              <span>POS</span>
-            </button>
-            <button
-              type="button"
-              onClick={openStreamMode}
-              aria-label="StreamPay"
-              title="StreamPay"
-              className={cn(
-                'flex h-[52px] min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl text-[10px] font-semibold transition-all',
-                streamMode
-                  ? 'bg-gray-950 text-white shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:text-white dark:ring-white/10'
-                  : 'text-gray-400 hover:bg-white/70 hover:text-gray-700 dark:text-gray-500 dark:hover:bg-white/[0.06] dark:hover:text-gray-300',
-              )}
-            >
-              <Radio className="h-5 w-5" />
-              <span>Stream</span>
-            </button>
-            <button
-              type="button"
-              onClick={openPolymarketMode}
-              aria-label="PolyDesk"
-              title="PolyDesk"
-              className={cn(
-                'flex h-[52px] min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl text-[10px] font-semibold transition-all',
-                polymarketMode
-                  ? 'bg-gray-950 text-white shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:text-white dark:ring-white/10'
-                  : 'text-gray-400 hover:bg-white/70 hover:text-gray-700 dark:text-gray-500 dark:hover:bg-white/[0.06] dark:hover:text-gray-300',
-              )}
-            >
-              <PolymarketMark className="h-5 w-5" />
-              <span>Poly</span>
-            </button>
+        {productHubOpen ? (
+          <div className="space-y-2 p-2">
+            {[
+              { icon: Coins, title: 'Payment', body: 'Create personal or business PayLinks.', action: openPaymentMode },
+              { icon: Bot, title: 'x402', body: 'Fund service balance and use paid services.', action: () => toggleAccessMode(true) },
+              { icon: Store, title: 'POS', body: 'Create QR checkout and print receipts.', action: openPosMode },
+              { icon: Radio, title: 'Stream', body: 'Creator, payroll, and Arena on Arc.', action: openStreamMode },
+              { icon: PolymarketMark, title: 'Poly', body: 'Polymarket tools through chat.', action: openPolymarketMode },
+            ].map(({ icon: Icon, title, body, action }) => (
+              <button
+                key={title}
+                type="button"
+                onClick={action}
+                className="group flex w-full items-center gap-3 rounded-xl p-3 text-left transition-all hover:bg-gray-50 active:scale-[0.99] dark:hover:bg-white/[0.05]"
+              >
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-gray-600 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300">
+                  <Icon className="h-[18px] w-[18px]" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[14px] font-bold text-gray-950 dark:text-white">{title}</span>
+                  <span className="mt-1 block text-[12px] leading-relaxed text-gray-500 dark:text-gray-400">{body}</span>
+                </span>
+                <ArrowRight className="h-4 w-4 shrink-0 text-gray-400 transition-transform group-hover:translate-x-0.5" />
+              </button>
+            ))}
           </div>
-        </div>
-
+        ) : (
+          <>
         <div className="space-y-0 p-0">
           {polymarketMode ? (
             <div className="space-y-5 p-4 sm:p-5">
-              <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-4 dark:border-white/10 dark:bg-white/[0.04]">
-                <div className="flex items-start gap-3">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white dark:border-white/10 dark:bg-white/[0.06]">
-                    <PolymarketMark className="h-[18px] w-[18px] text-gray-700 dark:text-gray-200" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">PolyDesk</p>
-                    <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">Polymarket desk in chat</h2>
-                    <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-                      Available through the Telegram chat layer for funding, positions, and market checks.
-                    </p>
-                  </div>
-                </div>
+              <button
+                type="button"
+                onClick={closePolymarketMode}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/[0.1]"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" />
+                Back
+              </button>
 
-                <div className="mt-4 space-y-2 rounded-lg border border-gray-100 bg-white p-2 dark:border-white/10 dark:bg-white/[0.05]">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Chat layer</p>
+                <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">PolyDesk services</h2>
+                <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
+                  Funding, positions, World Cup markets, and LP Scout open inside Telegram.
+                </p>
+              </div>
+
+              <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-[#111216]">
+                <div className="space-y-2 p-2">
                   {[
-                    { icon: Wallet, title: 'Funding', body: 'Add USDC from chat.' },
-                    { icon: LayoutDashboard, title: 'Portfolio', body: 'Track positions and claims.' },
-                    { icon: Bot, title: 'LP Scout', body: 'Check markets from Telegram.' },
+                    { icon: Wallet, title: 'Fund Polymarket', body: 'Add USDC and manage market balances from chat.' },
+                    { icon: Activity, title: 'Positions', body: 'Track open positions, claimable markets, and alerts.' },
+                    { icon: Bot, title: 'LP Scout', body: 'Ask for market depth and reward checks.' },
                   ].map(({ icon: Icon, title, body }) => (
-                    <div key={title} className="flex items-center gap-3 rounded-lg px-3 py-3 transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.05]">
-                      <Icon className="h-4 w-4 shrink-0 text-gray-400" />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">{title}</p>
-                        <p className="mt-0.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">{body}</p>
-                      </div>
+                    <div
+                      key={title}
+                      className="flex w-full items-center gap-3 rounded-xl p-3 text-left"
+                    >
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-gray-600 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300">
+                        <Icon className="h-[18px] w-[18px]" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-[14px] font-bold text-gray-950 dark:text-white">{title}</span>
+                        <span className="mt-1 block text-[12px] leading-relaxed text-gray-500 dark:text-gray-400">{body}</span>
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -1681,51 +1676,56 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                   <AgentDemo embedded forceProfile />
                 </div>
               ) : (
-              <>
-              <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-4 dark:border-white/10 dark:bg-white/[0.04]">
-                <div className="flex items-start gap-3">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white dark:border-white/10 dark:bg-white/[0.06]">
-                    <Bot className="h-[18px] w-[18px] text-gray-700 dark:text-gray-200" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">x402 wallet</p>
-                    <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">Manage service balance</h2>
+                <>
+                  <button
+                    type="button"
+                    onClick={closeAccessMode}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/[0.1]"
+                  >
+                    <ArrowLeft className="h-3.5 w-3.5" />
+                    Back
+                  </button>
+
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Service balance</p>
+                    <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">x402 wallet setup</h2>
                     <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-                      Fund once, activate x402, and use the same wallet across Hash PayLink services.
+                      Fund once, activate x402, and use the wallet across Hash PayLink services.
                     </p>
                   </div>
-                </div>
 
-                <div className="mt-4 divide-y divide-gray-100 rounded-lg border border-gray-100 bg-white px-3 dark:divide-white/10 dark:border-white/10 dark:bg-white/[0.05]">
-                  {[
-                    { icon: Wallet, title: 'Fund & manage x402', body: 'Wallet balance, activation, and receipts.', action: () => setAccessView('wallet') },
-                    { icon: Radio, title: 'Polymarket services', body: 'Run LP Scout and market actions from the chat layer.', action: openPolymarketMode },
-                    { icon: Zap, title: 'StreamPay services', body: 'Creator, payroll, and Arena flows stay on Arc.', action: openStreamMode },
-                  ].map(({ icon: Icon, title, body, action }) => {
-                    const row = (
-                      <>
-                        <Icon className="h-4 w-4 shrink-0 text-gray-400" />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">{title}</p>
-                          <p className="mt-0.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">{body}</p>
+                  <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-[#111216]">
+                    <div className="space-y-2 p-2">
+                      {[
+                        { icon: Wallet, title: 'Wallet balance', body: 'Fund USDC, activate x402, and view receipts.' },
+                        { icon: Radio, title: 'Polymarket services', body: 'LP Scout and market actions run from the chat layer.' },
+                        { icon: Zap, title: 'StreamPay services', body: 'Creator, payroll, and Arena flows stay on Arc.' },
+                      ].map(({ icon: Icon, title, body }) => (
+                        <div
+                          key={title}
+                          className="flex w-full items-center gap-3 rounded-xl p-3 text-left"
+                        >
+                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-gray-600 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300">
+                            <Icon className="h-[18px] w-[18px]" />
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-[14px] font-bold text-gray-950 dark:text-white">{title}</span>
+                            <span className="mt-1 block text-[12px] leading-relaxed text-gray-500 dark:text-gray-400">{body}</span>
+                          </span>
                         </div>
-                        <ArrowRight className="h-4 w-4 text-gray-400" />
-                      </>
-                    )
-                    return (
-                      <button
-                        key={title}
-                        type="button"
-                        onClick={action}
-                        className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.05]"
-                      >
-                        {row}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-              </>
+                      ))}
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setAccessView('wallet')}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-gray-950 px-4 py-3 text-sm font-bold text-white shadow-sm transition-all hover:bg-black active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-100"
+                  >
+                    Fund & manage x402
+                    <ArrowRight className="h-4 w-4" />
+                  </button>
+                </>
               )}
             </div>
           ) : (
@@ -2482,6 +2482,8 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
             </div>
           </div>
         )}
+          </>
+        )}
       </div>
 
       {/* ── Last event dashboard recovery ────────────────────────────── */}
@@ -2502,7 +2504,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
         </div>
       )}
 
-      {!generatedLink && !posMode && !streamMode && savedEvent && (
+      {!generatedLink && !productHubOpen && !posMode && !streamMode && savedEvent && (
         <div className="mt-6 animate-fade-in">
           <div className="flex items-center justify-between gap-3">
             {/* Left — label + event info */}
@@ -2557,7 +2559,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
 
 
       {/* ── How it works ─────────────────────────────────────────────── */}
-      {!generatedLink && (
+      {!generatedLink && !productHubOpen && (
         <div className="mt-10 animate-fade-in">
           <p className="mb-4 text-center text-[11px] font-semibold uppercase tracking-widest text-gray-400">
             How it works
