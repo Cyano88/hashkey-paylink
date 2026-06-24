@@ -369,6 +369,7 @@ function buildGateLink(params: {
   p.set('cr', params.creator)
   p.set('r', String(params.rateRaw))
   p.set('cap', String(params.capRaw))
+  p.set('mode', params.mode)
   if (params.title.trim()) p.set('t', params.title.trim())
   return `${baseUrl()}/gate?${p.toString()}`
 }

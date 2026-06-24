@@ -379,6 +379,7 @@ export function StreamGate() {
   const rateRaw   = parseInt(params.get('r')   ?? '1000',   10)
   const capRaw    = parseInt(params.get('cap') ?? '100000', 10)
   const title     = params.get('t')    ?? ''
+  const gateMode: 'unlock' | 'stream' = params.get('mode') === 'stream' ? 'stream' : 'unlock'
   const paymentMode: 'poa' = 'poa'
 
   const dripRate   = rateRaw  / 1_000_000
@@ -1053,7 +1054,7 @@ export function StreamGate() {
 
         {/* ── Auth steps overlay ── */}
         {!fullyAuthorised && (
-          <OverlayShell dripRate={dripRate} sessionCap={sessionCap} paymentMode={paymentMode}>
+          <OverlayShell dripRate={dripRate} sessionCap={sessionCap} paymentMode={paymentMode} gateMode={gateMode}>
 
             {paymentMode === 'x402' ? (
               <div className="w-full space-y-4">
@@ -1568,7 +1569,7 @@ export function StreamGate() {
 
             <div className="flex items-center justify-between">
               <p className="text-[10px] text-gray-400">
-                Sign once when done reading to confirm payment
+                {gateMode === 'unlock' ? 'Sign once to confirm this access payment' : 'Sign once when done reading to confirm payment'}
               </p>
               <button
                 onClick={handleEndSession}
@@ -1595,13 +1596,13 @@ export function StreamGate() {
             </div>
             <div className="flex items-center justify-between">
               <p className="text-[10px] text-emerald-600">
-                The creator can now settle your payment on Arc.
+                {gateMode === 'unlock' ? 'Your creator access payment is ready to settle on Arc.' : 'The creator can now settle your payment on Arc.'}
               </p>
               <button
                 onClick={() => setEnded(false)}
                 className="text-[10px] font-semibold text-gray-500 hover:text-gray-800 underline underline-offset-2 transition-colors"
               >
-                Read again
+                {gateMode === 'unlock' ? 'Open again' : 'Read again'}
               </button>
             </div>
           </div>
@@ -1630,10 +1631,10 @@ export function StreamGate() {
         </div>
         <div className="text-right space-y-0.5">
           <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
-            {paymentMode === 'x402' ? 'Access Price' : 'Drip Rate'}
+            {gateMode === 'unlock' ? 'Access Price' : 'Stream Rate'}
           </p>
           <p className="text-[12px] font-semibold text-gray-700">
-            {paymentMode === 'x402' ? `${formatUsdc(sessionCap)} USDC` : `$${dripRate.toFixed(4)}/sec`}
+            {gateMode === 'unlock' ? `${formatUsdc(sessionCap)} USDC` : `$${dripRate.toFixed(4)}/sec`}
           </p>
         </div>
       </div>
@@ -1788,11 +1789,12 @@ function WorldCupScoresUnlocked() {
 }
 
 function OverlayShell({
-  dripRate, sessionCap, paymentMode, children,
+  dripRate, sessionCap, paymentMode, gateMode, children,
 }: {
   dripRate: number
   sessionCap: number
   paymentMode: 'x402' | 'poa'
+  gateMode: 'unlock' | 'stream'
   children: React.ReactNode
 }) {
   return (
@@ -1814,9 +1816,16 @@ function OverlayShell({
             Pay <span className="font-semibold">{formatUsdc(sessionCap)} USDC</span> to unlock this creator content.
           </p>
         )}
-        <p className={paymentMode === 'x402' ? 'hidden' : 'text-[12px] text-gray-500 max-w-[260px]'}>
-          Pay <span className="font-semibold">${dripRate.toFixed(4)}/sec</span>
-          {' '}— max <span className="font-semibold">${sessionCap.toFixed(2)} USDC</span>
+        <p className={paymentMode === 'x402' ? 'hidden' : 'text-[12px] text-gray-500 max-w-[280px]'}>
+          {gateMode === 'unlock' ? (
+            <>
+              Pay <span className="font-semibold">${sessionCap.toFixed(2)} USDC</span> to unlock this creator content.
+            </>
+          ) : (
+            <>
+              Stream <span className="font-semibold">${dripRate.toFixed(4)}/sec</span> up to <span className="font-semibold">${sessionCap.toFixed(2)} USDC</span>
+            </>
+          )}
         </p>
       </div>
       {children}
