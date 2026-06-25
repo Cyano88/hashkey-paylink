@@ -362,7 +362,7 @@ type AgentDemoProps = {
 export default function AgentDemo({ embedded = false, forceProfile = false }: AgentDemoProps = {}) {
   const { onNetworkSelect } = useOutletContext<LayoutOutletContext>()
   const navigate = useNavigate()
-  const { authenticated: privyAuthenticated, user: privyUser, login: loginPrivy, logout: logoutPrivy, getAccessToken } = usePrivy()
+  const { ready: privyReady, authenticated: privyAuthenticated, user: privyUser, login: loginPrivy, logout: logoutPrivy, getAccessToken } = usePrivy()
   const privyEmail = emailFromPrivyUser(privyUser).trim().toLowerCase()
   const params = new URLSearchParams(window.location.search)
   const agentSlug = params.get('agent') ?? ''
@@ -920,8 +920,12 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
     const selectedMode = mode ?? (walletMode === 'choose' ? 'login' : walletMode)
     const requiresPrivyWalletAuth = Boolean(PRIVY_AUTH_ENABLED && !currentAgentWallet)
     if (requiresPrivyWalletAuth && !privyAuthenticated) {
+      if (!privyReady) {
+        setWalletError('Secure sign-in is still loading. Try again in a moment.')
+        return
+      }
       try { window.sessionStorage.setItem(AGENT_WALLET_LOGIN_INTENT_KEY, selectedMode) } catch {}
-      loginPrivy({ loginMethods: ['email'] })
+      loginPrivy()
       return
     }
     setWalletMode(selectedMode)
@@ -1784,9 +1788,9 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
                     type="button"
                     onClick={() => {
                       try { window.sessionStorage.setItem(AGENT_WALLET_LOGIN_INTENT_KEY, 'login') } catch {}
-                      loginPrivy({ loginMethods: ['email'] })
+                      loginPrivy()
                     }}
-                    disabled={walletBusy}
+                    disabled={walletBusy || !privyReady}
                     className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-6 py-3.5 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-60 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
                   >
                     <img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert mix-blend-screen" />

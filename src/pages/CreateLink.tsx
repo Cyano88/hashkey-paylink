@@ -237,7 +237,7 @@ function CircleReceiveSelector({
   setGeneratedLink: Dispatch<SetStateAction<string>>
 }) {
   const circleEmailReceiveIntentKey = 'hashpaylink-circle-email-receive-intent'
-  const { authenticated: privyAuthenticated, user: privyUser, login: loginPrivy, logout: logoutPrivy, getAccessToken } = usePrivy()
+  const { ready: privyReady, authenticated: privyAuthenticated, user: privyUser, login: loginPrivy, logout: logoutPrivy, getAccessToken } = usePrivy()
   const privyEmail = emailFromPrivyUser(privyUser).trim().toLowerCase()
   const [circleRecipientPending, setCircleRecipientPending] = useState(false)
   const [circleRecipientError, setCircleRecipientError] = useState<string | null>(null)
@@ -254,7 +254,7 @@ function CircleReceiveSelector({
 
     if (!privyAuthenticated) {
       try { window.sessionStorage.setItem(circleEmailReceiveIntentKey, selectedNet) } catch {}
-      loginPrivy({ loginMethods: ['email'] })
+      loginPrivy()
       return
     }
 
@@ -435,13 +435,13 @@ function CircleReceiveSelector({
           <button
             type="button"
             onClick={handleEmailRecipient}
-            disabled={circleRecipientPending}
+            disabled={circleRecipientPending || !privyReady}
             className={cn(
               'rounded-xl border px-3 py-2.5 text-left transition-all active:scale-[0.99]',
               receiveMode === 'email'
                 ? 'border-gray-900 bg-gray-50 text-gray-900 dark:border-white/30 dark:bg-white/10 dark:text-gray-100'
                 : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:border-white/20 dark:hover:bg-white/[0.07]',
-              circleRecipientPending && 'cursor-not-allowed opacity-70',
+              (circleRecipientPending || !privyReady) && 'cursor-not-allowed opacity-70',
             )}
           >
             <span className="flex items-center gap-2 text-sm font-semibold">
