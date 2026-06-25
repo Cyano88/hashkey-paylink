@@ -1470,7 +1470,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
                     </div>
                   </div>
                   <div className="flex items-center justify-between gap-4 py-1.5 last:pb-0">
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">x402</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">x402 service balance</p>
                     <p className="text-sm font-semibold text-gray-900 dark:text-white">Not connected</p>
                   </div>
                 </div>
@@ -2237,12 +2237,14 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
             </div>
           )}
 
-          <div className="mt-5 flex items-center justify-center gap-2 border-t border-gray-100 pt-3 text-[11px] font-semibold text-gray-400 dark:border-white/10 dark:text-gray-500">
-            <img src="/brand/circle-logo.jpeg" alt="" className="h-4 w-4 rounded-full object-cover" />
-            <span>
-              Powered by Circle
-            </span>
-          </div>
+          {!embedded && (
+            <div className="mt-5 flex items-center justify-center gap-2 border-t border-gray-100 pt-3 text-[11px] font-semibold text-gray-400 dark:border-white/10 dark:text-gray-500">
+              <img src="/brand/circle-logo.jpeg" alt="" className="h-4 w-4 rounded-full object-cover" />
+              <span>
+                Powered by Circle
+              </span>
+            </div>
+          )}
         </div>
       )}
 

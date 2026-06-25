@@ -1226,7 +1226,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     ? [
         { n: '1', title: 'Sign in', body: 'Open your Circle wallet' },
         { n: '2', title: 'Activate x402', body: 'Move USDC into x402 service balance' },
-        { n: '3', title: 'Use services', body: 'Pay for agent-powered actions' },
+        { n: '3', title: 'Use services', body: 'Pay for x402-enabled actions' },
       ]
     : [
         { n: '1', title: 'Enter details', body: 'Your wallet address' },
