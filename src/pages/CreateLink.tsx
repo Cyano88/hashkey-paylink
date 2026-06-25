@@ -1260,7 +1260,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
             : streamMode
               ? 'Stream USDC for payroll, agent services, and Arena games.'
               : accessMode
-                ? 'Fund and activate the Circle wallet your agents use for x402 services.'
+                ? 'Fund and activate your service wallet for x402 access.'
                 : 'Create a secure USDC PayLink in seconds.'}
         </p>
 
@@ -1827,8 +1827,8 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                   <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-[#111216]">
                     <div className="space-y-2 p-2">
                       {[
-                        { icon: Wallet, title: 'Wallet balance', body: 'Fund USDC, activate x402, and view receipts.' },
-                        { icon: Radio, title: 'Polymarket services', body: 'LP Scout and market actions run from the chat layer.' },
+                        { icon: Wallet, title: 'Wallet', body: 'Fund USDC, activate x402, and view receipts.' },
+                        { icon: Radio, title: 'Paid services', body: 'LP Scout and market actions run from the chat layer.' },
                         { icon: Zap, title: 'StreamPay services', body: 'Creator, payroll, and Arena flows stay on Arc.' },
                       ].map(({ icon: Icon, title, body }) => (
                         <div
@@ -1852,7 +1852,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                     onClick={() => setAccessView('wallet')}
                     className="flex w-full items-center justify-center gap-2 rounded-xl bg-gray-950 px-4 py-3 text-sm font-bold text-white shadow-sm transition-all hover:bg-black active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-100"
                   >
-                    Fund & manage x402
+                    Open wallet manager
                     <ArrowRight className="h-4 w-4" />
                   </button>
                 </>

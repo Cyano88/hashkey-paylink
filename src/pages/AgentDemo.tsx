@@ -1256,7 +1256,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
     ? 'x402 Wallet Manager'
     : displayAgentProfile?.name || agentSlug || 'Your agent wallet'
   const displayAgentPurpose = hasPendingLpScoutRequest
-    ? 'Selected paying wallet for LP Scout x402 access.'
+    ? 'Selected wallet for LP Scout x402 access.'
     : embedded
     ? 'Fund USDC, activate x402, and use this wallet across Hash PayLink services.'
     : displayAgentProfile?.purpose || 'Sign in, link a Circle wallet, fund USDC, and activate x402 from the dashboard.'
@@ -1403,7 +1403,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
                   className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-950 px-3 py-2 text-xs font-semibold text-white transition-all hover:bg-emerald-900 active:scale-[0.98] dark:bg-emerald-100 dark:text-emerald-950 dark:hover:bg-white"
                 >
                   {agentWalletAccessConnected ? <ArrowRight className="h-3.5 w-3.5" /> : <Wallet className="h-3.5 w-3.5" />}
-                  {agentWalletAccessConnected ? 'Continue LP Scout' : 'Authorize paying agent'}
+                  {agentWalletAccessConnected ? 'Continue LP Scout' : embeddedWalletManager ? 'Authorize wallet' : 'Authorize paying agent'}
                 </button>
               </div>
             )}
@@ -1459,7 +1459,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
               ) : (
                 <div className="divide-y divide-gray-100 dark:divide-white/10">
                   <div className="flex items-center justify-between gap-4 py-1.5 first:pt-0">
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Wallet treasury</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">{embeddedWalletManager ? 'Service wallet' : 'Wallet treasury'}</p>
                     <div className="text-right">
                       <p className="text-sm font-semibold text-gray-900 dark:text-white" title={treasuryBalanceError || undefined}>
                         {currentAgentWallet
@@ -1478,7 +1478,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
             )}
             {!hasPendingLpScoutRequest && currentAgentWallet && !agentWalletAccessConnected && !connectedWalletNeedsAccess && (
               <p className="mt-3 text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
-                Fund the wallet treasury first. x402 activation moves part of that balance into Circle Gateway.
+                Fund the wallet first. x402 activation moves part of that balance into Circle Gateway.
               </p>
             )}
             {!hasPendingLpScoutRequest && connectedWalletNeedsAccess && !showWalletAccessPanel && (
@@ -1520,7 +1520,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
                     <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">LP Scout</p>
                     <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{scoutModeLabel(pendingScoutMode)}</p>
                     <p className="mt-0.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                      Pays Hash PayLink Agent with x402.
+                      Pays Hash PayLink services with x402.
                     </p>
                   </div>
                   <span className="shrink-0 rounded-full bg-white px-2 py-1 text-[10px] font-semibold text-gray-500 shadow-sm dark:bg-white/[0.08] dark:text-gray-300">
@@ -1572,7 +1572,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
                   <div className="space-y-2">
                     <div className="ml-auto max-w-[88%] break-words rounded-2xl rounded-br-md bg-gray-900 px-3 py-2 text-xs leading-relaxed text-white dark:bg-white dark:text-gray-950">
                       {agentWalletAccessConnected
-                        ? `Tip Hash PayLink Agent for ${scoutModeLabel(pendingScoutMode).toLowerCase()}.`
+                        ? `Use x402 for ${scoutModeLabel(pendingScoutMode).toLowerCase()}.`
                         : `Authorize ${displayAgentProfile?.name ?? agentSlug ?? 'this agent'} for LP Scout.`}
                     </div>
                     {pendingScoutContext && (
@@ -1587,7 +1587,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
                     )}
                     <div className="max-w-[92%] break-words rounded-2xl rounded-bl-md border border-gray-100 bg-white px-3 py-2 text-xs leading-relaxed text-gray-600 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300">
                       {!agentWalletAccessConnected
-                        ? 'One secure agent session is needed. Then x402 pays and the LP result returns here.'
+                        ? embeddedWalletManager ? 'One secure wallet session is needed. Then x402 pays and the LP result returns here.' : 'One secure agent session is needed. Then x402 pays and the LP result returns here.'
                         : lpScoutBusy
                         ? 'Working... LP Alpha paid for. Checking live rewards, spread, depth, time left, and volatility.'
                         : lpScoutHasResult
@@ -1739,7 +1739,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
                       ) : agentWalletAccessConnected ? (
                         <><Send className="h-4 w-4" /> Get LP Alpha</>
                       ) : (
-                        <><Wallet className="h-4 w-4" /> Connect agent session</>
+                        <><Wallet className="h-4 w-4" /> {embeddedWalletManager ? 'Connect wallet access' : 'Connect agent session'}</>
                       )}
                     </button>
                     {agentWalletAccessConnected && lpScoutHasResult && (
@@ -1749,7 +1749,9 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
                     )}
                     {!agentWalletAccessConnected && (
                       <p className="text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
-                        This only authorizes the selected paying agent. You are not signing into the Hash PayLink platform wallet.
+                        {embeddedWalletManager
+                          ? 'This only authorizes your service wallet. You are not signing into the Hash PayLink platform wallet.'
+                          : 'This only authorizes the selected paying agent. You are not signing into the Hash PayLink platform wallet.'}
                       </p>
                     )}
                   </>
@@ -1763,7 +1765,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-gray-900 dark:text-white">
                   {hasPendingLpScoutRequest
-                    ? 'Authorize paying agent'
+                    ? embeddedWalletManager ? 'Authorize wallet' : 'Authorize paying agent'
                     : currentAgentWallet
                     ? 'Wallet access'
                     : agentEmailConnected
@@ -1772,7 +1774,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
                   {hasPendingLpScoutRequest
-                    ? 'Confirm this agent before it tips Hash PayLink through x402.'
+                    ? embeddedWalletManager ? 'Confirm this wallet before x402 services run.' : 'Confirm this agent before it tips Hash PayLink through x402.'
                     : currentAgentWallet
                     ? embeddedWalletManager ? 'Confirm the Circle email for this wallet to view balances and receipts.' : 'Confirm the Circle email for this agent to view balances and receipts.'
                     : agentEmailConnected
