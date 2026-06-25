@@ -60,6 +60,10 @@ function stableWalletSlugFromEmail(email: string) {
   return `wallet-${hash.toString(36)}`
 }
 
+function isEvmAddress(value: string) {
+  return /^0x[a-fA-F0-9]{40}$/.test(value.trim())
+}
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 type VerifyResult = {
@@ -374,8 +378,10 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
   const privyManagedWalletSlug = embeddedWalletManager ? stableWalletSlugFromEmail(privyEmail) : ''
   const normalizedAgentSlug = agentSlug || privyManagedWalletSlug || (embeddedWalletManager ? '' : PLATFORM_AGENT_SLUG)
   const savedLpScoutIntent = readSavedLpScoutIntent(normalizedAgentSlug)
-  const urlAgentWallet = params.get('wallet') ?? params.get('e') ?? ''
-  const expectedAgentWallet = params.get('expectedWallet') ?? ''
+  const rawUrlAgentWallet = params.get('wallet') ?? params.get('e') ?? ''
+  const rawExpectedAgentWallet = params.get('expectedWallet') ?? ''
+  const urlAgentWallet = isEvmAddress(rawUrlAgentWallet) ? rawUrlAgentWallet : ''
+  const expectedAgentWallet = isEvmAddress(rawExpectedAgentWallet) ? rawExpectedAgentWallet : ''
   const agentWallet = urlAgentWallet || (shouldOpenWalletLinkPanel ? expectedAgentWallet : '')
   const intendedAgentWallet = urlAgentWallet || expectedAgentWallet
   const [ignoreUrlAgentWallet, setIgnoreUrlAgentWallet] = useState(false)
@@ -905,12 +911,12 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
       return
     }
     if (requiresPrivyWalletAuth && !privyEmail) {
-      setWalletError('Sign in with email to manage your Circle agent wallet.')
+      setWalletError(embeddedWalletManager ? 'Sign in with email to manage your Circle service wallet.' : 'Sign in with email to manage your Circle agent wallet.')
       return
     }
     const email = (!currentAgentWallet && PRIVY_AUTH_ENABLED && privyAuthenticated && privyEmail ? privyEmail : walletEmail).trim().toLowerCase()
     if (!email) {
-      setWalletError('Enter the Circle email for this agent wallet.')
+      setWalletError(embeddedWalletManager ? 'Enter the Circle email for this service wallet.' : 'Enter the Circle email for this agent wallet.')
       return
     }
     const requestAgentSlug = agentSlug || (embeddedWalletManager ? stableWalletSlugFromEmail(email) : PLATFORM_AGENT_SLUG)
@@ -947,7 +953,9 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
           otp: walletOtp,
           testnet: agentNetwork === 'arc',
           expectedWallet: walletExpectedAddress.trim()
-            || (ignoreUrlAgentWallet ? currentAgentWallet || undefined : intendedAgentWallet || currentAgentWallet || undefined),
+            || (embeddedWalletManager
+              ? undefined
+              : ignoreUrlAgentWallet ? currentAgentWallet || undefined : intendedAgentWallet || currentAgentWallet || undefined),
         }),
       })
       const data = await res.json() as { ok?: boolean; error?: string; walletAddress?: string; chain?: string; code?: string; existingWallet?: string; newWallet?: string; availableWallets?: WalletChoice[] }
@@ -956,7 +964,9 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
       }
       if (data.code === 'multiple_agent_wallets') {
         setWalletChoices(Array.isArray(data.availableWallets) ? data.availableWallets : [])
-        throw new Error('Circle found multiple agent wallets. Select the funded wallet below, then resend OTP and verify again.')
+        throw new Error(embeddedWalletManager
+          ? 'Circle found multiple wallets. Select the funded wallet below, then resend OTP and verify again.'
+          : 'Circle found multiple agent wallets. Select the funded wallet below, then resend OTP and verify again.')
       }
       if (data.code === 'expected_wallet_not_found') {
         setWalletChoices(Array.isArray(data.availableWallets) ? data.availableWallets : [])
@@ -970,7 +980,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
         setWalletOtp('')
         throw new Error(data.error ?? 'OTP expired. Resend OTP and use the newest code.')
       }
-      if (!res.ok || !data.ok) throw new Error(data.error ?? 'Circle Agent Wallet request failed')
+      if (!res.ok || !data.ok) throw new Error(data.error ?? (embeddedWalletManager ? 'Circle wallet request failed' : 'Circle Agent Wallet request failed'))
       if (action === 'init') {
         setWalletOtp('')
         setWalletOtpContext({ email, network: agentNetwork })
@@ -1007,7 +1017,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
         }, 0)
       }
     } catch (err) {
-      setWalletError(err instanceof Error ? err.message : 'Circle Agent Wallet request failed')
+      setWalletError(err instanceof Error ? err.message : embeddedWalletManager ? 'Circle wallet request failed' : 'Circle Agent Wallet request failed')
     } finally {
       setWalletBusy(false)
     }
@@ -1265,7 +1275,8 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
 
   return (
     <div className={cn(
-      'mx-auto w-full min-w-0 animate-slide-up space-y-6',
+      'mx-auto w-full min-w-0 space-y-6',
+      !embedded && 'animate-slide-up',
       embedded ? 'max-w-none' : showAgentProfile ? 'max-w-[calc(100vw-2rem)] sm:max-w-md' : 'max-w-2xl',
     )}>
 
@@ -1745,9 +1756,9 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
                   {hasPendingLpScoutRequest
                     ? 'Confirm this agent before it tips Hash PayLink through x402.'
                     : currentAgentWallet
-                    ? 'Confirm the Circle email for this agent to view balances and receipts.'
+                    ? embeddedWalletManager ? 'Confirm the Circle email for this wallet to view balances and receipts.' : 'Confirm the Circle email for this agent to view balances and receipts.'
                     : agentEmailConnected
-                    ? 'Create or link a Circle agent wallet.'
+                    ? embeddedWalletManager ? 'Create or link a Circle service wallet.' : 'Create or link a Circle agent wallet.'
                     : 'Email sign-in is required before wallet setup.'}
                 </p>
               </div>
@@ -1820,7 +1831,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
                     </button>
                   </div>
                   <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
-                    Circle agent wallet access
+                    {embeddedWalletManager ? 'Circle service wallet access' : 'Circle agent wallet access'}
                   </p>
                 </>
               ) : (
@@ -1904,7 +1915,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
                   {walletStep === 'otp' && (
                     <div className="space-y-2">
                       <p className="rounded-lg bg-gray-50 px-3 py-2 text-[11px] font-medium text-gray-500 dark:bg-white/[0.04] dark:text-gray-400">
-                        Code sent to {walletOtpContext?.email || walletEmail || privyEmail || 'your email'} · {CHAIN_META[walletOtpContext?.network ?? agentNetwork].label} agent wallet
+                        Code sent to {walletOtpContext?.email || walletEmail || privyEmail || 'your email'} - {CHAIN_META[walletOtpContext?.network ?? agentNetwork].label} {embeddedWalletManager ? 'service wallet' : 'agent wallet'}
                       </p>
                       <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.06]">
                         <input
