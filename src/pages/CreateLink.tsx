@@ -1201,7 +1201,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   const howItWorksSteps = productHubOpen
     ? [
         { n: '1', title: 'Receive payments', body: 'Personal, business, POS, and QR payment flows' },
-        { n: '2', title: 'Manage services', body: 'x402 balance, PolyDesk, and StreamPay entry points' },
+        { n: '2', title: 'Manage services', body: 'x402 service balance, PolyDesk, and StreamPay entry points' },
         { n: '3', title: 'Keep proof', body: 'Receipts, dashboards, and settlement records stay connected' },
       ]
     : polymarketMode
@@ -1225,7 +1225,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     : accessMode
     ? [
         { n: '1', title: 'Sign in', body: 'Open your Circle wallet' },
-        { n: '2', title: 'Activate x402', body: 'Move USDC into service balance' },
+        { n: '2', title: 'Activate x402', body: 'Move USDC into x402 service balance' },
         { n: '3', title: 'Use services', body: 'Pay for agent-powered actions' },
       ]
     : [

@@ -1459,7 +1459,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
               ) : (
                 <div className="divide-y divide-gray-100 dark:divide-white/10">
                   <div className="flex items-center justify-between gap-4 py-1.5 first:pt-0">
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">{embeddedWalletManager ? 'Service wallet' : 'Wallet treasury'}</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">{embeddedWalletManager ? 'Wallet balance' : 'Wallet treasury'}</p>
                     <div className="text-right">
                       <p className="text-sm font-semibold text-gray-900 dark:text-white" title={treasuryBalanceError || undefined}>
                         {currentAgentWallet
@@ -1544,7 +1544,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
                 {agentWalletAccessConnected && (
                   <div className="flex flex-col gap-2 rounded-lg border border-gray-100 bg-white px-3 py-2 dark:border-white/10 dark:bg-white/[0.04] sm:flex-row sm:items-center sm:justify-between sm:gap-3">
                     <div>
-                      <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">x402 balance</p>
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">x402 service balance</p>
                       <p className="mt-0.5 text-sm font-semibold text-gray-900 dark:text-white" title={x402BalanceError || undefined}>
                         {x402Balance !== null
                           ? `${Number(x402Balance).toLocaleString(undefined, { maximumFractionDigits: 6 })} USDC`
@@ -1563,7 +1563,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
                       disabled={x402Busy || treasuryEmpty}
                       className="inline-flex w-full shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 sm:w-auto"
                     >
-                      Add x402
+                      Add x402 balance
                     </button>
                   </div>
                 )}
@@ -1677,7 +1677,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
 
                 {x402ModalOpen && agentWalletAccessConnected && !x402ActivationSuccess && (
                   <div className="rounded-lg border border-gray-100 bg-white p-3 dark:border-white/10 dark:bg-white/[0.04]">
-                    <p className="text-xs font-semibold text-gray-900 dark:text-white">Add x402 balance</p>
+                    <p className="text-xs font-semibold text-gray-900 dark:text-white">Add x402 service balance</p>
                     <div className="mt-2 flex h-10 max-w-[160px] min-w-0 items-center overflow-hidden rounded-lg border border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-white/[0.06]">
                       <input
                         value={x402Amount}
