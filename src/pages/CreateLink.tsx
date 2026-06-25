@@ -433,6 +433,7 @@ function CircleReceiveSelector({
         </button>
         {canReceiveWithEmail && !privyAuthenticated ? (
           <PrivyConnectButton
+            logoutOnAuthenticated={false}
             onBeforeLogin={() => {
               try { window.sessionStorage.setItem(circleEmailReceiveIntentKey, selectedNet) } catch {}
             }}
