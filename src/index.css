@@ -398,14 +398,3 @@ html.dark .gradient-border {
   background: linear-gradient(#1e1e1e, #1e1e1e) padding-box,
     linear-gradient(135deg, #0071e3, #34aadc) border-box;
 }
-
-/* Privy modal footer: reduce the gap below the wallet option. */
-div:has(> #protected-by-privy) {
-  padding-top: 2px !important;
-  padding-bottom: 8px !important;
-}
-
-#protected-by-privy {
-  padding-top: 2px !important;
-  padding-bottom: 2px !important;
-}

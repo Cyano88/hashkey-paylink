@@ -374,7 +374,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
   const pendingScoutBudget = params.get('budget') ?? ''
   const pendingScoutMaxAmount = params.get('maxAmount') ?? '0.01'
   const hasPendingLpScoutRequest = pendingRun === 'polymarket-scout'
-  const embeddedWalletManager = Boolean(embedded && forceProfile && !agentSlug)
+  const embeddedWalletManager = Boolean(!agentSlug && ((embedded && forceProfile) || params.get('walletManager') === 'service'))
   const privyManagedWalletSlug = embeddedWalletManager ? stableWalletSlugFromEmail(privyEmail) : ''
   const normalizedAgentSlug = agentSlug || privyManagedWalletSlug || (embeddedWalletManager ? '' : PLATFORM_AGENT_SLUG)
   const savedLpScoutIntent = readSavedLpScoutIntent(normalizedAgentSlug)
@@ -389,7 +389,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
   const initialAgentNetwork = isAgentTreasuryNetwork(urlAgentNetwork) ? urlAgentNetwork : 'base'
   const [agentNetwork, setAgentNetwork] = useState<AgentTreasuryNetwork>(initialAgentNetwork)
   const showHelperDemo = params.get('helper') === 'live' || params.get('helper') === 'demo' || params.get('demo') === 'ai'
-  const showAgentProfile = !showHelperDemo && (forceProfile || params.get('profile') === 'agent' || Boolean(agentSlug || agentWallet))
+  const showAgentProfile = !showHelperDemo && (forceProfile || embeddedWalletManager || params.get('profile') === 'agent' || Boolean(agentSlug || agentWallet))
   useEffect(() => {
     if (!showHelperDemo) return
     const next = new URLSearchParams({
@@ -1234,7 +1234,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
     : ''
   const x402ActivationBlocked = Boolean(agentNetwork === 'arc' || !x402Amount || x402AmountInvalid || x402AmountBelowMinimum || treasuryEmpty || x402AmountExceedsTreasury)
   const displayAgentProfile = agentProfile ?? (agentSlug === PLATFORM_AGENT_SLUG || (!agentSlug && !embeddedWalletManager) ? PLATFORM_AGENT_PROFILE : null)
-  const displayAgentName = embedded
+  const displayAgentName = embeddedWalletManager
     ? 'x402 Wallet Manager'
     : displayAgentProfile?.name || agentSlug || 'Your agent wallet'
   const displayAgentPurpose = hasPendingLpScoutRequest

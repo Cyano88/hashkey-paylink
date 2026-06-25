@@ -1764,6 +1764,12 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                     Back
                   </button>
                   <AgentDemo embedded forceProfile />
+                  <a
+                    href="/agent?walletManager=service"
+                    className="block text-center text-[11px] font-medium text-gray-400 transition-colors hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200"
+                  >
+                    Open wallet manager full screen
+                  </a>
                 </div>
               ) : (
                 <>
