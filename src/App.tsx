@@ -53,6 +53,7 @@ export default function App() {
     <Route element={<Layout />}>
       {IS_APP_HOST && <Route index element={<CreateLink />} />}
       <Route path="app" element={<CreateLink />} />
+      <Route path="create" element={<CreateLink />} />
       <Route path="polymarket" element={<CreateLink initialProduct="polymarket" />} />
       <Route path="pay" element={<PaymentPage />} />
       <Route path="p/:network/:amount/:recipient/:memo" element={<ShortPayRedirect />} />

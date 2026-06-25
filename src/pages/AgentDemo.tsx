@@ -1784,6 +1784,8 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
               {PRIVY_AUTH_ENABLED && !currentAgentWallet && !privyAuthenticated ? (
                 <>
                   <PrivyConnectButton
+                    debugLabel="x402-wallet-email"
+                    loginOptions={{ loginMethods: ['email'] }}
                     logoutOnAuthenticated={false}
                     onBeforeLogin={() => {
                       try { window.sessionStorage.setItem(AGENT_WALLET_LOGIN_INTENT_KEY, 'login') } catch {}

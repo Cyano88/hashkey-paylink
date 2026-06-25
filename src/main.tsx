@@ -74,6 +74,10 @@ function AppProviders() {
       loginMessage: 'Staff will never ask for this code.',
       emailDomain: 'Hash PayLink',
     },
+    legal: {
+      termsAndConditionsUrl: `${BRAND_ORIGIN}/docs/terms`,
+      privacyPolicyUrl: `${BRAND_ORIGIN}/docs/privacy`,
+    },
   }), [theme])
 
   const app = (
