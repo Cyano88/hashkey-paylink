@@ -9,7 +9,7 @@ export default function SDKDocs() {
       />
 
       <Section title="Positioning">
-        <InfoBox type="info">The SDK does not ask integrators to install wallet providers, Wagmi, or RainbowKit. Wallet and session execution stay inside the hosted Hash PayLink checkout.</InfoBox>
+        <InfoBox type="info">The SDK does not ask integrators to install wallet providers, Wagmi, or third-party wallet UI kits. Wallet and session execution stay inside the hosted Hash PayLink checkout.</InfoBox>
       </Section>
 
       <Section title="Install">

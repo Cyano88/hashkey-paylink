@@ -15,7 +15,6 @@ import {
   useWalletClient,
 } from 'wagmi'
 import { usePrivy, useWallets } from '@privy-io/react-auth'
-import { useConnectModal } from '@rainbow-me/rainbowkit'
 import {
   parseEther,
   parseUnits,
@@ -60,6 +59,7 @@ import { isValidSolanaAddress } from '../lib/solanaAddress'
 import { getPaylinkParam, hasPaylinkFlag, isTelegramSourceParam } from '../lib/paylinkParams'
 import { PRIVY_AUTH_ENABLED } from '../lib/authMode'
 import { PrivyConnectButton } from '../lib/PrivyConnectButton'
+import { PrivyWalletConnectButton } from '../lib/PrivyWalletConnectButton'
 import { ReceiptIcon } from '../components/ReceiptIcon'
 import { resolvePrivyCircleLink, savePrivyCircleLink } from '../lib/privyCircleLink'
 import {
@@ -501,7 +501,6 @@ export default function PaymentPage() {
   const chainId                  = useChainId()
   const { switchChain, switchChainAsync, isPending: isSwitching } = useSwitchChain()
   const { disconnect: disconnectEvm } = useDisconnect()
-  const { openConnectModal }     = useConnectModal()
   const { authenticated: privyAuthenticated, user: privyUser, getAccessToken } = usePrivy()
   const { wallets: privyWallets } = useWallets()
   const privyEmail = emailFromPrivyUser(privyUser).toLowerCase()
@@ -3042,7 +3041,6 @@ export default function PaymentPage() {
     }
   }, [paymentReceiptId])
 
-  // ── openConnectModal unused lint suppression ──────────────────────────────
   useEffect(() => {
     if (!autoAccessRedirect || accessRedirected.current || !isEventMode || !agentUrl || eventRegStatus !== 'ok') return
     const payerName = isAgentFunding ? (memo || 'Agent wallet funding') : attendeeName.trim()
@@ -3060,8 +3058,6 @@ export default function PaymentPage() {
     }, isAgentFunding ? 2600 : 900)
     return () => window.clearTimeout(timer)
   }, [autoAccessRedirect, isEventMode, agentUrl, eventRegStatus, eventId, attendeeName, isAgentFunding, memo])
-
-  void openConnectModal
 
   // ────────────────────────────────────────────────────────────────────────────
   //  INVALID PARAMS
@@ -4601,14 +4597,13 @@ export default function PaymentPage() {
               'flex flex-col items-center gap-1.5',
               requiresAttendeeName && !attendeeName.trim() && 'pointer-events-none opacity-50 select-none',
             )}>
-              <button
-                type="button"
-                onClick={openConnectModal}
+              <PrivyWalletConnectButton
+                options={{ walletChainType: 'ethereum-only' }}
                 className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-6 py-3.5 text-sm font-semibold text-gray-800 transition-all hover:bg-gray-50 active:scale-[0.98]"
               >
                 <Wallet className="h-4 w-4" />
                 {showCircleEmailPay ? 'Connect EOA Wallet' : 'Connect Wallet to Pay'}
-              </button>
+              </PrivyWalletConnectButton>
               {showLegacyCircleEmailPay && (
                 <p className="text-center text-xs text-gray-400">Gas in ETH</p>
               )}

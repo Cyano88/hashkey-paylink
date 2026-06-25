@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Outlet, Link, useLocation, useSearchParams } from 'react-router-dom'
-import { useConnectModal } from '@rainbow-me/rainbowkit'
 import { useAccount, useDisconnect, useSwitchChain } from 'wagmi'
 import { usePrivy } from '@privy-io/react-auth'
 import { ChevronDown, MessageCircle, LogOut, X, Send, ExternalLink, Search, Sun, Moon } from 'lucide-react'
@@ -115,8 +114,8 @@ function keywordReply(input: string): ChatMsg | null {
     return { from: 'bot', text: 'Paste your transaction hash directly into this chat and I will query it live across Base, HashKey, Arc, and Starknet. An EVM transaction hash starts with 0x and is 66 characters long.' }
 
   // ── Chains — Base ────────────────────────────────────────────────────────────
-  if ((has('base') && !has('database')) || has('basescan', 'metamask', 'rainbow wallet', 'layer 2', 'ethereum l2'))
-    return { from: 'bot', text: 'Base is an Ethereum L2 by Coinbase. Hash PayLink supports USDC payments on Base Mainnet. Gas is sponsored — zero extra cost to payers. Wallets: MetaMask, Coinbase Smart Wallet, Rainbow, or any WalletConnect wallet. Explorer: basescan.org' }
+  if ((has('base') && !has('database')) || has('basescan', 'metamask', 'layer 2', 'ethereum l2'))
+    return { from: 'bot', text: 'Base is an Ethereum L2 by Coinbase. Hash PayLink supports USDC payments on Base Mainnet. Gas is sponsored — zero extra cost to payers. Wallets: MetaMask, Coinbase Smart Wallet, and other Privy-supported EVM wallets. Explorer: basescan.org' }
 
   // ── Chains — HashKey ─────────────────────────────────────────────────────────
   if (has('hashkey', 'hsk', 'hash key', 'hashkey chain'))
@@ -135,8 +134,8 @@ function keywordReply(input: string): ChatMsg | null {
     return { from: 'bot', text: 'Solana payments use native USDC. Wallets: Phantom and Solflare. Gas is relayer-sponsored — payers only sign the USDC transfer. "Send via Address" also works on Solana. Confirms in under 1 second. Explorer: solscan.io' }
 
   // ── Wallet setup / connect ───────────────────────────────────────────────────
-  if (has('wallet', 'connect wallet', 'which wallet', 'walletconnect', 'install wallet', 'coinbase wallet', 'rainbow'))
-    return { from: 'bot', text: 'Supported wallets:\n• Base / Arc / HashKey: MetaMask, Coinbase Smart Wallet, Rainbow, any WalletConnect wallet.\n• Starknet: ArgentX or Braavos.\n• Solana: Phantom or Solflare.\n\nOr skip wallets entirely — use "Send via Address" to pay from any exchange or cold wallet.' }
+  if (has('wallet', 'connect wallet', 'which wallet', 'walletconnect', 'install wallet', 'coinbase wallet'))
+    return { from: 'bot', text: 'Supported wallets:\n• Base / Arc / HashKey: Privy-supported EVM wallets, including MetaMask and Coinbase Smart Wallet.\n• Starknet: ArgentX or Braavos.\n• Solana: Phantom or Solflare.\n\nOr skip wallets entirely — use "Send via Address" to pay from any exchange or cold wallet.' }
 
   // ── Security / non-custodial ─────────────────────────────────────────────────
   if (has('safe', 'secure', 'trust', 'custody', 'custodial', 'non-custodial', 'open source', 'trustless', 'audit', 'smart contract'))
@@ -362,7 +361,6 @@ export default function Layout() {
   const { isConnected: evmConnected, chainId: evmChainId } = useAccount()
   const { disconnect: disconnectEvm } = useDisconnect()
   const { switchChain }               = useSwitchChain()
-  const { openConnectModal }          = useConnectModal()
   const { address: starkAddress,  connect: connectStarknet,  disconnect: disconnectStarknet  } = useStarknet()
   const { address: solanaAddress, connect: connectSolana,   disconnect: disconnectSolana    } = useSolana()
   const { authenticated: privyAuthenticated } = usePrivy()
@@ -427,7 +425,7 @@ export default function Layout() {
     } else if (selectedNet === 'solana') {
       connectSolana({ includeEmail: true })
     } else {
-      openConnectModal?.()
+      // EVM wallet connection is handled by PrivyConnectButton in production.
     }
   }
 

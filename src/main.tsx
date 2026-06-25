@@ -1,21 +1,18 @@
 import React, { useMemo } from 'react'
 import ReactDOM from 'react-dom/client'
-import { WagmiProvider as LegacyWagmiProvider } from 'wagmi'
+import { WagmiProvider } from 'wagmi'
 import { WagmiProvider as PrivyWagmiProvider } from '@privy-io/wagmi'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { RainbowKitProvider, lightTheme, darkTheme } from '@rainbow-me/rainbowkit'
 import { PrivyProvider, type PrivyClientConfig } from '@privy-io/react-auth'
 
-import '@rainbow-me/rainbowkit/styles.css'
 import './index.css'
 
 import App from './App'
-import { wagmiConfig } from './lib/wagmi'
 import { privyWagmiConfig } from './lib/privyWagmi'
 import { StarknetProvider } from './lib/StarknetContext'
 import { ThemeProvider, useTheme } from './lib/ThemeContext'
-import { arcChain, hashkeyMainnet } from './lib/chains'
-import { baseMainnet, arbitrumMainnet } from './lib/wagmi'
+import { arcChain, hashkeyMainnet, baseMainnet } from './lib/chains'
+import { arbitrum } from 'viem/chains'
 import { PRIVY_APP_ID, PRIVY_AUTH_ENABLED } from './lib/authMode'
 import { PrivyLoginProvider } from './lib/PrivyLoginProvider'
 
@@ -30,38 +27,13 @@ const queryClient = new QueryClient({
   },
 })
 
-const RK_LIGHT = lightTheme({
-  accentColor: '#0071E3',
-  accentColorForeground: 'white',
-  borderRadius: 'large',
-  fontStack: 'system',
-  overlayBlur: 'small',
-})
-
-const RK_DARK = darkTheme({
-  accentColor: '#0071E3',
-  accentColorForeground: 'white',
-  borderRadius: 'large',
-  fontStack: 'system',
-  overlayBlur: 'small',
-})
-
-function RainbowKitThemed({ children }: { children: React.ReactNode }) {
-  const { theme } = useTheme()
-  return (
-    <RainbowKitProvider theme={theme === 'dark' ? RK_DARK : RK_LIGHT} coolMode>
-      {children}
-    </RainbowKitProvider>
-  )
-}
-
 function AppProviders() {
   const { theme } = useTheme()
   const privyConfig = useMemo<PrivyClientConfig>(() => ({
     loginMethods: ['email', 'wallet'],
     allowOAuthInEmbeddedBrowsers: true,
     defaultChain: baseMainnet,
-    supportedChains: [baseMainnet, arcChain, arbitrumMainnet, hashkeyMainnet],
+    supportedChains: [baseMainnet, arcChain, arbitrum, hashkeyMainnet],
     embeddedWallets: {
       ethereum: {
         createOnLogin: 'off',
@@ -82,18 +54,16 @@ function AppProviders() {
   }), [theme])
 
   const app = (
-    <RainbowKitThemed>
-      <StarknetProvider>
-        <App />
-      </StarknetProvider>
-    </RainbowKitThemed>
+    <StarknetProvider>
+      <App />
+    </StarknetProvider>
   )
 
   if (!PRIVY_AUTH_ENABLED) {
     return (
-      <LegacyWagmiProvider config={wagmiConfig}>
+      <WagmiProvider config={privyWagmiConfig}>
         <QueryClientProvider client={queryClient}>{app}</QueryClientProvider>
-      </LegacyWagmiProvider>
+      </WagmiProvider>
     )
   }
 
