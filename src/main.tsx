@@ -17,6 +17,7 @@ import { ThemeProvider, useTheme } from './lib/ThemeContext'
 import { arcChain, hashkeyMainnet } from './lib/chains'
 import { baseMainnet, arbitrumMainnet } from './lib/wagmi'
 import { PRIVY_APP_ID, PRIVY_AUTH_ENABLED } from './lib/authMode'
+import { PrivyLoginProvider } from './lib/PrivyLoginProvider'
 
 const BRAND_ORIGIN = 'https://hashpaylink.com'
 
@@ -101,9 +102,11 @@ function AppProviders() {
       appId={PRIVY_APP_ID!}
       config={privyConfig}
     >
-      <QueryClientProvider client={queryClient}>
-        <PrivyWagmiProvider config={privyWagmiConfig}>{app}</PrivyWagmiProvider>
-      </QueryClientProvider>
+      <PrivyLoginProvider>
+        <QueryClientProvider client={queryClient}>
+          <PrivyWagmiProvider config={privyWagmiConfig}>{app}</PrivyWagmiProvider>
+        </QueryClientProvider>
+      </PrivyLoginProvider>
     </PrivyProvider>
   )
 }

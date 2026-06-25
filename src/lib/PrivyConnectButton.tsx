@@ -1,5 +1,6 @@
-import { useEffect, useState, type MouseEvent, type ReactNode } from 'react'
-import { useLogin, useModalStatus, usePrivy, type LoginModalOptions } from '@privy-io/react-auth'
+import { useEffect, useState, type ReactNode } from 'react'
+import { useModalStatus, usePrivy, type LoginModalOptions } from '@privy-io/react-auth'
+import { usePrivyLoginLauncher } from './PrivyLoginProvider'
 
 type PrivyConnectButtonProps = {
   className?: string
@@ -22,20 +23,16 @@ export function PrivyConnectButton({
 }: PrivyConnectButtonProps) {
   const { authenticated, ready, logout } = usePrivy()
   const { isOpen } = useModalStatus()
-  const { login } = useLogin({
-    onError: error => {
-      if (shouldLogPrivyDebug()) console.warn('[privy-login:error]', { debugLabel, error })
-    },
-  })
+  const launcher = usePrivyLoginLauncher()
   const [reopenAfterLogout, setReopenAfterLogout] = useState(false)
 
   useEffect(() => {
     if (!ready || authenticated || !reopenAfterLogout) return
     setReopenAfterLogout(false)
-    login(loginOptions)
-  }, [authenticated, login, loginOptions, ready, reopenAfterLogout])
+    launcher?.requestLogin({ debugLabel, loginOptions, onBeforeLogin })
+  }, [authenticated, debugLabel, launcher, loginOptions, onBeforeLogin, ready, reopenAfterLogout])
 
-  async function handleClick(event: MouseEvent<HTMLButtonElement>) {
+  async function handleClick() {
     if (shouldLogPrivyDebug()) {
       console.info('[privy-login:click]', { debugLabel, ready, authenticated, modalOpen: isOpen, disabled })
     }
@@ -46,8 +43,7 @@ export function PrivyConnectButton({
       await logout()
       return
     }
-    onBeforeLogin?.()
-    login(loginOptions ?? event)
+    launcher?.requestLogin({ debugLabel, loginOptions: loginOptions ?? undefined, onBeforeLogin })
   }
 
   return (
