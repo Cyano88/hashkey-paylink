@@ -1208,28 +1208,28 @@ export function CreateStreamForm() {
     const overviewCards = [
       {
         icon: Wallet,
-        title: 'Fund & manage x402',
-        body: 'Wallet balance, activation, and receipts.',
+        title: 'Wallet',
+        body: 'Fund USDC, activate x402, and view receipts.',
         action: () => { window.location.href = HASH_PAYLINK_X402_MANAGER_URL },
       },
       {
         icon: Bot,
         title: 'Services',
-        body: 'Creator and Polymarket actions.',
+        body: 'Open paid creator and Polymarket tools.',
         action: () => setX402View('services'),
       },
     ] as const
     const serviceCards = [
       {
         icon: Bot,
-        title: 'Creator Studio',
+        title: 'Creator',
         body: 'Paid posts, unlock links, and earnings.',
         href: '/creator?app=streampay',
       },
       {
         icon: MessageCircle,
-        title: 'Polymarket chat',
-        body: 'LP Scout and market actions in Telegram.',
+        title: 'Polymarket',
+        body: 'LP Scout and market actions through chat.',
         href: TELEGRAM_POLYDESK_URL,
       },
     ] as const
@@ -1241,7 +1241,7 @@ export function CreateStreamForm() {
           <div className="px-1">
             <h1 className="text-[22px] font-black tracking-tight text-gray-950 dark:text-white">x402 Services</h1>
             <p className="mt-1 text-[13px] leading-5 text-gray-500 dark:text-gray-400">
-              Fund once, then use paid services across Hash PayLink.
+              One wallet for paid creator and Polymarket actions.
             </p>
           </div>
 

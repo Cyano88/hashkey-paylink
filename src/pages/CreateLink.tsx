@@ -1166,7 +1166,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   const isPaymentView = !productHubOpen && !accessMode && !posMode && !streamMode && !polymarketMode
   const howItWorksSteps = productHubOpen
     ? [
-        { n: '1', title: 'Create links', body: 'Personal, business, POS, and QR payment flows' },
+        { n: '1', title: 'Receive payments', body: 'Personal, business, POS, and QR payment flows' },
         { n: '2', title: 'Manage services', body: 'x402 balance, PolyDesk, and StreamPay entry points' },
         { n: '3', title: 'Keep proof', body: 'Receipts, dashboards, and settlement records stay connected' },
       ]
@@ -1218,7 +1218,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
         </h1>
         <p className="mt-2 text-[15px] text-gray-500 text-balance dark:text-gray-400">
           {productHubOpen
-            ? 'Create links, manage x402, run POS, StreamPay, or PolyDesk.'
+            ? 'Receive payments, manage x402, run POS, StreamPay, or PolyDesk.'
             : polymarketMode
             ? 'Open the Telegram chat layer for Polymarket funding, positions, and LP Scout.'
             : posMode

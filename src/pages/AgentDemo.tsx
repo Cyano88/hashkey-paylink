@@ -50,6 +50,16 @@ function emailFromPrivyUser(user: unknown) {
   return typeof email === 'string' ? email : ''
 }
 
+function stableWalletSlugFromEmail(email: string) {
+  const clean = email.trim().toLowerCase()
+  if (!clean) return ''
+  let hash = 5381
+  for (let i = 0; i < clean.length; i += 1) {
+    hash = ((hash << 5) + hash + clean.charCodeAt(i)) >>> 0
+  }
+  return `wallet-${hash.toString(36)}`
+}
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 type VerifyResult = {
@@ -360,7 +370,9 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
   const pendingScoutBudget = params.get('budget') ?? ''
   const pendingScoutMaxAmount = params.get('maxAmount') ?? '0.01'
   const hasPendingLpScoutRequest = pendingRun === 'polymarket-scout'
-  const normalizedAgentSlug = agentSlug || PLATFORM_AGENT_SLUG
+  const embeddedWalletManager = Boolean(embedded && forceProfile && !agentSlug)
+  const privyManagedWalletSlug = embeddedWalletManager ? stableWalletSlugFromEmail(privyEmail) : ''
+  const normalizedAgentSlug = agentSlug || privyManagedWalletSlug || (embeddedWalletManager ? '' : PLATFORM_AGENT_SLUG)
   const savedLpScoutIntent = readSavedLpScoutIntent(normalizedAgentSlug)
   const urlAgentWallet = params.get('wallet') ?? params.get('e') ?? ''
   const expectedAgentWallet = params.get('expectedWallet') ?? ''
@@ -416,7 +428,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
   const [lpScoutError, setLpScoutError] = useState('')
   const [lpScoutResult, setLpScoutResult] = useState<LpScoutRunResult | null>(null)
   const [receiptsOpen, setReceiptsOpen] = useState(false)
-  const [agentProfile, setAgentProfile] = useState<AgentProfileSummary | null>(agentSlug === PLATFORM_AGENT_SLUG || !agentSlug ? PLATFORM_AGENT_PROFILE : null)
+  const [agentProfile, setAgentProfile] = useState<AgentProfileSummary | null>(agentSlug === PLATFORM_AGENT_SLUG || (!agentSlug && !embeddedWalletManager) ? PLATFORM_AGENT_PROFILE : null)
   const [agentProfileError, setAgentProfileError] = useState('')
   const [activity, setActivity] = useState<AgentActivity[]>([])
   const [copiedProofId, setCopiedProofId] = useState('')
@@ -530,7 +542,11 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
   }, [showHelperDemo, verified?.verified, helperName, payer, eventId, helperProfile?.memoryProof]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function loadAgentWallet() {
-    const slug = agentSlug || 'hashpaylink-agent'
+    const slug = normalizedAgentSlug
+    if (!slug) {
+      setActivityBusy(false)
+      return
+    }
     setActivityBusy(true)
     try {
       const res = await fetch(`/api/agent-wallet?agent=${encodeURIComponent(slug)}`)
@@ -549,13 +565,17 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
     if (!showAgentProfile) return
     loadAgentWallet()
       .catch(() => undefined)
-  }, [agentSlug, showAgentProfile]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [agentSlug, normalizedAgentSlug, showAgentProfile]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     let cancelled = false
     if (!showAgentProfile) return
-    const slug = agentSlug || PLATFORM_AGENT_SLUG
+    const slug = normalizedAgentSlug || (embeddedWalletManager ? '' : PLATFORM_AGENT_SLUG)
     setAgentProfileError('')
+    if (!slug) {
+      setAgentProfile(null)
+      return
+    }
     if (slug === PLATFORM_AGENT_SLUG) {
       setAgentProfile(PLATFORM_AGENT_PROFILE)
       return
@@ -574,7 +594,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
         setAgentProfileError(err instanceof Error ? err.message : 'Agent profile unavailable.')
       })
     return () => { cancelled = true }
-  }, [agentSlug, showAgentProfile]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [agentSlug, normalizedAgentSlug, embeddedWalletManager, showAgentProfile]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     let cancelled = false
@@ -659,7 +679,8 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
     setX402BalanceChecked(false)
     setX402BalanceError('')
     try {
-      const slug = agentSlug || 'hashpaylink-agent'
+      const slug = normalizedAgentSlug
+      if (!slug) throw new Error('Sign in with email before checking x402 balance.')
       const res = await fetch(`/api/agent-wallet?agent=${encodeURIComponent(slug)}&x402=1`)
       const data = await res.json() as {
         ok?: boolean
@@ -687,7 +708,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
 
   useEffect(() => {
     refreshX402Balance().catch(() => undefined)
-  }, [agentSlug, agentWalletSessionConnected, currentAgentWallet, showAgentProfile]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [normalizedAgentSlug, agentWalletSessionConnected, currentAgentWallet, showAgentProfile]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-verify when eventId + payer arrive via access link URL params
   useEffect(() => {
@@ -820,11 +841,12 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
   }
 
   function buildAgentFundUrl() {
-    const displayName = agentProfile?.name || agentSlug || 'Hash PayLink Agent'
-    const fundingId = `agent-${agentSlug || 'hashpaylink'}-fund-${Date.now().toString(36)}`
+    const activeSlug = normalizedAgentSlug || 'x402-wallet'
+    const displayName = agentProfile?.name || agentSlug || (embeddedWalletManager ? 'x402 wallet' : 'Hash PayLink Agent')
+    const fundingId = `agent-${activeSlug}-fund-${Date.now().toString(36)}`
     const returnUrl = new URL('/agent', window.location.origin)
     returnUrl.searchParams.set('profile', 'agent')
-    returnUrl.searchParams.set('agent', agentSlug || 'hashpaylink-agent')
+    if (activeSlug) returnUrl.searchParams.set('agent', activeSlug)
     returnUrl.searchParams.set('src', 'dashboard')
     returnUrl.searchParams.set('n', agentNetwork)
     if (currentAgentWallet) returnUrl.searchParams.set('expectedWallet', currentAgentWallet)
@@ -836,8 +858,8 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
     p.set('v', '1')
     p.set('x', '1')
     p.set('src', 'agent')
-    p.set('agent', agentSlug || 'hashpaylink-agent')
-    p.set('agentSlug', agentSlug || 'hashpaylink-agent')
+    p.set('agent', activeSlug)
+    p.set('agentSlug', activeSlug)
     p.set('g', returnUrl.toString())
     p.set('ad', '1')
     if (currentAgentWallet) p.set('e', currentAgentWallet)
@@ -891,6 +913,11 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
       setWalletError('Enter the Circle email for this agent wallet.')
       return
     }
+    const requestAgentSlug = agentSlug || (embeddedWalletManager ? stableWalletSlugFromEmail(email) : PLATFORM_AGENT_SLUG)
+    if (!requestAgentSlug) {
+      setWalletError('Enter the Circle email for this wallet.')
+      return
+    }
     if (email) setWalletEmail(email)
     if (action === 'complete') {
       if (!walletOtpContext) {
@@ -915,7 +942,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action,
-          agentSlug: agentSlug || 'hashpaylink-agent',
+          agentSlug: requestAgentSlug,
           email,
           otp: walletOtp,
           testnet: agentNetwork === 'arc',
@@ -967,7 +994,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
               purpose: 'agent',
               email,
               wallet: {
-                id: `agent:${agentSlug || 'hashpaylink-agent'}:${data.walletAddress.toLowerCase()}`,
+                id: `agent:${requestAgentSlug}:${data.walletAddress.toLowerCase()}`,
                 address: data.walletAddress as `0x${string}`,
                 blockchain: data.chain ?? (agentNetwork === 'arc' ? 'ARC-TESTNET' : agentNetwork.toUpperCase()),
               },
@@ -992,12 +1019,13 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
     setWalletError(null)
     try {
       if (currentAgentWallet || agentWalletSessionConnected) {
+        const requestAgentSlug = normalizedAgentSlug || (embeddedWalletManager && walletEmail ? stableWalletSlugFromEmail(walletEmail) : PLATFORM_AGENT_SLUG)
         const res = await fetch('/api/agent-wallet', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             action: 'disconnect',
-            agentSlug: agentSlug || 'hashpaylink-agent',
+            agentSlug: requestAgentSlug,
           }),
         })
         const data = await res.json() as { ok?: boolean; error?: string }
@@ -1070,6 +1098,8 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
     setX402ActivationSuccess('')
     try {
       if (agentNetwork === 'arc') throw new Error('x402 Gateway activation supports Base or Arbitrum funding. Open this agent dashboard on Base or Arbitrum to activate x402.')
+      const payerAgentSlug = normalizedAgentSlug || (embeddedWalletManager ? '' : PLATFORM_AGENT_SLUG)
+      if (!payerAgentSlug) throw new Error('Sign in with email before activating x402.')
       const amount = Number(x402Amount)
       if (!Number.isFinite(amount) || amount <= 0) throw new Error('Enter a valid x402 amount.')
       if (amount < MIN_X402_ACTIVATION_USDC) throw new Error(`Minimum x402 top up is ${MIN_X402_ACTIVATION_USDC} USDC.`)
@@ -1078,7 +1108,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'gateway-deposit',
-          agentSlug: agentSlug || 'hashpaylink-agent',
+          agentSlug: payerAgentSlug,
           amount: String(amount),
           chain: agentNetwork === 'arbitrum' ? 'ARBITRUM' : 'BASE',
         }),
@@ -1111,12 +1141,14 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
     setLpScoutError('')
     setLpScoutResult(null)
     try {
+      const payerAgentSlug = normalizedAgentSlug || (embeddedWalletManager ? '' : PLATFORM_AGENT_SLUG)
+      if (!payerAgentSlug) throw new Error('Sign in with email before running LP Scout.')
       const res = await fetch('/api/agent-wallet', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'pay-lp-scout',
-          agentSlug: agentSlug || PLATFORM_AGENT_SLUG,
+          agentSlug: payerAgentSlug,
           sellerAgentSlug: PLATFORM_AGENT_SLUG,
           maxAmount: pendingScoutMaxAmount,
           scoutMode: pendingScoutMode,
@@ -1191,7 +1223,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
     ? `Minimum x402 top up is ${MIN_X402_ACTIVATION_USDC} USDC.`
     : ''
   const x402ActivationBlocked = Boolean(agentNetwork === 'arc' || !x402Amount || x402AmountInvalid || x402AmountBelowMinimum || treasuryEmpty || x402AmountExceedsTreasury)
-  const displayAgentProfile = agentProfile ?? (agentSlug === PLATFORM_AGENT_SLUG || !agentSlug ? PLATFORM_AGENT_PROFILE : null)
+  const displayAgentProfile = agentProfile ?? (agentSlug === PLATFORM_AGENT_SLUG || (!agentSlug && !embeddedWalletManager) ? PLATFORM_AGENT_PROFILE : null)
   const displayAgentName = embedded
     ? 'x402 Wallet Manager'
     : displayAgentProfile?.name || agentSlug || 'Your agent wallet'
