@@ -1,10 +1,10 @@
-import React from 'react'
+import React, { useMemo } from 'react'
 import ReactDOM from 'react-dom/client'
 import { WagmiProvider as LegacyWagmiProvider } from 'wagmi'
 import { WagmiProvider as PrivyWagmiProvider } from '@privy-io/wagmi'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { RainbowKitProvider, lightTheme, darkTheme } from '@rainbow-me/rainbowkit'
-import { PrivyProvider } from '@privy-io/react-auth'
+import { PrivyProvider, type PrivyClientConfig } from '@privy-io/react-auth'
 
 import '@rainbow-me/rainbowkit/styles.css'
 import './index.css'
@@ -56,6 +56,26 @@ function RainbowKitThemed({ children }: { children: React.ReactNode }) {
 
 function AppProviders() {
   const { theme } = useTheme()
+  const privyConfig = useMemo<PrivyClientConfig>(() => ({
+    loginMethods: ['email', 'wallet'],
+    allowOAuthInEmbeddedBrowsers: true,
+    defaultChain: baseMainnet,
+    supportedChains: [baseMainnet, arcChain, arbitrumMainnet, hashkeyMainnet],
+    embeddedWallets: {
+      ethereum: {
+        createOnLogin: 'off',
+      },
+    },
+    appearance: {
+      theme: theme === 'dark' ? 'dark' : 'light',
+      accentColor: '#0071E3',
+      logo: `${BRAND_ORIGIN}/privy-mark-logo.png`,
+      landingHeader: 'Hash PayLink',
+      loginMessage: 'Staff will never ask for this code.',
+      emailDomain: 'Hash PayLink',
+    },
+  }), [theme])
+
   const app = (
     <RainbowKitThemed>
       <StarknetProvider>
@@ -75,25 +95,7 @@ function AppProviders() {
   return (
     <PrivyProvider
       appId={PRIVY_APP_ID!}
-      config={{
-        loginMethods: ['email', 'wallet'],
-        allowOAuthInEmbeddedBrowsers: true,
-        defaultChain: baseMainnet,
-        supportedChains: [baseMainnet, arcChain, arbitrumMainnet, hashkeyMainnet],
-        embeddedWallets: {
-          ethereum: {
-            createOnLogin: 'off',
-          },
-        },
-        appearance: {
-          theme: theme === 'dark' ? 'dark' : 'light',
-          accentColor: '#0071E3',
-          logo: `${BRAND_ORIGIN}/privy-mark-logo.png`,
-          landingHeader: 'Hash PayLink',
-          loginMessage: 'Staff will never ask for this code.',
-          emailDomain: 'Hash PayLink',
-        },
-      }}
+      config={privyConfig}
     >
       <QueryClientProvider client={queryClient}>
         <PrivyWagmiProvider config={privyWagmiConfig}>{app}</PrivyWagmiProvider>
