@@ -253,6 +253,7 @@ function PulsingDots() {
 
 // ─── Demo credentials (pre-filled for judges) ─────────────────────────────────
 const PLATFORM_AGENT_SLUG = 'hashpaylink-agent'
+const AGENT_WALLET_LOGIN_INTENT_KEY = 'hashpaylink-agent-wallet-login-intent'
 const MIN_X402_ACTIVATION_USDC = 0.5
 const LP_SCOUT_INTENT_KEY = 'hashpaylink:lp-scout-intent'
 const LP_SCOUT_INTENT_TTL_MS = 30 * 60 * 1000
@@ -469,6 +470,20 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
     setShowWalletAccessPanel(true)
     setWalletMode('login')
   }, [hasPendingLpScoutRequest, agentWalletSessionConnected])
+
+  useEffect(() => {
+    if (!privyAuthenticated) return
+    let pendingMode = ''
+    try { pendingMode = window.sessionStorage.getItem(AGENT_WALLET_LOGIN_INTENT_KEY) || '' } catch {}
+    if (pendingMode !== 'create' && pendingMode !== 'login') return
+    try { window.sessionStorage.removeItem(AGENT_WALLET_LOGIN_INTENT_KEY) } catch {}
+    setShowWalletAccessPanel(true)
+    setWalletMode(pendingMode)
+    setWalletStep('idle')
+    setWalletOtp('')
+    setWalletOtpContext(null)
+    setWalletError(null)
+  }, [privyAuthenticated])
   const [verifying,  setVerifying]  = useState(false)
   const [verified,   setVerified]   = useState<VerifyResult | null>(null)
   const [question,   setQuestion]   = useState('')
@@ -903,13 +918,13 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
 
   async function callAgentWallet(action: 'init' | 'complete', mode?: 'create' | 'login') {
     const selectedMode = mode ?? (walletMode === 'choose' ? 'login' : walletMode)
-    setWalletMode(selectedMode)
     const requiresPrivyWalletAuth = Boolean(PRIVY_AUTH_ENABLED && !currentAgentWallet)
     if (requiresPrivyWalletAuth && !privyAuthenticated) {
-      setWalletError(null)
+      try { window.sessionStorage.setItem(AGENT_WALLET_LOGIN_INTENT_KEY, selectedMode) } catch {}
       loginPrivy({ loginMethods: ['email'] })
       return
     }
+    setWalletMode(selectedMode)
     if (requiresPrivyWalletAuth && !privyEmail) {
       setWalletError(embeddedWalletManager ? 'Sign in with email to manage your Circle service wallet.' : 'Sign in with email to manage your Circle agent wallet.')
       return
@@ -1768,11 +1783,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
                   <button
                     type="button"
                     onClick={() => {
-                      setWalletMode('login')
-                      setWalletStep('idle')
-                      setWalletOtp('')
-                      setWalletOtpContext(null)
-                      setWalletError(null)
+                      try { window.sessionStorage.setItem(AGENT_WALLET_LOGIN_INTENT_KEY, 'login') } catch {}
                       loginPrivy({ loginMethods: ['email'] })
                     }}
                     disabled={walletBusy}

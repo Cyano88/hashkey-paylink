@@ -236,6 +236,7 @@ function CircleReceiveSelector({
   setSolanaAddr: Dispatch<SetStateAction<string>>
   setGeneratedLink: Dispatch<SetStateAction<string>>
 }) {
+  const circleEmailReceiveIntentKey = 'hashpaylink-circle-email-receive-intent'
   const { authenticated: privyAuthenticated, user: privyUser, login: loginPrivy, logout: logoutPrivy, getAccessToken } = usePrivy()
   const privyEmail = emailFromPrivyUser(privyUser).trim().toLowerCase()
   const [circleRecipientPending, setCircleRecipientPending] = useState(false)
@@ -244,19 +245,22 @@ function CircleReceiveSelector({
   const circleRecipientRunKey = useRef('')
 
   async function handleEmailRecipient() {
-    setReceiveMode('email')
-    setGeneratedLink('')
-    setCircleRecipientError(null)
-
     if (!canReceiveWithEmail) {
+      setReceiveMode('email')
+      setGeneratedLink('')
       setCircleRecipientError('Email receiving is not configured for this network. Paste a wallet address instead.')
       return
     }
 
     if (!privyAuthenticated) {
+      try { window.sessionStorage.setItem(circleEmailReceiveIntentKey, selectedNet) } catch {}
       loginPrivy({ loginMethods: ['email'] })
       return
     }
+
+    setReceiveMode('email')
+    setGeneratedLink('')
+    setCircleRecipientError(null)
 
     if (!privyEmail) {
       setCircleRecipientError('Sign in with email to receive with the Circle wallet for this network.')
@@ -330,6 +334,18 @@ function CircleReceiveSelector({
       if (circleRecipientRunKey.current === runKey) setCircleRecipientPending(false)
     }
   }
+
+  useEffect(() => {
+    if (!privyAuthenticated || !privyEmail) return
+    let pending = ''
+    try { pending = window.sessionStorage.getItem(circleEmailReceiveIntentKey) || '' } catch {}
+    if (!pending) return
+    try { window.sessionStorage.removeItem(circleEmailReceiveIntentKey) } catch {}
+    if (!canReceiveWithEmail) return
+    setReceiveMode('email')
+    setGeneratedLink('')
+    setCircleRecipientError(null)
+  }, [privyAuthenticated, privyEmail, canReceiveWithEmail, setReceiveMode, setGeneratedLink])
 
   useEffect(() => {
     if (receiveMode !== 'email' || !privyAuthenticated || !privyEmail || circleRecipientPending) return
