@@ -18,6 +18,7 @@ import type { ChainKey }                from '../lib/chains'
 import { queryBalances }                from '../lib/unifiedBalance'
 import { PRIVY_AUTH_ENABLED }           from '../lib/authMode'
 import { resolvePrivyCircleLink, savePrivyCircleLink } from '../lib/privyCircleLink'
+import { PrivyConnectButton }           from '../lib/PrivyConnectButton'
 import {
   CheckCircle2, AlertCircle, Loader2, Send,
   ExternalLink, ArrowLeft, ArrowRight, ShieldCheck, Zap,
@@ -362,7 +363,7 @@ type AgentDemoProps = {
 export default function AgentDemo({ embedded = false, forceProfile = false }: AgentDemoProps = {}) {
   const { onNetworkSelect } = useOutletContext<LayoutOutletContext>()
   const navigate = useNavigate()
-  const { ready: privyReady, authenticated: privyAuthenticated, user: privyUser, login: loginPrivy, logout: logoutPrivy, getAccessToken } = usePrivy()
+  const { ready: privyReady, authenticated: privyAuthenticated, user: privyUser, logout: logoutPrivy, getAccessToken } = usePrivy()
   const privyEmail = emailFromPrivyUser(privyUser).trim().toLowerCase()
   const params = new URLSearchParams(window.location.search)
   const agentSlug = params.get('agent') ?? ''
@@ -920,12 +921,10 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
     const selectedMode = mode ?? (walletMode === 'choose' ? 'login' : walletMode)
     const requiresPrivyWalletAuth = Boolean(PRIVY_AUTH_ENABLED && !currentAgentWallet)
     if (requiresPrivyWalletAuth && !privyAuthenticated) {
-      if (!privyReady) {
-        setWalletError('Secure sign-in is still loading. Try again in a moment.')
-        return
-      }
       try { window.sessionStorage.setItem(AGENT_WALLET_LOGIN_INTENT_KEY, selectedMode) } catch {}
-      loginPrivy()
+      setShowWalletAccessPanel(true)
+      setWalletMode(selectedMode)
+      setWalletError('Sign in with Privy to continue.')
       return
     }
     setWalletMode(selectedMode)
@@ -1784,18 +1783,16 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
 
               {PRIVY_AUTH_ENABLED && !currentAgentWallet && !privyAuthenticated ? (
                 <>
-                  <button
-                    type="button"
-                    onClick={() => {
+                  <PrivyConnectButton
+                    onBeforeLogin={() => {
                       try { window.sessionStorage.setItem(AGENT_WALLET_LOGIN_INTENT_KEY, 'login') } catch {}
-                      loginPrivy()
                     }}
                     disabled={walletBusy || !privyReady}
                     className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-6 py-3.5 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-60 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
                   >
                     <img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert mix-blend-screen" />
                     {currentAgentWallet ? 'Link wallet' : 'Sign in with email'}
-                  </button>
+                  </PrivyConnectButton>
                   <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
                     Privy email
                   </p>

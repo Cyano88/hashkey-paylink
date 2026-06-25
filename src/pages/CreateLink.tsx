@@ -57,6 +57,7 @@ import { PRIVY_AUTH_ENABLED } from '../lib/authMode'
 import { EVM_CLIENTS, ERC20_BALANCE_OF_ABI } from '../lib/router'
 import { canUseCircleEvmEmailWallet, connectCircleEvmEmailWallet } from '../lib/circleEvmEmailWallet'
 import { canUseCircleSolanaEmailWallet, connectCircleSolanaEmailWallet } from '../lib/circleSolanaEmailWallet'
+import { PrivyConnectButton } from '../lib/PrivyConnectButton'
 import { resolvePrivyCircleLink, savePrivyCircleLink } from '../lib/privyCircleLink'
 import AgentDemo from './AgentDemo'
 
@@ -237,7 +238,7 @@ function CircleReceiveSelector({
   setGeneratedLink: Dispatch<SetStateAction<string>>
 }) {
   const circleEmailReceiveIntentKey = 'hashpaylink-circle-email-receive-intent'
-  const { ready: privyReady, authenticated: privyAuthenticated, user: privyUser, login: loginPrivy, logout: logoutPrivy, getAccessToken } = usePrivy()
+  const { authenticated: privyAuthenticated, user: privyUser, logout: logoutPrivy, getAccessToken } = usePrivy()
   const privyEmail = emailFromPrivyUser(privyUser).trim().toLowerCase()
   const [circleRecipientPending, setCircleRecipientPending] = useState(false)
   const [circleRecipientError, setCircleRecipientError] = useState<string | null>(null)
@@ -253,8 +254,7 @@ function CircleReceiveSelector({
     }
 
     if (!privyAuthenticated) {
-      try { window.sessionStorage.setItem(circleEmailReceiveIntentKey, selectedNet) } catch {}
-      loginPrivy()
+      setCircleRecipientError('Sign in with Privy first, then continue receiving with email.')
       return
     }
 
@@ -431,17 +431,32 @@ function CircleReceiveSelector({
           </span>
           <span className="mt-1 block text-[11px] text-gray-400">Any wallet or exchange</span>
         </button>
-        {canReceiveWithEmail && (
+        {canReceiveWithEmail && !privyAuthenticated ? (
+          <PrivyConnectButton
+            onBeforeLogin={() => {
+              try { window.sessionStorage.setItem(circleEmailReceiveIntentKey, selectedNet) } catch {}
+            }}
+            className="rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-left text-gray-700 transition-all hover:border-gray-300 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-70 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:border-white/20 dark:hover:bg-white/[0.07]"
+          >
+            <span className="flex items-center gap-2 text-sm font-semibold">
+              <Mail className="h-4 w-4 text-blue-500" />
+              Receive with email
+            </span>
+            <span className="mt-1 block text-[11px] text-gray-400">
+              Single-network Circle wallet
+            </span>
+          </PrivyConnectButton>
+        ) : canReceiveWithEmail && (
           <button
             type="button"
             onClick={handleEmailRecipient}
-            disabled={circleRecipientPending || !privyReady}
+            disabled={circleRecipientPending}
             className={cn(
               'rounded-xl border px-3 py-2.5 text-left transition-all active:scale-[0.99]',
               receiveMode === 'email'
                 ? 'border-gray-900 bg-gray-50 text-gray-900 dark:border-white/30 dark:bg-white/10 dark:text-gray-100'
                 : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:border-white/20 dark:hover:bg-white/[0.07]',
-              (circleRecipientPending || !privyReady) && 'cursor-not-allowed opacity-70',
+              circleRecipientPending && 'cursor-not-allowed opacity-70',
             )}
           >
             <span className="flex items-center gap-2 text-sm font-semibold">

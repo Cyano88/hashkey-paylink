@@ -4,10 +4,11 @@ import { usePrivy } from '@privy-io/react-auth'
 type PrivyConnectButtonProps = {
   className?: string
   disabled?: boolean
+  onBeforeLogin?: () => void
   children: ReactNode
 }
 
-export function PrivyConnectButton({ className, disabled, children }: PrivyConnectButtonProps) {
+export function PrivyConnectButton({ className, disabled, onBeforeLogin, children }: PrivyConnectButtonProps) {
   const { authenticated, ready, login, logout } = usePrivy()
   const [reopenAfterLogout, setReopenAfterLogout] = useState(false)
 
@@ -23,6 +24,7 @@ export function PrivyConnectButton({ className, disabled, children }: PrivyConne
       await logout()
       return
     }
+    onBeforeLogin?.()
     void login()
   }
 
