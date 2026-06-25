@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useRef, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useRef, type ReactNode } from 'react'
 import { useLogin, useModalStatus, usePrivy, type LoginModalOptions } from '@privy-io/react-auth'
 
 type PrivyLoginRequest = {
@@ -16,7 +16,6 @@ const PrivyLoginContext = createContext<PrivyLoginContextValue | null>(null)
 export function PrivyLoginProvider({ children }: { children: ReactNode }) {
   const { authenticated, ready } = usePrivy()
   const { isOpen } = useModalStatus()
-  const pendingTimer = useRef<number | null>(null)
   const lastRequest = useRef<PrivyLoginRequest | undefined>(undefined)
   const { login } = useLogin({
     onError: error => {
@@ -37,28 +36,14 @@ export function PrivyLoginProvider({ children }: { children: ReactNode }) {
     if (!ready || authenticated) return
 
     request?.onBeforeLogin?.()
-
-    if (pendingTimer.current !== null) {
-      window.clearTimeout(pendingTimer.current)
+    if (shouldLogPrivyDebug()) {
+      console.info('[privy-login:open]', {
+        debugLabel: request?.debugLabel ?? 'privy-connect',
+        modalOpen: isOpen,
+      })
     }
-
-    pendingTimer.current = window.setTimeout(() => {
-      pendingTimer.current = null
-      if (shouldLogPrivyDebug()) {
-        console.info('[privy-login:open]', {
-          debugLabel: request?.debugLabel ?? 'privy-connect',
-          modalOpen: isOpen,
-        })
-      }
-      login(request?.loginOptions)
-    }, 0)
+    login(request?.loginOptions)
   }, [authenticated, isOpen, login, ready])
-
-  useEffect(() => () => {
-    if (pendingTimer.current !== null) {
-      window.clearTimeout(pendingTimer.current)
-    }
-  }, [])
 
   return (
     <PrivyLoginContext.Provider value={{ requestLogin }}>
