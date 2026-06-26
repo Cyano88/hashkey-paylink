@@ -190,7 +190,7 @@ const sectionServices: Record<TelegramSectionId, TelegramService[]> = {
 
 const sectionDescriptions: Record<TelegramSectionId, string> = {
   'payment-links': 'Create normal USDC requests and share them into Telegram.',
-  helper: 'Open the ZeroScout-sponsored helper for payments, PolyDesk, StreamPay, and setup questions.',
+  helper: 'Open Ask Hash for payments, PolyDesk, StreamPay, and setup questions.',
   'agent-wallets': 'Manage Circle wallet balance, x402 service balance, and receipts.',
   'market-tools': 'PolyDesk for Polymarket funding, portfolio alerts, LP Scout, and live market context.',
   streampay: 'Payroll, creator, x402 stream, and Arena flows on StreamPay.',
@@ -452,7 +452,25 @@ function friendlyName(value: string) {
 }
 
 function isAskingUserName(text: string) {
-  return /\b(what'?s|what is|tell me)\s+my\s+name\b|\bdo you know my name\b/i.test(text)
+  return /\b(what'?s|what is|tell me)\s+my\s+name\b|\bdo you know my name\b|\bwho am i\b|\bwhat do you call me\b/i.test(text)
+}
+
+function extractRememberedName(text: string) {
+  const match = text.match(/\b(?:remember\s+)?(?:my name is|call me|i am|i'm)\s+(@?[a-zA-Z][\w .-]{1,40})/i)?.[1] ?? ''
+  return match
+    .replace(/[.?!,;:]+$/g, '')
+    .trim()
+    .slice(0, 48)
+}
+
+function nameFromMemorySummary(value: string) {
+  const summary = value.trim()
+  if (!summary) return ''
+  const match = summary.match(/\b(?:known as|called|prefers to be called)\s+(@?[a-zA-Z][\w .-]{1,40})/i)?.[1] ?? ''
+  return match
+    .replace(/[.?!,;:]+$/g, '')
+    .trim()
+    .slice(0, 48)
 }
 
 function sleep(ms: number) {
@@ -1371,13 +1389,12 @@ function TelegramHelperPanel({
     setAgentStatus('Preparing PayLink...')
     const saved = await createPaylinkFromDraft(draft)
     setPaylinkDraft(null)
-    const network = saved.network ?? inferRequestNetwork(saved)
     const target = friendlyName(saved.target)
     setMessages(prev => [...prev, {
       question: nextQuestion,
       answer: saved.mode === 'group'
-        ? `Collection ready: ${saved.amount || 'flexible'} USDC on ${requestNetworkLabels[network]}. Share it and track payments below.`
-        : `PayLink ready for ${target}: ${saved.amount || 'flexible'} USDC on ${requestNetworkLabels[network]}. Ask them to send you the receipt after payment.`,
+        ? 'Collection ready.'
+        : `PayLink ready for ${target}.`,
       paylink: saved,
     }])
     return true
@@ -1391,20 +1408,39 @@ function TelegramHelperPanel({
     setAsking(true)
     try {
       const isPaylinkFlow = Boolean(paylinkDraft || isPaymentRequestIntent(nextQuestion))
-      setAgentStatus(isPaylinkFlow ? 'Checking payment request details...' : 'Thinking...')
+      setAgentStatus(isPaylinkFlow ? 'Checking payment details...' : 'Reading your message...')
       await sleep(isPaylinkFlow ? 800 : 500)
+      const rememberedName = extractRememberedName(nextQuestion)
+      if (rememberedName) {
+        const cleanName = friendlyName(rememberedName)
+        const nextMemory = [`User prefers to be called ${cleanName}.`, memoryDraft.trim() || profile?.memorySummary || '']
+          .filter(Boolean)
+          .join('\n')
+          .slice(0, 1200)
+        window.localStorage.setItem('hashpaylink-helper-name', cleanName)
+        setHelperName(cleanName)
+        setHelperNameDraft(cleanName)
+        setPayer(current => current || cleanName)
+        setMemoryDraft(nextMemory)
+        setMessages(prev => [...prev, {
+          question: nextQuestion,
+          answer: `Got it. I'll call you ${cleanName}.`,
+        }])
+        void saveProfile({ displayName: cleanName, memorySummary: nextMemory })
+        return
+      }
       if (isAskingUserName(nextQuestion)) {
-        const knownName = helperName || profile?.displayName || helperNameDraft || cleanTelegramName
+        const knownName = helperName || profile?.displayName || helperNameDraft || cleanTelegramName || nameFromMemorySummary(memoryDraft || profile?.memorySummary || '')
         setMessages(prev => [...prev, {
           question: nextQuestion,
           answer: knownName && knownName !== 'there'
-            ? `I know you here as ${friendlyName(knownName)}.`
-            : "I do not know your name yet. Tell me what to call you and I will remember it for future chats.",
+            ? `You're ${friendlyName(knownName)}.`
+            : "I don't know your preferred name yet. Tell me what to call you and I'll remember it.",
         }])
         return
       }
       if (await handlePaylinkConversation(nextQuestion)) return
-      setAgentStatus('Writing a direct answer...')
+      setAgentStatus('Asking ZeroScout...')
       const res = await fetch('/api/agent-ask', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1423,6 +1459,7 @@ function TelegramHelperPanel({
         error?: string
       }
       if (!data.answer) throw new Error(data.error ?? 'No helper response returned.')
+      setAgentStatus('Securing proof...')
       setMessages(prev => [...prev, { question: nextQuestion, answer: data.answer!, proof: data.proof, zeroscoutSponsorship: data.zeroscoutSponsorship }])
       void saveProfile({ question: nextQuestion, answer: data.answer } as Partial<HelperProfile>)
       if (!memoryDraft.trim()) {
@@ -1465,7 +1502,7 @@ function TelegramHelperPanel({
         </div>
 
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
-          {['ZeroScout', profile?.memoryProof ? '0G memory' : profile?.memorySummary || memoryDraft ? 'Memory local' : 'Memory next', 'Telegram live'].map(label => (
+          {[profile?.memoryProof ? '0G memory' : profile?.memorySummary || memoryDraft ? 'Memory local' : 'Memory next', 'Telegram live'].map(label => (
             <span
               key={label}
               className="rounded-full border border-gray-100 bg-white px-2 py-1 text-[10px] font-semibold text-gray-500 dark:border-white/10 dark:bg-white/[0.05] dark:text-gray-400"
@@ -1483,7 +1520,7 @@ function TelegramHelperPanel({
             <p className="text-xs font-semibold text-gray-900 dark:text-white">Open helper</p>
           </div>
           <p className="text-xs leading-relaxed text-gray-600 dark:text-gray-300">
-            The helper opens from Telegram and saves useful profile context quietly. ZeroScout sponsorship protects helper responses; 0G memory checkpointing is optional proof, not an approval step.
+            The helper opens from Telegram and saves useful profile context quietly. Proof badges appear only when a sponsored response includes one.
           </p>
           <button
             type="button"
@@ -1535,7 +1572,7 @@ function TelegramHelperPanel({
                   <p className="text-xs font-semibold text-gray-900 dark:text-white">
                     {helperName ? `Hi ${helperName}` : 'Helper is live'}
                   </p>
-                  <p className="text-[11px] text-gray-400">Open helper. ZeroScout sponsored.</p>
+                  <p className="text-[11px] text-gray-400">Open helper</p>
                 </div>
               </div>
 
@@ -1546,8 +1583,8 @@ function TelegramHelperPanel({
                       {helperName ? `Welcome back, ${helperName}.` : 'Welcome.'} Ask me about payments, Polymarket funding, StreamPay, agent setup, research, planning, or daily questions.
                     </p>
                     <div className="mt-2 inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400">
-                      <span className="rounded border border-emerald-100 px-1 text-[8px] font-black text-emerald-600 dark:border-emerald-300/20 dark:text-emerald-200">ZS</span>
-                      ZeroScout-sponsored helper
+                      <span className="rounded border border-gray-100 px-1 text-[8px] font-black text-gray-500 dark:border-white/10 dark:text-gray-300">AI</span>
+                      Ready in Telegram
                     </div>
                   </div>
                 )}
@@ -1555,26 +1592,15 @@ function TelegramHelperPanel({
                 {messages.map((message, index) => (
                   <div key={index} className="space-y-2">
                     <div className="flex justify-end">
-                      <div className="max-w-[86%] rounded-2xl rounded-tr-md bg-gray-900 px-3 py-2 text-sm text-white dark:bg-white dark:text-gray-950">
+                      <div className="max-w-[86%] break-words rounded-2xl rounded-tr-md bg-gray-900 px-3 py-2 text-sm leading-relaxed text-white shadow-sm dark:bg-white dark:text-gray-950">
                         {message.question}
                       </div>
                     </div>
                     <div>
-                      <div className="max-w-[86%] whitespace-pre-wrap rounded-2xl rounded-tl-md border border-gray-100 bg-gray-50 px-3 py-2.5 text-sm text-gray-800 dark:border-white/10 dark:bg-white/[0.05] dark:text-gray-200">
+                      <div className="max-w-[86%] break-words whitespace-pre-wrap rounded-2xl rounded-tl-md border border-gray-100 bg-gray-50 px-3 py-2.5 text-sm leading-relaxed text-gray-800 shadow-sm dark:border-white/10 dark:bg-white/[0.05] dark:text-gray-200">
                         {message.answer}
                       </div>
                       {message.paylink && <HelperPaylinkCard request={message.paylink} />}
-                      {message.proof && (
-                        <a
-                          href={message.proof.ogExplorer}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="mt-1 inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400 transition-colors hover:text-gray-600 dark:hover:text-gray-200"
-                        >
-                          <span className="rounded border border-purple-100 px-1 text-[8px] font-black text-purple-500 dark:border-purple-300/20 dark:text-purple-200">0G</span>
-                          response proof
-                        </a>
-                      )}
                       {message.zeroscoutSponsorship && (
                         <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] font-semibold text-gray-400">
                           <span className="rounded border border-emerald-100 bg-emerald-50 px-1.5 py-0.5 text-[9px] font-black uppercase text-emerald-600 dark:border-emerald-300/20 dark:bg-emerald-300/10 dark:text-emerald-200">
@@ -1636,9 +1662,12 @@ function TelegramHelperPanel({
 function HelperThinkingIndicator({ status }: { status: string }) {
   const [stepIndex, setStepIndex] = useState(0)
   const isPaylink = /payment|paylink|request/i.test(status)
+  const isProof = /proof|sponsor/i.test(status)
   const steps = isPaylink
-    ? ['reading details', 'checking wallet', 'preparing link']
-    : ['reading', 'checking context', 'writing']
+    ? ['Reading your message...', 'Checking payment details...', 'Preparing PayLink...']
+    : isProof
+    ? ['Asking ZeroScout...', 'Securing proof...', 'Ready.']
+    : ['Reading your message...', 'Asking ZeroScout...', 'Securing proof...']
 
   useEffect(() => {
     setStepIndex(0)
@@ -1660,7 +1689,7 @@ function HelperThinkingIndicator({ status }: { status: string }) {
         ))}
       </span>
       <span className="text-[11px] font-medium text-gray-400 dark:text-gray-400">
-        Ask Hash is {steps[stepIndex]}
+        {steps[stepIndex]}
       </span>
     </div>
   )
@@ -1673,6 +1702,7 @@ function HelperPaylinkCard({ request }: { request: SavedRequest }) {
   const dashboardUrl = request.mode === 'group' ? request.dashboardUrl || buildRequestDashboardLink(request) : ''
   const amountLine = request.amount ? `${request.amount} USDC` : 'Flexible amount'
   const target = friendlyName(request.target)
+  const recipient = request.wallet || request.evmWallet || request.solanaWallet
   const shareText = [
     request.mode === 'group' ? 'Hash PayLink collection' : 'Hash PayLink payment request',
     `${request.label} - ${amountLine}`,
@@ -1703,20 +1733,28 @@ function HelperPaylinkCard({ request }: { request: SavedRequest }) {
         <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-200" />
         <div className="min-w-0">
           <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-100">
-            {request.mode === 'group' ? 'Collection Ready' : 'PayLink Ready'}
+            {request.mode === 'group' ? 'Collection ready' : 'Payment request ready'}
           </p>
           <p className="truncate text-[11px] text-emerald-700/80 dark:text-emerald-100/75">
-            {amountLine} on {requestNetworkLabels[network]}
+            {amountLine} · {requestNetworkLabels[network]}
           </p>
         </div>
       </div>
-      <div className="mt-2 rounded-xl bg-white/80 p-2 text-xs dark:bg-white/[0.06]">
-        <p className="break-words font-semibold text-gray-900 dark:text-white">{request.label}</p>
-        <p className="mt-0.5 truncate text-gray-500 dark:text-gray-300">
-          {request.mode === 'group' ? 'Collection' : 'Payer'}: {target}
-        </p>
+      <div className="mt-2 grid gap-1 rounded-xl bg-white/80 p-2 text-xs dark:bg-white/[0.06]">
+        {[
+          ['Amount', amountLine],
+          ['Network', requestNetworkLabels[network]],
+          ['Purpose', request.label || 'Payment'],
+          ['Recipient', recipient ? shortAddress(recipient) : 'Not set'],
+          [request.mode === 'group' ? 'Collection' : 'Payer', target || 'Not set'],
+        ].map(([label, value]) => (
+          <div key={label} className="grid grid-cols-[64px_minmax(0,1fr)] items-center gap-2">
+            <span className="text-[10px] font-semibold uppercase text-gray-400">{label}</span>
+            <span className="min-w-0 truncate font-medium text-gray-800 dark:text-gray-100" title={value}>{value}</span>
+          </div>
+        ))}
       </div>
-      <div className="mt-2 grid grid-cols-2 gap-1.5">
+      <div className="mt-2 grid grid-cols-3 gap-1.5">
         <button
           type="button"
           onClick={() => void nativeShare()}
@@ -1734,6 +1772,14 @@ function HelperPaylinkCard({ request }: { request: SavedRequest }) {
           <ExternalLink className="h-3.5 w-3.5" />
           {request.mode === 'group' ? 'Pay' : 'Open'}
         </a>
+        <button
+          type="button"
+          onClick={() => void copyLink()}
+          className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-emerald-200 bg-white px-2.5 py-2 text-xs font-semibold text-emerald-700 dark:border-emerald-300/20 dark:bg-white/[0.06] dark:text-emerald-100"
+        >
+          <Copy className="h-3.5 w-3.5" />
+          {copied ? 'Copied' : 'Copy'}
+        </button>
       </div>
       {dashboardUrl && (
         <a
@@ -1746,13 +1792,10 @@ function HelperPaylinkCard({ request }: { request: SavedRequest }) {
           Track collection
         </a>
       )}
-      <div className="mt-1.5 grid grid-cols-4 gap-1">
+      <div className="mt-1.5 grid grid-cols-3 gap-1">
         <a className="rounded-md bg-white px-2 py-1.5 text-center text-[10px] font-bold text-gray-600 dark:bg-white/[0.08] dark:text-gray-200" href={buildTelegramShareUrl({ ...request, payUrl: url })} target="_blank" rel="noopener noreferrer">TG</a>
         <a className="rounded-md bg-white px-2 py-1.5 text-center text-[10px] font-bold text-gray-600 dark:bg-white/[0.08] dark:text-gray-200" href={`https://wa.me/?text=${encodeURIComponent(`${shareText}\n${url}`)}`} target="_blank" rel="noopener noreferrer">WA</a>
         <a className="rounded-md bg-white px-2 py-1.5 text-center text-[10px] font-bold text-gray-600 dark:bg-white/[0.08] dark:text-gray-200" href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(`${shareText}\n${url}`)}`} target="_blank" rel="noopener noreferrer">X</a>
-        <button type="button" onClick={() => void copyLink()} className="rounded-md bg-white px-2 py-1.5 text-center text-[10px] font-bold text-gray-600 dark:bg-white/[0.08] dark:text-gray-200">
-          {copied ? 'OK' : 'Copy'}
-        </button>
       </div>
       <p className="mt-2 text-[11px] font-medium text-emerald-700/80 dark:text-emerald-100/80">
         Ask for the receipt after payment.

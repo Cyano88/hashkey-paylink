@@ -311,7 +311,7 @@ export default async function handler(req: Request, res: Response) {
       },
       proof: {
         contract: '',
-        network: 'ZeroScout-sponsored helper',
+        network: 'Ask Hash helper',
         rootHash: '',
         ogTxHash: '',
       },
