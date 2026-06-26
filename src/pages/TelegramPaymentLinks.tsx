@@ -1446,8 +1446,18 @@ function TelegramHelperPanel({
 
       <div className="rounded-xl border border-gray-100 bg-gray-50/80 p-3 dark:border-white/10 dark:bg-white/[0.04]">
         <div className="flex items-start gap-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-gray-800 shadow-sm dark:bg-white/[0.08] dark:text-gray-100">
-            <Sparkles className="h-4 w-4" />
+          <div className="ask-hash-live-agent" aria-hidden="true">
+            <span className="ask-hash-live-agent__head">
+              <span className="ask-hash-live-agent__eye ask-hash-live-agent__eye--left" />
+              <span className="ask-hash-live-agent__eye ask-hash-live-agent__eye--right" />
+              <span className="ask-hash-live-agent__mouth" />
+            </span>
+            <span className="ask-hash-live-agent__antenna" />
+            <span className="ask-hash-live-agent__bubble">
+              <span />
+              <span />
+              <span />
+            </span>
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
@@ -1587,8 +1597,8 @@ function TelegramHelperPanel({
                       {profile?.memoryProof
                         ? 'Latest profile checkpoint is archived.'
                         : memoryDraft.trim() || profile?.memorySummary
-                        ? 'Profile summary will personalize replies.'
-                        : 'Add what the helper should remember.'}
+                        ? 'Profile context saves quietly to personalize future replies.'
+                        : 'Profile context will save quietly as you chat.'}
                     </p>
                   </div>
                   {profile?.memoryProof && (
@@ -1602,13 +1612,6 @@ function TelegramHelperPanel({
                     </a>
                   )}
                 </div>
-                <textarea
-                  value={memoryDraft}
-                  onChange={event => setMemoryDraft(event.target.value.slice(0, 1200))}
-                  onBlur={() => void saveProfile({ memorySummary: memoryDraft })}
-                  placeholder="Example: Call me Ada. I like concise answers and I am building with Hash PayLink, Polymarket, StreamPay, and 0G."
-                  className="min-h-[58px] w-full resize-none rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-xs leading-relaxed text-gray-900 outline-none placeholder:text-gray-400 focus:ring-2 focus:ring-gray-200 dark:border-white/10 dark:bg-white/[0.05] dark:text-white"
-                />
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-[10px] text-gray-400">
                     {profileBusy ? 'Saving...' : profileError || 'Profile context saves quietly to personalize future replies.'}
@@ -1617,10 +1620,9 @@ function TelegramHelperPanel({
                     type="button"
                     onClick={checkpointMemory}
                     disabled={checkpointBusy || !memoryDraft.trim()}
-                    className="inline-flex items-center gap-1 rounded-lg bg-gray-900 px-2.5 py-1.5 text-[11px] font-semibold text-white transition-all hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-950"
+                    className="inline-flex items-center rounded-lg bg-gray-900 px-2.5 py-1.5 text-[11px] font-semibold text-white transition-all hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-950"
                   >
-                    {checkpointBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : <ShieldCheck className="h-3 w-3" />}
-                    Archive
+                    {checkpointBusy ? 'Archiving...' : 'Archive'}
                   </button>
                 </div>
               </div>
