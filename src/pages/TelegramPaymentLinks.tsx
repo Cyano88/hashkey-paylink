@@ -393,7 +393,11 @@ function extractPurpose(text: string) {
   const clean = text.replace(/\s+/g, ' ').trim()
   const match = clean.match(/\b(?:for|purpose|memo|reason)\s+([^?.!,;]+)/i)?.[1]?.trim() ?? ''
   if (!match) return ''
-  return match.replace(/^(base|arc|solana|arbitrum|usdc)\b/i, '').trim().slice(0, 80)
+  return match
+    .replace(/\s+\bto\b\s+(0x[a-fA-F0-9]{40}|[1-9A-HJ-NP-Za-km-z]{32,44}).*$/i, '')
+    .replace(/^(base|arc|solana|arbitrum|usdc)\b/i, '')
+    .trim()
+    .slice(0, 80)
 }
 
 function isPaymentRequestIntent(text: string) {
@@ -416,7 +420,7 @@ function describeMissingDraftFields(draft: HelperPaylinkDraft, savedWallet?: str
   const missing = [
     !draft.target && (draft.mode === 'group' ? 'group or collection name' : 'payer name'),
     !draft.amount && 'amount in USDC',
-    !draft.network && 'network',
+    !draft.network && !draft.wallet?.startsWith('0x') && 'network',
     !draft.label && 'purpose',
     !draft.wallet && !savedWallet && 'receive wallet',
   ].filter(Boolean)
@@ -1228,7 +1232,7 @@ function TelegramHelperPanel({
     const mode = existing?.mode ?? (isGroupRequestIntent(text) ? 'group' : 'person')
     const walletFromText = extractWallet(text)
     const networkFromText = extractNetwork(text)
-    const nextNetwork = networkFromText || existing?.network || (walletFromText && !walletFromText.startsWith('0x') ? 'solana' : '')
+    const nextNetwork = networkFromText || existing?.network || (walletFromText ? (walletFromText.startsWith('0x') ? 'base' : 'solana') : '')
     const targetFromText = extractTarget(text, mode)
     const purposeFromText = extractPurpose(text)
     const amountFromText = extractAmount(text)
@@ -1319,13 +1323,19 @@ function TelegramHelperPanel({
     if (draft.network === 'all') {
       draft = { ...draft, network: '' }
     }
+    if (!draft.network && draft.wallet?.startsWith('0x')) {
+      draft = { ...draft, network: 'base' }
+    }
 
     const missing = describeMissingDraftFields(draft, draft.wallet ? '' : savedWallet)
     if (missing.length > 0) {
       setPaylinkDraft(draft)
+      const missingNetworkOnly = missing.length === 1 && missing[0] === 'network'
       setMessages(prev => [...prev, {
         question: nextQuestion,
-        answer: `I can create this. I still need: ${missing.join(', ')}. Reply in one line, for example: "25 Base for dinner to 0x..."`,
+        answer: missingNetworkOnly
+          ? 'Which network should this use: Base, Arc, Arbitrum, Solana, or all networks?'
+          : `I have part of it. Send ${missing.join(', ')}${draft.wallet?.startsWith('0x') ? ' or say a different network if you do not want Base.' : ''}`,
       }])
       return true
     }
@@ -1486,46 +1496,6 @@ function TelegramHelperPanel({
                 </div>
               </div>
 
-              <div className="space-y-2 border-b border-gray-100 p-3 dark:border-white/10">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">
-                      {profile?.memoryProof ? '0G memory active' : memoryDraft.trim() || profile?.memorySummary ? 'Memory local' : 'Memory setup'}
-                    </p>
-                    <p className="mt-0.5 truncate text-xs text-gray-500 dark:text-gray-400">
-                      {profile?.memoryProof
-                        ? 'Latest profile checkpoint is archived.'
-                        : memoryDraft.trim() || profile?.memorySummary
-                        ? 'Profile context saves quietly to personalize future replies.'
-                        : 'Profile context will save quietly as you chat.'}
-                    </p>
-                  </div>
-                  {profile?.memoryProof && (
-                    <a
-                      href={profile.memoryProof.ogExplorer}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 rounded-lg border border-purple-100 bg-purple-50 px-2 py-1 text-[10px] font-bold text-purple-600 dark:border-purple-300/20 dark:bg-purple-300/10 dark:text-purple-200"
-                    >
-                      0G memory <ExternalLink className="h-2.5 w-2.5" />
-                    </a>
-                  )}
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-[10px] text-gray-400">
-                    {profileBusy ? 'Saving...' : profileError || 'Profile context saves quietly to personalize future replies.'}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={checkpointMemory}
-                    disabled={checkpointBusy || !memoryDraft.trim()}
-                    className="inline-flex items-center rounded-lg bg-gray-900 px-2.5 py-1.5 text-[11px] font-semibold text-white transition-all hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-950"
-                  >
-                    {checkpointBusy ? 'Archiving...' : 'Archive'}
-                  </button>
-                </div>
-              </div>
-
               <div className="max-h-[360px] min-h-[220px] space-y-4 overflow-y-auto p-3">
                 {messages.length === 0 && !asking && (
                   <div className="rounded-2xl rounded-tl-md bg-gray-50 px-3 py-2.5 dark:bg-white/[0.05]">
@@ -1586,12 +1556,7 @@ function TelegramHelperPanel({
                   </div>
                 ))}
 
-                {asking && (
-                  <div className="inline-flex items-center gap-2 rounded-xl bg-gray-50 px-3 py-2 text-sm text-gray-400 dark:bg-white/[0.05]">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    {agentStatus}
-                  </div>
-                )}
+                {asking && <HelperThinkingIndicator status={agentStatus} />}
                 {askError && (
                   <p className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs font-medium text-red-600 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200">{askError}</p>
                 )}
@@ -1621,6 +1586,37 @@ function TelegramHelperPanel({
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+function HelperThinkingIndicator({ status }: { status: string }) {
+  const isPaylink = /payment|paylink|request/i.test(status)
+  const steps = isPaylink
+    ? ['Reading request details', 'Checking wallet and network', 'Preparing shareable PayLink']
+    : ['Reading your question', 'Asking ZeroScout for guidance', 'Writing a direct answer']
+
+  return (
+    <div className="max-w-[86%] rounded-2xl rounded-tl-md border border-gray-100 bg-gray-50 px-3 py-2.5 text-sm text-gray-500 dark:border-white/10 dark:bg-white/[0.05] dark:text-gray-300">
+      <div className="flex items-center gap-2">
+        <span className="relative flex h-2.5 w-2.5">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+          <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
+        </span>
+        <span className="font-semibold text-gray-700 dark:text-gray-100">{status}</span>
+      </div>
+      <div className="mt-2 space-y-1.5">
+        {steps.map((step, index) => (
+          <div key={step} className="flex items-center gap-2 text-[11px]">
+            {index === steps.length - 1 ? (
+              <Loader2 className="h-3 w-3 animate-spin text-emerald-500" />
+            ) : (
+              <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+            )}
+            <span>{step}</span>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
