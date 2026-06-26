@@ -1242,11 +1242,11 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
   const x402ValidationMessage = agentNetwork === 'arc'
     ? 'x402 activation currently supports Base or Arbitrum.'
     : treasuryEmpty
-    ? 'Fund treasury first, then activate x402.'
+    ? embeddedWalletManager ? 'Fund wallet balance first, then activate x402.' : 'Fund treasury first, then activate x402.'
     : x402AmountInvalid
     ? 'Enter a valid x402 amount.'
     : x402AmountExceedsTreasury
-    ? 'Amount is higher than the current treasury balance.'
+    ? embeddedWalletManager ? 'Amount is higher than the current wallet balance.' : 'Amount is higher than the current treasury balance.'
     : x402AmountBelowMinimum
     ? `Minimum x402 top up is ${MIN_X402_ACTIVATION_USDC} USDC.`
     : ''
@@ -1797,7 +1797,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
                     disabled={walletBusy || !privyReady}
                     className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-6 py-3.5 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-60 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
                   >
-                    <img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert mix-blend-screen" />
+                    <img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert mix-blend-screen dark:invert-0 dark:mix-blend-multiply" />
                     {currentAgentWallet ? 'Link wallet' : 'Sign in with email'}
                   </PrivyConnectButton>
                   <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
@@ -1923,7 +1923,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
                       >
                         {walletBusy && walletStep === 'idle'
                           ? <><Loader2 className="h-4 w-4 animate-spin" /> Opening Circle wallet</>
-                          : <><img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert mix-blend-screen" /> {walletMode === 'create' ? 'Create wallet' : 'Send code'}</>}
+                          : <><img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert mix-blend-screen dark:invert-0 dark:mix-blend-multiply" /> {walletMode === 'create' ? 'Create wallet' : 'Send code'}</>}
                       </button>
                       <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
                         Circle will email a one-time code.
@@ -2001,7 +2001,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
               <div className="overflow-hidden rounded-lg border border-gray-100 bg-white dark:border-white/10 dark:bg-white/[0.04]">
                 <div className="flex items-center justify-between gap-3 px-3 py-3">
                   <div className="min-w-0">
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Treasury</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">{embeddedWalletManager ? 'Wallet balance' : 'Treasury'}</p>
                     <p className="mt-0.5 text-sm font-semibold text-gray-900 dark:text-white" title={treasuryBalanceError || undefined}>
                       {treasuryBalance !== null
                         ? `${Number(treasuryBalance).toLocaleString(undefined, { maximumFractionDigits: 6 })} USDC`
@@ -2021,7 +2021,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
                 <div className="border-t border-gray-100 px-3 py-3 dark:border-white/10">
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">x402</p>
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">x402 service balance</p>
                       <p className="mt-0.5 text-sm font-semibold text-gray-900 dark:text-white" title={x402BalanceError || undefined}>
                         {x402Balance !== null
                           ? `${Number(x402Balance).toLocaleString(undefined, { maximumFractionDigits: 6 })} USDC`
@@ -2046,7 +2046,9 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
                     </div>
                   </div>
                   <p className="mt-2 text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
-                    {treasuryEmpty ? 'Fund treasury before activation.' : 'Activate from treasury when your agent needs API spend.'}
+                    {embeddedWalletManager
+                      ? treasuryEmpty ? 'Fund wallet balance before activation.' : 'Activate x402 service balance from wallet balance.'
+                      : treasuryEmpty ? 'Fund treasury before activation.' : 'Activate from treasury when your agent needs API spend.'}
                   </p>
                 </div>
                 {(x402ModalOpen || x402ActivationSuccess) && (
@@ -2065,7 +2067,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
                           <div>
                             <p className="text-xs font-semibold text-gray-900 dark:text-white">Activate x402</p>
                             <p className="mt-0.5 text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
-                              Move USDC from treasury into x402 for API spend.
+                              {embeddedWalletManager ? 'Move USDC from wallet balance into x402 service balance.' : 'Move USDC from treasury into x402 for API spend.'}
                             </p>
                           </div>
                         </div>
@@ -2126,7 +2128,9 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <p className="text-xs font-semibold text-gray-900 dark:text-white">Receipts</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">Treasury funding, x402 activation, and Circle Gateway receipts</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      {embeddedWalletManager ? 'Wallet funding, x402 activation, and Circle Gateway receipts' : 'Treasury funding, x402 activation, and Circle Gateway receipts'}
+                    </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-1.5">
                     <button
@@ -2230,7 +2234,9 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
                     <div className="rounded-lg border border-dashed border-gray-200 px-3 py-4 text-center dark:border-white/10">
                       <p className="text-xs font-semibold text-gray-500 dark:text-gray-300">No receipts yet</p>
                       <p className="mt-1 text-xs leading-relaxed text-gray-400 dark:text-gray-500">
-                        x402 receipts appear here after this agent pays a Circle Gateway service. Fund treasury, activate x402, then run LP Scout.
+                        {embeddedWalletManager
+                          ? 'x402 receipts appear here after your wallet pays a Circle Gateway service. Fund wallet balance, activate x402, then run a paid action.'
+                          : 'x402 receipts appear here after this agent pays a Circle Gateway service. Fund treasury, activate x402, then run LP Scout.'}
                       </p>
                     </div>
                   )}
