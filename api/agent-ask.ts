@@ -12,13 +12,12 @@
  *   2. If verified → return AI response + on-chain proof
  *   3. If not verified → 402 Payment Required + payment link
  *
- * The AI response uses ANTHROPIC_API_KEY if configured, otherwise returns a
- * structured demo response that still fully demonstrates the verification flow.
+ * Ask Hash gets model intelligence through ZeroScout guidance and only returns
+ * after final ZeroScout sponsorship succeeds.
  */
 
 import type { Request, Response } from 'express'
 import { ethers }                  from 'ethers'
-import Anthropic                   from '@anthropic-ai/sdk'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import crypto from 'node:crypto'
@@ -51,6 +50,7 @@ const HELPER_VERIFY_TIMEOUT_MS = Math.max(5_000, parseInt(process.env.HELPER_VER
 const UPSTASH_REST_URL = (process.env.UPSTASH_REDIS_REST_URL ?? '').trim().replace(/\/+$/, '')
 const UPSTASH_REST_TOKEN = (process.env.UPSTASH_REDIS_REST_TOKEN ?? '').trim()
 const UPSTASH_USAGE_KEY = (process.env.HELPER_USAGE_STORE_KEY ?? 'hashpaylink:helper-usage').trim()
+const GENERIC_STRATEGY_PHRASE = 'Build around agentic USDC commerce'
 
 type UsageRecord = {
   count: number
@@ -60,31 +60,6 @@ type UsageRecord = {
 type UsageStore = {
   usage: Record<string, UsageRecord>
 }
-
-const HASH_PAYLINK_SYSTEM_PROMPT = [
-  'You are the Hash PayLink Strategy Agent for Circle, Arc, 0G, Polymarket, and agentic USDC commerce.',
-  'Paid service access is granted only after a verified Hash PayLink payment archived on 0G. Ask Hash helper access is free and still requires ZeroScout sponsorship before a response is returned.',
-  '',
-  'Your specialty:',
-  '- Circle Developer Platform and USDC-native product strategy',
-  '- Arc ecosystem product ideas and migration planning',
-  '- Polymarket funding workflows, LP reward-market interpretation, maker spread planning, and portfolio explanation',
-  '- agentic economic activity with stablecoin payments',
-  '- Hash PayLink instant payments, StreamPay, paid AI access, and 0G verification',
-  '- practical MVPs, grant positioning, technical architecture, and milestone design',
-  '',
-  'Response standards:',
-  '- Give specific, high-signal recommendations, not generic startup advice.',
-  '- Prefer concrete build plans, integration steps, and grant-ready positioning.',
-  '- For Polymarket questions, explain the data needed, reward constraints, spread logic, risks, and next operational step.',
-  '- Do not invent live Polymarket prices, rewards, odds, balances, or positions. If no structured data is supplied, say what to check live.',
-  '- Treat LP spread suggestions as educational market-structure analysis, not financial advice.',
-  '- Distinguish clearly between what is already built, what is testnet, and what is a future milestone.',
-  '- Be honest that Arc is testnet when relevant.',
-  '- Do not claim official Circle, Arc, 0G, or Polymarket partnership, endorsement, badges, grant approval, or guaranteed acceptance.',
-  '- Do not provide financial, legal, tax, or compliance advice. For regulated questions, give product/technical framing and advise professional review.',
-  '- Keep answers concise but valuable.',
-].join('\n')
 
 function normalizeBoundedString(value: unknown, field: string, maxLength: number): string {
   if (typeof value !== 'string') throw new Error(`${field} must be a string`)
@@ -230,46 +205,73 @@ async function verifyPayment(eventId: string, payer: string) {
 
 // ─── AI response ──────────────────────────────────────────────────────────────
 
-async function getAiResponse(question: string, payerName: string, chain: string, amount: string, memorySummary = '', zeroScoutGuidance?: ZeroScoutHelperGuidance, accessMode = 'paid'): Promise<string> {
-  const memoryContext = memorySummary
-    ? `\n\nSaved Hash PayLink helper memory summary:\n${memorySummary}\nUse this only to personalize helpful context. Do not expose it unless the user asks.`
-    : ''
-  const guidanceContext = zeroScoutGuidance?.guidance
-    ? `\n\nZeroScout helper guidance:\n${zeroScoutGuidance.guidance}\nUse this as private response-planning context. Do not claim payment, wallet balance, x402 activation, paid-service access, receipt status, or LP Scout proof unless verified app state supplied it. Keep Circle wallet balance, x402 service balance, Activate x402, paid services, and LP Scout proof/payment requirements clearly separate.`
-    : ''
-  if (process.env.ANTHROPIC_API_KEY) {
-    try {
-      const client  = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-      const message = await client.messages.create({
-        model:      'claude-haiku-4-5-20251001',
-        max_tokens: 900,
-        system:     `${HASH_PAYLINK_SYSTEM_PROMPT}\n\nAccess context: ${accessMode === HELPER_FREE_ACCESS_MODE ? `${payerName} is using the free Ask Hash helper. Do not claim they paid for helper access.` : `${payerName} paid ${amount} on ${chain}, confirmed on 0G decentralized storage.`}${memoryContext}${guidanceContext}`,
-        messages:   [{ role: 'user', content: question }],
-      })
-      const block = message.content[0]
-      if (block.type === 'text') {
-        console.log('[agent-ask] Claude responded successfully')
-        return block.text
-      }
-    } catch (err) {
-      console.error('[agent-ask] Claude error:', err instanceof Error ? err.message : String(err))
-    }
-  } else {
-    console.warn('[agent-ask] ANTHROPIC_API_KEY not set')
+function isNameQuestion(question: string) {
+  return /\b(what'?s|what is|who am i|do you know)\b/i.test(question)
+    && /\b(my name|me as|call me|who i am)\b/i.test(question)
+}
+
+function isLikelyIdentifier(value: string) {
+  return !value
+    || value.includes('@')
+    || /^0x[a-fA-F0-9]{40}$/.test(value)
+    || /^helper-free-/i.test(value)
+}
+
+function titleName(value: string) {
+  return value
+    .trim()
+    .replace(/^@+/, '')
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 3)
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
+}
+
+function nameFromMemory(memorySummary: string, payerName: string) {
+  const candidates = [
+    /\b(?:user is known as|known as|called|call(?:ed)?|prefers to be called)\s+([A-Za-z][A-Za-z0-9_.-]{1,40}(?:\s+[A-Za-z][A-Za-z0-9_.-]{1,40}){0,2})/i.exec(memorySummary)?.[1],
+    /\bHi\s+([A-Za-z][A-Za-z0-9_.-]{1,40})\b/i.exec(memorySummary)?.[1],
+    !isLikelyIdentifier(payerName) ? payerName : '',
+  ]
+  const picked = candidates.map(item => String(item ?? '').trim()).find(Boolean)
+  return picked ? titleName(picked) : ''
+}
+
+function cleanZeroScoutGuidanceText(value: string) {
+  return value
+    .split('\n')
+    .map(line => line.replace(/^(Signal|Use|Boundary|Missing):\s*/i, '').trim())
+    .filter(line => line && !/ZeroScout sponsorship is required/i.test(line))
+    .filter(line => !line.includes(GENERIC_STRATEGY_PHRASE))
+    .slice(0, 5)
+    .join('\n')
+    .trim()
+}
+
+function answerFromZeroScoutGuidance(question: string, zeroScoutGuidance?: ZeroScoutHelperGuidance) {
+  const guidance = cleanZeroScoutGuidanceText(zeroScoutGuidance?.guidance ?? '')
+  if (!guidance) return ''
+  const limit = /\b(payment|paylink|request|invoice|usdc|wallet|base|arc|arbitrum|solana)\b/i.test(question) ? 900 : 700
+  return guidance.length <= limit ? guidance : `${guidance.slice(0, limit - 20).trim()}...`
+}
+
+function getHelperResponse(question: string, payerName: string, chain: string, amount: string, memorySummary = '', zeroScoutGuidance?: ZeroScoutHelperGuidance, accessMode = 'paid'): string {
+  if (isNameQuestion(question)) {
+    const knownName = nameFromMemory(memorySummary, payerName)
+    return knownName
+      ? `You are ${knownName}.`
+      : "I do not know your preferred name yet. Tell me what to call you and I will remember it for future chats."
   }
 
-  const fallbackLines = [
-    accessMode === HELPER_FREE_ACCESS_MODE
-      ? 'Ask Hash is open. ZeroScout sponsorship is required before this helper response is returned.'
-      : `Access granted. Your payment of ${amount} on ${chain} has been verified on 0G decentralized storage.`,
-    '',
-    `You asked: "${question}"`,
-    '',
-    'Hash PayLink Strategy Agent guidance:',
-    '',
-    'Build around agentic USDC commerce: instant PayLinks for one-time settlement, StreamPay on Arc for time-based budgets and retainers, Polymarket funding/LP intelligence for prediction-market users, and 0G proofs for verifiable AI access. A strong MVP should show a paid request, a verified 0G archive proof, and either an AI answer unlock, an Arc USDC stream, or a Polymarket funding/LP workflow. Frame Arc as the programmable USDC settlement environment, Circle as the stablecoin platform layer, and Polymarket as a high-signal consumer workflow. This is product strategy, not financial advice.',
-  ]
-  return fallbackLines.filter(Boolean).join('\n')
+  const zeroScoutAnswer = answerFromZeroScoutGuidance(question, zeroScoutGuidance)
+  if (zeroScoutAnswer) return zeroScoutAnswer
+
+  if (accessMode !== HELPER_FREE_ACCESS_MODE) {
+    return `Your paid helper access is verified: ${amount} on ${chain}. What would you like to do next?`
+  }
+
+  return 'I can help with payments, PayLinks, StreamPay, PolyDesk, wallets, and setup. Ask me what you want to create or check next.'
 }
 
 // ─── Handler ──────────────────────────────────────────────────────────────────
@@ -351,6 +353,7 @@ export default async function handler(req: Request, res: Response) {
       request: {
         eventId,
         question,
+        accessMode,
         memorySummary,
         memorySummaryHash,
       },
@@ -363,7 +366,7 @@ export default async function handler(req: Request, res: Response) {
       },
     })
 
-    const answer = await getAiResponse(
+    const answer = getHelperResponse(
       question,
       access.payment.payer,
       access.payment.chain,

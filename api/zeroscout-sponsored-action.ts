@@ -21,6 +21,7 @@ type ZeroScoutHelperGuidanceInput = {
   request: {
     eventId: string
     question: string
+    accessMode?: string
     memorySummary?: string
     memorySummaryHash?: string
   }
@@ -126,6 +127,7 @@ export async function getZeroScoutHelperGuidance(input: ZeroScoutHelperGuidanceI
   const request = {
     eventId: input.request.eventId,
     question: sanitizeHelperContext(input.request.question),
+    accessMode: input.request.accessMode,
     memorySummary: sanitizedMemorySummary || undefined,
     memorySummaryHash: input.request.memorySummaryHash,
   }
@@ -141,8 +143,8 @@ export async function getZeroScoutHelperGuidance(input: ZeroScoutHelperGuidanceI
       partner: 'Hash PayLink',
       productType: 'agentic-service',
       analysisType: 'zeroscout-helper-context-guidance',
-      objective: 'Return concise guidance that helps Hash PayLink helper personalize the response while respecting payment, wallet, LP Scout, and x402 boundaries.',
-      outputStyle: 'helper-context-guidance',
+      objective: 'Return a concise, consumer-friendly Ask Hash chat answer plan. Be direct, human, and useful. Personal identity questions should be answered only from supplied memory/profile context; if unknown, say that naturally. Payment-link requests should be practical and minimal. Respect payment, wallet, LP Scout, and x402 proof boundaries.',
+      outputStyle: 'consumer-helper-answer-guidance',
       data: {
         proofClass: 'zeroscout_helper_context_guidance',
         service: input.service,
@@ -153,6 +155,8 @@ export async function getZeroScoutHelperGuidance(input: ZeroScoutHelperGuidanceI
         sourceProof: input.sourceProof,
         separationRules: [
           'This is helper context guidance only, not LP Scout paid proof.',
+          'Do not mention ZeroScout sponsorship requirements in user-facing answer text.',
+          'Do not return generic product strategy when the user asks a simple personal, payment, or setup question.',
           'Do not claim Circle wallet balance, x402 service balance, x402 activation, paid-service access, receipt status, or LP Scout proof unless supplied by verified app state.',
           'Keep Circle wallet balance, x402 service balance, Activate x402, paid services, and LP Scout proof/payment requirements distinct.',
           'Do not infer live prices, wallet balances, secrets, payment proofs, or user identity beyond supplied fields.',
