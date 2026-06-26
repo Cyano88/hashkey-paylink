@@ -380,10 +380,24 @@ function extractWallet(text: string) {
   return solana
 }
 
+function stripWallets(text: string) {
+  return text
+    .replace(/0x[a-fA-F0-9]{40}/g, '')
+    .replace(/\b[1-9A-HJ-NP-Za-km-z]{32,44}\b/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 function extractTarget(text: string, mode: RequestMode) {
   const clean = text.replace(/\s+/g, ' ').trim()
-  const person = clean.match(/\b(?:from|to|for)\s+(@?[a-zA-Z][\w.-]{1,40})\b/)?.[1] ?? ''
-  if (person && !['base', 'arc', 'solana', 'arbitrum', 'dinner', 'invoice', 'payment'].includes(person.toLowerCase())) return person
+  const blocked = new Set(['a', 'an', 'the', 'request', 'payment', 'paylink', 'invoice', 'base', 'arc', 'solana', 'arbitrum', 'dinner', 'lunch', 'food'])
+  const candidates = Array.from(clean.matchAll(/\b(from|to|for)\s+(@?[a-zA-Z][\w.-]{1,40})\b/gi))
+    .map(match => ({ preposition: match[1].toLowerCase(), value: match[2] }))
+    .filter(item => !blocked.has(item.value.toLowerCase()))
+  const fromCandidate = candidates.find(item => item.preposition === 'from')
+  if (fromCandidate) return fromCandidate.value
+  const person = candidates.find(item => item.preposition !== 'for')?.value ?? ''
+  if (person) return person
   const group = clean.match(/\b(?:group|collection|collect from)\s+([^,.;]+)/i)?.[1]?.trim() ?? ''
   if (mode === 'group' && group) return group.slice(0, 48)
   return ''
@@ -393,7 +407,7 @@ function extractPurpose(text: string) {
   const clean = text.replace(/\s+/g, ' ').trim()
   const match = clean.match(/\b(?:for|purpose|memo|reason)\s+([^?.!,;]+)/i)?.[1]?.trim() ?? ''
   if (!match) return ''
-  return match
+  return stripWallets(match)
     .replace(/\s+\bto\b\s+(0x[a-fA-F0-9]{40}|[1-9A-HJ-NP-Za-km-z]{32,44}).*$/i, '')
     .replace(/^(base|arc|solana|arbitrum|usdc)\b/i, '')
     .trim()
@@ -429,6 +443,20 @@ function describeMissingDraftFields(draft: HelperPaylinkDraft, savedWallet?: str
 
 function compactSavedWallet(wallet: string) {
   return wallet ? shortAddress(wallet).replace('...', '..') : ''
+}
+
+function friendlyName(value: string) {
+  const clean = value.trim()
+  if (!clean || clean.startsWith('@')) return clean
+  return clean.charAt(0).toUpperCase() + clean.slice(1)
+}
+
+function isAskingUserName(text: string) {
+  return /\b(what'?s|what is|tell me)\s+my\s+name\b|\bdo you know my name\b/i.test(text)
+}
+
+function sleep(ms: number) {
+  return new Promise(resolve => window.setTimeout(resolve, ms))
 }
 
 export default function TelegramPaymentLinks() {
@@ -1335,7 +1363,7 @@ function TelegramHelperPanel({
         question: nextQuestion,
         answer: missingNetworkOnly
           ? 'Which network should this use: Base, Arc, Arbitrum, Solana, or all networks?'
-          : `I have part of it. Send ${missing.join(', ')}${draft.wallet?.startsWith('0x') ? ' or say a different network if you do not want Base.' : ''}`,
+          : `I need ${missing.join(', ')}. You can send it in one line.`,
       }])
       return true
     }
@@ -1344,9 +1372,12 @@ function TelegramHelperPanel({
     const saved = await createPaylinkFromDraft(draft)
     setPaylinkDraft(null)
     const network = saved.network ?? inferRequestNetwork(saved)
+    const target = friendlyName(saved.target)
     setMessages(prev => [...prev, {
       question: nextQuestion,
-      answer: `${saved.mode === 'group' ? 'Collection PayLink ready.' : 'PayLink ready.'}\n\n${saved.target} can pay ${saved.amount || 'a flexible amount'} USDC on ${requestNetworkLabels[network]} for ${saved.label}.\n\nAlways ask the payer to share the receipt with you after payment is confirmed.`,
+      answer: saved.mode === 'group'
+        ? `Collection ready: ${saved.amount || 'flexible'} USDC on ${requestNetworkLabels[network]}. Share it and track payments below.`
+        : `PayLink ready for ${target}: ${saved.amount || 'flexible'} USDC on ${requestNetworkLabels[network]}. Ask them to send you the receipt after payment.`,
       paylink: saved,
     }])
     return true
@@ -1359,7 +1390,19 @@ function TelegramHelperPanel({
     setAskError('')
     setAsking(true)
     try {
-      setAgentStatus(paylinkDraft || isPaymentRequestIntent(nextQuestion) ? 'Checking payment request details...' : 'Asking ZeroScout for guidance...')
+      const isPaylinkFlow = Boolean(paylinkDraft || isPaymentRequestIntent(nextQuestion))
+      setAgentStatus(isPaylinkFlow ? 'Checking payment request details...' : 'Thinking...')
+      await sleep(isPaylinkFlow ? 800 : 500)
+      if (isAskingUserName(nextQuestion)) {
+        const knownName = helperName || profile?.displayName || helperNameDraft || cleanTelegramName
+        setMessages(prev => [...prev, {
+          question: nextQuestion,
+          answer: knownName && knownName !== 'there'
+            ? `I know you here as ${friendlyName(knownName)}.`
+            : "I do not know your name yet. Tell me what to call you and I will remember it for future chats.",
+        }])
+        return
+      }
       if (await handlePaylinkConversation(nextQuestion)) return
       setAgentStatus('Writing a direct answer...')
       const res = await fetch('/api/agent-ask', {
@@ -1591,32 +1634,34 @@ function TelegramHelperPanel({
 }
 
 function HelperThinkingIndicator({ status }: { status: string }) {
+  const [stepIndex, setStepIndex] = useState(0)
   const isPaylink = /payment|paylink|request/i.test(status)
   const steps = isPaylink
-    ? ['Reading request details', 'Checking wallet and network', 'Preparing shareable PayLink']
-    : ['Reading your question', 'Asking ZeroScout for guidance', 'Writing a direct answer']
+    ? ['reading details', 'checking wallet', 'preparing link']
+    : ['reading', 'checking context', 'writing']
+
+  useEffect(() => {
+    setStepIndex(0)
+    const timer = window.setInterval(() => {
+      setStepIndex(index => (index + 1) % steps.length)
+    }, 900)
+    return () => window.clearInterval(timer)
+  }, [status, steps.length])
 
   return (
-    <div className="max-w-[86%] rounded-2xl rounded-tl-md border border-gray-100 bg-gray-50 px-3 py-2.5 text-sm text-gray-500 dark:border-white/10 dark:bg-white/[0.05] dark:text-gray-300">
-      <div className="flex items-center gap-2">
-        <span className="relative flex h-2.5 w-2.5">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
-          <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
-        </span>
-        <span className="font-semibold text-gray-700 dark:text-gray-100">{status}</span>
-      </div>
-      <div className="mt-2 space-y-1.5">
-        {steps.map((step, index) => (
-          <div key={step} className="flex items-center gap-2 text-[11px]">
-            {index === steps.length - 1 ? (
-              <Loader2 className="h-3 w-3 animate-spin text-emerald-500" />
-            ) : (
-              <CheckCircle2 className="h-3 w-3 text-emerald-500" />
-            )}
-            <span>{step}</span>
-          </div>
+    <div className="inline-flex max-w-[86%] items-center gap-2 rounded-2xl rounded-tl-md bg-gray-50 px-3 py-2 text-sm text-gray-500 shadow-sm dark:bg-white/[0.06] dark:text-gray-300">
+      <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 dark:bg-white/[0.08]">
+        {[0, 1, 2].map(index => (
+          <span
+            key={index}
+            className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-400 dark:bg-gray-300"
+            style={{ animationDelay: `${index * 120}ms` }}
+          />
         ))}
-      </div>
+      </span>
+      <span className="text-[11px] font-medium text-gray-400 dark:text-gray-400">
+        Ask Hash is {steps[stepIndex]}
+      </span>
     </div>
   )
 }
@@ -1627,10 +1672,11 @@ function HelperPaylinkCard({ request }: { request: SavedRequest }) {
   const url = request.payUrl || buildRequestPayLink(request)
   const dashboardUrl = request.mode === 'group' ? request.dashboardUrl || buildRequestDashboardLink(request) : ''
   const amountLine = request.amount ? `${request.amount} USDC` : 'Flexible amount'
+  const target = friendlyName(request.target)
   const shareText = [
     request.mode === 'group' ? 'Hash PayLink collection' : 'Hash PayLink payment request',
     `${request.label} - ${amountLine}`,
-    request.mode === 'group' ? `Collection: ${request.target}` : `Payer: ${request.target}`,
+    request.mode === 'group' ? `Collection: ${target}` : `Payer: ${target}`,
     'Please share the receipt after payment is confirmed.',
   ].join('\n')
 
@@ -1652,18 +1698,22 @@ function HelperPaylinkCard({ request }: { request: SavedRequest }) {
   }
 
   return (
-    <div className="mt-2 w-full max-w-[86%] rounded-2xl rounded-tl-md border border-emerald-100 bg-emerald-50/70 p-3 dark:border-emerald-300/20 dark:bg-emerald-300/10">
+    <div className="mt-2 w-full max-w-[86%] rounded-2xl rounded-tl-md border border-emerald-100 bg-emerald-50/70 p-2.5 dark:border-emerald-300/20 dark:bg-emerald-300/10">
       <div className="flex items-center gap-2">
-        <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-200" />
-        <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-100">
-          {request.mode === 'group' ? 'Collection PayLink Ready' : 'PayLink Ready'}
-        </p>
+        <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-200" />
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-100">
+            {request.mode === 'group' ? 'Collection Ready' : 'PayLink Ready'}
+          </p>
+          <p className="truncate text-[11px] text-emerald-700/80 dark:text-emerald-100/75">
+            {amountLine} on {requestNetworkLabels[network]}
+          </p>
+        </div>
       </div>
-      <div className="mt-2 rounded-xl border border-white/70 bg-white/80 p-2.5 text-xs dark:border-white/10 dark:bg-white/[0.06]">
-        <p className="font-semibold text-gray-900 dark:text-white">{request.label}</p>
-        <p className="mt-0.5 text-gray-500 dark:text-gray-300">{amountLine} on {requestNetworkLabels[network]}</p>
-        <p className="mt-0.5 text-gray-500 dark:text-gray-300">
-          {request.mode === 'group' ? 'Collection' : 'Payer'}: {request.target}
+      <div className="mt-2 rounded-xl bg-white/80 p-2 text-xs dark:bg-white/[0.06]">
+        <p className="break-words font-semibold text-gray-900 dark:text-white">{request.label}</p>
+        <p className="mt-0.5 truncate text-gray-500 dark:text-gray-300">
+          {request.mode === 'group' ? 'Collection' : 'Payer'}: {target}
         </p>
       </div>
       <div className="mt-2 grid grid-cols-2 gap-1.5">
@@ -1705,7 +1755,7 @@ function HelperPaylinkCard({ request }: { request: SavedRequest }) {
         </button>
       </div>
       <p className="mt-2 text-[11px] font-medium text-emerald-700/80 dark:text-emerald-100/80">
-        Ask the payer to share the receipt with you after payment is confirmed.
+        Ask for the receipt after payment.
       </p>
     </div>
   )
