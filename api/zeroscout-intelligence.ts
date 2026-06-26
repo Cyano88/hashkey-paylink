@@ -54,20 +54,21 @@ const RETRY_DELAY_MS = Math.max(100, Number(process.env.ZEROSCOUT_RETRY_DELAY_MS
 
 type ZeroScoutCallOptions = {
   requireProof?: boolean
+  endpointPath?: string
 }
 
 function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
-function configuredEndpoint() {
+function configuredEndpoint(endpointPath?: string) {
   const base = (process.env.ZEROSCOUT_API_URL ?? '').trim().replace(/\/+$/, '')
   if (!base) {
     const error = new Error('ZeroScout integration is not configured. Set ZEROSCOUT_API_URL on the server.') as Error & { status?: number }
     error.status = 503
     throw error
   }
-  const path = (process.env.ZEROSCOUT_INTELLIGENCE_PATH ?? DEFAULT_INTELLIGENCE_PATH).trim() || DEFAULT_INTELLIGENCE_PATH
+  const path = (endpointPath ?? process.env.ZEROSCOUT_INTELLIGENCE_PATH ?? DEFAULT_INTELLIGENCE_PATH).trim() || DEFAULT_INTELLIGENCE_PATH
   return `${base}${path.startsWith('/') ? path : `/${path}`}`
 }
 
@@ -133,7 +134,7 @@ function shouldRetry(error: unknown) {
 }
 
 export async function callZeroScoutIntelligence(payload: ZeroScoutPayload, options: ZeroScoutCallOptions = {}): Promise<ZeroScoutIntelligenceResult> {
-  const endpoint = configuredEndpoint()
+  const endpoint = configuredEndpoint(options.endpointPath)
   const secret = (process.env.ZEROSCOUT_INTEGRATION_SECRET ?? '').trim()
   if (!secret) {
     const error = new Error('ZeroScout integration is not configured. Set ZEROSCOUT_INTEGRATION_SECRET on the server.') as Error & { status?: number }

@@ -134,7 +134,7 @@ try {
   })
   assert.equal(valid?.proofClass, 'zeroscout_sponsored_action')
   assert.equal(valid?.zeroscout.proof?.contentHash, '0xabc123')
-  assert.equal(seen[0].url, 'https://zeroscout.test/api/integrations/intelligence')
+  assert.equal(seen[0].url, 'https://zeroscout.test/api/integrations/sponsorship-proof')
   assert.equal(seen[0].init.headers.authorization, 'Bearer test-secret')
   assert.equal(seen[0].init.headers['x-hashpaylink-analysis-type'], 'zeroscout-sponsored-action')
 
