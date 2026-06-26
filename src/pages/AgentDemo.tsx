@@ -243,7 +243,7 @@ type LpScoutRunResult = {
 }
 
 type SavedLpScoutIntent = {
-  agentSlug: string
+  agentSlug?: string
   href: string
   label: string
   savedAt: number
@@ -491,14 +491,20 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
     if (!hasPendingLpScoutRequest) return
     const intentUrl = new URL(window.location.href)
     intentUrl.searchParams.set('profile', 'agent')
-    intentUrl.searchParams.set('agent', normalizedAgentSlug)
-    saveLpScoutIntent({
-      agentSlug: normalizedAgentSlug,
+    if (embeddedWalletManager) {
+      intentUrl.searchParams.delete('agent')
+      intentUrl.searchParams.set('walletManager', 'service')
+    } else if (normalizedAgentSlug) {
+      intentUrl.searchParams.set('agent', normalizedAgentSlug)
+    }
+    const intent: SavedLpScoutIntent = {
       href: `${intentUrl.pathname}${intentUrl.search}${intentUrl.hash}`,
       label: scoutModeLabel(pendingScoutMode),
       savedAt: Date.now(),
-    })
-  }, [hasPendingLpScoutRequest, normalizedAgentSlug, pendingScoutMode])
+    }
+    if (!embeddedWalletManager && normalizedAgentSlug) intent.agentSlug = normalizedAgentSlug
+    saveLpScoutIntent(intent)
+  }, [hasPendingLpScoutRequest, normalizedAgentSlug, pendingScoutMode, embeddedWalletManager])
 
   useEffect(() => {
     if (!hasPendingLpScoutRequest || agentWalletSessionConnected) return
@@ -902,7 +908,8 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
     const fundingId = `agent-${activeSlug}-fund-${Date.now().toString(36)}`
     const returnUrl = new URL('/agent', window.location.origin)
     returnUrl.searchParams.set('profile', 'agent')
-    if (activeSlug) returnUrl.searchParams.set('agent', activeSlug)
+    if (embeddedWalletManager) returnUrl.searchParams.set('walletManager', 'service')
+    else if (activeSlug) returnUrl.searchParams.set('agent', activeSlug)
     returnUrl.searchParams.set('src', 'dashboard')
     returnUrl.searchParams.set('n', agentNetwork)
     if (currentAgentWallet) returnUrl.searchParams.set('expectedWallet', currentAgentWallet)
@@ -914,8 +921,12 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
     p.set('v', '1')
     p.set('x', '1')
     p.set('src', 'agent')
-    p.set('agent', activeSlug)
-    p.set('agentSlug', activeSlug)
+    if (embeddedWalletManager) {
+      p.set('walletManager', 'service')
+    } else {
+      p.set('agent', activeSlug)
+      p.set('agentSlug', activeSlug)
+    }
     p.set('g', returnUrl.toString())
     p.set('ad', '1')
     if (currentAgentWallet) p.set('e', currentAgentWallet)
@@ -1227,7 +1238,14 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
       await refreshX402Balance()
       await loadAgentWallet()
     } catch (err) {
-      setLpScoutError(err instanceof Error ? err.message : 'LP Scout x402 request failed')
+      const message = err instanceof Error ? err.message : 'LP Scout x402 request failed'
+      if (/insufficient|balance|fund|top up|deposit|gateway/i.test(message)) {
+        setX402ModalOpen(true)
+        refreshX402Balance().catch(() => undefined)
+        setLpScoutError('x402 service balance is too low for LP Scout. Fund Circle wallet balance, activate x402 service balance, then continue.')
+      } else {
+        setLpScoutError(message)
+      }
     } finally {
       setLpScoutBusy(false)
     }

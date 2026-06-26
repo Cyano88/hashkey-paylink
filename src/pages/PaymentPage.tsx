@@ -341,7 +341,7 @@ export default function PaymentPage() {
         }
       }
     }
-    if (isAgentFunding) {
+    if (isAgentOrWalletFunding) {
       window.location.assign(agentFundingBackUrl)
       return
     }
@@ -407,6 +407,8 @@ export default function PaymentPage() {
   const isHelperAccess   = getPaylinkParam(initParams, 'src', 'src') === 'telegram-helper' && !!agentUrl
   const agentFundingSlug = getPaylinkParam(initParams, 'agentSlug', 'agent')
   const isAgentFunding   = getPaylinkParam(initParams, 'src', 'src') === 'agent' && !!agentFundingSlug
+  const isWalletManagerFunding = getPaylinkParam(initParams, 'src', 'src') === 'agent' && getPaylinkParam(initParams, 'walletManager') === 'service' && !agentFundingSlug
+  const isAgentOrWalletFunding = isAgentFunding || isWalletManagerFunding
   const agentFundingBackUrl = (() => {
     const raw = getPaylinkParam(initParams, 'return', 'g').trim()
     if (raw) {
@@ -417,16 +419,17 @@ export default function PaymentPage() {
         if (raw.startsWith('/')) return raw
       }
     }
+    if (isWalletManagerFunding) return '/agent?profile=agent&walletManager=service'
     return `/agent?profile=agent&agent=${encodeURIComponent(agentFundingSlug || 'hashpaylink-agent')}`
   })()
-  const agentFundingName = isAgentFunding ? agentDisplayNameFromMemo(memo, agentFundingSlug) : ''
+  const agentFundingName = isWalletManagerFunding ? 'x402 wallet manager' : isAgentFunding ? agentDisplayNameFromMemo(memo, agentFundingSlug) : ''
   const agentFundingHue = agentAvatarHue(`${agentFundingSlug}:${agentFundingName}`)
   const isNgPosPayment   = getPaylinkParam(initParams, 'src', 'src') === 'ngpos'
   const ngPosMerchantId  = (initParams.get('merchant') ?? '').trim().replace(/[^a-zA-Z0-9_-]/g, '')
   const ngPosEventId     = ngPosMerchantId ? `ngpos-${ngPosMerchantId}` : ''
   const ngPosSettlement  = (initParams.get('settlement') ?? '').trim()
   const ngPosAmountNgn   = (initParams.get('ngn') ?? '').trim()
-  const smartWalletOnlyFunding = isPolymarketFunding || isAgentFunding || isHelperAccess
+  const smartWalletOnlyFunding = isPolymarketFunding || isAgentOrWalletFunding || isHelperAccess
   const isMainHashPaylinkPayment = !isTelegramSource && !smartWalletOnlyFunding
   const [attendeeName,   setAttendeeName]   = useState(() => initParams.get('payer') ?? '')
   const [eventRegStatus, setEventRegStatus] = useState<'idle' | 'pending' | 'ok' | 'error'>('idle')
@@ -434,7 +437,7 @@ export default function PaymentPage() {
   const ordinaryReceiptRegistered = useRef(false)
   const accessRedirected = useRef(false)
   const ngPosRegistered  = useRef(false)
-  const requiresAttendeeName = (isEventMode || isNgPosPayment) && !isPolymarketFunding && !isAgentFunding && !isHelperAccess
+  const requiresAttendeeName = (isEventMode || isNgPosPayment) && !isPolymarketFunding && !isAgentOrWalletFunding && !isHelperAccess
 
   // ── FX display (event mode only — reads params baked into the URL at link creation) ──
   const fxCurrency  = isEventMode ? getPaylinkParam(initParams, 'fx', 'fx') : ''
@@ -2960,13 +2963,13 @@ export default function PaymentPage() {
 
   useEffect(() => {
     if (!isConfirmed || !isEventMode || !eventId || eventRegistered.current) return
-    const name = isAgentFunding ? (memo || 'Agent wallet funding') : attendeeName.trim()
+    const name = isAgentOrWalletFunding ? (memo || (isWalletManagerFunding ? 'x402 wallet funding' : 'Agent wallet funding')) : attendeeName.trim()
     console.log('[EventReg] triggered — name:', name, 'eventId:', eventId)
     if (!name) return
     eventRegistered.current = true
     void doRegister(name)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isConfirmed, attendeeName])
+  }, [isConfirmed, attendeeName, isAgentOrWalletFunding, isWalletManagerFunding, memo])
 
   useEffect(() => {
     if (!isConfirmed || !isNgPosPayment || !ngPosEventId || ngPosRegistered.current) return
@@ -2981,26 +2984,26 @@ export default function PaymentPage() {
   // in case the Transfer event watcher hasn't set manualPayDetected yet.
   useEffect(() => {
     if (directStatus !== 'success' || !isEventMode || !eventId || eventRegistered.current) return
-    const name = isAgentFunding ? (memo || 'Agent wallet funding') : attendeeName.trim()
+    const name = isAgentOrWalletFunding ? (memo || (isWalletManagerFunding ? 'x402 wallet funding' : 'Agent wallet funding')) : attendeeName.trim()
     if (!name) return
     eventRegistered.current = true
     void doRegister(name)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [directStatus, attendeeName])
+  }, [directStatus, attendeeName, isAgentOrWalletFunding, isWalletManagerFunding, memo])
 
   // Fallback: register when Solana direct-send sweep succeeds.
   useEffect(() => {
     if (solanaDirectStatus !== 'success' || !isEventMode || !eventId || eventRegistered.current) return
-    const name = isAgentFunding ? (memo || 'Agent wallet funding') : attendeeName.trim()
+    const name = isAgentOrWalletFunding ? (memo || (isWalletManagerFunding ? 'x402 wallet funding' : 'Agent wallet funding')) : attendeeName.trim()
     if (!name) return
     eventRegistered.current = true
     void doRegister(name)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [solanaDirectStatus, attendeeName])
+  }, [solanaDirectStatus, attendeeName, isAgentOrWalletFunding, isWalletManagerFunding, memo])
 
   useEffect(() => {
     if (!isConfirmed || !txHash || ordinaryReceiptRegistered.current) return
-    if (!isMainHashPaylinkPayment || isEventMode || isNgPosPayment || isPolymarketFunding || isAgentFunding || isHelperAccess) return
+    if (!isMainHashPaylinkPayment || isEventMode || isNgPosPayment || isPolymarketFunding || isAgentOrWalletFunding || isHelperAccess) return
     ordinaryReceiptRegistered.current = true
     void registerOrdinaryReceipt()
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -3043,8 +3046,8 @@ export default function PaymentPage() {
 
   useEffect(() => {
     if (!autoAccessRedirect || accessRedirected.current || !isEventMode || !agentUrl || eventRegStatus !== 'ok') return
-    const payerName = isAgentFunding ? (memo || 'Agent wallet funding') : attendeeName.trim()
-    if (!eventId || (!payerName && !isAgentFunding)) return
+    const payerName = isAgentOrWalletFunding ? (memo || (isWalletManagerFunding ? 'x402 wallet funding' : 'Agent wallet funding')) : attendeeName.trim()
+    if (!eventId || (!payerName && !isAgentOrWalletFunding)) return
     accessRedirected.current = true
     const timer = window.setTimeout(() => {
       try {
@@ -3055,9 +3058,9 @@ export default function PaymentPage() {
       } catch {
         accessRedirected.current = false
       }
-    }, isAgentFunding ? 2600 : 900)
+    }, isAgentOrWalletFunding ? 2600 : 900)
     return () => window.clearTimeout(timer)
-  }, [autoAccessRedirect, isEventMode, agentUrl, eventRegStatus, eventId, attendeeName, isAgentFunding, memo])
+  }, [autoAccessRedirect, isEventMode, agentUrl, eventRegStatus, eventId, attendeeName, isAgentOrWalletFunding, isWalletManagerFunding, memo])
 
   // ────────────────────────────────────────────────────────────────────────────
   //  INVALID PARAMS
@@ -3383,7 +3386,7 @@ export default function PaymentPage() {
               </div>
             )}
 
-            {isAgentFunding ? (
+            {isAgentOrWalletFunding ? (
               <div className="space-y-2">
                 <p className="flex items-center justify-center gap-1 text-center text-[11px] font-medium text-gray-400">
                   Redirecting in a few seconds
@@ -3429,7 +3432,7 @@ export default function PaymentPage() {
   // ────────────────────────────────────────────────────────────────────────────
   return (
     <div className="mx-auto max-w-md animate-slide-up">
-      {isNgPosSource || isPolymarketFunding || isAgentFunding || isHelperAccess ? (
+      {isNgPosSource || isPolymarketFunding || isAgentOrWalletFunding || isHelperAccess ? (
         <button
           type="button"
           onClick={goBackFromCheckout}
@@ -3521,7 +3524,7 @@ export default function PaymentPage() {
         <div className={cn('border-b border-gray-100 dark:border-white/10 bg-gradient-to-br p-6 text-center mt-4', meta.headerBg, 'dark:from-gray-800 dark:to-gray-900')}>
           {isFlex ? (
             <div className="flex flex-col items-center gap-2">
-              {isAgentFunding ? (
+              {isAgentOrWalletFunding ? (
                 <div className="flex flex-col items-center gap-1">
                   <div className="flex items-center justify-center gap-2">
                     <span
@@ -3532,7 +3535,7 @@ export default function PaymentPage() {
                     >
                       <Bot className="h-4 w-4" />
                     </span>
-                    <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-300">Agent Funding</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-300">{isWalletManagerFunding ? 'x402 Wallet Funding' : 'Agent Funding'}</p>
                   </div>
                   <p className="max-w-[15rem] truncate text-sm font-semibold text-gray-800 dark:text-gray-100">
                     {agentFundingName}
@@ -3597,7 +3600,7 @@ export default function PaymentPage() {
               </span>
               <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Polymarket Funding</p>
             </div>
-          ) : isAgentFunding ? (
+          ) : isAgentOrWalletFunding ? (
             <div className="mb-2 flex items-center justify-center gap-2">
               <span
                 className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/70 text-white shadow-sm"
@@ -3607,7 +3610,7 @@ export default function PaymentPage() {
               >
                 <Bot className="h-4 w-4" />
               </span>
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Agent Funding</p>
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">{isWalletManagerFunding ? 'x402 Wallet Funding' : 'Agent Funding'}</p>
             </div>
           ) : (
             <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-widest text-gray-400">Payment Request</p>
@@ -3618,7 +3621,7 @@ export default function PaymentPage() {
                 <span className="text-[2.75rem] font-bold leading-none tracking-tight text-gray-900 dark:text-white">{formatAmount(effectiveAmt, meta.decimals)}</span>
                 <span className="text-xl font-semibold text-gray-400">{meta.asset}</span>
               </div>
-              {memo && !isAgentFunding && (
+              {memo && !isAgentOrWalletFunding && (
                 <p className="mt-1 text-sm font-medium text-gray-500 dark:text-gray-300">
                   {isHelperAccess ? (
                     'Hash PayLink Agent Helper'
@@ -4695,6 +4698,10 @@ export default function PaymentPage() {
             { n: '1', title: 'Review wallet', body: 'Confirm the funding wallet and amount' },
             { n: '2', title: 'Fund with USDC', body: 'Pay from your gasless wallet or another wallet' },
             { n: '3', title: 'Continue trading', body: 'Use the success screen to return to Polymarket' },
+          ] : isWalletManagerFunding ? [
+            { n: '1', title: 'Fund wallet', body: 'Add USDC to your Circle wallet balance' },
+            { n: '2', title: 'Activate x402', body: 'Move wallet USDC into x402 service balance' },
+            { n: '3', title: 'Return to services', body: 'Go back to the wallet manager or PolyDesk checkout' },
           ] : isAgentFunding ? [
             { n: '1', title: 'Fund treasury', body: 'Add USDC to this agent wallet' },
             { n: '2', title: 'Use for actions', body: 'Treasury can support services, tips, and x402 activation' },
@@ -4741,12 +4748,12 @@ export default function PaymentPage() {
         </div>
 
         <p className="mt-6 text-center text-xs text-gray-400">
-          {isHelperAccess ? 'Helper access on ' : isPolymarketFunding ? 'Polymarket Funding on ' : isAgentFunding ? 'Agent payments on ' : 'Powered by Circle USDC · '}
+          {isHelperAccess ? 'Helper access on ' : isPolymarketFunding ? 'Polymarket Funding on ' : isWalletManagerFunding ? 'x402 wallet funding on ' : isAgentFunding ? 'Agent payments on ' : 'Powered by Circle USDC · '}
           {(isPolymarketFunding ? [
             { label: 'Base',      href: 'https://basescan.org' },
             { label: 'Solana',   href: 'https://solscan.io' },
             { label: 'Arbitrum', href: 'https://arbiscan.io' },
-          ] : isAgentFunding || isHelperAccess ? [
+          ] : isAgentOrWalletFunding || isHelperAccess ? [
             { label: 'Base',      href: 'https://basescan.org' },
             { label: 'Arbitrum', href: 'https://arbiscan.io' },
             { label: 'Arc Testnet', href: 'https://testnet.arcscan.app' },

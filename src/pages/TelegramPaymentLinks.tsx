@@ -32,11 +32,11 @@ import {
 } from 'lucide-react'
 import { cn } from '../lib/utils'
 import { EVM_TREASURY } from '../lib/chains'
+import AgentDemo from './AgentDemo'
 
 const TELEGRAM_BOT_URL = import.meta.env.VITE_TELEGRAM_AGENT_URL || 'https://t.me/HashPayLinkBot'
 const PUBLIC_PAYLINK_ORIGIN = (import.meta.env.VITE_PUBLIC_PAYLINK_ORIGIN || 'https://hashpaylink.com').replace(/\/+$/, '')
 const POLYMARKET_LOGO = '/brand/polymarket-logo.png'
-const MAX_USER_AGENTS = 3
 
 function displayTelegramName(rawName: string | null, fallback = 'there') {
   const clean = (rawName ?? '').replace(/^@+/, '').trim()
@@ -59,6 +59,7 @@ type TelegramServiceId =
   | 'agent-marketplace'
   | 'agent-dashboard'
   | 'fund-agent-wallet'
+  | 'polydesk-services'
   | 'poly-portfolio'
   | 'poly-worldcup'
   | 'lp-scout'
@@ -106,18 +107,18 @@ const sectionServices: Record<TelegramSectionId, TelegramService[]> = {
       active: true,
     },
     {
-      id: 'create-your-agent',
-      title: 'Agent Setup',
-      body: 'Create, restore, edit, or delete agent profiles.',
+      id: 'agent-dashboard',
+      title: 'x402 Wallet Manager',
+      body: 'Sign in with email, fund Circle wallet balance, activate x402, and view receipts.',
       icon: Wallet,
       status: 'Open',
       active: true,
     },
     {
-      id: 'agent-dashboard',
-      title: 'Agent Dashboard',
-      body: 'Open a linked agent to fund treasury, activate x402, and view receipts.',
-      icon: Wallet,
+      id: 'polydesk-services',
+      title: 'PolyDesk services',
+      body: 'Return to LP Scout, portfolio, and Polymarket services after wallet setup.',
+      icon: LineChart,
       status: 'Open',
       active: true,
     },
@@ -179,7 +180,7 @@ const sectionServices: Record<TelegramSectionId, TelegramService[]> = {
 
 const sectionDescriptions: Record<TelegramSectionId, string> = {
   'payment-links': 'Create normal USDC requests and share them into Telegram.',
-  'agent-wallets': 'Open the helper, manage wallets, and keep Marketplace marked Soon.',
+  'agent-wallets': 'Manage Circle wallet balance, x402 service balance, receipts, and PolyDesk service checkout.',
   'market-tools': 'PolyDesk for Polymarket funding, portfolio alerts, LP Scout, and live market context.',
   streampay: 'Arc USDC streams for recipients, services, and ongoing retainers.',
 }
@@ -262,20 +263,6 @@ type HelperProfile = {
   }
 }
 
-type AgentProfile = {
-  slug: string
-  name: string
-  purpose: string
-  walletAddress?: string
-  profileImage?: {
-    initials: string
-    hue: number
-    accentHue: number
-  }
-  createdAt: number
-  updatedAt: number
-}
-
 type TelegramWebAppUser = {
   id?: number | string
   username?: string
@@ -324,56 +311,6 @@ function telegramOwnerFromContext(searchParams: URLSearchParams, displayName: st
   }
 }
 
-function shortAgentWallet(value?: string) {
-  if (!value) return ''
-  return value.length > 14 ? `${value.slice(0, 6)}...${value.slice(-4)}` : value
-}
-
-function agentWalletStatus(agent: AgentProfile, ready = false) {
-  if (!agent.walletAddress) {
-    return {
-      label: 'No wallet',
-      detail: 'Link Circle wallet',
-      className: 'bg-gray-100 text-gray-500 dark:bg-white/[0.08] dark:text-gray-400',
-    }
-  }
-  return {
-    label: ready ? 'Ready to fund' : 'Wallet linked',
-    detail: shortAgentWallet(agent.walletAddress),
-    className: ready
-      ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-400/10 dark:text-emerald-300'
-      : 'bg-blue-50 text-blue-600 dark:bg-blue-400/10 dark:text-blue-300',
-  }
-}
-
-function fallbackAgentImage(agent: AgentProfile) {
-  const seed = `${agent.slug}:${agent.name}`
-  let hash = 0
-  for (let i = 0; i < seed.length; i += 1) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0
-  const hues = [216, 266, 188, 336, 28, 201, 292, 156, 232]
-  const hue = hues[hash % hues.length]
-  const parts = agent.name.replace(/[^a-z0-9\s-]/gi, ' ').trim().split(/\s+/).filter(Boolean)
-  return {
-    initials: parts.slice(0, 2).map(part => part[0]?.toUpperCase()).join('') || 'AG',
-    hue,
-    accentHue: (hue + 34) % 360,
-  }
-}
-
-function AgentProfileAvatar({ agent, className = 'h-8 w-8 rounded-lg text-[11px]' }: { agent: AgentProfile; className?: string }) {
-  const image = { ...fallbackAgentImage(agent), initials: agent.profileImage?.initials ?? fallbackAgentImage(agent).initials }
-  return (
-    <span
-      className={cn('flex shrink-0 items-center justify-center font-black text-white shadow-sm', className)}
-      style={{
-        background: `linear-gradient(135deg, hsl(${image.hue} 72% 42%), hsl(${image.accentHue} 72% 34%))`,
-      }}
-    >
-      {image.initials}
-    </span>
-  )
-}
-
 export default function TelegramPaymentLinks() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -401,7 +338,7 @@ export default function TelegramPaymentLinks() {
       : initialServiceParam === 'hashpaylink-agent' || initialServiceParam === 'hashpaylink-helper'
       ? 'hashpaylink-helper'
       : initialServiceParam === 'create-your-agent'
-      ? 'create-your-agent'
+      ? 'agent-dashboard'
       : initialServiceParam === 'fund-agent-wallet' || initialServiceParam === 'agent-dashboard'
       ? 'agent-dashboard'
       : initialServiceParam === 'fund-polymarket' || initialServiceParam === 'poly-portfolio'
@@ -441,8 +378,6 @@ export default function TelegramPaymentLinks() {
   const [polymarketNetwork, setPolymarketNetwork] = useState<RequestNetwork>('base')
   const [polymarketBridgeBusy, setPolymarketBridgeBusy] = useState(false)
   const [polymarketBridgeError, setPolymarketBridgeError] = useState('')
-  const [agentProfiles, setAgentProfiles] = useState<AgentProfile[]>([])
-  const [agentProfilesError, setAgentProfilesError] = useState('')
   const [lpScoutPrefill, setLpScoutPrefill] = useState<LpScoutPrefill | null>(null)
   const [recoveredTelegramName, setRecoveredTelegramName] = useState('')
   const telegramName = useMemo(() => {
@@ -457,7 +392,6 @@ export default function TelegramPaymentLinks() {
     )
   }, [searchParams, recoveredTelegramName])
   const telegramIdentity = useMemo(() => telegramOwnerFromContext(searchParams, telegramName), [searchParams, telegramName])
-  const agentOwner = telegramIdentity.isStable ? telegramIdentity.owner : ''
   const needsTelegramIdentity = activeSection === 'agent-wallets' && !telegramIdentity.isStable
 
   const requestFormTarget = target.trim()
@@ -471,29 +405,6 @@ export default function TelegramPaymentLinks() {
   const polymarketAmountReady = Number.isFinite(polymarketAmountNumber) && polymarketAmountNumber >= polymarketBridgeMinimum
   const polymarketFunderReady = polymarketMode !== 'friends' || polymarketFunder.trim().length > 1
   const canUsePolymarketFunding = polymarketWalletReady && polymarketAmountReady && polymarketFunderReady && !polymarketBridgeBusy
-
-  async function loadAgentProfiles() {
-    if (!agentOwner) {
-      setAgentProfiles([])
-      setAgentProfilesError('')
-      return
-    }
-    setAgentProfilesError('')
-    try {
-      const profileParams = new URLSearchParams({ owner: agentOwner })
-      if (telegramIdentity.legacyOwner) profileParams.set('fallbackOwner', telegramIdentity.legacyOwner)
-      const res = await fetch(`/api/agent-profile?${profileParams.toString()}`)
-      const data = await res.json() as { ok?: boolean; agents?: AgentProfile[]; error?: string }
-      if (!res.ok || !data.ok) throw new Error(data.error || 'Could not load agents.')
-      setAgentProfiles(data.agents ?? [])
-    } catch (err) {
-      setAgentProfilesError(err instanceof Error ? err.message : 'Could not load agents.')
-    }
-  }
-
-  useEffect(() => {
-    if (activeSection === 'agent-wallets' || activeService === 'lp-scout') void loadAgentProfiles()
-  }, [activeSection, activeService, agentOwner, telegramIdentity.legacyOwner]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function openRequestService() {
     setActiveService('request-usdc')
@@ -582,11 +493,16 @@ export default function TelegramPaymentLinks() {
       return
     }
     if (service.id === 'create-your-agent') {
-      setActiveService('create-your-agent')
+      setActiveService('agent-dashboard')
       return
     }
     if (service.id === 'agent-dashboard' || service.id === 'fund-agent-wallet') {
       setActiveService('agent-dashboard')
+      return
+    }
+    if (service.id === 'polydesk-services') {
+      setActiveSection('market-tools')
+      setActiveService('lp-scout')
       return
     }
     if (service.id === 'create-streampay') {
@@ -861,13 +777,11 @@ export default function TelegramPaymentLinks() {
             />
           ) : activeService === 'lp-scout' ? (
             <LpScoutPanel
-              agents={agentProfiles}
-              loadError={agentProfilesError}
               prefill={lpScoutPrefill}
               onPrefillConsumed={() => setLpScoutPrefill(null)}
-              onCreateAgent={() => {
+              onOpenWalletManager={() => {
                 setActiveSection('agent-wallets')
-                setActiveService('create-your-agent')
+                setActiveService('agent-dashboard')
               }}
               onBack={() => setActiveService('')}
             />
@@ -898,23 +812,13 @@ export default function TelegramPaymentLinks() {
               onRecoverTelegramName={setRecoveredTelegramName}
               onBack={() => setActiveService('')}
             />
-          ) : activeService === 'create-your-agent' ? (
-            <CreateAgentPanel
-              owner={agentOwner}
-              agents={agentProfiles}
-              setAgents={setAgentProfiles}
+          ) : activeService === 'agent-dashboard' || activeService === 'fund-agent-wallet' || activeService === 'create-your-agent' ? (
+            <TelegramX402WalletPanel
               onBack={() => setActiveService('')}
-            />
-          ) : activeService === 'agent-dashboard' || activeService === 'fund-agent-wallet' ? (
-            <AgentDashboardPanel
-              owner={agentOwner}
-              fallbackOwner={telegramIdentity.legacyOwner}
-              agents={agentProfiles}
-              setAgents={setAgentProfiles}
-              loadError={agentProfilesError}
-              setLoadError={setAgentProfilesError}
-              onCreateAgent={() => setActiveService('create-your-agent')}
-              onBack={() => setActiveService('')}
+              onOpenPolyDesk={() => {
+                setActiveSection('market-tools')
+                setActiveService('lp-scout')
+              }}
             />
           ) : (
             <div className="mt-4 space-y-2">
@@ -1543,405 +1447,33 @@ function TelegramHelperPanel({
   )
 }
 
-function CreateAgentPanel({
-  owner,
-  agents,
-  setAgents,
+function TelegramX402WalletPanel({
   onBack,
+  onOpenPolyDesk,
 }: {
-  owner: string
-  agents: AgentProfile[]
-  setAgents: (agents: AgentProfile[]) => void
   onBack: () => void
+  onOpenPolyDesk: () => void
 }) {
-  const [name, setName] = useState('')
-  const [purpose, setPurpose] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
-  const [savedAgent, setSavedAgent] = useState<AgentProfile | null>(null)
-  const [editingAgent, setEditingAgent] = useState<AgentProfile | null>(null)
-  const [showProfileForm, setShowProfileForm] = useState(agents.length === 0)
-  const [showExistingProfiles, setShowExistingProfiles] = useState(false)
-  const [pendingDeleteSlug, setPendingDeleteSlug] = useState('')
-
-  async function saveAgent() {
-    if (busy) return
-    setBusy(true)
-    setError('')
-    try {
-      const res = await fetch('/api/agent-profile', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ owner, slug: editingAgent?.slug, name, purpose }),
-      })
-      const data = await res.json() as { ok?: boolean; agent?: AgentProfile; agents?: AgentProfile[]; error?: string }
-      if (!res.ok || !data.ok || !data.agent) throw new Error(data.error || 'Could not save agent.')
-      setSavedAgent(data.agent)
-      setAgents(data.agents ?? [data.agent])
-      setName('')
-      setPurpose('')
-      setEditingAgent(null)
-      setShowProfileForm(false)
-      setShowExistingProfiles(true)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not save agent.')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  function editAgent(agent: AgentProfile) {
-    setSavedAgent(null)
-    setEditingAgent(agent)
-    setName(agent.name)
-    setPurpose(agent.purpose)
-    setError('')
-    setShowExistingProfiles(true)
-    setShowProfileForm(true)
-  }
-
-  async function deleteAgent(agent: AgentProfile) {
-    if (busy) return
-    setBusy(true)
-    setError('')
-    try {
-      if (agent.walletAddress) {
-        const walletRes = await fetch('/api/agent-wallet', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'disconnect', agentSlug: agent.slug }),
-        })
-        const walletData = await walletRes.json().catch(() => ({})) as { ok?: boolean; error?: string }
-        if (!walletRes.ok || !walletData.ok) throw new Error(walletData.error || 'Could not unlink agent wallet.')
-      }
-      const res = await fetch('/api/agent-profile', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ owner, slug: agent.slug }),
-      })
-      const data = await res.json() as { ok?: boolean; agents?: AgentProfile[]; error?: string }
-      if (!res.ok || !data.ok) throw new Error(data.error || 'Could not delete agent.')
-      setAgents(data.agents ?? [])
-      if (editingAgent?.slug === agent.slug) {
-        setEditingAgent(null)
-        setName('')
-        setPurpose('')
-      }
-      if (savedAgent?.slug === agent.slug) setSavedAgent(null)
-      if (pendingDeleteSlug === agent.slug) setPendingDeleteSlug('')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not delete agent.')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  function requestDeleteAgent(agent: AgentProfile) {
-    if (busy) return
-    if (pendingDeleteSlug === agent.slug) {
-      void deleteAgent(agent)
-      return
-    }
-    setError('')
-    setPendingDeleteSlug(agent.slug)
-  }
-
-  function startNewAgent() {
-    setSavedAgent(null)
-    setEditingAgent(null)
-    setName('')
-    setPurpose('')
-    setError('')
-    setPendingDeleteSlug('')
-    setShowExistingProfiles(true)
-    setShowProfileForm(true)
-  }
-
-  const connectedAgents = agents.filter(agent => Boolean(agent.walletAddress))
-  const draftAgents = agents.filter(agent => !agent.walletAddress)
-  const atAgentLimit = !editingAgent && agents.length >= MAX_USER_AGENTS
-  const canSave = name.trim().length >= 2 && purpose.trim().length >= 6 && !busy && !atAgentLimit
-
   return (
     <div className="mt-4 space-y-3">
-      <button
-        type="button"
-        onClick={onBack}
-        className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-400 transition-colors hover:text-gray-700 dark:hover:text-gray-200"
-      >
-        <ArrowLeft className="h-3.5 w-3.5" />
-        Agent Wallets
-      </button>
-
-      <div className="rounded-xl border border-gray-100 bg-gray-50/80 p-3 dark:border-white/10 dark:bg-white/[0.04]">
-        <div className="flex items-start gap-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-gray-800 shadow-sm dark:bg-white/[0.08] dark:text-gray-100">
-            <Bot className="h-4 w-4" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-gray-900 dark:text-white">Agent Setup</p>
-            <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-              Create, restore, edit, or delete profiles. Funding and x402 live in Agent Dashboard.
-            </p>
-          </div>
-        </div>
+      <div className="flex items-center justify-between gap-3">
+        <button
+          type="button"
+          onClick={onBack}
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-400 transition-colors hover:text-gray-700 dark:hover:text-gray-200"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Agent Wallets
+        </button>
+        <button
+          type="button"
+          onClick={onOpenPolyDesk}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/[0.1]"
+        >
+          <LineChart className="h-3.5 w-3.5" />
+          PolyDesk services
+        </button>
       </div>
-
-      {agents.length > 0 && !showExistingProfiles && (
-        <div className="rounded-xl border border-gray-100 bg-white p-3 dark:border-white/10 dark:bg-white/[0.03]">
-          <div className="flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-gray-900 dark:text-white">Existing profiles</p>
-              <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Restore saved agents for this Telegram account.</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                setShowExistingProfiles(true)
-                setShowProfileForm(false)
-              }}
-              className="shrink-0 rounded-lg bg-black px-3 py-2 text-xs font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950"
-            >
-              Restore
-            </button>
-          </div>
-        </div>
-      )}
-
-      {(showProfileForm || savedAgent) && (
-        <div className="space-y-3 rounded-xl border border-gray-100 bg-white p-3 dark:border-white/10 dark:bg-white/[0.03]">
-          {showProfileForm ? (
-            <>
-              {editingAgent && (
-                <div className="flex items-center justify-between gap-3 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">
-                  <p className="min-w-0 truncate text-xs font-semibold text-gray-700 dark:text-gray-200">
-                    Editing {editingAgent.name}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditingAgent(null)
-                      setName('')
-                      setPurpose('')
-                      setShowProfileForm(false)
-                    }}
-                    className="text-xs font-semibold text-gray-400 transition-colors hover:text-gray-700 dark:hover:text-gray-200"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              )}
-              <label className="block">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Agent name</span>
-                <input
-                  value={name}
-                  onChange={event => setName(event.target.value)}
-                  placeholder="e.g. PayLink Scout"
-                  className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:ring-2 focus:ring-gray-200 dark:border-white/10 dark:bg-white/[0.05] dark:text-white"
-                />
-              </label>
-              <label className="block">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Purpose</span>
-                <textarea
-                  value={purpose}
-                  onChange={event => setPurpose(event.target.value.slice(0, 260))}
-                  placeholder="What should this agent do for you?"
-                  className="mt-1 min-h-[82px] w-full resize-none rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm leading-relaxed text-gray-900 outline-none placeholder:text-gray-400 focus:ring-2 focus:ring-gray-200 dark:border-white/10 dark:bg-white/[0.05] dark:text-white"
-                />
-              </label>
-              {atAgentLimit && (
-                <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">
-                  <p className="text-xs font-semibold text-gray-800 dark:text-gray-100">Profile limit reached</p>
-                  <p className="mt-0.5 text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
-                    You can keep up to {MAX_USER_AGENTS} agent profiles. Sign in to an existing profile or delete one to create another.
-                  </p>
-                </div>
-              )}
-              <button
-                type="button"
-                onClick={saveAgent}
-                disabled={!canSave}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
-              >
-                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                {editingAgent ? 'Save changes' : 'Save profile'}
-              </button>
-              {error && <p className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs font-medium text-red-600 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200">{error}</p>}
-            </>
-          ) : savedAgent ? (
-          <div className="rounded-xl border border-emerald-100 bg-emerald-50/80 p-3 dark:border-emerald-400/20 dark:bg-emerald-400/10">
-            <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-200">{savedAgent.name} saved</p>
-            <p className="mt-1 text-xs leading-relaxed text-emerald-700/80 dark:text-emerald-200/80">
-              Next: sign in and link a Circle agent wallet to this profile.
-            </p>
-            <a
-              href={`/agent?profile=agent&agent=${encodeURIComponent(savedAgent.slug)}&src=telegram`}
-              className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950"
-            >
-              <Wallet className="h-4 w-4" />
-              Link wallet
-            </a>
-          </div>
-          ) : null}
-        </div>
-      )}
-
-      {showExistingProfiles && draftAgents.length > 0 && (
-        <div className="space-y-2">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Profiles to finish</p>
-          {draftAgents.map(agent => (
-            <div
-              key={agent.slug}
-              className="flex w-full items-center gap-2 rounded-xl border border-gray-100 bg-white p-2 text-left dark:border-white/10 dark:bg-white/[0.03]"
-            >
-              <button
-                type="button"
-                onClick={() => editAgent(agent)}
-                className="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-1 py-1.5 text-left transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.06]"
-              >
-                <AgentProfileAvatar agent={agent} />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-semibold text-gray-900 dark:text-white">{agent.name}</span>
-                <span className="mt-0.5 block truncate text-xs text-gray-500 dark:text-gray-400">Needs wallet - {agent.purpose}</span>
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={() => deleteAgent(agent)}
-                disabled={busy}
-                className="shrink-0 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-gray-500 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300 dark:hover:border-red-400/30 dark:hover:bg-red-400/10 dark:hover:text-red-200"
-              >
-                Delete
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {showExistingProfiles && (
-      <div className="space-y-2">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Existing profiles</p>
-        {connectedAgents.length ? connectedAgents.map(agent => {
-          const status = agentWalletStatus(agent)
-          const dashboardUrl = `/agent?profile=agent&agent=${encodeURIComponent(agent.slug)}&src=telegram`
-          const confirmingDelete = pendingDeleteSlug === agent.slug
-          return (
-            <div
-              key={agent.slug}
-              className="flex w-full items-center gap-2 rounded-xl border border-gray-100 bg-white p-2 text-left transition-all hover:border-gray-200 hover:bg-gray-50 dark:border-white/10 dark:bg-white/[0.03] dark:hover:bg-white/[0.06]"
-            >
-              <a
-                href={dashboardUrl}
-                className="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-1 py-1.5 active:scale-[0.99]"
-              >
-              <AgentProfileAvatar agent={agent} />
-              <span className="min-w-0 flex-1">
-                <span className="flex min-w-0 items-center gap-2">
-                  <span className="truncate text-sm font-semibold text-gray-900 dark:text-white">{agent.name}</span>
-                  <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase', status.className)}>
-                    {status.label}
-                  </span>
-                </span>
-                <span className="mt-0.5 block truncate text-xs text-gray-500 dark:text-gray-400">{status.detail} - {agent.purpose}</span>
-              </span>
-                <ArrowRight className="h-4 w-4 shrink-0 text-gray-400" />
-              </a>
-              <button
-                type="button"
-                onClick={() => editAgent(agent)}
-                className="shrink-0 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-gray-700 transition-colors hover:bg-gray-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/[0.1]"
-              >
-                Edit
-              </button>
-              <button
-                type="button"
-                onClick={() => requestDeleteAgent(agent)}
-                disabled={busy}
-                className={cn(
-                  'shrink-0 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition-colors disabled:opacity-50',
-                  confirmingDelete
-                    ? 'border-red-200 bg-red-50 text-red-600 hover:bg-red-100 dark:border-red-400/30 dark:bg-red-400/10 dark:text-red-200 dark:hover:bg-red-400/15'
-                    : 'border-gray-200 bg-white text-gray-500 hover:border-red-200 hover:bg-red-50 hover:text-red-600 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300 dark:hover:border-red-400/30 dark:hover:bg-red-400/10 dark:hover:text-red-200',
-                )}
-              >
-                {confirmingDelete ? 'Confirm' : 'Delete'}
-              </button>
-            </div>
-          )
-        }) : (
-          <p className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-3 text-xs text-gray-500 dark:border-white/10 dark:bg-white/[0.03] dark:text-gray-400">
-            No linked agents yet. Sign in after creating a profile to link a Circle wallet.
-          </p>
-        )}
-        {!showProfileForm && !atAgentLimit && (
-          <button
-            type="button"
-            onClick={startNewAgent}
-            className="mt-2 flex w-full items-center justify-center rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-50 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:bg-white/[0.08]"
-          >
-            New profile
-          </button>
-        )}
-        {!showProfileForm && atAgentLimit && (
-          <p className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 text-[11px] leading-relaxed text-gray-500 dark:border-white/10 dark:bg-white/[0.03] dark:text-gray-400">
-            You can keep up to {MAX_USER_AGENTS} agent profiles. Delete one before creating another.
-          </p>
-        )}
-      </div>
-      )}
-    </div>
-  )
-}
-
-function AgentDashboardPanel({
-  owner,
-  fallbackOwner,
-  agents,
-  setAgents,
-  loadError,
-  setLoadError,
-  onCreateAgent,
-  onBack,
-}: {
-  owner: string
-  fallbackOwner: string
-  agents: AgentProfile[]
-  setAgents: (agents: AgentProfile[]) => void
-  loadError: string
-  setLoadError: (value: string) => void
-  onCreateAgent: () => void
-  onBack: () => void
-}) {
-  const connectedAgents = useMemo(() => agents.filter(agent => Boolean(agent.walletAddress)), [agents])
-
-  async function refreshAgents() {
-    setLoadError('')
-    try {
-      const profileParams = new URLSearchParams({ owner })
-      if (fallbackOwner) profileParams.set('fallbackOwner', fallbackOwner)
-      const res = await fetch(`/api/agent-profile?${profileParams.toString()}`)
-      const data = await res.json() as { ok?: boolean; agents?: AgentProfile[]; error?: string }
-      if (!res.ok || !data.ok) throw new Error(data.error || 'Could not load agents.')
-      setAgents(data.agents ?? [])
-    } catch (err) {
-      setLoadError(err instanceof Error ? err.message : 'Could not load agents.')
-    }
-  }
-
-  useEffect(() => {
-    if (!agents.length) void refreshAgents()
-  }, [owner, fallbackOwner]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  return (
-    <div className="mt-4 space-y-3">
-      <button
-        type="button"
-        onClick={onBack}
-        className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-400 transition-colors hover:text-gray-700 dark:hover:text-gray-200"
-      >
-        <ArrowLeft className="h-3.5 w-3.5" />
-        Agent Wallets
-      </button>
 
       <div className="rounded-xl border border-gray-100 bg-gray-50/80 p-3 dark:border-white/10 dark:bg-white/[0.04]">
         <div className="flex items-start gap-3">
@@ -1949,64 +1481,15 @@ function AgentDashboardPanel({
             <Wallet className="h-4 w-4" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-gray-900 dark:text-white">Agent Dashboard</p>
+            <p className="text-sm font-semibold text-gray-900 dark:text-white">x402 Wallet Manager</p>
             <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-              Open a linked agent to fund treasury, activate x402, and review receipts.
+              Telegram uses the same wallet flow as Create Link: sign in with email, fund Circle wallet balance, activate x402 service balance, then use paid services.
             </p>
           </div>
         </div>
       </div>
 
-      {loadError && <p className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs font-medium text-red-600 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200">{loadError}</p>}
-
-      {!connectedAgents.length ? (
-        <div className="rounded-xl border border-gray-100 bg-white p-3 dark:border-white/10 dark:bg-white/[0.03]">
-          <p className="text-sm font-semibold text-gray-900 dark:text-white">Set up an agent first</p>
-          <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-            Dashboard actions unlock after a profile has a Circle wallet linked.
-          </p>
-          <button
-            type="button"
-            onClick={onCreateAgent}
-            className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950"
-          >
-            <Bot className="h-4 w-4" />
-            Agent Setup
-          </button>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {connectedAgents.map(agent => {
-            const status = agentWalletStatus(agent, true)
-            return (
-              <a
-                key={agent.slug}
-                href={`/agent?profile=agent&agent=${encodeURIComponent(agent.slug)}&src=telegram`}
-                className="flex w-full items-center gap-3 rounded-xl border border-gray-100 bg-white p-3 text-left transition-all hover:border-gray-200 hover:bg-gray-50 active:scale-[0.99] dark:border-white/10 dark:bg-white/[0.03] dark:hover:bg-white/[0.06]"
-              >
-                <AgentProfileAvatar agent={agent} className="h-10 w-10 rounded-xl text-xs" />
-                <span className="min-w-0 flex-1">
-                  <span className="flex min-w-0 items-center gap-2">
-                    <span className="truncate text-sm font-semibold text-gray-900 dark:text-white">{agent.name}</span>
-                    <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase', status.className)}>
-                      Connected
-                    </span>
-                  </span>
-                  <span className="mt-0.5 block truncate text-xs text-gray-500 dark:text-gray-400">
-                    {agent.purpose || 'Agent profile'}
-                  </span>
-                  {agent.walletAddress && (
-                    <span className="mt-1 block font-mono text-[11px] text-gray-400">
-                      {shortAgentWallet(agent.walletAddress)}
-                    </span>
-                  )}
-                </span>
-                <ArrowRight className="h-4 w-4 shrink-0 text-gray-400" />
-              </a>
-            )
-          })}
-        </div>
-      )}
+      <AgentDemo embedded forceProfile />
     </div>
   )
 }
@@ -2028,14 +1511,14 @@ const lpScoutOptions: LpScoutOption[] = [
   {
     id: 'best',
     title: 'Best reward markets',
-    body: 'Have your agent buy the x402 LP Scout service and rank live reward markets by spread, liquidity, depth, rewards, and risk.',
+    body: 'Use x402 to buy the LP Scout service and rank live reward markets by spread, liquidity, depth, rewards, and risk.',
     amount: '0.01',
     icon: LineChart,
   },
   {
     id: 'theme',
     title: 'Scout a theme',
-    body: 'Have your agent focus the x402 scout on one sector, event, token, election, or sports category using live Gamma and CLOB data.',
+    body: 'Focus the x402 scout on one sector, event, token, election, or sports category using live Gamma and CLOB data.',
     amount: '0.01',
     icon: Sparkles,
     inputLabel: 'Theme',
@@ -2044,7 +1527,7 @@ const lpScoutOptions: LpScoutOption[] = [
   {
     id: 'market',
     title: 'Inspect one market',
-    body: 'Have your agent inspect one Polymarket URL or slug for current book, maker quote, depth, and LP risk context.',
+    body: 'Inspect one Polymarket URL or market slug for current book, maker quote, depth, and LP risk context.',
     amount: '0.01',
     icon: ExternalLink,
     inputLabel: 'Market URL or slug',
@@ -2053,18 +1536,14 @@ const lpScoutOptions: LpScoutOption[] = [
 ]
 
 function LpScoutPanel({
-  agents,
-  loadError,
   prefill,
   onPrefillConsumed,
-  onCreateAgent,
+  onOpenWalletManager,
   onBack,
 }: {
-  agents: AgentProfile[]
-  loadError: string
   prefill: LpScoutPrefill | null
   onPrefillConsumed: () => void
-  onCreateAgent: () => void
+  onOpenWalletManager: () => void
   onBack: () => void
 }) {
   const [path, setPath] = useState<LpScoutPath>('')
@@ -2074,7 +1553,6 @@ function LpScoutPanel({
   const [budget, setBudget] = useState('')
   const [maxSpend, setMaxSpend] = useState(lpScoutOptions[0].amount)
   const [prefillNotice, setPrefillNotice] = useState('')
-  const connectedAgents = useMemo(() => agents.filter(agent => Boolean(agent.walletAddress)), [agents])
   const selectedOption = lpScoutOptions.find(option => option.id === mode) ?? lpScoutOptions[0]
   const needsQuery = Boolean(selectedOption.inputLabel)
   const contextReady = !needsQuery || query.trim().length > 2
@@ -2123,20 +1601,16 @@ function LpScoutPanel({
     setPath('')
   }
 
-  function buildAgentScoutUrl(agent: AgentProfile) {
+  function buildWalletScoutUrl() {
     const params = new URLSearchParams()
     params.set('profile', 'agent')
-    params.set('agent', agent.slug)
+    params.set('walletManager', 'service')
     params.set('src', 'lp-scout')
     params.set('run', 'polymarket-scout')
     params.set('scoutMode', selectedOption.id)
     params.set('maxAmount', maxSpend.trim())
     params.set('serviceUrl', '/api/x402/polymarket-scout')
     params.set('n', 'base')
-    if (agent.walletAddress) {
-      params.set('wallet', agent.walletAddress)
-      params.set('expectedWallet', agent.walletAddress)
-    }
     if (query.trim()) params.set('context', query.trim())
     if (budget.trim()) params.set('budget', budget.trim())
     return `/agent?${params.toString()}`
@@ -2167,7 +1641,7 @@ function LpScoutPanel({
             </div>
             <h2 className="mt-2 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Choose how LP Scout should work</h2>
             <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-              Use a linked agent for one-time Polymarket x402 access, or stream daily LP intelligence by email.
+              Use the x402 wallet manager for one-time Polymarket scout access, or stream daily LP intelligence by email.
             </p>
           </div>
         </div>
@@ -2176,7 +1650,7 @@ function LpScoutPanel({
           <RequestModeButton
             icon={Bot}
             title="Tip for LP Scout access"
-            body="Pick a Polymarket scout category, then choose which linked agent pays Hash PayLink through the agent/x402 route."
+            body="Pick a Polymarket scout category, then use your x402 Wallet Manager to pay Hash PayLink through Circle Gateway."
             onClick={startAccessFlow}
           />
           <RequestModeButton
@@ -2208,9 +1682,9 @@ function LpScoutPanel({
             </span>
             <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">LP Scout x402</p>
           </div>
-          <h2 className="mt-2 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Tip Hash PayLink Agent with your agent</h2>
+          <h2 className="mt-2 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Run LP Scout with x402</h2>
           <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-            Choose the Polymarket research category first. Next, pick the linked agent that should pay Hash PayLink for access.
+            Choose the Polymarket research category first. Next, sign in to the x402 Wallet Manager. If x402 balance is low, fund Circle wallet balance and activate x402 before checkout continues.
           </p>
         </div>
       </div>
@@ -2288,66 +1762,43 @@ function LpScoutPanel({
           disabled={!canChooseAgent}
           className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
         >
-          <Bot className="h-4 w-4" />
-          Choose paying agent
+          <Wallet className="h-4 w-4" />
+          Continue to x402 wallet
         </button>
       </div>
 
       {step === 'agent' && (
         <div className="space-y-3 rounded-xl border border-gray-100 bg-white p-3 dark:border-white/10 dark:bg-white/[0.05]">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Paying agent</p>
-            <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-white">Pick the agent that will tip Hash PayLink Agent</p>
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">x402 wallet</p>
+            <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-white">Use email session and Circle wallet</p>
             <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-              The selected agent opens its dashboard with this LP Scout request attached. Fund and activate x402 there if needed.
+              Your email session opens the wallet manager, your 0x Circle wallet is confirmed, and LP Scout only runs after x402 payment succeeds.
             </p>
           </div>
+          <a
+            href={buildWalletScoutUrl()}
+            className="flex w-full items-center gap-3 rounded-xl border border-gray-100 bg-gray-50/70 p-3 text-left transition-all hover:border-gray-200 hover:bg-white active:scale-[0.99] dark:border-white/10 dark:bg-white/[0.04] dark:hover:bg-white/[0.08]"
+          >
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-gray-800 shadow-sm dark:bg-white/[0.08] dark:text-gray-100">
+              <Wallet className="h-4 w-4" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-semibold text-gray-900 dark:text-white">Open x402 Wallet Manager</span>
+              <span className="mt-0.5 block text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                Pay max {maxSpend || selectedOption.amount} USDC for {selectedOption.title}. Low balance prompts wallet funding and x402 activation.
+              </span>
+            </span>
+            <ArrowRight className="h-4 w-4 shrink-0 text-gray-400" />
+          </a>
 
-          {loadError && <p className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs font-medium text-red-600 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200">{loadError}</p>}
-
-          {connectedAgents.length ? (
-            <div className="grid gap-2">
-              {connectedAgents.map(agent => {
-                const status = agentWalletStatus(agent, true)
-                return (
-                  <a
-                    key={agent.slug}
-                    href={buildAgentScoutUrl(agent)}
-                    className="flex w-full items-center gap-3 rounded-xl border border-gray-100 bg-gray-50/70 p-3 text-left transition-all hover:border-gray-200 hover:bg-white active:scale-[0.99] dark:border-white/10 dark:bg-white/[0.04] dark:hover:bg-white/[0.08]"
-                  >
-                    <AgentProfileAvatar agent={agent} className="h-10 w-10 rounded-xl text-xs" />
-                    <span className="min-w-0 flex-1">
-                      <span className="flex min-w-0 items-center gap-2">
-                        <span className="truncate text-sm font-semibold text-gray-900 dark:text-white">{agent.name}</span>
-                        <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase', status.className)}>
-                          Connected
-                        </span>
-                      </span>
-                      <span className="mt-0.5 block truncate text-xs text-gray-500 dark:text-gray-400">
-                        {shortAgentWallet(agent.walletAddress)} pays max {maxSpend || selectedOption.amount} USDC for {selectedOption.title}
-                      </span>
-                    </span>
-                    <ArrowRight className="h-4 w-4 shrink-0 text-gray-400" />
-                  </a>
-                )
-              })}
-            </div>
-          ) : (
-            <div className="rounded-xl border border-gray-100 bg-gray-50 p-3 dark:border-white/10 dark:bg-white/[0.03]">
-              <p className="text-sm font-semibold text-gray-900 dark:text-white">No linked paying agent yet</p>
-              <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                Create or link an agent wallet first, then return here to run LP Scout through x402.
-              </p>
-              <button
-                type="button"
-                onClick={onCreateAgent}
-                className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
-              >
-                <Wallet className="h-4 w-4" />
-                Create or link agent
-              </button>
-            </div>
-          )}
+          <button
+            type="button"
+            onClick={onOpenWalletManager}
+            className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-3 text-sm font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:bg-white/[0.08]"
+          >
+            Manage wallet first
+          </button>
         </div>
       )}
     </div>
