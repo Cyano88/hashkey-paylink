@@ -22,6 +22,7 @@ import Anthropic                   from '@anthropic-ai/sdk'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import crypto from 'node:crypto'
+import { sponsorZeroScoutAction, type ZeroScoutSponsoredAction } from './zeroscout-sponsored-action.js'
 
 // ─── 0G Mainnet config ────────────────────────────────────────────────────────
 const OG_RPC       = 'https://evmrpc.0g.ai'
@@ -283,6 +284,31 @@ export default async function handler(req: Request, res: Response) {
       memorySummary,
     )
 
+    const zeroscoutSponsorship: ZeroScoutSponsoredAction | undefined = await sponsorZeroScoutAction({
+      service: 'Hash PayLink Helper',
+      action: 'helper-chat-response',
+      user: {
+        payer: result.payment.payer,
+        email: result.payment.payer,
+        wallet: result.payment.payer,
+      },
+      request: {
+        eventId,
+        question,
+        memorySummaryHash: memorySummary
+          ? crypto.createHash('sha256').update(memorySummary).digest('hex')
+          : undefined,
+      },
+      sourceProof: {
+        type: 'helper_access_receipt',
+        ...result.proof,
+      },
+      result: {
+        answerHash: crypto.createHash('sha256').update(answer).digest('hex'),
+        usageRemaining: usage.remaining,
+      },
+    })
+
     return res.json({
       answer,
       paymentVerified: true,
@@ -293,6 +319,7 @@ export default async function handler(req: Request, res: Response) {
       },
       payment:         result.payment,
       proof:           result.proof,
+      ...(zeroscoutSponsorship ? { zeroscoutSponsorship } : {}),
     })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)

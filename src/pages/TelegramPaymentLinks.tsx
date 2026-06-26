@@ -252,6 +252,25 @@ type HelperMessage = {
   question: string
   answer: string
   proof: { ogTxHash: string; ogExplorer: string }
+  zeroscoutSponsorship?: ZeroScoutSponsorship
+}
+
+type ZeroScoutSponsorship = {
+  proofClass: 'zeroscout_sponsored_action'
+  sponsor: 'ZeroScout'
+  service: string
+  action: string
+  requestHash: string
+  sponsoredAt: string
+  sourceProofClass?: 'helper_access_receipt' | 'helper_memory_proof' | 'service_receipt'
+  zeroscout?: {
+    intelligenceScore?: number
+    summary?: string
+    proof?: {
+      storageRoot?: string
+      storageTxHash?: string
+    }
+  }
 }
 
 type HelperProfile = {
@@ -1150,10 +1169,11 @@ function TelegramHelperPanel({
       const data = await res.json() as {
         answer?: string
         proof?: { ogTxHash: string; ogExplorer: string }
+        zeroscoutSponsorship?: ZeroScoutSponsorship
         error?: string
       }
       if (!data.answer || !data.proof) throw new Error(data.error ?? 'No helper response returned.')
-      setMessages(prev => [...prev, { question: nextQuestion, answer: data.answer!, proof: data.proof! }])
+      setMessages(prev => [...prev, { question: nextQuestion, answer: data.answer!, proof: data.proof!, zeroscoutSponsorship: data.zeroscoutSponsorship }])
       if (!memoryDraft.trim()) {
         setMemoryDraft(`User is known as ${helperName || payer}. They use Hash PayLink Agent Helper from Telegram and may ask about payments, Polymarket, StreamPay, agents, research, planning, and daily questions.`)
       }
@@ -1414,6 +1434,26 @@ function TelegramHelperPanel({
                         <span className="rounded border border-purple-100 px-1 text-[8px] font-black text-purple-500 dark:border-purple-300/20 dark:text-purple-200">0G</span>
                         response proof
                       </a>
+                      {message.zeroscoutSponsorship && (
+                        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] font-semibold text-gray-400">
+                          <span className="rounded border border-emerald-100 bg-emerald-50 px-1.5 py-0.5 text-[9px] font-black uppercase text-emerald-600 dark:border-emerald-300/20 dark:bg-emerald-300/10 dark:text-emerald-200">
+                            ZeroScout-sponsored
+                          </span>
+                          <span title={message.zeroscoutSponsorship.requestHash}>
+                            request {message.zeroscoutSponsorship.requestHash.slice(0, 10)}...
+                          </span>
+                          {message.zeroscoutSponsorship.zeroscout?.proof?.storageTxHash && (
+                            <a
+                              href={`https://chainscan.0g.ai/tx/${message.zeroscoutSponsorship.zeroscout.proof.storageTxHash}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-emerald-600 hover:text-emerald-700 dark:text-emerald-200"
+                            >
+                              proof <ExternalLink className="h-2.5 w-2.5" />
+                            </a>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}

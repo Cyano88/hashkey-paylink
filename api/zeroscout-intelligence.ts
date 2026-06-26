@@ -1,4 +1,4 @@
-type ZeroScoutPayload = {
+export type ZeroScoutPayload = {
   partner: string
   productType: string
   analysisType: string
@@ -59,7 +59,7 @@ export async function callZeroScoutIntelligence(payload: ZeroScoutPayload): Prom
 
   const body = JSON.stringify(payload)
   if (Buffer.byteLength(body, 'utf8') > MAX_PAYLOAD_BYTES) {
-    const error = new Error('ZeroScout payload is too large. Send a summarized LP scout result under 96 KB.') as Error & { status?: number }
+    const error = new Error('ZeroScout payload is too large. Send a summarized request under 96 KB.') as Error & { status?: number }
     error.status = 413
     throw error
   }
