@@ -632,6 +632,11 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
   useEffect(() => {
     let cancelled = false
     if (!showAgentProfile) return
+    if (embeddedWalletManager) {
+      setAgentProfile(null)
+      setAgentProfileError('')
+      return
+    }
     const slug = normalizedAgentSlug || (embeddedWalletManager ? '' : PLATFORM_AGENT_SLUG)
     setAgentProfileError('')
     if (!slug) {
@@ -2421,25 +2426,6 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
             </p>
           </div>
           <div className="space-y-2">
-            <Link
-              to="/telegram/payment-links?section=agent-wallets&service=hashpaylink-agent&open=1"
-              className="flex w-full items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-left transition-all hover:border-gray-300 hover:bg-white active:scale-[0.99] dark:border-white/10 dark:bg-white/[0.05] dark:hover:bg-white/[0.08]"
-            >
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-gray-700 shadow-sm dark:bg-white/[0.08] dark:text-gray-200">
-                <Bot className="h-4 w-4" />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="flex items-center gap-2">
-                  <span className="text-sm font-semibold text-gray-900 dark:text-white">{PLATFORM_AGENT_PROFILE.name}</span>
-                  <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-600 dark:bg-emerald-400/10 dark:text-emerald-300">Open</span>
-                </span>
-                <span className="mt-0.5 block text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                  {PLATFORM_AGENT_PROFILE.purpose}
-                </span>
-              </span>
-              <ArrowRight className="h-4 w-4 text-gray-400" />
-            </Link>
-
             <Link
               to="/telegram/payment-links?section=agent-wallets&service=create-your-agent&open=1"
               className="flex w-full items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-left transition-all hover:border-gray-300 hover:bg-white active:scale-[0.99] dark:border-white/10 dark:bg-white/[0.05] dark:hover:bg-white/[0.08]"

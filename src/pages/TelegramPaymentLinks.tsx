@@ -59,15 +59,16 @@ type TelegramServiceId =
   | 'agent-marketplace'
   | 'agent-dashboard'
   | 'fund-agent-wallet'
-  | 'polydesk-services'
   | 'poly-portfolio'
   | 'poly-worldcup'
   | 'lp-scout'
   | 'poly-worldcup-news'
   | 'poly-stream'
   | 'agentic-lp-research'
-  | 'create-streampay'
-  | 'agentic-streampay'
+  | 'streampay-payroll'
+  | 'streampay-creator'
+  | 'streampay-x402'
+  | 'streampay-arena'
 
 type TelegramService = {
   id: TelegramServiceId
@@ -96,29 +97,21 @@ const sectionServices: Record<TelegramSectionId, TelegramService[]> = {
       status: 'Open',
       active: true,
     },
-  ],
-  'agent-wallets': [
     {
-      id: 'hashpaylink-agent',
-      title: 'Hash PayLink Agent',
-      body: 'Platform agent with paid helper access for Hash PayLink services.',
+      id: 'hashpaylink-helper',
+      title: 'Hash PayLink Helper',
+      body: 'Fast chat help for payments, PolyDesk, StreamPay, and LP services.',
       icon: Bot,
       status: 'Open',
       active: true,
     },
+  ],
+  'agent-wallets': [
     {
       id: 'agent-dashboard',
       title: 'x402 Wallet Manager',
       body: 'Sign in with email, fund Circle wallet balance, activate x402, and view receipts.',
       icon: Wallet,
-      status: 'Open',
-      active: true,
-    },
-    {
-      id: 'polydesk-services',
-      title: 'PolyDesk services',
-      body: 'Return to LP Scout, portfolio, and Polymarket services after wallet setup.',
-      icon: LineChart,
       status: 'Open',
       active: true,
     },
@@ -160,19 +153,35 @@ const sectionServices: Record<TelegramSectionId, TelegramService[]> = {
   ],
   streampay: [
     {
-      id: 'create-streampay',
-      title: 'Create StreamPay',
-      body: 'Open Arc USDC streaming from Telegram.',
+      id: 'streampay-payroll',
+      title: 'Payroll',
+      body: 'Create Arc USDC streams for payroll and scheduled payouts.',
       icon: Radio,
       status: 'Open',
       active: true,
     },
     {
-      id: 'agentic-streampay',
-      title: 'Agentic StreamPay',
-      body: 'Use /streamagent for ongoing agent retainers.',
+      id: 'streampay-creator',
+      title: 'Creator',
+      body: 'Publish creator drops and paid access flows on StreamPay.',
+      icon: Pencil,
+      status: 'Open',
+      active: true,
+    },
+    {
+      id: 'streampay-x402',
+      title: 'x402 Stream',
+      body: 'Open x402-backed agentic streams and service retainers.',
       icon: Sparkles,
-      status: 'Telegram',
+      status: 'Open',
+      active: true,
+    },
+    {
+      id: 'streampay-arena',
+      title: 'Arena',
+      body: 'Launch StreamPay Arena rooms with Arc settlement.',
+      icon: UsersRound,
+      status: 'Open',
       active: true,
     },
   ],
@@ -180,9 +189,9 @@ const sectionServices: Record<TelegramSectionId, TelegramService[]> = {
 
 const sectionDescriptions: Record<TelegramSectionId, string> = {
   'payment-links': 'Create normal USDC requests and share them into Telegram.',
-  'agent-wallets': 'Manage Circle wallet balance, x402 service balance, receipts, and PolyDesk service checkout.',
+  'agent-wallets': 'Manage Circle wallet balance, x402 service balance, and receipts.',
   'market-tools': 'PolyDesk for Polymarket funding, portfolio alerts, LP Scout, and live market context.',
-  streampay: 'Arc USDC streams for recipients, services, and ongoing retainers.',
+  streampay: 'Payroll, creator, x402 stream, and Arena flows on StreamPay.',
 }
 
 const telegramSections: Array<{ id: TelegramSectionId; title: string; icon: typeof Coins }> = [
@@ -354,12 +363,13 @@ export default function TelegramPaymentLinks() {
       : initialServiceParam === 'agentic-lp-research'
       ? 'agentic-lp-research'
       : ''
-  const initialAgentService = initialService === 'hashpaylink-helper' || initialService === 'create-your-agent' || initialService === 'agent-dashboard'
+  const initialAgentService = initialService === 'create-your-agent' || initialService === 'agent-dashboard'
+  const initialPaymentService = initialService === 'hashpaylink-helper'
   const initialMarketService = initialService === 'poly-portfolio' || initialService === 'lp-scout' || initialService === 'poly-worldcup' || initialService === 'poly-worldcup-news' || initialService === 'poly-stream' || initialService === 'agentic-lp-research'
   const initialPersonTarget = displayTelegramName(searchParams.get('target') ?? searchParams.get('payer') ?? searchParams.get('p'), '')
   const initialGroupTarget = displayTelegramName(searchParams.get('target') ?? searchParams.get('group') ?? searchParams.get('g') ?? searchParams.get('chat'), '')
   const [opened, setOpened] = useState(searchParams.get('open') !== '0')
-  const [activeSection, setActiveSection] = useState<TelegramSectionId>(initialAgentService ? 'agent-wallets' : initialMarketService ? 'market-tools' : initialSection)
+  const [activeSection, setActiveSection] = useState<TelegramSectionId>(initialAgentService ? 'agent-wallets' : initialPaymentService ? 'payment-links' : initialMarketService ? 'market-tools' : initialSection)
   const [activeService, setActiveService] = useState<TelegramServiceId | ''>(initialService)
   const [requestMode, setRequestMode] = useState<RequestMode | ''>(initialServiceParam === 'request-usdc' ? initialMode : '')
   const [savedRequest, setSavedRequest] = useState<SavedRequest | null>(null)
@@ -500,13 +510,20 @@ export default function TelegramPaymentLinks() {
       setActiveService('agent-dashboard')
       return
     }
-    if (service.id === 'polydesk-services') {
-      setActiveSection('market-tools')
-      setActiveService('lp-scout')
+    if (service.id === 'streampay-payroll') {
+      window.location.href = '/?app=streampay&src=telegram'
       return
     }
-    if (service.id === 'create-streampay') {
-      window.location.href = '/?app=streampay&src=telegram'
+    if (service.id === 'streampay-creator') {
+      window.location.href = '/creator?app=streampay&src=telegram'
+      return
+    }
+    if (service.id === 'streampay-x402') {
+      window.location.href = '/agentic?app=streampay&mode=agentic-streaming&src=telegram'
+      return
+    }
+    if (service.id === 'streampay-arena') {
+      window.location.href = '/arena?app=streampay&game=trivia&src=telegram'
       return
     }
     if (service.id === 'poly-portfolio') {
@@ -532,9 +549,6 @@ export default function TelegramPaymentLinks() {
     if (service.id === 'agentic-lp-research') {
       setActiveService('agentic-lp-research')
       return
-    }
-    if (service.id === 'agentic-streampay') {
-      setActiveService('agentic-streampay')
     }
   }
 
@@ -663,7 +677,7 @@ export default function TelegramPaymentLinks() {
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Hash PayLink</p>
-              <h1 className="mt-1 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Telegram Dashboard</h1>
+              <h1 className="mt-1 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Telegram Services</h1>
               <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
                 Create payment actions and share them back into Telegram.
               </p>
@@ -815,10 +829,6 @@ export default function TelegramPaymentLinks() {
           ) : activeService === 'agent-dashboard' || activeService === 'fund-agent-wallet' || activeService === 'create-your-agent' ? (
             <TelegramX402WalletPanel
               onBack={() => setActiveService('')}
-              onOpenPolyDesk={() => {
-                setActiveSection('market-tools')
-                setActiveService('lp-scout')
-              }}
             />
           ) : (
             <div className="mt-4 space-y-2">
@@ -1449,31 +1459,19 @@ function TelegramHelperPanel({
 
 function TelegramX402WalletPanel({
   onBack,
-  onOpenPolyDesk,
 }: {
   onBack: () => void
-  onOpenPolyDesk: () => void
 }) {
   return (
     <div className="mt-4 space-y-3">
-      <div className="flex items-center justify-between gap-3">
-        <button
-          type="button"
-          onClick={onBack}
-          className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-400 transition-colors hover:text-gray-700 dark:hover:text-gray-200"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" />
-          Agent Wallets
-        </button>
-        <button
-          type="button"
-          onClick={onOpenPolyDesk}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/[0.1]"
-        >
-          <LineChart className="h-3.5 w-3.5" />
-          PolyDesk services
-        </button>
-      </div>
+      <button
+        type="button"
+        onClick={onBack}
+        className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-400 transition-colors hover:text-gray-700 dark:hover:text-gray-200"
+      >
+        <ArrowLeft className="h-3.5 w-3.5" />
+        Agent Wallets
+      </button>
 
       <div className="rounded-xl border border-gray-100 bg-gray-50/80 p-3 dark:border-white/10 dark:bg-white/[0.04]">
         <div className="flex items-start gap-3">
