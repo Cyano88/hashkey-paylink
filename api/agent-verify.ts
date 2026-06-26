@@ -28,6 +28,7 @@ const ARCHIVE_ABI = [
 
 const MAX_EVENT_ID_LENGTH = 128
 const MAX_PAYER_LENGTH = 128
+const VERIFY_TIMEOUT_MS = Math.max(5_000, parseInt(process.env.HELPER_VERIFY_TIMEOUT_MS ?? '15000', 10) || 15_000)
 
 function normalizeBoundedString(value: unknown, field: string, maxLength: number): string {
   if (typeof value !== 'string') throw new Error(`${field} must be a string`)
@@ -35,6 +36,20 @@ function normalizeBoundedString(value: unknown, field: string, maxLength: number
   if (!normalized) throw new Error(`${field} is required`)
   if (normalized.length > maxLength) throw new Error(`${field} is too long`)
   return normalized
+}
+
+async function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label} timed out`)), VERIFY_TIMEOUT_MS)
+      }),
+    ])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
 }
 
 // ─── Handler ──────────────────────────────────────────────────────────────────
@@ -56,14 +71,14 @@ export default async function handler(req: Request, res: Response) {
   try {
     const provider = new ethers.JsonRpcProvider(OG_RPC)
     const contract = new ethers.Contract(ARCHIVE_ADDR, ARCHIVE_ABI, provider)
-    const latest   = await provider.getBlockNumber()
+    const latest   = await withTimeout(provider.getBlockNumber(), '0G payment verification')
 
     // Query PaymentArchived events filtered by eventId (indexed — ethers handles keccak256)
-    const events = await contract.queryFilter(
+    const events = await withTimeout(contract.queryFilter(
       contract.filters.PaymentArchived(eventId),
       FROM_BLOCK,
       latest,
-    )
+    ), '0G payment proof lookup')
 
     // Match by payer name (case-insensitive, non-indexed so readable from log data)
     const match = events.find(
@@ -98,6 +113,10 @@ export default async function handler(req: Request, res: Response) {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error('[agent-verify]', msg)
-    return res.status(500).json({ verified: false, error: 'Verification service unavailable' })
+    const timedOut = /timed out/i.test(msg)
+    return res.status(timedOut ? 504 : 500).json({
+      verified: false,
+      error: timedOut ? 'Verification is still syncing. Try again shortly.' : 'Verification service unavailable',
+    })
   }
 }

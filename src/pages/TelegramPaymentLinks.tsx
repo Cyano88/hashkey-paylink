@@ -1101,7 +1101,15 @@ function TelegramHelperPanel({
   const [memoryDraft, setMemoryDraft] = useState('')
   const [paylinkDraft, setPaylinkDraft] = useState<HelperPaylinkDraft | null>(null)
   const [checkpointBusy, setCheckpointBusy] = useState(false)
+  const verifyRequestRef = useRef(0)
   const returningFromPayment = Boolean(initialEventId && initialPayer && !verified?.verified)
+
+  useEffect(() => {
+    setVerified(null)
+    setMessages([])
+    setPaylinkDraft(null)
+    setAskError('')
+  }, [eventId, payer])
 
   useEffect(() => {
     if (!initialEventId || !initialPayer || verified?.verified) return
@@ -1246,27 +1254,35 @@ function TelegramHelperPanel({
   }
 
   async function verifyAccess(nextEventId = eventId, nextPayer = payer) {
-    if (!nextEventId.trim() || !nextPayer.trim()) return
+    const cleanEventId = nextEventId.trim()
+    const cleanPayer = nextPayer.trim()
+    if (!cleanEventId || !cleanPayer) return
+    const requestId = verifyRequestRef.current + 1
+    verifyRequestRef.current = requestId
+    setEventId(cleanEventId)
+    setPayer(cleanPayer)
     setVerifying(true)
     setVerified(null)
     try {
-      const res = await fetch(`/api/agent-verify?eventId=${encodeURIComponent(nextEventId.trim())}&payer=${encodeURIComponent(nextPayer.trim())}`)
+      const res = await fetch(`/api/agent-verify?eventId=${encodeURIComponent(cleanEventId)}&payer=${encodeURIComponent(cleanPayer)}`)
       const data = await res.json().catch(() => null) as HelperVerifyResult | null
+      if (requestId !== verifyRequestRef.current) return
       if (!data) throw new Error('Verification service returned an unreadable response.')
       if (!res.ok && !data.verified) throw new Error(data.error || 'Access is not active yet.')
       setVerified(data)
       if (data.verified) {
         setStarted(true)
         setMessages([])
-        void saveProfile({ displayName: helperName || helperNameDraft || nextPayer, accessEventId: nextEventId, accessPayer: nextPayer })
+        void saveProfile({ displayName: helperName || helperNameDraft || cleanPayer, accessEventId: cleanEventId, accessPayer: cleanPayer })
       }
     } catch (err) {
+      if (requestId !== verifyRequestRef.current) return
       const message = err instanceof Error && err.message
         ? err.message
         : 'Verification service unreachable.'
       setVerified({ verified: false, error: message })
     } finally {
-      setVerifying(false)
+      if (requestId === verifyRequestRef.current) setVerifying(false)
     }
   }
 

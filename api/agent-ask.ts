@@ -46,6 +46,7 @@ const HELPER_DAILY_PROMPT_LIMIT = Math.max(1, parseInt(process.env.HELPER_DAILY_
 const HELPER_USAGE_WINDOW_MS = 24 * 60 * 60 * 1000
 const HELPER_USAGE_STORE = process.env.HELPER_USAGE_STORE
   ?? (process.env.DATA_PATH ? `${process.env.DATA_PATH}/helper-usage.json` : './data/helper-usage.json')
+const HELPER_VERIFY_TIMEOUT_MS = Math.max(5_000, parseInt(process.env.HELPER_VERIFY_TIMEOUT_MS ?? '15000', 10) || 15_000)
 const UPSTASH_REST_URL = (process.env.UPSTASH_REDIS_REST_URL ?? '').trim().replace(/\/+$/, '')
 const UPSTASH_REST_TOKEN = (process.env.UPSTASH_REDIS_REST_TOKEN ?? '').trim()
 const UPSTASH_USAGE_KEY = (process.env.HELPER_USAGE_STORE_KEY ?? 'hashpaylink:helper-usage').trim()
@@ -132,6 +133,20 @@ async function writeUsageStore(store: UsageStore) {
   }
 }
 
+async function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label} timed out`)), HELPER_VERIFY_TIMEOUT_MS)
+      }),
+    ])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
 function usageKey(eventId: string, payer: string) {
   return crypto.createHash('sha256').update(`${eventId.toLowerCase()}:${payer.toLowerCase()}`).digest('hex')
 }
@@ -180,13 +195,13 @@ async function getHelperPromptUsageStatus(eventId: string, payer: string) {
 async function verifyPayment(eventId: string, payer: string) {
   const provider = new ethers.JsonRpcProvider(OG_RPC)
   const contract = new ethers.Contract(ARCHIVE_ADDR, ARCHIVE_ABI, provider)
-  const latest   = await provider.getBlockNumber()
+  const latest   = await withTimeout(provider.getBlockNumber(), '0G payment verification')
 
-  const events = await contract.queryFilter(
+  const events = await withTimeout(contract.queryFilter(
     contract.filters.PaymentArchived(eventId),
     FROM_BLOCK,
     latest,
-  )
+  ), '0G payment proof lookup')
 
   const match = events.find(
     e => 'args' in e && (e.args[3] as string).toLowerCase() === payer.toLowerCase(),
@@ -393,6 +408,9 @@ export default async function handler(req: Request, res: Response) {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error('[agent-ask]', msg)
-    return res.status(500).json({ error: 'Service temporarily unavailable' })
+    const timedOut = /timed out/i.test(msg)
+    return res.status(timedOut ? 504 : 500).json({
+      error: timedOut ? 'Payment verification is still syncing. Try again shortly.' : 'Service temporarily unavailable',
+    })
   }
 }

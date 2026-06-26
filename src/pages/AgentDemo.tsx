@@ -548,11 +548,19 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
   const [helperNameDraft, setHelperNameDraft] = useState(() => window.localStorage.getItem('hashpaylink-helper-name') ?? '')
   const [helperProfile, setHelperProfile] = useState<HelperProfile | null>(null)
   const [helperMemoryBusy, setHelperMemoryBusy] = useState(false)
+  const helperVerifyRequestRef = useRef(0)
   const bottomRef    = useRef<HTMLDivElement>(null)
   const autoRan      = useRef(false)
   const agentPrivyRestoreKey = useRef('')
   const helperCheckpointKey = useRef('')
   const returningFromHelperPayment = Boolean(eventId && payer && showHelperDemo && !verified?.verified)
+
+  useEffect(() => {
+    if (!showHelperDemo) return
+    setVerified(null)
+    setMessages([])
+    setAskError(null)
+  }, [eventId, payer, showHelperDemo])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -807,18 +815,24 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleVerify() {
-    if (!eventId.trim() || !payer.trim()) return
+    const cleanEventId = eventId.trim()
+    const cleanPayer = payer.trim()
+    if (!cleanEventId || !cleanPayer) return
+    const requestId = helperVerifyRequestRef.current + 1
+    helperVerifyRequestRef.current = requestId
     setVerifying(true)
     setVerified(null)
     try {
-      const res  = await fetch(`/api/agent-verify?eventId=${encodeURIComponent(eventId.trim())}&payer=${encodeURIComponent(payer.trim())}`)
+      const res  = await fetch(`/api/agent-verify?eventId=${encodeURIComponent(cleanEventId)}&payer=${encodeURIComponent(cleanPayer)}`)
       const data = await res.json() as VerifyResult
+      if (requestId !== helperVerifyRequestRef.current) return
       setVerified(data)
       if (data.verified) setMessages([])
     } catch {
+      if (requestId !== helperVerifyRequestRef.current) return
       setVerified({ verified: false, error: 'Verification service unreachable' })
     } finally {
-      setVerifying(false)
+      if (requestId === helperVerifyRequestRef.current) setVerifying(false)
     }
   }
 
@@ -862,7 +876,6 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
     const helperEventId = `helper-${Date.now().toString(36)}`
     const returnUrl = new URL('/agent', window.location.origin)
     returnUrl.searchParams.set('helper', 'live')
-    returnUrl.searchParams.set('agent', 'hashpaylink-agent')
     returnUrl.searchParams.set('src', params.get('src') || 'dashboard')
 
     const checkout = new URLSearchParams()
