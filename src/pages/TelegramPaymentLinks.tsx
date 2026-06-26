@@ -260,13 +260,6 @@ type HelperPaylinkDraft = {
 
 type PolymarketMode = 'self' | 'friends' | ''
 
-type HelperVerifyResult = {
-  verified: boolean
-  payment?: { payer: string; chain: string; amount: string; ts: number }
-  proof?: { ogTxHash: string; ogExplorer: string; network: string }
-  error?: string
-}
-
 type HelperMessage = {
   question: string
   answer: string
@@ -282,7 +275,7 @@ type ZeroScoutSponsorship = {
   action: string
   requestHash: string
   sponsoredAt: string
-  sourceProofClass?: 'helper_access_receipt' | 'helper_memory_proof' | 'service_receipt'
+  sourceProofClass?: 'helper_access_receipt' | 'helper_free_access' | 'helper_memory_proof' | 'service_receipt'
   zeroscout?: {
     intelligenceScore?: number
     summary?: string
@@ -1088,8 +1081,6 @@ function TelegramHelperPanel({
   const [helperNameDraft, setHelperNameDraft] = useState(() => window.localStorage.getItem('hashpaylink-helper-name') ?? (initialPayer || cleanTelegramName))
   const [eventId, setEventId] = useState(initialEventId)
   const [payer, setPayer] = useState(initialPayer || cleanTelegramName)
-  const [verified, setVerified] = useState<HelperVerifyResult | null>(null)
-  const [verifying, setVerifying] = useState(false)
   const [messages, setMessages] = useState<HelperMessage[]>([])
   const [question, setQuestion] = useState('')
   const [asking, setAsking] = useState(false)
@@ -1101,32 +1092,11 @@ function TelegramHelperPanel({
   const [memoryDraft, setMemoryDraft] = useState('')
   const [paylinkDraft, setPaylinkDraft] = useState<HelperPaylinkDraft | null>(null)
   const [checkpointBusy, setCheckpointBusy] = useState(false)
-  const verifyRequestRef = useRef(0)
-  const returningFromPayment = Boolean(initialEventId && initialPayer && !verified?.verified)
-
   useEffect(() => {
-    setVerified(null)
     setMessages([])
     setPaylinkDraft(null)
     setAskError('')
   }, [eventId, payer])
-
-  useEffect(() => {
-    if (!initialEventId || !initialPayer || verified?.verified) return
-    let cancelled = false
-    let attempts = 0
-
-    const run = async () => {
-      attempts += 1
-      await verifyAccess(initialEventId, initialPayer)
-      if (!cancelled && attempts < 8) {
-        window.setTimeout(run, attempts < 3 ? 4000 : 8000)
-      }
-    }
-
-    void run()
-    return () => { cancelled = true }
-  }, [initialEventId, initialPayer, verified?.verified]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const lookupPayer = payer.trim()
@@ -1144,11 +1114,6 @@ function TelegramHelperPanel({
         if (cancelled) return
         if (!data.ok) throw new Error(data.error || 'Could not load helper profile.')
         setProfile(data.profile ?? null)
-        if (data.profile?.accessEventId && data.profile?.accessPayer && !verified?.verified) {
-          setEventId(current => current || data.profile?.accessEventId || '')
-          setPayer(current => current || data.profile?.accessPayer || '')
-          void verifyAccess(data.profile.accessEventId, data.profile.accessPayer)
-        }
         if (data.profile?.displayName) {
           setHelperName(current => current || data.profile?.displayName || '')
           setHelperNameDraft(current => current || data.profile?.displayName || '')
@@ -1195,9 +1160,9 @@ function TelegramHelperPanel({
           owner: ownerKey || undefined,
           fallbackOwner: fallbackOwner || undefined,
           displayName: extra.displayName ?? (helperName || helperNameDraft || cleanPayer),
-          accessPayer: extra.accessPayer ?? (payer || cleanPayer),
+          accessPayer: extra.accessPayer,
           telegramHandle: cleanTelegramName,
-          accessEventId: extra.accessEventId ?? eventId,
+          accessEventId: extra.accessEventId,
           memorySummary: extra.memorySummary ?? memoryDraft,
           question: (extra as { question?: string }).question,
           answer: (extra as { answer?: string }).answer,
@@ -1235,9 +1200,9 @@ function TelegramHelperPanel({
           owner: ownerKey || undefined,
           fallbackOwner: fallbackOwner || undefined,
           displayName: helperName || helperNameDraft || cleanPayer,
-          accessPayer: profile?.accessPayer || payer || cleanPayer,
+          accessPayer: profile?.accessPayer,
           telegramHandle: cleanTelegramName,
-          accessEventId: eventId,
+          accessEventId: profile?.accessEventId,
           memorySummary: summary,
           preferences: profile?.preferences ?? [],
         }),
@@ -1250,39 +1215,6 @@ function TelegramHelperPanel({
       setProfileError(err instanceof Error ? err.message : 'Could not checkpoint memory.')
     } finally {
       setCheckpointBusy(false)
-    }
-  }
-
-  async function verifyAccess(nextEventId = eventId, nextPayer = payer) {
-    const cleanEventId = nextEventId.trim()
-    const cleanPayer = nextPayer.trim()
-    if (!cleanEventId || !cleanPayer) return
-    const requestId = verifyRequestRef.current + 1
-    verifyRequestRef.current = requestId
-    setEventId(cleanEventId)
-    setPayer(cleanPayer)
-    setVerifying(true)
-    setVerified(null)
-    try {
-      const res = await fetch(`/api/agent-verify?eventId=${encodeURIComponent(cleanEventId)}&payer=${encodeURIComponent(cleanPayer)}`)
-      const data = await res.json().catch(() => null) as HelperVerifyResult | null
-      if (requestId !== verifyRequestRef.current) return
-      if (!data) throw new Error('Verification service returned an unreadable response.')
-      if (!res.ok && !data.verified) throw new Error(data.error || 'Access is not active yet.')
-      setVerified(data)
-      if (data.verified) {
-        setStarted(true)
-        setMessages([])
-        void saveProfile({ displayName: helperName || helperNameDraft || cleanPayer, accessEventId: cleanEventId, accessPayer: cleanPayer })
-      }
-    } catch (err) {
-      if (requestId !== verifyRequestRef.current) return
-      const message = err instanceof Error && err.message
-        ? err.message
-        : 'Verification service unreachable.'
-      setVerified({ verified: false, error: message })
-    } finally {
-      if (requestId === verifyRequestRef.current) setVerifying(false)
     }
   }
 
@@ -1550,16 +1482,8 @@ function TelegramHelperPanel({
                   <p className="text-xs font-semibold text-gray-900 dark:text-white">
                     {helperName ? `Hi ${helperName}` : 'Helper is live'}
                   </p>
-                  <p className="text-[11px] text-gray-400">Access verified with 0G proof</p>
+                  <p className="text-[11px] text-gray-400">Open helper. ZeroScout sponsored.</p>
                 </div>
-                <a
-                  href={verified.proof?.ogExplorer}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 rounded-lg border border-purple-100 bg-purple-50 px-2 py-1 text-[10px] font-bold text-purple-600 dark:border-purple-300/20 dark:bg-purple-300/10 dark:text-purple-200"
-                >
-                  0G <ExternalLink className="h-2.5 w-2.5" />
-                </a>
               </div>
 
               <div className="space-y-2 border-b border-gray-100 p-3 dark:border-white/10">
@@ -1609,7 +1533,7 @@ function TelegramHelperPanel({
                       {helperName ? `Welcome back, ${helperName}.` : 'Welcome.'} Ask me about payments, Polymarket funding, StreamPay, agent setup, research, planning, or daily questions.
                     </p>
                     <div className="mt-2 inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400">
-                      <span className="rounded border border-purple-100 px-1 text-[8px] font-black text-purple-500 dark:border-purple-300/20 dark:text-purple-200">0G</span>
+                      <span className="rounded border border-emerald-100 px-1 text-[8px] font-black text-emerald-600 dark:border-emerald-300/20 dark:text-emerald-200">ZS</span>
                       ZeroScout-sponsored helper
                     </div>
                   </div>

@@ -179,7 +179,7 @@ type ZeroScoutSponsorship = {
   action: string
   requestHash: string
   sponsoredAt: string
-  sourceProofClass?: 'helper_access_receipt' | 'helper_memory_proof' | 'service_receipt'
+  sourceProofClass?: 'helper_access_receipt' | 'helper_free_access' | 'helper_memory_proof' | 'service_receipt'
   zeroscout?: ZeroScoutIntelligenceResult
 }
 
@@ -553,8 +553,6 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
   const autoRan      = useRef(false)
   const agentPrivyRestoreKey = useRef('')
   const helperCheckpointKey = useRef('')
-  const returningFromHelperPayment = Boolean(eventId && payer && showHelperDemo && !verified?.verified)
-
   useEffect(() => {
     if (!showHelperDemo) return
     setVerified(null)
@@ -595,7 +593,6 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
           owner: displayName,
           payer: payer || displayName,
           displayName,
-          accessEventId: eventId || undefined,
           memorySummary,
         }),
       })
@@ -2590,17 +2587,19 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
                         {helperName ? `Hi ${helperName}` : 'Helper is live'}
                       </p>
                       <p className="text-[11px] text-gray-400">
-                        {helperMemoryBusy ? 'Saving helper memory' : helperProfile?.memorySummary ? 'Access verified; memory saved' : 'Access verified'}
+                        {helperMemoryBusy ? 'Saving helper memory' : helperProfile?.memorySummary ? 'Memory saved quietly' : 'Open helper'}
                       </p>
                     </div>
-                    <a
-                      href={verified.proof?.ogExplorer}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 rounded-lg border border-purple-100 bg-purple-50 px-2 py-1 text-[10px] font-bold text-purple-600 dark:border-purple-300/20 dark:bg-purple-300/10 dark:text-purple-200"
-                    >
-                      0G <ExternalLink className="h-2.5 w-2.5" />
-                    </a>
+                    {verified?.proof?.ogExplorer && (
+                      <a
+                        href={verified?.proof?.ogExplorer}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 rounded-lg border border-purple-100 bg-purple-50 px-2 py-1 text-[10px] font-bold text-purple-600 dark:border-purple-300/20 dark:bg-purple-300/10 dark:text-purple-200"
+                      >
+                        0G <ExternalLink className="h-2.5 w-2.5" />
+                      </a>
+                    )}
                   </div>
 
                   <div className="max-h-[380px] min-h-[220px] space-y-4 overflow-y-auto p-3">
@@ -2610,8 +2609,8 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
                           {helperName ? `Welcome back, ${helperName}.` : 'Welcome.'} Ask me about payments, Polymarket funding, StreamPay, agent setup, research, planning, or daily questions.
                         </p>
                         <div className="mt-2 inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400">
-                          <span className="rounded border border-purple-100 px-1 text-[8px] font-black text-purple-500 dark:border-purple-300/20 dark:text-purple-200">0G</span>
-                          access proof active
+                          <span className="rounded border border-emerald-100 px-1 text-[8px] font-black text-emerald-600 dark:border-emerald-300/20 dark:text-emerald-200">ZS</span>
+                          ZeroScout-sponsored helper
                         </div>
                       </div>
                     )}
