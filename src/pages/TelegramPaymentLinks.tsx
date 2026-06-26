@@ -978,11 +978,15 @@ function TelegramServiceCard({
           : 'cursor-not-allowed border-gray-100 bg-gray-50/60 opacity-70 dark:border-white/10 dark:bg-white/[0.03]',
       )}
     >
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-gray-700 shadow-sm dark:bg-white/[0.08] dark:text-gray-200">
-        {service.brand === 'polymarket'
-          ? <img src={POLYMARKET_LOGO} alt="" className="h-4 w-4 invert dark:invert-0" />
-          : <Icon className="h-4 w-4" />}
-      </span>
+      {service.id === 'hashpaylink-helper' ? (
+        <AskHashLiveAgentIcon />
+      ) : (
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-gray-700 shadow-sm dark:bg-white/[0.08] dark:text-gray-200">
+          {service.brand === 'polymarket'
+            ? <img src={POLYMARKET_LOGO} alt="" className="h-4 w-4 invert dark:invert-0" />
+            : <Icon className="h-4 w-4" />}
+        </span>
+      )}
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-2">
           <span className="text-sm font-semibold text-gray-900 dark:text-white">{service.title}</span>
@@ -997,6 +1001,24 @@ function TelegramServiceCard({
       </span>
       {service.active ? <ArrowRight className="h-4 w-4 text-gray-400" /> : <CheckCircle2 className="h-4 w-4 text-gray-300" />}
     </button>
+  )
+}
+
+function AskHashLiveAgentIcon({ isStatic = false }: { isStatic?: boolean }) {
+  return (
+    <div className={cn('ask-hash-live-agent shrink-0', isStatic && 'ask-hash-live-agent--static')} aria-hidden="true">
+      <span className="ask-hash-live-agent__head">
+        <span className="ask-hash-live-agent__eye ask-hash-live-agent__eye--left" />
+        <span className="ask-hash-live-agent__eye ask-hash-live-agent__eye--right" />
+        <span className="ask-hash-live-agent__mouth" />
+      </span>
+      <span className="ask-hash-live-agent__antenna" />
+      <span className="ask-hash-live-agent__bubble">
+        <span />
+        <span />
+        <span />
+      </span>
+    </div>
   )
 }
 
@@ -1446,19 +1468,7 @@ function TelegramHelperPanel({
 
       <div className="rounded-xl border border-gray-100 bg-gray-50/80 p-3 dark:border-white/10 dark:bg-white/[0.04]">
         <div className="flex items-start gap-3">
-          <div className="ask-hash-live-agent" aria-hidden="true">
-            <span className="ask-hash-live-agent__head">
-              <span className="ask-hash-live-agent__eye ask-hash-live-agent__eye--left" />
-              <span className="ask-hash-live-agent__eye ask-hash-live-agent__eye--right" />
-              <span className="ask-hash-live-agent__mouth" />
-            </span>
-            <span className="ask-hash-live-agent__antenna" />
-            <span className="ask-hash-live-agent__bubble">
-              <span />
-              <span />
-              <span />
-            </span>
-          </div>
+          <AskHashLiveAgentIcon isStatic />
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <p className="text-sm font-semibold text-gray-900 dark:text-white">Hash PayLink Agent Helper</p>

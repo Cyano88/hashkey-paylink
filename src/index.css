@@ -500,6 +500,27 @@ html.dark .gradient-border {
 .ask-hash-live-agent__bubble span:nth-child(2) { animation-delay: 0.16s; }
 .ask-hash-live-agent__bubble span:nth-child(3) { animation-delay: 0.32s; }
 
+.ask-hash-live-agent--static .ask-hash-live-agent__head,
+.ask-hash-live-agent--static .ask-hash-live-agent__antenna,
+.ask-hash-live-agent--static .ask-hash-live-agent__bubble,
+.ask-hash-live-agent--static .ask-hash-live-agent__bubble span {
+  animation: none;
+}
+
+.ask-hash-live-agent--static .ask-hash-live-agent__head {
+  opacity: 1;
+  transform: scale(1) translateY(0);
+}
+
+.ask-hash-live-agent--static .ask-hash-live-agent__antenna {
+  opacity: 1;
+  transform: translateX(-50%) rotate(45deg) scale(1);
+}
+
+.ask-hash-live-agent--static .ask-hash-live-agent__bubble {
+  display: none;
+}
+
 html.dark .ask-hash-live-agent {
   background: rgba(255, 255, 255, 0.08);
   color: #f3f4f6;
