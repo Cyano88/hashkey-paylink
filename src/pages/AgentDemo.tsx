@@ -1760,51 +1760,53 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
                         </p>
                       )}
                       {latestZeroScout && (
-                        <div className="mt-2 rounded-xl border border-purple-100 bg-purple-50/70 p-2.5 dark:border-purple-400/20 dark:bg-purple-400/10">
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <p className="text-[11px] font-semibold text-purple-900 dark:text-purple-100">ZeroScout operator signal</p>
-                            <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-purple-700 dark:bg-white/[0.08] dark:text-purple-200">
-                              {latestZeroScout.intelligenceScore ?? 'n/a'}/100
+                        <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5 rounded-xl border border-purple-100 bg-purple-50/70 px-2.5 py-2 text-[10px] font-semibold text-purple-800 dark:border-purple-400/20 dark:bg-purple-400/10 dark:text-purple-100">
+                          <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-white text-purple-700 shadow-sm dark:bg-white/[0.08] dark:text-purple-100">
+                            <Sparkles className="h-3 w-3" />
+                          </span>
+                          <span className="shrink-0">ZeroScout</span>
+                          <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-purple-700 dark:bg-white/[0.08] dark:text-purple-100">
+                            {latestZeroScout.intelligenceScore ?? 'n/a'}/100
+                          </span>
+                          {latestZeroScout.proof?.storageRoot && (
+                            <span className="min-w-0 truncate rounded-full bg-white px-2 py-0.5 text-purple-700 dark:bg-white/[0.08] dark:text-purple-100">
+                              {latestZeroScout.proof.storageRoot.slice(0, 10)}...
                             </span>
-                          </div>
-                          <p className="mt-1 text-[10px] leading-relaxed text-purple-800/80 dark:text-purple-100/80">
-                            {latestZeroScout.summary ?? 'Stored LP intelligence signal generated from supplied Hash PayLink data.'}
-                          </p>
-                          {latestZeroScout.riskFlags?.length ? (
-                            <p className="mt-1 text-[10px] leading-relaxed text-purple-800/70 dark:text-purple-100/70">
-                              Risk: {latestZeroScout.riskFlags[0]}
+                          )}
+                          {latestZeroScout.proof?.storageTxHash && (
+                            <a
+                              href={`https://chainscan.0g.ai/tx/${latestZeroScout.proof.storageTxHash}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="shrink-0 rounded-full bg-white px-2 py-0.5 text-purple-700 transition-colors hover:bg-purple-100 dark:bg-white/[0.08] dark:text-purple-100"
+                            >
+                              tx
+                            </a>
+                          )}
+                          {latestZeroScout.claudeReview?.intelligenceRating && (
+                            <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-purple-700 dark:bg-white/[0.08] dark:text-purple-100">
+                              Claude {latestZeroScout.claudeReview.intelligenceRating}/10
+                            </span>
+                          )}
+                          {latestZeroScout.openAiReview?.intelligenceRating && (
+                            <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-purple-700 dark:bg-white/[0.08] dark:text-purple-100">
+                              OpenAI {latestZeroScout.openAiReview.intelligenceRating}/10
+                            </span>
+                          )}
+                          <details className="w-full min-w-0 pt-1">
+                            <summary className="cursor-pointer text-[10px] text-purple-700/70 dark:text-purple-100/70">Details</summary>
+                            <p className="mt-1 text-[10px] leading-relaxed font-medium text-purple-800/75 dark:text-purple-100/75">
+                              {latestZeroScout.summary ?? 'Stored LP intelligence signal generated from supplied Hash PayLink data.'}
                             </p>
-                          ) : null}
-                          <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] font-semibold">
-                            {latestZeroScout.proof?.storageRoot && (
-                              <span className="rounded-lg bg-white px-2 py-1 text-purple-700 dark:bg-white/[0.08] dark:text-purple-100">
-                                root {latestZeroScout.proof.storageRoot.slice(0, 10)}...
-                              </span>
-                            )}
-                            {latestZeroScout.proof?.storageTxHash && (
-                              <a
-                                href={`https://chainscan.0g.ai/tx/${latestZeroScout.proof.storageTxHash}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="rounded-lg bg-white px-2 py-1 text-purple-700 transition-colors hover:bg-purple-100 dark:bg-white/[0.08] dark:text-purple-100"
-                              >
-                                0G tx
-                              </a>
-                            )}
-                            {latestZeroScout.claudeReview?.intelligenceRating && (
-                              <span className="rounded-lg bg-white px-2 py-1 text-purple-700 dark:bg-white/[0.08] dark:text-purple-100">
-                                Claude {latestZeroScout.claudeReview.intelligenceRating}/10
-                              </span>
-                            )}
-                            {latestZeroScout.openAiReview?.intelligenceRating && (
-                              <span className="rounded-lg bg-white px-2 py-1 text-purple-700 dark:bg-white/[0.08] dark:text-purple-100">
-                                OpenAI {latestZeroScout.openAiReview.intelligenceRating}/10
-                              </span>
-                            )}
-                          </div>
-                          <p className="mt-2 text-[10px] leading-relaxed text-purple-800/60 dark:text-purple-100/60">
-                            Operator signal only. Not financial advice.
-                          </p>
+                            {latestZeroScout.riskFlags?.length ? (
+                              <p className="mt-1 text-[10px] leading-relaxed font-medium text-purple-800/65 dark:text-purple-100/65">
+                                Risk: {latestZeroScout.riskFlags[0]}
+                              </p>
+                            ) : null}
+                            <p className="mt-1 text-[10px] leading-relaxed font-medium text-purple-800/55 dark:text-purple-100/55">
+                              Operator signal only. Not financial advice.
+                            </p>
+                          </details>
                         </div>
                       )}
                     </div>
