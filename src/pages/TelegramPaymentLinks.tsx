@@ -1590,14 +1590,14 @@ function TelegramHelperPanel({
                 )}
 
                 {messages.map((message, index) => (
-                  <div key={index} className="space-y-2">
+                  <div key={index} className="space-y-2.5">
                     <div className="flex justify-end">
-                      <div className="max-w-[86%] break-words rounded-2xl rounded-tr-md bg-gray-900 px-3 py-2 text-sm leading-relaxed text-white shadow-sm dark:bg-white dark:text-gray-950">
+                      <div className="max-w-[82%] break-words rounded-[18px] rounded-br-md bg-[#0084ff] px-3.5 py-2 text-sm leading-relaxed text-white shadow-sm">
                         {message.question}
                       </div>
                     </div>
                     <div>
-                      <div className="max-w-[86%] break-words whitespace-pre-wrap rounded-2xl rounded-tl-md border border-gray-100 bg-gray-50 px-3 py-2.5 text-sm leading-relaxed text-gray-800 shadow-sm dark:border-white/10 dark:bg-white/[0.05] dark:text-gray-200">
+                      <div className="max-w-[82%] break-words whitespace-pre-wrap rounded-[18px] rounded-bl-md bg-[#f0f0f0] px-3.5 py-2.5 text-sm leading-relaxed text-gray-900 shadow-sm dark:bg-white/[0.08] dark:text-gray-100">
                         {message.answer}
                       </div>
                       {message.paylink && <HelperPaylinkCard request={message.paylink} />}
@@ -1625,7 +1625,7 @@ function TelegramHelperPanel({
                   </div>
                 ))}
 
-                {asking && <HelperThinkingIndicator status={agentStatus} />}
+                {asking && <HelperThinkingIndicator statusText={agentStatus} />}
                 {askError && (
                   <p className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs font-medium text-red-600 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200">{askError}</p>
                 )}
@@ -1659,10 +1659,10 @@ function TelegramHelperPanel({
   )
 }
 
-function HelperThinkingIndicator({ status }: { status: string }) {
+function HelperThinkingIndicator({ statusText }: { statusText: string }) {
   const [stepIndex, setStepIndex] = useState(0)
-  const isPaylink = /payment|paylink|request/i.test(status)
-  const isProof = /proof|sponsor/i.test(status)
+  const isPaylink = /payment|paylink|request/i.test(statusText)
+  const isProof = /proof|sponsor/i.test(statusText)
   const steps = isPaylink
     ? ['Reading your message...', 'Checking payment details...', 'Preparing PayLink...']
     : isProof
@@ -1675,22 +1675,24 @@ function HelperThinkingIndicator({ status }: { status: string }) {
       setStepIndex(index => (index + 1) % steps.length)
     }, 900)
     return () => window.clearInterval(timer)
-  }, [status, steps.length])
+  }, [statusText, steps.length])
 
   return (
-    <div className="inline-flex max-w-[86%] items-center gap-2 rounded-2xl rounded-tl-md bg-gray-50 px-3 py-2 text-sm text-gray-500 shadow-sm dark:bg-white/[0.06] dark:text-gray-300">
-      <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 dark:bg-white/[0.08]">
-        {[0, 1, 2].map(index => (
-          <span
-            key={index}
-            className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-400 dark:bg-gray-300"
-            style={{ animationDelay: `${index * 120}ms` }}
-          />
-        ))}
-      </span>
-      <span className="text-[11px] font-medium text-gray-400 dark:text-gray-400">
+    <div className="max-w-[82%]">
+      <div className="inline-flex items-center rounded-[18px] rounded-bl-md bg-[#f0f0f0] px-3.5 py-2.5 shadow-sm dark:bg-white/[0.08]">
+        <span className="inline-flex items-center gap-1">
+          {[0, 1, 2].map(index => (
+            <span
+              key={index}
+              className="h-2 w-2 animate-bounce rounded-full bg-[#8e8e93] dark:bg-gray-300"
+              style={{ animationDelay: `${index * 120}ms` }}
+            />
+          ))}
+        </span>
+      </div>
+      <p className="ml-3 mt-1 text-xs italic text-[#8e8e93] dark:text-gray-400">
         {steps[stepIndex]}
-      </span>
+      </p>
     </div>
   )
 }
@@ -1728,7 +1730,7 @@ function HelperPaylinkCard({ request }: { request: SavedRequest }) {
   }
 
   return (
-    <div className="mt-2 w-full max-w-[86%] rounded-2xl rounded-tl-md border border-emerald-100 bg-emerald-50/70 p-2.5 dark:border-emerald-300/20 dark:bg-emerald-300/10">
+    <div className="mt-2 w-full max-w-[82%] rounded-[18px] rounded-bl-md border border-emerald-100 bg-emerald-50/70 p-2.5 dark:border-emerald-300/20 dark:bg-emerald-300/10">
       <div className="flex items-center gap-2">
         <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-200" />
         <div className="min-w-0">
@@ -1792,11 +1794,6 @@ function HelperPaylinkCard({ request }: { request: SavedRequest }) {
           Track collection
         </a>
       )}
-      <div className="mt-1.5 grid grid-cols-3 gap-1">
-        <a className="rounded-md bg-white px-2 py-1.5 text-center text-[10px] font-bold text-gray-600 dark:bg-white/[0.08] dark:text-gray-200" href={buildTelegramShareUrl({ ...request, payUrl: url })} target="_blank" rel="noopener noreferrer">TG</a>
-        <a className="rounded-md bg-white px-2 py-1.5 text-center text-[10px] font-bold text-gray-600 dark:bg-white/[0.08] dark:text-gray-200" href={`https://wa.me/?text=${encodeURIComponent(`${shareText}\n${url}`)}`} target="_blank" rel="noopener noreferrer">WA</a>
-        <a className="rounded-md bg-white px-2 py-1.5 text-center text-[10px] font-bold text-gray-600 dark:bg-white/[0.08] dark:text-gray-200" href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(`${shareText}\n${url}`)}`} target="_blank" rel="noopener noreferrer">X</a>
-      </div>
       <p className="mt-2 text-[11px] font-medium text-emerald-700/80 dark:text-emerald-100/80">
         Ask for the receipt after payment.
       </p>
