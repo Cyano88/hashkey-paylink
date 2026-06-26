@@ -420,7 +420,7 @@ html.dark .gradient-border {
   border: 2px solid currentColor;
   border-radius: 0.34rem;
   transform-origin: center;
-  animation: askHashRobotMorph 20s ease-in-out infinite;
+  animation: askHashRobotMorph 10s ease-in-out infinite;
 }
 
 .ask-hash-live-agent__eye {
@@ -457,7 +457,7 @@ html.dark .gradient-border {
   border-radius: 0.18rem 0 0 0;
   transform: translateX(-50%) rotate(45deg);
   transform-origin: bottom center;
-  animation: askHashAntennaSignal 20s ease-in-out infinite;
+  animation: askHashAntennaSignal 10s ease-in-out infinite;
 }
 
 .ask-hash-live-agent__bubble {
@@ -475,7 +475,8 @@ html.dark .gradient-border {
   opacity: 0;
   transform: translate(-50%, -50%) scale(0.36) rotate(-8deg);
   transform-origin: center;
-  animation: askHashChatMorph 20s ease-in-out infinite;
+  z-index: 1;
+  animation: askHashChatMorph 10s ease-in-out infinite;
 }
 
 .ask-hash-live-agent__bubble::after {
@@ -517,20 +518,20 @@ html.dark .ask-hash-live-agent__bubble span {
 }
 
 @keyframes askHashRobotMorph {
-  0%, 66%, 100% { opacity: 1; transform: scale(1) translateY(0); }
-  72%, 84% { opacity: 0; transform: scale(0.46) translateY(0.12rem); }
-  90% { opacity: 1; transform: scale(1.04) translateY(0); }
+  0%, 36%, 100% { opacity: 1; transform: scale(1) translateY(0); }
+  44%, 68% { opacity: 0; transform: scale(0.42) translateY(0.12rem); }
+  76% { opacity: 1; transform: scale(1.04) translateY(0); }
 }
 
 @keyframes askHashAntennaSignal {
-  0%, 64%, 100% { opacity: 1; transform: translateX(-50%) rotate(45deg) scale(1); }
-  70%, 84% { opacity: 0; transform: translateX(-50%) rotate(45deg) scale(0.32); }
-  90% { opacity: 1; transform: translateX(-50%) rotate(45deg) scale(1.05); }
+  0%, 34%, 100% { opacity: 1; transform: translateX(-50%) rotate(45deg) scale(1); }
+  42%, 68% { opacity: 0; transform: translateX(-50%) rotate(45deg) scale(0.32); }
+  76% { opacity: 1; transform: translateX(-50%) rotate(45deg) scale(1.05); }
 }
 
 @keyframes askHashChatMorph {
-  0%, 68%, 88%, 100% { opacity: 0; transform: translate(-50%, -50%) scale(0.36) rotate(-8deg); }
-  74%, 82% { opacity: 1; transform: translate(-50%, -50%) scale(1) rotate(0); }
+  0%, 38%, 76%, 100% { opacity: 0; transform: translate(-50%, -50%) scale(0.36) rotate(-8deg); }
+  48%, 64% { opacity: 1; transform: translate(-50%, -50%) scale(1) rotate(0); }
 }
 
 @keyframes askHashBubbleDot {
