@@ -164,7 +164,7 @@ export default async function zeroScoutPolymarketBriefHandler(req: Request, res:
       includeClaudeReview: req.body?.includeClaudeReview !== false,
       includeOpenAiReview: req.body?.includeOpenAiReview !== false,
     }
-    const result = await callZeroScoutIntelligence(payload)
+    const result = await callZeroScoutIntelligence(payload, { requireProof: true })
 
     await appendAgentActivity({
       agentSlug,

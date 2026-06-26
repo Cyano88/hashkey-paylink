@@ -220,7 +220,7 @@ export async function sponsorZeroScoutAction(input: ZeroScoutSponsoredActionInpu
       },
       includeClaudeReview: false,
       includeOpenAiReview: false,
-    }), SPONSOR_TIMEOUT_MS)
+    }, { requireProof: true }), SPONSOR_TIMEOUT_MS)
 
     return {
       proofClass: 'zeroscout_sponsored_action',
