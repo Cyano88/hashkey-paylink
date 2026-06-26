@@ -908,7 +908,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
     if (currentAgentWallet) returnUrl.searchParams.set('expectedWallet', currentAgentWallet)
     const p = new URLSearchParams()
     p.set('id', fundingId)
-    p.set('m', embeddedWalletManager ? `Fund service wallet: ${displayName}` : `Fund agent wallet: ${displayName}`)
+    p.set('m', embeddedWalletManager ? `Fund Circle wallet: ${displayName}` : `Fund agent wallet: ${displayName}`)
     p.set('n', agentNetwork)
     p.set('f', '1')
     p.set('v', '1')
@@ -963,12 +963,12 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
     }
     setWalletMode(selectedMode)
     if (requiresPrivyWalletAuth && !privyEmail) {
-      setWalletError(embeddedWalletManager ? 'Sign in with email to manage your Circle service wallet.' : 'Sign in with email to manage your Circle agent wallet.')
+      setWalletError(embeddedWalletManager ? 'Sign in with email to manage your Circle wallet.' : 'Sign in with email to manage your Circle agent wallet.')
       return
     }
     const email = (!currentAgentWallet && PRIVY_AUTH_ENABLED && privyAuthenticated && privyEmail ? privyEmail : walletEmail).trim().toLowerCase()
     if (!email) {
-      setWalletError(embeddedWalletManager ? 'Enter the Circle email for this service wallet.' : 'Enter the Circle email for this agent wallet.')
+      setWalletError(embeddedWalletManager ? 'Enter the Circle email for this wallet.' : 'Enter the Circle email for this agent wallet.')
       return
     }
     const requestAgentSlug = agentSlug || (embeddedWalletManager ? stableWalletSlugFromEmail(email) : PLATFORM_AGENT_SLUG)
@@ -1179,7 +1179,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
       const data = await res.json() as { ok?: boolean; error?: string; amount?: string }
       if (!res.ok || !data.ok) throw new Error(data.error ?? 'x402 activation failed')
       const activatedAmount = data.amount ?? x402Amount
-      setX402ActivationSuccess(`${activatedAmount} USDC added to x402.`)
+      setX402ActivationSuccess(`${activatedAmount} USDC moved into x402 service balance.`)
       setX402ModalOpen(false)
       await refreshX402Balance()
       await loadAgentWallet()
@@ -1530,7 +1530,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
               ) : (
                 <div className="divide-y divide-gray-100 dark:divide-white/10">
                   <div className="flex items-center justify-between gap-4 py-1.5 first:pt-0">
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">{embeddedWalletManager ? 'Wallet balance' : 'Wallet treasury'}</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">{embeddedWalletManager ? 'Circle wallet balance' : 'Wallet treasury'}</p>
                     <div className="text-right">
                       <p className="text-sm font-semibold text-gray-900 dark:text-white" title={treasuryBalanceError || undefined}>
                         {currentAgentWallet
@@ -1549,7 +1549,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
             )}
             {!hasPendingLpScoutRequest && currentAgentWallet && !agentWalletAccessConnected && !connectedWalletNeedsAccess && (
               <p className="mt-3 text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
-                Fund the wallet first. x402 activation moves part of that balance into Circle Gateway.
+                Fund Circle wallet balance first. x402 activation moves part of that USDC into Circle Gateway.
               </p>
             )}
             {!hasPendingLpScoutRequest && connectedWalletNeedsAccess && !showWalletAccessPanel && (
@@ -1634,7 +1634,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
                       disabled={x402Busy || treasuryEmpty}
                       className="inline-flex w-full shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 sm:w-auto"
                     >
-                      Add x402 balance
+                      Activate x402
                     </button>
                   </div>
                 )}
@@ -1813,7 +1813,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
 
                 {x402ModalOpen && agentWalletAccessConnected && !x402ActivationSuccess && (
                   <div className="rounded-lg border border-gray-100 bg-white p-3 dark:border-white/10 dark:bg-white/[0.04]">
-                    <p className="text-xs font-semibold text-gray-900 dark:text-white">Add x402 service balance</p>
+                    <p className="text-xs font-semibold text-gray-900 dark:text-white">Activate x402 service balance</p>
                     <div className="mt-2 flex h-10 max-w-[160px] min-w-0 items-center overflow-hidden rounded-lg border border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-white/[0.06]">
                       <input
                         value={x402Amount}
@@ -1835,7 +1835,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
                       disabled={x402Busy || x402ActivationBlocked}
                       className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gray-900 px-4 py-3 text-sm font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-50 dark:bg-white dark:text-gray-950"
                     >
-                      {x402Busy ? <><span>Adding</span><PulsingDots /></> : 'Add balance'}
+                      {x402Busy ? <><span>Activating</span><PulsingDots /></> : 'Activate x402'}
                     </button>
                   </div>
                 )}
@@ -1886,7 +1886,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
                     {!agentWalletAccessConnected && (
                       <p className="text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
                         {embeddedWalletManager
-                          ? 'This only authorizes your service wallet. You are not signing into the Hash PayLink platform wallet.'
+                          ? 'This only authorizes your Circle wallet for x402 service access. You are not signing into the Hash PayLink platform wallet.'
                           : 'This only authorizes the selected paying agent. You are not signing into the Hash PayLink platform wallet.'}
                       </p>
                     )}
@@ -1914,7 +1914,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
                     : currentAgentWallet
                     ? embeddedWalletManager ? 'Confirm the Circle email for this wallet to view balances and receipts.' : 'Confirm the Circle email for this agent to view balances and receipts.'
                     : agentEmailConnected
-                    ? embeddedWalletManager ? 'Create or link a Circle service wallet.' : 'Create or link a Circle agent wallet.'
+                    ? embeddedWalletManager ? 'Create or link a Circle wallet for x402 services.' : 'Create or link a Circle agent wallet.'
                     : 'Email sign-in is required before wallet setup.'}
                 </p>
               </div>
@@ -1984,7 +1984,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
                     </button>
                   </div>
                   <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
-                    {embeddedWalletManager ? 'Circle service wallet access' : 'Circle agent wallet access'}
+                    {embeddedWalletManager ? 'Circle wallet access' : 'Circle agent wallet access'}
                   </p>
                 </>
               ) : (
@@ -2068,7 +2068,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
                   {walletStep === 'otp' && (
                     <div className="space-y-2">
                       <p className="rounded-lg bg-gray-50 px-3 py-2 text-[11px] font-medium text-gray-500 dark:bg-white/[0.04] dark:text-gray-400">
-                        Code sent to {walletOtpContext?.email || walletEmail || privyEmail || 'your email'} - {CHAIN_META[walletOtpContext?.network ?? agentNetwork].label} {embeddedWalletManager ? 'service wallet' : 'agent wallet'}
+                        Code sent to {walletOtpContext?.email || walletEmail || privyEmail || 'your email'} - {CHAIN_META[walletOtpContext?.network ?? agentNetwork].label} {embeddedWalletManager ? 'Circle wallet' : 'agent wallet'}
                       </p>
                       <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.06]">
                         <input
@@ -2135,7 +2135,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
               <div className="overflow-hidden rounded-lg border border-gray-100 bg-white dark:border-white/10 dark:bg-white/[0.04]">
                 <div className="flex items-center justify-between gap-3 px-3 py-3">
                   <div className="min-w-0">
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">{embeddedWalletManager ? 'Wallet balance' : 'Treasury'}</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">{embeddedWalletManager ? 'Circle wallet balance' : 'Treasury'}</p>
                     <p className="mt-0.5 text-sm font-semibold text-gray-900 dark:text-white" title={treasuryBalanceError || undefined}>
                       {treasuryBalance !== null
                         ? `${Number(treasuryBalance).toLocaleString(undefined, { maximumFractionDigits: 6 })} USDC`
@@ -2181,7 +2181,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
                   </div>
                   <p className="mt-2 text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
                     {embeddedWalletManager
-                      ? treasuryEmpty ? 'Fund wallet balance before activation.' : 'Activate x402 service balance from wallet balance.'
+                      ? treasuryEmpty ? 'Fund Circle wallet balance before activation.' : 'Move Circle wallet USDC into x402 service balance.'
                       : treasuryEmpty ? 'Fund treasury before activation.' : 'Activate from treasury when your agent needs API spend.'}
                   </p>
                 </div>
@@ -2192,7 +2192,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
                         <div className="mx-auto flex h-9 w-9 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 dark:bg-emerald-400/10 dark:text-emerald-200">
                           <CheckCircle2 className="h-5 w-5" />
                         </div>
-                        <p className="mt-2 text-sm font-semibold text-gray-900 dark:text-white">Top up successful</p>
+                        <p className="mt-2 text-sm font-semibold text-gray-900 dark:text-white">x402 activated</p>
                         <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{x402ActivationSuccess}</p>
                       </div>
                     ) : (
@@ -2201,7 +2201,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
                           <div>
                             <p className="text-xs font-semibold text-gray-900 dark:text-white">Activate x402</p>
                             <p className="mt-0.5 text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
-                              {embeddedWalletManager ? 'Move USDC from wallet balance into x402 service balance.' : 'Move USDC from treasury into x402 for API spend.'}
+                              {embeddedWalletManager ? 'Move USDC from Circle wallet balance into x402 service balance.' : 'Move USDC from treasury into x402 for API spend.'}
                             </p>
                           </div>
                         </div>
@@ -2369,7 +2369,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
                       <p className="text-xs font-semibold text-gray-500 dark:text-gray-300">No receipts yet</p>
                       <p className="mt-1 text-xs leading-relaxed text-gray-400 dark:text-gray-500">
                         {embeddedWalletManager
-                          ? 'x402 receipts appear here after your wallet pays a Circle Gateway service. Fund wallet balance, activate x402, then run a paid action.'
+                          ? 'x402 receipts appear here after your wallet pays a Circle Gateway service. Fund Circle wallet balance, activate x402 service balance, then run a paid action.'
                           : 'x402 receipts appear here after this agent pays a Circle Gateway service. Fund treasury, activate x402, then run LP Scout.'}
                       </p>
                     </div>
@@ -2396,10 +2396,10 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">x402 Wallet Manager</p>
             <h1 className="mt-1 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">
-              Fund wallets and activate service balance.
+              Fund wallet balance and activate x402.
             </h1>
             <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-              Sign in with email, fund USDC, activate x402, and use the same wallet across Hash PayLink services.
+              Sign in with email, fund Circle wallet balance, activate x402 service balance, and use paid Hash PayLink services.
             </p>
           </div>
           <div className="space-y-2">

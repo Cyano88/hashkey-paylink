@@ -1201,7 +1201,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   const howItWorksSteps = productHubOpen
     ? [
         { n: '1', title: 'Receive payments', body: 'Personal, business, POS, and QR payment flows' },
-        { n: '2', title: 'Manage services', body: 'x402 service balance, PolyDesk, and StreamPay entry points' },
+        { n: '2', title: 'Manage services', body: 'Circle wallet balance, x402 service balance, PolyDesk, and StreamPay' },
         { n: '3', title: 'Keep proof', body: 'Receipts, dashboards, and settlement records stay connected' },
       ]
     : polymarketMode
@@ -1224,9 +1224,9 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
       ]
     : accessMode
     ? [
-        { n: '1', title: 'Sign in', body: 'Open your Circle wallet' },
-        { n: '2', title: 'Activate x402', body: 'Move USDC into x402 service balance' },
-        { n: '3', title: 'Use services', body: 'Pay for x402-enabled actions' },
+        { n: '1', title: 'Wallet balance', body: 'Open or fund your Circle USDC wallet' },
+        { n: '2', title: 'Activate x402', body: 'Move wallet USDC into x402 service balance' },
+        { n: '3', title: 'Use services', body: 'Spend x402 service balance on paid actions' },
       ]
     : [
         { n: '1', title: 'Enter details', body: 'Your wallet address' },
@@ -1248,7 +1248,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
           </span>
         )}
         <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-[2.25rem]">
-          {productHubOpen ? 'What do you want to do?' : polymarketMode ? 'PolyDesk' : posMode ? 'Retail POS' : streamMode ? 'StreamPay' : accessMode ? accessView === 'wallet' ? 'x402 service wallet' : 'x402 Wallet Manager' : 'Request a payment'}
+          {productHubOpen ? 'What do you want to do?' : polymarketMode ? 'PolyDesk' : posMode ? 'Retail POS' : streamMode ? 'StreamPay' : accessMode ? accessView === 'wallet' ? 'x402 Wallet Manager' : 'x402 Wallet Manager' : 'Request a payment'}
         </h1>
         <p className="mt-2 text-[15px] text-gray-500 text-balance dark:text-gray-400">
           {productHubOpen
@@ -1261,8 +1261,8 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               ? 'Stream USDC for payroll, agent services, and Arena games.'
               : accessMode
                 ? accessView === 'wallet'
-                  ? 'Check wallet balance, activate x402, and view service access.'
-                  : 'Fund and activate your service wallet for x402 access.'
+                  ? 'Check Circle wallet balance, activate x402 service balance, and view paid service access.'
+                  : 'Fund your Circle wallet, activate x402 service balance, then use paid services.'
                 : 'Create a secure USDC PayLink in seconds.'}
         </p>
 
@@ -1335,11 +1335,11 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
         {productHubOpen ? (
           <div className="space-y-2">
             {[
-              { icon: Coins, title: 'Payment', body: 'Create personal or business PayLinks.', action: openPaymentMode },
-              { icon: Bot, title: 'x402', body: 'Fund service balance and use paid services.', action: () => toggleAccessMode(true) },
-              { icon: Store, title: 'POS', body: 'Create QR checkout and print receipts.', action: openPosMode },
-              { icon: Radio, title: 'Stream', body: 'Creator, payroll, and Arena on Arc.', action: openStreamMode },
-              { icon: PolymarketMark, title: 'Poly', body: 'Polymarket tools through chat.', action: openPolymarketMode },
+              { icon: Coins, title: 'Payment', body: 'Create personal or business PayLinks.', action: () => openPaymentMode() },
+              { icon: Bot, title: 'x402', body: 'Fund wallet balance, activate x402, and use paid services.', action: () => toggleAccessMode(true) },
+              { icon: Store, title: 'POS', body: 'Create QR checkout and print receipts.', action: () => openPosMode() },
+              { icon: Radio, title: 'Stream', body: 'Creator, payroll, and Arena on Arc.', action: () => openStreamMode() },
+              { icon: PolymarketMark, title: 'Poly', body: 'Polymarket tools through chat.', action: () => openPolymarketMode() },
             ].map(({ icon: Icon, title, body, action }) => (
               <button
                 key={title}
@@ -1819,18 +1819,18 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                   </button>
 
                   <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Service balance</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Wallet to x402</p>
                     <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">x402 wallet setup</h2>
                     <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-                      Fund once, activate x402, and use the wallet across Hash PayLink services.
+                      Keep USDC in your Circle wallet, move what you need into x402 service balance, then use paid services.
                     </p>
                   </div>
 
                   <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-[#111216]">
                     <div className="space-y-2 p-2">
                       {[
-                        { icon: Wallet, title: 'Wallet', body: 'Fund USDC, activate x402, and view receipts.' },
-                        { icon: Radio, title: 'Paid services', body: 'LP Scout and market actions run from the chat layer.' },
+                        { icon: Wallet, title: 'Wallet balance', body: 'USDC held in your Circle wallet before x402 activation.' },
+                        { icon: Radio, title: 'x402 service balance', body: 'USDC moved into Circle Gateway for paid service calls.' },
                         { icon: Zap, title: 'StreamPay services', body: 'Creator, payroll, and Arena flows stay on Arc.' },
                       ].map(({ icon: Icon, title, body }) => (
                         <div
