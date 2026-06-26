@@ -874,7 +874,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
     if (currentAgentWallet) returnUrl.searchParams.set('expectedWallet', currentAgentWallet)
     const p = new URLSearchParams()
     p.set('id', fundingId)
-    p.set('m', `Fund agent wallet: ${displayName}`)
+    p.set('m', embeddedWalletManager ? `Fund service wallet: ${displayName}` : `Fund agent wallet: ${displayName}`)
     p.set('n', agentNetwork)
     p.set('f', '1')
     p.set('v', '1')
@@ -1047,7 +1047,8 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
     setWalletError(null)
     try {
       if (currentAgentWallet || agentWalletSessionConnected) {
-        const requestAgentSlug = normalizedAgentSlug || (embeddedWalletManager && walletEmail ? stableWalletSlugFromEmail(walletEmail) : PLATFORM_AGENT_SLUG)
+        const requestAgentSlug = normalizedAgentSlug || (embeddedWalletManager ? stableWalletSlugFromEmail(walletEmail || privyEmail) : PLATFORM_AGENT_SLUG)
+        if (!requestAgentSlug) throw new Error('Sign in with email before disconnecting this wallet.')
         const res = await fetch('/api/agent-wallet', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1317,7 +1318,10 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
           <div className="flex items-start justify-between gap-3">
             <div className="flex min-w-0 items-start gap-3 sm:gap-4">
               <div
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[11px] font-black text-white shadow-sm"
+                className={cn(
+                  'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[11px] font-black shadow-sm',
+                  displayAgentImage ? 'text-white' : 'border border-gray-200 bg-gray-50 text-gray-700 dark:border-white/10 dark:bg-white/[0.08] dark:text-gray-200',
+                )}
                 style={{
                   background: displayAgentImage
                     ? `linear-gradient(135deg, hsl(${displayAgentImage.hue} 72% 42%), hsl(${displayAgentImage.accentHue} 72% 34%))`
