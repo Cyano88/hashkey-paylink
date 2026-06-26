@@ -93,6 +93,7 @@ type AgentActivity = {
   txHash?: string
   detail?: string
   result?: {
+    zeroscout?: ZeroScoutIntelligenceResult
     summary?: string
     signals?: string[]
     highlights?: string[]
@@ -138,6 +139,36 @@ type AgentActivity = {
     archivedAt: number
   }
   createdAt: number
+}
+
+type ZeroScoutIntelligenceResult = {
+  id?: string
+  aiProvider?: string
+  intelligenceScore?: number
+  confidence?: number
+  summary?: string
+  signals?: string[]
+  riskFlags?: string[]
+  recommendedActions?: string[]
+  dataGaps?: string[]
+  disclaimer?: string
+  claudeReview?: {
+    provider?: string
+    intelligenceRating?: number
+    recommendation?: string
+  }
+  openAiReview?: {
+    provider?: string
+    intelligenceRating?: number
+    recommendation?: string
+  }
+  proof?: {
+    storageRoot?: string
+    contentHash?: string
+    storageTxHash?: string
+  }
+  network?: string
+  storageMode?: string
 }
 
 type AgentProfileSummary = {
@@ -435,6 +466,9 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
   const [lpScoutBusy, setLpScoutBusy] = useState(false)
   const [lpScoutError, setLpScoutError] = useState('')
   const [lpScoutResult, setLpScoutResult] = useState<LpScoutRunResult | null>(null)
+  const [zeroScoutBusy, setZeroScoutBusy] = useState(false)
+  const [zeroScoutError, setZeroScoutError] = useState('')
+  const [zeroScoutResult, setZeroScoutResult] = useState<ZeroScoutIntelligenceResult | null>(null)
   const [receiptsOpen, setReceiptsOpen] = useState(false)
   const [agentProfile, setAgentProfile] = useState<AgentProfileSummary | null>(agentSlug === PLATFORM_AGENT_SLUG || (!agentSlug && !embeddedWalletManager) ? PLATFORM_AGENT_PROFILE : null)
   const [agentProfileError, setAgentProfileError] = useState('')
@@ -1199,6 +1233,39 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
     }
   }
 
+  async function generateZeroScoutBrief() {
+    if (!latestScoutOutput || zeroScoutBusy) return
+    setZeroScoutBusy(true)
+    setZeroScoutError('')
+    try {
+      const payerAgentSlug = normalizedAgentSlug || (embeddedWalletManager ? '' : PLATFORM_AGENT_SLUG)
+      const res = await fetch('/api/zeroscout/polymarket-brief', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agentSlug: payerAgentSlug || undefined,
+          request: {
+            mode: pendingScoutMode,
+            context: pendingScoutContext || undefined,
+            budget: pendingScoutBudget || undefined,
+          },
+          scout: latestScoutOutput,
+          includeClaudeReview: true,
+          includeOpenAiReview: true,
+        }),
+      })
+      const data = await readAgentWalletJson<{ ok?: boolean; error?: string; zeroscout?: ZeroScoutIntelligenceResult }>(res)
+      if (!res.ok || !data.ok || !data.zeroscout) throw new Error(data.error ?? 'ZeroScout operator signal failed')
+      setZeroScoutResult(data.zeroscout)
+      setReceiptsOpen(true)
+      await loadAgentWallet()
+    } catch (err) {
+      setZeroScoutError(err instanceof Error ? err.message : 'ZeroScout operator signal failed')
+    } finally {
+      setZeroScoutBusy(false)
+    }
+  }
+
   const agentStreamUrl = buildAgentStreamUrl()
   const activityAmount = (item: AgentActivity) => {
     if (!item.amount) return item.direction === 'result' ? 'Result' : item.direction === 'system' ? 'Setup' : ''
@@ -1224,9 +1291,11 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
     setCopiedProofId(item.id)
     window.setTimeout(() => setCopiedProofId(''), 1400)
   }
-  const latestScoutActivity = activity.find(item => item.type === 'scout_returned')
+  const latestZeroScoutActivity = activity.find(item => item.type === 'scout_returned' && item.result?.zeroscout)
+  const latestScoutActivity = activity.find(item => item.type === 'scout_returned' && !item.result?.zeroscout)
   const latestX402Spend = activity.find(item => item.type === 'x402_spent' && item.proof?.proofHash)
   const latestScoutOutput = lpScoutResult?.response?.scout ?? latestScoutActivity?.result
+  const latestZeroScout = zeroScoutResult ?? latestZeroScoutActivity?.result?.zeroscout
   const latestScoutSignals = latestScoutOutput?.signals ?? latestScoutOutput?.highlights ?? []
   const latestPrimaryOpportunity = latestScoutOutput?.opportunities?.[0]
   const lpScoutHasResult = Boolean(latestScoutOutput?.summary || latestScoutSignals.length)
@@ -1675,7 +1744,69 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
                             0G proof
                           </a>
                         )}
+                        <button
+                          type="button"
+                          onClick={generateZeroScoutBrief}
+                          disabled={zeroScoutBusy}
+                          className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-purple-100 bg-purple-50 px-2.5 py-1 text-[10px] text-purple-700 transition-all hover:bg-purple-100 active:scale-[0.98] disabled:opacity-50 dark:border-purple-400/20 dark:bg-purple-400/10 dark:text-purple-200"
+                        >
+                          {zeroScoutBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+                          ZeroScout signal
+                        </button>
                       </div>
+                      {zeroScoutError && (
+                        <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5 text-[10px] font-medium text-amber-700 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-200">
+                          {zeroScoutError}
+                        </p>
+                      )}
+                      {latestZeroScout && (
+                        <div className="mt-2 rounded-xl border border-purple-100 bg-purple-50/70 p-2.5 dark:border-purple-400/20 dark:bg-purple-400/10">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="text-[11px] font-semibold text-purple-900 dark:text-purple-100">ZeroScout operator signal</p>
+                            <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-purple-700 dark:bg-white/[0.08] dark:text-purple-200">
+                              {latestZeroScout.intelligenceScore ?? 'n/a'}/100
+                            </span>
+                          </div>
+                          <p className="mt-1 text-[10px] leading-relaxed text-purple-800/80 dark:text-purple-100/80">
+                            {latestZeroScout.summary ?? 'Stored LP intelligence signal generated from supplied Hash PayLink data.'}
+                          </p>
+                          {latestZeroScout.riskFlags?.length ? (
+                            <p className="mt-1 text-[10px] leading-relaxed text-purple-800/70 dark:text-purple-100/70">
+                              Risk: {latestZeroScout.riskFlags[0]}
+                            </p>
+                          ) : null}
+                          <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] font-semibold">
+                            {latestZeroScout.proof?.storageRoot && (
+                              <span className="rounded-lg bg-white px-2 py-1 text-purple-700 dark:bg-white/[0.08] dark:text-purple-100">
+                                root {latestZeroScout.proof.storageRoot.slice(0, 10)}...
+                              </span>
+                            )}
+                            {latestZeroScout.proof?.storageTxHash && (
+                              <a
+                                href={`https://chainscan.0g.ai/tx/${latestZeroScout.proof.storageTxHash}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="rounded-lg bg-white px-2 py-1 text-purple-700 transition-colors hover:bg-purple-100 dark:bg-white/[0.08] dark:text-purple-100"
+                              >
+                                0G tx
+                              </a>
+                            )}
+                            {latestZeroScout.claudeReview?.intelligenceRating && (
+                              <span className="rounded-lg bg-white px-2 py-1 text-purple-700 dark:bg-white/[0.08] dark:text-purple-100">
+                                Claude {latestZeroScout.claudeReview.intelligenceRating}/10
+                              </span>
+                            )}
+                            {latestZeroScout.openAiReview?.intelligenceRating && (
+                              <span className="rounded-lg bg-white px-2 py-1 text-purple-700 dark:bg-white/[0.08] dark:text-purple-100">
+                                OpenAI {latestZeroScout.openAiReview.intelligenceRating}/10
+                              </span>
+                            )}
+                          </div>
+                          <p className="mt-2 text-[10px] leading-relaxed text-purple-800/60 dark:text-purple-100/60">
+                            Operator signal only. Not financial advice.
+                          </p>
+                        </div>
+                      )}
                     </div>
                   )}
                   </div>

@@ -65,6 +65,7 @@ import agentLegalProfileHandler from './api/agent-legal-profile.js'
 import polyWorldcupNewsHandler from './api/poly-worldcup-news.js'
 import polyStreamHandler from './api/poly-stream.js'
 import x402PolymarketScoutHandler from './api/x402-polymarket-scout.js'
+import zeroScoutPolymarketBriefHandler from './api/zeroscout-polymarket-brief.js'
 import x402ReceiptHandler from './api/x402-receipt.js'
 import receiptHandler from './api/receipt.js'
 import checkAgentUrlHandler from './api/check-agent-url.js'
@@ -166,6 +167,7 @@ app.get('/api/agent-legal-profile',    readLimiter, agentLegalProfileHandler)
 app.get('/api/poly-worldcup-news',      readLimiter, polyWorldcupNewsHandler)
 app.get('/api/poly-stream',             readLimiter, polyStreamHandler)
 app.get('/api/x402/polymarket-scout',  strictLimiter, x402PolymarketScoutHandler)
+app.post('/api/zeroscout/polymarket-brief', strictLimiter, zeroScoutPolymarketBriefHandler)
 app.get('/api/x402/receipt',           readLimiter, x402ReceiptHandler)
 app.get('/api/receipt',                readLimiter, receiptHandler)
 app.get('/api/check-agent-url',        strictLimiter, checkAgentUrlHandler)

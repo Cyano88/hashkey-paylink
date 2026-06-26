@@ -84,6 +84,10 @@ services:
         value: "Hash PayLink Agent"
       - key: ALERT_FROM_EMAIL
         value: "no-reply@mail.hashpaylink.com"
+      - key: ZEROSCOUT_API_URL
+        value: "https://zeroscout.app"
+      - key: ZEROSCOUT_INTEGRATION_SECRET
+        sync: false                   # Server-only ZeroScout API key for LP operator signals
 
       # ── V2 relayer (api/relay-v2.ts) ──────────────────────────────────────
       - key: PAYLINK_FACTORY_V2
