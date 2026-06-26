@@ -1239,17 +1239,13 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
     setZeroScoutError('')
     try {
       const payerAgentSlug = normalizedAgentSlug || (embeddedWalletManager ? '' : PLATFORM_AGENT_SLUG)
+      if (!latestScoutActivity?.id) throw new Error('Refresh the agent record, then review the saved LP Scout result.')
       const res = await fetch('/api/zeroscout/polymarket-brief', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           agentSlug: payerAgentSlug || undefined,
-          request: {
-            mode: pendingScoutMode,
-            context: pendingScoutContext || undefined,
-            budget: pendingScoutBudget || undefined,
-          },
-          scout: latestScoutOutput,
+          activityId: latestScoutActivity.id,
           includeClaudeReview: true,
           includeOpenAiReview: true,
         }),
@@ -1747,8 +1743,9 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
                         <button
                           type="button"
                           onClick={generateZeroScoutBrief}
-                          disabled={zeroScoutBusy}
+                          disabled={zeroScoutBusy || !latestScoutActivity?.id}
                           className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-purple-100 bg-purple-50 px-2.5 py-1 text-[10px] text-purple-700 transition-all hover:bg-purple-100 active:scale-[0.98] disabled:opacity-50 dark:border-purple-400/20 dark:bg-purple-400/10 dark:text-purple-200"
+                          title={latestScoutActivity?.id ? 'Generate a stored operator signal from this paid scout result.' : 'Refresh the agent record after LP Scout returns.'}
                         >
                           {zeroScoutBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
                           ZeroScout signal

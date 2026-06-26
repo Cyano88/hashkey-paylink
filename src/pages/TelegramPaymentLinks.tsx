@@ -2167,7 +2167,7 @@ function LpScoutPanel({
             </div>
             <h2 className="mt-2 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Choose how LP Scout should work</h2>
             <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-              Use a linked agent for one-time Polymarket x402 access, or stream USDC daily for LP alpha by email.
+              Use a linked agent for one-time Polymarket x402 access, or stream daily LP intelligence by email.
             </p>
           </div>
         </div>
@@ -2181,7 +2181,7 @@ function LpScoutPanel({
           />
           <RequestModeButton
             icon={Radio}
-            title="Stream daily LP alpha"
+            title="Stream daily LP intelligence"
             body="Stream USDC to Hash PayLink for daily Polymarket LP research delivered to your email."
             onClick={startDailyFlow}
           />
@@ -2485,7 +2485,7 @@ function PolyWorldCupNewsPanel({
           </div>
           <h2 className="mt-2 text-base font-semibold tracking-tight text-gray-900 dark:text-white">World Cup market pulse</h2>
           <p className="mt-1 max-w-xl text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-            Track World Cup headlines that can affect Polymarket prices, liquidity, and LP risk before asking the agent for paid alpha.
+            Track World Cup headlines that can affect Polymarket prices, liquidity, and LP risk before asking the agent for an operator signal.
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-1.5 sm:mt-7">
