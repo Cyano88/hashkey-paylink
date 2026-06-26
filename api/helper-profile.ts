@@ -23,6 +23,10 @@ type HelperProfile = {
   accessPayer?: string
   telegramHandle?: string
   accessEventId?: string
+  preferredPaymentWallet?: string
+  preferredPaymentNetwork?: string
+  preferredPaymentEvmWallet?: string
+  preferredPaymentSolanaWallet?: string
   preferences?: string[]
   memorySummary?: string
   memoryProof?: HelperMemoryProof
@@ -216,6 +220,10 @@ export default async function handler(req: Request, res: Response) {
     accessPayer: cleanString(req.body?.accessPayer, 128) || existing?.accessPayer || payer,
     telegramHandle: cleanString(req.body?.telegramHandle, 80) || existing?.telegramHandle,
     accessEventId: cleanString(req.body?.accessEventId, 128) || existing?.accessEventId,
+    preferredPaymentWallet: cleanString(req.body?.preferredPaymentWallet, 120) || existing?.preferredPaymentWallet,
+    preferredPaymentNetwork: cleanString(req.body?.preferredPaymentNetwork, 24) || existing?.preferredPaymentNetwork,
+    preferredPaymentEvmWallet: cleanString(req.body?.preferredPaymentEvmWallet, 120) || existing?.preferredPaymentEvmWallet,
+    preferredPaymentSolanaWallet: cleanString(req.body?.preferredPaymentSolanaWallet, 120) || existing?.preferredPaymentSolanaWallet,
     preferences: cleanList(req.body?.preferences).length ? cleanList(req.body?.preferences) : existing?.preferences ?? [],
     memorySummary,
     memoryProof: existing?.memoryProof,

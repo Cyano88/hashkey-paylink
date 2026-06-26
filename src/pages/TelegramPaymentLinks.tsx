@@ -230,6 +230,7 @@ const requestNetworkLabels: Record<RequestNetwork, string> = {
 }
 
 type SavedRequest = {
+  id?: string
   kind?: 'payment-request' | 'polymarket-funding'
   mode: RequestMode
   wallet: string
@@ -240,6 +241,19 @@ type SavedRequest = {
   label: string
   target: string
   amount: string
+  payUrl?: string
+}
+
+type HelperPaylinkDraft = {
+  mode: RequestMode
+  target: string
+  amount: string
+  network: RequestNetwork | ''
+  label: string
+  wallet: string
+  evmWallet: string
+  solanaWallet: string
+  offeredSavedWallet?: boolean
 }
 
 type PolymarketMode = 'self' | 'friends' | ''
@@ -254,8 +268,9 @@ type HelperVerifyResult = {
 type HelperMessage = {
   question: string
   answer: string
-  proof: { ogTxHash: string; ogExplorer: string }
+  proof?: { ogTxHash: string; ogExplorer: string }
   zeroscoutSponsorship?: ZeroScoutSponsorship
+  paylink?: SavedRequest
 }
 
 type ZeroScoutSponsorship = {
@@ -284,6 +299,10 @@ type HelperProfile = {
   accessPayer?: string
   telegramHandle?: string
   accessEventId?: string
+  preferredPaymentWallet?: string
+  preferredPaymentNetwork?: RequestNetwork
+  preferredPaymentEvmWallet?: string
+  preferredPaymentSolanaWallet?: string
   preferences?: string[]
   memorySummary?: string
   memoryProof?: {
@@ -340,6 +359,77 @@ function telegramOwnerFromContext(searchParams: URLSearchParams, displayName: st
     isStable: Boolean(stableId),
     username,
   }
+}
+
+function extractAmount(text: string) {
+  const explicit = text.match(/(?:\$|usdc\s+)(\d+(?:\.\d{1,6})?)|(\d+(?:\.\d{1,6})?)\s*(?:usdc|usd)\b/i)
+  if (explicit) return explicit[1] || explicit[2] || ''
+  const loose = Array.from(text.matchAll(/(^|[^\w.])(\d+(?:\.\d{1,6})?)(?!x|\w)/gi))
+  return loose.find(match => Number(match[2]) > 0)?.[2] ?? ''
+}
+
+function extractNetwork(text: string): RequestNetwork | '' {
+  const lower = text.toLowerCase()
+  if (/\barc\b/.test(lower)) return 'arc'
+  if (/\bsolana\b|\bsol\b/.test(lower)) return 'solana'
+  if (/\barbitrum\b|\barb\b/.test(lower)) return 'arbitrum'
+  if (/\ball networks\b|\bany network\b|\bbase and solana\b/.test(lower)) return 'all'
+  if (/\bbase\b|\bevm\b/.test(lower)) return 'base'
+  return ''
+}
+
+function extractWallet(text: string) {
+  const evm = text.match(/0x[a-fA-F0-9]{40}/)?.[0] ?? ''
+  if (evm) return evm
+  const solana = text.match(/\b[1-9A-HJ-NP-Za-km-z]{32,44}\b/)?.[0] ?? ''
+  return solana
+}
+
+function extractTarget(text: string, mode: RequestMode) {
+  const clean = text.replace(/\s+/g, ' ').trim()
+  const person = clean.match(/\b(?:from|to|for)\s+(@?[a-zA-Z][\w.-]{1,40})\b/)?.[1] ?? ''
+  if (person && !['base', 'arc', 'solana', 'arbitrum', 'dinner', 'invoice', 'payment'].includes(person.toLowerCase())) return person
+  const group = clean.match(/\b(?:group|collection|collect from)\s+([^,.;]+)/i)?.[1]?.trim() ?? ''
+  if (mode === 'group' && group) return group.slice(0, 48)
+  return ''
+}
+
+function extractPurpose(text: string) {
+  const clean = text.replace(/\s+/g, ' ').trim()
+  const match = clean.match(/\b(?:for|purpose|memo|reason)\s+([^?.!,;]+)/i)?.[1]?.trim() ?? ''
+  if (!match) return ''
+  return match.replace(/^(base|arc|solana|arbitrum|usdc)\b/i, '').trim().slice(0, 80)
+}
+
+function isPaymentRequestIntent(text: string) {
+  return /\b(request|collect|charge|invoice|paylink|payment link|ask .*pay|split|dues|donation|group collection)\b/i.test(text)
+}
+
+function isGroupRequestIntent(text: string) {
+  return /\b(group|collection|multi payer|multi-payer|everyone|split|dues|donation|contributors|many people)\b/i.test(text)
+}
+
+function wantsSavedWallet(text: string) {
+  return /\b(saved|same|continue|use it|use that|yes|ok|okay)\b/i.test(text)
+}
+
+function wantsNewWallet(text: string) {
+  return /\b(new|replace|change|different|another)\b/i.test(text)
+}
+
+function describeMissingDraftFields(draft: HelperPaylinkDraft, savedWallet?: string) {
+  const missing = [
+    !draft.target && (draft.mode === 'group' ? 'group or collection name' : 'payer name'),
+    !draft.amount && 'amount in USDC',
+    !draft.network && 'network',
+    !draft.label && 'purpose',
+    !draft.wallet && !savedWallet && 'receive wallet',
+  ].filter(Boolean)
+  return missing as string[]
+}
+
+function compactSavedWallet(wallet: string) {
+  return wallet ? shortAddress(wallet).replace('...', '..') : ''
 }
 
 export default function TelegramPaymentLinks() {
@@ -979,11 +1069,13 @@ function TelegramHelperPanel({
   const [messages, setMessages] = useState<HelperMessage[]>([])
   const [question, setQuestion] = useState('')
   const [asking, setAsking] = useState(false)
+  const [agentStatus, setAgentStatus] = useState('Asking ZeroScout for guidance...')
   const [askError, setAskError] = useState('')
   const [profile, setProfile] = useState<HelperProfile | null>(null)
   const [profileBusy, setProfileBusy] = useState(false)
   const [profileError, setProfileError] = useState('')
   const [memoryDraft, setMemoryDraft] = useState('')
+  const [paylinkDraft, setPaylinkDraft] = useState<HelperPaylinkDraft | null>(null)
   const [checkpointBusy, setCheckpointBusy] = useState(false)
   const returningFromPayment = Boolean(initialEventId && initialPayer && !verified?.verified)
 
@@ -1075,6 +1167,12 @@ function TelegramHelperPanel({
           telegramHandle: cleanTelegramName,
           accessEventId: extra.accessEventId ?? eventId,
           memorySummary: extra.memorySummary ?? memoryDraft,
+          question: (extra as { question?: string }).question,
+          answer: (extra as { answer?: string }).answer,
+          preferredPaymentWallet: extra.preferredPaymentWallet ?? profile?.preferredPaymentWallet,
+          preferredPaymentNetwork: extra.preferredPaymentNetwork ?? profile?.preferredPaymentNetwork,
+          preferredPaymentEvmWallet: extra.preferredPaymentEvmWallet ?? profile?.preferredPaymentEvmWallet,
+          preferredPaymentSolanaWallet: extra.preferredPaymentSolanaWallet ?? profile?.preferredPaymentSolanaWallet,
           preferences: extra.preferences ?? profile?.preferences ?? [],
         }),
       })
@@ -1148,6 +1246,130 @@ function TelegramHelperPanel({
     }
   }
 
+  function preferredWalletFor(network: RequestNetwork | '') {
+    if (!profile) return ''
+    if (network === 'solana') return profile.preferredPaymentSolanaWallet || (!profile.preferredPaymentWallet?.startsWith('0x') ? profile.preferredPaymentWallet ?? '' : '')
+    return profile.preferredPaymentEvmWallet || (profile.preferredPaymentWallet?.startsWith('0x') ? profile.preferredPaymentWallet : '')
+  }
+
+  function buildDraftFromText(text: string, existing?: HelperPaylinkDraft | null): HelperPaylinkDraft {
+    const mode = existing?.mode ?? (isGroupRequestIntent(text) ? 'group' : 'person')
+    const walletFromText = extractWallet(text)
+    const networkFromText = extractNetwork(text)
+    const nextNetwork = networkFromText || existing?.network || (walletFromText && !walletFromText.startsWith('0x') ? 'solana' : '')
+    const targetFromText = extractTarget(text, mode)
+    const purposeFromText = extractPurpose(text)
+    const amountFromText = extractAmount(text)
+    return {
+      mode,
+      target: targetFromText || existing?.target || '',
+      amount: amountFromText || existing?.amount || '',
+      network: nextNetwork,
+      label: purposeFromText || existing?.label || '',
+      wallet: walletFromText || existing?.wallet || '',
+      evmWallet: walletFromText?.startsWith('0x') ? walletFromText : existing?.evmWallet || '',
+      solanaWallet: walletFromText && !walletFromText.startsWith('0x') ? walletFromText : existing?.solanaWallet || '',
+      offeredSavedWallet: existing?.offeredSavedWallet,
+    }
+  }
+
+  async function createPaylinkFromDraft(draft: HelperPaylinkDraft) {
+    const network = draft.network === 'all' ? 'base' : draft.network || 'base'
+    const walletForNetwork = draft.wallet || preferredWalletFor(network)
+    const request: SavedRequest = {
+      mode: draft.mode,
+      network,
+      wallet: walletForNetwork,
+      evmWallet: network === 'solana' ? '' : walletForNetwork,
+      solanaWallet: network === 'solana' ? walletForNetwork : '',
+      label: draft.label,
+      target: draft.target,
+      amount: draft.amount,
+    }
+    const res = await fetch('/api/telegram-request', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    })
+    const data = await res.json() as { ok?: boolean; request?: SavedRequest; error?: string }
+    if (!res.ok || !data.ok || !data.request) throw new Error(data.error || 'Could not create PayLink.')
+    const saved = data.request
+    const savedWallet = saved.wallet || walletForNetwork
+    const memoryLine = `Preferred payment receive wallet is ${shortAddress(savedWallet)} on ${requestNetworkLabels[network]}. For future PayLink requests, ask whether to continue with this wallet or replace it.`
+    const nextMemory = [memoryDraft.trim() || profile?.memorySummary || '', memoryLine]
+      .filter(Boolean)
+      .join('\n')
+      .slice(-1200)
+    setMemoryDraft(nextMemory)
+    void saveProfile({
+      memorySummary: nextMemory,
+      preferredPaymentWallet: savedWallet,
+      preferredPaymentNetwork: network,
+      preferredPaymentEvmWallet: network === 'solana' ? profile?.preferredPaymentEvmWallet : savedWallet,
+      preferredPaymentSolanaWallet: network === 'solana' ? savedWallet : profile?.preferredPaymentSolanaWallet,
+    })
+    return saved
+  }
+
+  async function handlePaylinkConversation(nextQuestion: string) {
+    if (!paylinkDraft && !isPaymentRequestIntent(nextQuestion)) return false
+    let draft = buildDraftFromText(nextQuestion, paylinkDraft)
+    const savedWallet = preferredWalletFor(draft.network)
+
+    if (!draft.wallet && savedWallet && !draft.offeredSavedWallet) {
+      draft = { ...draft, offeredSavedWallet: true }
+      setPaylinkDraft(draft)
+      setMessages(prev => [...prev, {
+        question: nextQuestion,
+        answer: `I can prepare that PayLink. Do you want to continue with your saved ${draft.network ? requestNetworkLabels[draft.network] : 'payment'} wallet ${compactSavedWallet(savedWallet)}, or use a new receive wallet?`,
+      }])
+      return true
+    }
+
+    if (!draft.wallet && savedWallet && draft.offeredSavedWallet && wantsSavedWallet(nextQuestion)) {
+      draft = {
+        ...draft,
+        wallet: savedWallet,
+        evmWallet: savedWallet.startsWith('0x') ? savedWallet : draft.evmWallet,
+        solanaWallet: savedWallet.startsWith('0x') ? draft.solanaWallet : savedWallet,
+      }
+    }
+
+    if (!draft.wallet && savedWallet && draft.offeredSavedWallet && wantsNewWallet(nextQuestion)) {
+      setPaylinkDraft(draft)
+      setMessages(prev => [...prev, {
+        question: nextQuestion,
+        answer: 'Send the new receive wallet. I will replace the saved wallet after this PayLink is ready.',
+      }])
+      return true
+    }
+
+    if (draft.network === 'all') {
+      draft = { ...draft, network: '' }
+    }
+
+    const missing = describeMissingDraftFields(draft, draft.wallet ? '' : savedWallet)
+    if (missing.length > 0) {
+      setPaylinkDraft(draft)
+      setMessages(prev => [...prev, {
+        question: nextQuestion,
+        answer: `I can create this. I still need: ${missing.join(', ')}. Reply in one line, for example: "25 Base for dinner to 0x..."`,
+      }])
+      return true
+    }
+
+    setAgentStatus('Preparing PayLink...')
+    const saved = await createPaylinkFromDraft(draft)
+    setPaylinkDraft(null)
+    const network = saved.network ?? inferRequestNetwork(saved)
+    setMessages(prev => [...prev, {
+      question: nextQuestion,
+      answer: `${saved.mode === 'group' ? 'Collection PayLink ready.' : 'PayLink ready.'}\n\n${saved.target} can pay ${saved.amount || 'a flexible amount'} USDC on ${requestNetworkLabels[network]} for ${saved.label}.\n\nAlways ask the payer to share the receipt with you after payment is confirmed.`,
+      paylink: saved,
+    }])
+    return true
+  }
+
   async function askHelper() {
     if (!question.trim() || asking || !verified?.verified) return
     const nextQuestion = question.trim()
@@ -1155,6 +1377,9 @@ function TelegramHelperPanel({
     setAskError('')
     setAsking(true)
     try {
+      setAgentStatus(paylinkDraft || isPaymentRequestIntent(nextQuestion) ? 'Checking payment request details...' : 'Asking ZeroScout for guidance...')
+      if (await handlePaylinkConversation(nextQuestion)) return
+      setAgentStatus('Writing a direct answer...')
       const res = await fetch('/api/agent-ask', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1173,6 +1398,7 @@ function TelegramHelperPanel({
       }
       if (!data.answer || !data.proof) throw new Error(data.error ?? 'No helper response returned.')
       setMessages(prev => [...prev, { question: nextQuestion, answer: data.answer!, proof: data.proof!, zeroscoutSponsorship: data.zeroscoutSponsorship }])
+      void saveProfile({ question: nextQuestion, answer: data.answer } as Partial<HelperProfile>)
       if (!memoryDraft.trim()) {
         setMemoryDraft(`User is known as ${helperName || payer}. They use Hash PayLink Agent Helper from Telegram and may ask about payments, Polymarket, StreamPay, agents, research, planning, and daily questions.`)
       }
@@ -1423,15 +1649,18 @@ function TelegramHelperPanel({
                       <div className="max-w-[86%] whitespace-pre-wrap rounded-2xl rounded-tl-md border border-gray-100 bg-gray-50 px-3 py-2.5 text-sm text-gray-800 dark:border-white/10 dark:bg-white/[0.05] dark:text-gray-200">
                         {message.answer}
                       </div>
-                      <a
-                        href={message.proof.ogExplorer}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="mt-1 inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400 transition-colors hover:text-gray-600 dark:hover:text-gray-200"
-                      >
-                        <span className="rounded border border-purple-100 px-1 text-[8px] font-black text-purple-500 dark:border-purple-300/20 dark:text-purple-200">0G</span>
-                        response proof
-                      </a>
+                      {message.paylink && <HelperPaylinkCard request={message.paylink} />}
+                      {message.proof && (
+                        <a
+                          href={message.proof.ogExplorer}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-1 inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400 transition-colors hover:text-gray-600 dark:hover:text-gray-200"
+                        >
+                          <span className="rounded border border-purple-100 px-1 text-[8px] font-black text-purple-500 dark:border-purple-300/20 dark:text-purple-200">0G</span>
+                          response proof
+                        </a>
+                      )}
                       {message.zeroscoutSponsorship && (
                         <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] font-semibold text-gray-400">
                           <span className="rounded border border-emerald-100 bg-emerald-50 px-1.5 py-0.5 text-[9px] font-black uppercase text-emerald-600 dark:border-emerald-300/20 dark:bg-emerald-300/10 dark:text-emerald-200">
@@ -1459,7 +1688,7 @@ function TelegramHelperPanel({
                 {asking && (
                   <div className="inline-flex items-center gap-2 rounded-xl bg-gray-50 px-3 py-2 text-sm text-gray-400 dark:bg-white/[0.05]">
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Thinking...
+                    {agentStatus}
                   </div>
                 )}
                 {askError && (
@@ -1491,6 +1720,84 @@ function TelegramHelperPanel({
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+function HelperPaylinkCard({ request }: { request: SavedRequest }) {
+  const [copied, setCopied] = useState(false)
+  const network = request.network ?? inferRequestNetwork(request)
+  const url = request.payUrl || buildRequestPayLink(request)
+  const amountLine = request.amount ? `${request.amount} USDC` : 'Flexible amount'
+  const shareText = [
+    request.mode === 'group' ? 'Hash PayLink collection' : 'Hash PayLink payment request',
+    `${request.label} - ${amountLine}`,
+    request.mode === 'group' ? `Collection: ${request.target}` : `Payer: ${request.target}`,
+    'Please share the receipt after payment is confirmed.',
+  ].join('\n')
+
+  async function nativeShare() {
+    const nav = navigator as Navigator & { share?: (data: ShareData) => Promise<void> }
+    if (nav.share) {
+      await nav.share({ title: 'Hash PayLink', text: shareText, url })
+      return
+    }
+    await navigator.clipboard.writeText(`${shareText}\n${url}`)
+    setCopied(true)
+    window.setTimeout(() => setCopied(false), 1600)
+  }
+
+  async function copyLink() {
+    await navigator.clipboard.writeText(url)
+    setCopied(true)
+    window.setTimeout(() => setCopied(false), 1600)
+  }
+
+  return (
+    <div className="mt-2 w-full max-w-[86%] rounded-2xl rounded-tl-md border border-emerald-100 bg-emerald-50/70 p-3 dark:border-emerald-300/20 dark:bg-emerald-300/10">
+      <div className="flex items-center gap-2">
+        <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-200" />
+        <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-100">
+          {request.mode === 'group' ? 'Collection PayLink Ready' : 'PayLink Ready'}
+        </p>
+      </div>
+      <div className="mt-2 rounded-xl border border-white/70 bg-white/80 p-2.5 text-xs dark:border-white/10 dark:bg-white/[0.06]">
+        <p className="font-semibold text-gray-900 dark:text-white">{request.label}</p>
+        <p className="mt-0.5 text-gray-500 dark:text-gray-300">{amountLine} on {requestNetworkLabels[network]}</p>
+        <p className="mt-0.5 text-gray-500 dark:text-gray-300">
+          {request.mode === 'group' ? 'Collection' : 'Payer'}: {request.target}
+        </p>
+      </div>
+      <div className="mt-2 grid grid-cols-2 gap-1.5">
+        <button
+          type="button"
+          onClick={() => void nativeShare()}
+          className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-gray-950 px-2.5 py-2 text-xs font-semibold text-white dark:bg-white dark:text-gray-950"
+        >
+          <Send className="h-3.5 w-3.5" />
+          Share
+        </button>
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-emerald-200 bg-white px-2.5 py-2 text-xs font-semibold text-emerald-700 dark:border-emerald-300/20 dark:bg-white/[0.06] dark:text-emerald-100"
+        >
+          <ExternalLink className="h-3.5 w-3.5" />
+          {request.mode === 'group' ? 'Track' : 'Open'}
+        </a>
+      </div>
+      <div className="mt-1.5 grid grid-cols-4 gap-1">
+        <a className="rounded-md bg-white px-2 py-1.5 text-center text-[10px] font-bold text-gray-600 dark:bg-white/[0.08] dark:text-gray-200" href={buildTelegramShareUrl({ ...request, payUrl: url })} target="_blank" rel="noopener noreferrer">TG</a>
+        <a className="rounded-md bg-white px-2 py-1.5 text-center text-[10px] font-bold text-gray-600 dark:bg-white/[0.08] dark:text-gray-200" href={`https://wa.me/?text=${encodeURIComponent(`${shareText}\n${url}`)}`} target="_blank" rel="noopener noreferrer">WA</a>
+        <a className="rounded-md bg-white px-2 py-1.5 text-center text-[10px] font-bold text-gray-600 dark:bg-white/[0.08] dark:text-gray-200" href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(`${shareText}\n${url}`)}`} target="_blank" rel="noopener noreferrer">X</a>
+        <button type="button" onClick={() => void copyLink()} className="rounded-md bg-white px-2 py-1.5 text-center text-[10px] font-bold text-gray-600 dark:bg-white/[0.08] dark:text-gray-200">
+          {copied ? 'OK' : 'Copy'}
+        </button>
+      </div>
+      <p className="mt-2 text-[11px] font-medium text-emerald-700/80 dark:text-emerald-100/80">
+        Ask the payer to share the receipt with you after payment is confirmed.
+      </p>
     </div>
   )
 }
@@ -3500,6 +3807,7 @@ function buildPolymarketPayLink({
 }
 
 function buildRequestPayLink(request: SavedRequest) {
+  if (request.payUrl) return request.payUrl
   const params = new URLSearchParams()
   const wallet = request.wallet.trim()
   const amount = request.amount.trim()
@@ -3531,6 +3839,7 @@ function buildRequestPayLink(request: SavedRequest) {
 }
 
 function buildShortRequestPayLink(request: SavedRequest) {
+  if (request.payUrl) return request.payUrl
   const wallet = request.wallet.trim()
   const amount = request.amount.trim() || '-'
   const memo = request.label.trim() || '-'
