@@ -14,6 +14,7 @@ type TelegramRequestNetwork = 'base' | 'arc' | 'solana' | 'arbitrum' | 'all'
 
 type TelegramRequestRecord = {
   id: string
+  eventId?: string
   mode: TelegramRequestMode
   kind?: TelegramRequestKind
   wallet: string
@@ -25,6 +26,7 @@ type TelegramRequestRecord = {
   amount: string
   target: string
   payUrl: string
+  dashboardUrl?: string
   createdAt: number
 }
 
@@ -108,9 +110,33 @@ function buildPayUrl(req: Request, record: Omit<TelegramRequestRecord, 'id' | 'p
   }
   if (record.mode === 'group') {
     params.set('v', '1')
-    params.set('id', record.label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'telegram-request')
+    params.set('id', record.eventId || collectionEventId(record.label, 'telegram-request'))
   }
   return `${originFromRequest(req)}/pay?${params.toString()}`
+}
+
+function buildDashboardUrl(req: Request, record: Omit<TelegramRequestRecord, 'id' | 'payUrl' | 'createdAt'>) {
+  if (record.mode !== 'group') return ''
+  const params = new URLSearchParams()
+  params.set('id', record.eventId || collectionEventId(record.label, 'telegram-request'))
+  if (record.amount) params.set('a', record.amount)
+  else params.set('f', '1')
+  if (record.network === 'all') {
+    params.set('x', '1')
+    if (record.evmWallet) params.set('e', record.evmWallet)
+    if (record.solanaWallet) params.set('s', record.solanaWallet)
+  } else {
+    params.set('n', record.network)
+    if (record.network === 'solana') params.set('s', record.solanaWallet || record.wallet)
+    else params.set('e', record.evmWallet || record.wallet)
+  }
+  params.set('m', record.label)
+  return `${originFromRequest(req)}/event?${params.toString()}`
+}
+
+function collectionEventId(label: string, fallback: string, suffix = '') {
+  const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || fallback
+  return suffix ? `${slug}-${suffix}` : slug
 }
 
 export default async function handler(req: Request, res: Response) {
@@ -161,7 +187,9 @@ export default async function handler(req: Request, res: Response) {
     }
 
     const id = randomBytes(9).toString('base64url')
+    const eventId = mode === 'group' ? collectionEventId(label, 'telegram-request', id.slice(0, 6).toLowerCase()) : undefined
     const draft = {
+      eventId,
       mode,
       kind,
       wallet: primaryWallet,
@@ -177,6 +205,7 @@ export default async function handler(req: Request, res: Response) {
       id,
       ...draft,
       payUrl: buildPayUrl(req, draft),
+      dashboardUrl: buildDashboardUrl(req, draft),
       createdAt: Date.now(),
     }
 

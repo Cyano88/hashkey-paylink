@@ -231,6 +231,7 @@ const requestNetworkLabels: Record<RequestNetwork, string> = {
 
 type SavedRequest = {
   id?: string
+  eventId?: string
   kind?: 'payment-request' | 'polymarket-funding'
   mode: RequestMode
   wallet: string
@@ -242,6 +243,7 @@ type SavedRequest = {
   target: string
   amount: string
   payUrl?: string
+  dashboardUrl?: string
 }
 
 type HelperPaylinkDraft = {
@@ -1740,6 +1742,7 @@ function HelperPaylinkCard({ request }: { request: SavedRequest }) {
   const [copied, setCopied] = useState(false)
   const network = request.network ?? inferRequestNetwork(request)
   const url = request.payUrl || buildRequestPayLink(request)
+  const dashboardUrl = request.mode === 'group' ? request.dashboardUrl || buildRequestDashboardLink(request) : ''
   const amountLine = request.amount ? `${request.amount} USDC` : 'Flexible amount'
   const shareText = [
     request.mode === 'group' ? 'Hash PayLink collection' : 'Hash PayLink payment request',
@@ -1796,9 +1799,20 @@ function HelperPaylinkCard({ request }: { request: SavedRequest }) {
           className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-emerald-200 bg-white px-2.5 py-2 text-xs font-semibold text-emerald-700 dark:border-emerald-300/20 dark:bg-white/[0.06] dark:text-emerald-100"
         >
           <ExternalLink className="h-3.5 w-3.5" />
-          {request.mode === 'group' ? 'Track' : 'Open'}
+          {request.mode === 'group' ? 'Pay' : 'Open'}
         </a>
       </div>
+      {dashboardUrl && (
+        <a
+          href={dashboardUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-1.5 inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-emerald-200 bg-white px-2.5 py-2 text-xs font-semibold text-emerald-700 dark:border-emerald-300/20 dark:bg-white/[0.06] dark:text-emerald-100"
+        >
+          <ExternalLink className="h-3.5 w-3.5" />
+          Track collection
+        </a>
+      )}
       <div className="mt-1.5 grid grid-cols-4 gap-1">
         <a className="rounded-md bg-white px-2 py-1.5 text-center text-[10px] font-bold text-gray-600 dark:bg-white/[0.08] dark:text-gray-200" href={buildTelegramShareUrl({ ...request, payUrl: url })} target="_blank" rel="noopener noreferrer">TG</a>
         <a className="rounded-md bg-white px-2 py-1.5 text-center text-[10px] font-bold text-gray-600 dark:bg-white/[0.08] dark:text-gray-200" href={`https://wa.me/?text=${encodeURIComponent(`${shareText}\n${url}`)}`} target="_blank" rel="noopener noreferrer">WA</a>
@@ -3844,10 +3858,33 @@ function buildRequestPayLink(request: SavedRequest) {
   params.set('m', request.label)
   if (request.mode === 'group') {
     params.set('v', '1')
-    params.set('id', request.label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'telegram-request')
+    params.set('id', request.eventId || request.id || request.label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'telegram-request')
   }
 
   return `${shareOrigin()}/pay?${params.toString()}`
+}
+
+function buildRequestDashboardLink(request: SavedRequest) {
+  const params = new URLSearchParams()
+  const wallet = request.wallet.trim()
+  const amount = request.amount.trim()
+  const network = request.network ?? inferRequestNetwork(request)
+  params.set('id', request.eventId || request.id || request.label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'telegram-request')
+  if (amount) params.set('a', amount)
+  else params.set('f', '1')
+  if (network === 'all') {
+    params.set('x', '1')
+    if (request.evmWallet?.trim()) params.set('e', request.evmWallet.trim())
+    if (request.solanaWallet?.trim()) params.set('s', request.solanaWallet.trim())
+  } else if (network === 'solana') {
+    params.set('n', 'solana')
+    params.set('s', request.solanaWallet?.trim() || wallet)
+  } else {
+    params.set('n', network)
+    params.set('e', request.evmWallet?.trim() || wallet)
+  }
+  params.set('m', request.label)
+  return `${shareOrigin()}/event?${params.toString()}`
 }
 
 function buildShortRequestPayLink(request: SavedRequest) {
@@ -3860,7 +3897,7 @@ function buildShortRequestPayLink(request: SavedRequest) {
   const params = new URLSearchParams()
   if (request.mode === 'group') {
     params.set('v', '1')
-    params.set('id', request.label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'telegram-request')
+    params.set('id', request.eventId || request.id || request.label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'telegram-request')
   }
   const suffix = params.toString() ? `?${params.toString()}` : ''
   return `${shareOrigin()}/p/${encodeURIComponent(network)}/${encodeURIComponent(amount)}/${encodeURIComponent(wallet)}/${encodeURIComponent(memo)}${suffix}`
