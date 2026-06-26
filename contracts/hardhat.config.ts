@@ -46,7 +46,7 @@ const config: HardhatUserConfig = {
       accounts: PK,
     },
     og: {
-      url:      process.env.OG_RPC_URL ?? process.env.OG_EVM_RPC_URL ?? process.env.ZG_RPC_URL ?? '',
+      url:      process.env.OG_RPC_URL ?? process.env.OG_EVM_RPC_URL ?? process.env.ZG_RPC_URL ?? 'https://evmrpc.0g.ai',
       chainId:  16661,
       accounts: PK,
     },

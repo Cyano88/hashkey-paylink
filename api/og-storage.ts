@@ -12,8 +12,8 @@
  * Required env vars:
  *   OG_STORAGE_KEY      Private key of wallet holding OG tokens for gas
  *   OG_ARCHIVE_ADDRESS  Deployed PayLinkArchive contract on 0G mainnet
- *   OG_RPC_URL          Private 0G EVM RPC endpoint
- *   OG_INDEXER_RPC_URL  Private 0G storage indexer endpoint
+ *   OG_RPC_URL          Preferred 0G EVM RPC endpoint
+ *   OG_INDEXER_RPC_URL  Preferred 0G storage indexer endpoint
  */
 
 import { ZgFile, Indexer }  from '@0gfoundation/0g-ts-sdk'
@@ -37,8 +37,8 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 }
 
 // ─── 0G Mainnet config ────────────────────────────────────────────────────────
-const EVM_RPC     = (process.env.OG_RPC_URL ?? process.env.OG_EVM_RPC_URL ?? process.env.ZG_RPC_URL ?? '').trim()
-const INDEXER_RPC = (process.env.OG_INDEXER_RPC_URL ?? process.env.ZG_INDEXER_RPC_URL ?? '').trim()
+const EVM_RPC     = (process.env.OG_RPC_URL ?? process.env.OG_EVM_RPC_URL ?? process.env.ZG_RPC_URL ?? 'https://evmrpc.0g.ai').trim()
+const INDEXER_RPC = (process.env.OG_INDEXER_RPC_URL ?? process.env.ZG_INDEXER_RPC_URL ?? 'https://indexer-storage-turbo.0g.ai').trim()
 
 // ─── PayLinkArchive ABI (anchor rootHash on-chain) ────────────────────────────
 const ARCHIVE_ABI = [
@@ -83,10 +83,6 @@ export type ArchiveResult = {
  * Never throws — all errors are caught and logged.
  */
 export async function archivePayment(entry: ArchiveRecord): Promise<ArchiveResult | null> {
-  if (!EVM_RPC || !INDEXER_RPC) {
-    console.warn('[0g] private RPC env missing â€” set OG_RPC_URL and OG_INDEXER_RPC_URL to enable archive')
-    return null
-  }
   const signer = getSigner()
   if (!signer) {
     console.warn('[0g] OG_STORAGE_KEY not set — skipping archive')

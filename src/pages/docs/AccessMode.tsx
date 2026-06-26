@@ -105,7 +105,7 @@ async function verifyOnChain(eventId: string, payer: string) {
 
   return events.some(e => e.args[3].toLowerCase() === payer.toLowerCase())
 }`}</CodeBlock>
-        <InfoBox type="info">Run this server-side with your private 0G RPC endpoint. It produces the same proof result without exposing RPC infrastructure in browser code.</InfoBox>
+        <InfoBox type="info">Run this server-side. Use a private 0G RPC when available; public 0G RPC fallback is acceptable for early testing but should not be the long-term production dependency.</InfoBox>
       </Section>
 
       <Section title="The access link format">

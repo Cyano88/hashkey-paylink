@@ -53,8 +53,8 @@ export default function ZeroGStorage() {
             ['Contract address', '0x79a804C49e1E5EBC279A228Ab73a7570A0D0819a'],
             ['Network', '0G Mainnet'],
             ['Chain ID', '16661'],
-            ['RPC', 'Server-side OG_RPC_URL private endpoint'],
-            ['Indexer', 'Server-side OG_INDEXER_RPC_URL private endpoint'],
+            ['RPC', 'Server-side OG_RPC_URL when set, otherwise public 0G RPC fallback'],
+            ['Indexer', 'Server-side OG_INDEXER_RPC_URL when set, otherwise public 0G indexer fallback'],
             ['Explorer', 'https://chainscan.0g.ai'],
           ]}
         />
@@ -135,7 +135,7 @@ const events = await contract.queryFilter(
 )
 
 const match = events.find(e => e.args[3].toLowerCase() === 'alice')`}</CodeBlock>
-        <p className="mt-2">Run this server-side with your private 0G RPC endpoint. The result is the on-chain truth without exposing RPC infrastructure in browser code.</p>
+        <p className="mt-2">Run this server-side. Hash PayLink prefers <Code>OG_RPC_URL</Code> when configured and temporarily falls back to the public 0G RPC while private provider access is pending.</p>
       </Section>
 
       <Section title="Payment-gated AI demo">
