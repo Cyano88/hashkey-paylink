@@ -9,8 +9,8 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "node scripts/verify-prebuilt-dist.mjs",
-    "build:frontend": "node scripts/verify-prebuilt-dist.mjs",
+    "build": "vite build --emptyOutDir false",
+    "build:frontend": "vite build --emptyOutDir false",
     "typecheck": "tsc",
     "preview": "vite preview",
     "start": "tsx server.ts"
@@ -66,6 +66,6 @@
     "postcss": "^8.5.10",
     "tailwindcss": "^3.4.7",
     "typescript": "^5.5.3",
-    "vite": "^5.3.5"
+    "vite": "^5.4.21"
   }
 }
