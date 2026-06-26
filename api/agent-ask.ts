@@ -5,7 +5,7 @@
  * economy primitive. Any AI service can use this pattern to require verified
  * payment before rendering a response.
  *
- * Body: { eventId: string, payer: string, question: string }
+ * Body: { eventId?: string, payer: string, question: string, accessMode?: 'helper-free' }
  *
  * Flow:
  *   1. Verify payment on 0G Mainnet via PayLinkArchive contract (trustless)
@@ -30,7 +30,7 @@ import {
 } from './zeroscout-sponsored-action.js'
 
 // ─── 0G Mainnet config ────────────────────────────────────────────────────────
-const OG_RPC       = 'https://evmrpc.0g.ai'
+const OG_RPC       = (process.env.OG_RPC_URL ?? process.env.OG_EVM_RPC_URL ?? process.env.ZG_RPC_URL ?? '').trim()
 const ARCHIVE_ADDR = '0x79a804C49e1E5EBC279A228Ab73a7570A0D0819a'
 const FROM_BLOCK   = parseInt(process.env.OG_FROM_BLOCK ?? '32498000', 10)
 
@@ -42,6 +42,7 @@ const MAX_EVENT_ID_LENGTH = 128
 const MAX_PAYER_LENGTH = 128
 const MAX_QUESTION_LENGTH = 4_000
 const MAX_MEMORY_LENGTH = 1_600
+const HELPER_FREE_ACCESS_MODE = 'helper-free'
 const HELPER_DAILY_PROMPT_LIMIT = Math.max(1, parseInt(process.env.HELPER_DAILY_PROMPT_LIMIT ?? '20', 10) || 20)
 const HELPER_USAGE_WINDOW_MS = 24 * 60 * 60 * 1000
 const HELPER_USAGE_STORE = process.env.HELPER_USAGE_STORE
@@ -62,7 +63,7 @@ type UsageStore = {
 
 const HASH_PAYLINK_SYSTEM_PROMPT = [
   'You are the Hash PayLink Strategy Agent for Circle, Arc, 0G, Polymarket, and agentic USDC commerce.',
-  'Access is only granted after a verified Hash PayLink payment archived on 0G.',
+  'Paid service access is granted only after a verified Hash PayLink payment archived on 0G. Ask Hash helper access is free and still requires ZeroScout sponsorship before a response is returned.',
   '',
   'Your specialty:',
   '- Circle Developer Platform and USDC-native product strategy',
@@ -193,6 +194,7 @@ async function getHelperPromptUsageStatus(eventId: string, payer: string) {
 }
 
 async function verifyPayment(eventId: string, payer: string) {
+  if (!OG_RPC) throw new Error('0G private RPC is not configured. Set OG_RPC_URL on the server.')
   const provider = new ethers.JsonRpcProvider(OG_RPC)
   const contract = new ethers.Contract(ARCHIVE_ADDR, ARCHIVE_ABI, provider)
   const latest   = await withTimeout(provider.getBlockNumber(), '0G payment verification')
@@ -229,7 +231,7 @@ async function verifyPayment(eventId: string, payer: string) {
 
 // ─── AI response ──────────────────────────────────────────────────────────────
 
-async function getAiResponse(question: string, payerName: string, chain: string, amount: string, memorySummary = '', zeroScoutGuidance?: ZeroScoutHelperGuidance): Promise<string> {
+async function getAiResponse(question: string, payerName: string, chain: string, amount: string, memorySummary = '', zeroScoutGuidance?: ZeroScoutHelperGuidance, accessMode = 'paid'): Promise<string> {
   const memoryContext = memorySummary
     ? `\n\nSaved Hash PayLink helper memory summary:\n${memorySummary}\nUse this only to personalize helpful context. Do not expose it unless the user asks.`
     : ''
@@ -242,7 +244,7 @@ async function getAiResponse(question: string, payerName: string, chain: string,
       const message = await client.messages.create({
         model:      'claude-haiku-4-5-20251001',
         max_tokens: 900,
-        system:     `${HASH_PAYLINK_SYSTEM_PROMPT}\n\nVerified access context: ${payerName} paid ${amount} on ${chain}, confirmed on 0G decentralized storage.${memoryContext}${guidanceContext}`,
+        system:     `${HASH_PAYLINK_SYSTEM_PROMPT}\n\nAccess context: ${accessMode === HELPER_FREE_ACCESS_MODE ? `${payerName} is using the free Ask Hash helper. Do not claim they paid for helper access.` : `${payerName} paid ${amount} on ${chain}, confirmed on 0G decentralized storage.`}${memoryContext}${guidanceContext}`,
         messages:   [{ role: 'user', content: question }],
       })
       const block = message.content[0]
@@ -258,7 +260,9 @@ async function getAiResponse(question: string, payerName: string, chain: string,
   }
 
   const fallbackLines = [
-    `Access granted. Your payment of ${amount} on ${chain} has been verified on 0G decentralized storage.`,
+    accessMode === HELPER_FREE_ACCESS_MODE
+      ? 'Ask Hash is open. ZeroScout sponsorship is required before this helper response is returned.'
+      : `Access granted. Your payment of ${amount} on ${chain} has been verified on 0G decentralized storage.`,
     '',
     `You asked: "${question}"`,
     '',
@@ -275,26 +279,44 @@ export default async function handler(req: Request, res: Response) {
   if (req.method !== 'POST')
     return res.status(405).json({ error: 'Method not allowed' })
 
-  const { eventId: rawEventId, payer: rawPayer, question: rawQuestion, memorySummary: rawMemorySummary } = (req.body ?? {}) as Record<string, unknown>
+  const { eventId: rawEventId, payer: rawPayer, question: rawQuestion, memorySummary: rawMemorySummary, accessMode: rawAccessMode } = (req.body ?? {}) as Record<string, unknown>
   let eventId: string
   let payer: string
   let question: string
   let memorySummary = ''
+  const accessMode = rawAccessMode === HELPER_FREE_ACCESS_MODE ? HELPER_FREE_ACCESS_MODE : 'paid'
 
   try {
-    eventId = normalizeBoundedString(rawEventId, 'eventId', MAX_EVENT_ID_LENGTH)
     payer = normalizeBoundedString(rawPayer, 'payer', MAX_PAYER_LENGTH)
     question = normalizeBoundedString(rawQuestion, 'question', MAX_QUESTION_LENGTH)
+    eventId = accessMode === HELPER_FREE_ACCESS_MODE
+      ? String(rawEventId || `helper-free-${crypto.createHash('sha256').update(payer.toLowerCase()).digest('hex').slice(0, 18)}`).slice(0, MAX_EVENT_ID_LENGTH)
+      : normalizeBoundedString(rawEventId, 'eventId', MAX_EVENT_ID_LENGTH)
     if (typeof rawMemorySummary === 'string') memorySummary = rawMemorySummary.trim().slice(0, MAX_MEMORY_LENGTH)
   } catch (err) {
     return res.status(400).json({ error: err instanceof Error ? err.message : 'Invalid request' })
   }
 
   try {
-    // 1. Verify payment on 0G Mainnet
-    const result = await verifyPayment(eventId, payer)
+    // 1. Verify payment on 0G Mainnet unless this is the free Ask Hash helper.
+    const result = accessMode === HELPER_FREE_ACCESS_MODE ? null : await verifyPayment(eventId, payer)
+    const access = result ?? {
+      payment: {
+        eventId,
+        payer,
+        chain: 'Ask Hash',
+        amount: '0',
+        ts: Math.floor(Date.now() / 1000),
+      },
+      proof: {
+        contract: '',
+        network: 'ZeroScout-sponsored helper',
+        rootHash: '',
+        ogTxHash: '',
+      },
+    }
 
-    if (!result) {
+    if (!result && accessMode !== HELPER_FREE_ACCESS_MODE) {
       return res.status(402).json({
         error:           'Payment required',
         paymentRequired: true,
@@ -305,7 +327,7 @@ export default async function handler(req: Request, res: Response) {
     }
 
     // 2. Payment verified — get AI response
-    const usagePreview = await getHelperPromptUsageStatus(eventId, result.payment.payer)
+    const usagePreview = await getHelperPromptUsageStatus(eventId, access.payment.payer)
     if (!usagePreview.allowed) {
       res.setHeader('Retry-After', Math.ceil((usagePreview.resetAt - Date.now()) / 1000).toString())
       return res.status(429).json({
@@ -323,9 +345,9 @@ export default async function handler(req: Request, res: Response) {
       service: 'Hash PayLink Helper',
       action: 'helper-chat-preflight',
       user: {
-        payer: result.payment.payer,
-        email: result.payment.payer,
-        wallet: result.payment.payer,
+        payer: access.payment.payer,
+        email: access.payment.payer,
+        wallet: access.payment.payer,
       },
       request: {
         eventId,
@@ -334,40 +356,42 @@ export default async function handler(req: Request, res: Response) {
         memorySummaryHash,
       },
       sourceProof: {
-        type: 'helper_access_receipt',
-        contract: result.proof.contract,
-        network: result.proof.network,
-        rootHash: result.proof.rootHash,
-        ogTxHash: result.proof.ogTxHash,
+        type: accessMode === HELPER_FREE_ACCESS_MODE ? 'helper-free-access' : 'helper_access_receipt',
+        contract: access.proof.contract,
+        network: access.proof.network,
+        rootHash: access.proof.rootHash,
+        ogTxHash: access.proof.ogTxHash,
       },
     })
 
     const answer = await getAiResponse(
       question,
-      result.payment.payer,
-      result.payment.chain,
-      result.payment.amount,
+      access.payment.payer,
+      access.payment.chain,
+      access.payment.amount,
       memorySummary,
       zeroScoutGuidance,
+      accessMode,
     )
 
     const zeroscoutSponsorship: ZeroScoutSponsoredAction | undefined = await sponsorZeroScoutAction({
       service: 'Hash PayLink Helper',
       action: 'helper-chat-response',
       user: {
-        payer: result.payment.payer,
-        email: result.payment.payer,
-        wallet: result.payment.payer,
+        payer: access.payment.payer,
+        email: access.payment.payer,
+        wallet: access.payment.payer,
       },
       request: {
         eventId,
         question,
+        accessMode,
         memorySummaryHash,
         guidanceRequestHash: zeroScoutGuidance?.requestHash,
       },
       sourceProof: {
-        type: 'helper_access_receipt',
-        ...result.proof,
+        type: accessMode === HELPER_FREE_ACCESS_MODE ? 'helper-free-access' : 'helper_access_receipt',
+        ...access.proof,
       },
       result: {
         answerHash: crypto.createHash('sha256').update(answer).digest('hex'),
@@ -382,7 +406,7 @@ export default async function handler(req: Request, res: Response) {
       })
     }
 
-    const usage = await consumeHelperPrompt(eventId, result.payment.payer)
+    const usage = await consumeHelperPrompt(eventId, access.payment.payer)
     if (!usage.allowed) {
       res.setHeader('Retry-After', Math.ceil((usage.resetAt - Date.now()) / 1000).toString())
       return res.status(429).json({
@@ -395,14 +419,15 @@ export default async function handler(req: Request, res: Response) {
 
     return res.json({
       answer,
-      paymentVerified: true,
+      accessMode,
+      paymentVerified: accessMode !== HELPER_FREE_ACCESS_MODE,
       usage: {
         remaining: usage.remaining,
         limit: HELPER_DAILY_PROMPT_LIMIT,
         resetAt: usage.resetAt,
       },
-      payment:         result.payment,
-      proof:           result.proof,
+      payment:         access.payment,
+      proof:           accessMode === HELPER_FREE_ACCESS_MODE ? undefined : result?.proof,
       zeroscoutSponsorship,
     })
   } catch (err) {

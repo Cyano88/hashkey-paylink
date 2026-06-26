@@ -78,7 +78,7 @@ type VerifyResult = {
 type Message = {
   question: string
   answer:   string
-  proof:    { ogTxHash: string; ogExplorer: string }
+  proof?:   { ogTxHash: string; ogExplorer: string }
   zeroscoutSponsorship?: ZeroScoutSponsorship
 }
 
@@ -837,7 +837,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
   }
 
   async function handleAsk() {
-    if (!question.trim() || isAsking || !verified?.verified) return
+    if (!question.trim() || isAsking || !helperStarted) return
     const q = question.trim()
     setQuestion('')
     setAskError(null)
@@ -850,14 +850,15 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
           eventId: eventId.trim(),
           payer: payer.trim(),
           question: q,
+          accessMode: 'helper-free',
           memorySummary: helperProfile?.memorySummary || undefined,
         }),
       })
       const data = await res.json() as {
         answer?: string; proof?: { ogTxHash: string; ogExplorer: string }; zeroscoutSponsorship?: ZeroScoutSponsorship; error?: string
       }
-      if (!data.answer || !data.proof) throw new Error(data.error ?? 'No response')
-      setMessages(prev => [...prev, { question: q, answer: data.answer!, proof: data.proof!, zeroscoutSponsorship: data.zeroscoutSponsorship }])
+      if (!data.answer) throw new Error(data.error ?? 'No response')
+      setMessages(prev => [...prev, { question: q, answer: data.answer!, proof: data.proof, zeroscoutSponsorship: data.zeroscoutSponsorship }])
       const displayName = (helperName || payer || 'Helper user').trim()
       const nextMemory = nextHelperMemorySummary(helperProfile?.memorySummary ?? '', displayName, q, data.answer)
       setHelperProfile(current => current
@@ -872,24 +873,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
   }
 
   function openHelperCheckout() {
-    const cleanPayer = (helperName || helperNameDraft || payer || 'Helper user').trim()
-    const helperEventId = `helper-${Date.now().toString(36)}`
-    const returnUrl = new URL('/agent', window.location.origin)
-    returnUrl.searchParams.set('helper', 'live')
-    returnUrl.searchParams.set('src', params.get('src') || 'dashboard')
-
-    const checkout = new URLSearchParams()
-    checkout.set('e', EVM_TREASURY)
-    checkout.set('a', '0.5')
-    checkout.set('m', 'Hash PayLink Agent Helper Access')
-    checkout.set('n', 'base')
-    checkout.set('v', '1')
-    checkout.set('id', helperEventId)
-    checkout.set('src', 'telegram-helper')
-    checkout.set('g', returnUrl.toString())
-    checkout.set('ad', '1')
-    if (cleanPayer) checkout.set('payer', cleanPayer)
-    window.location.href = `/pay?${checkout.toString()}`
+    setHelperStarted(true)
   }
 
   function startHelper() {
@@ -2520,8 +2504,8 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <p className="text-sm font-semibold text-gray-900 dark:text-white">Hash PayLink Agent Helper</p>
-                  <span className="rounded-full bg-purple-50 px-2 py-0.5 text-[10px] font-bold uppercase text-purple-600 dark:bg-purple-300/15 dark:text-purple-200">0.5 USDC</span>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">Ask Hash</p>
+                  <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-600 dark:bg-emerald-300/15 dark:text-emerald-200">Open</span>
                 </div>
                 <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
                   A pocket AI helper for payments, Polymarket funding, StreamPay, research, planning, and daily questions.
@@ -2531,7 +2515,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
 
             <div className="mt-3 grid grid-cols-3 gap-2">
               {[
-                ['Verified', 'Payment proof'],
+                ['ZeroScout', 'Sponsored'],
                 ['Memory', helperMemoryBusy ? 'Saving...' : helperProfile?.memorySummary ? 'Profile saved' : 'Profile ready'],
                 ['Telegram', 'Quick launch'],
               ].map(([label, body]) => (
@@ -2547,11 +2531,11 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
             <div className="space-y-3 p-4">
               <div className="rounded-xl border border-purple-100 bg-purple-50/70 p-3 dark:border-purple-400/20 dark:bg-purple-400/10">
                 <div className="flex items-center gap-2">
-                  <span className="rounded-md border border-purple-100 bg-white px-1.5 py-0.5 text-[10px] font-black text-purple-600 dark:border-purple-300/20 dark:bg-white/[0.08] dark:text-purple-200">0G</span>
-                  <p className="text-xs font-semibold text-gray-900 dark:text-white">Secure helper access</p>
+                  <span className="rounded-md border border-emerald-100 bg-white px-1.5 py-0.5 text-[10px] font-black text-emerald-600 dark:border-emerald-300/20 dark:bg-white/[0.08] dark:text-emerald-200">AI</span>
+                  <p className="text-xs font-semibold text-gray-900 dark:text-white">Open helper</p>
                 </div>
                 <p className="mt-1.5 text-xs leading-relaxed text-gray-600 dark:text-gray-300">
-                  Helper access is verified from 0G payment proofs. Memory saves quietly so future sessions can stay personal and useful.
+                  Ask Hash is open for platform help. Memory saves quietly so future sessions can stay personal and useful.
                 </p>
               </div>
 
@@ -2578,7 +2562,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
                       onKeyDown={event => {
                         if (event.key !== 'Enter' || !helperNameDraft.trim()) return
                         saveHelperName()
-                        window.setTimeout(openHelperCheckout, 0)
+                        setHelperStarted(true)
                       }}
                       placeholder="Your name or Telegram handle"
                       className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:ring-2 focus:ring-gray-200 dark:border-white/10 dark:bg-white/[0.06] dark:text-white dark:focus:ring-white/10"
@@ -2587,52 +2571,18 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
                       type="button"
                       onClick={() => {
                         saveHelperName()
-                        window.setTimeout(openHelperCheckout, 0)
+                        setHelperStarted(true)
                       }}
                       disabled={!helperNameDraft.trim()}
                       className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-50 dark:bg-white dark:text-gray-950"
                     >
-                      Continue to payment
+                      Continue to chat
                     </button>
                   </div>
                 </div>
               )}
 
-              {!helperName && verified?.verified !== true ? null : !verified?.verified && (
-                <div className="space-y-3 rounded-xl border border-gray-100 bg-white p-3 dark:border-white/10 dark:bg-white/[0.03]">
-                  <div>
-                    <p className="text-sm font-semibold text-gray-900 dark:text-white">Unlock helper access</p>
-                    <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                      {returningFromHelperPayment
-                        ? 'Payment received. Confirming your access receipt now.'
-                        : 'Pay 0.5 USDC once to unlock the helper.'}
-                    </p>
-                  </div>
-                  {returningFromHelperPayment && (
-                    <div className="flex items-center gap-2 rounded-xl border border-purple-100 bg-purple-50 px-3 py-2.5 text-xs font-medium text-purple-700 dark:border-purple-300/20 dark:bg-purple-300/10 dark:text-purple-200">
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      Redirecting shortly while access is confirmed
-                    </div>
-                  )}
-                  <button
-                    type="button"
-                    onClick={openHelperCheckout}
-                    disabled={returningFromHelperPayment || (!helperName && !helperNameDraft.trim())}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
-                  >
-                    Continue to payment
-                  </button>
-                  {verified && !verified.verified && (
-                    <p className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs font-medium text-red-600 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200">
-                      {returningFromHelperPayment
-                        ? 'Still confirming the 0G receipt. This usually clears shortly.'
-                        : verified.error ?? 'Access is not active yet.'}
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {verified?.verified && (
+              {helperName && (
                 <div className="overflow-hidden rounded-xl border border-gray-100 bg-white dark:border-white/10 dark:bg-white/[0.03]">
                   <div className="flex items-center justify-between gap-3 border-b border-gray-100 px-3 py-2.5 dark:border-white/10">
                     <div>
@@ -2677,15 +2627,17 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
                           <div className="max-w-[86%] whitespace-pre-wrap rounded-2xl rounded-tl-md border border-gray-100 bg-gray-50 px-3 py-2.5 text-sm text-gray-800 dark:border-white/10 dark:bg-white/[0.05] dark:text-gray-200">
                             {message.answer}
                           </div>
-                          <a
-                            href={message.proof.ogExplorer}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="mt-1 inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400 transition-colors hover:text-gray-600 dark:hover:text-gray-200"
-                          >
-                            <span className="rounded border border-purple-100 px-1 text-[8px] font-black text-purple-500 dark:border-purple-300/20 dark:text-purple-200">0G</span>
-                            response proof
-                          </a>
+                          {message.proof && (
+                            <a
+                              href={message.proof.ogExplorer}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="mt-1 inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400 transition-colors hover:text-gray-600 dark:hover:text-gray-200"
+                            >
+                              <span className="rounded border border-purple-100 px-1 text-[8px] font-black text-purple-500 dark:border-purple-300/20 dark:text-purple-200">0G</span>
+                              response proof
+                            </a>
+                          )}
                           {message.zeroscoutSponsorship && (
                             <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] font-semibold text-gray-400">
                               <span className="rounded border border-emerald-100 bg-emerald-50 px-1.5 py-0.5 text-[9px] font-black uppercase text-emerald-600 dark:border-emerald-300/20 dark:bg-emerald-300/10 dark:text-emerald-200">

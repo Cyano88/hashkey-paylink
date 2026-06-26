@@ -34,7 +34,7 @@ export type ZeroScoutSponsoredAction = {
   action: string
   requestHash: string
   sponsoredAt: string
-  sourceProofClass?: 'helper_access_receipt' | 'helper_memory_proof' | 'service_receipt'
+  sourceProofClass?: 'helper_access_receipt' | 'helper_free_access' | 'helper_memory_proof' | 'service_receipt'
   zeroscout: ZeroScoutIntelligenceResult
 }
 
@@ -82,6 +82,7 @@ function cleanUser(input: ZeroScoutSponsoredActionInput['user']) {
 
 function sourceProofClass(proof: Record<string, unknown> | undefined): ZeroScoutSponsoredAction['sourceProofClass'] | undefined {
   const source = String(proof?.source ?? proof?.type ?? '').toLowerCase()
+  if (source.includes('helper-free')) return 'helper_free_access'
   if (source.includes('helper-memory')) return 'helper_memory_proof'
   if (source.includes('helper') || proof?.ogTxHash || proof?.rootHash) return 'helper_access_receipt'
   if (proof) return 'service_receipt'

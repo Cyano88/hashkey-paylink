@@ -75,6 +75,8 @@ export default function EnvironmentDocs() {
           headers={['Variable', 'Required', 'Description']}
           rows={[
             ['OG_STORAGE_KEY', '0G archiving', 'Private key for 0G storage/archive transactions.'],
+            ['OG_RPC_URL', '0G archiving and proof checks', 'Private server-side 0G EVM RPC endpoint. Do not expose with VITE_.'],
+            ['OG_INDEXER_RPC_URL', '0G archiving', 'Private server-side 0G storage indexer endpoint. Do not expose with VITE_.'],
             ['OG_ARCHIVE_ADDRESS', '0G archiving', 'PayLinkArchive contract address on 0G.'],
             ['OG_FROM_BLOCK', 'Optional', 'Block number to start scanning archive events.'],
           ]}

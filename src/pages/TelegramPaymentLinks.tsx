@@ -74,7 +74,7 @@ type TelegramService = {
   title: string
   body: string
   icon: typeof Coins
-  status: 'Open' | 'Soon' | 'Next' | 'Telegram' | '0.5 USDC'
+  status: 'Open' | 'Soon' | 'Next' | 'Telegram'
   active: boolean
   brand?: 'polymarket'
 }
@@ -1411,7 +1411,7 @@ function TelegramHelperPanel({
   }
 
   async function askHelper() {
-    if (!question.trim() || asking || !verified?.verified) return
+    if (!question.trim() || asking || !started) return
     const nextQuestion = question.trim()
     setQuestion('')
     setAskError('')
@@ -1427,6 +1427,7 @@ function TelegramHelperPanel({
           eventId: eventId.trim(),
           payer: payer.trim(),
           question: nextQuestion,
+          accessMode: 'helper-free',
           memorySummary: memoryDraft.trim() || profile?.memorySummary || '',
         }),
       })
@@ -1436,8 +1437,8 @@ function TelegramHelperPanel({
         zeroscoutSponsorship?: ZeroScoutSponsorship
         error?: string
       }
-      if (!data.answer || !data.proof) throw new Error(data.error ?? 'No helper response returned.')
-      setMessages(prev => [...prev, { question: nextQuestion, answer: data.answer!, proof: data.proof!, zeroscoutSponsorship: data.zeroscoutSponsorship }])
+      if (!data.answer) throw new Error(data.error ?? 'No helper response returned.')
+      setMessages(prev => [...prev, { question: nextQuestion, answer: data.answer!, proof: data.proof, zeroscoutSponsorship: data.zeroscoutSponsorship }])
       void saveProfile({ question: nextQuestion, answer: data.answer } as Partial<HelperProfile>)
       if (!memoryDraft.trim()) {
         setMemoryDraft(`User is known as ${helperName || payer}. They use Hash PayLink Agent Helper from Telegram and may ask about payments, Polymarket, StreamPay, agents, research, planning, and daily questions.`)
@@ -1450,27 +1451,7 @@ function TelegramHelperPanel({
   }
 
   function openHelperCheckout() {
-    const cleanPayer = (helperName || helperNameDraft || payer || cleanTelegramName || 'Helper user').trim()
-    const helperEventId = `helper-${Date.now().toString(36)}`
-    const returnUrl = new URL('/telegram/payment-links', window.location.origin)
-    returnUrl.searchParams.set('open', '1')
-    returnUrl.searchParams.set('section', 'helper')
-    returnUrl.searchParams.set('service', 'hashpaylink-helper')
-    if (telegramId) returnUrl.searchParams.set('telegramId', telegramId)
-    if (cleanTelegramName) returnUrl.searchParams.set('u', cleanTelegramName)
-
-    const params = new URLSearchParams()
-    params.set('e', EVM_TREASURY)
-    params.set('a', '0.5')
-    params.set('m', 'Hash PayLink Agent Helper Access')
-    params.set('n', 'base')
-    params.set('v', '1')
-    params.set('id', helperEventId)
-    params.set('src', 'telegram-helper')
-    params.set('g', returnUrl.toString())
-    params.set('ad', '1')
-    if (cleanPayer) params.set('payer', cleanPayer)
-    window.location.href = `/pay?${params.toString()}`
+    startHelper()
   }
 
   return (
@@ -1489,8 +1470,8 @@ function TelegramHelperPanel({
           <AskHashLiveAgentIcon isStatic />
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <p className="text-sm font-semibold text-gray-900 dark:text-white">Hash PayLink Agent Helper</p>
-              <span className="rounded-full bg-purple-50 px-2 py-0.5 text-[10px] font-bold uppercase text-purple-600 dark:bg-purple-300/15 dark:text-purple-200">0.5 USDC</span>
+              <p className="text-sm font-semibold text-gray-900 dark:text-white">Ask Hash</p>
+              <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-600 dark:bg-emerald-300/15 dark:text-emerald-200">Open</span>
             </div>
             <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
               Pocket help for payments, Polymarket funding, StreamPay, agent setup, research, and daily questions.
@@ -1499,7 +1480,7 @@ function TelegramHelperPanel({
         </div>
 
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
-          {['0G access', profile?.memoryProof ? '0G memory' : profile?.memorySummary || memoryDraft ? 'Memory local' : 'Memory next', 'Telegram live'].map(label => (
+          {['ZeroScout', profile?.memoryProof ? '0G memory' : profile?.memorySummary || memoryDraft ? 'Memory local' : 'Memory next', 'Telegram live'].map(label => (
             <span
               key={label}
               className="rounded-full border border-gray-100 bg-white px-2 py-1 text-[10px] font-semibold text-gray-500 dark:border-white/10 dark:bg-white/[0.05] dark:text-gray-400"
@@ -1513,11 +1494,11 @@ function TelegramHelperPanel({
       {!started ? (
         <div className="space-y-3 rounded-xl border border-purple-100 bg-purple-50/70 p-3 dark:border-purple-400/20 dark:bg-purple-400/10">
           <div className="flex items-center gap-2">
-            <span className="rounded-md border border-purple-100 bg-white px-1.5 py-0.5 text-[10px] font-black text-purple-600 dark:border-purple-300/20 dark:bg-white/[0.08] dark:text-purple-200">0G</span>
-            <p className="text-xs font-semibold text-gray-900 dark:text-white">Verifiable access first</p>
+            <span className="rounded-md border border-emerald-100 bg-white px-1.5 py-0.5 text-[10px] font-black text-emerald-600 dark:border-emerald-300/20 dark:bg-white/[0.08] dark:text-emerald-200">AI</span>
+            <p className="text-xs font-semibold text-gray-900 dark:text-white">Open helper</p>
           </div>
           <p className="text-xs leading-relaxed text-gray-600 dark:text-gray-300">
-            The helper opens from Telegram, verifies paid access with 0G receipts, and saves useful profile context quietly. 0G memory checkpointing is optional proof, not an approval step.
+            The helper opens from Telegram and saves useful profile context quietly. ZeroScout sponsorship protects helper responses; 0G memory checkpointing is optional proof, not an approval step.
           </p>
           <button
             type="button"
@@ -1542,7 +1523,7 @@ function TelegramHelperPanel({
                   onKeyDown={event => {
                     if (event.key !== 'Enter' || !helperNameDraft.trim()) return
                     saveName()
-                    window.setTimeout(openHelperCheckout, 0)
+                    startHelper()
                   }}
                   placeholder="Name or Telegram handle"
                   className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:ring-2 focus:ring-gray-200 dark:border-white/10 dark:bg-white/[0.05] dark:text-white"
@@ -1551,52 +1532,18 @@ function TelegramHelperPanel({
                   type="button"
                   onClick={() => {
                     saveName()
-                    window.setTimeout(openHelperCheckout, 0)
+                    startHelper()
                   }}
                   disabled={!helperNameDraft.trim()}
                   className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-50 dark:bg-white dark:text-gray-950"
                 >
-                  Continue to payment
+                  Continue to chat
                 </button>
               </div>
             </div>
           )}
 
-          {!helperName && verified?.verified !== true ? null : !verified?.verified && (
-                <div className="space-y-3 rounded-xl border border-gray-100 bg-white p-3 dark:border-white/10 dark:bg-white/[0.03]">
-                  <div>
-                    <p className="text-sm font-semibold text-gray-900 dark:text-white">Unlock helper access</p>
-                    <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                      {returningFromPayment
-                        ? 'Payment received. Verifying your 0G access receipt now.'
-                        : 'Pay 0.5 USDC once to unlock the helper from Telegram.'}
-                    </p>
-                  </div>
-                  {returningFromPayment && (
-                    <div className="flex items-center gap-2 rounded-xl border border-purple-100 bg-purple-50 px-3 py-2.5 text-xs font-medium text-purple-700 dark:border-purple-300/20 dark:bg-purple-300/10 dark:text-purple-200">
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      Redirecting shortly while 0G verifies access
-                    </div>
-                  )}
-                  <button
-                    type="button"
-                    onClick={openHelperCheckout}
-                    disabled={returningFromPayment || (!helperName && !helperNameDraft.trim())}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
-                  >
-                    Continue to payment
-                  </button>
-              {verified?.verified === false && (
-                <p className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs font-medium text-red-600 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200">
-                  {returningFromPayment
-                    ? 'Still confirming the 0G receipt. This usually clears shortly.'
-                    : verified.error ?? 'Access is not active yet.'}
-                </p>
-              )}
-            </div>
-          )}
-
-          {verified?.verified && (
+          {helperName && (
             <div className="overflow-hidden rounded-xl border border-gray-100 bg-white dark:border-white/10 dark:bg-white/[0.03]">
               <div className="flex items-center justify-between gap-3 border-b border-gray-100 px-3 py-2.5 dark:border-white/10">
                 <div>
@@ -1663,7 +1610,7 @@ function TelegramHelperPanel({
                     </p>
                     <div className="mt-2 inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400">
                       <span className="rounded border border-purple-100 px-1 text-[8px] font-black text-purple-500 dark:border-purple-300/20 dark:text-purple-200">0G</span>
-                      access proof active
+                      ZeroScout-sponsored helper
                     </div>
                   </div>
                 )}
@@ -1732,7 +1679,7 @@ function TelegramHelperPanel({
                     value={question}
                     onChange={event => setQuestion(event.target.value)}
                     onKeyDown={event => event.key === 'Enter' && !event.shiftKey && askHelper()}
-                    placeholder="Ask your helper..."
+                    placeholder="Ask Hash..."
                     disabled={asking}
                     className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:ring-2 focus:ring-gray-200 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.05] dark:text-white"
                   />

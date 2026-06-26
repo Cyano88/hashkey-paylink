@@ -4691,7 +4691,7 @@ export default function PaymentPage() {
         </p>
         <div className="grid grid-cols-3 gap-3">
           {(isHelperAccess ? [
-            { n: '1', title: 'Pay once', body: 'Unlock helper access with 0.5 USDC' },
+            { n: '1', title: 'Ask Hash', body: 'Open helper access from Telegram or the agent page' },
             { n: '2', title: 'Verify access', body: 'Hash PayLink confirms the payment receipt' },
             { n: '3', title: 'Open helper', body: 'Return to Telegram with access unlocked' },
           ] : isPolymarketFunding ? [

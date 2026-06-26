@@ -53,8 +53,8 @@ export default function ZeroGStorage() {
             ['Contract address', '0x79a804C49e1E5EBC279A228Ab73a7570A0D0819a'],
             ['Network', '0G Mainnet'],
             ['Chain ID', '16661'],
-            ['RPC', 'https://evmrpc.0g.ai'],
-            ['Indexer', 'https://indexer-storage-turbo.0g.ai'],
+            ['RPC', 'Server-side OG_RPC_URL private endpoint'],
+            ['Indexer', 'Server-side OG_INDEXER_RPC_URL private endpoint'],
             ['Explorer', 'https://chainscan.0g.ai'],
           ]}
         />
@@ -67,7 +67,7 @@ export default function ZeroGStorage() {
   string  amount,
   uint256 ts
 );`}</CodeBlock>
-        <p className="mt-3">The <Code>rootHash</Code> is the 0G Storage content address — use it to retrieve the original JSON blob from any 0G node. The event is fully public and queryable by anyone with access to the 0G RPC.</p>
+        <p className="mt-3">The <Code>rootHash</Code> is the 0G Storage content address — use it to retrieve the original JSON blob from an authorized 0G node. The event is fully public and queryable by services with access to a 0G RPC.</p>
       </Section>
 
       <Section title="Organizer dashboard badges">
@@ -121,7 +121,7 @@ export default function ZeroGStorage() {
         <p>For maximum trustlessness, skip the API endpoint entirely and query the contract directly using any Ethereum library:</p>
         <CodeBlock lang="typescript">{`import { ethers } from 'ethers'
 
-const provider = new ethers.JsonRpcProvider('https://evmrpc.0g.ai')
+const provider = new ethers.JsonRpcProvider(process.env.OG_RPC_URL)
 const contract = new ethers.Contract(
   '0x79a804C49e1E5EBC279A228Ab73a7570A0D0819a',
   ['event PaymentArchived(string indexed eventId, bytes32 indexed rootHash, string chain, string payer, string amount, uint256 ts)'],
@@ -135,7 +135,7 @@ const events = await contract.queryFilter(
 )
 
 const match = events.find(e => e.args[3].toLowerCase() === 'alice')`}</CodeBlock>
-        <p className="mt-2">This requires no API key, no Hash PayLink account, and no trust in any intermediary. The result is the on-chain truth.</p>
+        <p className="mt-2">Run this server-side with your private 0G RPC endpoint. The result is the on-chain truth without exposing RPC infrastructure in browser code.</p>
       </Section>
 
       <Section title="Payment-gated AI demo">

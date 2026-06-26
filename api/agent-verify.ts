@@ -18,7 +18,7 @@ import type { Request, Response } from 'express'
 import { ethers } from 'ethers'
 
 // ─── 0G Mainnet config ────────────────────────────────────────────────────────
-const OG_RPC       = 'https://evmrpc.0g.ai'
+const OG_RPC       = (process.env.OG_RPC_URL ?? process.env.OG_EVM_RPC_URL ?? process.env.ZG_RPC_URL ?? '').trim()
 const ARCHIVE_ADDR = '0x79a804C49e1E5EBC279A228Ab73a7570A0D0819a'
 const FROM_BLOCK   = parseInt(process.env.OG_FROM_BLOCK ?? '32498000', 10)
 
@@ -69,6 +69,7 @@ export default async function handler(req: Request, res: Response) {
   }
 
   try {
+    if (!OG_RPC) throw new Error('0G private RPC is not configured. Set OG_RPC_URL on the server.')
     const provider = new ethers.JsonRpcProvider(OG_RPC)
     const contract = new ethers.Contract(ARCHIVE_ADDR, ARCHIVE_ABI, provider)
     const latest   = await withTimeout(provider.getBlockNumber(), '0G payment verification')

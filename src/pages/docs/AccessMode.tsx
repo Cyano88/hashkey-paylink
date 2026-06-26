@@ -94,7 +94,7 @@ app.use('/premium', requirePayment)`}</CodeBlock>
 const ABI = ['event PaymentArchived(string indexed eventId, bytes32 indexed rootHash, string chain, string payer, string amount, uint256 ts)']
 
 async function verifyOnChain(eventId: string, payer: string) {
-  const provider = new ethers.JsonRpcProvider('https://evmrpc.0g.ai')
+  const provider = new ethers.JsonRpcProvider(process.env.OG_RPC_URL)
   const contract = new ethers.Contract('0x79a804C49e1E5EBC279A228Ab73a7570A0D0819a', ABI, provider)
 
   const events = await contract.queryFilter(
@@ -105,7 +105,7 @@ async function verifyOnChain(eventId: string, payer: string) {
 
   return events.some(e => e.args[3].toLowerCase() === payer.toLowerCase())
 }`}</CodeBlock>
-        <InfoBox type="info">This approach requires no API key, no Hash PayLink server, and produces the same result. Use it when you want zero dependency on hashpaylink.com infrastructure.</InfoBox>
+        <InfoBox type="info">Run this server-side with your private 0G RPC endpoint. It produces the same proof result without exposing RPC infrastructure in browser code.</InfoBox>
       </Section>
 
       <Section title="The access link format">

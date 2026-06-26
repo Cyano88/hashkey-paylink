@@ -88,6 +88,10 @@ services:
         value: "https://zeroscout.app"
       - key: ZEROSCOUT_INTEGRATION_SECRET
         sync: false                   # Server-only ZeroScout API key for LP operator signals
+      - key: OG_RPC_URL
+        sync: false                   # Server-side private 0G EVM RPC endpoint for proof checks and archive anchoring
+      - key: OG_INDEXER_RPC_URL
+        sync: false                   # Server-side private 0G storage indexer endpoint for archive uploads
 
       # ── V2 relayer (api/relay-v2.ts) ──────────────────────────────────────
       - key: PAYLINK_FACTORY_V2
