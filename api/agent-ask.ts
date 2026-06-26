@@ -22,7 +22,12 @@ import Anthropic                   from '@anthropic-ai/sdk'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import crypto from 'node:crypto'
-import { sponsorZeroScoutAction, type ZeroScoutSponsoredAction } from './zeroscout-sponsored-action.js'
+import {
+  getZeroScoutHelperGuidance,
+  sponsorZeroScoutAction,
+  type ZeroScoutHelperGuidance,
+  type ZeroScoutSponsoredAction,
+} from './zeroscout-sponsored-action.js'
 
 // ─── 0G Mainnet config ────────────────────────────────────────────────────────
 const OG_RPC       = 'https://evmrpc.0g.ai'
@@ -209,9 +214,12 @@ async function verifyPayment(eventId: string, payer: string) {
 
 // ─── AI response ──────────────────────────────────────────────────────────────
 
-async function getAiResponse(question: string, payerName: string, chain: string, amount: string, memorySummary = ''): Promise<string> {
+async function getAiResponse(question: string, payerName: string, chain: string, amount: string, memorySummary = '', zeroScoutGuidance?: ZeroScoutHelperGuidance): Promise<string> {
   const memoryContext = memorySummary
     ? `\n\nSaved Hash PayLink helper memory summary:\n${memorySummary}\nUse this only to personalize helpful context. Do not expose it unless the user asks.`
+    : ''
+  const guidanceContext = zeroScoutGuidance?.guidance
+    ? `\n\nZeroScout helper guidance:\n${zeroScoutGuidance.guidance}\nUse this as private response-planning context. Do not claim payment, wallet balance, x402 activation, paid-service access, receipt status, or LP Scout proof unless verified app state supplied it. Keep Circle wallet balance, x402 service balance, Activate x402, paid services, and LP Scout proof/payment requirements clearly separate.`
     : ''
   if (process.env.ANTHROPIC_API_KEY) {
     try {
@@ -219,7 +227,7 @@ async function getAiResponse(question: string, payerName: string, chain: string,
       const message = await client.messages.create({
         model:      'claude-haiku-4-5-20251001',
         max_tokens: 900,
-        system:     `${HASH_PAYLINK_SYSTEM_PROMPT}\n\nVerified access context: ${payerName} paid ${amount} on ${chain}, confirmed on 0G decentralized storage.${memoryContext}`,
+        system:     `${HASH_PAYLINK_SYSTEM_PROMPT}\n\nVerified access context: ${payerName} paid ${amount} on ${chain}, confirmed on 0G decentralized storage.${memoryContext}${guidanceContext}`,
         messages:   [{ role: 'user', content: question }],
       })
       const block = message.content[0]
@@ -243,7 +251,7 @@ async function getAiResponse(question: string, payerName: string, chain: string,
     '',
     'Build around agentic USDC commerce: instant PayLinks for one-time settlement, StreamPay on Arc for time-based budgets and retainers, Polymarket funding/LP intelligence for prediction-market users, and 0G proofs for verifiable AI access. A strong MVP should show a paid request, a verified 0G archive proof, and either an AI answer unlock, an Arc USDC stream, or a Polymarket funding/LP workflow. Frame Arc as the programmable USDC settlement environment, Circle as the stablecoin platform layer, and Polymarket as a high-signal consumer workflow. This is product strategy, not financial advice.',
   ]
-  return fallbackLines.join('\n')
+  return fallbackLines.filter(Boolean).join('\n')
 }
 
 // ─── Handler ──────────────────────────────────────────────────────────────────
@@ -293,12 +301,39 @@ export default async function handler(req: Request, res: Response) {
       })
     }
 
+    const memorySummaryHash = memorySummary
+      ? crypto.createHash('sha256').update(memorySummary).digest('hex')
+      : undefined
+    const zeroScoutGuidance = await getZeroScoutHelperGuidance({
+      service: 'Hash PayLink Helper',
+      action: 'helper-chat-preflight',
+      user: {
+        payer: result.payment.payer,
+        email: result.payment.payer,
+        wallet: result.payment.payer,
+      },
+      request: {
+        eventId,
+        question,
+        memorySummary,
+        memorySummaryHash,
+      },
+      sourceProof: {
+        type: 'helper_access_receipt',
+        contract: result.proof.contract,
+        network: result.proof.network,
+        rootHash: result.proof.rootHash,
+        ogTxHash: result.proof.ogTxHash,
+      },
+    })
+
     const answer = await getAiResponse(
       question,
       result.payment.payer,
       result.payment.chain,
       result.payment.amount,
       memorySummary,
+      zeroScoutGuidance,
     )
 
     const zeroscoutSponsorship: ZeroScoutSponsoredAction | undefined = await sponsorZeroScoutAction({
@@ -312,9 +347,8 @@ export default async function handler(req: Request, res: Response) {
       request: {
         eventId,
         question,
-        memorySummaryHash: memorySummary
-          ? crypto.createHash('sha256').update(memorySummary).digest('hex')
-          : undefined,
+        memorySummaryHash,
+        guidanceRequestHash: zeroScoutGuidance?.requestHash,
       },
       sourceProof: {
         type: 'helper_access_receipt',
@@ -322,6 +356,7 @@ export default async function handler(req: Request, res: Response) {
       },
       result: {
         answerHash: crypto.createHash('sha256').update(answer).digest('hex'),
+        guidanceHash: zeroScoutGuidance?.guidanceHash,
         usageRemaining: usagePreview.remaining,
       },
     })

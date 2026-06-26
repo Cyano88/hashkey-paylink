@@ -53,7 +53,6 @@ type TelegramSectionId = 'payment-links' | 'helper' | 'agent-wallets' | 'market-
 type TelegramServiceId =
   | 'request-usdc'
   | 'fund-polymarket'
-  | 'hashpaylink-agent'
   | 'create-your-agent'
   | 'hashpaylink-helper'
   | 'agent-marketplace'
@@ -101,7 +100,7 @@ const sectionServices: Record<TelegramSectionId, TelegramService[]> = {
   helper: [
     {
       id: 'hashpaylink-helper',
-      title: 'Hash PayLink Helper',
+      title: 'Ask Hash',
       body: 'Fast chat help for payments, PolyDesk, StreamPay, and LP services.',
       icon: Bot,
       status: 'Open',
@@ -199,7 +198,7 @@ const sectionDescriptions: Record<TelegramSectionId, string> = {
 
 const telegramSections: Array<{ id: TelegramSectionId; title: string; icon: typeof Coins }> = [
   { id: 'payment-links', title: 'Payment Links', icon: Coins },
-  { id: 'helper', title: 'Hash Helper', icon: Bot },
+  { id: 'helper', title: 'Ask Hash', icon: Bot },
   { id: 'agent-wallets', title: 'Agent Wallets', icon: Bot },
   { id: 'market-tools', title: 'PolyDesk', icon: LineChart },
   { id: 'streampay', title: 'StreamPay', icon: Radio },
@@ -367,7 +366,7 @@ export default function TelegramPaymentLinks() {
       ? 'poly-portfolio'
       : startPayload === 'lp_scout'
       ? 'lp-scout'
-      : initialServiceParam === 'hashpaylink-agent' || initialServiceParam === 'hashpaylink-helper'
+      : initialServiceParam === 'hashpaylink-helper'
       ? 'hashpaylink-helper'
       : initialServiceParam === 'create-your-agent'
       ? 'agent-dashboard'
@@ -515,10 +514,6 @@ export default function TelegramPaymentLinks() {
     }
     if (service.id === 'fund-polymarket') {
       openPolymarketService()
-      return
-    }
-    if (service.id === 'hashpaylink-agent') {
-      setActiveService('hashpaylink-helper')
       return
     }
     if (service.id === 'hashpaylink-helper') {
@@ -1220,7 +1215,7 @@ function TelegramHelperPanel({
         className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-400 transition-colors hover:text-gray-700 dark:hover:text-gray-200"
       >
         <ArrowLeft className="h-3.5 w-3.5" />
-        Hash Helper
+        Ask Hash
       </button>
 
       <div className="rounded-xl border border-gray-100 bg-gray-50/80 p-3 dark:border-white/10 dark:bg-white/[0.04]">
