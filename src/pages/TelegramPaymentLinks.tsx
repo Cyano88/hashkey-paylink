@@ -49,7 +49,7 @@ function shortAddress(value: string) {
   return value.length > 14 ? `${value.slice(0, 6)}...${value.slice(-4)}` : value
 }
 
-type TelegramSectionId = 'payment-links' | 'agent-wallets' | 'market-tools' | 'streampay'
+type TelegramSectionId = 'payment-links' | 'helper' | 'agent-wallets' | 'market-tools' | 'streampay'
 type TelegramServiceId =
   | 'request-usdc'
   | 'fund-polymarket'
@@ -97,6 +97,8 @@ const sectionServices: Record<TelegramSectionId, TelegramService[]> = {
       status: 'Open',
       active: true,
     },
+  ],
+  helper: [
     {
       id: 'hashpaylink-helper',
       title: 'Hash PayLink Helper',
@@ -189,6 +191,7 @@ const sectionServices: Record<TelegramSectionId, TelegramService[]> = {
 
 const sectionDescriptions: Record<TelegramSectionId, string> = {
   'payment-links': 'Create normal USDC requests and share them into Telegram.',
+  helper: 'Open the ZeroScout-sponsored helper for payments, PolyDesk, StreamPay, and setup questions.',
   'agent-wallets': 'Manage Circle wallet balance, x402 service balance, and receipts.',
   'market-tools': 'PolyDesk for Polymarket funding, portfolio alerts, LP Scout, and live market context.',
   streampay: 'Payroll, creator, x402 stream, and Arena flows on StreamPay.',
@@ -196,6 +199,7 @@ const sectionDescriptions: Record<TelegramSectionId, string> = {
 
 const telegramSections: Array<{ id: TelegramSectionId; title: string; icon: typeof Coins }> = [
   { id: 'payment-links', title: 'Payment Links', icon: Coins },
+  { id: 'helper', title: 'Hash Helper', icon: Bot },
   { id: 'agent-wallets', title: 'Agent Wallets', icon: Bot },
   { id: 'market-tools', title: 'PolyDesk', icon: LineChart },
   { id: 'streampay', title: 'StreamPay', icon: Radio },
@@ -348,7 +352,7 @@ export default function TelegramPaymentLinks() {
   const initialSection: TelegramSectionId =
     startPayload === 'polymarket' || startPayload === 'poly'
       ? 'market-tools'
-      : initialSectionParam === 'agent-wallets' || initialSectionParam === 'market-tools' || initialSectionParam === 'streampay'
+      : initialSectionParam === 'helper' || initialSectionParam === 'agent-wallets' || initialSectionParam === 'market-tools' || initialSectionParam === 'streampay'
       ? initialSectionParam
       : 'payment-links'
   const initialServiceParam = searchParams.get('service')
@@ -383,12 +387,12 @@ export default function TelegramPaymentLinks() {
       ? 'agentic-lp-research'
       : ''
   const initialAgentService = initialService === 'create-your-agent' || initialService === 'agent-dashboard'
-  const initialPaymentService = initialService === 'hashpaylink-helper'
+  const initialHelperService = initialService === 'hashpaylink-helper'
   const initialMarketService = initialService === 'poly-portfolio' || initialService === 'lp-scout' || initialService === 'poly-worldcup' || initialService === 'poly-worldcup-news' || initialService === 'poly-stream' || initialService === 'agentic-lp-research'
   const initialPersonTarget = displayTelegramName(searchParams.get('target') ?? searchParams.get('payer') ?? searchParams.get('p'), '')
   const initialGroupTarget = displayTelegramName(searchParams.get('target') ?? searchParams.get('group') ?? searchParams.get('g') ?? searchParams.get('chat'), '')
   const [opened, setOpened] = useState(searchParams.get('open') !== '0')
-  const [activeSection, setActiveSection] = useState<TelegramSectionId>(initialAgentService ? 'agent-wallets' : initialPaymentService ? 'payment-links' : initialMarketService ? 'market-tools' : initialSection)
+  const [activeSection, setActiveSection] = useState<TelegramSectionId>(initialAgentService ? 'agent-wallets' : initialHelperService ? 'helper' : initialMarketService ? 'market-tools' : initialSection)
   const [activeService, setActiveService] = useState<TelegramServiceId | ''>(initialService)
   const [requestMode, setRequestMode] = useState<RequestMode | ''>(initialServiceParam === 'request-usdc' ? initialMode : '')
   const [savedRequest, setSavedRequest] = useState<SavedRequest | null>(null)
@@ -1189,9 +1193,8 @@ function TelegramHelperPanel({
     const helperEventId = `helper-${Date.now().toString(36)}`
     const returnUrl = new URL('/telegram/payment-links', window.location.origin)
     returnUrl.searchParams.set('open', '1')
-    returnUrl.searchParams.set('section', 'agent-wallets')
+    returnUrl.searchParams.set('section', 'helper')
     returnUrl.searchParams.set('service', 'hashpaylink-helper')
-    returnUrl.searchParams.set('agent', 'hashpaylink-agent')
     if (telegramId) returnUrl.searchParams.set('telegramId', telegramId)
     if (cleanTelegramName) returnUrl.searchParams.set('u', cleanTelegramName)
 
@@ -1217,7 +1220,7 @@ function TelegramHelperPanel({
         className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-400 transition-colors hover:text-gray-700 dark:hover:text-gray-200"
       >
         <ArrowLeft className="h-3.5 w-3.5" />
-        Agent Wallets
+        Hash Helper
       </button>
 
       <div className="rounded-xl border border-gray-100 bg-gray-50/80 p-3 dark:border-white/10 dark:bg-white/[0.04]">

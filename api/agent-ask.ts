@@ -155,6 +155,23 @@ async function consumeHelperPrompt(eventId: string, payer: string) {
 
 // ─── Payment verification (same logic as agent-verify, kept local) ────────────
 
+async function getHelperPromptUsageStatus(eventId: string, payer: string) {
+  const now = Date.now()
+  const key = usageKey(eventId, payer)
+  const store = await readUsageStore()
+  const current = store.usage[key]
+
+  if (!current || current.resetAt <= now) {
+    return { allowed: true, remaining: HELPER_DAILY_PROMPT_LIMIT - 1, resetAt: now + HELPER_USAGE_WINDOW_MS }
+  }
+
+  if (current.count >= HELPER_DAILY_PROMPT_LIMIT) {
+    return { allowed: false, remaining: 0, resetAt: current.resetAt }
+  }
+
+  return { allowed: true, remaining: Math.max(0, HELPER_DAILY_PROMPT_LIMIT - current.count - 1), resetAt: current.resetAt }
+}
+
 async function verifyPayment(eventId: string, payer: string) {
   const provider = new ethers.JsonRpcProvider(OG_RPC)
   const contract = new ethers.Contract(ARCHIVE_ADDR, ARCHIVE_ABI, provider)
@@ -265,14 +282,14 @@ export default async function handler(req: Request, res: Response) {
     }
 
     // 2. Payment verified — get AI response
-    const usage = await consumeHelperPrompt(eventId, result.payment.payer)
-    if (!usage.allowed) {
-      res.setHeader('Retry-After', Math.ceil((usage.resetAt - Date.now()) / 1000).toString())
+    const usagePreview = await getHelperPromptUsageStatus(eventId, result.payment.payer)
+    if (!usagePreview.allowed) {
+      res.setHeader('Retry-After', Math.ceil((usagePreview.resetAt - Date.now()) / 1000).toString())
       return res.status(429).json({
         error: 'Daily helper prompt limit reached. Try again after the cooldown.',
         cooldown: true,
         limit: HELPER_DAILY_PROMPT_LIMIT,
-        resetAt: usage.resetAt,
+        resetAt: usagePreview.resetAt,
       })
     }
 
@@ -305,9 +322,26 @@ export default async function handler(req: Request, res: Response) {
       },
       result: {
         answerHash: crypto.createHash('sha256').update(answer).digest('hex'),
-        usageRemaining: usage.remaining,
+        usageRemaining: usagePreview.remaining,
       },
     })
+    if (!zeroscoutSponsorship) {
+      return res.status(503).json({
+        error: 'ZeroScout sponsorship is required before helper responses are returned. Try again shortly.',
+        zeroscoutRequired: true,
+      })
+    }
+
+    const usage = await consumeHelperPrompt(eventId, result.payment.payer)
+    if (!usage.allowed) {
+      res.setHeader('Retry-After', Math.ceil((usage.resetAt - Date.now()) / 1000).toString())
+      return res.status(429).json({
+        error: 'Daily helper prompt limit reached. Try again after the cooldown.',
+        cooldown: true,
+        limit: HELPER_DAILY_PROMPT_LIMIT,
+        resetAt: usage.resetAt,
+      })
+    }
 
     return res.json({
       answer,
@@ -319,7 +353,7 @@ export default async function handler(req: Request, res: Response) {
       },
       payment:         result.payment,
       proof:           result.proof,
-      ...(zeroscoutSponsorship ? { zeroscoutSponsorship } : {}),
+      zeroscoutSponsorship,
     })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
