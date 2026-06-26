@@ -551,7 +551,7 @@ export default function Layout() {
           <Link to="/" className="group flex items-center gap-2.5 focus:outline-none">
             <img
               src="/hash-logo.png"
-              alt="Hash PayLink"
+              alt=""
               className="w-8 h-8 object-contain transition-transform group-hover:scale-105 dark:invert dark:mix-blend-screen"
             />
             <span className="text-[15px] font-semibold tracking-tight text-gray-900 dark:text-white">

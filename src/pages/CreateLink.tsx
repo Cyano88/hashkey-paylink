@@ -1248,7 +1248,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
           </span>
         )}
         <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-[2.25rem]">
-          {productHubOpen ? 'What do you want to do?' : polymarketMode ? 'PolyDesk' : posMode ? 'Retail POS' : streamMode ? 'StreamPay' : accessMode ? 'x402 Wallet Manager' : 'Request a payment'}
+          {productHubOpen ? 'What do you want to do?' : polymarketMode ? 'PolyDesk' : posMode ? 'Retail POS' : streamMode ? 'StreamPay' : accessMode ? accessView === 'wallet' ? 'x402 service wallet' : 'x402 Wallet Manager' : 'Request a payment'}
         </h1>
         <p className="mt-2 text-[15px] text-gray-500 text-balance dark:text-gray-400">
           {productHubOpen
@@ -1260,7 +1260,9 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
             : streamMode
               ? 'Stream USDC for payroll, agent services, and Arena games.'
               : accessMode
-                ? 'Fund and activate your service wallet for x402 access.'
+                ? accessView === 'wallet'
+                  ? 'Check wallet balance, activate x402, and view service access.'
+                  : 'Fund and activate your service wallet for x402 access.'
                 : 'Create a secure USDC PayLink in seconds.'}
         </p>
 

@@ -1327,7 +1327,9 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
                 {displayAgentImage?.initials ?? <Bot className="h-[18px] w-[18px]" />}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">x402 wallet</p>
+                {!embeddedWalletManager && (
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">x402 wallet</p>
+                )}
                 <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
                   <h1 className="min-w-0 truncate text-lg font-semibold tracking-tight text-gray-900 dark:text-white">
                     {displayAgentName}
