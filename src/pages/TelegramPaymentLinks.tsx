@@ -474,25 +474,6 @@ function extractRememberedName(text: string) {
     .slice(0, 48)
 }
 
-function localHelperAnswer(question: string, knownName: string) {
-  const clean = question.trim()
-  if (/^(hi|hello|hey|yo|gm|good morning|good afternoon|good evening)\b/i.test(clean)) {
-    return knownName && knownName !== 'there'
-      ? `Hi ${friendlyName(knownName)}. What do you want to create or check today?`
-      : 'Hi. What do you want to create or check today?'
-  }
-  if (/\b(what can you do|help me|how can you help|what do you help with)\b/i.test(clean)) {
-    return 'I can help you create PayLinks, explain payment status, guide wallet funding, clarify x402 activation, open PolyDesk or StreamPay flows, and answer daily questions.'
-  }
-  if (/\b(receipt|proof|0g archive|share receipt)\b/i.test(clean)) {
-    return 'After a PayLink is paid, the payer success screen shows the transaction, then the 0G archive and receipt actions appear once the proof is ready.'
-  }
-  if (/\b(x402|activate x402|service balance|wallet balance|circle balance)\b/i.test(clean)) {
-    return 'Circle wallet balance is the USDC in your wallet. x402 service balance is the amount activated for paid services. Fund the wallet first, then activate x402 before using paid services.'
-  }
-  return ''
-}
-
 function nameFromMemorySummary(value: string) {
   const summary = value.trim()
   if (!summary) return ''
@@ -1298,6 +1279,30 @@ function TelegramHelperPanel({
     }
   }
 
+  async function polishLocalHelperResult(prompt: string, fallback: string) {
+    try {
+      const res = await fetch('/api/agent-ask', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: eventId.trim(),
+          payer: payer.trim(),
+          question: prompt,
+          accessMode: 'helper-free',
+          memorySummary: memoryDraft.trim() || profile?.memorySummary || '',
+        }),
+      })
+      const data = await res.json() as { answer?: string; error?: string }
+      if (!res.ok || !data.answer) return fallback
+      return data.answer
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 160) || fallback
+    } catch {
+      return fallback
+    }
+  }
+
   function preferredWalletFor(network: RequestNetwork | '') {
     if (!profile) return ''
     if (network === 'solana') return profile.preferredPaymentSolanaWallet || (!profile.preferredPaymentWallet?.startsWith('0x') ? profile.preferredPaymentWallet ?? '' : '')
@@ -1420,11 +1425,25 @@ function TelegramHelperPanel({
     const saved = await createPaylinkFromDraft(draft)
     setPaylinkDraft(null)
     const target = friendlyName(saved.target)
+    const fallbackAnswer = saved.mode === 'group'
+      ? 'Collection ready.'
+      : `PayLink ready for ${target}.`
+    const answer = await polishLocalHelperResult(
+      [
+        'local_action=paylink_ready',
+        `mode=${saved.mode}`,
+        `target=${target}`,
+        `amount=${saved.amount} USDC`,
+        `network=${requestNetworkLabels[saved.network] ?? saved.network}`,
+        `purpose=${saved.label}`,
+        'Return one short consumer chat sentence only.',
+        'Do not repeat amount, wallet, network, or purpose because the card shows those details.',
+      ].join('\n'),
+      fallbackAnswer,
+    )
     setMessages(prev => [...prev, {
       question: nextQuestion,
-      answer: saved.mode === 'group'
-        ? 'Collection ready.'
-        : `PayLink ready for ${target}.`,
+      answer,
       paylink: saved,
     }])
     return true
@@ -1470,15 +1489,6 @@ function TelegramHelperPanel({
         return
       }
       if (await handlePaylinkConversation(nextQuestion)) return
-      const knownName = helperName || profile?.displayName || helperNameDraft || cleanTelegramName || nameFromMemorySummary(memoryDraft || profile?.memorySummary || '')
-      const localAnswer = localHelperAnswer(nextQuestion, knownName)
-      if (localAnswer) {
-        setMessages(prev => [...prev, {
-          question: nextQuestion,
-          answer: localAnswer,
-        }])
-        return
-      }
       setAgentStatus('Asking ZeroScout...')
       const res = await fetch('/api/agent-ask', {
         method: 'POST',
@@ -1555,11 +1565,11 @@ function TelegramHelperPanel({
       {!started ? (
         <div className="space-y-3 rounded-xl border border-purple-100 bg-purple-50/70 p-3 dark:border-purple-400/20 dark:bg-purple-400/10">
           <div className="flex items-center gap-2">
-            <span className="rounded-md border border-emerald-100 bg-white px-1.5 py-0.5 text-[10px] font-black text-emerald-600 dark:border-emerald-300/20 dark:bg-white/[0.08] dark:text-emerald-200">AI</span>
+            <span className="rounded-md border border-emerald-100 bg-white px-1.5 py-0.5 text-[10px] font-black text-emerald-600 dark:border-emerald-300/20 dark:bg-white/[0.08] dark:text-emerald-200">ZS</span>
             <p className="text-xs font-semibold text-gray-900 dark:text-white">Open helper</p>
           </div>
           <p className="text-xs leading-relaxed text-gray-600 dark:text-gray-300">
-            The helper opens from Telegram and saves useful profile context quietly. Proof badges appear only when a sponsored response includes one.
+            The helper opens from Telegram and saves useful profile context quietly. Powered by ZeroScout intelligence.
           </p>
           <button
             type="button"
@@ -1622,8 +1632,8 @@ function TelegramHelperPanel({
                       {helperName ? `Welcome back, ${helperName}.` : 'Welcome.'} Ask me about payments, Polymarket funding, StreamPay, agent setup, research, planning, or daily questions.
                     </p>
                     <div className="mt-2 inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400">
-                      <span className="rounded border border-gray-100 px-1 text-[8px] font-black text-gray-500 dark:border-white/10 dark:text-gray-300">AI</span>
-                      Ready in Telegram
+                      <span className="rounded border border-emerald-100 bg-emerald-50 px-1 text-[8px] font-black text-emerald-600 dark:border-emerald-300/20 dark:bg-emerald-300/10 dark:text-emerald-200">ZS</span>
+                      ZeroScout-powered
                     </div>
                   </div>
                 )}
@@ -1640,26 +1650,6 @@ function TelegramHelperPanel({
                         {message.answer}
                       </div>
                       {message.paylink && <HelperPaylinkCard request={message.paylink} />}
-                      {message.zeroscoutSponsorship && (
-                        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] font-semibold text-gray-400">
-                          <span className="rounded border border-emerald-100 bg-emerald-50 px-1.5 py-0.5 text-[9px] font-black uppercase text-emerald-600 dark:border-emerald-300/20 dark:bg-emerald-300/10 dark:text-emerald-200">
-                            ZeroScout-sponsored
-                          </span>
-                          <span title={message.zeroscoutSponsorship.requestHash}>
-                            request {message.zeroscoutSponsorship.requestHash.slice(0, 10)}...
-                          </span>
-                          {message.zeroscoutSponsorship.zeroscout?.proof?.storageTxHash && (
-                            <a
-                              href={`https://chainscan.0g.ai/tx/${message.zeroscoutSponsorship.zeroscout.proof.storageTxHash}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 text-emerald-600 hover:text-emerald-700 dark:text-emerald-200"
-                            >
-                              proof <ExternalLink className="h-2.5 w-2.5" />
-                            </a>
-                          )}
-                        </div>
-                      )}
                     </div>
                   </div>
                 ))}

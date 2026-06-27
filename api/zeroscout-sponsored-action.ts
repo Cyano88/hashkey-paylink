@@ -162,8 +162,8 @@ export async function getZeroScoutHelperGuidance(input: ZeroScoutHelperGuidanceI
           'Do not infer live prices, wallet balances, secrets, payment proofs, or user identity beyond supplied fields.',
         ],
       },
-      includeClaudeReview: false,
-      includeOpenAiReview: false,
+      includeClaudeReview: true,
+      includeOpenAiReview: true,
     }), GUIDANCE_TIMEOUT_MS)
 
     const guidance = buildGuidanceText(zeroscout)
@@ -223,8 +223,8 @@ export async function sponsorZeroScoutAction(input: ZeroScoutSponsoredActionInpu
           'Do not infer live prices, wallet balances, or market data that were not supplied.',
         ],
       },
-      includeClaudeReview: false,
-      includeOpenAiReview: false,
+      includeClaudeReview: true,
+      includeOpenAiReview: true,
     }, { requireProof: true, endpointPath: '/api/integrations/sponsorship-proof' }), SPONSOR_TIMEOUT_MS)
 
     return {

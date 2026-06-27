@@ -260,6 +260,9 @@ function cleanZeroScoutGuidanceText(value: string) {
 }
 
 function fallbackHelperAnswer(question: string) {
+  if (/\bpaylink_ready\b/i.test(question)) {
+    return /\bgroup|collection/i.test(question) ? 'Collection ready.' : 'PayLink ready.'
+  }
   if (/\b(receipt|proof|0g archive|share receipt)\b/i.test(question)) {
     return 'After a PayLink is paid, the payer success screen shows the transaction, then the 0G archive and receipt actions appear once the proof is ready.'
   }

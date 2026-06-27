@@ -2528,11 +2528,11 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
             <div className="space-y-3 p-4">
               <div className="rounded-xl border border-purple-100 bg-purple-50/70 p-3 dark:border-purple-400/20 dark:bg-purple-400/10">
                 <div className="flex items-center gap-2">
-                  <span className="rounded-md border border-emerald-100 bg-white px-1.5 py-0.5 text-[10px] font-black text-emerald-600 dark:border-emerald-300/20 dark:bg-white/[0.08] dark:text-emerald-200">AI</span>
+                  <span className="rounded-md border border-emerald-100 bg-white px-1.5 py-0.5 text-[10px] font-black text-emerald-600 dark:border-emerald-300/20 dark:bg-white/[0.08] dark:text-emerald-200">ZS</span>
                   <p className="text-xs font-semibold text-gray-900 dark:text-white">Open helper</p>
                 </div>
                 <p className="mt-1.5 text-xs leading-relaxed text-gray-600 dark:text-gray-300">
-                  Ask Hash is open for platform help. Memory saves quietly so future sessions can stay personal and useful.
+                  Ask Hash is open for platform help. Memory saves quietly. Powered by ZeroScout intelligence.
                 </p>
               </div>
 
@@ -2610,7 +2610,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
                         </p>
                         <div className="mt-2 inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400">
                           <span className="rounded border border-emerald-100 px-1 text-[8px] font-black text-emerald-600 dark:border-emerald-300/20 dark:text-emerald-200">ZS</span>
-                          ZeroScout-ready helper
+                          ZeroScout-powered
                         </div>
                       </div>
                     )}
@@ -2636,26 +2636,6 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
                               <span className="rounded border border-purple-100 px-1 text-[8px] font-black text-purple-500 dark:border-purple-300/20 dark:text-purple-200">0G</span>
                               response proof
                             </a>
-                          )}
-                          {message.zeroscoutSponsorship && (
-                            <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] font-semibold text-gray-400">
-                              <span className="rounded border border-emerald-100 bg-emerald-50 px-1.5 py-0.5 text-[9px] font-black uppercase text-emerald-600 dark:border-emerald-300/20 dark:bg-emerald-300/10 dark:text-emerald-200">
-                                ZeroScout-sponsored
-                              </span>
-                              <span title={message.zeroscoutSponsorship.requestHash}>
-                                request {message.zeroscoutSponsorship.requestHash.slice(0, 10)}...
-                              </span>
-                              {message.zeroscoutSponsorship.zeroscout?.proof?.storageTxHash && (
-                                <a
-                                  href={`https://chainscan.0g.ai/tx/${message.zeroscoutSponsorship.zeroscout.proof.storageTxHash}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-1 text-emerald-600 hover:text-emerald-700 dark:text-emerald-200"
-                                >
-                                  proof <ExternalLink className="h-2.5 w-2.5" />
-                                </a>
-                              )}
-                            </div>
                           )}
                         </div>
                       </div>
