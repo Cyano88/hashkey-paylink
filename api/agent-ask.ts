@@ -473,10 +473,6 @@ function getHelperResponse(question: string, payerName: string, chain: string, a
   const fallbackAnswer = fallbackHelperAnswer(question)
   if (fallbackAnswer) return fallbackAnswer
 
-  if (helperMode === 'daily') {
-    return 'I hear you. I can be your everyday assistant: planning, ideas, simple questions, personal context, and next steps. Tell me what you want to work on first.'
-  }
-
   if (helperMode === 'services') {
     return 'I can help with Hash PayLink services. Tell me if you mean PayLinks, StreamPay, Agent Wallets, x402, Circle wallet setup, or PolyDesk.'
   }
@@ -603,6 +599,15 @@ export default async function handler(req: Request, res: Response) {
           ogTxHash: access.proof.ogTxHash,
         },
       })
+
+    if (helperMode === 'daily' && !answerFromZeroScoutGuidance(question, zeroScoutGuidance)) {
+      return res.status(503).json({
+        error: 'ZeroScout Daily guidance is required before Daily mode responses are returned. Try again shortly.',
+        zeroscoutRequired: true,
+        helperMode,
+        helperIntent: helperRouting.helperIntent,
+      })
+    }
 
     const answer = getHelperResponse(
       question,
