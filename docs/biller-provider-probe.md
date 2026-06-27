@@ -42,6 +42,8 @@ Environment variables:
 RELOADLY_CLIENT_ID=
 RELOADLY_CLIENT_SECRET=
 RELOADLY_AUTH_URL=https://auth.reloadly.com/oauth/token
+RELOADLY_AIRTIME_BASE_URL=https://topups-sandbox.reloadly.com
+RELOADLY_AIRTIME_AUDIENCE=https://topups.reloadly.com
 RELOADLY_UTILITY_BASE_URL=https://utilities-sandbox.reloadly.com
 RELOADLY_UTILITY_AUDIENCE=https://utilities-sandbox.reloadly.com
 RELOADLY_OPERATOR_ID=
@@ -60,3 +62,5 @@ BILLER_PROBE_AMOUNT=100
 Decision rule:
 
 Pick the provider that passes catalog and validation first, has the exact biller coverage we need, and returns a durable receipt/status reference. Do not wire a provider into production until real test receipts are confirmed.
+
+Reloadly airtime/data categories use the Topups API. Utility-style bills use the Utility Payments API.

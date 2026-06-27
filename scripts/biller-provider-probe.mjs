@@ -44,7 +44,8 @@ async function request(url, options = {}) {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
-    const res = await fetch(url, {
+    let res
+    const fetchOptions = {
       ...options,
       signal: controller.signal,
       headers: {
@@ -52,7 +53,24 @@ async function request(url, options = {}) {
         ...(options.body ? { 'Content-Type': 'application/json' } : {}),
         ...(options.headers || {}),
       },
-    })
+    }
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        res = await fetch(url, fetchOptions)
+        break
+      } catch (error) {
+        if (attempt === 0) {
+          await new Promise((resolve) => setTimeout(resolve, 500))
+          continue
+        }
+        const message = error instanceof Error ? error.message : String(error)
+        const cause = error instanceof Error && error.cause instanceof Error ? `: ${error.cause.message}` : ''
+        return { ok: false, status: 0, statusText: `NETWORK_ERROR ${message}${cause}`, body: null }
+      }
+    }
+    if (!res) {
+      return { ok: false, status: 0, statusText: 'NETWORK_ERROR request did not return a response', body: null }
+    }
     return { ok: res.ok, status: res.status, statusText: res.statusText, body: await readBody(res) }
   } finally {
     clearTimeout(timer)
@@ -114,8 +132,17 @@ class ReloadlyProbe {
     this.clientId = (process.env.RELOADLY_CLIENT_ID || '').trim()
     this.clientSecret = (process.env.RELOADLY_CLIENT_SECRET || '').trim()
     this.authUrl = (process.env.RELOADLY_AUTH_URL || 'https://auth.reloadly.com/oauth/token').replace(/\/+$/, '')
-    this.baseUrl = (process.env.RELOADLY_UTILITY_BASE_URL || 'https://utilities-sandbox.reloadly.com').replace(/\/+$/, '')
-    this.audience = process.env.RELOADLY_UTILITY_AUDIENCE || this.baseUrl
+    this.product = /airtime|topup|data/i.test(category) ? 'topups' : 'utilities'
+    this.baseUrl = (
+      this.product === 'topups'
+        ? process.env.RELOADLY_AIRTIME_BASE_URL || 'https://topups-sandbox.reloadly.com'
+        : process.env.RELOADLY_UTILITY_BASE_URL || 'https://utilities-sandbox.reloadly.com'
+    ).replace(/\/+$/, '')
+    this.audience = (
+      this.product === 'topups'
+        ? process.env.RELOADLY_AIRTIME_AUDIENCE || 'https://topups.reloadly.com'
+        : process.env.RELOADLY_UTILITY_AUDIENCE || this.baseUrl
+    ).replace(/\/+$/, '')
     this.token = ''
   }
 
@@ -125,7 +152,7 @@ class ReloadlyProbe {
 
   async auth(result) {
     if (!this.configured()) {
-      result.add('credentials', 'SKIP', `Missing RELOADLY_CLIENT_ID or RELOADLY_CLIENT_SECRET. Base URL: ${this.baseUrl}`)
+      result.add('credentials', 'SKIP', `Missing RELOADLY_CLIENT_ID or RELOADLY_CLIENT_SECRET. Product: ${this.product}. Base URL: ${this.baseUrl}`)
       return false
     }
 
@@ -140,7 +167,10 @@ class ReloadlyProbe {
     })
     result.add('authenticate', auth.ok ? 'PASS' : 'FAIL', {
       status: auth.status,
+      statusText: auth.statusText,
       clientId: mask(this.clientId),
+      product: this.product,
+      audience: this.audience,
       body: auth.ok ? { token: 'received' } : auth.body,
     })
     this.token = auth.body?.access_token || ''
@@ -152,13 +182,19 @@ class ReloadlyProbe {
     if (!(await this.auth(result))) return result
 
     const headers = { Authorization: `Bearer ${this.token}` }
-    const discoveryPaths = [
-      `/operators/countries/${encodeURIComponent(country)}`,
-      `/operators?countryCode=${encodeURIComponent(country)}`,
-      `/services?countryCode=${encodeURIComponent(country)}`,
-      `/billers?countryCode=${encodeURIComponent(country)}`,
-      `/products/countries/${encodeURIComponent(country)}`,
-    ]
+    const discoveryPaths = this.product === 'topups'
+      ? [
+          `/operators/countries/${encodeURIComponent(country)}`,
+          `/operators/countries/${encodeURIComponent(country)}?includeBundles=true&includeData=true&includePin=true`,
+          `/operators/auto-detect/countries/${encodeURIComponent(country)}`,
+        ]
+      : [
+          `/operators/countries/${encodeURIComponent(country)}`,
+          `/operators?countryCode=${encodeURIComponent(country)}`,
+          `/services?countryCode=${encodeURIComponent(country)}`,
+          `/billers?countryCode=${encodeURIComponent(country)}`,
+          `/products/countries/${encodeURIComponent(country)}`,
+        ]
 
     let catalog = null
     let catalogPath = ''
@@ -182,29 +218,40 @@ class ReloadlyProbe {
     result.add('select operator', 'PASS', { catalogPath, operatorId })
 
     if (customer) {
-      const validatePayload = {
-        operatorId,
-        accountNumber: customer,
-        customerId: customer,
-        countryCode: country,
-      }
-      const validatePaths = ['/accounts/validate', '/account/validate', '/customers/validate']
-      for (const path of validatePaths) {
-        const response = await request(`${this.baseUrl}${path}`, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(validatePayload),
-        })
-        result.add(`validate ${path}`, response.ok ? 'PASS' : 'MISS', { status: response.status, body: response.body })
-        if (response.ok) break
+      if (this.product === 'topups') {
+        const normalizedPhone = String(customer).replace(/^\+/, '')
+        const detectPath = `/operators/auto-detect/phone/${encodeURIComponent(normalizedPhone)}/countries/${encodeURIComponent(country)}`
+        const response = await request(`${this.baseUrl}${detectPath}`, { headers })
+        result.add(`validate ${detectPath}`, response.ok ? 'PASS' : 'MISS', { status: response.status, body: response.body })
+      } else {
+        const validatePayload = {
+          operatorId,
+          accountNumber: customer,
+          customerId: customer,
+          countryCode: country,
+        }
+        const validatePaths = ['/accounts/validate', '/account/validate', '/customers/validate']
+        for (const path of validatePaths) {
+          const response = await request(`${this.baseUrl}${path}`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(validatePayload),
+          })
+          result.add(`validate ${path}`, response.ok ? 'PASS' : 'MISS', { status: response.status, body: response.body })
+          if (response.ok) break
+        }
       }
     } else {
-      result.add('validate customer/meter', 'SKIP', 'Set BILLER_PROBE_CUSTOMER or --customer to test validation.')
+      result.add('validate customer/meter', 'SKIP', this.product === 'topups'
+        ? 'Set BILLER_PROBE_CUSTOMER or --customer to test phone/operator auto-detect.'
+        : 'Set BILLER_PROBE_CUSTOMER or --customer to test validation.')
     }
 
     result.add('quote', 'INFO', {
       amount,
-      note: 'Reloadly utility products often return fixed/variable product metadata from catalog. Use provider response to derive the final quote.',
+      note: this.product === 'topups'
+        ? 'Reloadly airtime uses operator fixedAmounts/suggestedAmounts/min/max metadata from the catalog.'
+        : 'Reloadly utility products often return fixed/variable product metadata from catalog. Use provider response to derive the final quote.',
     })
 
     if (!execute) {
@@ -214,15 +261,22 @@ class ReloadlyProbe {
     }
 
     const customIdentifier = `hashpaylink-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`
-    const orderPayload = {
-      operatorId,
-      amount,
-      customIdentifier,
-      recipientAccountNumber: customer,
-      accountNumber: customer,
-      countryCode: country,
-    }
-    const orderPaths = ['/orders', '/payments', '/transactions']
+    const orderPayload = this.product === 'topups'
+      ? {
+          operatorId,
+          amount,
+          customIdentifier,
+          recipientPhone: { countryCode: country, number: String(customer).replace(/^\+/, '') },
+        }
+      : {
+          operatorId,
+          amount,
+          customIdentifier,
+          recipientAccountNumber: customer,
+          accountNumber: customer,
+          countryCode: country,
+        }
+    const orderPaths = this.product === 'topups' ? ['/topups'] : ['/orders', '/payments', '/transactions']
     for (const path of orderPaths) {
       const response = await request(`${this.baseUrl}${path}`, {
         method: 'POST',
