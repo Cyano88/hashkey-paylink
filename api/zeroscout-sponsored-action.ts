@@ -119,6 +119,36 @@ function shouldUseDeepHelperReview(input: ZeroScoutHelperGuidanceInput) {
   return input.request.qualityMode === 'deep'
 }
 
+type HelperRefinementLane = 'og-compute' | 'openai' | 'anthropic' | 'multi-stack'
+
+function helperRefinementLane(input: ZeroScoutHelperGuidanceInput): HelperRefinementLane {
+  if (shouldUseDeepHelperReview(input)) return 'multi-stack'
+  const seed = requestHash({
+    eventId: input.request.eventId,
+    question: input.request.question,
+    helperIntent: input.request.helperIntent,
+    memorySummaryHash: input.request.memorySummaryHash,
+  })
+  const bucket = parseInt(seed.slice(0, 2), 16) % 3
+  if (bucket === 1) return 'openai'
+  if (bucket === 2) return 'anthropic'
+  return 'og-compute'
+}
+
+function helperFallbackOrder(lane: HelperRefinementLane) {
+  if (lane === 'multi-stack') return ['0g-compute', 'openai', 'anthropic', 'local']
+  if (lane === 'openai') return ['openai', '0g-compute', 'anthropic', 'local']
+  if (lane === 'anthropic') return ['anthropic', '0g-compute', 'openai', 'local']
+  return ['0g-compute', 'openai', 'anthropic', 'local']
+}
+
+function helperReviewFlags(lane: HelperRefinementLane) {
+  return {
+    includeClaudeReview: lane === 'multi-stack' || lane === 'anthropic',
+    includeOpenAiReview: lane === 'multi-stack' || lane === 'openai',
+  }
+}
+
 async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined
   const timeout = new Promise<never>((_, reject) => {
@@ -131,6 +161,8 @@ async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 
 export async function getZeroScoutHelperGuidance(input: ZeroScoutHelperGuidanceInput): Promise<ZeroScoutHelperGuidance | undefined> {
   const sanitizedMemorySummary = sanitizeHelperContext(input.request.memorySummary)
+  const refinementLane = helperRefinementLane(input)
+  const reviewFlags = helperReviewFlags(refinementLane)
   const request = {
     eventId: input.request.eventId,
     question: sanitizeHelperContext(input.request.question),
@@ -165,6 +197,11 @@ export async function getZeroScoutHelperGuidance(input: ZeroScoutHelperGuidanceI
         sourceProof: input.sourceProof,
         helperIntent: input.request.helperIntent,
         qualityMode: input.request.qualityMode ?? 'standard',
+        refinementPolicy: refinementLane === 'multi-stack'
+          ? 'deep-multi-stack-0g-anthropic-openai'
+          : 'single-lane-short-refinement',
+        requestedRefinementLane: refinementLane,
+        fallbackOrder: helperFallbackOrder(refinementLane),
         separationRules: [
           'This is helper context guidance only, not LP Scout paid proof.',
           'Do not mention ZeroScout sponsorship requirements in user-facing answer text.',
@@ -174,8 +211,8 @@ export async function getZeroScoutHelperGuidance(input: ZeroScoutHelperGuidanceI
           'Do not infer live prices, wallet balances, secrets, payment proofs, or user identity beyond supplied fields.',
         ],
       },
-      includeClaudeReview: shouldUseDeepHelperReview(input),
-      includeOpenAiReview: shouldUseDeepHelperReview(input),
+      includeClaudeReview: reviewFlags.includeClaudeReview,
+      includeOpenAiReview: reviewFlags.includeOpenAiReview,
     }), timeoutMs)
 
     const guidance = buildGuidanceText(zeroscout)
@@ -231,6 +268,7 @@ export async function sponsorZeroScoutAction(input: ZeroScoutSponsoredActionInpu
         request: input.request,
         sourceProof: input.sourceProof,
         result: input.result,
+        refinementPolicy: 'proof-only-no-review',
         separationRules: [
           'This is ZeroScout-sponsored helper or service context, not LP Scout paid proof.',
           'LP Scout operator signals still require a saved Polymarket LP Scout result and matching x402 payment proof.',

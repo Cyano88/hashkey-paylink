@@ -43,7 +43,7 @@ const MAX_QUESTION_LENGTH = 4_000
 const MAX_MEMORY_LENGTH = 1_600
 const HELPER_FREE_ACCESS_MODE = 'helper-free'
 const HELPER_SIMPLE_DAILY_PROMPT_LIMIT = Math.max(1, parseInt(process.env.HELPER_SIMPLE_DAILY_PROMPT_LIMIT ?? process.env.HELPER_DAILY_PROMPT_LIMIT ?? '100', 10) || 100)
-const HELPER_DEEP_DAILY_PROMPT_LIMIT = Math.max(1, parseInt(process.env.HELPER_DEEP_DAILY_PROMPT_LIMIT ?? '5', 10) || 5)
+const HELPER_DEEP_DAILY_PROMPT_LIMIT = Math.max(1, parseInt(process.env.HELPER_DEEP_DAILY_PROMPT_LIMIT ?? '2', 10) || 2)
 const HELPER_USAGE_WINDOW_MS = 24 * 60 * 60 * 1000
 const HELPER_USAGE_STORE = process.env.HELPER_USAGE_STORE
   ?? (process.env.DATA_PATH ? `${process.env.DATA_PATH}/helper-usage.json` : './data/helper-usage.json')
@@ -281,6 +281,26 @@ function cleanZeroScoutGuidanceText(value: string) {
 }
 
 function fallbackHelperAnswer(question: string) {
+  if (/\blocal_action=remember_name\b/i.test(question)) {
+    const name = /preferred_name=([^\n]+)/i.exec(question)?.[1]?.trim()
+    return name ? `Got it. I will call you ${name}.` : 'Got it. I will remember that.'
+  }
+  if (/\blocal_action=personal_memory_answer\b/i.test(question)) {
+    const name = /known_name=([^\n]+)/i.exec(question)?.[1]?.trim()
+    return name ? `You are ${name}.` : 'I do not know your preferred name yet. Tell me what to call you and I will remember it.'
+  }
+  if (/\blocal_action=payment_request_saved_wallet_choice\b/i.test(question)) {
+    const network = /network=([^\n]+)/i.exec(question)?.[1]?.trim() || 'payment'
+    const wallet = /saved_wallet=([^\n]+)/i.exec(question)?.[1]?.trim() || 'saved'
+    return `I can prepare that PayLink. Continue with your saved ${network} wallet ${wallet}, or use a new receive wallet?`
+  }
+  if (/\blocal_action=payment_request_new_wallet_needed\b/i.test(question)) {
+    return 'Send the new receive wallet. I will use it for this PayLink.'
+  }
+  if (/\blocal_action=payment_request_missing_fields\b/i.test(question)) {
+    const missing = /missing_fields=([^\n]+)/i.exec(question)?.[1]?.trim()
+    return missing ? `I need ${missing}. You can send it in one line.` : 'I need the missing payment details. You can send them in one line.'
+  }
   if (/\bpaylink_ready\b/i.test(question)) {
     return /\bgroup|collection/i.test(question) ? 'Collection ready.' : 'PayLink ready.'
   }
@@ -293,7 +313,7 @@ function fallbackHelperAnswer(question: string) {
   if (/\b(x402|activate x402|service balance|wallet balance|circle balance)\b/i.test(question)) {
     return 'Circle wallet balance is the USDC in your wallet. x402 service balance is the amount activated for paid services. Fund the wallet first, then activate x402 before using paid services.'
   }
-  if (/\b(paylink|payment link|request|invoice|collect|charge)\b/i.test(question)) {
+  if (/\b(paylink|payment link|request|invoice|collect|charge|receive (?:a )?payment|get paid)\b/i.test(question)) {
     return 'Tell me the payer, amount, network, purpose, and receive wallet. I can then prepare a clean PayLink for sharing.'
   }
   if (/\b(what can you do|help me|how can you help|what do you help with)\b/i.test(question)) {
@@ -324,7 +344,7 @@ function classifyHelperRequest(question: string): { helperIntent: string; qualit
   if (/\b(x402|activate x402|service balance|wallet balance|circle balance)\b/.test(value)) {
     return { helperIntent: 'x402-help', qualityMode: 'standard' }
   }
-  if (/\b(paylink|payment link|request|invoice|collect|charge|wallet|base|arc|arbitrum|solana|usdc)\b/.test(value)) {
+  if (/\b(paylink|payment link|request|invoice|collect|charge|receive (?:a )?payment|get paid|wallet|base|arc|arbitrum|solana|usdc)\b/.test(value)) {
     return { helperIntent: 'payment-help', qualityMode: 'standard' }
   }
   if (question.length > 220) {
@@ -341,6 +361,9 @@ function answerFromZeroScoutGuidance(question: string, zeroScoutGuidance?: ZeroS
 }
 
 function getHelperResponse(question: string, payerName: string, chain: string, amount: string, memorySummary = '', zeroScoutGuidance?: ZeroScoutHelperGuidance, accessMode = 'paid'): string {
+  const zeroScoutAnswer = answerFromZeroScoutGuidance(question, zeroScoutGuidance)
+  if (zeroScoutAnswer) return zeroScoutAnswer
+
   if (isNameQuestion(question)) {
     const knownName = nameFromMemory(memorySummary, payerName)
     return knownName
@@ -352,9 +375,6 @@ function getHelperResponse(question: string, payerName: string, chain: string, a
     const knownName = nameFromMemory(memorySummary, payerName)
     return `Hey${knownName ? ` ${knownName}` : ''}. I can help you create a PayLink, check a receipt, set up wallets, use StreamPay, or research PolyDesk and Polymarket flows.`
   }
-
-  const zeroScoutAnswer = answerFromZeroScoutGuidance(question, zeroScoutGuidance)
-  if (zeroScoutAnswer) return zeroScoutAnswer
 
   const fallbackAnswer = fallbackHelperAnswer(question)
   if (fallbackAnswer) return fallbackAnswer
@@ -443,9 +463,7 @@ export default async function handler(req: Request, res: Response) {
     const memorySummaryHash = memorySummary
       ? crypto.createHash('sha256').update(memorySummary).digest('hex')
       : undefined
-    const zeroScoutGuidance = helperRouting.qualityMode === 'fast'
-      ? undefined
-      : await getZeroScoutHelperGuidance({
+    const zeroScoutGuidance = await getZeroScoutHelperGuidance({
         service: 'Hash PayLink Helper',
         action: 'helper-chat-preflight',
         user: {

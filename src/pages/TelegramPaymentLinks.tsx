@@ -40,8 +40,6 @@ import ZeroScoutPowerBadge from '../components/ZeroScoutPowerBadge'
 const TELEGRAM_BOT_URL = import.meta.env.VITE_TELEGRAM_AGENT_URL || 'https://t.me/HashPayLinkBot'
 const PUBLIC_PAYLINK_ORIGIN = (import.meta.env.VITE_PUBLIC_PAYLINK_ORIGIN || 'https://hashpaylink.com').replace(/\/+$/, '')
 const POLYMARKET_LOGO = '/brand/polymarket-logo.png'
-const MIN_HELPER_TYPING_VISIBLE_MS = 3500
-const FAST_HELPER_RESPONSE_MAX_MS = 4900
 const HELPER_PAYMENT_REQUEST_DAILY_LIMIT = 20
 
 function displayTelegramName(rawName: string | null, fallback = 'there') {
@@ -431,7 +429,7 @@ function extractPurpose(text: string) {
 }
 
 function isPaymentRequestIntent(text: string) {
-  return /\b(request|collect|charge|invoice|paylink|payment link|ask .*pay|split|dues|donation|group collection)\b/i.test(text)
+  return /\b(request|collect|charge|invoice|paylink|payment link|receive (?:a )?payment|get paid|ask .*pay|split|dues|donation|group collection)\b/i.test(text)
 }
 
 function isDeepResearchIntent(text: string) {
@@ -476,28 +474,6 @@ function isAskingUserName(text: string) {
   return /\b(what'?s|what is|tell me)\s+my\s+name\b|\bdo you know my name\b|\bwho am i\b|\bwhat do you call me\b/i.test(text)
 }
 
-function fastHelperFallback(text: string, name: string) {
-  if (/\bmeaning of love\b|\bwhat does love mean\b|\bdefine love\b/i.test(text)) {
-    return 'Love is deep care, trust, and commitment shown through attention, patience, respect, and action. It is not only a feeling; it is how people choose to value and support each other.'
-  }
-  if (/\bmeaning of\b|\bwhat does .+ mean\b|\bdefine\b/i.test(text)) {
-    return 'I can explain that simply. Give me the exact word or phrase and I will define it in plain language.'
-  }
-  if (/^\s*(hi|hello|hey|yo|gm|good morning|good afternoon|good evening)\b/i.test(text)) {
-    return `Hey ${name}. I can help you create a PayLink, check a receipt, set up wallets, use StreamPay, or research PolyDesk and Polymarket flows.`
-  }
-  if (/\b(what can you do|how can you help|help me|capabilities|what do you help with)\b/i.test(text)) {
-    return 'I can help with PayLinks, receipts, wallets, StreamPay, PolyDesk, Polymarket funding, and quick planning questions.'
-  }
-  if (/\b(receipt|proof|0g archive|share receipt)\b/i.test(text)) {
-    return 'Send the receipt or transaction link and I will help you check what it shows. I will not claim a payment is confirmed unless the app has verified proof.'
-  }
-  if (/\b(x402|activate x402|service balance|wallet balance|circle balance)\b/i.test(text)) {
-    return 'I can explain x402 setup and service balances. Wallet balances, x402 activation, and paid access need verified app state before I treat them as confirmed.'
-  }
-  return 'I can help with that. For fastest results, tell me the action, amount, network, wallet, or question you want me to handle.'
-}
-
 function extractRememberedName(text: string) {
   const match = text.match(/\b(?:remember\s+)?(?:my name is|call me|i am|i'm)\s+(@?[a-zA-Z][\w .-]{1,40})/i)?.[1] ?? ''
   return match
@@ -514,22 +490,6 @@ function nameFromMemorySummary(value: string) {
     .replace(/[.?!,;:]+$/g, '')
     .trim()
     .slice(0, 48)
-}
-
-function sleep(ms: number) {
-  return new Promise(resolve => window.setTimeout(resolve, ms))
-}
-
-function withClientTimeout<T>(promise: Promise<T>, ms: number): Promise<T | undefined> {
-  let timer: ReturnType<typeof window.setTimeout> | undefined
-  return Promise.race([
-    promise,
-    new Promise<undefined>(resolve => {
-      timer = window.setTimeout(() => resolve(undefined), ms)
-    }),
-  ]).finally(() => {
-    if (timer) window.clearTimeout(timer)
-  })
 }
 
 function todayKey() {
@@ -885,7 +845,12 @@ export default function TelegramPaymentLinks() {
       <button
         type="button"
         onClick={launchAgentHash}
-        className="group w-full rounded-2xl border border-gray-100 bg-white p-4 text-left shadow-card transition-all hover:border-gray-200 hover:shadow-lg active:scale-[0.995] dark:border-white/10 dark:bg-[#111114] dark:hover:bg-[#15151a]"
+        className={cn(
+          'group w-full border border-gray-100 bg-white p-4 text-left shadow-card transition-all hover:border-gray-200 hover:shadow-lg active:scale-[0.995] dark:border-white/10 dark:bg-[#111114] dark:hover:bg-[#15151a]',
+          opened && activeService === 'hashpaylink-helper'
+            ? 'rounded-t-2xl rounded-b-none border-b-0 shadow-none'
+            : 'rounded-2xl',
+        )}
       >
         <div className="flex items-start gap-3">
           <div className="flex shrink-0 flex-col items-center gap-3 pt-0.5 text-gray-500 dark:text-gray-400">
@@ -915,7 +880,14 @@ export default function TelegramPaymentLinks() {
       </button>
 
       {opened && (
-        <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card dark:border-white/10 dark:bg-[#111114]">
+        <div
+          className={cn(
+            'border border-gray-100 bg-white shadow-card dark:border-white/10 dark:bg-[#111114]',
+            activeService === 'hashpaylink-helper'
+              ? 'rounded-b-2xl border-t-0 p-0'
+              : 'rounded-2xl p-4',
+          )}
+        >
           {activeService !== 'hashpaylink-helper' && (
             <>
               <div className="flex items-start justify-between gap-4">
@@ -1426,9 +1398,9 @@ function TelegramHelperPanel({
     }
   }
 
-  async function polishLocalHelperResult(prompt: string, fallback: string) {
+  async function polishLocalHelperResult(prompt: string, fallback: string, memorySummaryOverride?: string) {
     try {
-      const res = await withClientTimeout(fetch('/api/agent-ask', {
+      const res = await fetch('/api/agent-ask', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal: helperAbortRef.current?.signal,
@@ -1437,10 +1409,9 @@ function TelegramHelperPanel({
           payer: payer.trim(),
           question: prompt,
           accessMode: 'helper-free',
-          memorySummary: helperMemoryContext(),
+          memorySummary: memorySummaryOverride ?? helperMemoryContext(),
         }),
-      }), 900)
-      if (!res) return fallback
+      })
       const data = await res.json() as { answer?: string; error?: string }
       if (!res.ok || !data.answer) return fallback
       return data.answer
@@ -1518,10 +1489,9 @@ function TelegramHelperPanel({
     return saved
   }
 
-  async function handlePaylinkConversation(nextQuestion: string, minimumTyping: Promise<unknown>) {
+  async function handlePaylinkConversation(nextQuestion: string) {
     if (!paylinkDraft && !isPaymentRequestIntent(nextQuestion)) return false
     if (!paylinkDraft && !paymentQuotaStatus().allowed) {
-      await minimumTyping
       finishHelperMessage(nextQuestion, {
         answer: 'You have used today\'s 20 AI-assisted PayLink requests. The normal Payment Links tab is still available for manual requests.',
       })
@@ -1533,9 +1503,19 @@ function TelegramHelperPanel({
     if (!draft.wallet && savedWallet && !draft.offeredSavedWallet) {
       draft = { ...draft, offeredSavedWallet: true }
       setPaylinkDraft(draft)
-      await minimumTyping
+      const fallbackAnswer = `I can prepare that PayLink. Do you want to continue with your saved ${draft.network ? requestNetworkLabels[draft.network] : 'payment'} wallet ${compactSavedWallet(savedWallet)}, or use a new receive wallet?`
+      const answer = await polishLocalHelperResult(
+        [
+          'local_action=payment_request_saved_wallet_choice',
+          `network=${draft.network ? requestNetworkLabels[draft.network] : 'payment'}`,
+          `saved_wallet=${compactSavedWallet(savedWallet)}`,
+          'Ask whether to continue with the saved receive wallet or use a new one.',
+          'Return one short consumer chat sentence only.',
+        ].join('\n'),
+        fallbackAnswer,
+      )
       finishHelperMessage(nextQuestion, {
-        answer: `I can prepare that PayLink. Do you want to continue with your saved ${draft.network ? requestNetworkLabels[draft.network] : 'payment'} wallet ${compactSavedWallet(savedWallet)}, or use a new receive wallet?`,
+        answer,
       })
       return true
     }
@@ -1551,9 +1531,17 @@ function TelegramHelperPanel({
 
     if (!draft.wallet && savedWallet && draft.offeredSavedWallet && wantsNewWallet(nextQuestion)) {
       setPaylinkDraft(draft)
-      await minimumTyping
+      const fallbackAnswer = 'Send the new receive wallet. I will replace the saved wallet after this PayLink is ready.'
+      const answer = await polishLocalHelperResult(
+        [
+          'local_action=payment_request_new_wallet_needed',
+          'Ask the user for the new receive wallet.',
+          'Return one short consumer chat sentence only.',
+        ].join('\n'),
+        fallbackAnswer,
+      )
       finishHelperMessage(nextQuestion, {
-        answer: 'Send the new receive wallet. I will replace the saved wallet after this PayLink is ready.',
+        answer,
       })
       return true
     }
@@ -1569,11 +1557,23 @@ function TelegramHelperPanel({
     if (missing.length > 0) {
       setPaylinkDraft(draft)
       const missingNetworkOnly = missing.length === 1 && missing[0] === 'network'
-      await minimumTyping
+      const fallbackAnswer = missingNetworkOnly
+        ? 'Which network should this use: Base, Arc, Arbitrum, Solana, or all networks?'
+        : `I need ${missing.join(', ')}. You can send it in one line.`
+      const answer = await polishLocalHelperResult(
+        [
+          'local_action=payment_request_missing_fields',
+          `missing_fields=${missing.join(', ')}`,
+          `payer=${draft.target}`,
+          `amount=${draft.amount}`,
+          `purpose=${draft.label}`,
+          'Ask only for the missing fields. Do not say a provided payer name is missing.',
+          'Return one short consumer chat sentence only.',
+        ].join('\n'),
+        fallbackAnswer,
+      )
       finishHelperMessage(nextQuestion, {
-        answer: missingNetworkOnly
-          ? 'Which network should this use: Base, Arc, Arbitrum, Solana, or all networks?'
-          : `I need ${missing.join(', ')}. You can send it in one line.`,
+        answer,
       })
       return true
     }
@@ -1599,7 +1599,6 @@ function TelegramHelperPanel({
       ].join('\n'),
       fallbackAnswer,
     )
-    await minimumTyping
     finishHelperMessage(nextQuestion, {
       answer,
       paylink: saved,
@@ -1624,7 +1623,6 @@ function TelegramHelperPanel({
         : isDeepResearch
           ? 'Running deeper research... this might take a little time.'
           : 'Reading your message...')
-      const minimumTyping = sleep(MIN_HELPER_TYPING_VISIBLE_MS)
       const rememberedName = extractRememberedName(nextQuestion)
       if (rememberedName) {
         const cleanName = friendlyName(rememberedName)
@@ -1638,26 +1636,44 @@ function TelegramHelperPanel({
         onRecoverTelegramName(cleanName)
         setPayer(current => current || cleanName)
         setMemoryDraft(nextMemory)
-        await minimumTyping
+        const fallbackAnswer = `Got it. I'll call you ${cleanName}.`
+        const answer = await polishLocalHelperResult(
+          [
+            'local_action=remember_name',
+            `preferred_name=${cleanName}`,
+            'Return one warm, short confirmation sentence only.',
+          ].join('\n'),
+          fallbackAnswer,
+          nextMemory,
+        )
         finishHelperMessage(nextQuestion, {
-          answer: `Got it. I'll call you ${cleanName}.`,
+          answer,
         })
         void saveProfile({ displayName: cleanName, memorySummary: nextMemory })
         return
       }
       if (isAskingUserName(nextQuestion)) {
         const knownName = helperName || profile?.displayName || helperNameDraft || cleanTelegramName || nameFromMemorySummary(memoryDraft || profile?.memorySummary || '')
-        await minimumTyping
+        const fallbackAnswer = knownName && knownName !== 'there'
+          ? `You're ${friendlyName(knownName)}.`
+          : "I don't know your preferred name yet. Tell me what to call you and I'll remember it."
+        const answer = await polishLocalHelperResult(
+          [
+            'local_action=personal_memory_answer',
+            `question=${nextQuestion}`,
+            `known_name=${knownName && knownName !== 'there' ? friendlyName(knownName) : ''}`,
+            'Answer only the user name question. If the name is unknown, say that naturally.',
+          ].join('\n'),
+          fallbackAnswer,
+        )
         finishHelperMessage(nextQuestion, {
-          answer: knownName && knownName !== 'there'
-            ? `You're ${friendlyName(knownName)}.`
-            : "I don't know your preferred name yet. Tell me what to call you and I'll remember it.",
+          answer,
         })
         return
       }
-      if (await handlePaylinkConversation(nextQuestion, minimumTyping)) return
+      if (await handlePaylinkConversation(nextQuestion)) return
       setAgentStatus(isDeepResearch ? 'Running deeper research... this might take a little time.' : 'Asking ZeroScout...')
-      const responsePromise = fetch('/api/agent-ask', {
+      const res = await fetch('/api/agent-ask', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal: abortController.signal,
@@ -1669,16 +1685,6 @@ function TelegramHelperPanel({
           memorySummary: helperMemoryContext(),
         }),
       })
-      const cappedResponsePromise = isDeepResearch
-        ? responsePromise
-        : withClientTimeout(responsePromise, FAST_HELPER_RESPONSE_MAX_MS)
-      const [res] = await Promise.all([cappedResponsePromise, minimumTyping])
-      if (!res) {
-        finishHelperMessage(nextQuestion, {
-          answer: fastHelperFallback(nextQuestion, friendlyName(helperName || cleanTelegramName || 'there')),
-        })
-        return
-      }
       const data = await res.json() as {
         answer?: string
         proof?: { ogTxHash: string; ogExplorer: string }
@@ -1718,106 +1724,10 @@ function TelegramHelperPanel({
   }
 
   return (
-    <div className="mt-4 space-y-3">
-      <button
-        type="button"
-        onClick={onBack}
-        className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-400 transition-colors hover:text-gray-700 dark:hover:text-gray-200"
-      >
-        <ArrowLeft className="h-3.5 w-3.5" />
-        Ask Hash
-      </button>
-
-      <div className="rounded-xl border border-gray-100 bg-gray-50/80 p-3 dark:border-white/10 dark:bg-white/[0.04]">
-        <div className="flex items-start gap-3">
-          <AskHashLiveAgentIcon isStatic />
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <p className="text-sm font-semibold text-gray-900 dark:text-white">Ask Hash</p>
-              <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-600 dark:bg-emerald-300/15 dark:text-emerald-200">Open</span>
-            </div>
-            <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-              Pocket help for payments, Polymarket funding, StreamPay, agent setup, research, and daily questions.
-            </p>
-          </div>
-        </div>
-
-        <div className="mt-2 flex flex-wrap items-center gap-1.5">
-          {[profile?.memoryProof ? '0G memory' : profile?.memorySummary || memoryDraft ? 'Memory local' : 'Memory next', 'Telegram live'].map(label => (
-            <span
-              key={label}
-              className="rounded-full border border-gray-100 bg-white px-2 py-1 text-[10px] font-semibold text-gray-500 dark:border-white/10 dark:bg-white/[0.05] dark:text-gray-400"
-            >
-              {label}
-            </span>
-          ))}
-        </div>
-      </div>
-
-      {!started ? (
-        <div className="space-y-3 rounded-xl border border-purple-100 bg-purple-50/70 p-3 dark:border-purple-400/20 dark:bg-purple-400/10">
-          <div className="flex items-center gap-2">
-            <ZeroScoutPowerBadge />
-            <p className="text-xs font-semibold text-gray-900 dark:text-white">Open helper</p>
-          </div>
-          <p className="text-xs leading-relaxed text-gray-600 dark:text-gray-300">
-            The helper opens from Telegram and saves useful profile context quietly.
-          </p>
-          <button
-            type="button"
-            onClick={startHelper}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
-          >
-            {helperName ? <><ArrowRight className="h-4 w-4" /> Continue as {helperName}</> : 'Start helper'}
-          </button>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {!helperName && (
-            <div className="rounded-xl border border-gray-100 bg-white p-3 dark:border-white/10 dark:bg-white/[0.03]">
-              <p className="text-sm font-semibold text-gray-900 dark:text-white">What should I call you?</p>
-              <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                This keeps the helper personal when you come back.
-              </p>
-              <div className="mt-3 space-y-2">
-                <input
-                  value={helperNameDraft}
-                  onChange={event => setHelperNameDraft(event.target.value)}
-                  onKeyDown={event => {
-                    if (event.key !== 'Enter' || !helperNameDraft.trim()) return
-                    saveName()
-                    startHelper()
-                  }}
-                  placeholder="Name or Telegram handle"
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:ring-2 focus:ring-gray-200 dark:border-white/10 dark:bg-white/[0.05] dark:text-white"
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    saveName()
-                    startHelper()
-                  }}
-                  disabled={!helperNameDraft.trim()}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-50 dark:bg-white dark:text-gray-950"
-                >
-                  Continue to chat
-                </button>
-              </div>
-            </div>
-          )}
-
-          {helperName && (
-            <div className="overflow-hidden rounded-xl border border-gray-100 bg-white dark:border-white/10 dark:bg-white/[0.03]">
-              <div className="flex items-center justify-between gap-3 border-b border-gray-100 px-3 py-2.5 dark:border-white/10">
-                <div>
-                  <p className="text-xs font-semibold text-gray-900 dark:text-white">
-                    {helperName ? `Hi ${helperName}` : 'Helper is live'}
-                  </p>
-                  <p className="text-[11px] text-gray-400">Open helper</p>
-                </div>
-              </div>
-
-              <div ref={helperScrollRef} className="max-h-[360px] min-h-[220px] space-y-4 overflow-y-auto p-3 scroll-smooth">
+    <div>
+      <div className="space-y-3">
+        <div className="overflow-hidden">
+              <div ref={helperScrollRef} className="max-h-[360px] min-h-[220px] space-y-4 overflow-y-auto border-t border-gray-100 p-3 scroll-smooth dark:border-white/10">
                 {messages.length === 0 && !asking && (
                   <div className="rounded-2xl rounded-tl-md bg-gray-50 px-3 py-2.5 dark:bg-white/[0.05]">
                     <p className="text-sm text-gray-700 dark:text-gray-200">
@@ -1880,10 +1790,8 @@ function TelegramHelperPanel({
                   </button>
                 </div>
               </div>
-            </div>
-          )}
         </div>
-      )}
+      </div>
     </div>
   )
 }
