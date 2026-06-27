@@ -29,6 +29,7 @@ import {
   UserRound,
   UsersRound,
   Wallet,
+  X,
 } from 'lucide-react'
 import { cn } from '../lib/utils'
 import { EVM_TREASURY } from '../lib/chains'
@@ -37,6 +38,7 @@ import AgentDemo from './AgentDemo'
 const TELEGRAM_BOT_URL = import.meta.env.VITE_TELEGRAM_AGENT_URL || 'https://t.me/HashPayLinkBot'
 const PUBLIC_PAYLINK_ORIGIN = (import.meta.env.VITE_PUBLIC_PAYLINK_ORIGIN || 'https://hashpaylink.com').replace(/\/+$/, '')
 const POLYMARKET_LOGO = '/brand/polymarket-logo.png'
+const MIN_HELPER_RESPONSE_DELAY_MS = 3500
 
 function displayTelegramName(rawName: string | null, fallback = 'there') {
   const clean = (rawName ?? '').replace(/^@+/, '').trim()
@@ -1409,7 +1411,7 @@ function TelegramHelperPanel({
     try {
       const isPaylinkFlow = Boolean(paylinkDraft || isPaymentRequestIntent(nextQuestion))
       setAgentStatus(isPaylinkFlow ? 'Checking payment details...' : 'Reading your message...')
-      await sleep(isPaylinkFlow ? 800 : 500)
+      await sleep(MIN_HELPER_RESPONSE_DELAY_MS)
       const rememberedName = extractRememberedName(nextQuestion)
       if (rememberedName) {
         const cleanName = friendlyName(rememberedName)
@@ -1592,7 +1594,7 @@ function TelegramHelperPanel({
                 {messages.map((message, index) => (
                   <div key={index} className="space-y-2.5">
                     <div className="flex justify-end">
-                      <div className="max-w-[82%] break-words rounded-[18px] rounded-br-md bg-[#0084ff] px-3.5 py-2 text-sm leading-relaxed text-white shadow-sm">
+                      <div className="max-w-[82%] break-words rounded-[18px] rounded-br-md bg-black px-3.5 py-2 text-sm leading-relaxed text-white shadow-sm dark:bg-white dark:text-gray-950">
                         {message.question}
                       </div>
                     </div>
@@ -1699,6 +1701,7 @@ function HelperThinkingIndicator({ statusText }: { statusText: string }) {
 
 function HelperPaylinkCard({ request }: { request: SavedRequest }) {
   const [copied, setCopied] = useState(false)
+  const [shareOpen, setShareOpen] = useState(false)
   const network = request.network ?? inferRequestNetwork(request)
   const url = request.payUrl || buildRequestPayLink(request)
   const dashboardUrl = request.mode === 'group' ? request.dashboardUrl || buildRequestDashboardLink(request) : ''
@@ -1711,17 +1714,9 @@ function HelperPaylinkCard({ request }: { request: SavedRequest }) {
     request.mode === 'group' ? `Collection: ${target}` : `Payer: ${target}`,
     'Please share the receipt after payment is confirmed.',
   ].join('\n')
-
-  async function nativeShare() {
-    const nav = navigator as Navigator & { share?: (data: ShareData) => Promise<void> }
-    if (nav.share) {
-      await nav.share({ title: 'Hash PayLink', text: shareText, url })
-      return
-    }
-    await navigator.clipboard.writeText(`${shareText}\n${url}`)
-    setCopied(true)
-    window.setTimeout(() => setCopied(false), 1600)
-  }
+  const encodedShareText = encodeURIComponent(`${request.mode === 'group' ? 'Hash PayLink collection' : 'Hash PayLink payment request'}: ${request.label || 'Payment'}`)
+  const encodedShareUrl = encodeURIComponent(url)
+  const encodedShareMessage = encodeURIComponent(`${shareText}\n${url}`)
 
   async function copyLink() {
     await navigator.clipboard.writeText(url)
@@ -1738,7 +1733,7 @@ function HelperPaylinkCard({ request }: { request: SavedRequest }) {
             {request.mode === 'group' ? 'Collection ready' : 'Payment request ready'}
           </p>
           <p className="truncate text-[11px] text-emerald-700/80 dark:text-emerald-100/75">
-            {amountLine} · {requestNetworkLabels[network]}
+            {amountLine} on {requestNetworkLabels[network]}
           </p>
         </div>
       </div>
@@ -1759,7 +1754,7 @@ function HelperPaylinkCard({ request }: { request: SavedRequest }) {
       <div className="mt-2 grid grid-cols-3 gap-1.5">
         <button
           type="button"
-          onClick={() => void nativeShare()}
+          onClick={() => setShareOpen(true)}
           className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-gray-950 px-2.5 py-2 text-xs font-semibold text-white dark:bg-white dark:text-gray-950"
         >
           <Send className="h-3.5 w-3.5" />
@@ -1797,6 +1792,82 @@ function HelperPaylinkCard({ request }: { request: SavedRequest }) {
       <p className="mt-2 text-[11px] font-medium text-emerald-700/80 dark:text-emerald-100/80">
         Ask for the receipt after payment.
       </p>
+      {shareOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/35 px-4 pb-5 sm:items-center sm:pb-0"
+          onClick={() => setShareOpen(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl border border-gray-100 bg-white p-4 shadow-2xl dark:border-white/10 dark:bg-gray-950"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-gray-900 dark:text-white">Share PayLink</p>
+                <p className="text-xs text-gray-400">Send the payment request from chat.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShareOpen(false)}
+                className="flex h-8 w-8 items-center justify-center rounded-xl bg-gray-50 text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:bg-white/[0.08] dark:text-gray-300 dark:hover:bg-white/[0.12]"
+                aria-label="Close share options"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => void copyLink()}
+              className={cn(
+                'mb-2 flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all active:scale-[0.98]',
+                copied
+                  ? 'border border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-300/20 dark:bg-emerald-300/10 dark:text-emerald-100'
+                  : 'bg-black text-white hover:bg-gray-800 dark:bg-white dark:text-gray-950',
+              )}
+            >
+              {copied ? <><CheckCircle2 className="h-4 w-4" /> Copied</> : <><Copy className="h-4 w-4" /> Copy link</>}
+            </button>
+
+            <div className="grid grid-cols-2 gap-2">
+              <a
+                href={`https://wa.me/?text=${encodedShareMessage}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-medium text-gray-700 hover:border-gray-300 hover:bg-gray-50 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:bg-white/[0.08]"
+              >
+                <MessageCircle className="h-4 w-4" />
+                WhatsApp
+              </a>
+              <a
+                href={`https://t.me/share/url?url=${encodedShareUrl}&text=${encodedShareText}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-medium text-gray-700 hover:border-gray-300 hover:bg-gray-50 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:bg-white/[0.08]"
+              >
+                <Send className="h-4 w-4" />
+                Telegram
+              </a>
+              <a
+                href={`https://twitter.com/intent/tweet?url=${encodedShareUrl}&text=${encodedShareText}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-medium text-gray-700 hover:border-gray-300 hover:bg-gray-50 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:bg-white/[0.08]"
+              >
+                <X className="h-4 w-4" />
+                X
+              </a>
+              <a
+                href={`mailto:?subject=${encodeURIComponent('Hash PayLink payment request')}&body=${encodedShareMessage}`}
+                className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-medium text-gray-700 hover:border-gray-300 hover:bg-gray-50 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:bg-white/[0.08]"
+              >
+                <Mail className="h-4 w-4" />
+                Email
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
