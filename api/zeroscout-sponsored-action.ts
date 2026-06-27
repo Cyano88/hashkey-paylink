@@ -22,6 +22,8 @@ type ZeroScoutHelperGuidanceInput = {
     eventId: string
     question: string
     accessMode?: string
+    helperIntent?: string
+    qualityMode?: 'fast' | 'standard' | 'deep'
     memorySummary?: string
     memorySummaryHash?: string
   }
@@ -103,13 +105,20 @@ function sanitizeHelperContext(input: string | undefined) {
 
 function buildGuidanceText(result: ZeroScoutIntelligenceResult) {
   const lines = [
+    result.suggestedAnswer,
     result.summary,
+    ...(result.missingFields ?? []).slice(0, 4).map(item => `Missing: ${item}`),
+    ...(result.safetyBoundaries ?? []).slice(0, 3).map(item => `Boundary: ${item}`),
     ...(result.signals ?? []).slice(0, 4).map(item => `Signal: ${item}`),
     ...(result.recommendedActions ?? []).slice(0, 4).map(item => `Use: ${item}`),
     ...(result.riskFlags ?? []).slice(0, 3).map(item => `Boundary: ${item}`),
     ...(result.dataGaps ?? []).slice(0, 3).map(item => `Missing: ${item}`),
   ]
   return lines.filter(Boolean).join('\n').slice(0, 1_600)
+}
+
+function shouldUseDeepHelperReview(input: ZeroScoutHelperGuidanceInput) {
+  return input.request.qualityMode === 'deep'
 }
 
 async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
@@ -128,6 +137,8 @@ export async function getZeroScoutHelperGuidance(input: ZeroScoutHelperGuidanceI
     eventId: input.request.eventId,
     question: sanitizeHelperContext(input.request.question),
     accessMode: input.request.accessMode,
+    helperIntent: input.request.helperIntent,
+    qualityMode: input.request.qualityMode,
     memorySummary: sanitizedMemorySummary || undefined,
     memorySummaryHash: input.request.memorySummaryHash,
   }
@@ -153,6 +164,8 @@ export async function getZeroScoutHelperGuidance(input: ZeroScoutHelperGuidanceI
         requestHash: hash,
         request,
         sourceProof: input.sourceProof,
+        helperIntent: input.request.helperIntent,
+        qualityMode: input.request.qualityMode ?? 'standard',
         separationRules: [
           'This is helper context guidance only, not LP Scout paid proof.',
           'Do not mention ZeroScout sponsorship requirements in user-facing answer text.',
@@ -162,8 +175,8 @@ export async function getZeroScoutHelperGuidance(input: ZeroScoutHelperGuidanceI
           'Do not infer live prices, wallet balances, secrets, payment proofs, or user identity beyond supplied fields.',
         ],
       },
-      includeClaudeReview: true,
-      includeOpenAiReview: true,
+      includeClaudeReview: shouldUseDeepHelperReview(input),
+      includeOpenAiReview: shouldUseDeepHelperReview(input),
     }), GUIDANCE_TIMEOUT_MS)
 
     const guidance = buildGuidanceText(zeroscout)

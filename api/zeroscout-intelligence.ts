@@ -15,6 +15,12 @@ export type ZeroScoutIntelligenceResult = {
   intelligenceScore?: number
   confidence?: number
   summary?: string
+  suggestedAnswer?: string
+  reasoningSummary?: string
+  intent?: string
+  missingFields?: string[]
+  safetyBoundaries?: string[]
+  proofMetadata?: Record<string, unknown>
   signals?: string[]
   riskFlags?: string[]
   recommendedActions?: string[]

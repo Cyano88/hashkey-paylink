@@ -278,6 +278,33 @@ function fallbackHelperAnswer(question: string) {
   return ''
 }
 
+function classifyHelperRequest(question: string): { helperIntent: string; qualityMode: 'fast' | 'standard' | 'deep' } {
+  const value = question.toLowerCase()
+  if (isNameQuestion(question)) return { helperIntent: 'personal-memory', qualityMode: 'fast' }
+  if (/^\s*(hi|hello|hey|yo|gm|good morning|good afternoon|good evening)\b/.test(value)) {
+    return { helperIntent: 'greeting', qualityMode: 'fast' }
+  }
+  if (/\b(what can you do|how can you help|help me|capabilities|what do you help with)\b/.test(value)) {
+    return { helperIntent: 'capabilities', qualityMode: 'fast' }
+  }
+  if (/\b(research|analyze|analysis|strategy|investor|pitch|grant|roadmap|architecture|design|compare|plan|proposal|polymarket|lp scout|liquidity|market|x402 architecture|product strategy)\b/.test(value)) {
+    return { helperIntent: 'deep-research', qualityMode: 'deep' }
+  }
+  if (/\b(receipt|proof|0g archive|share receipt)\b/.test(value)) {
+    return { helperIntent: 'receipt-help', qualityMode: 'standard' }
+  }
+  if (/\b(x402|activate x402|service balance|wallet balance|circle balance)\b/.test(value)) {
+    return { helperIntent: 'x402-help', qualityMode: 'standard' }
+  }
+  if (/\b(paylink|payment link|request|invoice|collect|charge|wallet|base|arc|arbitrum|solana|usdc)\b/.test(value)) {
+    return { helperIntent: 'payment-help', qualityMode: 'standard' }
+  }
+  if (question.length > 220) {
+    return { helperIntent: 'long-form-helper', qualityMode: 'deep' }
+  }
+  return { helperIntent: 'general-helper', qualityMode: 'standard' }
+}
+
 function answerFromZeroScoutGuidance(question: string, zeroScoutGuidance?: ZeroScoutHelperGuidance) {
   const guidance = cleanZeroScoutGuidanceText(zeroScoutGuidance?.guidance ?? '')
   if (!guidance) return ''
@@ -374,6 +401,7 @@ export default async function handler(req: Request, res: Response) {
     const memorySummaryHash = memorySummary
       ? crypto.createHash('sha256').update(memorySummary).digest('hex')
       : undefined
+    const helperRouting = classifyHelperRequest(question)
     const zeroScoutGuidance = await getZeroScoutHelperGuidance({
       service: 'Hash PayLink Helper',
       action: 'helper-chat-preflight',
@@ -386,6 +414,8 @@ export default async function handler(req: Request, res: Response) {
         eventId,
         question,
         accessMode,
+        helperIntent: helperRouting.helperIntent,
+        qualityMode: helperRouting.qualityMode,
         memorySummary,
         memorySummaryHash,
       },
@@ -420,6 +450,8 @@ export default async function handler(req: Request, res: Response) {
         eventId,
         question,
         accessMode,
+        helperIntent: helperRouting.helperIntent,
+        qualityMode: helperRouting.qualityMode,
         memorySummaryHash,
         guidanceRequestHash: zeroScoutGuidance?.requestHash,
       },
@@ -430,6 +462,8 @@ export default async function handler(req: Request, res: Response) {
       result: {
         answerHash: crypto.createHash('sha256').update(answer).digest('hex'),
         guidanceHash: zeroScoutGuidance?.guidanceHash,
+        helperIntent: helperRouting.helperIntent,
+        qualityMode: helperRouting.qualityMode,
         usageRemaining: usagePreview.remaining,
       },
     })
