@@ -3123,7 +3123,7 @@ export default function PaymentPage() {
       : (txHash ? `${meta.explorerUrl}/tx/${txHash}` : null)
     const ogExplorerUrl = paymentReceipt?.proof?.ogExplorer || (paymentReceipt?.proof?.ogTxHash ? `https://chainscan.0g.ai/tx/${paymentReceipt.proof.ogTxHash}` : '')
     const ogProofValue = paymentReceipt?.proof?.ogTxHash || paymentReceipt?.proof?.ogRootHash || ''
-    const receiptReady = Boolean(paymentReceipt && txHash && ogProofValue)
+    const receiptReady = Boolean(paymentReceipt && txHash)
     const archivePendingLabel = receiptArchiveTimedOut
       ? 'Archive pending'
       : receiptPollAttempts >= 9
@@ -3351,6 +3351,11 @@ export default function PaymentPage() {
                   <Share2 className="h-4 w-4" />
                   {receiptShared ? 'Downloaded' : 'Share receipt'}
                 </button>
+                {!ogProofValue && (
+                  <p className="text-center text-[11px] font-medium text-gray-400">
+                    Receipt is ready. 0G archive proof will update automatically when finalized.
+                  </p>
+                )}
               </div>
             )}
 
