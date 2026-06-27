@@ -498,9 +498,23 @@ function compactSavedWallet(wallet: string) {
 }
 
 function friendlyName(value: string) {
-  const clean = value.trim()
+  const clean = normalizeHelperName(value)
   if (!clean || clean.startsWith('@')) return clean
   return clean.charAt(0).toUpperCase() + clean.slice(1)
+}
+
+function normalizeHelperName(value: string) {
+  return value
+    .trim()
+    .replace(/^@+/, '')
+    .replace(/\b(?:not|is not|isn't)\s+@?[a-zA-Z0-9_.-]+.*$/i, '')
+    .replace(/\banymore\b.*$/i, '')
+    .replace(/[.?!,;:]+$/g, '')
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 3)
+    .join(' ')
+    .slice(0, 48)
 }
 
 function isAskingUserName(text: string) {
@@ -509,20 +523,23 @@ function isAskingUserName(text: string) {
 
 function extractRememberedName(text: string) {
   const match = text.match(/\b(?:remember\s+)?(?:my name is|call me|i am|i'm)\s+(@?[a-zA-Z][\w .-]{1,40})/i)?.[1] ?? ''
-  return match
-    .replace(/[.?!,;:]+$/g, '')
-    .trim()
-    .slice(0, 48)
+  return normalizeHelperName(match)
+}
+
+function extractRelationshipMemory(text: string) {
+  const match = text.match(/\b(?:i have|my)\s+(friend|sister|brother|mother|father|partner|client|customer|payer|colleague)\s+(?:called|named|is)\s+(@?[a-zA-Z][\w .-]{1,40})/i)
+  if (!match) return null
+  const relation = match[1].toLowerCase()
+  const name = normalizeHelperName(match[2])
+  if (!name) return null
+  return { relation, name: friendlyName(name) }
 }
 
 function nameFromMemorySummary(value: string) {
   const summary = value.trim()
   if (!summary) return ''
   const match = summary.match(/\b(?:known as|called|prefers to be called)\s+(@?[a-zA-Z][\w .-]{1,40})/i)?.[1] ?? ''
-  return match
-    .replace(/[.?!,;:]+$/g, '')
-    .trim()
-    .slice(0, 48)
+  return normalizeHelperName(match)
 }
 
 function todayKey() {
@@ -599,7 +616,7 @@ export default function TelegramPaymentLinks() {
   const [polymarketBridgeError, setPolymarketBridgeError] = useState('')
   const [lpScoutPrefill, setLpScoutPrefill] = useState<LpScoutPrefill | null>(null)
   const [recoveredTelegramName, setRecoveredTelegramName] = useState('')
-  const [savedHelperName, setSavedHelperName] = useState(() => window.localStorage.getItem('hashpaylink-helper-name') ?? '')
+  const [savedHelperName, setSavedHelperName] = useState(() => normalizeHelperName(window.localStorage.getItem('hashpaylink-helper-name') ?? ''))
   const [agentPromptIndex, setAgentPromptIndex] = useState(0)
   const telegramName = useMemo(() => {
     const webAppUser = telegramWebAppUser()
@@ -1231,8 +1248,8 @@ function TelegramHelperPanel({
 }) {
   const cleanTelegramName = telegramName === 'there' ? '' : telegramName
   const [started, setStarted] = useState(true)
-  const [helperName, setHelperName] = useState(() => window.localStorage.getItem('hashpaylink-helper-name') ?? (initialPayer || cleanTelegramName))
-  const [helperNameDraft, setHelperNameDraft] = useState(() => window.localStorage.getItem('hashpaylink-helper-name') ?? (initialPayer || cleanTelegramName))
+  const [helperName, setHelperName] = useState(() => normalizeHelperName(window.localStorage.getItem('hashpaylink-helper-name') ?? (initialPayer || cleanTelegramName)))
+  const [helperNameDraft, setHelperNameDraft] = useState(() => normalizeHelperName(window.localStorage.getItem('hashpaylink-helper-name') ?? (initialPayer || cleanTelegramName)))
   const [eventId, setEventId] = useState(initialEventId)
   const [payer, setPayer] = useState(initialPayer || cleanTelegramName)
   const [messages, setMessages] = useState<HelperMessage[]>([])
@@ -1308,8 +1325,12 @@ function TelegramHelperPanel({
         if (!data.ok) throw new Error(data.error || 'Could not load helper profile.')
         setProfile(data.profile ?? null)
         if (data.profile?.displayName) {
-          setHelperName(current => current || data.profile?.displayName || '')
-          setHelperNameDraft(current => current || data.profile?.displayName || '')
+          const cleanDisplayName = normalizeHelperName(data.profile.displayName)
+          if (cleanDisplayName) {
+            window.localStorage.setItem('hashpaylink-helper-name', cleanDisplayName)
+            setHelperName(cleanDisplayName)
+            setHelperNameDraft(cleanDisplayName)
+          }
         }
         const recoveredName = data.profile?.telegramHandle || data.profile?.displayName || ''
         if (recoveredName) onRecoverTelegramName(recoveredName)
@@ -1330,7 +1351,7 @@ function TelegramHelperPanel({
   }
 
   function saveName() {
-    const clean = helperNameDraft.trim().slice(0, 48)
+    const clean = normalizeHelperName(helperNameDraft)
     if (!clean) return
     window.localStorage.setItem('hashpaylink-helper-name', clean)
     setHelperName(clean)
@@ -1716,8 +1737,33 @@ function TelegramHelperPanel({
         void saveProfile({ displayName: cleanName, memorySummary: nextMemory })
         return
       }
+      const relationshipMemory = extractRelationshipMemory(nextQuestion)
+      if (relationshipMemory) {
+        const memoryLine = `User has a ${relationshipMemory.relation} called ${relationshipMemory.name}.`
+        const nextMemory = [memoryDraft.trim() || profile?.memorySummary || '', memoryLine]
+          .filter(Boolean)
+          .join('\n')
+          .slice(0, 1200)
+        setMemoryDraft(nextMemory)
+        const fallbackAnswer = `Got it. I'll remember that your ${relationshipMemory.relation} is ${relationshipMemory.name}.`
+        const answer = await polishLocalHelperResult(
+          [
+            'local_action=remember_relationship',
+            `relationship=${relationshipMemory.relation}`,
+            `name=${relationshipMemory.name}`,
+            'Return one warm, short confirmation sentence only.',
+          ].join('\n'),
+          fallbackAnswer,
+          nextMemory,
+        )
+        finishHelperMessage(nextQuestion, {
+          answer,
+        })
+        void saveProfile({ memorySummary: nextMemory })
+        return
+      }
       if (isAskingUserName(nextQuestion)) {
-        const knownName = helperName || profile?.displayName || helperNameDraft || cleanTelegramName || nameFromMemorySummary(memoryDraft || profile?.memorySummary || '')
+        const knownName = normalizeHelperName(helperName || profile?.displayName || helperNameDraft || nameFromMemorySummary(memoryDraft || profile?.memorySummary || '') || '')
         const fallbackAnswer = knownName && knownName !== 'there'
           ? `You're ${friendlyName(knownName)}.`
           : "I don't know your preferred name yet. Tell me what to call you and I'll remember it."

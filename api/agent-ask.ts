@@ -264,7 +264,9 @@ function nameFromMemory(memorySummary: string, payerName: string) {
     /\bHi\s+([A-Za-z][A-Za-z0-9_.-]{1,40})\b/i.exec(memorySummary)?.[1],
     !isLikelyIdentifier(payerName) ? payerName : '',
   ]
-  const picked = candidates.map(item => String(item ?? '').trim()).find(Boolean)
+  const picked = candidates
+    .map(item => String(item ?? '').trim().replace(/\b(?:not|is not|isn't)\s+@?[a-zA-Z0-9_.-]+.*$/i, '').replace(/\banymore\b.*$/i, '').trim())
+    .find(Boolean)
   return picked ? titleName(picked) : ''
 }
 
@@ -275,6 +277,7 @@ function cleanZeroScoutGuidanceText(value: string) {
     .filter(line => line && !/ZeroScout sponsorship is required/i.test(line))
     .filter(line => !line.includes(GENERIC_STRATEGY_PHRASE))
     .filter(line => !GENERIC_STRATEGY_PATTERNS.some(pattern => pattern.test(line)))
+    .filter(line => !/^I can help with payments,\s*PayLinks,\s*StreamPay,\s*PolyDesk,\s*wallets,\s*and setup/i.test(line))
     .slice(0, 5)
     .join('\n')
     .trim()
@@ -284,6 +287,11 @@ function fallbackHelperAnswer(question: string) {
   if (/\blocal_action=remember_name\b/i.test(question)) {
     const name = /preferred_name=([^\n]+)/i.exec(question)?.[1]?.trim()
     return name ? `Got it. I will call you ${name}.` : 'Got it. I will remember that.'
+  }
+  if (/\blocal_action=remember_relationship\b/i.test(question)) {
+    const relationship = /relationship=([^\n]+)/i.exec(question)?.[1]?.trim() || 'friend'
+    const name = /name=([^\n]+)/i.exec(question)?.[1]?.trim()
+    return name ? `Got it. I will remember that your ${relationship} is ${name}.` : 'Got it. I will remember that.'
   }
   if (/\blocal_action=personal_memory_answer\b/i.test(question)) {
     const name = /known_name=([^\n]+)/i.exec(question)?.[1]?.trim()
@@ -340,6 +348,14 @@ function fallbackHelperAnswer(question: string) {
 
 function isGreetingQuestion(question: string) {
   return /^\s*(hi|hello|hey|yo|gm|good morning|good afternoon|good evening)\b/i.test(question)
+}
+
+function cleanQuestionForFallback(question: string) {
+  return question
+    .trim()
+    .replace(/\s+/g, ' ')
+    .replace(/[<>]/g, '')
+    .slice(0, 180)
 }
 
 function classifyHelperRequest(question: string): { helperIntent: string; qualityMode: 'fast' | 'standard' | 'deep' } {
@@ -399,7 +415,10 @@ function getHelperResponse(question: string, payerName: string, chain: string, a
     return `Your paid helper access is verified: ${amount} on ${chain}. What would you like to do next?`
   }
 
-  return 'I can help with payments, PayLinks, StreamPay, PolyDesk, wallets, and setup. Ask me what you want to create or check next.'
+  const cleanQuestion = cleanQuestionForFallback(question)
+  return cleanQuestion
+    ? `I hear you. Ask Hash can answer that too, but I did not get enough ZeroScout guidance for "${cleanQuestion}" just now. Try once more and I will answer directly.`
+    : 'I can answer general questions too. Send the question again and I will respond directly.'
 }
 
 // ─── Handler ──────────────────────────────────────────────────────────────────

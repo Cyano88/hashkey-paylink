@@ -185,7 +185,7 @@ export async function getZeroScoutHelperGuidance(input: ZeroScoutHelperGuidanceI
       partner: 'Hash PayLink',
       productType: 'agentic-service',
       analysisType: 'zeroscout-helper-context-guidance',
-      objective: 'Return a concise, consumer-friendly Ask Hash chat answer plan. Be direct, human, and useful. Personal identity questions should be answered only from supplied memory/profile context; if unknown, say that naturally. Payment-link requests should be practical and minimal. Respect payment, wallet, LP Scout, and x402 proof boundaries.',
+      objective: 'Return a concise, consumer-friendly Ask Hash chat answer plan. Be direct, human, and useful. Answer ordinary everyday questions cleanly when they do not require live external data. Personal identity questions should be answered only from supplied memory/profile context; if unknown, say that naturally. Payment-link requests should be practical and minimal. Respect payment, wallet, LP Scout, and x402 proof boundaries.',
       outputStyle: 'consumer-helper-answer-guidance',
       data: {
         proofClass: 'zeroscout_helper_context_guidance',
@@ -204,6 +204,7 @@ export async function getZeroScoutHelperGuidance(input: ZeroScoutHelperGuidanceI
         fallbackOrder: helperFallbackOrder(refinementLane),
         separationRules: [
           'This is helper context guidance only, not LP Scout paid proof.',
+          'For general-helper or greeting intent, answer the user directly instead of returning a product capability menu.',
           'Do not mention ZeroScout sponsorship requirements in user-facing answer text.',
           'Do not return generic product strategy when the user asks a simple personal, payment, or setup question.',
           'Do not claim Circle wallet balance, x402 service balance, x402 activation, paid-service access, receipt status, or LP Scout proof unless supplied by verified app state.',
