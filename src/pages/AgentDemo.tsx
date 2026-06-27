@@ -2610,7 +2610,7 @@ export default function AgentDemo({ embedded = false, forceProfile = false }: Ag
                         </p>
                         <div className="mt-2 inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400">
                           <span className="rounded border border-emerald-100 px-1 text-[8px] font-black text-emerald-600 dark:border-emerald-300/20 dark:text-emerald-200">ZS</span>
-                          ZeroScout-sponsored helper
+                          ZeroScout-ready helper
                         </div>
                       </div>
                     )}
