@@ -420,6 +420,20 @@ function extractTarget(text: string, mode: RequestMode) {
   return ''
 }
 
+function extractInlinePayerName(text: string, mode: RequestMode) {
+  if (mode !== 'person') return ''
+  const clean = stripWallets(text)
+    .replace(/\b\d+(?:\.\d{1,6})?\s*(?:usdc|usd)\b/gi, '')
+    .replace(/\b(?:base|arc|solana|arbitrum|all networks?|any network|evm|usdc)\b/gi, '')
+    .replace(/\b(?:for|purpose|memo|reason)\s+[^,.;]+/gi, '')
+    .replace(/\b(?:request|collect|charge|invoice|paylink|payment|link|continue|use|saved|wallet|new|receive)\b/gi, '')
+    .replace(/[^\p{L}\p{M}' -]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  const firstName = clean.match(/\b[\p{L}\p{M}][\p{L}\p{M}'-]{1,40}\b/u)?.[0] ?? ''
+  return firstName.slice(0, 48)
+}
+
 function extractPurpose(text: string) {
   const clean = text.replace(/\s+/g, ' ').trim()
   const match = clean.match(/\b(?:for|purpose|memo|reason)\s+([^?.!,;]+)/i)?.[1]?.trim() ?? ''
@@ -1355,11 +1369,12 @@ function TelegramHelperPanel({
     const networkFromText = extractNetwork(text)
     const nextNetwork = networkFromText || existing?.network || (walletFromText ? (walletFromText.startsWith('0x') ? 'base' : 'solana') : '')
     const targetFromText = extractTarget(text, mode)
+    const inlineTarget = !targetFromText && existing && !existing.target ? extractInlinePayerName(text, mode) : ''
     const purposeFromText = extractPurpose(text)
     const amountFromText = extractAmount(text)
     return {
       mode,
-      target: targetFromText || existing?.target || '',
+      target: targetFromText || inlineTarget || existing?.target || '',
       amount: amountFromText || existing?.amount || '',
       network: nextNetwork,
       label: purposeFromText || existing?.label || '',

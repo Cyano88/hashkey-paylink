@@ -299,6 +299,10 @@ function fallbackHelperAnswer(question: string) {
   return ''
 }
 
+function isGreetingQuestion(question: string) {
+  return /^\s*(hi|hello|hey|yo|gm|good morning|good afternoon|good evening)\b/i.test(question)
+}
+
 function classifyHelperRequest(question: string): { helperIntent: string; qualityMode: 'fast' | 'standard' | 'deep' } {
   const value = question.toLowerCase()
   if (isNameQuestion(question)) return { helperIntent: 'personal-memory', qualityMode: 'fast' }
@@ -339,6 +343,11 @@ function getHelperResponse(question: string, payerName: string, chain: string, a
     return knownName
       ? `You are ${knownName}.`
       : "I do not know your preferred name yet. Tell me what to call you and I will remember it for future chats."
+  }
+
+  if (isGreetingQuestion(question)) {
+    const knownName = nameFromMemory(memorySummary, payerName)
+    return `Hey${knownName ? ` ${knownName}` : ''}. I can help you create a PayLink, check a receipt, set up wallets, use StreamPay, or research PolyDesk and Polymarket flows.`
   }
 
   const zeroScoutAnswer = answerFromZeroScoutGuidance(question, zeroScoutGuidance)
@@ -431,31 +440,33 @@ export default async function handler(req: Request, res: Response) {
     const memorySummaryHash = memorySummary
       ? crypto.createHash('sha256').update(memorySummary).digest('hex')
       : undefined
-    const zeroScoutGuidance = await getZeroScoutHelperGuidance({
-      service: 'Hash PayLink Helper',
-      action: 'helper-chat-preflight',
-      user: {
-        payer: access.payment.payer,
-        email: access.payment.payer,
-        wallet: access.payment.payer,
-      },
-      request: {
-        eventId,
-        question,
-        accessMode,
-        helperIntent: helperRouting.helperIntent,
-        qualityMode: helperRouting.qualityMode,
-        memorySummary,
-        memorySummaryHash,
-      },
-      sourceProof: {
-        type: accessMode === HELPER_FREE_ACCESS_MODE ? 'helper-free-access' : 'helper_access_receipt',
-        contract: access.proof.contract,
-        network: access.proof.network,
-        rootHash: access.proof.rootHash,
-        ogTxHash: access.proof.ogTxHash,
-      },
-    })
+    const zeroScoutGuidance = helperRouting.qualityMode === 'fast'
+      ? undefined
+      : await getZeroScoutHelperGuidance({
+        service: 'Hash PayLink Helper',
+        action: 'helper-chat-preflight',
+        user: {
+          payer: access.payment.payer,
+          email: access.payment.payer,
+          wallet: access.payment.payer,
+        },
+        request: {
+          eventId,
+          question,
+          accessMode,
+          helperIntent: helperRouting.helperIntent,
+          qualityMode: helperRouting.qualityMode,
+          memorySummary,
+          memorySummaryHash,
+        },
+        sourceProof: {
+          type: accessMode === HELPER_FREE_ACCESS_MODE ? 'helper-free-access' : 'helper_access_receipt',
+          contract: access.proof.contract,
+          network: access.proof.network,
+          rootHash: access.proof.rootHash,
+          ogTxHash: access.proof.ogTxHash,
+        },
+      })
 
     const answer = getHelperResponse(
       question,
