@@ -448,6 +448,40 @@ function wantsNewWallet(text: string) {
   return /\b(new|replace|change|different|another)\b/i.test(text)
 }
 
+function isPaylinkDraftSideQuestion(text: string) {
+  return /[?]/.test(text)
+    || /\b(can i|can we|should i|should we|do i|do we|what if|which|what|how|why|ask|wait|before|first|answered|answer my question|not answered)\b/i.test(text)
+}
+
+function hasPaylinkDraftUpdate(text: string, draft: HelperPaylinkDraft | null) {
+  if (wantsSavedWallet(text) || wantsNewWallet(text)) return true
+  if (extractAmount(text) || extractNetwork(text) || extractWallet(text) || extractPurpose(text)) return true
+  if (!draft?.target) {
+    const mode = draft?.mode ?? (isGroupRequestIntent(text) ? 'group' : 'person')
+    return Boolean(extractTarget(text, mode) || extractInlinePayerName(text, mode))
+  }
+  return false
+}
+
+function paylinkDraftSideQuestionFallback(draft: HelperPaylinkDraft, text: string) {
+  const target = draft.target ? friendlyName(draft.target) : 'the payer'
+  const missing = describeMissingDraftFields(draft).filter(item => item !== 'receive wallet' || !draft.offeredSavedWallet)
+  if (/\b(network|send through|send with|chain|base|solana|arc|arbitrum)\b/i.test(text)) {
+    return `Yes. Ask ${target} which network they can use first. I will keep this PayLink draft open while you confirm.`
+  }
+  if (/\b(wallet|receive address|address)\b/i.test(text)) {
+    return `Yes. You can confirm the receive wallet first. I will keep this draft open until you send the wallet or choose the saved one.`
+  }
+  if (/\b(answered|answer my question|not answered)\b/i.test(text)) {
+    return missing.length
+      ? `You're right. I should answer the question first. You can confirm with ${target}, then send ${missing.join(', ')} when ready.`
+      : `You're right. I should answer the question first. This draft is still open, and I can continue from here.`
+  }
+  return missing.length
+    ? `Yes. You can confirm that first. I will keep this PayLink draft open; send ${missing.join(', ')} when ready.`
+    : `Yes. This PayLink draft is still open, and I can continue from here.`
+}
+
 function describeMissingDraftFields(draft: HelperPaylinkDraft, savedWallet?: string) {
   const missing = [
     !draft.target && (draft.mode === 'group' ? 'group or collection name' : 'payer name'),
@@ -1506,6 +1540,31 @@ function TelegramHelperPanel({
     if (!paylinkDraft && !paymentQuotaStatus().allowed) {
       finishHelperMessage(nextQuestion, {
         answer: 'You have used today\'s 20 AI-assisted PayLink requests. The normal Payment Links tab is still available for manual requests.',
+      })
+      return true
+    }
+    if (paylinkDraft && isPaylinkDraftSideQuestion(nextQuestion) && !hasPaylinkDraftUpdate(nextQuestion, paylinkDraft)) {
+      const missingForDraftQuestion = describeMissingDraftFields(paylinkDraft).filter(item => item !== 'receive wallet' || !paylinkDraft.offeredSavedWallet)
+      const fallbackAnswer = paylinkDraftSideQuestionFallback(paylinkDraft, nextQuestion)
+      const answer = await polishLocalHelperResult(
+        [
+          'local_action=payment_request_draft_question',
+          `user_question=${nextQuestion}`,
+          `payer=${paylinkDraft.target ? friendlyName(paylinkDraft.target) : ''}`,
+          `known_amount=${paylinkDraft.amount}`,
+          `known_purpose=${paylinkDraft.label}`,
+          `known_network=${paylinkDraft.network ? requestNetworkLabels[paylinkDraft.network] : ''}`,
+          `has_receive_wallet=${Boolean(paylinkDraft.wallet)}`,
+          `missing_fields=${missingForDraftQuestion.join(', ')}`,
+          'Answer the user question directly in the context of the open PayLink draft.',
+          'Do not re-ask for missing fields unless the answer naturally says what details are still needed later.',
+          'Keep the PayLink draft open.',
+          'Return one short consumer chat answer only.',
+        ].join('\n'),
+        fallbackAnswer,
+      )
+      finishHelperMessage(nextQuestion, {
+        answer,
       })
       return true
     }

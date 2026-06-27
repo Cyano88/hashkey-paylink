@@ -301,6 +301,22 @@ function fallbackHelperAnswer(question: string) {
     const missing = /missing_fields=([^\n]+)/i.exec(question)?.[1]?.trim()
     return missing ? `I need ${missing}. You can send it in one line.` : 'I need the missing payment details. You can send them in one line.'
   }
+  if (/\blocal_action=payment_request_draft_question\b/i.test(question)) {
+    const userQuestion = /user_question=([^\n]+)/i.exec(question)?.[1]?.trim() ?? ''
+    const payer = /payer=([^\n]+)/i.exec(question)?.[1]?.trim() || 'the payer'
+    const missing = /missing_fields=([^\n]+)/i.exec(question)?.[1]?.trim()
+    if (/\b(network|send through|send with|chain)\b/i.test(userQuestion)) {
+      return `Yes. Ask ${payer} which network they can use first. I will keep this PayLink draft open while you confirm.`
+    }
+    if (/\b(answered|answer my question|not answered)\b/i.test(userQuestion)) {
+      return missing
+        ? `You're right. I should answer the question first. You can confirm with ${payer}, then send ${missing} when ready.`
+        : `You're right. I should answer the question first. This draft is still open, and I can continue from here.`
+    }
+    return missing
+      ? `Yes. You can confirm that first. I will keep this PayLink draft open; send ${missing} when ready.`
+      : `Yes. This PayLink draft is still open, and I can continue from here.`
+  }
   if (/\bpaylink_ready\b/i.test(question)) {
     return /\bgroup|collection/i.test(question) ? 'Collection ready.' : 'PayLink ready.'
   }
