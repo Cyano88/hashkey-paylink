@@ -105,6 +105,46 @@ function pickFirstId(value) {
   return String(first.id || first.operatorId || first.billerId || first.code || first.serviceID || first.productId || '')
 }
 
+function countryAlpha3(value) {
+  const code = String(value || '').trim().toUpperCase()
+  const map = {
+    NG: 'NGA',
+    NGA: 'NGA',
+    GH: 'GHA',
+    GHA: 'GHA',
+    KE: 'KEN',
+    KEN: 'KEN',
+    UG: 'UGA',
+    UGA: 'UGA',
+  }
+  return map[code] || code
+}
+
+function normalizeE164(value, countryCode) {
+  const raw = String(value || '').trim()
+  if (!raw) return ''
+  if (raw.startsWith('+')) return raw.replace(/[^\d+]/g, '')
+
+  const digits = raw.replace(/\D/g, '')
+  const alpha3 = countryAlpha3(countryCode)
+  if (alpha3 === 'NGA') {
+    if (digits.startsWith('0')) return `+234${digits.slice(1)}`
+    if (digits.startsWith('234')) return `+${digits}`
+  }
+  if (alpha3 === 'GHA') {
+    if (digits.startsWith('0')) return `+233${digits.slice(1)}`
+    if (digits.startsWith('233')) return `+${digits}`
+  }
+  if (digits.startsWith('1') || digits.startsWith('2') || digits.startsWith('3') || digits.startsWith('4') || digits.startsWith('5') || digits.startsWith('6') || digits.startsWith('7') || digits.startsWith('8') || digits.startsWith('9')) {
+    return `+${digits}`
+  }
+  return digits
+}
+
+function basicAuth(username, password) {
+  return `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`
+}
+
 class ProbeResult {
   constructor(name) {
     this.name = name
@@ -126,6 +166,132 @@ class ProbeResult {
   }
 }
 
+class DtOneProbe {
+  constructor() {
+    this.name = 'DT One DVS'
+    this.baseUrl = (process.env.DTONE_BASE_URL || 'https://preprod-dvs-api.dtone.com/v1').replace(/\/+$/, '')
+    this.apiKey = (process.env.DTONE_API_KEY || '').trim()
+    this.apiSecret = (process.env.DTONE_API_SECRET || '').trim()
+    this.productId = (process.env.DTONE_PRODUCT_ID || '').trim()
+    this.callbackUrl = (process.env.DTONE_CALLBACK_URL || '').trim()
+  }
+
+  matches(filter) {
+    return ['dtone', 'dt-one', 'dt one', 'dt'].includes(filter) || this.name.toLowerCase().includes(filter)
+  }
+
+  configured() {
+    return Boolean(this.apiKey && this.apiSecret)
+  }
+
+  headers() {
+    return { Authorization: basicAuth(this.apiKey, this.apiSecret) }
+  }
+
+  async run() {
+    const result = new ProbeResult(this.name)
+    const alpha3 = countryAlpha3(country)
+    const e164 = normalizeE164(customer, alpha3)
+
+    if (!this.configured()) {
+      result.add('credentials', 'SKIP', 'Missing DTONE_API_KEY or DTONE_API_SECRET. Generate pre-production API keys in DT Shop, then retry.')
+      result.add('base URL', 'INFO', this.baseUrl)
+      return result
+    }
+
+    const headers = this.headers()
+    result.add('credentials', 'PASS', { baseUrl: this.baseUrl, apiKey: mask(this.apiKey), country: alpha3 })
+
+    const discoveryPaths = [
+      `/countries/${encodeURIComponent(alpha3)}`,
+      `/operators?country_iso_code=${encodeURIComponent(alpha3)}&per_page=10`,
+      `/products?country_iso_code=${encodeURIComponent(alpha3)}&per_page=10`,
+      `/products?service_id=1&country_iso_code=${encodeURIComponent(alpha3)}&per_page=10`,
+      '/services?per_page=100',
+    ]
+
+    let catalog = null
+    let catalogPath = ''
+    for (const path of discoveryPaths) {
+      const response = await request(`${this.baseUrl}${path}`, { headers })
+      result.add(`catalog ${path}`, response.ok ? 'PASS' : 'MISS', {
+        status: response.status,
+        sample: response.ok ? summarizeRows(response.body) : response.body,
+      })
+      if (response.ok && !catalog && /\/products/.test(path)) {
+        catalog = response.body
+        catalogPath = path
+      }
+    }
+
+    if (customer) {
+      const lookupPath = `/lookup/mobile-number/${encodeURIComponent(e164)}?per_page=10`
+      const response = await request(`${this.baseUrl}${lookupPath}`, { headers })
+      result.add(`lookup mobile ${lookupPath}`, response.ok ? 'PASS' : 'MISS', {
+        status: response.status,
+        normalizedCustomer: mask(e164),
+        sample: response.ok ? summarizeRows(response.body) : response.body,
+      })
+    } else {
+      result.add('lookup mobile', 'SKIP', 'Set BILLER_PROBE_CUSTOMER or --customer with an E.164 phone number to test operator lookup.')
+    }
+
+    const selectedProductId = this.productId || pickFirstId(catalog)
+    if (!selectedProductId) {
+      result.add('select product', 'FAIL', 'No product id found. Set DTONE_PRODUCT_ID after checking /products catalog access.')
+      return result
+    }
+    result.add('select product', 'PASS', { catalogPath, productId: selectedProductId })
+
+    const productResponse = await request(`${this.baseUrl}/products/${encodeURIComponent(selectedProductId)}`, { headers })
+    result.add(`product /products/${selectedProductId}`, productResponse.ok ? 'PASS' : 'MISS', {
+      status: productResponse.status,
+      sample: productResponse.ok ? summarizeRows([productResponse.body]) : productResponse.body,
+    })
+
+    result.add('quote', 'INFO', {
+      amount,
+      country: alpha3,
+      normalizedCustomer: e164 ? mask(e164) : 'not set',
+      note: 'Use DT One product pricing and required_*_identifier_fields to choose fixed/ranged value UI and transaction payload.',
+    })
+
+    if (!execute) {
+      result.add('pay', 'SKIP', 'Dry run. Pass --execute only after DT One sandbox credentials, DTONE_PRODUCT_ID, and wallet funding are confirmed.')
+      result.add('receipt', 'SKIP', 'Payment was not executed.')
+      return result
+    }
+
+    if (!e164) {
+      result.add('pay', 'FAIL', 'DT One mobile topup execution requires --customer in E.164 format or a country-local number that can be normalized.')
+      return result
+    }
+
+    const externalId = `hpl-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`.slice(0, 40)
+    const transactionPayload = {
+      external_id: externalId,
+      product_id: Number(selectedProductId),
+      auto_confirm: true,
+      credit_party_identifier: { mobile_number: e164 },
+    }
+    if (this.callbackUrl) transactionPayload.callback_url = this.callbackUrl
+    if (/ranged/i.test(String(productResponse.body?.type || ''))) {
+      transactionPayload.calculation_mode = 'SOURCE_AMOUNT'
+      transactionPayload.source = { unit_type: 'CURRENCY', unit: 'USD', amount }
+    }
+
+    const response = await request(`${this.baseUrl}/transactions/async`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(transactionPayload),
+    })
+    result.add('pay /transactions/async', response.ok ? 'PASS' : 'FAIL', { status: response.status, body: response.body })
+    if (response.ok) result.add('receipt', 'PASS', response.body)
+
+    return result
+  }
+}
+
 class ReloadlyProbe {
   constructor() {
     this.name = 'Reloadly Utility Payments'
@@ -144,6 +310,10 @@ class ReloadlyProbe {
         : process.env.RELOADLY_UTILITY_AUDIENCE || this.baseUrl
     ).replace(/\/+$/, '')
     this.token = ''
+  }
+
+  matches(filter) {
+    return this.name.toLowerCase().includes(filter)
   }
 
   configured() {
@@ -301,6 +471,10 @@ class BaxiProbe {
     this.apiKey = (process.env.BAXI_API_KEY || process.env.BAXI_SECRET_KEY || '').trim()
   }
 
+  matches(filter) {
+    return this.name.toLowerCase().includes(filter)
+  }
+
   configured() {
     return Boolean(this.baseUrl && this.apiKey)
   }
@@ -421,12 +595,13 @@ async function main() {
   }
 
   const providers = [
+    new DtOneProbe(),
     new ReloadlyProbe(),
     new BaxiProbe(),
-  ].filter((provider) => providerFilter === 'all' || provider.name.toLowerCase().includes(providerFilter))
+  ].filter((provider) => providerFilter === 'all' || provider.matches(providerFilter))
 
   if (providers.length === 0) {
-    throw new Error(`No provider matched "${providerFilter}". Use all, reloadly, or baxi.`)
+    throw new Error(`No provider matched "${providerFilter}". Use all, dtone, reloadly, or baxi.`)
   }
 
   for (const provider of providers) {
