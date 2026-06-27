@@ -257,6 +257,12 @@ const blockedPayerNames = new Set([
   'payment',
   'paylink',
   'invoice',
+  'buy',
+  'send',
+  'receive',
+  'confirm',
+  'continue',
+  'use',
   'base',
   'arc',
   'solana',
@@ -467,7 +473,7 @@ const helperModes: Array<{ id: HelperMode; label: string; intro: string }> = [
 ]
 
 function extractPayerCorrection(text: string) {
-  const match = text.match(/\b(?:payer(?: name)?|her name'?s?|her name is|his name'?s?|his name is|their name'?s?|their name is)\s*(?:is|=|:)?\s+(@?[a-zA-Z][\w.-]{1,40})\b/i)?.[1] ?? ''
+  const match = text.match(/\b(?:change|update|correct|set)?\s*(?:payer(?: name)?|her name'?s?|her name is|his name'?s?|his name is|their name'?s?|their name is)\s*(?:to|is|=|:)?\s+(@?[a-zA-Z][\w.-]{1,40})\b/i)?.[1] ?? ''
   const clean = normalizeHelperName(match)
   return clean && !blockedPayerNames.has(clean.toLowerCase()) ? clean : ''
 }
@@ -488,7 +494,7 @@ function extractInlinePayerName(text: string, mode: RequestMode) {
 
 function extractPurpose(text: string) {
   const clean = text.replace(/\s+/g, ' ').trim()
-  const match = clean.match(/\b(?:purpose|memo|reason)\s*(?:for\s+payment\s*)?(?:is|=|:)?\s*(?:for\s+)?([^?.!,;]+)/i)?.[1]?.trim()
+  const match = clean.match(/\b(?:change|update|correct|set)?\s*(?:purpose|memo|reason)\s*(?:for\s+payment\s*)?(?:to|is|=|:)?\s*(?:for\s+)?([^?.!,;]+)/i)?.[1]?.trim()
     ?? clean.match(/\bfor\s+([^?.!,;]+)/i)?.[1]?.trim()
     ?? ''
   if (!match) return ''
@@ -1638,7 +1644,9 @@ function TelegramHelperPanel({
     const walletFromText = extractWallet(text)
     const networkFromText = extractNetwork(text)
     const nextNetwork = networkFromText || existing?.network || (walletFromText ? (walletFromText.startsWith('0x') ? 'base' : 'solana') : '')
-    const targetFromText = extractTarget(text, mode) || extractPayerCorrection(text)
+    const payerCorrection = extractPayerCorrection(text)
+    const extractedTarget = extractTarget(text, mode)
+    const targetFromText = payerCorrection || (!existing?.target ? extractedTarget : '')
     const inlineTarget = !targetFromText && existing && !existing.target ? extractInlinePayerName(text, mode) : ''
     const purposeFromText = extractPurpose(text)
     const amountFromText = extractAmount(text)
