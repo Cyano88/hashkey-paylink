@@ -462,6 +462,14 @@ function safeZeroScoutGuidanceError(error: unknown) {
     .slice(0, 220)
 }
 
+function userFacingZeroScoutGuidanceError(error: unknown) {
+  const message = safeZeroScoutGuidanceError(error)
+  if (/\b(credit|credits|top up|quota|billing|wallet that owns this integration key)\b/i.test(message)) {
+    return 'Agent Hash is undergoing self-maintenance so we can keep offering you the best service. Please try again shortly.'
+  }
+  return `Agent Hash could not reach its ZeroScout intelligence layer just now. Please try again shortly.`
+}
+
 function getHelperResponse(question: string, payerName: string, chain: string, amount: string, memorySummary = '', zeroScoutGuidance?: ZeroScoutHelperGuidance, accessMode = 'paid', helperMode = ''): string {
   const zeroScoutAnswer = answerFromZeroScoutGuidance(question, zeroScoutGuidance)
   if (zeroScoutAnswer) return zeroScoutAnswer
@@ -612,8 +620,9 @@ export default async function handler(req: Request, res: Response) {
       })
     } catch (err) {
       if (helperMode === 'daily') {
+        console.warn('[agent-ask] ZeroScout Daily guidance failed:', safeZeroScoutGuidanceError(err))
         return res.status(503).json({
-          error: `ZeroScout Daily guidance failed: ${safeZeroScoutGuidanceError(err)}`,
+          error: userFacingZeroScoutGuidanceError(err),
           zeroscoutRequired: true,
           helperMode,
           helperIntent: helperRouting.helperIntent,
