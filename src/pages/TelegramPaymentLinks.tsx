@@ -55,7 +55,7 @@ function shortAddress(value: string) {
   return value.length > 14 ? `${value.slice(0, 6)}...${value.slice(-4)}` : value
 }
 
-type TelegramSectionId = 'payment-links' | 'helper' | 'agent-wallets' | 'market-tools' | 'streampay'
+type TelegramSectionId = 'payment-links' | 'agent-wallets' | 'market-tools' | 'streampay'
 type TelegramServiceId =
   | 'request-usdc'
   | 'fund-polymarket'
@@ -99,16 +99,6 @@ const sectionServices: Record<TelegramSectionId, TelegramService[]> = {
       title: 'Request USDC',
       body: 'Request one payer or collect from a group.',
       icon: Coins,
-      status: 'Open',
-      active: true,
-    },
-  ],
-  helper: [
-    {
-      id: 'hashpaylink-helper',
-      title: 'Ask Hash',
-      body: 'Fast chat help for payments, PolyDesk, StreamPay, and LP services.',
-      icon: Bot,
       status: 'Open',
       active: true,
     },
@@ -196,7 +186,6 @@ const sectionServices: Record<TelegramSectionId, TelegramService[]> = {
 
 const sectionDescriptions: Record<TelegramSectionId, string> = {
   'payment-links': 'Create normal USDC requests and share them into Telegram.',
-  helper: 'Open Ask Hash for payments, PolyDesk, StreamPay, and setup questions.',
   'agent-wallets': 'Manage Circle wallet balance, x402 service balance, and receipts.',
   'market-tools': 'PolyDesk for Polymarket funding, portfolio alerts, LP Scout, and live market context.',
   streampay: 'Payroll, creator, x402 stream, and Arena flows on StreamPay.',
@@ -204,7 +193,6 @@ const sectionDescriptions: Record<TelegramSectionId, string> = {
 
 const telegramSections: Array<{ id: TelegramSectionId; title: string; icon: typeof Coins }> = [
   { id: 'payment-links', title: 'Payment Links', icon: Coins },
-  { id: 'helper', title: 'Ask Hash', icon: Bot },
   { id: 'agent-wallets', title: 'Agent Wallets', icon: Bot },
   { id: 'market-tools', title: 'PolyDesk', icon: LineChart },
   { id: 'streampay', title: 'StreamPay', icon: Radio },
@@ -557,7 +545,7 @@ export default function TelegramPaymentLinks() {
   const initialSection: TelegramSectionId =
     startPayload === 'polymarket' || startPayload === 'poly'
       ? 'market-tools'
-      : initialSectionParam === 'helper' || initialSectionParam === 'agent-wallets' || initialSectionParam === 'market-tools' || initialSectionParam === 'streampay'
+      : initialSectionParam === 'agent-wallets' || initialSectionParam === 'market-tools' || initialSectionParam === 'streampay'
       ? initialSectionParam
       : 'payment-links'
   const initialServiceParam = searchParams.get('service')
@@ -597,7 +585,7 @@ export default function TelegramPaymentLinks() {
   const initialPersonTarget = displayTelegramName(searchParams.get('target') ?? searchParams.get('payer') ?? searchParams.get('p'), '')
   const initialGroupTarget = displayTelegramName(searchParams.get('target') ?? searchParams.get('group') ?? searchParams.get('g') ?? searchParams.get('chat'), '')
   const [opened, setOpened] = useState(searchParams.get('open') !== '0')
-  const [activeSection, setActiveSection] = useState<TelegramSectionId>(initialAgentService ? 'agent-wallets' : initialHelperService ? 'helper' : initialMarketService ? 'market-tools' : initialSection)
+  const [activeSection, setActiveSection] = useState<TelegramSectionId>(initialAgentService ? 'agent-wallets' : initialMarketService ? 'market-tools' : initialSection)
   const [activeService, setActiveService] = useState<TelegramServiceId | ''>(initialService)
   const [requestMode, setRequestMode] = useState<RequestMode | ''>(initialServiceParam === 'request-usdc' ? initialMode : '')
   const [savedRequest, setSavedRequest] = useState<SavedRequest | null>(null)
@@ -618,6 +606,8 @@ export default function TelegramPaymentLinks() {
   const [polymarketBridgeError, setPolymarketBridgeError] = useState('')
   const [lpScoutPrefill, setLpScoutPrefill] = useState<LpScoutPrefill | null>(null)
   const [recoveredTelegramName, setRecoveredTelegramName] = useState('')
+  const [savedHelperName, setSavedHelperName] = useState(() => window.localStorage.getItem('hashpaylink-helper-name') ?? '')
+  const [agentPromptIndex, setAgentPromptIndex] = useState(0)
   const telegramName = useMemo(() => {
     const webAppUser = telegramWebAppUser()
     return displayTelegramName(
@@ -631,6 +621,36 @@ export default function TelegramPaymentLinks() {
   }, [searchParams, recoveredTelegramName])
   const telegramIdentity = useMemo(() => telegramOwnerFromContext(searchParams, telegramName), [searchParams, telegramName])
   const needsTelegramIdentity = activeSection === 'agent-wallets' && !telegramIdentity.isStable
+  const agentGreetingName = friendlyName(savedHelperName || (telegramName === 'there' ? '' : telegramName) || recoveredTelegramName || 'there')
+  const agentHeaderPrompts = [
+    'Tap to launch me.',
+    'I am Agent Hash. I can help with payments, wallets, and receipts.',
+    'I can help with PolyDesk, StreamPay, LP services, research, and daily questions.',
+    'What do you want to fund or request today?',
+    'Tap to launch me.',
+  ]
+
+  useEffect(() => {
+    const delay = agentPromptIndex === 0 || agentPromptIndex === agentHeaderPrompts.length - 1 ? 3600 : 10000
+    const timer = window.setTimeout(() => {
+      setAgentPromptIndex(index => (index + 1) % agentHeaderPrompts.length)
+    }, delay)
+    return () => window.clearTimeout(timer)
+  }, [agentPromptIndex, agentHeaderPrompts.length])
+
+  function launchAgentHash() {
+    setOpened(true)
+    setActiveService('hashpaylink-helper')
+    setRequestMode('')
+    setPolymarketMode('')
+  }
+
+  function rememberRecoveredHelperName(value: string) {
+    const clean = value.trim().slice(0, 48)
+    if (!clean) return
+    setRecoveredTelegramName(clean)
+    setSavedHelperName(clean)
+  }
 
   const requestFormTarget = target.trim()
   const requestWalletReady = requestNetwork === 'all'
@@ -862,71 +882,73 @@ export default function TelegramPaymentLinks() {
         Back
       </button>
 
-      <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card dark:border-white/10 dark:bg-[#111114]">
-        <div className="flex items-center gap-2 text-[11px] font-semibold text-gray-400">
-          <MessageCircle className="h-4 w-4" />
-          <span>Telegram</span>
-        </div>
-
-        <div className="mt-4 flex items-start gap-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-100 dark:bg-white/[0.08]">
-            <Bot className="h-[18px] w-[18px] text-gray-700 dark:text-gray-200" />
+      <button
+        type="button"
+        onClick={launchAgentHash}
+        className="group w-full rounded-2xl border border-gray-100 bg-white p-4 text-left shadow-card transition-all hover:border-gray-200 hover:shadow-lg active:scale-[0.995] dark:border-white/10 dark:bg-[#111114] dark:hover:bg-[#15151a]"
+      >
+        <div className="flex items-start gap-3">
+          <div className="flex shrink-0 flex-col items-center gap-3 pt-0.5 text-gray-500 dark:text-gray-400">
+            <MessageCircle className="h-4 w-4" />
+            <AskHashLiveAgentIcon header />
           </div>
           <div className="min-w-0 flex-1">
-            <div className="rounded-2xl rounded-tl-md bg-gray-100 px-4 py-3 dark:bg-white/[0.07]">
-              <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                Hello {telegramName}
-              </p>
-              <p className="mt-1 text-sm leading-relaxed text-gray-600 dark:text-gray-300">
-                What do you want to fund or request today?
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Telegram</p>
+                <p className="mt-1 truncate text-sm font-semibold text-gray-900 dark:text-white">
+                  Hello {agentGreetingName}
+                </p>
+              </div>
+              <ArrowRight className="h-4 w-4 shrink-0 text-gray-300 transition-transform group-hover:translate-x-0.5 group-hover:text-gray-500" />
+            </div>
+            <div className="mt-3 rounded-2xl rounded-tl-md bg-gray-100 px-4 py-3 dark:bg-white/[0.07]">
+              <p
+                key={agentPromptIndex}
+                className="telegram-agent-typewriter text-sm font-semibold leading-relaxed text-gray-800 dark:text-gray-100"
+              >
+                {agentHeaderPrompts[agentPromptIndex]}
               </p>
             </div>
-
-            {!opened && (
-              <button
-                type="button"
-                onClick={() => setOpened(true)}
-                className="mt-1 flex w-full items-center justify-between rounded-b-xl rounded-tr-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-900 shadow-sm transition-all hover:bg-gray-50 active:scale-[0.99] dark:border-white/10 dark:bg-white/[0.05] dark:text-white dark:hover:bg-white/[0.08]"
-              >
-                <span>Open Hash PayLink</span>
-                <ExternalLink className="h-4 w-4 text-gray-400" />
-              </button>
-            )}
           </div>
         </div>
-      </div>
+      </button>
 
       {opened && (
         <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card dark:border-white/10 dark:bg-[#111114]">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Hash PayLink</p>
-              <h1 className="mt-1 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Telegram Services</h1>
-              <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-                Create payment actions and share them back into Telegram.
-              </p>
-            </div>
-            <img src="/hash-logo-transparent.png" alt="" className="h-9 w-9 rounded-lg border border-gray-100 bg-white object-contain p-1 dark:border-white/10 dark:bg-white/[0.06]" />
-          </div>
+          {activeService !== 'hashpaylink-helper' && (
+            <>
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Hash PayLink</p>
+                  <h1 className="mt-1 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Telegram Services</h1>
+                  <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
+                    Create payment actions and share them back into Telegram.
+                  </p>
+                </div>
+                <img src="/hash-logo-transparent.png" alt="" className="h-9 w-9 rounded-lg border border-gray-100 bg-white object-contain p-1 dark:border-white/10 dark:bg-white/[0.06]" />
+              </div>
 
-          <div className="mt-4 grid grid-cols-2 gap-2">
-            {telegramSections.map(({ id, title, icon: Icon }) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => selectSection(id)}
-                className={cn(
-                  'flex min-h-[44px] items-center gap-2 rounded-xl border px-3 text-left text-xs font-semibold transition-all',
-                  id === activeSection
-                    ? 'border-gray-900 bg-gray-900 text-white dark:border-white dark:bg-white dark:text-gray-950'
-                    : 'border-gray-100 bg-gray-50 text-gray-500 hover:border-gray-200 hover:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-400 dark:hover:bg-white/[0.07]',
-                )}
-              >
-                <Icon className="h-4 w-4 shrink-0" />
-                <span className="truncate">{title}</span>
-              </button>
-            ))}
-          </div>
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                {telegramSections.map(({ id, title, icon: Icon }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => selectSection(id)}
+                    className={cn(
+                      'flex min-h-[44px] items-center gap-2 rounded-xl border px-3 text-left text-xs font-semibold transition-all',
+                      id === activeSection
+                        ? 'border-gray-900 bg-gray-900 text-white dark:border-white dark:bg-white dark:text-gray-950'
+                        : 'border-gray-100 bg-gray-50 text-gray-500 hover:border-gray-200 hover:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-400 dark:hover:bg-white/[0.07]',
+                    )}
+                  >
+                    <Icon className="h-4 w-4 shrink-0" />
+                    <span className="truncate">{title}</span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
 
           {needsTelegramIdentity ? (
             <ConnectTelegramPanel onBack={() => setActiveSection('payment-links')} />
@@ -1047,7 +1069,7 @@ export default function TelegramPaymentLinks() {
               fallbackOwner={telegramIdentity.legacyOwner}
               initialEventId={searchParams.get('eventId') ?? ''}
               initialPayer={searchParams.get('payer') ?? ''}
-              onRecoverTelegramName={setRecoveredTelegramName}
+              onRecoverTelegramName={rememberRecoveredHelperName}
               onBack={() => setActiveService('')}
             />
           ) : activeService === 'agent-dashboard' || activeService === 'fund-agent-wallet' || activeService === 'create-your-agent' ? (
@@ -1120,9 +1142,9 @@ function TelegramServiceCard({
   )
 }
 
-function AskHashLiveAgentIcon({ isStatic = false }: { isStatic?: boolean }) {
+function AskHashLiveAgentIcon({ isStatic = false, header = false }: { isStatic?: boolean; header?: boolean }) {
   return (
-    <div className={cn('ask-hash-live-agent shrink-0', isStatic && 'ask-hash-live-agent--static')} aria-hidden="true">
+    <div className={cn('ask-hash-live-agent shrink-0', isStatic && 'ask-hash-live-agent--static', header && 'ask-hash-live-agent--header')} aria-hidden="true">
       <span className="ask-hash-live-agent__head">
         <span className="ask-hash-live-agent__eye ask-hash-live-agent__eye--left" />
         <span className="ask-hash-live-agent__eye ask-hash-live-agent__eye--right" />
@@ -1301,6 +1323,7 @@ function TelegramHelperPanel({
     if (!clean) return
     window.localStorage.setItem('hashpaylink-helper-name', clean)
     setHelperName(clean)
+    onRecoverTelegramName(clean)
     if (!payer.trim()) setPayer(clean)
     void saveProfile({ displayName: clean })
   }
@@ -1612,6 +1635,7 @@ function TelegramHelperPanel({
         window.localStorage.setItem('hashpaylink-helper-name', cleanName)
         setHelperName(cleanName)
         setHelperNameDraft(cleanName)
+        onRecoverTelegramName(cleanName)
         setPayer(current => current || cleanName)
         setMemoryDraft(nextMemory)
         await minimumTyping
