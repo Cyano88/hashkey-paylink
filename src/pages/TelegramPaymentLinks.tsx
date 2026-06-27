@@ -388,6 +388,11 @@ function extractAmount(text: string) {
   return loose.find(match => Number(match[2]) > 0)?.[2] ?? ''
 }
 
+function extractAmountCorrection(text: string) {
+  if (!/\b(change|update|correct|set)\s+(?:the\s+)?amount\b|\bamount\s*(?:to|is|=|:)\b/i.test(text)) return ''
+  return extractAmount(text)
+}
+
 function extractNetwork(text: string): RequestNetwork | '' {
   const lower = text.toLowerCase()
   if (/\barc\b/.test(lower)) return 'arc'
@@ -398,11 +403,21 @@ function extractNetwork(text: string): RequestNetwork | '' {
   return ''
 }
 
+function extractNetworkCorrection(text: string): RequestNetwork | '' {
+  if (!/\b(change|update|correct|set|switch|use)\s+(?:the\s+)?(?:network|chain)\b|\b(?:network|chain)\s*(?:to|is|=|:)\b/i.test(text)) return ''
+  return extractNetwork(text)
+}
+
 function extractWallet(text: string) {
   const evm = text.match(/0x[a-fA-F0-9]{40}/)?.[0] ?? ''
   if (evm) return evm
   const solana = text.match(/\b[1-9A-HJ-NP-Za-km-z]{32,44}\b/)?.[0] ?? ''
   return solana
+}
+
+function extractWalletCorrection(text: string) {
+  if (!/\b(change|update|correct|set|replace|use)\s+(?:the\s+)?(?:wallet|address|receive wallet|receive address)\b|\b(?:wallet|address|receive wallet|receive address)\s*(?:to|is|=|:)\b/i.test(text)) return ''
+  return extractWallet(text)
 }
 
 function stripWallets(text: string) {
@@ -501,6 +516,10 @@ function extractPurpose(text: string) {
   return cleanPaymentPurpose(match)
 }
 
+function isExplicitDraftCorrection(text: string) {
+  return /\b(change|update|edit|correct|set|replace|switch)\s+(?:the\s+)?(?:payer|payer name|purpose|memo|reason|amount|network|chain|wallet|address|receive wallet|receive address)\b|\b(?:payer|purpose|memo|reason|amount|network|chain|wallet|address|receive wallet|receive address)\s*(?:to|is|=|:)\b/i.test(text)
+}
+
 function isPaymentRequestIntent(text: string) {
   return /\b(request|collect|charge|invoice|paylink|payment link|receive (?:a )?payment|get paid|ask .*pay|split|dues|donation|group collection)\b/i.test(text)
 }
@@ -529,6 +548,7 @@ function isPaylinkDraftSideQuestion(text: string) {
 
 function hasPaylinkDraftUpdate(text: string, draft: HelperPaylinkDraft | null) {
   if (wantsSavedWallet(text) || wantsNewWallet(text)) return true
+  if (isExplicitDraftCorrection(text)) return true
   if (extractAmount(text) || extractNetwork(text) || extractWallet(text) || extractPurpose(text)) return true
   if (!draft?.target) {
     const mode = draft?.mode ?? (isGroupRequestIntent(text) ? 'group' : 'person')
@@ -1641,25 +1661,30 @@ function TelegramHelperPanel({
 
   function buildDraftFromText(text: string, existing?: HelperPaylinkDraft | null): HelperPaylinkDraft {
     const mode = existing?.mode ?? (isGroupRequestIntent(text) ? 'group' : 'person')
-    const walletFromText = extractWallet(text)
-    const networkFromText = extractNetwork(text)
+    const walletCorrection = extractWalletCorrection(text)
+    const walletFromText = walletCorrection || extractWallet(text)
+    const networkCorrection = extractNetworkCorrection(text)
+    const networkFromText = networkCorrection || extractNetwork(text)
     const nextNetwork = networkFromText || existing?.network || (walletFromText ? (walletFromText.startsWith('0x') ? 'base' : 'solana') : '')
     const payerCorrection = extractPayerCorrection(text)
     const extractedTarget = extractTarget(text, mode)
     const targetFromText = payerCorrection || (!existing?.target ? extractedTarget : '')
     const inlineTarget = !targetFromText && existing && !existing.target ? extractInlinePayerName(text, mode) : ''
     const purposeFromText = extractPurpose(text)
-    const amountFromText = extractAmount(text)
+    const amountFromText = extractAmountCorrection(text) || extractAmount(text)
+    const existingWallet = existing?.wallet || ''
+    const keepExistingWallet = Boolean(existingWallet && !walletFromText && (!networkCorrection || walletMatchesNetwork(existingWallet, nextNetwork)))
+    const nextWallet = walletFromText || (keepExistingWallet ? existingWallet : '')
     return {
       mode,
       target: targetFromText || inlineTarget || existing?.target || '',
       amount: amountFromText || existing?.amount || '',
       network: nextNetwork,
       label: purposeFromText || existing?.label || '',
-      wallet: walletFromText || existing?.wallet || '',
-      evmWallet: walletFromText?.startsWith('0x') ? walletFromText : existing?.evmWallet || '',
-      solanaWallet: walletFromText && !walletFromText.startsWith('0x') ? walletFromText : existing?.solanaWallet || '',
-      offeredSavedWallet: existing?.offeredSavedWallet,
+      wallet: nextWallet,
+      evmWallet: nextWallet?.startsWith('0x') ? nextWallet : keepExistingWallet ? existing?.evmWallet || '' : '',
+      solanaWallet: nextWallet && !nextWallet.startsWith('0x') ? nextWallet : keepExistingWallet ? existing?.solanaWallet || '' : '',
+      offeredSavedWallet: networkCorrection && !keepExistingWallet ? false : existing?.offeredSavedWallet,
     }
   }
 
@@ -1826,6 +1851,29 @@ function TelegramHelperPanel({
     }
     if (!draft.network && draft.wallet?.startsWith('0x')) {
       draft = { ...draft, network: 'base' }
+    }
+
+    if (draft.wallet && !walletMatchesNetwork(draft.wallet, draft.network)) {
+      setPaylinkDraft(draft)
+      const walletNetwork = draft.wallet.startsWith('0x') ? 'Base/EVM' : 'Solana'
+      const requestedNetwork = draft.network ? requestNetworkLabels[draft.network] : 'the selected network'
+      const fallbackAnswer = `That receive wallet looks like ${walletNetwork}, but this PayLink is set to ${requestedNetwork}. Send a matching receive wallet, or change the network.`
+      const answer = await polishLocalHelperResult(
+        [
+          'local_action=payment_request_wallet_network_mismatch',
+          `wallet_network=${walletNetwork}`,
+          `requested_network=${requestedNetwork}`,
+          'Explain that the receive wallet does not match the selected network.',
+          'Ask for a matching receive wallet or a network change.',
+          'Do not create a PayLink yet.',
+          'Return one short consumer chat answer only.',
+        ].join('\n'),
+        fallbackAnswer,
+      )
+      finishHelperMessage(nextQuestion, {
+        answer,
+      })
+      return true
     }
 
     const missing = describeMissingDraftFields(draft, draft.wallet ? '' : savedWallet)
