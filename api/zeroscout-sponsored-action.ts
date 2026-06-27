@@ -51,8 +51,8 @@ export type ZeroScoutHelperGuidance = {
   zeroscout: ZeroScoutIntelligenceResult
 }
 
-const SPONSOR_TIMEOUT_MS = Math.max(1000, Number(process.env.ZEROSCOUT_SPONSOR_TIMEOUT_MS ?? 10_000))
-const GUIDANCE_TIMEOUT_MS = Math.max(1000, Number(process.env.ZEROSCOUT_HELPER_GUIDANCE_TIMEOUT_MS ?? 6_000))
+const SPONSOR_TIMEOUT_MS = Math.max(1000, Number(process.env.ZEROSCOUT_SPONSOR_TIMEOUT_MS ?? 30_000))
+const GUIDANCE_TIMEOUT_MS = Math.max(1000, Number(process.env.ZEROSCOUT_HELPER_GUIDANCE_TIMEOUT_MS ?? 45_000))
 const MAX_GUIDANCE_CONTEXT_LENGTH = 900
 
 function stableStringify(value: unknown): string {
@@ -223,8 +223,8 @@ export async function sponsorZeroScoutAction(input: ZeroScoutSponsoredActionInpu
           'Do not infer live prices, wallet balances, or market data that were not supplied.',
         ],
       },
-      includeClaudeReview: true,
-      includeOpenAiReview: true,
+      includeClaudeReview: false,
+      includeOpenAiReview: false,
     }, { requireProof: true, endpointPath: '/api/integrations/sponsorship-proof' }), SPONSOR_TIMEOUT_MS)
 
     return {
