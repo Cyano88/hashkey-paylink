@@ -5,7 +5,7 @@
  * economy primitive. Any AI service can use this pattern to require verified
  * payment before rendering a response.
  *
- * Body: { eventId?: string, payer: string, question: string, accessMode?: 'helper-free' }
+ * Body: { eventId?: string, payer: string, question: string, accessMode?: 'helper-free', helperMode?: string }
  *
  * Flow:
  *   1. Verify payment on 0G Mainnet via PayLinkArchive contract (trustless)
@@ -42,6 +42,7 @@ const MAX_PAYER_LENGTH = 128
 const MAX_QUESTION_LENGTH = 4_000
 const MAX_MEMORY_LENGTH = 1_600
 const HELPER_FREE_ACCESS_MODE = 'helper-free'
+const HELPER_MODES = new Set(['payments', 'daily', 'services', 'deep-research', 'support'])
 const HELPER_SIMPLE_DAILY_PROMPT_LIMIT = Math.max(1, parseInt(process.env.HELPER_SIMPLE_DAILY_PROMPT_LIMIT ?? process.env.HELPER_DAILY_PROMPT_LIMIT ?? '100', 10) || 100)
 const HELPER_DEEP_DAILY_PROMPT_LIMIT = Math.max(1, parseInt(process.env.HELPER_DEEP_DAILY_PROMPT_LIMIT ?? '2', 10) || 2)
 const HELPER_USAGE_WINDOW_MS = 24 * 60 * 60 * 1000
@@ -378,10 +379,19 @@ function requiresLiveExternalData(question: string) {
 }
 
 function isPersonalContextQuestion(question: string) {
-  return /\b(i am|i'm|i feel|feeling|my friend|i have a friend|i have a|i'm sad|i am sad|mood|not my name|that's not my name)\b/i.test(question)
+  return /\b(i am|i'm|i feel|feeling|my friend|i have a friend|i have a|i'm sad|i am sad|mood|not my name|that's not my name|years old|personal assistant|helpful everyday|everyday for me|do you love me)\b/i.test(question)
 }
 
 function personalContextFallback(question: string) {
+  if (/\b\d{1,3}\s+years?\s+old\b/i.test(question)) {
+    return 'Got it. I can remember that as part of your personal context and use it when it helps.'
+  }
+  if (/\bpersonal assistant|helpful everyday|everyday for me\b/i.test(question)) {
+    return 'Yes. I can help as your everyday assistant: planning, simple questions, ideas, payment tasks, reminders to yourself, and next steps.'
+  }
+  if (/\bdo you love me\b/i.test(question)) {
+    return "I care about helping you well. I am not a person, but I can be steady, useful, and kind whenever you need support."
+  }
   if (/\b(i am|i'm|i feel|feeling)\s+(sad|down|upset|stressed|anxious|lonely|tired|confused|angry)\b/i.test(question)) {
     return "I'm sorry you're feeling that way. I can stay with you for a bit: tell me what happened, or we can slow it down and take it one step at a time."
   }
@@ -394,9 +404,19 @@ function personalContextFallback(question: string) {
   return 'I understand. Tell me a little more, and I will respond like a normal chat, not just a payment tool.'
 }
 
-function classifyHelperRequest(question: string): { helperIntent: string; qualityMode: 'fast' | 'standard' | 'deep' } {
+function normalizeHelperMode(value: unknown) {
+  const mode = typeof value === 'string' ? value.trim().toLowerCase() : ''
+  return HELPER_MODES.has(mode) ? mode : ''
+}
+
+function classifyHelperRequest(question: string, helperMode = ''): { helperIntent: string; qualityMode: 'fast' | 'standard' | 'deep' } {
   const value = question.toLowerCase()
   if (isNameQuestion(question)) return { helperIntent: 'personal-memory', qualityMode: 'fast' }
+  if (helperMode === 'deep-research') return { helperIntent: 'deep-research', qualityMode: 'deep' }
+  if (helperMode === 'daily') return { helperIntent: isGreetingQuestion(question) ? 'greeting' : 'daily-assistant', qualityMode: 'standard' }
+  if (helperMode === 'services') return { helperIntent: 'hashpaylink-services', qualityMode: 'standard' }
+  if (helperMode === 'support') return { helperIntent: 'support', qualityMode: 'standard' }
+  if (helperMode === 'payments') return { helperIntent: 'payment-help', qualityMode: 'standard' }
   if (/^\s*(hi|hello|hey|yo|gm|good morning|good afternoon|good evening)\b/.test(value)) {
     return { helperIntent: 'greeting', qualityMode: 'fast' }
   }
@@ -434,7 +454,7 @@ function answerFromZeroScoutGuidance(question: string, zeroScoutGuidance?: ZeroS
   return guidance.length <= limit ? guidance : `${guidance.slice(0, limit - 20).trim()}...`
 }
 
-function getHelperResponse(question: string, payerName: string, chain: string, amount: string, memorySummary = '', zeroScoutGuidance?: ZeroScoutHelperGuidance, accessMode = 'paid'): string {
+function getHelperResponse(question: string, payerName: string, chain: string, amount: string, memorySummary = '', zeroScoutGuidance?: ZeroScoutHelperGuidance, accessMode = 'paid', helperMode = ''): string {
   const zeroScoutAnswer = answerFromZeroScoutGuidance(question, zeroScoutGuidance)
   if (zeroScoutAnswer) return zeroScoutAnswer
 
@@ -453,6 +473,22 @@ function getHelperResponse(question: string, payerName: string, chain: string, a
   const fallbackAnswer = fallbackHelperAnswer(question)
   if (fallbackAnswer) return fallbackAnswer
 
+  if (helperMode === 'daily') {
+    return 'I hear you. I can be your everyday assistant: planning, ideas, simple questions, personal context, and next steps. Tell me what you want to work on first.'
+  }
+
+  if (helperMode === 'services') {
+    return 'I can help with Hash PayLink services. Tell me if you mean PayLinks, StreamPay, Agent Wallets, x402, Circle wallet setup, or PolyDesk.'
+  }
+
+  if (helperMode === 'support') {
+    return 'I can help troubleshoot that. Tell me what you are trying to do, what happened, and where you got stuck.'
+  }
+
+  if (helperMode === 'deep-research') {
+    return 'I could not complete the deeper answer just now. Try again with the exact topic and I will rerun the research path.'
+  }
+
   if (accessMode !== HELPER_FREE_ACCESS_MODE) {
     return `Your paid helper access is verified: ${amount} on ${chain}. What would you like to do next?`
   }
@@ -469,12 +505,13 @@ export default async function handler(req: Request, res: Response) {
   if (req.method !== 'POST')
     return res.status(405).json({ error: 'Method not allowed' })
 
-  const { eventId: rawEventId, payer: rawPayer, question: rawQuestion, memorySummary: rawMemorySummary, accessMode: rawAccessMode } = (req.body ?? {}) as Record<string, unknown>
+  const { eventId: rawEventId, payer: rawPayer, question: rawQuestion, memorySummary: rawMemorySummary, accessMode: rawAccessMode, helperMode: rawHelperMode } = (req.body ?? {}) as Record<string, unknown>
   let eventId: string
   let payer: string
   let question: string
   let memorySummary = ''
   const accessMode = rawAccessMode === HELPER_FREE_ACCESS_MODE ? HELPER_FREE_ACCESS_MODE : 'paid'
+  const helperMode = normalizeHelperMode(rawHelperMode)
 
   try {
     payer = normalizeBoundedString(rawPayer, 'payer', MAX_PAYER_LENGTH)
@@ -517,7 +554,7 @@ export default async function handler(req: Request, res: Response) {
     }
 
     // 2. Payment verified — get AI response
-    const helperRouting = classifyHelperRequest(question)
+    const helperRouting = classifyHelperRequest(question, helperMode)
     const usageTier: HelperUsageTier = helperRouting.qualityMode === 'deep' ? 'deep' : 'simple'
     const usagePreview = await getHelperPromptUsageStatus(eventId, access.payment.payer, usageTier)
     if (!usagePreview.allowed) {
@@ -552,6 +589,7 @@ export default async function handler(req: Request, res: Response) {
           eventId,
           question,
           accessMode,
+          helperMode,
           helperIntent: helperRouting.helperIntent,
           qualityMode: helperRouting.qualityMode,
           memorySummary,
@@ -574,6 +612,7 @@ export default async function handler(req: Request, res: Response) {
       memorySummary,
       zeroScoutGuidance,
       accessMode,
+      helperMode,
     )
 
     const zeroscoutSponsorship: ZeroScoutSponsoredAction | undefined = await sponsorZeroScoutAction({
@@ -588,6 +627,7 @@ export default async function handler(req: Request, res: Response) {
         eventId,
         question,
         accessMode,
+        helperMode,
         helperIntent: helperRouting.helperIntent,
         qualityMode: helperRouting.qualityMode,
         memorySummaryHash,

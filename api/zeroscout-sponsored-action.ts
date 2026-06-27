@@ -22,6 +22,7 @@ type ZeroScoutHelperGuidanceInput = {
     eventId: string
     question: string
     accessMode?: string
+    helperMode?: string
     helperIntent?: string
     qualityMode?: 'fast' | 'standard' | 'deep'
     memorySummary?: string
@@ -127,6 +128,10 @@ function forcedSimpleHelperLane(): HelperRefinementLane | undefined {
 
 function helperRefinementLane(input: ZeroScoutHelperGuidanceInput): HelperRefinementLane {
   if (shouldUseDeepHelperReview(input)) return 'multi-stack'
+  const helperMode = String(input.request.helperMode ?? '').trim().toLowerCase()
+  if (helperMode === 'payments' || helperMode === 'support') return 'og-compute'
+  if (helperMode === 'daily') return 'openai'
+  if (helperMode === 'services') return 'anthropic'
   const forcedLane = forcedSimpleHelperLane()
   if (forcedLane) return forcedLane
   const seed = requestHash({
@@ -173,6 +178,7 @@ export async function getZeroScoutHelperGuidance(input: ZeroScoutHelperGuidanceI
     eventId: input.request.eventId,
     question: sanitizeHelperContext(input.request.question),
     accessMode: input.request.accessMode,
+    helperMode: input.request.helperMode,
     helperIntent: input.request.helperIntent,
     qualityMode: input.request.qualityMode,
     memorySummary: sanitizedMemorySummary || undefined,
@@ -201,6 +207,7 @@ export async function getZeroScoutHelperGuidance(input: ZeroScoutHelperGuidanceI
         request,
         sourceProof: input.sourceProof,
         helperIntent: input.request.helperIntent,
+        helperMode: input.request.helperMode,
         qualityMode: input.request.qualityMode ?? 'standard',
         refinementPolicy: refinementLane === 'multi-stack'
           ? 'deep-multi-stack-0g-anthropic-openai'

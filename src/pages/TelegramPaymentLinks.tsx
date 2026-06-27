@@ -277,6 +277,7 @@ const blockedPayerNames = new Set([
 ])
 
 type PolymarketMode = 'self' | 'friends' | ''
+type HelperMode = 'payments' | 'daily' | 'services' | 'deep-research' | 'support'
 
 type HelperMessage = {
   question: string
@@ -436,6 +437,34 @@ function extractTarget(text: string, mode: RequestMode) {
   if (mode === 'group' && group) return group.slice(0, 48)
   return ''
 }
+
+const helperModes: Array<{ id: HelperMode; label: string; intro: string }> = [
+  {
+    id: 'payments',
+    label: 'Payments',
+    intro: 'Payments mode is ready. I can help you request money, create a PayLink, check a receipt, or clarify wallet and network details. What do you want to do?',
+  },
+  {
+    id: 'daily',
+    label: 'Daily',
+    intro: "Daily mode is ready. I can help with personal planning, normal questions, ideas, and everyday support. What's on your mind?",
+  },
+  {
+    id: 'services',
+    label: 'Services',
+    intro: 'Services mode is ready. I can help with StreamPay, Agent Wallets, x402, Circle wallet setup, PolyDesk, and Hash PayLink features. What are you trying to use?',
+  },
+  {
+    id: 'deep-research',
+    label: 'Deep Research',
+    intro: 'Deep Research mode is ready. I can help with LP Scout, PolyDesk, Polymarket, product strategy, or complex research. What should I investigate?',
+  },
+  {
+    id: 'support',
+    label: 'Support',
+    intro: "Support mode is ready. Tell me what is stuck, confusing, or not working, and I'll help you fix it step by step.",
+  },
+]
 
 function extractPayerCorrection(text: string) {
   const match = text.match(/\b(?:payer(?: name)?|her name'?s?|her name is|his name'?s?|his name is|their name'?s?|their name is)\s*(?:is|=|:)?\s+(@?[a-zA-Z][\w.-]{1,40})\b/i)?.[1] ?? ''
@@ -705,7 +734,7 @@ export default function TelegramPaymentLinks() {
   const [polymarketBridgeError, setPolymarketBridgeError] = useState('')
   const [lpScoutPrefill, setLpScoutPrefill] = useState<LpScoutPrefill | null>(null)
   const [recoveredTelegramName, setRecoveredTelegramName] = useState('')
-  const [savedHelperName, setSavedHelperName] = useState(() => normalizeHelperName(window.localStorage.getItem('hashpaylink-helper-name') ?? ''))
+  const [savedHelperName, setSavedHelperName] = useState(() => usableHelperName(window.localStorage.getItem('hashpaylink-helper-name') ?? ''))
   const [agentPromptIndex, setAgentPromptIndex] = useState(0)
   const telegramName = useMemo(() => {
     const webAppUser = telegramWebAppUser()
@@ -1337,11 +1366,12 @@ function TelegramHelperPanel({
 }) {
   const cleanTelegramName = telegramName === 'there' ? '' : telegramName
   const [started, setStarted] = useState(true)
-  const [helperName, setHelperName] = useState(() => normalizeHelperName(window.localStorage.getItem('hashpaylink-helper-name') ?? (initialPayer || cleanTelegramName)))
-  const [helperNameDraft, setHelperNameDraft] = useState(() => normalizeHelperName(window.localStorage.getItem('hashpaylink-helper-name') ?? (initialPayer || cleanTelegramName)))
+  const [helperName, setHelperName] = useState(() => usableHelperName(window.localStorage.getItem('hashpaylink-helper-name') ?? (initialPayer || cleanTelegramName)))
+  const [helperNameDraft, setHelperNameDraft] = useState(() => usableHelperName(window.localStorage.getItem('hashpaylink-helper-name') ?? (initialPayer || cleanTelegramName)))
   const [eventId, setEventId] = useState(initialEventId)
   const [payer, setPayer] = useState(initialPayer || cleanTelegramName)
   const [messages, setMessages] = useState<HelperMessage[]>([])
+  const [helperMode, setHelperMode] = useState<HelperMode | ''>('')
   const [question, setQuestion] = useState('')
   const [asking, setAsking] = useState(false)
   const [agentStatus, setAgentStatus] = useState('Asking ZeroScout for guidance...')
@@ -1367,7 +1397,9 @@ function TelegramHelperPanel({
 
   function helperMemoryContext() {
     const profileName = helperName || profile?.displayName || helperNameDraft || nameFromMemorySummary(memoryDraft || profile?.memorySummary || '')
+    const activeMode = helperModes.find(mode => mode.id === helperMode)
     return [
+      activeMode ? `Agent Hash mode is ${activeMode.label}. Route the answer for this mode.` : '',
       profileName ? `User is known as ${friendlyName(profileName)}.` : '',
       cleanTelegramName ? `Telegram context is ${cleanTelegramName}. Do not use it as the user's name if a known name is provided.` : '',
       memoryDraft.trim() || profile?.memorySummary || '',
@@ -1395,6 +1427,7 @@ function TelegramHelperPanel({
   useEffect(() => {
     setMessages([])
     setPaylinkDraft(null)
+    setHelperMode('')
     setAskError('')
   }, [eventId, payer])
 
@@ -1415,14 +1448,16 @@ function TelegramHelperPanel({
         if (!data.ok) throw new Error(data.error || 'Could not load helper profile.')
         setProfile(data.profile ?? null)
         if (data.profile?.displayName) {
-          const cleanDisplayName = normalizeHelperName(data.profile.displayName)
+          const cleanDisplayName = usableHelperName(data.profile.displayName)
           if (cleanDisplayName) {
             window.localStorage.setItem('hashpaylink-helper-name', cleanDisplayName)
             setHelperName(cleanDisplayName)
             setHelperNameDraft(cleanDisplayName)
+          } else if (isMoodName(data.profile.displayName)) {
+            window.localStorage.removeItem('hashpaylink-helper-name')
           }
         }
-        const recoveredName = data.profile?.telegramHandle || data.profile?.displayName || ''
+        const recoveredName = data.profile?.telegramHandle || usableHelperName(data.profile?.displayName || '') || ''
         if (recoveredName) onRecoverTelegramName(recoveredName)
         if (data.profile?.memorySummary) setMemoryDraft(data.profile.memorySummary)
       })
@@ -1441,7 +1476,7 @@ function TelegramHelperPanel({
   }
 
   function saveName() {
-    const clean = normalizeHelperName(helperNameDraft)
+    const clean = usableHelperName(helperNameDraft)
     if (!clean) return
     window.localStorage.setItem('hashpaylink-helper-name', clean)
     setHelperName(clean)
@@ -1465,6 +1500,24 @@ function TelegramHelperPanel({
       }
       return prev
     })
+  }
+
+  function chooseHelperMode(mode: HelperMode) {
+    const selected = helperModes.find(item => item.id === mode)
+    if (!selected || asking) return
+    setHelperMode(mode)
+    setAskError('')
+    setMessages(prev => [...prev, { question: selected.label, answer: selected.intro }])
+    window.setTimeout(() => {
+      document.querySelector<HTMLInputElement>('[data-agent-hash-input="true"]')?.focus()
+    }, 40)
+  }
+
+  function resetHelperMode() {
+    setHelperMode('')
+    setPaylinkDraft(null)
+    setQuestion('')
+    setAskError('')
   }
 
   function stopHelperResponse() {
@@ -1559,6 +1612,7 @@ function TelegramHelperPanel({
           payer: payer.trim(),
           question: prompt,
           accessMode: 'helper-free',
+          helperMode: helperMode || undefined,
           memorySummary: memorySummaryOverride ?? helperMemoryContext(),
         }),
       })
@@ -1823,6 +1877,10 @@ function TelegramHelperPanel({
   async function askHelper() {
     if (!question.trim() || asking || !started) return
     const nextQuestion = question.trim()
+    if (!helperMode) {
+      setAskError('Choose a mode to start.')
+      return
+    }
     setQuestion('')
     setAskError('')
     setAsking(true)
@@ -1830,8 +1888,8 @@ function TelegramHelperPanel({
     helperAbortRef.current = abortController
     queueHelperMessage(nextQuestion)
     try {
-      const isPaylinkFlow = Boolean(paylinkDraft || isPaymentRequestIntent(nextQuestion))
-      const isDeepResearch = isDeepResearchIntent(nextQuestion)
+      const isPaylinkFlow = helperMode === 'payments' && Boolean(paylinkDraft || isPaymentRequestIntent(nextQuestion))
+      const isDeepResearch = helperMode === 'deep-research' || isDeepResearchIntent(nextQuestion)
       setAgentStatus(isPaylinkFlow
         ? 'Checking payment details...'
         : isDeepResearch
@@ -1947,7 +2005,13 @@ function TelegramHelperPanel({
         })
         return
       }
-      if (await handlePaylinkConversation(nextQuestion)) return
+      if (helperMode !== 'payments' && isPaymentRequestIntent(nextQuestion)) {
+        finishHelperMessage(nextQuestion, {
+          answer: 'That sounds like a payment request. Switch to Payments mode and I will prepare it cleanly.',
+        })
+        return
+      }
+      if (helperMode === 'payments' && await handlePaylinkConversation(nextQuestion)) return
       setAgentStatus(isDeepResearch ? 'Running deeper research... this might take a little time.' : 'Asking ZeroScout...')
       const res = await fetch('/api/agent-ask', {
         method: 'POST',
@@ -1958,6 +2022,7 @@ function TelegramHelperPanel({
           payer: payer.trim(),
           question: nextQuestion,
           accessMode: 'helper-free',
+          helperMode,
           memorySummary: helperMemoryContext(),
         }),
       })
@@ -2013,6 +2078,36 @@ function TelegramHelperPanel({
                   </div>
                 </div>
 
+                {!helperMode && (
+                  <div className="max-w-[92%] rounded-[18px] rounded-bl-md bg-[#f0f0f0] px-3.5 py-3 text-sm text-gray-900 shadow-sm dark:bg-white/[0.08] dark:text-gray-100">
+                    <p className="mb-2 font-medium">Choose how Agent Hash should help you first.</p>
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                      {helperModes.map(mode => (
+                        <button
+                          key={mode.id}
+                          type="button"
+                          onClick={() => chooseHelperMode(mode.id)}
+                          className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-left text-xs font-semibold text-gray-900 transition hover:border-gray-300 hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-white dark:hover:bg-white/[0.1]"
+                        >
+                          {mode.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {helperMode && (
+                  <div className="flex justify-center">
+                    <button
+                      type="button"
+                      onClick={resetHelperMode}
+                      className="rounded-full border border-gray-200 bg-white px-3 py-1 text-[11px] font-semibold text-gray-600 shadow-sm transition hover:bg-gray-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/[0.1]"
+                    >
+                      {helperModes.find(mode => mode.id === helperMode)?.label} mode
+                    </button>
+                  </div>
+                )}
+
                 {messages.map((message, index) => (
                   <div key={index} className="space-y-2.5">
                     <div className="flex justify-end">
@@ -2042,16 +2137,18 @@ function TelegramHelperPanel({
               <div className="border-t border-gray-100 p-3 dark:border-white/10">
                 <div className="flex items-center gap-2">
                   <input
+                    data-agent-hash-input="true"
                     value={question}
                     onChange={event => setQuestion(event.target.value)}
                     onKeyDown={event => event.key === 'Enter' && !event.shiftKey && !asking && askHelper()}
-                    placeholder="Ask Hash..."
-                    className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:ring-2 focus:ring-gray-200 dark:border-white/10 dark:bg-white/[0.05] dark:text-white"
+                    placeholder={helperMode ? 'Ask Hash...' : 'Choose a mode to start'}
+                    disabled={!helperMode}
+                    className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:ring-2 focus:ring-gray-200 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-white/[0.05] dark:text-white"
                   />
                   <button
                     type="button"
                     onClick={asking ? stopHelperResponse : askHelper}
-                    disabled={!asking && !question.trim()}
+                    disabled={!asking && (!question.trim() || !helperMode)}
                     aria-label={asking ? 'Stop response' : 'Send message'}
                     className={cn(
                       'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-all active:scale-95 disabled:opacity-40',
