@@ -391,6 +391,18 @@ function stripWallets(text: string) {
     .trim()
 }
 
+function cleanPaymentPurpose(value: string) {
+  return stripWallets(value)
+    .replace(/\b\d+(?:\.\d{1,6})?\s*(?:usdc|usd)\b/gi, '')
+    .replace(/\b(?:base|arc|solana|arbitrum|all networks?|any network|evm|usdc)\b/gi, '')
+    .replace(/\b(?:to|from)\s+@?[a-zA-Z][\w.-]{1,40}\b/gi, '')
+    .replace(/^(?:for|purpose|memo|reason)\s+/i, '')
+    .replace(/\s+/g, ' ')
+    .replace(/^[,.;:\s-]+|[,.;:\s-]+$/g, '')
+    .trim()
+    .slice(0, 80)
+}
+
 function extractTarget(text: string, mode: RequestMode) {
   const clean = text.replace(/\s+/g, ' ').trim()
   const blocked = new Set(['a', 'an', 'the', 'request', 'payment', 'paylink', 'invoice', 'base', 'arc', 'solana', 'arbitrum', 'dinner', 'lunch', 'food'])
@@ -410,11 +422,7 @@ function extractPurpose(text: string) {
   const clean = text.replace(/\s+/g, ' ').trim()
   const match = clean.match(/\b(?:for|purpose|memo|reason)\s+([^?.!,;]+)/i)?.[1]?.trim() ?? ''
   if (!match) return ''
-  return stripWallets(match)
-    .replace(/\s+\bto\b\s+(0x[a-fA-F0-9]{40}|[1-9A-HJ-NP-Za-km-z]{32,44}).*$/i, '')
-    .replace(/^(base|arc|solana|arbitrum|usdc)\b/i, '')
-    .trim()
-    .slice(0, 80)
+  return cleanPaymentPurpose(match)
 }
 
 function isPaymentRequestIntent(text: string) {
@@ -464,6 +472,25 @@ function extractRememberedName(text: string) {
     .replace(/[.?!,;:]+$/g, '')
     .trim()
     .slice(0, 48)
+}
+
+function localHelperAnswer(question: string, knownName: string) {
+  const clean = question.trim()
+  if (/^(hi|hello|hey|yo|gm|good morning|good afternoon|good evening)\b/i.test(clean)) {
+    return knownName && knownName !== 'there'
+      ? `Hi ${friendlyName(knownName)}. What do you want to create or check today?`
+      : 'Hi. What do you want to create or check today?'
+  }
+  if (/\b(what can you do|help me|how can you help|what do you help with)\b/i.test(clean)) {
+    return 'I can help you create PayLinks, explain payment status, guide wallet funding, clarify x402 activation, open PolyDesk or StreamPay flows, and answer daily questions.'
+  }
+  if (/\b(receipt|proof|0g archive|share receipt)\b/i.test(clean)) {
+    return 'After a PayLink is paid, the payer success screen shows the transaction, then the 0G archive and receipt actions appear once the proof is ready.'
+  }
+  if (/\b(x402|activate x402|service balance|wallet balance|circle balance)\b/i.test(clean)) {
+    return 'Circle wallet balance is the USDC in your wallet. x402 service balance is the amount activated for paid services. Fund the wallet first, then activate x402 before using paid services.'
+  }
+  return ''
 }
 
 function nameFromMemorySummary(value: string) {
@@ -1443,6 +1470,15 @@ function TelegramHelperPanel({
         return
       }
       if (await handlePaylinkConversation(nextQuestion)) return
+      const knownName = helperName || profile?.displayName || helperNameDraft || cleanTelegramName || nameFromMemorySummary(memoryDraft || profile?.memorySummary || '')
+      const localAnswer = localHelperAnswer(nextQuestion, knownName)
+      if (localAnswer) {
+        setMessages(prev => [...prev, {
+          question: nextQuestion,
+          answer: localAnswer,
+        }])
+        return
+      }
       setAgentStatus('Asking ZeroScout...')
       const res = await fetch('/api/agent-ask', {
         method: 'POST',

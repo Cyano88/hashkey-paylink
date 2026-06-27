@@ -51,6 +51,15 @@ const UPSTASH_REST_URL = (process.env.UPSTASH_REDIS_REST_URL ?? '').trim().repla
 const UPSTASH_REST_TOKEN = (process.env.UPSTASH_REDIS_REST_TOKEN ?? '').trim()
 const UPSTASH_USAGE_KEY = (process.env.HELPER_USAGE_STORE_KEY ?? 'hashpaylink:helper-usage').trim()
 const GENERIC_STRATEGY_PHRASE = 'Build around agentic USDC commerce'
+const GENERIC_STRATEGY_PATTERNS = [
+  /Hash PayLink Strategy Agent guidance/i,
+  /Build around agentic USDC commerce/i,
+  /strong MVP should show/i,
+  /Frame Arc as/i,
+  /Circle as the stablecoin platform layer/i,
+  /Polymarket as a high-signal consumer workflow/i,
+  /This is product strategy/i,
+]
 
 type UsageRecord = {
   count: number
@@ -244,9 +253,26 @@ function cleanZeroScoutGuidanceText(value: string) {
     .map(line => line.replace(/^(Signal|Use|Boundary|Missing):\s*/i, '').trim())
     .filter(line => line && !/ZeroScout sponsorship is required/i.test(line))
     .filter(line => !line.includes(GENERIC_STRATEGY_PHRASE))
+    .filter(line => !GENERIC_STRATEGY_PATTERNS.some(pattern => pattern.test(line)))
     .slice(0, 5)
     .join('\n')
     .trim()
+}
+
+function fallbackHelperAnswer(question: string) {
+  if (/\b(receipt|proof|0g archive|share receipt)\b/i.test(question)) {
+    return 'After a PayLink is paid, the payer success screen shows the transaction, then the 0G archive and receipt actions appear once the proof is ready.'
+  }
+  if (/\b(x402|activate x402|service balance|wallet balance|circle balance)\b/i.test(question)) {
+    return 'Circle wallet balance is the USDC in your wallet. x402 service balance is the amount activated for paid services. Fund the wallet first, then activate x402 before using paid services.'
+  }
+  if (/\b(paylink|payment link|request|invoice|collect|charge)\b/i.test(question)) {
+    return 'Tell me the payer, amount, network, purpose, and receive wallet. I can then prepare a clean PayLink for sharing.'
+  }
+  if (/\b(what can you do|help me|how can you help|what do you help with)\b/i.test(question)) {
+    return 'I can help with PayLinks, payment receipts, wallet funding, x402 activation, PolyDesk, StreamPay, setup questions, and everyday planning.'
+  }
+  return ''
 }
 
 function answerFromZeroScoutGuidance(question: string, zeroScoutGuidance?: ZeroScoutHelperGuidance) {
@@ -266,6 +292,9 @@ function getHelperResponse(question: string, payerName: string, chain: string, a
 
   const zeroScoutAnswer = answerFromZeroScoutGuidance(question, zeroScoutGuidance)
   if (zeroScoutAnswer) return zeroScoutAnswer
+
+  const fallbackAnswer = fallbackHelperAnswer(question)
+  if (fallbackAnswer) return fallbackAnswer
 
   if (accessMode !== HELPER_FREE_ACCESS_MODE) {
     return `Your paid helper access is verified: ${amount} on ${chain}. What would you like to do next?`
