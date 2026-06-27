@@ -616,16 +616,16 @@ export default function TelegramPaymentLinks() {
   const needsTelegramIdentity = activeSection === 'agent-wallets' && !telegramIdentity.isStable
   const agentGreetingName = friendlyName(savedHelperName || (telegramName === 'there' ? '' : telegramName) || recoveredTelegramName || 'there')
   const agentHeaderPrompts = useMemo(() => [
-    'I am Agent Hash.',
-    'Tap to launch me.',
-    'What do you want to fund or request today?',
-    'I can help with payments and PayLink services.',
+    { text: 'I am Agent Hash.', delayMs: 7000 },
+    { text: 'Tap to launch me.', delayMs: 3600 },
+    { text: 'What do you want to fund or request today?', delayMs: 8500 },
+    { text: 'I can help with payments and Hash PayLink services.', delayMs: 9500 },
   ], [])
   const isAgentHashOpen = opened && activeService === 'hashpaylink-helper'
 
   useEffect(() => {
     if (isAgentHashOpen) return undefined
-    const delay = agentHeaderPrompts[agentPromptIndex] === 'Tap to launch me.' ? 3600 : 10000
+    const delay = agentHeaderPrompts[agentPromptIndex]?.delayMs ?? 7000
     const timer = window.setTimeout(() => {
       setAgentPromptIndex(index => (index + 1) % agentHeaderPrompts.length)
     }, delay)
@@ -892,19 +892,12 @@ export default function TelegramPaymentLinks() {
           </div>
           <div className="min-w-0 flex-1">
             {isAgentHashOpen ? (
-              <div className="rounded-2xl rounded-tl-md bg-gray-100 px-4 py-3 dark:bg-white/[0.07]">
-                <p className="text-sm leading-relaxed text-gray-800 dark:text-gray-100">
-                  Welcome back, {agentGreetingName}. Ask me about payments, Polymarket funding, StreamPay, agent setup, research, planning, or daily questions.
-                </p>
-                <div className="mt-2">
-                  <ZeroScoutPowerBadge compact />
-                </div>
-              </div>
+              <p className="pt-0.5 text-sm font-semibold text-gray-900 dark:text-white">Agent Hash</p>
             ) : (
               <>
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Telegram</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Agent Hash</p>
                     <p className="mt-1 truncate text-sm font-semibold text-gray-900 dark:text-white">
                       Hello {agentGreetingName}
                     </p>
@@ -916,7 +909,7 @@ export default function TelegramPaymentLinks() {
                     key={agentPromptIndex}
                     className="telegram-agent-typewriter text-sm font-semibold leading-relaxed text-gray-800 dark:text-gray-100"
                   >
-                    {agentHeaderPrompts[agentPromptIndex]}
+                    {agentHeaderPrompts[agentPromptIndex]?.text}
                   </p>
                 </div>
               </>
@@ -1799,6 +1792,15 @@ function TelegramHelperPanel({
       <div className="space-y-3">
         <div className="overflow-hidden">
               <div ref={helperScrollRef} className="max-h-[360px] min-h-[220px] space-y-4 overflow-y-auto border-t border-gray-100 p-3 scroll-smooth dark:border-white/10">
+                <div className="max-w-[82%] break-words rounded-[18px] rounded-bl-md bg-[#f0f0f0] px-3.5 py-2.5 text-sm leading-relaxed text-gray-900 shadow-sm dark:bg-white/[0.08] dark:text-gray-100">
+                  <p>
+                    Welcome back, {helperName || cleanTelegramName || 'there'}. Ask me about payments, Polymarket funding, StreamPay, agent setup, research, planning, or daily questions.
+                  </p>
+                  <div className="mt-2">
+                    <ZeroScoutPowerBadge compact />
+                  </div>
+                </div>
+
                 {messages.map((message, index) => (
                   <div key={index} className="space-y-2.5">
                     <div className="flex justify-end">
