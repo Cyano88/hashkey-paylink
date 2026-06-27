@@ -107,14 +107,10 @@ function buildGuidanceText(result: ZeroScoutIntelligenceResult) {
   const lines = [
     result.suggestedAnswer,
     result.summary,
-    ...(result.missingFields ?? []).slice(0, 4).map(item => `Missing: ${item}`),
-    ...(result.safetyBoundaries ?? []).slice(0, 3).map(item => `Boundary: ${item}`),
-    ...(result.signals ?? []).slice(0, 4).map(item => `Signal: ${item}`),
-    ...(result.recommendedActions ?? []).slice(0, 4).map(item => `Use: ${item}`),
-    ...(result.riskFlags ?? []).slice(0, 3).map(item => `Boundary: ${item}`),
-    ...(result.dataGaps ?? []).slice(0, 3).map(item => `Missing: ${item}`),
   ]
-  return lines.filter(Boolean).join('\n').slice(0, 1_600)
+  return Array.from(new Set(lines.map(item => String(item ?? '').trim()).filter(Boolean)))
+    .join('\n')
+    .slice(0, 1_000)
 }
 
 function shouldUseDeepHelperReview(input: ZeroScoutHelperGuidanceInput) {

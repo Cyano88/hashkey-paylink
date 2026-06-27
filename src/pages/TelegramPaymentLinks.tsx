@@ -41,6 +41,7 @@ const TELEGRAM_BOT_URL = import.meta.env.VITE_TELEGRAM_AGENT_URL || 'https://t.m
 const PUBLIC_PAYLINK_ORIGIN = (import.meta.env.VITE_PUBLIC_PAYLINK_ORIGIN || 'https://hashpaylink.com').replace(/\/+$/, '')
 const POLYMARKET_LOGO = '/brand/polymarket-logo.png'
 const MIN_HELPER_TYPING_VISIBLE_MS = 3500
+const HELPER_PAYMENT_REQUEST_DAILY_LIMIT = 20
 
 function displayTelegramName(rawName: string | null, fallback = 'there') {
   const clean = (rawName ?? '').replace(/^@+/, '').trim()
@@ -430,6 +431,11 @@ function isPaymentRequestIntent(text: string) {
   return /\b(request|collect|charge|invoice|paylink|payment link|ask .*pay|split|dues|donation|group collection)\b/i.test(text)
 }
 
+function isDeepResearchIntent(text: string) {
+  return /\b(research|analyze|analysis|strategy|investor|pitch|grant|roadmap|architecture|design|compare|plan|proposal|polymarket|lp scout|liquidity|market|x402 architecture|product strategy)\b/i.test(text)
+    || text.trim().length > 220
+}
+
 function isGroupRequestIntent(text: string) {
   return /\b(group|collection|multi payer|multi-payer|everyone|split|dues|donation|contributors|many people)\b/i.test(text)
 }
@@ -487,6 +493,10 @@ function nameFromMemorySummary(value: string) {
 
 function sleep(ms: number) {
   return new Promise(resolve => window.setTimeout(resolve, ms))
+}
+
+function todayKey() {
+  return new Date().toISOString().slice(0, 10)
 }
 
 export default function TelegramPaymentLinks() {
@@ -1154,6 +1164,35 @@ function TelegramHelperPanel({
   const [memoryDraft, setMemoryDraft] = useState('')
   const [paylinkDraft, setPaylinkDraft] = useState<HelperPaylinkDraft | null>(null)
   const [checkpointBusy, setCheckpointBusy] = useState(false)
+  const helperIdentityKey = (ownerKey || telegramId || payer || cleanTelegramName || 'local-helper').trim().toLowerCase()
+
+  function helperMemoryContext() {
+    const profileName = helperName || profile?.displayName || helperNameDraft || nameFromMemorySummary(memoryDraft || profile?.memorySummary || '')
+    return [
+      profileName ? `User is known as ${friendlyName(profileName)}.` : '',
+      cleanTelegramName ? `Telegram context is ${cleanTelegramName}. Do not use it as the user's name if a known name is provided.` : '',
+      memoryDraft.trim() || profile?.memorySummary || '',
+    ].filter(Boolean).join('\n').slice(0, 1600)
+  }
+
+  function paymentQuotaStorageKey() {
+    return `hashpaylink-helper-payment-count:${todayKey()}:${helperIdentityKey}`
+  }
+
+  function paymentQuotaStatus() {
+    const used = Math.max(0, parseInt(window.localStorage.getItem(paymentQuotaStorageKey()) ?? '0', 10) || 0)
+    return {
+      used,
+      remaining: Math.max(0, HELPER_PAYMENT_REQUEST_DAILY_LIMIT - used),
+      allowed: used < HELPER_PAYMENT_REQUEST_DAILY_LIMIT,
+    }
+  }
+
+  function consumePaymentQuota() {
+    const status = paymentQuotaStatus()
+    window.localStorage.setItem(paymentQuotaStorageKey(), String(status.used + 1))
+  }
+
   useEffect(() => {
     setMessages([])
     setPaylinkDraft(null)
@@ -1290,7 +1329,7 @@ function TelegramHelperPanel({
           payer: payer.trim(),
           question: prompt,
           accessMode: 'helper-free',
-          memorySummary: memoryDraft.trim() || profile?.memorySummary || '',
+          memorySummary: helperMemoryContext(),
         }),
       })
       const data = await res.json() as { answer?: string; error?: string }
@@ -1371,6 +1410,13 @@ function TelegramHelperPanel({
 
   async function handlePaylinkConversation(nextQuestion: string) {
     if (!paylinkDraft && !isPaymentRequestIntent(nextQuestion)) return false
+    if (!paylinkDraft && !paymentQuotaStatus().allowed) {
+      setMessages(prev => [...prev, {
+        question: nextQuestion,
+        answer: 'You have used today\'s 20 AI-assisted PayLink requests. The normal Payment Links tab is still available for manual requests.',
+      }])
+      return true
+    }
     let draft = buildDraftFromText(nextQuestion, paylinkDraft)
     const savedWallet = preferredWalletFor(draft.network)
 
@@ -1424,6 +1470,7 @@ function TelegramHelperPanel({
 
     setAgentStatus('Preparing PayLink...')
     const saved = await createPaylinkFromDraft(draft)
+    consumePaymentQuota()
     setPaylinkDraft(null)
     const target = friendlyName(saved.target)
     const fallbackAnswer = saved.mode === 'group'
@@ -1458,7 +1505,12 @@ function TelegramHelperPanel({
     setAsking(true)
     try {
       const isPaylinkFlow = Boolean(paylinkDraft || isPaymentRequestIntent(nextQuestion))
-      setAgentStatus(isPaylinkFlow ? 'Checking payment details...' : 'Reading your message...')
+      const isDeepResearch = isDeepResearchIntent(nextQuestion)
+      setAgentStatus(isPaylinkFlow
+        ? 'Checking payment details...'
+        : isDeepResearch
+          ? 'Running deeper research... this might take a little time.'
+          : 'Reading your message...')
       await sleep(MIN_HELPER_TYPING_VISIBLE_MS)
       const rememberedName = extractRememberedName(nextQuestion)
       if (rememberedName) {
@@ -1490,7 +1542,7 @@ function TelegramHelperPanel({
         return
       }
       if (await handlePaylinkConversation(nextQuestion)) return
-      setAgentStatus('Asking ZeroScout...')
+      setAgentStatus(isDeepResearch ? 'Running deeper research... this might take a little time.' : 'Asking ZeroScout...')
       const res = await fetch('/api/agent-ask', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1499,7 +1551,7 @@ function TelegramHelperPanel({
           payer: payer.trim(),
           question: nextQuestion,
           accessMode: 'helper-free',
-          memorySummary: memoryDraft.trim() || profile?.memorySummary || '',
+          memorySummary: helperMemoryContext(),
         }),
       })
       const data = await res.json() as {
@@ -1507,8 +1559,21 @@ function TelegramHelperPanel({
         proof?: { ogTxHash: string; ogExplorer: string }
         zeroscoutSponsorship?: ZeroScoutSponsorship
         error?: string
+        upgradeRequired?: boolean
+        upgradeLink?: string
+        upgradeAmount?: string
+        upgradeCurrency?: string
       }
-      if (!data.answer) throw new Error(data.error ?? 'No helper response returned.')
+      if (!data.answer) {
+        if (data.upgradeRequired && data.upgradeLink) {
+          setMessages(prev => [...prev, {
+            question: nextQuestion,
+            answer: `Deep research is paused after today's free uses. Agent Hash Pro is ${data.upgradeAmount ?? '10'} ${data.upgradeCurrency ?? 'USDC'} monthly: ${data.upgradeLink}`,
+          }])
+          return
+        }
+        throw new Error(data.error ?? 'No helper response returned.')
+      }
       setAgentStatus('Securing proof...')
       setMessages(prev => [...prev, { question: nextQuestion, answer: data.answer!, proof: data.proof, zeroscoutSponsorship: data.zeroscoutSponsorship }])
       void saveProfile({ question: nextQuestion, answer: data.answer } as Partial<HelperProfile>)

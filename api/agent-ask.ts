@@ -42,11 +42,13 @@ const MAX_PAYER_LENGTH = 128
 const MAX_QUESTION_LENGTH = 4_000
 const MAX_MEMORY_LENGTH = 1_600
 const HELPER_FREE_ACCESS_MODE = 'helper-free'
-const HELPER_DAILY_PROMPT_LIMIT = Math.max(1, parseInt(process.env.HELPER_DAILY_PROMPT_LIMIT ?? '20', 10) || 20)
+const HELPER_SIMPLE_DAILY_PROMPT_LIMIT = Math.max(1, parseInt(process.env.HELPER_SIMPLE_DAILY_PROMPT_LIMIT ?? process.env.HELPER_DAILY_PROMPT_LIMIT ?? '100', 10) || 100)
+const HELPER_DEEP_DAILY_PROMPT_LIMIT = Math.max(1, parseInt(process.env.HELPER_DEEP_DAILY_PROMPT_LIMIT ?? '5', 10) || 5)
 const HELPER_USAGE_WINDOW_MS = 24 * 60 * 60 * 1000
 const HELPER_USAGE_STORE = process.env.HELPER_USAGE_STORE
   ?? (process.env.DATA_PATH ? `${process.env.DATA_PATH}/helper-usage.json` : './data/helper-usage.json')
 const HELPER_VERIFY_TIMEOUT_MS = Math.max(5_000, parseInt(process.env.HELPER_VERIFY_TIMEOUT_MS ?? '15000', 10) || 15_000)
+const AGENT_HASH_PRO_TREASURY = (process.env.AGENT_HASH_PRO_TREASURY ?? process.env.TREASURY_ADDRESS ?? '0xcE5dF9e1115F81a2Fc2F65941B20B820d508e753').trim()
 const UPSTASH_REST_URL = (process.env.UPSTASH_REDIS_REST_URL ?? '').trim().replace(/\/+$/, '')
 const UPSTASH_REST_TOKEN = (process.env.UPSTASH_REDIS_REST_TOKEN ?? '').trim()
 const UPSTASH_USAGE_KEY = (process.env.HELPER_USAGE_STORE_KEY ?? 'hashpaylink:helper-usage').trim()
@@ -132,49 +134,68 @@ async function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
   }
 }
 
-function usageKey(eventId: string, payer: string) {
-  return crypto.createHash('sha256').update(`${eventId.toLowerCase()}:${payer.toLowerCase()}`).digest('hex')
+type HelperUsageTier = 'simple' | 'deep'
+
+function helperLimitForTier(tier: HelperUsageTier) {
+  return tier === 'deep' ? HELPER_DEEP_DAILY_PROMPT_LIMIT : HELPER_SIMPLE_DAILY_PROMPT_LIMIT
 }
 
-async function consumeHelperPrompt(eventId: string, payer: string) {
+function usageKey(eventId: string, payer: string, tier: HelperUsageTier) {
+  return crypto.createHash('sha256').update(`${tier}:${eventId.toLowerCase()}:${payer.toLowerCase()}`).digest('hex')
+}
+
+function agentHashProPaymentLink(payer: string) {
+  const params = new URLSearchParams({
+    e: AGENT_HASH_PRO_TREASURY,
+    a: '10',
+    m: 'Agent Hash Pro monthly subscription',
+    v: '1',
+    id: `agent-hash-pro-${crypto.createHash('sha256').update(payer.toLowerCase()).digest('hex').slice(0, 16)}`,
+  })
+  return `https://hashpaylink.com/pay?${params.toString()}`
+}
+
+async function consumeHelperPrompt(eventId: string, payer: string, tier: HelperUsageTier) {
   const now = Date.now()
-  const key = usageKey(eventId, payer)
+  const limit = helperLimitForTier(tier)
+  const key = usageKey(eventId, payer, tier)
   const store = await readUsageStore()
   const current = store.usage[key]
 
   if (!current || current.resetAt <= now) {
     store.usage[key] = { count: 1, resetAt: now + HELPER_USAGE_WINDOW_MS }
     await writeUsageStore(store)
-    return { allowed: true, remaining: HELPER_DAILY_PROMPT_LIMIT - 1, resetAt: store.usage[key].resetAt }
+    return { allowed: true, remaining: limit - 1, resetAt: store.usage[key].resetAt, limit, tier }
   }
 
-  if (current.count >= HELPER_DAILY_PROMPT_LIMIT) {
-    return { allowed: false, remaining: 0, resetAt: current.resetAt }
+  if (current.count >= limit) {
+    return { allowed: false, remaining: 0, resetAt: current.resetAt, limit, tier }
   }
 
   current.count += 1
   store.usage[key] = current
   await writeUsageStore(store)
-  return { allowed: true, remaining: Math.max(0, HELPER_DAILY_PROMPT_LIMIT - current.count), resetAt: current.resetAt }
+  return { allowed: true, remaining: Math.max(0, limit - current.count), resetAt: current.resetAt, limit, tier }
 }
 
 // ─── Payment verification (same logic as agent-verify, kept local) ────────────
 
-async function getHelperPromptUsageStatus(eventId: string, payer: string) {
+async function getHelperPromptUsageStatus(eventId: string, payer: string, tier: HelperUsageTier) {
   const now = Date.now()
-  const key = usageKey(eventId, payer)
+  const limit = helperLimitForTier(tier)
+  const key = usageKey(eventId, payer, tier)
   const store = await readUsageStore()
   const current = store.usage[key]
 
   if (!current || current.resetAt <= now) {
-    return { allowed: true, remaining: HELPER_DAILY_PROMPT_LIMIT - 1, resetAt: now + HELPER_USAGE_WINDOW_MS }
+    return { allowed: true, remaining: limit - 1, resetAt: now + HELPER_USAGE_WINDOW_MS, limit, tier }
   }
 
-  if (current.count >= HELPER_DAILY_PROMPT_LIMIT) {
-    return { allowed: false, remaining: 0, resetAt: current.resetAt }
+  if (current.count >= limit) {
+    return { allowed: false, remaining: 0, resetAt: current.resetAt, limit, tier }
   }
 
-  return { allowed: true, remaining: Math.max(0, HELPER_DAILY_PROMPT_LIMIT - current.count - 1), resetAt: current.resetAt }
+  return { allowed: true, remaining: Math.max(0, limit - current.count - 1), resetAt: current.resetAt, limit, tier }
 }
 
 async function verifyPayment(eventId: string, payer: string) {
@@ -387,13 +408,22 @@ export default async function handler(req: Request, res: Response) {
     }
 
     // 2. Payment verified — get AI response
-    const usagePreview = await getHelperPromptUsageStatus(eventId, access.payment.payer)
+    const helperRouting = classifyHelperRequest(question)
+    const usageTier: HelperUsageTier = helperRouting.qualityMode === 'deep' ? 'deep' : 'simple'
+    const usagePreview = await getHelperPromptUsageStatus(eventId, access.payment.payer, usageTier)
     if (!usagePreview.allowed) {
       res.setHeader('Retry-After', Math.ceil((usagePreview.resetAt - Date.now()) / 1000).toString())
       return res.status(429).json({
-        error: 'Daily helper prompt limit reached. Try again after the cooldown.',
+        error: usageTier === 'deep'
+          ? 'Deep research limit reached for today. Upgrade to Agent Hash Pro to continue deeper Ask Hash research.'
+          : 'Daily Ask Hash chat limit reached. Payment Links, StreamPay, and other manual tools remain available.',
         cooldown: true,
-        limit: HELPER_DAILY_PROMPT_LIMIT,
+        upgradeRequired: usageTier === 'deep',
+        upgradeAmount: usageTier === 'deep' ? '10' : undefined,
+        upgradeCurrency: usageTier === 'deep' ? 'USDC' : undefined,
+        upgradeLink: usageTier === 'deep' ? agentHashProPaymentLink(access.payment.payer) : undefined,
+        usageTier,
+        limit: usagePreview.limit,
         resetAt: usagePreview.resetAt,
       })
     }
@@ -401,7 +431,6 @@ export default async function handler(req: Request, res: Response) {
     const memorySummaryHash = memorySummary
       ? crypto.createHash('sha256').update(memorySummary).digest('hex')
       : undefined
-    const helperRouting = classifyHelperRequest(question)
     const zeroScoutGuidance = await getZeroScoutHelperGuidance({
       service: 'Hash PayLink Helper',
       action: 'helper-chat-preflight',
@@ -474,13 +503,20 @@ export default async function handler(req: Request, res: Response) {
       })
     }
 
-    const usage = await consumeHelperPrompt(eventId, access.payment.payer)
+    const usage = await consumeHelperPrompt(eventId, access.payment.payer, usageTier)
     if (!usage.allowed) {
       res.setHeader('Retry-After', Math.ceil((usage.resetAt - Date.now()) / 1000).toString())
       return res.status(429).json({
-        error: 'Daily helper prompt limit reached. Try again after the cooldown.',
+        error: usageTier === 'deep'
+          ? 'Deep research limit reached for today. Upgrade to Agent Hash Pro to continue deeper Ask Hash research.'
+          : 'Daily Ask Hash chat limit reached. Payment Links, StreamPay, and other manual tools remain available.',
         cooldown: true,
-        limit: HELPER_DAILY_PROMPT_LIMIT,
+        upgradeRequired: usageTier === 'deep',
+        upgradeAmount: usageTier === 'deep' ? '10' : undefined,
+        upgradeCurrency: usageTier === 'deep' ? 'USDC' : undefined,
+        upgradeLink: usageTier === 'deep' ? agentHashProPaymentLink(access.payment.payer) : undefined,
+        usageTier,
+        limit: usage.limit,
         resetAt: usage.resetAt,
       })
     }
@@ -491,9 +527,12 @@ export default async function handler(req: Request, res: Response) {
       paymentVerified: accessMode !== HELPER_FREE_ACCESS_MODE,
       usage: {
         remaining: usage.remaining,
-        limit: HELPER_DAILY_PROMPT_LIMIT,
+        limit: usage.limit,
+        tier: usage.tier,
         resetAt: usage.resetAt,
       },
+      helperIntent: helperRouting.helperIntent,
+      qualityMode: helperRouting.qualityMode,
       payment:         access.payment,
       proof:           accessMode === HELPER_FREE_ACCESS_MODE ? undefined : result?.proof,
       zeroscoutSponsorship,
