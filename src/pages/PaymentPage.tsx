@@ -3003,7 +3003,8 @@ export default function PaymentPage() {
 
   useEffect(() => {
     if (!isConfirmed || !txHash || ordinaryReceiptRegistered.current) return
-    if (!isMainHashPaylinkPayment || isEventMode || isNgPosPayment || isPolymarketFunding || isAgentOrWalletFunding || isHelperAccess) return
+    const isReceiptablePaylinkPayment = isMainHashPaylinkPayment || isTelegramSource
+    if (!isReceiptablePaylinkPayment || isEventMode || isNgPosPayment || isPolymarketFunding || isAgentOrWalletFunding || isHelperAccess) return
     ordinaryReceiptRegistered.current = true
     void registerOrdinaryReceipt()
   // eslint-disable-next-line react-hooks/exhaustive-deps
