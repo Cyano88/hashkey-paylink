@@ -508,10 +508,13 @@ export default async function handler(req: Request, res: Response) {
       },
     })
     if (!zeroscoutSponsorship) {
-      return res.status(503).json({
-        error: 'ZeroScout sponsorship is required before helper responses are returned. Try again shortly.',
-        zeroscoutRequired: true,
-      })
+      const strictSponsorshipRequired = helperRouting.qualityMode === 'deep' || accessMode !== HELPER_FREE_ACCESS_MODE
+      if (strictSponsorshipRequired) {
+        return res.status(503).json({
+          error: 'ZeroScout sponsorship is required before helper responses are returned. Try again shortly.',
+          zeroscoutRequired: true,
+        })
+      }
     }
 
     const usage = await consumeHelperPrompt(eventId, access.payment.payer, usageTier)
@@ -547,6 +550,7 @@ export default async function handler(req: Request, res: Response) {
       payment:         access.payment,
       proof:           accessMode === HELPER_FREE_ACCESS_MODE ? undefined : result?.proof,
       zeroscoutSponsorship,
+      zeroscoutPending: !zeroscoutSponsorship,
     })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)

@@ -54,7 +54,9 @@ export type ZeroScoutHelperGuidance = {
 }
 
 const SPONSOR_TIMEOUT_MS = Math.max(1000, Number(process.env.ZEROSCOUT_SPONSOR_TIMEOUT_MS ?? 30_000))
+const FAST_SPONSOR_TIMEOUT_MS = Math.max(1000, Number(process.env.ZEROSCOUT_FAST_SPONSOR_TIMEOUT_MS ?? 1_500))
 const GUIDANCE_TIMEOUT_MS = Math.max(1000, Number(process.env.ZEROSCOUT_HELPER_GUIDANCE_TIMEOUT_MS ?? 45_000))
+const FAST_GUIDANCE_TIMEOUT_MS = Math.max(1000, Number(process.env.ZEROSCOUT_FAST_HELPER_GUIDANCE_TIMEOUT_MS ?? 2_500))
 const MAX_GUIDANCE_CONTEXT_LENGTH = 900
 
 function stableStringify(value: unknown): string {
@@ -146,6 +148,7 @@ export async function getZeroScoutHelperGuidance(input: ZeroScoutHelperGuidanceI
   })
 
   try {
+    const timeoutMs = input.request.qualityMode === 'deep' ? GUIDANCE_TIMEOUT_MS : FAST_GUIDANCE_TIMEOUT_MS
     const zeroscout = await withTimeout(callZeroScoutIntelligence({
       partner: 'Hash PayLink',
       productType: 'agentic-service',
@@ -173,7 +176,7 @@ export async function getZeroScoutHelperGuidance(input: ZeroScoutHelperGuidanceI
       },
       includeClaudeReview: shouldUseDeepHelperReview(input),
       includeOpenAiReview: shouldUseDeepHelperReview(input),
-    }), GUIDANCE_TIMEOUT_MS)
+    }), timeoutMs)
 
     const guidance = buildGuidanceText(zeroscout)
     const guidanceHash = requestHash({
@@ -211,6 +214,8 @@ export async function sponsorZeroScoutAction(input: ZeroScoutSponsoredActionInpu
   })
 
   try {
+    const qualityMode = String(input.request?.qualityMode ?? '')
+    const timeoutMs = qualityMode === 'deep' ? SPONSOR_TIMEOUT_MS : FAST_SPONSOR_TIMEOUT_MS
     const zeroscout = await withTimeout(callZeroScoutIntelligence({
       partner: 'Hash PayLink',
       productType: 'agentic-service',
@@ -234,7 +239,7 @@ export async function sponsorZeroScoutAction(input: ZeroScoutSponsoredActionInpu
       },
       includeClaudeReview: false,
       includeOpenAiReview: false,
-    }, { requireProof: true, endpointPath: '/api/integrations/sponsorship-proof' }), SPONSOR_TIMEOUT_MS)
+    }, { requireProof: true, endpointPath: '/api/integrations/sponsorship-proof' }), timeoutMs)
 
     return {
       proofClass: 'zeroscout_sponsored_action',

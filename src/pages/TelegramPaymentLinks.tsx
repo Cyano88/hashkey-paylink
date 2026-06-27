@@ -41,6 +41,7 @@ const TELEGRAM_BOT_URL = import.meta.env.VITE_TELEGRAM_AGENT_URL || 'https://t.m
 const PUBLIC_PAYLINK_ORIGIN = (import.meta.env.VITE_PUBLIC_PAYLINK_ORIGIN || 'https://hashpaylink.com').replace(/\/+$/, '')
 const POLYMARKET_LOGO = '/brand/polymarket-logo.png'
 const MIN_HELPER_TYPING_VISIBLE_MS = 3500
+const FAST_HELPER_RESPONSE_MAX_MS = 4900
 const HELPER_PAYMENT_REQUEST_DAILY_LIMIT = 20
 
 function displayTelegramName(rawName: string | null, fallback = 'there') {
@@ -487,6 +488,22 @@ function isAskingUserName(text: string) {
   return /\b(what'?s|what is|tell me)\s+my\s+name\b|\bdo you know my name\b|\bwho am i\b|\bwhat do you call me\b/i.test(text)
 }
 
+function fastHelperFallback(text: string, name: string) {
+  if (/^\s*(hi|hello|hey|yo|gm|good morning|good afternoon|good evening)\b/i.test(text)) {
+    return `Hey ${name}. I can help you create a PayLink, check a receipt, set up wallets, use StreamPay, or research PolyDesk and Polymarket flows.`
+  }
+  if (/\b(what can you do|how can you help|help me|capabilities|what do you help with)\b/i.test(text)) {
+    return 'I can help with PayLinks, receipts, wallets, StreamPay, PolyDesk, Polymarket funding, and quick planning questions.'
+  }
+  if (/\b(receipt|proof|0g archive|share receipt)\b/i.test(text)) {
+    return 'Send the receipt or transaction link and I will help you check what it shows. I will not claim a payment is confirmed unless the app has verified proof.'
+  }
+  if (/\b(x402|activate x402|service balance|wallet balance|circle balance)\b/i.test(text)) {
+    return 'I can explain x402 setup and service balances. Wallet balances, x402 activation, and paid access need verified app state before I treat them as confirmed.'
+  }
+  return 'I can help with that. For fastest results, tell me the action, amount, network, wallet, or question you want me to handle.'
+}
+
 function extractRememberedName(text: string) {
   const match = text.match(/\b(?:remember\s+)?(?:my name is|call me|i am|i'm)\s+(@?[a-zA-Z][\w .-]{1,40})/i)?.[1] ?? ''
   return match
@@ -507,6 +524,18 @@ function nameFromMemorySummary(value: string) {
 
 function sleep(ms: number) {
   return new Promise(resolve => window.setTimeout(resolve, ms))
+}
+
+function withClientTimeout<T>(promise: Promise<T>, ms: number): Promise<T | undefined> {
+  let timer: ReturnType<typeof window.setTimeout> | undefined
+  return Promise.race([
+    promise,
+    new Promise<undefined>(resolve => {
+      timer = window.setTimeout(() => resolve(undefined), ms)
+    }),
+  ]).finally(() => {
+    if (timer) window.clearTimeout(timer)
+  })
 }
 
 function todayKey() {
@@ -1335,7 +1364,7 @@ function TelegramHelperPanel({
 
   async function polishLocalHelperResult(prompt: string, fallback: string) {
     try {
-      const res = await fetch('/api/agent-ask', {
+      const res = await withClientTimeout(fetch('/api/agent-ask', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1345,7 +1374,8 @@ function TelegramHelperPanel({
           accessMode: 'helper-free',
           memorySummary: helperMemoryContext(),
         }),
-      })
+      }), 900)
+      if (!res) return fallback
       const data = await res.json() as { answer?: string; error?: string }
       if (!res.ok || !data.answer) return fallback
       return data.answer
@@ -1423,9 +1453,10 @@ function TelegramHelperPanel({
     return saved
   }
 
-  async function handlePaylinkConversation(nextQuestion: string) {
+  async function handlePaylinkConversation(nextQuestion: string, minimumTyping: Promise<unknown>) {
     if (!paylinkDraft && !isPaymentRequestIntent(nextQuestion)) return false
     if (!paylinkDraft && !paymentQuotaStatus().allowed) {
+      await minimumTyping
       setMessages(prev => [...prev, {
         question: nextQuestion,
         answer: 'You have used today\'s 20 AI-assisted PayLink requests. The normal Payment Links tab is still available for manual requests.',
@@ -1438,6 +1469,7 @@ function TelegramHelperPanel({
     if (!draft.wallet && savedWallet && !draft.offeredSavedWallet) {
       draft = { ...draft, offeredSavedWallet: true }
       setPaylinkDraft(draft)
+      await minimumTyping
       setMessages(prev => [...prev, {
         question: nextQuestion,
         answer: `I can prepare that PayLink. Do you want to continue with your saved ${draft.network ? requestNetworkLabels[draft.network] : 'payment'} wallet ${compactSavedWallet(savedWallet)}, or use a new receive wallet?`,
@@ -1456,6 +1488,7 @@ function TelegramHelperPanel({
 
     if (!draft.wallet && savedWallet && draft.offeredSavedWallet && wantsNewWallet(nextQuestion)) {
       setPaylinkDraft(draft)
+      await minimumTyping
       setMessages(prev => [...prev, {
         question: nextQuestion,
         answer: 'Send the new receive wallet. I will replace the saved wallet after this PayLink is ready.',
@@ -1474,6 +1507,7 @@ function TelegramHelperPanel({
     if (missing.length > 0) {
       setPaylinkDraft(draft)
       const missingNetworkOnly = missing.length === 1 && missing[0] === 'network'
+      await minimumTyping
       setMessages(prev => [...prev, {
         question: nextQuestion,
         answer: missingNetworkOnly
@@ -1504,6 +1538,7 @@ function TelegramHelperPanel({
       ].join('\n'),
       fallbackAnswer,
     )
+    await minimumTyping
     setMessages(prev => [...prev, {
       question: nextQuestion,
       answer,
@@ -1526,7 +1561,7 @@ function TelegramHelperPanel({
         : isDeepResearch
           ? 'Running deeper research... this might take a little time.'
           : 'Reading your message...')
-      await sleep(MIN_HELPER_TYPING_VISIBLE_MS)
+      const minimumTyping = sleep(MIN_HELPER_TYPING_VISIBLE_MS)
       const rememberedName = extractRememberedName(nextQuestion)
       if (rememberedName) {
         const cleanName = friendlyName(rememberedName)
@@ -1539,6 +1574,7 @@ function TelegramHelperPanel({
         setHelperNameDraft(cleanName)
         setPayer(current => current || cleanName)
         setMemoryDraft(nextMemory)
+        await minimumTyping
         setMessages(prev => [...prev, {
           question: nextQuestion,
           answer: `Got it. I'll call you ${cleanName}.`,
@@ -1548,6 +1584,7 @@ function TelegramHelperPanel({
       }
       if (isAskingUserName(nextQuestion)) {
         const knownName = helperName || profile?.displayName || helperNameDraft || cleanTelegramName || nameFromMemorySummary(memoryDraft || profile?.memorySummary || '')
+        await minimumTyping
         setMessages(prev => [...prev, {
           question: nextQuestion,
           answer: knownName && knownName !== 'there'
@@ -1556,9 +1593,9 @@ function TelegramHelperPanel({
         }])
         return
       }
-      if (await handlePaylinkConversation(nextQuestion)) return
+      if (await handlePaylinkConversation(nextQuestion, minimumTyping)) return
       setAgentStatus(isDeepResearch ? 'Running deeper research... this might take a little time.' : 'Asking ZeroScout...')
-      const res = await fetch('/api/agent-ask', {
+      const responsePromise = fetch('/api/agent-ask', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1569,6 +1606,17 @@ function TelegramHelperPanel({
           memorySummary: helperMemoryContext(),
         }),
       })
+      const cappedResponsePromise = isDeepResearch
+        ? responsePromise
+        : withClientTimeout(responsePromise, FAST_HELPER_RESPONSE_MAX_MS)
+      const [res] = await Promise.all([cappedResponsePromise, minimumTyping])
+      if (!res) {
+        setMessages(prev => [...prev, {
+          question: nextQuestion,
+          answer: fastHelperFallback(nextQuestion, friendlyName(helperName || cleanTelegramName || 'there')),
+        }])
+        return
+      }
       const data = await res.json() as {
         answer?: string
         proof?: { ogTxHash: string; ogExplorer: string }
