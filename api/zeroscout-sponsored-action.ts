@@ -151,10 +151,9 @@ function forcedSimpleHelperLane(): HelperRefinementLane | undefined {
 
 function helperRefinementLane(input: ZeroScoutHelperGuidanceInput): HelperRefinementLane {
   if (shouldUseDeepHelperReview(input)) return 'multi-stack'
+  if (input.request.qualityMode === 'fast') return 'og-compute'
   const helperMode = String(input.request.helperMode ?? '').trim().toLowerCase()
-  if (helperMode === 'payments' || helperMode === 'support') return 'og-compute'
-  if (helperMode === 'daily') return 'openai'
-  if (helperMode === 'services') return 'anthropic'
+  if (helperMode === 'payments' || helperMode === 'daily' || helperMode === 'services' || helperMode === 'support') return 'og-compute'
   const forcedLane = forcedSimpleHelperLane()
   if (forcedLane) return forcedLane
   const seed = requestHash({

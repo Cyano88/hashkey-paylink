@@ -2026,7 +2026,8 @@ function TelegramHelperPanel({
           memorySummary: helperMemoryContext(),
         }),
       })
-      const data = await res.json() as {
+      const rawHelperResponse = await res.text()
+      let data: {
         answer?: string
         proof?: { ogTxHash: string; ogExplorer: string }
         zeroscoutSponsorship?: ZeroScoutSponsorship
@@ -2035,6 +2036,15 @@ function TelegramHelperPanel({
         upgradeLink?: string
         upgradeAmount?: string
         upgradeCurrency?: string
+      }
+      try {
+        data = rawHelperResponse ? JSON.parse(rawHelperResponse) : {}
+      } catch {
+        data = {
+          error: rawHelperResponse.trim().startsWith('<')
+            ? 'Agent Hash is temporarily receiving a service page instead of an API response. Please try again shortly.'
+            : 'Agent Hash returned an unreadable response. Please try again shortly.',
+        }
       }
       if (!data.answer) {
         if (data.upgradeRequired && data.upgradeLink) {

@@ -29,9 +29,9 @@ try {
   globalThis.fetch = async (_url, init) => {
     seenPayload = JSON.parse(String(init.body))
     return jsonResponse({
-      id: 'zs_openai_lane_smoke',
-      suggestedAnswer: 'OpenAI lane smoke response.',
-      summary: 'OpenAI lane selected for simple helper refinement.',
+      id: 'zs_fast_greeting_lane_smoke',
+      suggestedAnswer: 'Fast greeting lane smoke response.',
+      summary: '0G Compute lane selected for fast greeting refinement.',
       signals: [],
       riskFlags: [],
       recommendedActions: [],
@@ -46,7 +46,7 @@ try {
     action: 'helper-chat-preflight',
     user: { payer: 'Shy' },
     request: {
-      eventId: 'openai-lane-smoke',
+      eventId: 'fast-greeting-lane-smoke',
       question: 'hello',
       accessMode: 'helper-free',
       helperIntent: 'greeting',
@@ -58,13 +58,13 @@ try {
   })
   const elapsedMs = Math.round(performance.now() - started)
 
-  assert.equal(guidance?.zeroscout.id, 'zs_openai_lane_smoke')
-  assert.equal(seenPayload?.data?.requestedRefinementLane, 'openai')
-  assert.equal(seenPayload?.includeOpenAiReview, true)
+  assert.equal(guidance?.zeroscout.id, 'zs_fast_greeting_lane_smoke')
+  assert.equal(seenPayload?.data?.requestedRefinementLane, 'og-compute')
+  assert.equal(seenPayload?.includeOpenAiReview, false)
   assert.equal(seenPayload?.includeClaudeReview, false)
   assert.equal(seenPayload?.data?.refinementPolicy, 'single-lane-short-refinement')
 
-  console.log(`zeroscout helper openai lane smoke ok (${elapsedMs}ms local mocked roundtrip)`)
+  console.log(`zeroscout helper fast greeting lane smoke ok (${elapsedMs}ms local mocked roundtrip)`)
 } finally {
   restore()
 }

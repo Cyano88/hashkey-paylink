@@ -412,8 +412,9 @@ function normalizeHelperMode(value: unknown) {
 function classifyHelperRequest(question: string, helperMode = ''): { helperIntent: string; qualityMode: 'fast' | 'standard' | 'deep' } {
   const value = question.toLowerCase()
   if (isNameQuestion(question)) return { helperIntent: 'personal-memory', qualityMode: 'fast' }
+  if (isGreetingQuestion(question)) return { helperIntent: 'greeting', qualityMode: 'fast' }
   if (helperMode === 'deep-research') return { helperIntent: 'deep-research', qualityMode: 'deep' }
-  if (helperMode === 'daily') return { helperIntent: isGreetingQuestion(question) ? 'greeting' : 'daily-assistant', qualityMode: 'standard' }
+  if (helperMode === 'daily') return { helperIntent: 'daily-assistant', qualityMode: 'standard' }
   if (helperMode === 'services') return { helperIntent: 'hashpaylink-services', qualityMode: 'standard' }
   if (helperMode === 'support') return { helperIntent: 'support', qualityMode: 'standard' }
   if (helperMode === 'payments') return { helperIntent: 'payment-help', qualityMode: 'standard' }
