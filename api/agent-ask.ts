@@ -343,6 +343,9 @@ function fallbackHelperAnswer(question: string) {
   if (/\b(what can you do|help me|how can you help|what do you help with)\b/i.test(question)) {
     return 'I can help with PayLinks, payment receipts, wallet funding, x402 activation, PolyDesk, StreamPay, setup questions, and everyday planning.'
   }
+  if (requiresLiveExternalData(question)) {
+    return 'I cannot verify live schedules or current events from this chat yet, so I should not guess. Ask me to create a PayLink or check payment details here, and use an official source for the latest fixture.'
+  }
   return ''
 }
 
@@ -358,6 +361,10 @@ function cleanQuestionForFallback(question: string) {
     .slice(0, 180)
 }
 
+function requiresLiveExternalData(question: string) {
+  return /\b(when is|when are|next game|next match|playing next|fixture|fixtures|schedule|score|scores|live|today|tomorrow|latest|current|near me|nearby|open now|restaurant around|weather|price|prices)\b/i.test(question)
+}
+
 function classifyHelperRequest(question: string): { helperIntent: string; qualityMode: 'fast' | 'standard' | 'deep' } {
   const value = question.toLowerCase()
   if (isNameQuestion(question)) return { helperIntent: 'personal-memory', qualityMode: 'fast' }
@@ -366,6 +373,9 @@ function classifyHelperRequest(question: string): { helperIntent: string; qualit
   }
   if (/\b(what can you do|how can you help|help me|capabilities|what do you help with)\b/.test(value)) {
     return { helperIntent: 'capabilities', qualityMode: 'fast' }
+  }
+  if (requiresLiveExternalData(question)) {
+    return { helperIntent: 'live-data-question', qualityMode: 'deep' }
   }
   if (/\b(research|analyze|analysis|strategy|investor|pitch|grant|roadmap|architecture|design|compare|plan|proposal|polymarket|lp scout|liquidity|market|x402 architecture|product strategy|look up|find|near me|nearby|restaurant|wuse|abuja)\b/.test(value)) {
     return { helperIntent: 'deep-research', qualityMode: 'deep' }
@@ -417,8 +427,8 @@ function getHelperResponse(question: string, payerName: string, chain: string, a
 
   const cleanQuestion = cleanQuestionForFallback(question)
   return cleanQuestion
-    ? `I hear you. Ask Hash can answer that too, but I did not get enough ZeroScout guidance for "${cleanQuestion}" just now. Try once more and I will answer directly.`
-    : 'I can answer general questions too. Send the question again and I will respond directly.'
+    ? `I did not get a clean ZeroScout answer for "${cleanQuestion}" just now. I can still help with PayLinks, receipts, wallet setup, StreamPay, PolyDesk, and general planning.`
+    : 'I did not get a clean ZeroScout answer just now. Try a shorter question or ask me to create/check a payment.'
 }
 
 // ─── Handler ──────────────────────────────────────────────────────────────────

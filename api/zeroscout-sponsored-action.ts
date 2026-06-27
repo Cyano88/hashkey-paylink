@@ -55,8 +55,6 @@ export type ZeroScoutHelperGuidance = {
 
 const SPONSOR_TIMEOUT_MS = Math.max(1000, Number(process.env.ZEROSCOUT_SPONSOR_TIMEOUT_MS ?? 30_000))
 const FAST_SPONSOR_TIMEOUT_MS = Math.max(1000, Number(process.env.ZEROSCOUT_FAST_SPONSOR_TIMEOUT_MS ?? 1_500))
-const GUIDANCE_TIMEOUT_MS = Math.max(1000, Number(process.env.ZEROSCOUT_HELPER_GUIDANCE_TIMEOUT_MS ?? 45_000))
-const FAST_GUIDANCE_TIMEOUT_MS = Math.max(1000, Number(process.env.ZEROSCOUT_FAST_HELPER_GUIDANCE_TIMEOUT_MS ?? 2_500))
 const MAX_GUIDANCE_CONTEXT_LENGTH = 900
 
 function stableStringify(value: unknown): string {
@@ -180,12 +178,11 @@ export async function getZeroScoutHelperGuidance(input: ZeroScoutHelperGuidanceI
   })
 
   try {
-    const timeoutMs = input.request.qualityMode === 'deep' ? GUIDANCE_TIMEOUT_MS : FAST_GUIDANCE_TIMEOUT_MS
-    const zeroscout = await withTimeout(callZeroScoutIntelligence({
+    const zeroscout = await callZeroScoutIntelligence({
       partner: 'Hash PayLink',
       productType: 'agentic-service',
       analysisType: 'zeroscout-helper-context-guidance',
-      objective: 'Return a concise, consumer-friendly Ask Hash chat answer plan. Be direct, human, and useful. Answer ordinary everyday questions cleanly when they do not require live external data. Personal identity questions should be answered only from supplied memory/profile context; if unknown, say that naturally. Payment-link requests should be practical and minimal. Respect payment, wallet, LP Scout, and x402 proof boundaries.',
+      objective: 'Return a concise, consumer-friendly Ask Hash chat answer plan. Be direct, human, and useful. Answer ordinary everyday questions cleanly. For live schedules, prices, current events, restaurants, or other freshness-sensitive requests, answer only if verified data is available in the request or ZeroScout can verify it; otherwise say plainly that live verification is not available from this chat. Personal identity questions should be answered only from supplied memory/profile context; if unknown, say that naturally. Payment-link requests should be practical and minimal. Respect payment, wallet, LP Scout, and x402 proof boundaries.',
       outputStyle: 'consumer-helper-answer-guidance',
       data: {
         proofClass: 'zeroscout_helper_context_guidance',
@@ -209,12 +206,12 @@ export async function getZeroScoutHelperGuidance(input: ZeroScoutHelperGuidanceI
           'Do not return generic product strategy when the user asks a simple personal, payment, or setup question.',
           'Do not claim Circle wallet balance, x402 service balance, x402 activation, paid-service access, receipt status, or LP Scout proof unless supplied by verified app state.',
           'Keep Circle wallet balance, x402 service balance, Activate x402, paid services, and LP Scout proof/payment requirements distinct.',
-          'Do not infer live prices, wallet balances, secrets, payment proofs, or user identity beyond supplied fields.',
+          'Do not infer live schedules, prices, wallet balances, secrets, payment proofs, or user identity beyond supplied fields.',
         ],
       },
       includeClaudeReview: reviewFlags.includeClaudeReview,
       includeOpenAiReview: reviewFlags.includeOpenAiReview,
-    }), timeoutMs)
+    })
 
     const guidance = buildGuidanceText(zeroscout)
     const guidanceHash = requestHash({
