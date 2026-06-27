@@ -561,7 +561,6 @@ html.dark .ask-hash-live-agent__bubble span {
   background: #ffffff;
   box-shadow: 0 8px 20px rgba(17, 24, 39, 0.08);
   isolation: isolate;
-  animation: zeroscoutBadgeRing 10s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
 
 .zeroscout-power-badge__mark::after {
@@ -588,20 +587,10 @@ html.dark .ask-hash-live-agent__bubble span {
   border-radius: 0.3rem;
   object-fit: contain;
   transform: scale(1);
-  will-change: opacity, transform, filter;
-}
-
-.zeroscout-power-badge__logo--og {
-  border-radius: 999px;
 }
 
 .zeroscout-power-badge__logo--zs {
-  animation: zeroscoutBadgeZs 10s ease-in-out infinite;
-}
-
-.zeroscout-power-badge__logo--og {
-  opacity: 0;
-  animation: zeroscoutBadgeOg 10s ease-in-out infinite;
+  opacity: 1;
 }
 
 html.dark .zeroscout-power-badge {

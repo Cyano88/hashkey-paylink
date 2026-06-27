@@ -260,7 +260,7 @@ function titleName(value: string) {
 
 function nameFromMemory(memorySummary: string, payerName: string) {
   const candidates = [
-    /\b(?:user is known as|known as|called|call(?:ed)?|prefers to be called)\s+([A-Za-z][A-Za-z0-9_.-]{1,40}(?:\s+[A-Za-z][A-Za-z0-9_.-]{1,40}){0,2})/i.exec(memorySummary)?.[1],
+    /\b(?:user is known as|known as|called|call(?:ed)?|prefers to be called)\s+([A-Za-z][A-Za-z0-9_-]{1,40}(?:\s+[A-Za-z][A-Za-z0-9_-]{1,40}){0,2})(?=[\s.!,;:]|$)/i.exec(memorySummary)?.[1],
     /\bHi\s+([A-Za-z][A-Za-z0-9_.-]{1,40})\b/i.exec(memorySummary)?.[1],
     !isLikelyIdentifier(payerName) ? payerName : '',
   ]
@@ -283,6 +283,9 @@ function cleanZeroScoutGuidanceText(value: string) {
 function fallbackHelperAnswer(question: string) {
   if (/\bpaylink_ready\b/i.test(question)) {
     return /\bgroup|collection/i.test(question) ? 'Collection ready.' : 'PayLink ready.'
+  }
+  if (/\bmeaning of love\b|\bwhat does love mean\b|\bdefine love\b/i.test(question)) {
+    return 'Love is deep care, trust, and commitment shown through attention, patience, respect, and action. It is not only a feeling; it is how people choose to value and support each other.'
   }
   if (/\b(receipt|proof|0g archive|share receipt)\b/i.test(question)) {
     return 'After a PayLink is paid, the payer success screen shows the transaction, then the 0G archive and receipt actions appear once the proof is ready.'
@@ -312,7 +315,7 @@ function classifyHelperRequest(question: string): { helperIntent: string; qualit
   if (/\b(what can you do|how can you help|help me|capabilities|what do you help with)\b/.test(value)) {
     return { helperIntent: 'capabilities', qualityMode: 'fast' }
   }
-  if (/\b(research|analyze|analysis|strategy|investor|pitch|grant|roadmap|architecture|design|compare|plan|proposal|polymarket|lp scout|liquidity|market|x402 architecture|product strategy)\b/.test(value)) {
+  if (/\b(research|analyze|analysis|strategy|investor|pitch|grant|roadmap|architecture|design|compare|plan|proposal|polymarket|lp scout|liquidity|market|x402 architecture|product strategy|look up|find|near me|nearby|restaurant|wuse|abuja)\b/.test(value)) {
     return { helperIntent: 'deep-research', qualityMode: 'deep' }
   }
   if (/\b(receipt|proof|0g archive|share receipt)\b/.test(value)) {

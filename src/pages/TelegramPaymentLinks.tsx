@@ -268,7 +268,7 @@ type PolymarketMode = 'self' | 'friends' | ''
 
 type HelperMessage = {
   question: string
-  answer: string
+  answer?: string
   proof?: { ogTxHash: string; ogExplorer: string }
   zeroscoutSponsorship?: ZeroScoutSponsorship
   paylink?: SavedRequest
@@ -447,7 +447,7 @@ function isPaymentRequestIntent(text: string) {
 }
 
 function isDeepResearchIntent(text: string) {
-  return /\b(research|analyze|analysis|strategy|investor|pitch|grant|roadmap|architecture|design|compare|plan|proposal|polymarket|lp scout|liquidity|market|x402 architecture|product strategy)\b/i.test(text)
+  return /\b(research|analyze|analysis|strategy|investor|pitch|grant|roadmap|architecture|design|compare|plan|proposal|polymarket|lp scout|liquidity|market|x402 architecture|product strategy|look up|find|near me|nearby|restaurant|wuse|abuja)\b/i.test(text)
     || text.trim().length > 220
 }
 
@@ -489,6 +489,12 @@ function isAskingUserName(text: string) {
 }
 
 function fastHelperFallback(text: string, name: string) {
+  if (/\bmeaning of love\b|\bwhat does love mean\b|\bdefine love\b/i.test(text)) {
+    return 'Love is deep care, trust, and commitment shown through attention, patience, respect, and action. It is not only a feeling; it is how people choose to value and support each other.'
+  }
+  if (/\bmeaning of\b|\bwhat does .+ mean\b|\bdefine\b/i.test(text)) {
+    return 'I can explain that simply. Give me the exact word or phrase and I will define it in plain language.'
+  }
   if (/^\s*(hi|hello|hey|yo|gm|good morning|good afternoon|good evening)\b/i.test(text)) {
     return `Hey ${name}. I can help you create a PayLink, check a receipt, set up wallets, use StreamPay, or research PolyDesk and Polymarket flows.`
   }
@@ -1207,7 +1213,17 @@ function TelegramHelperPanel({
   const [memoryDraft, setMemoryDraft] = useState('')
   const [paylinkDraft, setPaylinkDraft] = useState<HelperPaylinkDraft | null>(null)
   const [checkpointBusy, setCheckpointBusy] = useState(false)
+  const helperScrollRef = useRef<HTMLDivElement | null>(null)
+  const helperAbortRef = useRef<AbortController | null>(null)
   const helperIdentityKey = (ownerKey || telegramId || payer || cleanTelegramName || 'local-helper').trim().toLowerCase()
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      const node = helperScrollRef.current
+      if (node) node.scrollTo({ top: node.scrollHeight, behavior: 'smooth' })
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [messages, asking, agentStatus])
 
   function helperMemoryContext() {
     const profileName = helperName || profile?.displayName || helperNameDraft || nameFromMemorySummary(memoryDraft || profile?.memorySummary || '')
@@ -1289,6 +1305,31 @@ function TelegramHelperPanel({
     void saveProfile({ displayName: clean })
   }
 
+  function queueHelperMessage(nextQuestion: string) {
+    setMessages(prev => [...prev, { question: nextQuestion, answer: '' }])
+  }
+
+  function finishHelperMessage(nextQuestion: string, message: Omit<HelperMessage, 'question'>) {
+    setMessages(prev => {
+      const next = [...prev]
+      const pendingIndex = next.findLastIndex(item => item.question === nextQuestion && !item.answer && !item.paylink)
+      const finished = { question: nextQuestion, ...message }
+      if (pendingIndex >= 0) {
+        next[pendingIndex] = finished
+        return next
+      }
+      return prev
+    })
+  }
+
+  function stopHelperResponse() {
+    helperAbortRef.current?.abort()
+    helperAbortRef.current = null
+    setAsking(false)
+    setAgentStatus('Stopped.')
+    setMessages(prev => prev.filter(message => message.answer || message.paylink))
+  }
+
   async function saveProfile(extra: Partial<HelperProfile> = {}) {
     const cleanPayer = (payer || helperName || helperNameDraft || cleanTelegramName).trim()
     if (!cleanPayer) return
@@ -1367,6 +1408,7 @@ function TelegramHelperPanel({
       const res = await withClientTimeout(fetch('/api/agent-ask', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: helperAbortRef.current?.signal,
         body: JSON.stringify({
           eventId: eventId.trim(),
           payer: payer.trim(),
@@ -1457,10 +1499,9 @@ function TelegramHelperPanel({
     if (!paylinkDraft && !isPaymentRequestIntent(nextQuestion)) return false
     if (!paylinkDraft && !paymentQuotaStatus().allowed) {
       await minimumTyping
-      setMessages(prev => [...prev, {
-        question: nextQuestion,
+      finishHelperMessage(nextQuestion, {
         answer: 'You have used today\'s 20 AI-assisted PayLink requests. The normal Payment Links tab is still available for manual requests.',
-      }])
+      })
       return true
     }
     let draft = buildDraftFromText(nextQuestion, paylinkDraft)
@@ -1470,10 +1511,9 @@ function TelegramHelperPanel({
       draft = { ...draft, offeredSavedWallet: true }
       setPaylinkDraft(draft)
       await minimumTyping
-      setMessages(prev => [...prev, {
-        question: nextQuestion,
+      finishHelperMessage(nextQuestion, {
         answer: `I can prepare that PayLink. Do you want to continue with your saved ${draft.network ? requestNetworkLabels[draft.network] : 'payment'} wallet ${compactSavedWallet(savedWallet)}, or use a new receive wallet?`,
-      }])
+      })
       return true
     }
 
@@ -1489,10 +1529,9 @@ function TelegramHelperPanel({
     if (!draft.wallet && savedWallet && draft.offeredSavedWallet && wantsNewWallet(nextQuestion)) {
       setPaylinkDraft(draft)
       await minimumTyping
-      setMessages(prev => [...prev, {
-        question: nextQuestion,
+      finishHelperMessage(nextQuestion, {
         answer: 'Send the new receive wallet. I will replace the saved wallet after this PayLink is ready.',
-      }])
+      })
       return true
     }
 
@@ -1508,12 +1547,11 @@ function TelegramHelperPanel({
       setPaylinkDraft(draft)
       const missingNetworkOnly = missing.length === 1 && missing[0] === 'network'
       await minimumTyping
-      setMessages(prev => [...prev, {
-        question: nextQuestion,
+      finishHelperMessage(nextQuestion, {
         answer: missingNetworkOnly
           ? 'Which network should this use: Base, Arc, Arbitrum, Solana, or all networks?'
           : `I need ${missing.join(', ')}. You can send it in one line.`,
-      }])
+      })
       return true
     }
 
@@ -1539,11 +1577,10 @@ function TelegramHelperPanel({
       fallbackAnswer,
     )
     await minimumTyping
-    setMessages(prev => [...prev, {
-      question: nextQuestion,
+    finishHelperMessage(nextQuestion, {
       answer,
       paylink: saved,
-    }])
+    })
     return true
   }
 
@@ -1553,6 +1590,9 @@ function TelegramHelperPanel({
     setQuestion('')
     setAskError('')
     setAsking(true)
+    const abortController = new AbortController()
+    helperAbortRef.current = abortController
+    queueHelperMessage(nextQuestion)
     try {
       const isPaylinkFlow = Boolean(paylinkDraft || isPaymentRequestIntent(nextQuestion))
       const isDeepResearch = isDeepResearchIntent(nextQuestion)
@@ -1575,22 +1615,20 @@ function TelegramHelperPanel({
         setPayer(current => current || cleanName)
         setMemoryDraft(nextMemory)
         await minimumTyping
-        setMessages(prev => [...prev, {
-          question: nextQuestion,
+        finishHelperMessage(nextQuestion, {
           answer: `Got it. I'll call you ${cleanName}.`,
-        }])
+        })
         void saveProfile({ displayName: cleanName, memorySummary: nextMemory })
         return
       }
       if (isAskingUserName(nextQuestion)) {
         const knownName = helperName || profile?.displayName || helperNameDraft || cleanTelegramName || nameFromMemorySummary(memoryDraft || profile?.memorySummary || '')
         await minimumTyping
-        setMessages(prev => [...prev, {
-          question: nextQuestion,
+        finishHelperMessage(nextQuestion, {
           answer: knownName && knownName !== 'there'
             ? `You're ${friendlyName(knownName)}.`
             : "I don't know your preferred name yet. Tell me what to call you and I'll remember it.",
-        }])
+        })
         return
       }
       if (await handlePaylinkConversation(nextQuestion, minimumTyping)) return
@@ -1598,6 +1636,7 @@ function TelegramHelperPanel({
       const responsePromise = fetch('/api/agent-ask', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: abortController.signal,
         body: JSON.stringify({
           eventId: eventId.trim(),
           payer: payer.trim(),
@@ -1611,10 +1650,9 @@ function TelegramHelperPanel({
         : withClientTimeout(responsePromise, FAST_HELPER_RESPONSE_MAX_MS)
       const [res] = await Promise.all([cappedResponsePromise, minimumTyping])
       if (!res) {
-        setMessages(prev => [...prev, {
-          question: nextQuestion,
+        finishHelperMessage(nextQuestion, {
           answer: fastHelperFallback(nextQuestion, friendlyName(helperName || cleanTelegramName || 'there')),
-        }])
+        })
         return
       }
       const data = await res.json() as {
@@ -1629,23 +1667,24 @@ function TelegramHelperPanel({
       }
       if (!data.answer) {
         if (data.upgradeRequired && data.upgradeLink) {
-          setMessages(prev => [...prev, {
-            question: nextQuestion,
+          finishHelperMessage(nextQuestion, {
             answer: `Deep research is paused after today's free uses. Agent Hash Pro is ${data.upgradeAmount ?? '10'} ${data.upgradeCurrency ?? 'USDC'} monthly: ${data.upgradeLink}`,
-          }])
+          })
           return
         }
         throw new Error(data.error ?? 'No helper response returned.')
       }
       setAgentStatus('Securing proof...')
-      setMessages(prev => [...prev, { question: nextQuestion, answer: data.answer!, proof: data.proof, zeroscoutSponsorship: data.zeroscoutSponsorship }])
+      finishHelperMessage(nextQuestion, { answer: data.answer!, proof: data.proof, zeroscoutSponsorship: data.zeroscoutSponsorship })
       void saveProfile({ question: nextQuestion, answer: data.answer } as Partial<HelperProfile>)
       if (!memoryDraft.trim()) {
         setMemoryDraft(`User is known as ${helperName || payer}. They use Hash PayLink Agent Helper from Telegram and may ask about payments, Polymarket, StreamPay, agents, research, planning, and daily questions.`)
       }
     } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return
       setAskError(err instanceof Error ? err.message : 'Helper request failed.')
     } finally {
+      if (helperAbortRef.current === abortController) helperAbortRef.current = null
       setAsking(false)
     }
   }
@@ -1754,7 +1793,7 @@ function TelegramHelperPanel({
                 </div>
               </div>
 
-              <div className="max-h-[360px] min-h-[220px] space-y-4 overflow-y-auto p-3">
+              <div ref={helperScrollRef} className="max-h-[360px] min-h-[220px] space-y-4 overflow-y-auto p-3 scroll-smooth">
                 {messages.length === 0 && !asking && (
                   <div className="rounded-2xl rounded-tl-md bg-gray-50 px-3 py-2.5 dark:bg-white/[0.05]">
                     <p className="text-sm text-gray-700 dark:text-gray-200">
@@ -1773,12 +1812,16 @@ function TelegramHelperPanel({
                         {message.question}
                       </div>
                     </div>
-                    <div>
-                      <div className="max-w-[82%] break-words whitespace-pre-wrap rounded-[18px] rounded-bl-md bg-[#f0f0f0] px-3.5 py-2.5 text-sm leading-relaxed text-gray-900 shadow-sm dark:bg-white/[0.08] dark:text-gray-100">
-                        {message.answer}
+                    {(message.answer || message.paylink) && (
+                      <div>
+                        {message.answer && (
+                          <div className="max-w-[82%] break-words whitespace-pre-wrap rounded-[18px] rounded-bl-md bg-[#f0f0f0] px-3.5 py-2.5 text-sm leading-relaxed text-gray-900 shadow-sm dark:bg-white/[0.08] dark:text-gray-100">
+                            {message.answer}
+                          </div>
+                        )}
+                        {message.paylink && <HelperPaylinkCard request={message.paylink} />}
                       </div>
-                      {message.paylink && <HelperPaylinkCard request={message.paylink} />}
-                    </div>
+                    )}
                   </div>
                 ))}
 
@@ -1793,18 +1836,23 @@ function TelegramHelperPanel({
                   <input
                     value={question}
                     onChange={event => setQuestion(event.target.value)}
-                    onKeyDown={event => event.key === 'Enter' && !event.shiftKey && askHelper()}
+                    onKeyDown={event => event.key === 'Enter' && !event.shiftKey && !asking && askHelper()}
                     placeholder="Ask Hash..."
-                    disabled={asking}
-                    className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:ring-2 focus:ring-gray-200 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.05] dark:text-white"
+                    className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:ring-2 focus:ring-gray-200 dark:border-white/10 dark:bg-white/[0.05] dark:text-white"
                   />
                   <button
                     type="button"
-                    onClick={askHelper}
-                    disabled={asking || !question.trim()}
-                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-black text-white transition-all hover:bg-gray-800 active:scale-95 disabled:opacity-40 dark:bg-white dark:text-gray-950"
+                    onClick={asking ? stopHelperResponse : askHelper}
+                    disabled={!asking && !question.trim()}
+                    aria-label={asking ? 'Stop response' : 'Send message'}
+                    className={cn(
+                      'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-all active:scale-95 disabled:opacity-40',
+                      asking
+                        ? 'border border-gray-200 bg-white text-gray-900 shadow-sm hover:bg-gray-50 dark:border-white/10 dark:bg-white/[0.08] dark:text-white dark:hover:bg-white/[0.12]'
+                        : 'bg-black text-white hover:bg-gray-800 dark:bg-white dark:text-gray-950',
+                    )}
                   >
-                    <Send className="h-4 w-4" />
+                    {asking ? <span className="h-3.5 w-3.5 rounded-[4px] bg-current" /> : <Send className="h-4 w-4" />}
                   </button>
                 </div>
               </div>
