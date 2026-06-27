@@ -601,6 +601,10 @@ function walletMatchesNetwork(wallet: string, network: RequestNetwork | '') {
   return wallet.startsWith('0x')
 }
 
+function walletNetworkLabel(wallet: string) {
+  return wallet.startsWith('0x') ? 'Base/EVM' : 'Solana'
+}
+
 function friendlyName(value: string) {
   const clean = normalizeHelperName(value)
   if (!clean || clean.startsWith('@')) return clean
@@ -1659,6 +1663,14 @@ function TelegramHelperPanel({
     return profile.preferredPaymentEvmWallet || (profile.preferredPaymentWallet?.startsWith('0x') ? profile.preferredPaymentWallet : '')
   }
 
+  function savedWalletForOtherNetwork(network: RequestNetwork | '') {
+    if (!profile || !network || network === 'all') return ''
+    const evmWallet = profile.preferredPaymentEvmWallet || (profile.preferredPaymentWallet?.startsWith('0x') ? profile.preferredPaymentWallet : '')
+    const solanaWallet = profile.preferredPaymentSolanaWallet || (profile.preferredPaymentWallet && !profile.preferredPaymentWallet.startsWith('0x') ? profile.preferredPaymentWallet : '')
+    if (network === 'solana') return evmWallet || ''
+    return solanaWallet || ''
+  }
+
   function buildDraftFromText(text: string, existing?: HelperPaylinkDraft | null): HelperPaylinkDraft {
     const mode = existing?.mode ?? (isGroupRequestIntent(text) ? 'group' : 'person')
     const walletCorrection = extractWalletCorrection(text)
@@ -1798,10 +1810,36 @@ function TelegramHelperPanel({
       return true
     }
 
+    if (!draft.wallet && !savedWallet && draft.network && draft.network !== 'all' && wantsSavedWallet(nextQuestion)) {
+      setPaylinkDraft(draft)
+      const otherWallet = savedWalletForOtherNetwork(draft.network)
+      const requestedNetwork = requestNetworkLabels[draft.network]
+      const fallbackAnswer = otherWallet
+        ? `I only have your saved ${walletNetworkLabel(otherWallet)} wallet ${compactSavedWallet(otherWallet)}. For ${requestedNetwork}, send a ${requestedNetwork} receive wallet, or change the network.`
+        : `I do not have a saved ${requestedNetwork} receive wallet yet. Send the receive wallet for this PayLink.`
+      const answer = await polishLocalHelperResult(
+        [
+          'local_action=payment_request_saved_wallet_unavailable',
+          `requested_network=${requestedNetwork}`,
+          `other_saved_wallet=${otherWallet ? compactSavedWallet(otherWallet) : ''}`,
+          `other_saved_wallet_network=${otherWallet ? walletNetworkLabel(otherWallet) : ''}`,
+          'Explain that no saved wallet is available for the requested network.',
+          'Ask for a matching receive wallet or a network change.',
+          'Do not create a PayLink yet.',
+          'Return one short consumer chat answer only.',
+        ].join('\n'),
+        fallbackAnswer,
+      )
+      finishHelperMessage(nextQuestion, {
+        answer,
+      })
+      return true
+    }
+
     if (!draft.wallet && savedWallet && draft.offeredSavedWallet && wantsSavedWallet(nextQuestion)) {
       if (!walletMatchesNetwork(savedWallet, draft.network)) {
         setPaylinkDraft(draft)
-        const savedNetwork = savedWallet.startsWith('0x') ? 'Base/EVM' : 'Solana'
+        const savedNetwork = walletNetworkLabel(savedWallet)
         const requestedNetwork = draft.network ? requestNetworkLabels[draft.network] : 'that network'
         const fallbackAnswer = `I only have your saved ${savedNetwork} wallet ${compactSavedWallet(savedWallet)}. For ${requestedNetwork}, send a ${requestedNetwork} receive wallet, or switch this PayLink back to ${savedNetwork.includes('Base') ? 'Base' : 'Solana'}.`
         const answer = await polishLocalHelperResult(
@@ -1855,7 +1893,7 @@ function TelegramHelperPanel({
 
     if (draft.wallet && !walletMatchesNetwork(draft.wallet, draft.network)) {
       setPaylinkDraft(draft)
-      const walletNetwork = draft.wallet.startsWith('0x') ? 'Base/EVM' : 'Solana'
+      const walletNetwork = walletNetworkLabel(draft.wallet)
       const requestedNetwork = draft.network ? requestNetworkLabels[draft.network] : 'the selected network'
       const fallbackAnswer = `That receive wallet looks like ${walletNetwork}, but this PayLink is set to ${requestedNetwork}. Send a matching receive wallet, or change the network.`
       const answer = await polishLocalHelperResult(
