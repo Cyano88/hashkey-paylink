@@ -305,6 +305,12 @@ function fallbackHelperAnswer(question: string) {
   if (/\blocal_action=payment_request_new_wallet_needed\b/i.test(question)) {
     return 'Send the new receive wallet. I will use it for this PayLink.'
   }
+  if (/\blocal_action=payment_request_saved_wallet_network_mismatch\b/i.test(question)) {
+    const savedWallet = /saved_wallet=([^\n]+)/i.exec(question)?.[1]?.trim() || 'saved wallet'
+    const savedNetwork = /saved_wallet_network=([^\n]+)/i.exec(question)?.[1]?.trim() || 'saved network'
+    const requestedNetwork = /requested_network=([^\n]+)/i.exec(question)?.[1]?.trim() || 'that network'
+    return `I only have your saved ${savedNetwork} wallet ${savedWallet}. For ${requestedNetwork}, send a matching receive wallet or switch this PayLink back to ${savedNetwork.includes('Base') ? 'Base' : savedNetwork}.`
+  }
   if (/\blocal_action=payment_request_missing_fields\b/i.test(question)) {
     const missing = /missing_fields=([^\n]+)/i.exec(question)?.[1]?.trim()
     return missing ? `I need ${missing}. You can send it in one line.` : 'I need the missing payment details. You can send them in one line.'

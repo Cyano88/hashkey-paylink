@@ -480,7 +480,7 @@ function isGroupRequestIntent(text: string) {
 }
 
 function wantsSavedWallet(text: string) {
-  return /\b(saved|same|continue|use it|use that|yes|ok|okay)\b/i.test(text)
+  return /\b(saved|same|continue|use it|use that|use the one saved|saved wallet|my saved wallet|continue with my saved wallet|yes|ok|okay)\b/i.test(text)
 }
 
 function wantsNewWallet(text: string) {
@@ -538,6 +538,12 @@ function describeMissingDraftFields(draft: HelperPaylinkDraft, savedWallet?: str
 
 function compactSavedWallet(wallet: string) {
   return wallet ? shortAddress(wallet).replace('...', '..') : ''
+}
+
+function walletMatchesNetwork(wallet: string, network: RequestNetwork | '') {
+  if (!wallet || !network || network === 'all') return true
+  if (network === 'solana') return !wallet.startsWith('0x')
+  return wallet.startsWith('0x')
 }
 
 function friendlyName(value: string) {
@@ -1666,6 +1672,28 @@ function TelegramHelperPanel({
     }
 
     if (!draft.wallet && savedWallet && draft.offeredSavedWallet && wantsSavedWallet(nextQuestion)) {
+      if (!walletMatchesNetwork(savedWallet, draft.network)) {
+        setPaylinkDraft(draft)
+        const savedNetwork = savedWallet.startsWith('0x') ? 'Base/EVM' : 'Solana'
+        const requestedNetwork = draft.network ? requestNetworkLabels[draft.network] : 'that network'
+        const fallbackAnswer = `I only have your saved ${savedNetwork} wallet ${compactSavedWallet(savedWallet)}. For ${requestedNetwork}, send a ${requestedNetwork} receive wallet, or switch this PayLink back to ${savedNetwork.includes('Base') ? 'Base' : 'Solana'}.`
+        const answer = await polishLocalHelperResult(
+          [
+            'local_action=payment_request_saved_wallet_network_mismatch',
+            `saved_wallet=${compactSavedWallet(savedWallet)}`,
+            `saved_wallet_network=${savedNetwork}`,
+            `requested_network=${requestedNetwork}`,
+            'Explain that the saved wallet cannot be used for the requested network.',
+            'Ask for a matching receive wallet or offer to switch back to the saved wallet network.',
+            'Return one short consumer chat answer only.',
+          ].join('\n'),
+          fallbackAnswer,
+        )
+        finishHelperMessage(nextQuestion, {
+          answer,
+        })
+        return true
+      }
       draft = {
         ...draft,
         wallet: savedWallet,
