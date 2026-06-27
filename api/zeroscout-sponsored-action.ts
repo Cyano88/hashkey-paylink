@@ -182,6 +182,35 @@ function helperReviewFlags(lane: HelperRefinementLane) {
   }
 }
 
+function helperModeInstructions(input: ZeroScoutHelperGuidanceInput) {
+  const mode = String(input.request.helperMode ?? '').trim().toLowerCase()
+  if (mode === 'daily') {
+    return [
+      'Daily mode is an everyday companion mode for normal conversation, emotions, planning, ideas, and personal support.',
+      'Do not mention payments, PayLinks, wallets, StreamPay, PolyDesk, LP Scout, or Hash PayLink services unless the user asks about them.',
+      'For greetings, reply warmly in one short sentence and ask a simple open question.',
+      'For mood or personal support, respond empathetically and naturally without turning it into a product menu.',
+    ]
+  }
+  if (mode === 'payments') {
+    return [
+      'Payments mode should focus on payment request creation, payment clarification, receipts, network, amount, purpose, and receive wallet.',
+      'Keep wording short because deterministic PayLink creation is handled by Hash PayLink locally.',
+    ]
+  }
+  if (mode === 'services') {
+    return [
+      'Services mode should explain Hash PayLink services only when the user asks about product capabilities or setup.',
+    ]
+  }
+  if (mode === 'support') {
+    return [
+      'Support mode should troubleshoot app usage clearly with one next step at a time.',
+    ]
+  }
+  return []
+}
+
 async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined
   const timeout = new Promise<never>((_, reject) => {
@@ -218,7 +247,7 @@ export async function getZeroScoutHelperGuidance(input: ZeroScoutHelperGuidanceI
       partner: 'Hash PayLink',
       productType: 'agentic-service',
       analysisType: 'zeroscout-helper-context-guidance',
-      objective: 'Return a concise, consumer-friendly Ask Hash chat answer plan. Be direct, human, and useful. Answer ordinary everyday questions cleanly. For live schedules, prices, current events, restaurants, or other freshness-sensitive requests, answer only if verified data is available in the request or ZeroScout can verify it; otherwise say plainly that live verification is not available from this chat. Personal identity questions should be answered only from supplied memory/profile context; if unknown, say that naturally. Payment-link requests should be practical and minimal. Respect payment, wallet, LP Scout, and x402 proof boundaries.',
+      objective: 'Return a concise, consumer-friendly Agent Hash chat answer. Be direct, human, and useful. Follow helperModeInstructions strictly. Answer ordinary everyday questions cleanly. For live schedules, prices, current events, restaurants, or other freshness-sensitive requests, answer only if verified data is available in the request or ZeroScout can verify it; otherwise say plainly that live verification is not available from this chat. Personal identity questions should be answered only from supplied memory/profile context; if unknown, say that naturally. Payment-link requests should be practical and minimal only when the user is in Payments mode or explicitly asks for payment help. Respect payment, wallet, LP Scout, and x402 proof boundaries.',
       outputStyle: 'consumer-helper-answer-guidance',
       data: {
         proofClass: 'zeroscout_helper_context_guidance',
@@ -236,9 +265,13 @@ export async function getZeroScoutHelperGuidance(input: ZeroScoutHelperGuidanceI
           : 'single-lane-short-refinement',
         requestedRefinementLane: refinementLane,
         fallbackOrder: helperFallbackOrder(refinementLane),
+        latencyTargetMs: input.request.qualityMode === 'deep' ? 20_000 : input.request.qualityMode === 'fast' ? 4_000 : 8_000,
+        maxAnswerChars: input.request.qualityMode === 'deep' ? 1_200 : 420,
+        helperModeInstructions: helperModeInstructions(input),
         separationRules: [
           'This is helper context guidance only, not LP Scout paid proof.',
           'For general-helper or greeting intent, answer the user directly instead of returning a product capability menu.',
+          'In Daily mode, never include a payment/product capability menu unless the user asks for payment or product help.',
           'Do not mention ZeroScout sponsorship requirements in user-facing answer text.',
           'Do not return generic product strategy when the user asks a simple personal, payment, or setup question.',
           'Do not claim Circle wallet balance, x402 service balance, x402 activation, paid-service access, receipt status, or LP Scout proof unless supplied by verified app state.',
