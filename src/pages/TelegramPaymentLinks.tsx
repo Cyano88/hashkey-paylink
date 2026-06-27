@@ -38,7 +38,7 @@ import AgentDemo from './AgentDemo'
 const TELEGRAM_BOT_URL = import.meta.env.VITE_TELEGRAM_AGENT_URL || 'https://t.me/HashPayLinkBot'
 const PUBLIC_PAYLINK_ORIGIN = (import.meta.env.VITE_PUBLIC_PAYLINK_ORIGIN || 'https://hashpaylink.com').replace(/\/+$/, '')
 const POLYMARKET_LOGO = '/brand/polymarket-logo.png'
-const MIN_HELPER_RESPONSE_DELAY_MS = 3500
+const MIN_HELPER_TYPING_VISIBLE_MS = 3500
 
 function displayTelegramName(rawName: string | null, fallback = 'there') {
   const clean = (rawName ?? '').replace(/^@+/, '').trim()
@@ -1411,7 +1411,7 @@ function TelegramHelperPanel({
     try {
       const isPaylinkFlow = Boolean(paylinkDraft || isPaymentRequestIntent(nextQuestion))
       setAgentStatus(isPaylinkFlow ? 'Checking payment details...' : 'Reading your message...')
-      await sleep(MIN_HELPER_RESPONSE_DELAY_MS)
+      await sleep(MIN_HELPER_TYPING_VISIBLE_MS)
       const rememberedName = extractRememberedName(nextQuestion)
       if (rememberedName) {
         const cleanName = friendlyName(rememberedName)
