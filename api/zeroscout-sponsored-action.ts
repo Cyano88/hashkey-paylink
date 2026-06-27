@@ -119,8 +119,16 @@ function shouldUseDeepHelperReview(input: ZeroScoutHelperGuidanceInput) {
 
 type HelperRefinementLane = 'og-compute' | 'openai' | 'anthropic' | 'multi-stack'
 
+function forcedSimpleHelperLane(): HelperRefinementLane | undefined {
+  const lane = String(process.env.ZEROSCOUT_HELPER_REFINEMENT_LANE ?? '').trim().toLowerCase()
+  if (lane === 'og-compute' || lane === 'openai' || lane === 'anthropic') return lane
+  return undefined
+}
+
 function helperRefinementLane(input: ZeroScoutHelperGuidanceInput): HelperRefinementLane {
   if (shouldUseDeepHelperReview(input)) return 'multi-stack'
+  const forcedLane = forcedSimpleHelperLane()
+  if (forcedLane) return forcedLane
   const seed = requestHash({
     eventId: input.request.eventId,
     question: input.request.question,
