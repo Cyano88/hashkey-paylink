@@ -552,6 +552,27 @@ function friendlyName(value: string) {
   return clean.charAt(0).toUpperCase() + clean.slice(1)
 }
 
+const moodNameWords = new Set([
+  'sad',
+  'happy',
+  'angry',
+  'tired',
+  'sick',
+  'bored',
+  'excited',
+  'stressed',
+  'depressed',
+  'anxious',
+  'lonely',
+  'confused',
+  'upset',
+  'okay',
+  'ok',
+  'fine',
+  'well',
+  'busy',
+])
+
 function normalizeHelperName(value: string) {
   return value
     .trim()
@@ -566,20 +587,39 @@ function normalizeHelperName(value: string) {
     .slice(0, 48)
 }
 
+function isMoodName(value: string) {
+  const clean = normalizeHelperName(value).toLowerCase()
+  return Boolean(clean && moodNameWords.has(clean))
+}
+
+function usableHelperName(value: string) {
+  const clean = normalizeHelperName(value)
+  return isMoodName(clean) ? '' : clean
+}
+
+function isNameCorrectionMessage(text: string) {
+  return /\b(?:not my name|isn'?t my name|that's not my name|that is not my name|my mood|i meant my mood)\b/i.test(text)
+}
+
+function isMoodNameMemoryLine(line: string) {
+  const match = /\bUser (?:prefers to be called|is known as)\s+(.+?)[.!,;:]?$/i.exec(line.trim())?.[1] ?? ''
+  return isMoodName(match)
+}
+
 function isAskingUserName(text: string) {
   return /\b(what'?s|what is|tell me)\s+my\s+name\b|\bdo you know my name\b|\bwho am i\b|\bwhat do you call me\b/i.test(text)
 }
 
 function extractRememberedName(text: string) {
-  const match = text.match(/\b(?:remember\s+)?(?:my name is|call me|i am|i'm)\s+(@?[a-zA-Z][\w .-]{1,40})/i)?.[1] ?? ''
-  return normalizeHelperName(match)
+  const match = text.match(/\b(?:remember\s+)?(?:my name is|call me)\s+(@?[a-zA-Z][\w .-]{1,40})/i)?.[1] ?? ''
+  return usableHelperName(match)
 }
 
 function extractRelationshipMemory(text: string) {
-  const match = text.match(/\b(?:i have|my)\s+(friend|sister|brother|mother|father|partner|client|customer|payer|colleague)\s+(?:called|named|is)\s+(@?[a-zA-Z][\w .-]{1,40})/i)
+  const match = text.match(/\b(?:i have|my)\s+(?:a\s+|an\s+)?(friend|sister|brother|mother|father|partner|client|customer|payer|colleague)\s+(?:called|named|is)\s+(@?[a-zA-Z][\w .-]{1,40})/i)
   if (!match) return null
   const relation = match[1].toLowerCase()
-  const name = normalizeHelperName(match[2])
+  const name = usableHelperName(match[2])
   if (!name) return null
   return { relation, name: friendlyName(name) }
 }
@@ -588,7 +628,7 @@ function nameFromMemorySummary(value: string) {
   const summary = value.trim()
   if (!summary) return ''
   const match = summary.match(/\b(?:known as|called|prefers to be called)\s+(@?[a-zA-Z][\w .-]{1,40})/i)?.[1] ?? ''
-  return normalizeHelperName(match)
+  return usableHelperName(match)
 }
 
 function todayKey() {
@@ -1797,6 +1837,34 @@ function TelegramHelperPanel({
         : isDeepResearch
           ? 'Running deeper research... this might take a little time.'
           : 'Reading your message...')
+      if (isNameCorrectionMessage(nextQuestion)) {
+        const nextMemory = [
+          (memoryDraft.trim() || profile?.memorySummary || '')
+            .split('\n')
+            .filter(line => !isMoodNameMemoryLine(line))
+            .join('\n'),
+          'User clarified that recent mood wording was not their name.',
+        ].filter(Boolean).join('\n').slice(0, 1200)
+        window.localStorage.removeItem('hashpaylink-helper-name')
+        const fallbackName = usableHelperName(profile?.displayName || nameFromMemorySummary(nextMemory) || '')
+        setHelperName(fallbackName)
+        setHelperNameDraft(fallbackName)
+        setMemoryDraft(nextMemory)
+        const answer = await polishLocalHelperResult(
+          [
+            'local_action=personal_context_correction',
+            `question=${nextQuestion}`,
+            'The user clarified that a mood was mistaken for their name.',
+            'Apologize briefly, acknowledge the correction, and continue as a normal supportive chat.',
+            'Return one short consumer chat answer only.',
+          ].join('\n'),
+          "You're right. I won't treat that as your name. Tell me what's on your mind.",
+          nextMemory,
+        )
+        finishHelperMessage(nextQuestion, { answer })
+        void saveProfile({ displayName: fallbackName || '', memorySummary: nextMemory })
+        return
+      }
       const rememberedName = extractRememberedName(nextQuestion)
       if (rememberedName) {
         const cleanName = friendlyName(rememberedName)

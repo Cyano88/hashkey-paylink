@@ -297,6 +297,9 @@ function fallbackHelperAnswer(question: string) {
     const name = /known_name=([^\n]+)/i.exec(question)?.[1]?.trim()
     return name ? `You are ${name}.` : 'I do not know your preferred name yet. Tell me what to call you and I will remember it.'
   }
+  if (/\blocal_action=personal_context_correction\b/i.test(question)) {
+    return "You're right. I won't treat that as your name. Tell me what's on your mind."
+  }
   if (/\blocal_action=payment_request_saved_wallet_choice\b/i.test(question)) {
     const network = /network=([^\n]+)/i.exec(question)?.[1]?.trim() || 'payment'
     const wallet = /saved_wallet=([^\n]+)/i.exec(question)?.[1]?.trim() || 'saved'
@@ -349,6 +352,9 @@ function fallbackHelperAnswer(question: string) {
   if (/\b(what can you do|help me|how can you help|what do you help with)\b/i.test(question)) {
     return 'I can help with PayLinks, payment receipts, wallet funding, x402 activation, PolyDesk, StreamPay, setup questions, and everyday planning.'
   }
+  if (isPersonalContextQuestion(question)) {
+    return personalContextFallback(question)
+  }
   if (requiresLiveExternalData(question)) {
     return 'I cannot verify live schedules or current events from this chat yet, so I should not guess. Ask me to create a PayLink or check payment details here, and use an official source for the latest fixture.'
   }
@@ -371,6 +377,23 @@ function requiresLiveExternalData(question: string) {
   return /\b(when is|when are|next game|next match|playing next|fixture|fixtures|schedule|score|scores|live|today|tomorrow|latest|current|near me|nearby|open now|restaurant around|weather|price|prices)\b/i.test(question)
 }
 
+function isPersonalContextQuestion(question: string) {
+  return /\b(i am|i'm|i feel|feeling|my friend|i have a friend|i have a|i'm sad|i am sad|mood|not my name|that's not my name)\b/i.test(question)
+}
+
+function personalContextFallback(question: string) {
+  if (/\b(i am|i'm|i feel|feeling)\s+(sad|down|upset|stressed|anxious|lonely|tired|confused|angry)\b/i.test(question)) {
+    return "I'm sorry you're feeling that way. I can stay with you for a bit: tell me what happened, or we can slow it down and take it one step at a time."
+  }
+  if (/\bfriend called|friend named|friend is|i have a friend\b/i.test(question)) {
+    return 'Got it. I can remember that context and use it naturally when you ask about them.'
+  }
+  if (/\bnot my name|my mood|that's not my name\b/i.test(question)) {
+    return "You're right. I won't treat that as your name. Tell me what's on your mind."
+  }
+  return 'I understand. Tell me a little more, and I will respond like a normal chat, not just a payment tool.'
+}
+
 function classifyHelperRequest(question: string): { helperIntent: string; qualityMode: 'fast' | 'standard' | 'deep' } {
   const value = question.toLowerCase()
   if (isNameQuestion(question)) return { helperIntent: 'personal-memory', qualityMode: 'fast' }
@@ -382,6 +405,9 @@ function classifyHelperRequest(question: string): { helperIntent: string; qualit
   }
   if (requiresLiveExternalData(question)) {
     return { helperIntent: 'live-data-question', qualityMode: 'deep' }
+  }
+  if (isPersonalContextQuestion(question)) {
+    return { helperIntent: 'personal-context', qualityMode: 'standard' }
   }
   if (/\b(research|analyze|analysis|strategy|investor|pitch|grant|roadmap|architecture|design|compare|plan|proposal|polymarket|lp scout|liquidity|market|x402 architecture|product strategy|look up|find|near me|nearby|restaurant|wuse|abuja)\b/.test(value)) {
     return { helperIntent: 'deep-research', qualityMode: 'deep' }
@@ -433,8 +459,8 @@ function getHelperResponse(question: string, payerName: string, chain: string, a
 
   const cleanQuestion = cleanQuestionForFallback(question)
   return cleanQuestion
-    ? `I did not get a clean ZeroScout answer for "${cleanQuestion}" just now. I can still help with PayLinks, receipts, wallet setup, StreamPay, PolyDesk, and general planning.`
-    : 'I did not get a clean ZeroScout answer just now. Try a shorter question or ask me to create/check a payment.'
+    ? `I did not get the full refined answer just now, but I can still respond. For "${cleanQuestion}", tell me a little more about what you mean and I will help from there.`
+    : 'I did not get the full refined answer just now. Send that again in a shorter way and I will help from there.'
 }
 
 // ─── Handler ──────────────────────────────────────────────────────────────────
