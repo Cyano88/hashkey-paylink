@@ -454,6 +454,14 @@ function answerFromZeroScoutGuidance(question: string, zeroScoutGuidance?: ZeroS
   return guidance.length <= limit ? guidance : `${guidance.slice(0, limit - 20).trim()}...`
 }
 
+function safeZeroScoutGuidanceError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error)
+  return message
+    .replace(/Bearer\s+[a-zA-Z0-9._-]{8,}/gi, 'Bearer [redacted-token]')
+    .replace(/sk-[a-zA-Z0-9_-]{8,}/g, '[redacted-api-key]')
+    .slice(0, 220)
+}
+
 function getHelperResponse(question: string, payerName: string, chain: string, amount: string, memorySummary = '', zeroScoutGuidance?: ZeroScoutHelperGuidance, accessMode = 'paid', helperMode = ''): string {
   const zeroScoutAnswer = answerFromZeroScoutGuidance(question, zeroScoutGuidance)
   if (zeroScoutAnswer) return zeroScoutAnswer
@@ -573,7 +581,9 @@ export default async function handler(req: Request, res: Response) {
     const memorySummaryHash = memorySummary
       ? crypto.createHash('sha256').update(memorySummary).digest('hex')
       : undefined
-    const zeroScoutGuidance = await getZeroScoutHelperGuidance({
+    let zeroScoutGuidance: ZeroScoutHelperGuidance | undefined
+    try {
+      zeroScoutGuidance = await getZeroScoutHelperGuidance({
         service: 'Hash PayLink Helper',
         action: 'helper-chat-preflight',
         user: {
@@ -598,7 +608,19 @@ export default async function handler(req: Request, res: Response) {
           rootHash: access.proof.rootHash,
           ogTxHash: access.proof.ogTxHash,
         },
+        strictGuidance: helperMode === 'daily',
       })
+    } catch (err) {
+      if (helperMode === 'daily') {
+        return res.status(503).json({
+          error: `ZeroScout Daily guidance failed: ${safeZeroScoutGuidanceError(err)}`,
+          zeroscoutRequired: true,
+          helperMode,
+          helperIntent: helperRouting.helperIntent,
+        })
+      }
+      console.warn('[agent-ask] ZeroScout helper guidance failed:', safeZeroScoutGuidanceError(err))
+    }
 
     if (helperMode === 'daily' && !answerFromZeroScoutGuidance(question, zeroScoutGuidance)) {
       return res.status(503).json({

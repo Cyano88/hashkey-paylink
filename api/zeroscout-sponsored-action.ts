@@ -29,6 +29,7 @@ type ZeroScoutHelperGuidanceInput = {
     memorySummaryHash?: string
   }
   sourceProof?: Record<string, unknown>
+  strictGuidance?: boolean
 }
 
 export type ZeroScoutSponsoredAction = {
@@ -105,9 +106,31 @@ function sanitizeHelperContext(input: string | undefined) {
 }
 
 function buildGuidanceText(result: ZeroScoutIntelligenceResult) {
+  const extra = result as ZeroScoutIntelligenceResult & {
+    guidance?: string
+    answer?: string
+    message?: string
+    response?: string
+    result?: {
+      suggestedAnswer?: string
+      guidance?: string
+      answer?: string
+      message?: string
+      summary?: string
+    }
+  }
   const lines = [
     result.suggestedAnswer,
+    extra.guidance,
+    extra.answer,
+    extra.message,
+    extra.response,
+    extra.result?.suggestedAnswer,
+    extra.result?.guidance,
+    extra.result?.answer,
+    extra.result?.message,
     result.summary,
+    extra.result?.summary,
   ]
   return Array.from(new Set(lines.map(item => String(item ?? '').trim()).filter(Boolean)))
     .join('\n')
@@ -229,6 +252,11 @@ export async function getZeroScoutHelperGuidance(input: ZeroScoutHelperGuidanceI
     })
 
     const guidance = buildGuidanceText(zeroscout)
+    if (input.strictGuidance && !guidance) {
+      const error = new Error('ZeroScout helper guidance response did not include suggestedAnswer, guidance, answer, message, response, or summary.') as Error & { status?: number }
+      error.status = 502
+      throw error
+    }
     const guidanceHash = requestHash({
       requestHash: hash,
       summary: zeroscout.summary,
@@ -251,6 +279,7 @@ export async function getZeroScoutHelperGuidance(input: ZeroScoutHelperGuidanceI
     }
   } catch (err) {
     console.warn('[zeroscout-helper-guidance] skipped:', err instanceof Error ? err.message : String(err))
+    if (input.strictGuidance) throw err
     return undefined
   }
 }
