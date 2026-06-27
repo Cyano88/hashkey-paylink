@@ -59,7 +59,7 @@ import { canUseCircleEvmEmailWallet, connectCircleEvmEmailWallet } from '../lib/
 import { canUseCircleSolanaEmailWallet, connectCircleSolanaEmailWallet } from '../lib/circleSolanaEmailWallet'
 import { PrivyConnectButton } from '../lib/PrivyConnectButton'
 import { resolvePrivyCircleLink, savePrivyCircleLink } from '../lib/privyCircleLink'
-import AgentDemo from './AgentDemo'
+import AgentWorkspace from './AgentWorkspace'
 
 // ─── Starknet address: 0x followed by exactly 64 hex chars ──────────────────
 const isValidStarkAddr = (v: string) => /^0x[0-9a-fA-F]{64}$/.test(v)
@@ -1799,7 +1799,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                     <ArrowLeft className="h-3.5 w-3.5" />
                     Back
                   </button>
-                  <AgentDemo embedded forceProfile />
+                  <AgentWorkspace embedded forceProfile />
                   <a
                     href="/agent?walletManager=service"
                     className="block text-center text-[11px] font-medium text-gray-400 transition-colors hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200"

@@ -34,7 +34,8 @@ import {
 } from 'lucide-react'
 import { cn } from '../lib/utils'
 import { EVM_TREASURY } from '../lib/chains'
-import AgentDemo from './AgentDemo'
+import AgentWorkspace from './AgentWorkspace'
+import ZeroScoutPowerBadge from '../components/ZeroScoutPowerBadge'
 
 const TELEGRAM_BOT_URL = import.meta.env.VITE_TELEGRAM_AGENT_URL || 'https://t.me/HashPayLinkBot'
 const PUBLIC_PAYLINK_ORIGIN = (import.meta.env.VITE_PUBLIC_PAYLINK_ORIGIN || 'https://hashpaylink.com').replace(/\/+$/, '')
@@ -1565,11 +1566,11 @@ function TelegramHelperPanel({
       {!started ? (
         <div className="space-y-3 rounded-xl border border-purple-100 bg-purple-50/70 p-3 dark:border-purple-400/20 dark:bg-purple-400/10">
           <div className="flex items-center gap-2">
-            <span className="rounded-md border border-emerald-100 bg-white px-1.5 py-0.5 text-[10px] font-black text-emerald-600 dark:border-emerald-300/20 dark:bg-white/[0.08] dark:text-emerald-200">ZS</span>
+            <ZeroScoutPowerBadge />
             <p className="text-xs font-semibold text-gray-900 dark:text-white">Open helper</p>
           </div>
           <p className="text-xs leading-relaxed text-gray-600 dark:text-gray-300">
-            The helper opens from Telegram and saves useful profile context quietly. Powered by ZeroScout intelligence.
+            The helper opens from Telegram and saves useful profile context quietly.
           </p>
           <button
             type="button"
@@ -1631,9 +1632,8 @@ function TelegramHelperPanel({
                     <p className="text-sm text-gray-700 dark:text-gray-200">
                       {helperName ? `Welcome back, ${helperName}.` : 'Welcome.'} Ask me about payments, Polymarket funding, StreamPay, agent setup, research, planning, or daily questions.
                     </p>
-                    <div className="mt-2 inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400">
-                      <span className="rounded border border-emerald-100 bg-emerald-50 px-1 text-[8px] font-black text-emerald-600 dark:border-emerald-300/20 dark:bg-emerald-300/10 dark:text-emerald-200">ZS</span>
-                      ZeroScout-powered
+                    <div className="mt-2">
+                      <ZeroScoutPowerBadge compact />
                     </div>
                   </div>
                 )}
@@ -1921,7 +1921,7 @@ function TelegramX402WalletPanel({
         </div>
       </div>
 
-      <AgentDemo embedded forceProfile />
+      <AgentWorkspace embedded forceProfile />
     </div>
   )
 }

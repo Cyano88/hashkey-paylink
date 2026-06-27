@@ -538,6 +538,76 @@ html.dark .ask-hash-live-agent__bubble span {
   background: #111827;
 }
 
+.zeroscout-power-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: #6b7280;
+  font-size: 0.625rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.zeroscout-power-badge__mark {
+  position: relative;
+  display: inline-flex;
+  width: 1.25rem;
+  height: 1.25rem;
+  overflow: hidden;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(16, 185, 129, 0.18);
+  border-radius: 999px;
+  background: #ffffff;
+  box-shadow: 0 8px 20px rgba(17, 24, 39, 0.08);
+  isolation: isolate;
+  animation: zeroscoutBadgeRing 10s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.zeroscout-power-badge__mark::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.16), rgba(124, 58, 237, 0.2));
+  opacity: 0.22;
+  z-index: -1;
+}
+
+.zeroscout-power-badge__mark--compact {
+  width: 1rem;
+  height: 1rem;
+}
+
+.zeroscout-power-badge__logo {
+  position: absolute;
+  inset: 0.16rem;
+  width: calc(100% - 0.32rem);
+  height: calc(100% - 0.32rem);
+  border-radius: 999px;
+  object-fit: contain;
+  transform: scale(1);
+  will-change: opacity, transform, filter;
+}
+
+.zeroscout-power-badge__logo--zs {
+  animation: zeroscoutBadgeZs 10s ease-in-out infinite;
+}
+
+.zeroscout-power-badge__logo--og {
+  opacity: 0;
+  animation: zeroscoutBadgeOg 10s ease-in-out infinite;
+}
+
+html.dark .zeroscout-power-badge {
+  color: #9ca3af;
+}
+
+html.dark .zeroscout-power-badge__mark {
+  border-color: rgba(167, 139, 250, 0.24);
+  background: rgba(255, 255, 255, 0.08);
+}
+
 @keyframes askHashRobotMorph {
   0%, 36%, 100% { opacity: 1; transform: scale(1) translateY(0); }
   44%, 68% { opacity: 0; transform: scale(0.42) translateY(0.12rem); }
@@ -558,4 +628,41 @@ html.dark .ask-hash-live-agent__bubble span {
 @keyframes askHashBubbleDot {
   0%, 80%, 100% { opacity: 0.4; transform: translateY(0); }
   40% { opacity: 1; transform: translateY(-0.06rem); }
+}
+
+@keyframes zeroscoutBadgeZs {
+  0%, 40%, 100% {
+    opacity: 1;
+    filter: blur(0);
+    transform: scale(1) rotateY(0deg);
+  }
+  48%, 92% {
+    opacity: 0;
+    filter: blur(0.6px);
+    transform: scale(0.86) rotateY(-72deg);
+  }
+}
+
+@keyframes zeroscoutBadgeOg {
+  0%, 40%, 100% {
+    opacity: 0;
+    filter: blur(0.6px);
+    transform: scale(0.86) rotateY(72deg);
+  }
+  48%, 92% {
+    opacity: 1;
+    filter: blur(0);
+    transform: scale(1) rotateY(0deg);
+  }
+}
+
+@keyframes zeroscoutBadgeRing {
+  0%, 40%, 100% {
+    border-color: rgba(16, 185, 129, 0.22);
+    box-shadow: 0 8px 20px rgba(17, 24, 39, 0.08), 0 0 0 0 rgba(16, 185, 129, 0);
+  }
+  48%, 92% {
+    border-color: rgba(124, 58, 237, 0.24);
+    box-shadow: 0 8px 20px rgba(17, 24, 39, 0.08), 0 0 0 3px rgba(124, 58, 237, 0.08);
+  }
 }

@@ -5,7 +5,7 @@ import CreateLink from './pages/CreateLink'
 import PaymentPage from './pages/PaymentPage'
 import Dashboard from './pages/Dashboard'
 import EventDashboard from './pages/EventDashboard'
-import AgentDemo     from './pages/AgentDemo'
+import AgentWorkspace from './pages/AgentWorkspace'
 import TelegramPaymentLinks from './pages/TelegramPaymentLinks'
 import NigerianPos from './pages/NigerianPos'
 import X402Receipt   from './pages/X402Receipt'
@@ -59,7 +59,7 @@ export default function App() {
       <Route path="p/:network/:amount/:recipient/:memo" element={<ShortPayRedirect />} />
       <Route path="dashboard" element={<Dashboard />} />
       <Route path="event" element={<EventDashboard />} />
-      <Route path="agent" element={<AgentDemo />} />
+      <Route path="agent" element={<AgentWorkspace />} />
       <Route path="telegram/payment-links" element={<TelegramPaymentLinks />} />
       <Route path="pos/ng" element={<NigerianPos />} />
       <Route path="agent-terms" element={<AgentTerms />} />
