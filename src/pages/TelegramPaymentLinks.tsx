@@ -2239,7 +2239,7 @@ function TelegramHelperPanel({
   async function worldCupAnswer(nextQuestion: string) {
     const scoresUrl = polyDeskUrl('poly-stream')
     const newsUrl = polyDeskUrl('poly-worldcup-news')
-    const wantsFixture = /\b(match|matches|fixture|fixtures|playing|play|game|games|score|scores|live|today|tonight|next)\b/i.test(nextQuestion)
+    const wantsFixture = /\b(match|matches|fixture|fixtures|playing|play|game|games|score|scores|live|today|tonight|next|upcoming|schedule)\b/i.test(nextQuestion)
     const wantsNews = !wantsFixture && /\b(news|headline|headlines|latest|update|updates)\b/i.test(nextQuestion)
     if (wantsNews) {
       const response = await fetch('/api/poly-worldcup-news')
@@ -2264,6 +2264,7 @@ function TelegramHelperPanel({
     if (!response.ok || !data.ok) throw new Error('World Cup live board is unavailable right now.')
     const matches = data.matches ?? []
     const wantsToday = /\b(today|tonight|now|live|playing)\b/i.test(nextQuestion)
+    const wantsUpcoming = /\b(upcoming|next|schedule|fixtures|all fixtures|all upcoming)\b/i.test(nextQuestion)
     const todayMatches = matches.filter(match => {
       const kickoffTime = Date.parse(match.kickoffAt || match.time)
       if (/^(live|today)$/i.test(match.tag)) return true
@@ -2281,7 +2282,22 @@ function TelegramHelperPanel({
         actionLink: { label: 'Live board', url: scoresUrl },
       }
     }
-    const words = nextQuestion.toLowerCase().match(/[a-z]{3,}/g)?.filter(word => !['what', 'when', 'score', 'scores', 'between', 'playing', 'their', 'next', 'world', 'cup', 'game', 'games', 'match', 'matches', 'fixture', 'fixtures', 'current', 'latest', 'today', 'tonight', 'live'].includes(word)) ?? []
+    const upcomingMatches = matches.filter(match => {
+      const state = matchDisplayState(match)
+      const kickoffTime = Date.parse(match.kickoffAt || match.time)
+      return state.tag === 'NS' || /upcoming|scheduled|not started|fixture/i.test(`${match.tag} ${match.status}`) || (Number.isFinite(kickoffTime) && kickoffTime > Date.now())
+    })
+    if (wantsUpcoming && upcomingMatches.length) {
+      const lines = upcomingMatches.slice(0, 6).map(match => {
+        const state = matchDisplayState(match)
+        return `${match.title}: ${state.sub || match.time}.`
+      })
+      return {
+        answer: `Upcoming verified World Cup fixtures:\n${lines.join('\n')}`,
+        actionLink: { label: 'Live board', url: scoresUrl },
+      }
+    }
+    const words = nextQuestion.toLowerCase().match(/[a-z]{3,}/g)?.filter(word => !['what', 'when', 'score', 'scores', 'between', 'playing', 'their', 'next', 'world', 'cup', 'game', 'games', 'match', 'matches', 'fixture', 'fixtures', 'current', 'latest', 'today', 'tonight', 'live', 'upcoming', 'schedule', 'all'].includes(word)) ?? []
     const match = matches.find(item => {
       const title = item.title.toLowerCase()
       const hits = words.filter(word => title.includes(word))
