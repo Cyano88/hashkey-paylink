@@ -42,7 +42,7 @@ const MAX_PAYER_LENGTH = 128
 const MAX_QUESTION_LENGTH = 4_000
 const MAX_MEMORY_LENGTH = 1_600
 const HELPER_FREE_ACCESS_MODE = 'helper-free'
-const HELPER_MODES = new Set(['payments', 'daily', 'services', 'deep-research', 'support'])
+const HELPER_MODES = new Set(['payments', 'daily', 'services', 'polydesk', 'support'])
 const HELPER_SIMPLE_DAILY_PROMPT_LIMIT = Math.max(1, parseInt(process.env.HELPER_SIMPLE_DAILY_PROMPT_LIMIT ?? process.env.HELPER_DAILY_PROMPT_LIMIT ?? '100', 10) || 100)
 const HELPER_DEEP_DAILY_PROMPT_LIMIT = Math.max(1, parseInt(process.env.HELPER_DEEP_DAILY_PROMPT_LIMIT ?? '2', 10) || 2)
 const HELPER_USAGE_WINDOW_MS = 24 * 60 * 60 * 1000
@@ -413,7 +413,7 @@ function classifyHelperRequest(question: string, helperMode = ''): { helperInten
   const value = question.toLowerCase()
   if (isNameQuestion(question)) return { helperIntent: 'personal-memory', qualityMode: 'fast' }
   if (isGreetingQuestion(question)) return { helperIntent: 'greeting', qualityMode: 'fast' }
-  if (helperMode === 'deep-research') return { helperIntent: 'deep-research', qualityMode: 'deep' }
+  if (helperMode === 'polydesk') return { helperIntent: 'polydesk', qualityMode: 'deep' }
   if (helperMode === 'daily') return { helperIntent: 'daily-assistant', qualityMode: 'fast' }
   if (helperMode === 'services') return { helperIntent: 'hashpaylink-services', qualityMode: 'standard' }
   if (helperMode === 'support') return { helperIntent: 'support', qualityMode: 'standard' }
@@ -498,8 +498,8 @@ function getHelperResponse(question: string, payerName: string, chain: string, a
     return 'I can help troubleshoot that. Tell me what you are trying to do, what happened, and where you got stuck.'
   }
 
-  if (helperMode === 'deep-research') {
-    return 'I could not complete the deeper answer just now. Try again with the exact topic and I will rerun the research path.'
+  if (helperMode === 'polydesk') {
+    return 'I could not complete the PolyDesk answer just now. Open Portfolio, World Cup, or LP Scout and I will use that exact Polymarket path.'
   }
 
   if (accessMode !== HELPER_FREE_ACCESS_MODE) {

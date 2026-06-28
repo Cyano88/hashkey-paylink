@@ -154,6 +154,7 @@ function helperRefinementLane(input: ZeroScoutHelperGuidanceInput): HelperRefine
   if (input.request.qualityMode === 'fast') return 'og-compute'
   const helperMode = String(input.request.helperMode ?? '').trim().toLowerCase()
   if (helperMode === 'payments' || helperMode === 'daily' || helperMode === 'services' || helperMode === 'support') return 'og-compute'
+  if (helperMode === 'polydesk') return 'multi-stack'
   const forcedLane = forcedSimpleHelperLane()
   if (forcedLane) return forcedLane
   const seed = requestHash({
@@ -201,6 +202,14 @@ function helperModeInstructions(input: ZeroScoutHelperGuidanceInput) {
   if (mode === 'services') {
     return [
       'Services mode should explain Hash PayLink services only when the user asks about product capabilities or setup.',
+    ]
+  }
+  if (mode === 'polydesk') {
+    return [
+      'PolyDesk mode is only for Polymarket users: portfolio tracking, World Cup market context, funding, and LP Scout access.',
+      'Do not answer unrelated daily-life or generic product strategy questions in PolyDesk mode.',
+      'For portfolio value, positions, scores, news, market data, LP Scout access, x402, or paid proof claims, rely only on verified app state and supplied backend context.',
+      'Keep LP Scout x402 proof separate from normal USDC access payments.',
     ]
   }
   if (mode === 'support') {

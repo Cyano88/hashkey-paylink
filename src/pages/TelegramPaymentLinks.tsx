@@ -308,7 +308,8 @@ const blockedPayerNames = new Set([
 ])
 
 type PolymarketMode = 'self' | 'friends' | ''
-type HelperMode = 'payments' | 'daily' | 'services' | 'deep-research' | 'support'
+type HelperMode = 'payments' | 'daily' | 'services' | 'polydesk' | 'support'
+type PolyDeskSubMode = 'portfolio' | 'worldcup' | 'lp-scout'
 type HelperThinkingState = 'light' | 'payment-draft' | 'payment-wallet' | 'paylink-build' | 'deep-research' | 'proof'
 
 type HelperMessage = {
@@ -521,9 +522,9 @@ const helperModes: Array<{ id: HelperMode; label: string; intro: string }> = [
     intro: 'Services mode is ready. I can help with StreamPay, Agent Wallets, x402, Circle wallet setup, PolyDesk, and Hash PayLink features. What are you trying to use?',
   },
   {
-    id: 'deep-research',
-    label: 'Deep Research',
-    intro: 'Deep Research mode is ready. I can help with LP Scout, PolyDesk, Polymarket, product strategy, or complex research. What should I investigate?',
+    id: 'polydesk',
+    label: 'PolyDesk',
+    intro: 'PolyDesk is ready. Choose Portfolio, World Cup, or LP Scout so I can use the right Polymarket flow.',
   },
   {
     id: 'support',
@@ -531,6 +532,35 @@ const helperModes: Array<{ id: HelperMode; label: string; intro: string }> = [
     intro: "Support mode is ready. Tell me what is stuck, confusing, or not working, and I'll help you fix it step by step.",
   },
 ]
+
+const polyDeskSubModes: Array<{ id: PolyDeskSubMode; label: string; intro: string; icon: typeof Wallet }> = [
+  {
+    id: 'portfolio',
+    label: 'Portfolio',
+    intro: 'Portfolio mode is ready. I can check saved profile setup, portfolio value, open positions, claimables, alerts, and funding.',
+    icon: Wallet,
+  },
+  {
+    id: 'worldcup',
+    label: 'World Cup',
+    intro: 'World Cup mode is ready. I can read live score feeds, fixture context, market routes, and latest World Cup news.',
+    icon: Radio,
+  },
+  {
+    id: 'lp-scout',
+    label: 'LP Scout',
+    intro: 'LP Scout mode is ready. I can help you choose paid LP Scout access through x402 or a normal USDC access payment.',
+    icon: LineChart,
+  },
+]
+
+function inferPolyDeskSubMode(text: string): PolyDeskSubMode | '' {
+  const value = text.toLowerCase()
+  if (/\b(lp scout|liquidity|reward market|maker|spread|depth|scout|lp\b)\b/.test(value)) return 'lp-scout'
+  if (/\b(world cup|score|fixture|match|game|news|headline|argentina|jordan|fifa|market odds|live board)\b/.test(value)) return 'worldcup'
+  if (/\b(portfolio|position|positions|claimable|claim|pnl|value|balance|exposure|fund polymarket|polymarket profile|open positions)\b/.test(value)) return 'portfolio'
+  return ''
+}
 
 function extractPayerCorrection(text: string) {
   const match = text.match(/\b(?:change|update|correct|set)?\s*(?:payer(?: name)?|payee|sender|from|her name'?s?|her name is|his name'?s?|his name is|their name'?s?|their name is)\s*(?:to|is|=|:)?\s+(@?[\p{L}\p{M}][\p{L}\p{M}\w .'-]{1,40})\b/iu)?.[1] ?? ''
@@ -1486,6 +1516,7 @@ function TelegramHelperPanel({
   const [payer, setPayer] = useState(initialPayer || cleanTelegramName)
   const [messages, setMessages] = useState<HelperMessage[]>([])
   const [helperMode, setHelperMode] = useState<HelperMode | ''>('')
+  const [polyDeskSubMode, setPolyDeskSubMode] = useState<PolyDeskSubMode | ''>('')
   const [question, setQuestion] = useState('')
   const [asking, setAsking] = useState(false)
   const [agentStatus, setAgentStatus] = useState('Asking ZeroScout for guidance...')
@@ -1501,6 +1532,7 @@ function TelegramHelperPanel({
   const helperScrollRef = useRef<HTMLDivElement | null>(null)
   const helperAbortRef = useRef<AbortController | null>(null)
   const helperIdentityKey = (ownerKey || telegramId || payer || cleanTelegramName || 'local-helper').trim().toLowerCase()
+  const { authenticated: polyDeskAuthenticated, getAccessToken: getPolyDeskAccessToken } = usePrivy()
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -1513,8 +1545,10 @@ function TelegramHelperPanel({
   function helperMemoryContext() {
     const profileName = helperName || profile?.displayName || helperNameDraft || nameFromMemorySummary(memoryDraft || profile?.memorySummary || '')
     const activeMode = helperModes.find(mode => mode.id === helperMode)
+    const activePolyDeskSubMode = polyDeskSubModes.find(mode => mode.id === polyDeskSubMode)
     return [
       activeMode ? `Agent Hash mode is ${activeMode.label}. Route the answer for this mode.` : '',
+      activePolyDeskSubMode ? `PolyDesk submode is ${activePolyDeskSubMode.label}. Only answer tasks for this PolyDesk lane.` : '',
       profileName ? `User is known as ${friendlyName(profileName)}.` : '',
       cleanTelegramName ? `Telegram context is ${cleanTelegramName}. Do not use it as the user's name if a known name is provided.` : '',
       memoryDraft.trim() || profile?.memorySummary || '',
@@ -1543,6 +1577,7 @@ function TelegramHelperPanel({
     setMessages([])
     setPaylinkDraft(null)
     setHelperMode('')
+    setPolyDeskSubMode('')
     setAskError('')
   }, [eventId, payer])
 
@@ -1621,6 +1656,7 @@ function TelegramHelperPanel({
     const selected = helperModes.find(item => item.id === mode)
     if (!selected || asking) return
     setHelperMode(mode)
+    setPolyDeskSubMode('')
     setAskError('')
     setMessages(prev => [...prev, { question: selected.label, answer: selected.intro }])
     window.setTimeout(() => {
@@ -1630,9 +1666,21 @@ function TelegramHelperPanel({
 
   function resetHelperMode() {
     setHelperMode('')
+    setPolyDeskSubMode('')
     setPaylinkDraft(null)
     setQuestion('')
     setAskError('')
+  }
+
+  function choosePolyDeskSubMode(mode: PolyDeskSubMode) {
+    const selected = polyDeskSubModes.find(item => item.id === mode)
+    if (!selected || asking) return
+    setPolyDeskSubMode(mode)
+    setAskError('')
+    setMessages(prev => [...prev, { question: selected.label, answer: selected.intro }])
+    window.setTimeout(() => {
+      document.querySelector<HTMLInputElement>('[data-agent-hash-input="true"]')?.focus()
+    }, 40)
   }
 
   function stopHelperResponse() {
@@ -2077,11 +2125,146 @@ function TelegramHelperPanel({
     return true
   }
 
+  function polyDeskUrl(service: TelegramServiceId) {
+    const params = new URLSearchParams()
+    params.set('section', 'market-tools')
+    params.set('service', service)
+    params.set('open', '1')
+    return `${shareOrigin()}/telegram/payment-links?${params.toString()}`
+  }
+
+  function buildLpScoutWalletManagerUrl(context: string) {
+    const params = new URLSearchParams()
+    params.set('profile', 'agent')
+    params.set('walletManager', 'service')
+    params.set('src', 'lp-scout')
+    params.set('run', 'polymarket-scout')
+    params.set('scoutMode', /\b(url|market|slug|theme|specific|this)\b/i.test(context) ? 'theme' : 'best')
+    params.set('maxAmount', lpScoutOptions[0]?.amount ?? '0.01')
+    params.set('serviceUrl', '/api/x402/polymarket-scout')
+    params.set('n', 'base')
+    if (context.trim()) params.set('context', context.trim().slice(0, 180))
+    return `${shareOrigin()}/agent?${params.toString()}`
+  }
+
+  function lpScoutTreasuryAccessRequest(): SavedRequest {
+    return {
+      mode: 'person',
+      network: 'base',
+      wallet: EVM_TREASURY,
+      evmWallet: EVM_TREASURY,
+      solanaWallet: '',
+      amount: lpScoutOptions[0]?.amount ?? '0.01',
+      label: 'LP Scout access',
+      target: 'Hash PayLink treasury',
+    }
+  }
+
+  async function portfolioAnswer(nextQuestion: string) {
+    const portfolioUrl = polyDeskUrl('poly-portfolio')
+    if (!polyDeskAuthenticated) {
+      return `Open PolyDesk Portfolio and sign in to connect your Polymarket profile first: ${portfolioUrl}`
+    }
+    const token = await getPolyDeskAccessToken()
+    if (!token) return `Open PolyDesk Portfolio and sign in to continue: ${portfolioUrl}`
+    const profileRes = await fetch('/api/polymarket-portfolio?action=profile', {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    const profileData = await profileRes.json() as { ok?: boolean; profile?: PolymarketProfile | null; error?: string }
+    if (!profileRes.ok || !profileData.ok) throw new Error(profileData.error || 'Could not load PolyDesk profile.')
+    const address = profileData.profile?.polymarketAddress
+    if (!address) return `Connect your Polymarket 0x profile in PolyDesk Portfolio first: ${portfolioUrl}`
+
+    if (/\b(fund|deposit|top up|bridge)\b/i.test(nextQuestion)) {
+      return `Your saved Polymarket profile is ${shortAddress(address)}. Open Portfolio, choose Fund Polymarket, and Hash PayLink will prepare the bridge-backed checkout: ${portfolioUrl}`
+    }
+
+    const [valueRes, positionsRes] = await Promise.all([
+      fetch(`/api/polymarket-portfolio?action=value&address=${encodeURIComponent(address)}`),
+      fetch(`/api/polymarket-portfolio?action=positions&address=${encodeURIComponent(address)}&sizeThreshold=0&limit=100`),
+    ])
+    const valueData = await valueRes.json() as { ok?: boolean; value?: unknown; error?: string }
+    const positionsData = await positionsRes.json() as { ok?: boolean; positions?: PolymarketPosition[]; error?: string }
+    if (!valueRes.ok || !valueData.ok) throw new Error(valueData.error || 'Could not load portfolio value.')
+    if (!positionsRes.ok || !positionsData.ok) throw new Error(positionsData.error || 'Could not load positions.')
+    const positions = Array.isArray(positionsData.positions) ? positionsData.positions : []
+    const active = positions.filter(isActiveOpenPosition)
+    const claimable = positions.filter(isClaimablePosition)
+    const total = normalizePortfolioValue(valueData.value)?.value
+    const claimableText = claimable.length ? ` ${claimable.length} claimable position${claimable.length === 1 ? '' : 's'} need attention.` : ' No claimables right now.'
+    return `Your saved Polymarket portfolio is ${formatUsd(total)} across ${active.length} open position${active.length === 1 ? '' : 's'}.${claimableText} Open Portfolio: ${portfolioUrl}`
+  }
+
+  async function worldCupAnswer(nextQuestion: string) {
+    const scoresUrl = polyDeskUrl('poly-stream')
+    const newsUrl = polyDeskUrl('poly-worldcup-news')
+    const wantsNews = /\b(news|headline|latest|today|update|updates)\b/i.test(nextQuestion)
+    if (wantsNews) {
+      const response = await fetch('/api/poly-worldcup-news')
+      const data = await response.json() as PolyWorldCupFeed
+      if (!response.ok || !data.ok) throw new Error('World Cup news is unavailable right now.')
+      const articles = (data.articles ?? []).slice(0, 3)
+      if (!articles.length) return `I do not have verified World Cup news from the feed right now. Open PolyDesk News: ${newsUrl}`
+      const lines = articles.map((article, index) => `${index + 1}. ${article.title}${article.source ? ` (${article.source})` : ''}`)
+      return `Latest verified World Cup market news:\n${lines.join('\n')}\nOpen News: ${newsUrl}`
+    }
+
+    const response = await fetch('/api/poly-stream')
+    const data = await response.json() as PolyStreamFeed
+    if (!response.ok || !data.ok) throw new Error('World Cup live board is unavailable right now.')
+    const matches = data.matches ?? []
+    const words = nextQuestion.toLowerCase().match(/[a-z]{3,}/g)?.filter(word => !['what', 'when', 'score', 'between', 'playing', 'their', 'next', 'world', 'cup', 'game', 'match', 'current', 'latest'].includes(word)) ?? []
+    const match = matches.find(item => {
+      const title = item.title.toLowerCase()
+      const hits = words.filter(word => title.includes(word))
+      return hits.length >= Math.min(2, Math.max(1, words.length))
+    }) || (words.length ? undefined : matches[0])
+    if (!match) return `I do not have verified World Cup match data from the feed right now. Open the live board: ${scoresUrl}`
+    const state = matchDisplayState(match)
+    const score = hasMatchScore(match) ? `${match.homeScore}-${match.awayScore}` : state.center
+    const market = match.polymarketUrl ? ` Trade route: ${match.polymarketUrl}` : ''
+    return `${match.title}: ${state.tag}${state.phase ? `, ${state.phase}` : ''}. Score/status: ${score}. ${state.sub || match.time}.${market}\nOpen live board: ${scoresUrl}`
+  }
+
+  async function handlePolyDeskConversation(nextQuestion: string) {
+    if (helperMode !== 'polydesk' || !polyDeskSubMode) return false
+    setThinkingState(polyDeskSubMode === 'lp-scout' ? 'deep-research' : 'light')
+    setAgentStatus(polyDeskSubMode === 'lp-scout' ? 'Preparing LP Scout access...' : 'Reading PolyDesk data...')
+
+    if (polyDeskSubMode === 'portfolio') {
+      const answer = await portfolioAnswer(nextQuestion)
+      finishHelperMessage(nextQuestion, { answer })
+      return true
+    }
+
+    if (polyDeskSubMode === 'worldcup') {
+      const answer = await worldCupAnswer(nextQuestion)
+      finishHelperMessage(nextQuestion, { answer })
+      return true
+    }
+
+    const x402Url = buildLpScoutWalletManagerUrl(nextQuestion)
+    const treasuryRequest = lpScoutTreasuryAccessRequest()
+    finishHelperMessage(nextQuestion, {
+      answer: [
+        'LP Scout is paid access.',
+        `Agentic tip / x402 access: ${x402Url}`,
+        'Normal USDC access is available below. This is an access payment, not x402 LP proof.',
+      ].join('\n'),
+      paylink: treasuryRequest,
+    })
+    return true
+  }
+
   async function askHelper() {
     if (!question.trim() || asking || !started) return
     const nextQuestion = question.trim()
     if (!helperMode) {
       setAskError('Choose a mode to start.')
+      return
+    }
+    if (helperMode === 'polydesk' && !polyDeskSubMode) {
+      setAskError('Choose Portfolio, World Cup, or LP Scout first.')
       return
     }
     setQuestion('')
@@ -2093,7 +2276,7 @@ function TelegramHelperPanel({
     queueHelperMessage(nextQuestion)
     try {
       const isPaylinkFlow = helperMode === 'payments' && Boolean(paylinkDraft || isPaymentRequestIntent(nextQuestion))
-      const isDeepResearch = helperMode === 'deep-research' || isDeepResearchIntent(nextQuestion)
+      const isDeepResearch = helperMode === 'polydesk' || isDeepResearchIntent(nextQuestion)
       setThinkingState(isPaylinkFlow ? 'payment-draft' : isDeepResearch ? 'deep-research' : 'light')
       setAgentStatus(isPaylinkFlow
         ? 'Checking payment details...'
@@ -2217,6 +2400,7 @@ function TelegramHelperPanel({
         return
       }
       if (helperMode === 'payments' && await handlePaylinkConversation(nextQuestion)) return
+      if (helperMode === 'polydesk' && await handlePolyDeskConversation(nextQuestion)) return
       setThinkingState(isDeepResearch ? 'deep-research' : 'light')
       setAgentStatus(isDeepResearch ? 'Running deeper research... this might take a little time.' : 'Asking ZeroScout...')
       const res = await fetch('/api/agent-ask', {
@@ -2325,6 +2509,40 @@ function TelegramHelperPanel({
                   </div>
                 )}
 
+                {helperMode === 'polydesk' && !polyDeskSubMode && (
+                  <div className="max-w-[92%] rounded-[18px] rounded-bl-md bg-[#f0f0f0] px-3.5 py-3 text-sm text-gray-900 shadow-sm dark:bg-white/[0.08] dark:text-gray-100">
+                    <p className="mb-2 font-medium">Choose your PolyDesk lane.</p>
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      {polyDeskSubModes.map(mode => {
+                        const Icon = mode.icon
+                        return (
+                          <button
+                            key={mode.id}
+                            type="button"
+                            onClick={() => choosePolyDeskSubMode(mode.id)}
+                            className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-left text-xs font-semibold text-gray-900 transition hover:border-gray-300 hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-white dark:hover:bg-white/[0.1]"
+                          >
+                            <Icon className="h-3.5 w-3.5 text-gray-500 dark:text-gray-300" />
+                            {mode.label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {helperMode === 'polydesk' && polyDeskSubMode && (
+                  <div className="flex justify-center">
+                    <button
+                      type="button"
+                      onClick={() => setPolyDeskSubMode('')}
+                      className="rounded-full border border-gray-200 bg-white px-3 py-1 text-[11px] font-semibold text-gray-600 shadow-sm transition hover:bg-gray-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/[0.1]"
+                    >
+                      PolyDesk / {polyDeskSubModes.find(mode => mode.id === polyDeskSubMode)?.label}
+                    </button>
+                  </div>
+                )}
+
                 {messages.map((message, index) => (
                   <div key={index} className="space-y-2.5">
                     <div className="flex justify-end">
@@ -2358,14 +2576,14 @@ function TelegramHelperPanel({
                     value={question}
                     onChange={event => setQuestion(event.target.value)}
                     onKeyDown={event => event.key === 'Enter' && !event.shiftKey && !asking && askHelper()}
-                    placeholder={helperMode ? 'Ask Hash...' : 'Choose a mode to start'}
-                    disabled={!helperMode}
+                    placeholder={helperMode === 'polydesk' && !polyDeskSubMode ? 'Choose a PolyDesk lane' : helperMode ? 'Ask Hash...' : 'Choose a mode to start'}
+                    disabled={!helperMode || (helperMode === 'polydesk' && !polyDeskSubMode)}
                     className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:ring-2 focus:ring-gray-200 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-white/[0.05] dark:text-white"
                   />
                   <button
                     type="button"
                     onClick={asking ? stopHelperResponse : askHelper}
-                    disabled={!asking && (!question.trim() || !helperMode)}
+                    disabled={!asking && (!question.trim() || !helperMode || (helperMode === 'polydesk' && !polyDeskSubMode))}
                     aria-label={asking ? 'Stop response' : 'Send message'}
                     className={cn(
                       'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-all active:scale-95 disabled:opacity-40',
