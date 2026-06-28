@@ -247,6 +247,7 @@ type HelperPaylinkDraft = {
   evmWallet: string
   solanaWallet: string
   offeredSavedWallet?: boolean
+  offeredSavedWalletNetwork?: RequestNetwork | ''
 }
 
 const blockedPayerNames = new Set([
@@ -674,11 +675,17 @@ function extractRememberedName(text: string) {
   return usableHelperName(match)
 }
 
+function cleanRelationshipName(value: string) {
+  return value
+    .replace(/\s+\b(?:and\s+i|and\s+we|i\s+want|i\s+need|who|that|she|he|they|for)\b.*$/i, '')
+    .trim()
+}
+
 function extractRelationshipMemory(text: string) {
   const match = text.match(/\b(?:i have|my)\s+(?:a\s+|an\s+)?(friend|sister|brother|mother|father|partner|client|customer|payer|colleague)\s+(?:called|named|is)\s+(@?[a-zA-Z][\w .-]{1,40})/i)
   if (!match) return null
   const relation = match[1].toLowerCase()
-  const name = usableHelperName(match[2])
+  const name = usableHelperName(cleanRelationshipName(match[2]))
   if (!name) return null
   return { relation, name: friendlyName(name) }
 }
@@ -1687,6 +1694,11 @@ function TelegramHelperPanel({
     const existingWallet = existing?.wallet || ''
     const keepExistingWallet = Boolean(existingWallet && !walletFromText && (!networkCorrection || walletMatchesNetwork(existingWallet, nextNetwork)))
     const nextWallet = walletFromText || (keepExistingWallet ? existingWallet : '')
+    const savedWalletOfferStillApplies = Boolean(
+      existing?.offeredSavedWallet
+      && existing.offeredSavedWalletNetwork
+      && existing.offeredSavedWalletNetwork === nextNetwork,
+    )
     return {
       mode,
       target: targetFromText || inlineTarget || existing?.target || '',
@@ -1696,7 +1708,8 @@ function TelegramHelperPanel({
       wallet: nextWallet,
       evmWallet: nextWallet?.startsWith('0x') ? nextWallet : keepExistingWallet ? existing?.evmWallet || '' : '',
       solanaWallet: nextWallet && !nextWallet.startsWith('0x') ? nextWallet : keepExistingWallet ? existing?.solanaWallet || '' : '',
-      offeredSavedWallet: networkCorrection && !keepExistingWallet ? false : existing?.offeredSavedWallet,
+      offeredSavedWallet: networkCorrection && !keepExistingWallet ? false : savedWalletOfferStillApplies,
+      offeredSavedWalletNetwork: savedWalletOfferStillApplies ? existing?.offeredSavedWalletNetwork : '',
     }
   }
 
@@ -1712,6 +1725,7 @@ function TelegramHelperPanel({
       evmWallet: request.evmWallet || (wallet.startsWith('0x') ? wallet : ''),
       solanaWallet: request.solanaWallet || (!wallet.startsWith('0x') ? wallet : ''),
       offeredSavedWallet: true,
+      offeredSavedWalletNetwork: request.network || (wallet.startsWith('0x') ? 'base' : ''),
     }
   }
 
@@ -1791,7 +1805,7 @@ function TelegramHelperPanel({
     const savedWallet = preferredWalletFor(draft.network)
 
     if (!draft.wallet && savedWallet && !draft.offeredSavedWallet) {
-      draft = { ...draft, offeredSavedWallet: true }
+      draft = { ...draft, offeredSavedWallet: true, offeredSavedWalletNetwork: draft.network }
       setPaylinkDraft(draft)
       const fallbackAnswer = `I can prepare that PayLink. Do you want to continue with your saved ${draft.network ? requestNetworkLabels[draft.network] : 'payment'} wallet ${compactSavedWallet(savedWallet)}, or use a new receive wallet?`
       const answer = await polishLocalHelperResult(

@@ -54,6 +54,19 @@ function extractPayerCorrection(text) {
   return clean && !blockedPayerNames.has(clean.toLowerCase()) ? clean : ''
 }
 
+function cleanRelationshipName(value) {
+  return value
+    .replace(/\s+\b(?:and\s+i|and\s+we|i\s+want|i\s+need|who|that|she|he|they|for)\b.*$/i, '')
+    .trim()
+}
+
+function extractRelationshipMemory(text) {
+  const match = text.match(/\b(?:i have|my)\s+(?:a\s+|an\s+)?(friend|sister|brother|mother|father|partner|client|customer|payer|colleague)\s+(?:called|named|is)\s+(@?[a-zA-Z][\w .-]{1,40})/i)
+  if (!match) return null
+  const name = normalizeHelperName(cleanRelationshipName(match[2]))
+  return name ? { relation: match[1].toLowerCase(), name } : null
+}
+
 function walletMatchesNetwork(wallet, network) {
   if (!wallet || !network || network === 'all') return true
   if (network === 'solana') return !wallet.startsWith('0x')
@@ -63,6 +76,7 @@ function walletMatchesNetwork(wallet, network) {
 assert.equal(extractPayerCorrection('change payer to Nana'), 'Nana')
 assert.equal(extractPayerCorrection("her name's Nana"), 'Nana')
 assert.equal(extractPayerCorrection('payer is buy'), '')
+assert.equal(extractRelationshipMemory('I have a friend called Nana and I want to request 1000 USDC from her for tuition')?.name, 'Nana')
 assert.equal(extractNetwork('She picked Solana'), 'solana')
 assert.equal(extractNetwork('change network to Base'), 'base')
 assert.equal(walletMatchesNetwork('0xCEB57B0C27C47657C7B2f847196C953Fc7f155Ce', 'solana'), false)
