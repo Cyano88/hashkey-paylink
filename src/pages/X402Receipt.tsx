@@ -1,13 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, CheckCircle2, Download, ExternalLink, Loader2, Share2, ShieldCheck, XCircle } from 'lucide-react'
-import { CHAIN_META } from '../lib/chains'
-import { truncateAddress } from '../lib/utils'
 import {
   compactReceiptAmount,
   createPaymentReceiptPdf,
   paymentReceiptFileName,
-  receiptChainKey,
   type PaylinkReceipt,
 } from '../lib/paymentReceiptPdf'
 
@@ -57,6 +54,7 @@ export default function X402Receipt() {
   const [busy, setBusy] = useState(true)
   const [shared, setShared] = useState(false)
   const [circleNotice, setCircleNotice] = useState(false)
+  const [paylinkReceiptUrl, setPaylinkReceiptUrl] = useState('')
 
   async function load() {
     setBusy(true)
@@ -117,6 +115,28 @@ export default function X402Receipt() {
     ].filter(Boolean).join('\n')
   }, [data?.receipt, governance.governanceVersion, legal.entityName, og?.ogTxHash, og?.rootHash, proof])
 
+  useEffect(() => {
+    if (!paylinkReceipt) {
+      setPaylinkReceiptUrl('')
+      return
+    }
+    let cancelled = false
+    let objectUrl = ''
+    createPaymentReceiptPdf(paylinkReceipt)
+      .then(blob => {
+        if (cancelled) return
+        objectUrl = URL.createObjectURL(blob)
+        setPaylinkReceiptUrl(objectUrl)
+      })
+      .catch(() => {
+        if (!cancelled) setPaylinkReceiptUrl('')
+      })
+    return () => {
+      cancelled = true
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
+    }
+  }, [paylinkReceipt])
+
   async function receiptPdfBlob() {
     if (!data?.receipt) return new Blob([], { type: 'application/pdf' })
     if (paylinkReceipt) return createPaymentReceiptPdf(paylinkReceipt)
@@ -158,21 +178,6 @@ export default function X402Receipt() {
     window.setTimeout(() => setShared(false), 1800)
   }
 
-  async function openReceipt() {
-    const pdf = await receiptPdfBlob()
-    const url = URL.createObjectURL(pdf)
-    const win = window.open(url, '_blank', 'noopener,noreferrer')
-    if (!win) {
-      const link = document.createElement('a')
-      link.href = url
-      link.download = receiptPdfName()
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-    }
-    window.setTimeout(() => URL.revokeObjectURL(url), 30_000)
-  }
-
   function showCircleComingSoon() {
     setCircleNotice(true)
     window.setTimeout(() => setCircleNotice(false), 5000)
@@ -193,13 +198,30 @@ export default function X402Receipt() {
 
   if (paylinkReceipt && data?.ok) {
     return (
-      <PaylinkReceiptView
-        receipt={paylinkReceipt}
-        shared={shared}
-        onBack={() => navigate(-1)}
-        onView={openReceipt}
-        onShare={shareReceipt}
-      />
+      <main className="mx-auto flex min-h-[calc(100vh-120px)] w-full max-w-2xl flex-col px-4 py-6 sm:py-10">
+        <button
+          type="button"
+          onClick={() => navigate(-1)}
+          className="mb-3 inline-flex w-fit items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Back
+        </button>
+        <section className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-card dark:border-white/10 dark:bg-[#1c1c20]">
+          {paylinkReceiptUrl ? (
+            <iframe
+              title={paylinkReceipt.title || 'Hash PayLink receipt'}
+              src={paylinkReceiptUrl}
+              className="h-[min(82vh,900px)] w-full bg-white"
+            />
+          ) : (
+            <div className="flex min-h-[420px] items-center justify-center gap-2 text-sm font-semibold text-gray-500 dark:text-gray-300">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Preparing receipt...
+            </div>
+          )}
+        </section>
+      </main>
     )
   }
 
@@ -322,141 +344,6 @@ export default function X402Receipt() {
             {data?.error ?? 'Receipt not found.'}
           </div>
         )}
-      </section>
-    </main>
-  )
-}
-
-function PaylinkReceiptView({
-  receipt,
-  shared,
-  onBack,
-  onView,
-  onShare,
-}: {
-  receipt: PaylinkReceipt
-  shared: boolean
-  onBack: () => void
-  onView: () => void
-  onShare: () => void
-}) {
-  const meta = CHAIN_META[receiptChainKey(receipt.chain)]
-  const isPos = receipt.source === 'ngpos'
-  const isPolymarket = receipt.source === 'polymarket-funding' || receipt.settlementType === 'polymarket_bridge'
-  const isStream = receipt.source === 'streampay' || receipt.settlementType === 'stream-created'
-  const amount = compactReceiptAmount(receipt.amount)
-  const title = isPos ? 'Retail payment confirmed' : isPolymarket ? 'Polymarket funded' : isStream ? 'Stream created' : 'Payment confirmed'
-  const eyebrow = isPos ? 'Retail POS receipt' : isPolymarket ? 'Polymarket funding receipt' : isStream ? 'StreamPay receipt' : 'Hash PayLink receipt'
-  const payerLabel = isPos ? 'Customer wallet' : isPolymarket ? 'Funder' : isStream ? 'Sender' : 'Payer'
-  const forLabel = isPolymarket ? 'For' : isStream ? 'Stream memo' : isPos ? 'Customer' : 'Memo'
-  const forValue = isPolymarket ? 'Polymarket funding' : receipt.memo || receipt.merchantId || receipt.eventId || '-'
-  const recipientLabel = isPolymarket ? 'Polymarket profile' : isStream ? 'Stream vault' : isPos ? 'Merchant' : 'Recipient'
-  const archived = Boolean(receipt.proof?.ogExplorer || receipt.proof?.ogTxHash)
-  const txUrl = receipt.txHash && meta.explorerUrl ? `${meta.explorerUrl}/tx/${receipt.txHash}` : ''
-  const proofUrl = receipt.proof?.ogExplorer || (receipt.proof?.ogTxHash ? `https://chainscan.0g.ai/tx/${receipt.proof.ogTxHash}` : '')
-
-  return (
-    <main className="mx-auto flex min-h-[calc(100vh-120px)] w-full max-w-md flex-col px-4 py-6 sm:py-10">
-      <button
-        type="button"
-        onClick={onBack}
-        className="mb-3 inline-flex w-fit items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200"
-      >
-        <ArrowLeft className="h-3.5 w-3.5" />
-        Back
-      </button>
-
-      <section className="overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-card dark:border-white/10 dark:bg-[#1c1c20]">
-        <div className="bg-gradient-to-br from-emerald-50 to-green-50 p-8 text-center dark:from-emerald-950/30 dark:to-green-950/20">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-white shadow-sm dark:bg-white/10">
-            {isPolymarket ? (
-              <img src="/brand/polymarket-logo.png" alt="" className="h-9 w-9 rounded-full object-contain" />
-            ) : (
-              <CheckCircle2 className="h-8 w-8 text-emerald-500" />
-            )}
-          </div>
-          <p className="text-[11px] font-semibold uppercase tracking-widest text-emerald-700/70 dark:text-emerald-300/70">{eyebrow}</p>
-          <h1 className="mt-1 text-xl font-bold text-gray-900 dark:text-white">{title}</h1>
-          <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
-            <span className="font-semibold text-gray-900 dark:text-white">{amount} {receipt.asset}</span> confirmed on {meta.label}
-          </p>
-        </div>
-
-        <div className="space-y-4 p-6">
-          <div className="rounded-xl border border-gray-100 bg-gray-50/60 p-4 dark:border-white/10 dark:bg-white/[0.04]">
-            <p className="text-[11px] font-medium text-gray-400 dark:text-gray-500">{isPolymarket ? 'Amount funded' : 'Amount paid'}</p>
-            <p className="mt-1 font-mono text-2xl font-bold text-emerald-700 dark:text-emerald-300">{amount} {receipt.asset}</p>
-          </div>
-
-          <div className="space-y-3 text-sm">
-            {[
-              ['Network', meta.label],
-              [payerLabel, receipt.payer || '-'],
-              [forLabel, forValue],
-              ...(receipt.merchantId ? [[recipientLabel, receipt.merchantId] as [string, string]] : []),
-            ].map(([label, value]) => (
-              <div key={label} className="flex items-center justify-between gap-4">
-                <span className="text-xs text-gray-400 dark:text-gray-500">{label}</span>
-                <span className="min-w-0 truncate text-right text-xs font-semibold text-gray-800 dark:text-gray-200">{value}</span>
-              </div>
-            ))}
-
-            <div className="flex items-center justify-between gap-4">
-              <span className="text-xs text-gray-400 dark:text-gray-500">Tx</span>
-              {txUrl ? (
-                <a
-                  href={txUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 rounded-lg border border-gray-100 px-2 py-1 font-mono text-[11px] font-semibold text-blue-500 transition-colors hover:bg-blue-50 dark:border-white/10 dark:hover:bg-blue-950/30"
-                >
-                  {truncateAddress(receipt.txHash, 5)}
-                  <ExternalLink className="h-3 w-3" />
-                </a>
-              ) : (
-                <span className="font-mono text-[11px] text-gray-400">Not captured</span>
-              )}
-            </div>
-
-            <div className="flex items-center justify-between gap-4">
-              <span className="text-xs text-gray-400 dark:text-gray-500">0G</span>
-              {proofUrl ? (
-                <a
-                  href={proofUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 rounded-lg border border-purple-100 bg-purple-50 px-2 py-1 text-[11px] font-bold text-purple-600 transition-colors hover:bg-purple-100 dark:border-purple-900/60 dark:bg-purple-950/50 dark:text-purple-300"
-                >
-                  Archived
-                  <ExternalLink className="h-3 w-3" />
-                </a>
-              ) : (
-                <span className="rounded border border-gray-100 bg-gray-50 px-2 py-1 text-[11px] font-semibold text-gray-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-500">
-                  {archived ? 'Archived' : 'Archiving'}
-                </span>
-              )}
-            </div>
-          </div>
-
-          <div className="grid gap-2">
-            <button
-              type="button"
-              onClick={onView}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-gray-900 px-4 py-3 text-sm font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
-            >
-              <Download className="h-4 w-4" />
-              View receipt
-            </button>
-            <button
-              type="button"
-              onClick={onShare}
-              className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-800 transition-all hover:border-gray-300 hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-100 dark:hover:bg-white/[0.08]"
-            >
-              <Share2 className="h-4 w-4" />
-              {shared ? 'Downloaded' : 'Share receipt'}
-            </button>
-          </div>
-        </div>
       </section>
     </main>
   )

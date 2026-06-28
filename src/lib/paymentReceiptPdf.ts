@@ -173,7 +173,7 @@ function drawReceiptCanvas(
   roundRect(ctx, 64, 216, width - 128, 88, 18, '#f8fafc')
   ctx.fillStyle = '#667085'
   ctx.font = '700 10px Arial'
-  ctx.fillText('AMOUNT PAID', 84, 244)
+  ctx.fillText(labels.amountLabel.toUpperCase(), 84, 244)
   ctx.fillStyle = '#101828'
   ctx.font = '800 30px Arial'
   ctx.fillText(`${amount} ${receipt.asset}`, 84, 274)

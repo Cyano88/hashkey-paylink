@@ -3181,9 +3181,8 @@ export default function PaymentPage() {
     if (!proofReady) return
     polymarketAgentNoticeStored.current = true
     const actionLinks = [
-      paymentReceiptId ? { label: 'Show receipt', url: `/receipt/${encodeURIComponent(paymentReceiptId)}` } : null,
-      paymentReceiptId ? { label: 'Share receipt', url: `/receipt/${encodeURIComponent(paymentReceiptId)}` } : null,
-      { label: 'Trade on Polymarket', url: POLYMARKET_SIGNUP_URL },
+      paymentReceiptId ? { label: 'Receipt', url: `/receipt/${encodeURIComponent(paymentReceiptId)}` } : null,
+      { label: 'Polymarket', url: POLYMARKET_SIGNUP_URL },
     ].filter(Boolean)
     void fetch('/api/helper-profile', {
       method: 'POST',
@@ -3295,13 +3294,7 @@ export default function PaymentPage() {
             </div>
             <h2 className="text-xl font-bold text-gray-900">
               {isUnder ? 'Underpayment Detected'
-               : isPolymarketBridge ? (
-                <span className="inline-flex items-center justify-center gap-2">
-                  <img src={POLYMARKET_LOGO} alt="" className="h-5 w-5 rounded-full object-contain" />
-                  Funded
-                </span>
-               )
-               : isPolymarketFunding ? 'Funding Complete!'
+               : isPolymarketFunding ? 'Completed'
                : 'Payment Sent!'}
             </h2>
             <p className="mt-1 text-sm text-gray-600">
@@ -3311,7 +3304,7 @@ export default function PaymentPage() {
                     {formatPaymentAmountDisplay(recipientAmt, meta.decimals)} {meta.asset}
                   </span>
                   {' '}
-                  {isUnder ? 'received - ' : isPolymarketBridge ? 'sent' : isPolymarketFunding ? 'delivered to funding wallet' : 'received by recipient'}
+                  {isUnder ? 'received - ' : isPolymarketFunding ? 'funded' : 'received by recipient'}
                   {isUnder && (
                     <span className={cn(
                       'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold',
@@ -3333,10 +3326,8 @@ export default function PaymentPage() {
                   <span className="font-semibold text-gray-900">
                     {formatAmount(effectiveAmt, meta.decimals)} {meta.asset}
                   </span>{' '}
-                  {isPolymarketBridge
-                    ? 'sent'
-                    : isPolymarketFunding
-                    ? 'delivered to funding wallet'
+                  {isPolymarketFunding
+                    ? 'funded'
                     : manualPayDetected && directStatus !== 'success'
                     ? 'received by recipient'
                     : 'delivered successfully'}
@@ -3353,8 +3344,10 @@ export default function PaymentPage() {
                 <div className="flex items-center justify-between px-4 py-3">
                   <span className="text-sm text-gray-500">For</span>
                   <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-gray-800">
-                    Polymarket funding
-                    <img src={POLYMARKET_LOGO} alt="" className="h-4 w-4 rounded-full object-contain" />
+                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-gray-200 bg-gray-950 p-0.5">
+                      <img src={POLYMARKET_LOGO} alt="" className="h-full w-full rounded-full object-contain invert" />
+                    </span>
+                    <span>Polymarket funding</span>
                   </span>
                 </div>
               )}
@@ -3448,7 +3441,9 @@ export default function PaymentPage() {
                     rel="noopener noreferrer"
                     className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98]"
                   >
-                    <img src={POLYMARKET_LOGO} alt="" className="h-4 w-4 rounded-full object-contain" />
+                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-gray-200 bg-gray-950 p-0.5">
+                      <img src={POLYMARKET_LOGO} alt="" className="h-full w-full rounded-full object-contain invert" />
+                    </span>
                     Trade on Polymarket
                   </a>
                 )}
