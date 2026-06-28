@@ -2239,7 +2239,8 @@ function TelegramHelperPanel({
   async function worldCupAnswer(nextQuestion: string) {
     const scoresUrl = polyDeskUrl('poly-stream')
     const newsUrl = polyDeskUrl('poly-worldcup-news')
-    const wantsNews = /\b(news|headline|latest|today|update|updates)\b/i.test(nextQuestion)
+    const wantsFixture = /\b(match|matches|fixture|fixtures|playing|play|game|games|score|scores|live|today|tonight|next)\b/i.test(nextQuestion)
+    const wantsNews = !wantsFixture && /\b(news|headline|headlines|latest|update|updates)\b/i.test(nextQuestion)
     if (wantsNews) {
       const response = await fetch('/api/poly-worldcup-news')
       const data = await response.json() as PolyWorldCupFeed
@@ -2262,7 +2263,25 @@ function TelegramHelperPanel({
     const data = await response.json() as PolyStreamFeed
     if (!response.ok || !data.ok) throw new Error('World Cup live board is unavailable right now.')
     const matches = data.matches ?? []
-    const words = nextQuestion.toLowerCase().match(/[a-z]{3,}/g)?.filter(word => !['what', 'when', 'score', 'between', 'playing', 'their', 'next', 'world', 'cup', 'game', 'match', 'current', 'latest'].includes(word)) ?? []
+    const wantsToday = /\b(today|tonight|now|live|playing)\b/i.test(nextQuestion)
+    const todayMatches = matches.filter(match => {
+      const kickoffTime = Date.parse(match.kickoffAt || match.time)
+      if (/^(live|today)$/i.test(match.tag)) return true
+      if (!Number.isFinite(kickoffTime)) return false
+      return new Date(kickoffTime).toDateString() === new Date().toDateString()
+    })
+    if (wantsToday && todayMatches.length) {
+      const lines = todayMatches.slice(0, 4).map(match => {
+        const state = matchDisplayState(match)
+        const score = hasMatchScore(match) ? `${match.homeScore}-${match.awayScore}` : state.center
+        return `${match.title}: ${state.tag}${state.phase ? `, ${state.phase}` : ''}. ${score}. ${state.sub || match.time}.`
+      })
+      return {
+        answer: `Today's verified World Cup matches:\n${lines.join('\n')}`,
+        actionLink: { label: 'Live board', url: scoresUrl },
+      }
+    }
+    const words = nextQuestion.toLowerCase().match(/[a-z]{3,}/g)?.filter(word => !['what', 'when', 'score', 'scores', 'between', 'playing', 'their', 'next', 'world', 'cup', 'game', 'games', 'match', 'matches', 'fixture', 'fixtures', 'current', 'latest', 'today', 'tonight', 'live'].includes(word)) ?? []
     const match = matches.find(item => {
       const title = item.title.toLowerCase()
       const hits = words.filter(word => title.includes(word))
