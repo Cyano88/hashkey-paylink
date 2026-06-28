@@ -285,6 +285,7 @@ const blockedPayerNames = new Set([
 
 type PolymarketMode = 'self' | 'friends' | ''
 type HelperMode = 'payments' | 'daily' | 'services' | 'deep-research' | 'support'
+type HelperThinkingState = 'light' | 'payment-draft' | 'payment-wallet' | 'paylink-build' | 'deep-research' | 'proof'
 
 type HelperMessage = {
   question: string
@@ -1412,6 +1413,7 @@ function TelegramHelperPanel({
   const [question, setQuestion] = useState('')
   const [asking, setAsking] = useState(false)
   const [agentStatus, setAgentStatus] = useState('Asking ZeroScout for guidance...')
+  const [thinkingState, setThinkingState] = useState<HelperThinkingState>('light')
   const [askError, setAskError] = useState('')
   const [profile, setProfile] = useState<HelperProfile | null>(null)
   const [profileBusy, setProfileBusy] = useState(false)
@@ -1562,6 +1564,7 @@ function TelegramHelperPanel({
     helperAbortRef.current = null
     setAsking(false)
     setAgentStatus('Stopped.')
+    setThinkingState('light')
     setMessages(prev => prev.filter(message => message.answer || message.paylink))
   }
 
@@ -1777,6 +1780,7 @@ function TelegramHelperPanel({
       return true
     }
     if (paylinkDraft && isPaylinkDraftSideQuestion(nextQuestion) && !hasPaylinkDraftUpdate(nextQuestion, paylinkDraft)) {
+      setThinkingState('payment-draft')
       const missingForDraftQuestion = describeMissingDraftFields(paylinkDraft).filter(item => item !== 'receive wallet' || !paylinkDraft.offeredSavedWallet)
       const fallbackAnswer = paylinkDraftSideQuestionFallback(paylinkDraft, nextQuestion)
       const answer = await polishLocalHelperResult(
@@ -1805,6 +1809,7 @@ function TelegramHelperPanel({
     const savedWallet = preferredWalletFor(draft.network)
 
     if (!draft.wallet && savedWallet && !draft.offeredSavedWallet) {
+      setThinkingState('payment-wallet')
       draft = { ...draft, offeredSavedWallet: true, offeredSavedWalletNetwork: draft.network }
       setPaylinkDraft(draft)
       const fallbackAnswer = `Use your saved ${draft.network ? requestNetworkLabels[draft.network] : 'payment'} wallet ${compactSavedWallet(savedWallet)}, or add a new receive wallet?`
@@ -1826,6 +1831,7 @@ function TelegramHelperPanel({
     }
 
     if (!draft.wallet && !savedWallet && draft.network && draft.network !== 'all' && wantsSavedWallet(nextQuestion)) {
+      setThinkingState('payment-wallet')
       setPaylinkDraft(draft)
       const otherWallet = savedWalletForOtherNetwork(draft.network)
       const requestedNetwork = requestNetworkLabels[draft.network]
@@ -1853,6 +1859,7 @@ function TelegramHelperPanel({
 
     if (!draft.wallet && savedWallet && draft.offeredSavedWallet && wantsSavedWallet(nextQuestion)) {
       if (!walletMatchesNetwork(savedWallet, draft.network)) {
+        setThinkingState('payment-wallet')
         setPaylinkDraft(draft)
         const savedNetwork = walletNetworkLabel(savedWallet)
         const requestedNetwork = draft.network ? requestNetworkLabels[draft.network] : 'that network'
@@ -1883,6 +1890,7 @@ function TelegramHelperPanel({
     }
 
     if (!draft.wallet && savedWallet && draft.offeredSavedWallet && wantsNewWallet(nextQuestion)) {
+      setThinkingState('payment-wallet')
       setPaylinkDraft(draft)
       const fallbackAnswer = 'Send the new receive wallet. I will use it for this PayLink.'
       const answer = await polishLocalHelperResult(
@@ -1908,6 +1916,7 @@ function TelegramHelperPanel({
     }
 
     if (draft.wallet && !walletMatchesNetwork(draft.wallet, draft.network)) {
+      setThinkingState('payment-wallet')
       setPaylinkDraft(draft)
       const walletNetwork = walletNetworkLabel(draft.wallet)
       const requestedNetwork = draft.network ? requestNetworkLabels[draft.network] : 'the selected network'
@@ -1932,6 +1941,7 @@ function TelegramHelperPanel({
 
     const missing = describeMissingDraftFields(draft, draft.wallet ? '' : savedWallet)
     if (missing.length > 0) {
+      setThinkingState('payment-draft')
       setPaylinkDraft(draft)
       const missingNetworkOnly = missing.length === 1 && missing[0] === 'network'
       const missingTarget = draft.target ? friendlyName(draft.target) : 'the payer'
@@ -1957,6 +1967,7 @@ function TelegramHelperPanel({
       return true
     }
 
+    setThinkingState('paylink-build')
     setAgentStatus('Preparing PayLink...')
     const saved = await createPaylinkFromDraft(draft)
     consumePaymentQuota()
@@ -1996,12 +2007,14 @@ function TelegramHelperPanel({
     setQuestion('')
     setAskError('')
     setAsking(true)
+    setThinkingState('light')
     const abortController = new AbortController()
     helperAbortRef.current = abortController
     queueHelperMessage(nextQuestion)
     try {
       const isPaylinkFlow = helperMode === 'payments' && Boolean(paylinkDraft || isPaymentRequestIntent(nextQuestion))
       const isDeepResearch = helperMode === 'deep-research' || isDeepResearchIntent(nextQuestion)
+      setThinkingState(isPaylinkFlow ? 'payment-draft' : isDeepResearch ? 'deep-research' : 'light')
       setAgentStatus(isPaylinkFlow
         ? 'Checking payment details...'
         : isDeepResearch
@@ -2124,6 +2137,7 @@ function TelegramHelperPanel({
         return
       }
       if (helperMode === 'payments' && await handlePaylinkConversation(nextQuestion)) return
+      setThinkingState(isDeepResearch ? 'deep-research' : 'light')
       setAgentStatus(isDeepResearch ? 'Running deeper research... this might take a little time.' : 'Asking ZeroScout...')
       const res = await fetch('/api/agent-ask', {
         method: 'POST',
@@ -2167,6 +2181,7 @@ function TelegramHelperPanel({
         }
         throw new Error(data.error ?? 'No helper response returned.')
       }
+      setThinkingState('proof')
       setAgentStatus('Securing proof...')
       finishHelperMessage(nextQuestion, { answer: data.answer!, proof: data.proof, zeroscoutSponsorship: data.zeroscoutSponsorship })
       void saveProfile({ question: nextQuestion, answer: data.answer } as Partial<HelperProfile>)
@@ -2250,7 +2265,7 @@ function TelegramHelperPanel({
                   </div>
                 ))}
 
-                {asking && <HelperThinkingIndicator statusText={agentStatus} />}
+                {asking && <HelperThinkingIndicator statusText={agentStatus} state={thinkingState} />}
                 {askError && (
                   <p className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs font-medium text-red-600 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200">{askError}</p>
                 )}
@@ -2289,23 +2304,26 @@ function TelegramHelperPanel({
   )
 }
 
-function HelperThinkingIndicator({ statusText }: { statusText: string }) {
+const helperThinkingCopy: Record<HelperThinkingState, string[]> = {
+  light: ['Reading this...', 'Checking context...', 'Preparing reply...', 'Polishing wording...'],
+  'payment-draft': ['Matching details...', 'Holding the draft...', 'Preparing reply...', 'Polishing wording...'],
+  'payment-wallet': ['Checking wallet...', 'Validating flow...', 'Matching details...', 'Preparing reply...'],
+  'paylink-build': ['Building PayLink...', 'Validating flow...', 'Polishing wording...', 'Almost ready...'],
+  'deep-research': ['Reading this...', 'Checking context...', 'Preparing reply...', 'Almost ready...'],
+  proof: ['Polishing wording...', 'Validating flow...', 'Almost ready...'],
+}
+
+function HelperThinkingIndicator({ statusText, state }: { statusText: string; state: HelperThinkingState }) {
   const [stepIndex, setStepIndex] = useState(0)
-  const isPaylink = /payment|paylink|request/i.test(statusText)
-  const isProof = /proof|sponsor/i.test(statusText)
-  const steps = isPaylink
-    ? ['Reading your message...', 'Checking payment details...', 'Preparing PayLink...']
-    : isProof
-    ? ['Asking ZeroScout...', 'Securing proof...', 'Ready.']
-    : ['Reading your message...', 'Asking ZeroScout...', 'Securing proof...']
+  const steps = useMemo(() => helperThinkingCopy[state] ?? helperThinkingCopy.light, [state])
 
   useEffect(() => {
-    setStepIndex(0)
+    setStepIndex(Math.floor(Math.random() * steps.length))
     const timer = window.setInterval(() => {
       setStepIndex(index => (index + 1) % steps.length)
     }, 900)
     return () => window.clearInterval(timer)
-  }, [statusText, steps.length])
+  }, [statusText, state, steps.length])
 
   return (
     <div className="max-w-[82%]">
