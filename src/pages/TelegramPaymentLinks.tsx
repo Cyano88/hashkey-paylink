@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { usePrivy } from '@privy-io/react-auth'
 import {
@@ -323,6 +323,7 @@ type PolyDeskSubMode = 'portfolio' | 'worldcup' | 'lp-scout'
 type HelperThinkingState = 'light' | 'payment-draft' | 'payment-wallet' | 'paylink-build' | 'deep-research' | 'proof'
 
 type HelperMessage = {
+  id?: string
   question?: string
   answer?: string
   proof?: { ogTxHash: string; ogExplorer: string }
@@ -1572,6 +1573,7 @@ function TelegramHelperPanel({
   const [thinkingState, setThinkingState] = useState<HelperThinkingState>('light')
   const [askError, setAskError] = useState('')
   const [helperToast, setHelperToast] = useState('')
+  const [clearHistoryPending, setClearHistoryPending] = useState(false)
   const [profile, setProfile] = useState<HelperProfile | null>(null)
   const [profileBusy, setProfileBusy] = useState(false)
   const [profileError, setProfileError] = useState('')
@@ -1583,14 +1585,21 @@ function TelegramHelperPanel({
   const helperScrollRef = useRef<HTMLDivElement | null>(null)
   const helperAbortRef = useRef<AbortController | null>(null)
   const initialRouteAppliedRef = useRef(Boolean(initialNotice || initialHelperMode || initialPolyDeskSubMode))
-  const helperThreadHydratedRef = useRef(false)
+  const helperFirstScrollRef = useRef(true)
   const helperIdentityKey = (ownerKey || telegramId || payer || cleanTelegramName || 'local-helper').trim().toLowerCase()
+  const activeHelperThreadId = `mode:${helperMode || 'general'}${helperMode === 'polydesk' && polyDeskSubMode ? `:${polyDeskSubMode}` : ''}`
   const { authenticated: polyDeskAuthenticated, getAccessToken: getPolyDeskAccessToken } = usePrivy()
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const frame = window.requestAnimationFrame(() => {
       const node = helperScrollRef.current
-      if (node) node.scrollTo({ top: node.scrollHeight, behavior: 'smooth' })
+      if (!node) return
+      if (helperFirstScrollRef.current) {
+        node.scrollTop = node.scrollHeight
+        helperFirstScrollRef.current = false
+        return
+      }
+      node.scrollTo({ top: node.scrollHeight, behavior: 'smooth' })
     })
     return () => window.cancelAnimationFrame(frame)
   }, [messages, asking, agentStatus])
@@ -1649,6 +1658,7 @@ function TelegramHelperPanel({
     if (ownerKey) profileParams.set('owner', ownerKey)
     if (lookupPayer) profileParams.set('payer', lookupPayer)
     if (fallbackOwner) profileParams.set('fallbackOwner', fallbackOwner)
+    profileParams.set('threadId', activeHelperThreadId)
     fetch(`/api/helper-profile?${profileParams.toString()}`)
       .then(res => res.json() as Promise<{ ok?: boolean; profile?: HelperProfile | null; error?: string }>)
       .then(data => {
@@ -1668,18 +1678,22 @@ function TelegramHelperPanel({
         const recoveredName = data.profile?.telegramHandle || usableHelperName(data.profile?.displayName || '') || ''
         if (recoveredName) onRecoverTelegramName(recoveredName)
         if (data.profile?.memorySummary) setMemoryDraft(data.profile.memorySummary)
-        if (!helperThreadHydratedRef.current && data.profile?.helperThread?.length) {
-          helperThreadHydratedRef.current = true
+        if (data.profile?.helperThread?.length) {
           const storedMessages = data.profile.helperThread.map(item => ({
+            id: item.id,
             question: item.question,
             answer: item.answer,
             actionLinks: item.actionLinks,
           }))
           setMessages(prev => {
-            const seen = new Set(prev.map(item => `${item.question ?? ''}|${item.answer ?? ''}`))
+            const seenIds = new Set(prev.map(item => item.id).filter(Boolean))
+            const seenFallback = new Set(prev.map(item => `${item.question ?? ''}|${item.answer ?? ''}`))
             return [
               ...prev,
-              ...storedMessages.filter(item => !seen.has(`${item.question ?? ''}|${item.answer ?? ''}`)),
+              ...storedMessages.filter(item => {
+                if (item.id && seenIds.has(item.id)) return false
+                return !seenFallback.has(`${item.question ?? ''}|${item.answer ?? ''}`)
+              }),
             ]
           })
         }
@@ -1691,7 +1705,7 @@ function TelegramHelperPanel({
         if (!cancelled) setProfileBusy(false)
       })
     return () => { cancelled = true }
-  }, [payer, ownerKey, fallbackOwner]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [payer, ownerKey, fallbackOwner, activeHelperThreadId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function startHelper() {
     setStarted(true)
@@ -1713,17 +1727,18 @@ function TelegramHelperPanel({
   }
 
   function finishHelperMessage(nextQuestion: string, message: Omit<HelperMessage, 'question'>) {
+    const messageId = message.id || `helper-${helperIdentityKey}-${Date.now().toString(36)}`
     setMessages(prev => {
       const next = [...prev]
       const pendingIndex = next.findLastIndex(item => item.question === nextQuestion && !item.answer && !item.paylink)
-      const finished = { question: nextQuestion, ...message }
+      const finished = { question: nextQuestion, ...message, id: messageId }
       if (pendingIndex >= 0) {
         next[pendingIndex] = finished
         return next
       }
       return prev
     })
-    void appendHelperThreadMessage(nextQuestion, message)
+    void appendHelperThreadMessage(nextQuestion, { ...message, id: messageId })
   }
 
   async function appendHelperThreadMessage(nextQuestion: string, message: Omit<HelperMessage, 'question'>) {
@@ -1740,7 +1755,8 @@ function TelegramHelperPanel({
           fallbackOwner,
           mode: helperMode || undefined,
           subMode: polyDeskSubMode || undefined,
-          id: `helper-${helperIdentityKey}-${Date.now().toString(36)}`,
+          threadId: activeHelperThreadId,
+          id: message.id || `helper-${helperIdentityKey}-${Date.now().toString(36)}`,
           question: nextQuestion,
           answer,
           actionLinks: helperActionLinks({ ...message, answer }),
@@ -2622,6 +2638,36 @@ function TelegramHelperPanel({
     return true
   }
 
+  function isClearHistoryRequest(value: string) {
+    return /^(clear|clean|delete|wipe|reset)\s+(this\s+)?(chat|conversation|history|chat history)\b/i.test(value.trim())
+  }
+
+  function isClearHistoryConfirm(value: string) {
+    return /^(clear|yes|confirm|do it|delete)$/i.test(value.trim())
+  }
+
+  function isClearHistoryCancel(value: string) {
+    return /^(cancel|no|stop|never mind|nevermind)$/i.test(value.trim())
+  }
+
+  async function clearCurrentHelperThread() {
+    try {
+      await fetch('/api/helper-profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'clear-thread',
+          owner: ownerKey,
+          payer: payer.trim() || helperName || cleanTelegramName || ownerKey,
+          fallbackOwner,
+          threadId: activeHelperThreadId,
+        }),
+      })
+    } catch {
+      // Local clear should still work if persistence is temporarily unavailable.
+    }
+  }
+
   async function askHelper() {
     if (!question.trim() || asking || !started) return
     const nextQuestion = question.trim()
@@ -2635,6 +2681,34 @@ function TelegramHelperPanel({
     }
     setQuestion('')
     setAskError('')
+
+    if (clearHistoryPending) {
+      setClearHistoryPending(false)
+      if (isClearHistoryCancel(nextQuestion)) {
+        setMessages(prev => [...prev, { question: nextQuestion, answer: 'No problem. I kept this chat history.' }])
+        return
+      }
+      if (isClearHistoryConfirm(nextQuestion)) {
+        await clearCurrentHelperThread()
+        setMessages([{ answer: 'Chat history cleared. I kept your saved profile, wallet preferences, and memory.' }])
+        return
+      }
+      setMessages(prev => [...prev, {
+        question: nextQuestion,
+        answer: 'I kept this chat history. Type "clear history" again if you want to clear the visible chat.',
+      }])
+      return
+    }
+
+    if (isClearHistoryRequest(nextQuestion)) {
+      setClearHistoryPending(true)
+      setMessages(prev => [...prev, {
+        question: nextQuestion,
+        answer: 'Clear this chat history? Type "clear" to confirm or "cancel" to keep it. I will keep your saved profile, wallet preferences, and memory.',
+      }])
+      return
+    }
+
     setAsking(true)
     setThinkingState('light')
     const abortController = new AbortController()

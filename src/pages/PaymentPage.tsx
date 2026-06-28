@@ -3210,6 +3210,7 @@ export default function PaymentPage() {
         payer: polymarketHelperOwner,
         mode: 'polydesk',
         subMode: 'portfolio',
+        threadId: 'mode:polydesk:portfolio',
         id: `polymarket-funding-${chain}-${txHash || paymentReceiptId || Date.now().toString(36)}`,
         answer: 'Funding complete. I can track open positions, claimables, alerts, and portfolio value right now. Idle Polymarket cash balance still needs to be confirmed inside Polymarket.',
         actionLinks,
