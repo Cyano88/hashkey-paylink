@@ -256,6 +256,11 @@ type HelperPaylinkDraft = {
   offeredSavedWalletNetwork?: RequestNetwork | ''
 }
 
+type PolyPortfolioFundingDraft = {
+  amount: string
+  network: RequestNetwork | ''
+}
+
 const blockedPayerNames = new Set([
   'a',
   'an',
@@ -1551,6 +1556,7 @@ function TelegramHelperPanel({
   const [memoryDraft, setMemoryDraft] = useState('')
   const [paylinkDraft, setPaylinkDraft] = useState<HelperPaylinkDraft | null>(null)
   const [lastPaylinkDraft, setLastPaylinkDraft] = useState<HelperPaylinkDraft | null>(null)
+  const [polyPortfolioFundingDraft, setPolyPortfolioFundingDraft] = useState<PolyPortfolioFundingDraft | null>(null)
   const [checkpointBusy, setCheckpointBusy] = useState(false)
   const helperScrollRef = useRef<HTMLDivElement | null>(null)
   const helperAbortRef = useRef<AbortController | null>(null)
@@ -1599,6 +1605,7 @@ function TelegramHelperPanel({
   useEffect(() => {
     setMessages([])
     setPaylinkDraft(null)
+    setPolyPortfolioFundingDraft(null)
     setHelperMode('')
     setPolyDeskSubMode('')
     setAskError('')
@@ -1699,6 +1706,7 @@ function TelegramHelperPanel({
     if (!selected || asking) return
     setHelperMode(mode)
     setPolyDeskSubMode('')
+    setPolyPortfolioFundingDraft(null)
     setAskError('')
     setMessages(prev => [...prev, { question: selected.label, answer: selected.intro }])
     window.setTimeout(() => {
@@ -1710,6 +1718,7 @@ function TelegramHelperPanel({
     setHelperMode('')
     setPolyDeskSubMode('')
     setPaylinkDraft(null)
+    setPolyPortfolioFundingDraft(null)
     setQuestion('')
     setAskError('')
   }
@@ -1718,6 +1727,7 @@ function TelegramHelperPanel({
     const selected = polyDeskSubModes.find(item => item.id === mode)
     if (!selected || asking) return
     setPolyDeskSubMode(mode)
+    setPolyPortfolioFundingDraft(null)
     setAskError('')
     setMessages(prev => [...prev, { question: selected.label, answer: selected.intro }])
     window.setTimeout(() => {
@@ -2230,16 +2240,27 @@ function TelegramHelperPanel({
       }
     }
 
-    if (/\b(fund|deposit|top up|bridge)\b/i.test(nextQuestion)) {
-      const requestedAmount = extractAmount(nextQuestion)
-      if (!requestedAmount || Number(requestedAmount) < 3) {
+    const isFundingContinuation = Boolean(polyPortfolioFundingDraft)
+    const isFundingIntent = /\b(fund|deposit|top up|bridge)\b/i.test(nextQuestion)
+    if (isFundingIntent || isFundingContinuation) {
+      const requestedAmount = extractAmount(nextQuestion) || polyPortfolioFundingDraft?.amount || ''
+      const requestedNetwork = extractNetwork(nextQuestion) || polyPortfolioFundingDraft?.network || ''
+      if (!requestedAmount) {
+        setPolyPortfolioFundingDraft({ amount: '', network: requestedNetwork })
         return {
           answer: 'How much USDC do you want to fund? Minimum bridge amount is 3 USDC.',
           actionLink: { label: 'Portfolio', url: portfolioUrl },
         }
       }
-      const requestedNetwork = extractNetwork(nextQuestion)
+      if (Number(requestedAmount) < 3) {
+        setPolyPortfolioFundingDraft({ amount: '', network: requestedNetwork })
+        return {
+          answer: 'Minimum bridge amount is 3 USDC. Send an amount of 3 USDC or more.',
+          actionLink: { label: 'Portfolio', url: portfolioUrl },
+        }
+      }
       if (requestedNetwork === 'arc' || requestedNetwork === 'all') {
+        setPolyPortfolioFundingDraft({ amount: requestedAmount, network: '' })
         return {
           answer: 'Polymarket bridge checkout supports Base, Arbitrum, or Solana right now. Which one should I use?',
           actionLink: { label: 'Portfolio', url: portfolioUrl },
@@ -2248,6 +2269,7 @@ function TelegramHelperPanel({
       const preferredNetwork = (profileData.profile?.preferredFundingNetwork || 'base') as RequestNetwork
       const bridgeNetwork = (requestedNetwork || preferredNetwork || 'base') as RequestNetwork
       if (!['base', 'arbitrum', 'solana'].includes(bridgeNetwork)) {
+        setPolyPortfolioFundingDraft({ amount: requestedAmount, network: '' })
         return {
           answer: 'Polymarket bridge checkout supports Base, Arbitrum, or Solana right now. Which one should I use?',
           actionLink: { label: 'Portfolio', url: portfolioUrl },
@@ -2294,6 +2316,7 @@ function TelegramHelperPanel({
         returnToAgentHash: true,
         requestId,
       })
+      setPolyPortfolioFundingDraft(null)
       return {
         answer: `Bridge checkout ready for ${requestedAmount} USDC to your Polymarket profile ${shortAddress(address)} on ${requestNetworkLabels[finalNetwork]}.`,
         paylink: {
@@ -2805,7 +2828,10 @@ function TelegramHelperPanel({
                   <div className="flex justify-center">
                     <button
                       type="button"
-                      onClick={() => setPolyDeskSubMode('')}
+                      onClick={() => {
+                        setPolyDeskSubMode('')
+                        setPolyPortfolioFundingDraft(null)
+                      }}
                       className="rounded-full border border-gray-200 bg-white px-3 py-1 text-[11px] font-semibold text-gray-600 shadow-sm transition hover:bg-gray-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/[0.1]"
                     >
                       PolyDesk / {polyDeskSubModes.find(mode => mode.id === polyDeskSubMode)?.label}
