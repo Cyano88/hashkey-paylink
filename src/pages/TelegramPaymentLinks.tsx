@@ -2211,8 +2211,81 @@ function TelegramHelperPanel({
     }
 
     if (/\b(fund|deposit|top up|bridge)\b/i.test(nextQuestion)) {
+      const requestedAmount = extractAmount(nextQuestion)
+      if (!requestedAmount || Number(requestedAmount) < 3) {
+        return {
+          answer: 'How much USDC do you want to fund? Minimum bridge amount is 3 USDC.',
+          actionLink: { label: 'Portfolio', url: portfolioUrl },
+        }
+      }
+      const requestedNetwork = extractNetwork(nextQuestion)
+      if (requestedNetwork === 'arc' || requestedNetwork === 'all') {
+        return {
+          answer: 'Polymarket bridge checkout supports Base, Arbitrum, or Solana right now. Which one should I use?',
+          actionLink: { label: 'Portfolio', url: portfolioUrl },
+        }
+      }
+      const preferredNetwork = (profileData.profile?.preferredFundingNetwork || 'base') as RequestNetwork
+      const bridgeNetwork = (requestedNetwork || preferredNetwork || 'base') as RequestNetwork
+      if (!['base', 'arbitrum', 'solana'].includes(bridgeNetwork)) {
+        return {
+          answer: 'Polymarket bridge checkout supports Base, Arbitrum, or Solana right now. Which one should I use?',
+          actionLink: { label: 'Portfolio', url: portfolioUrl },
+        }
+      }
+      const bridgeRes = await fetch('/api/polymarket-bridge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          polymarketWallet: address,
+          network: bridgeNetwork,
+        }),
+      })
+      const bridgeData = await bridgeRes.json() as {
+        ok?: boolean
+        depositAddress?: string
+        network?: PolymarketBridgeNetwork
+        minimumUsdc?: number
+        error?: string
+      }
+      if (!bridgeRes.ok || !bridgeData.ok || !bridgeData.depositAddress) {
+        throw new Error(bridgeData.error || 'Could not prepare Polymarket bridge checkout.')
+      }
+      const finalNetwork = (bridgeData.network ?? bridgeNetwork) as RequestNetwork
+      await fetch('/api/polymarket-portfolio', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          action: 'log-funding',
+          network: finalNetwork,
+          amount: requestedAmount,
+          status: 'pending',
+          depositAddress: bridgeData.depositAddress,
+        }),
+      }).catch(() => undefined)
+      const payUrl = buildPolymarketPayLink({
+        wallet: bridgeData.depositAddress,
+        amount: requestedAmount,
+        funding: 'Polymarket portfolio',
+        network: finalNetwork,
+        polymarketWallet: address,
+        returnToPortfolio: true,
+      })
       return {
-        answer: `Your saved Polymarket profile is ${shortAddress(address)}. Open Portfolio and choose Fund Polymarket to prepare the bridge-backed checkout.`,
+        answer: `Bridge checkout ready for ${requestedAmount} USDC to your Polymarket profile ${shortAddress(address)} on ${requestNetworkLabels[finalNetwork]}.`,
+        paylink: {
+          kind: 'polymarket-funding',
+          mode: 'person',
+          network: finalNetwork,
+          wallet: bridgeData.depositAddress,
+          evmWallet: finalNetwork === 'solana' ? '' : bridgeData.depositAddress,
+          solanaWallet: finalNetwork === 'solana' ? bridgeData.depositAddress : '',
+          polymarketWallet: address,
+          label: 'Polymarket funding',
+          target: 'Your Polymarket account',
+          amount: requestedAmount,
+          payUrl,
+        },
         actionLink: { label: 'Portfolio', url: portfolioUrl },
       }
     }
@@ -2865,16 +2938,19 @@ function HelperPaylinkCard({ request }: { request: SavedRequest }) {
   const [copied, setCopied] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
   const network = request.network ?? inferRequestNetwork(request)
+  const isPolymarketFunding = request.kind === 'polymarket-funding'
   const url = request.payUrl || buildRequestPayLink(request)
   const dashboardUrl = request.mode === 'group' ? request.dashboardUrl || buildRequestDashboardLink(request) : ''
   const amountLine = request.amount ? `${request.amount} USDC` : 'Flexible amount'
   const target = friendlyName(request.target)
   const recipient = request.wallet || request.evmWallet || request.solanaWallet
   const shareText = [
-    request.mode === 'group' ? 'Hash PayLink collection' : 'Hash PayLink payment request',
+    isPolymarketFunding ? 'Polymarket funding checkout' : request.mode === 'group' ? 'Hash PayLink collection' : 'Hash PayLink payment request',
     `${request.label} - ${amountLine}`,
-    request.mode === 'group' ? `Collection: ${target}` : `Payer: ${target}`,
-    request.mode === 'group'
+    isPolymarketFunding ? `Profile: ${request.polymarketWallet ? shortAddress(request.polymarketWallet) : target}` : request.mode === 'group' ? `Collection: ${target}` : `Payer: ${target}`,
+    isPolymarketFunding
+      ? 'Open the checkout to fund the saved Polymarket profile through the bridge.'
+      : request.mode === 'group'
       ? 'Open the link, enter your name, and contribute securely.'
       : 'Please share the receipt after payment is confirmed.',
   ].join('\n')
@@ -2891,7 +2967,7 @@ function HelperPaylinkCard({ request }: { request: SavedRequest }) {
         <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-200" />
         <div className="min-w-0">
           <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-100">
-            {request.mode === 'group' ? 'Collection ready' : 'Payment request ready'}
+            {isPolymarketFunding ? 'Polymarket funding ready' : request.mode === 'group' ? 'Collection ready' : 'Payment request ready'}
           </p>
           <p className="truncate text-[11px] text-emerald-700/80 dark:text-emerald-100/75">
             {amountLine} on {requestNetworkLabels[network]}
@@ -2903,8 +2979,8 @@ function HelperPaylinkCard({ request }: { request: SavedRequest }) {
           ['Amount', amountLine],
           ['Network', requestNetworkLabels[network]],
           ['Purpose', request.label || 'Payment'],
-          ['Recipient', recipient ? shortAddress(recipient) : 'Not set'],
-          [request.mode === 'group' ? 'Collection' : 'Payer', target || 'Not set'],
+          [isPolymarketFunding ? 'Bridge' : 'Recipient', recipient ? shortAddress(recipient) : 'Not set'],
+          [isPolymarketFunding ? 'Profile' : request.mode === 'group' ? 'Collection' : 'Payer', isPolymarketFunding && request.polymarketWallet ? shortAddress(request.polymarketWallet) : target || 'Not set'],
         ].map(([label, value]) => (
           <div key={label} className="grid grid-cols-[64px_minmax(0,1fr)] items-center gap-2">
             <span className="text-[10px] font-semibold uppercase text-gray-400">{label}</span>
@@ -2928,7 +3004,7 @@ function HelperPaylinkCard({ request }: { request: SavedRequest }) {
           className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-emerald-200 bg-white px-2.5 py-2 text-xs font-semibold text-emerald-700 dark:border-emerald-300/20 dark:bg-white/[0.06] dark:text-emerald-100"
         >
           <ExternalLink className="h-3.5 w-3.5" />
-          {request.mode === 'group' ? 'Contribute' : 'Open'}
+          {isPolymarketFunding ? 'Proceed' : request.mode === 'group' ? 'Contribute' : 'Open'}
         </a>
       </div>
       {dashboardUrl && (
