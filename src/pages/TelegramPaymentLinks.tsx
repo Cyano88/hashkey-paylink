@@ -2349,8 +2349,11 @@ function TelegramHelperPanel({
     const claimable = positions.filter(isClaimablePosition)
     const total = normalizePortfolioValue(valueData.value)?.value
     const claimableText = claimable.length ? ` ${claimable.length} claimable position${claimable.length === 1 ? '' : 's'} need attention.` : ' No claimables right now.'
+    const wantsCashBalance = /\b(cash|available|wallet balance|cash balance|current balance|portfolio balance)\b/i.test(nextQuestion)
     return {
-      answer: `Your saved Polymarket portfolio is ${formatUsd(total)} across ${active.length} open position${active.length === 1 ? '' : 's'}.${claimableText}`,
+      answer: wantsCashBalance
+        ? `Your saved Polymarket portfolio value is ${formatUsd(total)} across ${active.length} open position${active.length === 1 ? '' : 's'}.${claimableText} I cannot verify idle Polymarket cash balance yet.`
+        : `Your saved Polymarket portfolio is ${formatUsd(total)} across ${active.length} open position${active.length === 1 ? '' : 's'}.${claimableText}`,
       actionLink: { label: 'Portfolio', url: portfolioUrl },
     }
   }

@@ -318,7 +318,7 @@ export default function PaymentPage() {
   const polymarketReturnToAgentHash = polymarketReturnTarget === 'agent-hash-polydesk-portfolio'
   const telegramUrl = telegramReturnUrl(searchParams)
   const polymarketPortfolioUrl = '/telegram/payment-links?section=market-tools&service=poly-portfolio'
-  const polymarketAgentHashUrl = '/telegram/payment-links?service=hashpaylink-helper&open=1&mode=polydesk&poly=portfolio&notice=polymarket-funding-complete'
+  const polymarketAgentHashUrl = '/telegram/payment-links?section=market-tools&service=hashpaylink-helper&open=1&mode=polydesk&poly=portfolio&notice=polymarket-funding-complete'
 
   const resolvedStark  = starkParam || (legacyChain === 'starknet' ? evmParam : '')
   const resolvedEvm    = legacyChain === 'starknet' ? '' : evmParam
@@ -3229,15 +3229,6 @@ export default function PaymentPage() {
 
     return (
       <div className="mx-auto max-w-md animate-scale-in">
-        {isPolymarketBridge && (polymarketReturnToPortfolio || polymarketReturnToAgentHash) && (
-          <button
-            type="button"
-            onClick={() => navigate(polymarketReturnToAgentHash ? polymarketAgentHashUrl : polymarketPortfolioUrl)}
-            className="mb-2 inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 transition-colors hover:text-gray-900"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" /> {polymarketReturnToAgentHash ? 'Agent Hash' : 'Portfolio'}
-          </button>
-        )}
         <div
           className={cn(
             'overflow-hidden rounded-2xl border bg-white shadow-card',
@@ -3259,7 +3250,7 @@ export default function PaymentPage() {
             </div>
             <h2 className="text-xl font-bold text-gray-900">
               {isUnder ? 'Underpayment Detected'
-               : isPolymarketBridge ? 'Polymarket Funding Sent'
+               : isPolymarketBridge ? 'Polymarket Funding Complete'
                : isPolymarketFunding ? 'Funding Complete!'
                : 'Payment Sent!'}
             </h2>
@@ -3270,7 +3261,7 @@ export default function PaymentPage() {
                     {formatPaymentAmountDisplay(recipientAmt, meta.decimals)} {meta.asset}
                   </span>
                   {' '}
-                  {isUnder ? 'received - ' : isPolymarketBridge ? 'sent through the Polymarket bridge' : isPolymarketFunding ? 'delivered to funding wallet' : 'received by recipient'}
+                  {isUnder ? 'received - ' : isPolymarketBridge ? 'sent' : isPolymarketFunding ? 'delivered to funding wallet' : 'received by recipient'}
                   {isUnder && (
                     <span className={cn(
                       'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold',
@@ -3293,7 +3284,7 @@ export default function PaymentPage() {
                     {formatAmount(effectiveAmt, meta.decimals)} {meta.asset}
                   </span>{' '}
                   {isPolymarketBridge
-                    ? 'sent through the Polymarket bridge'
+                    ? 'sent'
                     : isPolymarketFunding
                     ? 'delivered to funding wallet'
                     : manualPayDetected && directStatus !== 'success'
@@ -3307,13 +3298,12 @@ export default function PaymentPage() {
           <div className="p-6 space-y-4">
             <div className="divide-y divide-gray-100 rounded-xl border border-gray-100 bg-gray-50/60 overflow-hidden">
               <Row label="Amount"    value={`${formatAmount(effectiveAmt, meta.decimals)} ${meta.asset}`} mono={false} />
-              <Row label="Recipient" value={truncateAddress(activeRecipient, 4)} mono />
               <Row label="Network"   value={meta.label} mono={false} />
-              {isPolymarketBridge && polymarketWalletParam && <Row label="Polymarket" value={truncateAddress(polymarketWalletParam, 8)} mono />}
-              {memo && <Row label={isPolymarketFunding ? 'Funding' : 'For'} value={isPolymarketFunding ? polymarketFundingLabel : memo} mono={false} />}
+              {!isPolymarketBridge && <Row label="Recipient" value={truncateAddress(activeRecipient, 4)} mono />}
+              {!isPolymarketBridge && memo && <Row label={isPolymarketFunding ? 'Funding' : 'For'} value={isPolymarketFunding ? polymarketFundingLabel : memo} mono={false} />}
               {txHash && (
                 <div className="flex items-center justify-between px-4 py-3">
-                  <span className="text-sm text-gray-500">Tx Hash</span>
+                  <span className="text-sm text-gray-500">Tx</span>
                   <div className="flex items-center gap-2">
                     {primaryExplorerUrl ? (
                       <a
@@ -3333,7 +3323,7 @@ export default function PaymentPage() {
               )}
               {!txHash && manualPayDetected && chain !== 'starknet' && chain !== 'solana' && (
                 <div className="flex items-center justify-between px-4 py-3">
-                  <span className="text-sm text-gray-500">Tx Hash</span>
+                  <span className="text-sm text-gray-500">Tx</span>
                   <span className="text-xs font-medium text-gray-400">
                     Syncing{'.'.repeat((txSyncTick % 3) + 1)}
                   </span>
@@ -3341,7 +3331,7 @@ export default function PaymentPage() {
               )}
               {paymentReceiptId && (
                 <div className="flex items-center justify-between px-4 py-3">
-                  <span className="text-sm text-gray-500">0G Archive</span>
+                  <span className="text-sm text-gray-500">0G</span>
                   {ogProofValue ? (
                     <a
                       href={ogExplorerUrl || undefined}
@@ -3369,75 +3359,7 @@ export default function PaymentPage() {
               )}
             </div>
 
-            {isPolymarketBridge && (
-              <div className={cn(
-                'rounded-xl border px-3 py-2.5',
-                polymarketBridgeStatus === 'complete'
-                  ? 'border-emerald-200 bg-emerald-50'
-                  : polymarketBridgeStatus === 'error'
-                  ? 'border-amber-200 bg-amber-50'
-                  : 'border-gray-200 bg-white',
-              )}>
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className={cn(
-                      'text-[11px] font-semibold uppercase tracking-widest',
-                      polymarketBridgeStatus === 'complete'
-                        ? 'text-emerald-800'
-                        : polymarketBridgeStatus === 'error'
-                        ? 'text-amber-800'
-                        : 'text-gray-500',
-                    )}>
-                      {polymarketBridgeStatus === 'complete'
-                        ? 'Bridge complete'
-                        : polymarketBridgeStatus === 'checking'
-                        ? 'Checking bridge'
-                        : polymarketBridgeStatus === 'error'
-                        ? 'Bridge status unavailable'
-                        : polymarketBridgeStatus === 'pending'
-                        ? 'Bridge detected'
-                        : polymarketBridgeStatus === 'waiting'
-                        ? 'Waiting for bridge'
-                        : 'Bridge processing'}
-                    </p>
-                    <p className={cn(
-                      'mt-0.5 text-xs leading-snug',
-                      polymarketBridgeStatus === 'complete'
-                        ? 'text-emerald-700'
-                        : polymarketBridgeStatus === 'error'
-                        ? 'text-amber-700'
-                        : 'text-gray-600',
-                    )}>
-                      {polymarketBridgeStatusText || 'Base transfer complete. Polymarket credit can take a few minutes.'}
-                    </p>
-                    {polymarketBridgeLatestTx && (
-                      <p className="mt-1 truncate font-mono text-[11px] text-gray-500">
-                        Bridge tx {truncateAddress(polymarketBridgeLatestTx, 8)}
-                      </p>
-                    )}
-                  </div>
-                  <span className={cn(
-                    'inline-flex h-7 min-w-7 shrink-0 items-center justify-center rounded-full px-2 text-xs font-black tracking-widest',
-                    polymarketBridgeStatus === 'complete'
-                      ? 'bg-emerald-100 text-emerald-700'
-                      : polymarketBridgeStatus === 'error'
-                      ? 'bg-amber-100 text-amber-700'
-                      : 'bg-gray-100 text-gray-500 animate-pulse',
-                  )}>
-                    {polymarketBridgeStatus === 'complete' ? <CheckCircle2 className="h-3.5 w-3.5" /> : '...'}
-                  </span>
-                </div>
-              </div>
-            )}
-
-            {isPolymarketBridge && (
-              <div className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-2.5 text-xs leading-relaxed text-blue-800">
-                Funding receipt and on-chain transfer are verified here. Agent Hash can track open positions, claimables, alerts, and portfolio value; confirm available Polymarket cash balance inside Polymarket.
-                {polymarketReturnToAgentHash && <span className="mt-1 block font-semibold">Returning to Agent Hash shortly...</span>}
-              </div>
-            )}
-
-            {receiptReady && (
+            {receiptReady && !isPolymarketBridge && (
               <div className="grid gap-2">
                 <button
                   type="button"
@@ -3514,32 +3436,9 @@ export default function PaymentPage() {
                 </a>
               </div>
             ) : isPolymarketBridge ? (
-              <div className="space-y-2">
-                <button
-                  type="button"
-                  onClick={() => navigate(polymarketReturnToAgentHash ? polymarketAgentHashUrl : polymarketPortfolioUrl)}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-2.5 text-sm font-medium text-white hover:bg-gray-800 transition-all active:scale-[0.98]"
-                >
-                  {polymarketReturnToAgentHash ? 'Return to Agent Hash' : 'Back to Portfolio'}
-                </button>
-                <a
-                  href={POLYMARKET_SIGNUP_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98]"
-                >
-                  Open Polymarket
-                </a>
-              </div>
+              <p className="text-center text-[11px] font-medium text-gray-400">Returning to Agent Hash...</p>
             ) : isPolymarketFunding ? (
-              <a
-                href={POLYMARKET_SIGNUP_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-2.5 text-sm font-medium text-white hover:bg-gray-800 transition-all active:scale-[0.98]"
-              >
-                Trade on Polymarket
-              </a>
+              <p className="text-center text-[11px] font-medium text-gray-400">Funding complete.</p>
             ) : telegramUrl ? (
               <a href={telegramUrl} className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-2.5 text-sm font-medium text-white hover:bg-gray-800 transition-all active:scale-[0.98]">
                 Create with Telegram
