@@ -1670,11 +1670,18 @@ function TelegramHelperPanel({
         if (data.profile?.memorySummary) setMemoryDraft(data.profile.memorySummary)
         if (!helperThreadHydratedRef.current && data.profile?.helperThread?.length) {
           helperThreadHydratedRef.current = true
-          setMessages(data.profile.helperThread.map(item => ({
+          const storedMessages = data.profile.helperThread.map(item => ({
             question: item.question,
             answer: item.answer,
             actionLinks: item.actionLinks,
-          })))
+          }))
+          setMessages(prev => {
+            const seen = new Set(prev.map(item => `${item.question ?? ''}|${item.answer ?? ''}`))
+            return [
+              ...prev,
+              ...storedMessages.filter(item => !seen.has(`${item.question ?? ''}|${item.answer ?? ''}`)),
+            ]
+          })
         }
       })
       .catch(err => {
@@ -1716,6 +1723,32 @@ function TelegramHelperPanel({
       }
       return prev
     })
+    void appendHelperThreadMessage(nextQuestion, message)
+  }
+
+  async function appendHelperThreadMessage(nextQuestion: string, message: Omit<HelperMessage, 'question'>) {
+    const answer = (message.answer ?? '').trim()
+    if (!answer) return
+    try {
+      await fetch('/api/helper-profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'append-thread',
+          owner: ownerKey,
+          payer: payer.trim() || helperName || cleanTelegramName || ownerKey,
+          fallbackOwner,
+          mode: helperMode || undefined,
+          subMode: polyDeskSubMode || undefined,
+          id: `helper-${helperIdentityKey}-${Date.now().toString(36)}`,
+          question: nextQuestion,
+          answer,
+          actionLinks: helperActionLinks({ ...message, answer }),
+        }),
+      })
+    } catch {
+      // Thread persistence is best-effort; the visible helper response should not fail.
+    }
   }
 
   async function copyHelperActionLink(url: string) {

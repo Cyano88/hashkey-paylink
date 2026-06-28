@@ -3295,7 +3295,12 @@ export default function PaymentPage() {
             </div>
             <h2 className="text-xl font-bold text-gray-900">
               {isUnder ? 'Underpayment Detected'
-               : isPolymarketBridge ? 'Polymarket Funding Complete'
+               : isPolymarketBridge ? (
+                <span className="inline-flex items-center justify-center gap-2">
+                  <img src={POLYMARKET_LOGO} alt="" className="h-5 w-5 rounded-full object-contain" />
+                  Funded
+                </span>
+               )
                : isPolymarketFunding ? 'Funding Complete!'
                : 'Payment Sent!'}
             </h2>
@@ -3348,7 +3353,7 @@ export default function PaymentPage() {
                 <div className="flex items-center justify-between px-4 py-3">
                   <span className="text-sm text-gray-500">For</span>
                   <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-gray-800">
-                    Polymarket
+                    Polymarket funding
                     <img src={POLYMARKET_LOGO} alt="" className="h-4 w-4 rounded-full object-contain" />
                   </span>
                 </div>

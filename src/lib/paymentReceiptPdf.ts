@@ -48,6 +48,7 @@ export function compactReceiptAmount(value?: string) {
 export function paymentReceiptFileName(receipt?: PaylinkReceipt) {
   const prefix = receipt?.source === 'streampay' ? 'streampay'
     : receipt?.source === 'ngpos' ? 'pos'
+    : receipt?.source === 'polymarket-funding' ? 'polymarket-funding'
     : 'paylink'
   return `hashpaylink-${prefix}-receipt-${receipt?.receiptId.slice(0, 10) || 'receipt'}.pdf`
 }
@@ -72,17 +73,20 @@ function formatNgn(value?: string) {
 function receiptLabels(receipt: PaylinkReceipt) {
   const isStream = receipt.source === 'streampay' || receipt.settlementType === 'stream-created'
   const isPos = receipt.source === 'ngpos'
-  const heading = isStream ? 'StreamPay receipt' : isPos ? 'Retail POS receipt' : 'Request payment receipt'
-  const title = isStream ? 'Stream created' : isPos ? 'Retail payment confirmed' : 'Payment confirmed'
-  const amountLabel = isStream ? 'Stream amount' : 'Amount paid'
-  const payer = isStream ? 'Sender' : isPos ? 'Customer wallet' : 'Payer'
-  const context = isStream ? 'Stream memo' : isPos ? 'Customer' : 'Memo'
+  const isPolymarket = receipt.source === 'polymarket-funding' || receipt.settlementType === 'polymarket_bridge'
+  const heading = isStream ? 'StreamPay receipt' : isPos ? 'Retail POS receipt' : isPolymarket ? 'Polymarket funding receipt' : 'Request payment receipt'
+  const title = isStream ? 'Stream created' : isPos ? 'Retail payment confirmed' : isPolymarket ? 'Polymarket funded' : 'Payment confirmed'
+  const amountLabel = isStream ? 'Stream amount' : isPolymarket ? 'Amount funded' : 'Amount paid'
+  const payer = isStream ? 'Sender' : isPos ? 'Customer wallet' : isPolymarket ? 'Funder' : 'Payer'
+  const context = isStream ? 'Stream memo' : isPos ? 'Customer' : isPolymarket ? 'For' : 'Memo'
   const contextValue = isStream
     ? (receipt.memo || receipt.merchantId || receipt.eventId || '-')
     : isPos
     ? (receipt.memo || receipt.eventId || '-')
+    : isPolymarket
+    ? 'Polymarket funding'
     : (receipt.memo || receipt.merchantId || receipt.eventId || '-')
-  const merchantLabel = isStream ? 'Stream vault' : isPos ? 'Merchant' : 'Recipient'
+  const merchantLabel = isStream ? 'Stream vault' : isPos ? 'Merchant' : isPolymarket ? 'Polymarket profile' : 'Recipient'
   const merchantValue = receipt.merchantId || ''
   return { heading, title, amountLabel, payer, context, contextValue, merchantLabel, merchantValue }
 }
@@ -224,7 +228,8 @@ function drawReceiptCanvas(
 
   ctx.fillStyle = '#667085'
   ctx.font = '600 11px Arial'
-  drawText(ctx, isPos ? 'Keep this receipt for store verification.' : 'Keep this receipt for payment verification.', 64, 734, width - 128, 16)
+  const isPolymarket = receipt.source === 'polymarket-funding' || receipt.settlementType === 'polymarket_bridge'
+  drawText(ctx, isPos ? 'Keep this receipt for store verification.' : isPolymarket ? 'Keep this receipt for Polymarket funding verification.' : 'Keep this receipt for payment verification.', 64, 734, width - 128, 16)
   ctx.fillStyle = '#667085'
   ctx.font = '800 11px Arial'
   const poweredBy = 'Powered by Circle USDC'
