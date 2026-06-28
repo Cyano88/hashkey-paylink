@@ -8,9 +8,18 @@ type ReceiptResponse = {
   receipt?: {
     type: string
     activityId: string
+    receiptId?: string
+    receiptHash?: string
     agentSlug: string
     title: string
     amount?: string
+    asset?: string
+    chain?: string
+    txHash?: string
+    payer?: string
+    memo?: string
+    merchantId?: string
+    source?: string
     detail?: string
     createdAt: number
     legal?: Record<string, unknown>
@@ -44,7 +53,13 @@ export default function X402Receipt() {
     setBusy(true)
     try {
       const res = await fetch(`/api/x402/receipt?id=${encodeURIComponent(activityId)}`)
-      setData(await res.json())
+      const x402 = await res.json() as ReceiptResponse
+      if (res.ok && x402.ok && x402.receipt) {
+        setData(x402)
+        return
+      }
+      const paylinkRes = await fetch(`/api/receipt?id=${encodeURIComponent(activityId)}`)
+      setData(await paylinkRes.json())
     } finally {
       setBusy(false)
     }
@@ -55,7 +70,16 @@ export default function X402Receipt() {
   }, [activityId])
 
   const proof = data?.receipt?.proof ?? {}
-  const og = data?.receipt?.og
+  const og = data?.receipt?.og ?? (
+    proof.ogTxHash || proof.ogRootHash
+      ? {
+          rootHash: String(proof.ogRootHash ?? ''),
+          ogTxHash: String(proof.ogTxHash ?? ''),
+          ogExplorer: String(proof.ogExplorer ?? ''),
+          archivedAt: data?.receipt?.createdAt ?? Date.now(),
+        }
+      : undefined
+  )
   const legal = data?.receipt?.legal ?? {}
   const governance = data?.receipt?.governance ?? {}
   const circleOk = data?.circle?.ok
@@ -67,14 +91,14 @@ export default function X402Receipt() {
       '',
       `Title: ${receipt.title ?? 'Receipt'}`,
       `Amount: ${receipt.amount ?? 'x402 payment'}`,
-      `Service: ${String(proof.service ?? 'Hash PayLink service')}`,
-      `Buyer: ${String(proof.buyerAgent ?? proof.payer ?? '')}`,
-      `Seller: ${String(proof.sellerAgent ?? proof.seller ?? '')}`,
+      `Service: ${String(proof.service ?? receipt.source ?? 'Hash PayLink service')}`,
+      `Buyer: ${String(proof.buyerAgent ?? proof.payer ?? receipt.payer ?? '')}`,
+      `Seller: ${String(proof.sellerAgent ?? proof.seller ?? receipt.merchantId ?? '')}`,
       `Counterparty: ${String(legal.entityName ?? 'Hash PayLink Agent')}`,
-      `Network: ${String(proof.network ?? 'Circle Gateway')}`,
-      `Transaction reference: ${String(proof.transaction ?? '')}`,
+      `Network: ${String(proof.network ?? receipt.chain ?? 'Circle Gateway')}`,
+      `Transaction reference: ${String(proof.transaction ?? receipt.txHash ?? '')}`,
       `Governance version: ${String(governance.governanceVersion ?? 'unversioned')}`,
-      `Proof: ${String(proof.proofHash ?? '')}`,
+      `Proof: ${String(proof.proofHash ?? proof.receiptHash ?? receipt.receiptHash ?? '')}`,
       og?.rootHash ? `0G root: ${og.rootHash}` : '',
       og?.ogTxHash ? `0G tx: ${og.ogTxHash}` : '',
       `Receipt URL: ${window.location.href}`,
@@ -159,7 +183,7 @@ export default function X402Receipt() {
               {data?.receipt?.title ?? 'Receipt'}
             </h1>
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              {data?.receipt?.amount ?? 'x402 payment'} - {String(proof.service ?? 'Hash PayLink service')}
+              {data?.receipt?.amount ?? 'x402 payment'} {data?.receipt?.asset ?? ''} - {String(proof.service ?? data?.receipt?.type ?? 'Hash PayLink service')}
             </p>
           </div>
           {data?.ok && data.receipt && (
@@ -181,13 +205,13 @@ export default function X402Receipt() {
         ) : data?.ok && data.receipt ? (
           <>
             <div className="mt-5 grid gap-2 rounded-xl border border-gray-100 bg-gray-50/70 p-3 text-xs dark:border-white/10 dark:bg-white/[0.04]">
-              <div className="flex justify-between gap-3"><span className="text-gray-400">Buyer</span><span className="truncate font-mono text-gray-700 dark:text-gray-200">{String(proof.buyerAgent ?? proof.payer ?? '')}</span></div>
-              <div className="flex justify-between gap-3"><span className="text-gray-400">Seller</span><span className="truncate font-mono text-gray-700 dark:text-gray-200">{String(proof.sellerAgent ?? proof.seller ?? '')}</span></div>
+              <div className="flex justify-between gap-3"><span className="text-gray-400">Payer</span><span className="truncate font-mono text-gray-700 dark:text-gray-200">{String(proof.buyerAgent ?? proof.payer ?? data.receipt.payer ?? '')}</span></div>
+              <div className="flex justify-between gap-3"><span className="text-gray-400">Recipient</span><span className="truncate font-mono text-gray-700 dark:text-gray-200">{String(proof.sellerAgent ?? proof.seller ?? data.receipt.merchantId ?? '')}</span></div>
               <div className="flex justify-between gap-3"><span className="text-gray-400">Counterparty</span><span className="truncate font-mono text-gray-700 dark:text-gray-200">{String(legal.entityName ?? 'Not configured')}</span></div>
-              <div className="flex justify-between gap-3"><span className="text-gray-400">Network</span><span className="font-mono text-gray-700 dark:text-gray-200">{String(proof.network ?? 'Circle Gateway')}</span></div>
-              <div className="flex justify-between gap-3"><span className="text-gray-400">Tx ref</span><span className="truncate font-mono text-gray-700 dark:text-gray-200">{String(proof.transaction ?? '')}</span></div>
+              <div className="flex justify-between gap-3"><span className="text-gray-400">Network</span><span className="font-mono text-gray-700 dark:text-gray-200">{String(proof.network ?? data.receipt.chain ?? 'Circle Gateway')}</span></div>
+              <div className="flex justify-between gap-3"><span className="text-gray-400">Tx ref</span><span className="truncate font-mono text-gray-700 dark:text-gray-200">{String(proof.transaction ?? data.receipt.txHash ?? '')}</span></div>
               <div className="flex justify-between gap-3"><span className="text-gray-400">Gov version</span><span className="truncate font-mono text-gray-700 dark:text-gray-200">{String(governance.governanceVersion ?? 'unversioned')}</span></div>
-              <div className="flex justify-between gap-3"><span className="text-gray-400">Proof</span><span className="truncate font-mono text-gray-700 dark:text-gray-200">{String(proof.proofHash ?? '').slice(0, 24)}</span></div>
+              <div className="flex justify-between gap-3"><span className="text-gray-400">Proof</span><span className="truncate font-mono text-gray-700 dark:text-gray-200">{String(proof.proofHash ?? proof.receiptHash ?? data.receipt.receiptHash ?? '').slice(0, 24)}</span></div>
               {og?.rootHash && (
                 <div className="flex justify-between gap-3"><span className="text-gray-400">0G root</span><span className="truncate font-mono text-gray-700 dark:text-gray-200">{og.rootHash.slice(0, 24)}</span></div>
               )}

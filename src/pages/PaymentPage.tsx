@@ -316,9 +316,21 @@ export default function PaymentPage() {
   const polymarketReturnTarget = searchParams.get('return') ?? ''
   const polymarketReturnToPortfolio = polymarketReturnTarget === 'poly-portfolio'
   const polymarketReturnToAgentHash = polymarketReturnTarget === 'agent-hash-polydesk-portfolio'
+  const polymarketHelperOwner = (searchParams.get('helperOwner') || '').trim().slice(0, 160)
   const telegramUrl = telegramReturnUrl(searchParams)
   const polymarketPortfolioUrl = '/telegram/payment-links?section=market-tools&service=poly-portfolio'
-  const polymarketAgentHashUrl = '/telegram/payment-links?section=market-tools&service=hashpaylink-helper&open=1&mode=polydesk&poly=portfolio&notice=polymarket-funding-complete'
+  const polymarketAgentHashUrl = (() => {
+    const params = new URLSearchParams({
+      section: 'market-tools',
+      service: 'hashpaylink-helper',
+      open: '1',
+      mode: 'polydesk',
+      poly: 'portfolio',
+      notice: 'polymarket-funding-complete',
+    })
+    if (polymarketHelperOwner) params.set('helperOwner', polymarketHelperOwner)
+    return `/telegram/payment-links?${params.toString()}`
+  })()
 
   const resolvedStark  = starkParam || (legacyChain === 'starknet' ? evmParam : '')
   const resolvedEvm    = legacyChain === 'starknet' ? '' : evmParam
@@ -445,6 +457,7 @@ export default function PaymentPage() {
   const ordinaryReceiptRegistered = useRef(false)
   const accessRedirected = useRef(false)
   const polymarketReturnRedirected = useRef(false)
+  const polymarketAgentNoticeStored = useRef(false)
   const polymarketFundingMarkRef = useRef('')
   const polymarketFundingMarkInFlightRef = useRef('')
   const ngPosRegistered  = useRef(false)
@@ -3153,12 +3166,44 @@ export default function PaymentPage() {
 
   useEffect(() => {
     if (!isConfirmed || !isPolymarketBridge || !polymarketReturnToAgentHash || polymarketReturnRedirected.current) return
+    const proofReady = Boolean(paymentReceipt?.proof?.ogTxHash || paymentReceipt?.proof?.ogRootHash)
+    if (!proofReady) return
     polymarketReturnRedirected.current = true
     const timer = window.setTimeout(() => {
       window.location.assign(polymarketAgentHashUrl)
-    }, 5200)
+    }, 3800)
     return () => window.clearTimeout(timer)
-  }, [isConfirmed, isPolymarketBridge, polymarketReturnToAgentHash, polymarketAgentHashUrl])
+  }, [isConfirmed, isPolymarketBridge, polymarketReturnToAgentHash, polymarketAgentHashUrl, paymentReceipt?.proof?.ogTxHash, paymentReceipt?.proof?.ogRootHash])
+
+  useEffect(() => {
+    if (!isConfirmed || !isPolymarketBridge || !polymarketReturnToAgentHash || !polymarketHelperOwner || polymarketAgentNoticeStored.current) return
+    const proofReady = Boolean(paymentReceipt?.proof?.ogTxHash || paymentReceipt?.proof?.ogRootHash)
+    if (!proofReady) return
+    polymarketAgentNoticeStored.current = true
+    const actionLinks = [
+      paymentReceiptId ? { label: 'Show receipt', url: `/receipt/${encodeURIComponent(paymentReceiptId)}` } : null,
+      paymentReceiptId ? { label: 'Share receipt', url: `/receipt/${encodeURIComponent(paymentReceiptId)}` } : null,
+      { label: 'Trade on Polymarket', url: POLYMARKET_SIGNUP_URL },
+    ].filter(Boolean)
+    void fetch('/api/helper-profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'append-thread',
+        owner: polymarketHelperOwner,
+        payer: polymarketHelperOwner,
+        mode: 'polydesk',
+        subMode: 'portfolio',
+        id: `polymarket-funding-${chain}-${txHash || paymentReceiptId || Date.now().toString(36)}`,
+        answer: 'Funding complete. I can track open positions, claimables, alerts, and portfolio value right now. Idle Polymarket cash balance still needs to be confirmed inside Polymarket.',
+        actionLinks,
+        receiptId: paymentReceiptId,
+        txHash,
+      }),
+    }).catch(() => {
+      polymarketAgentNoticeStored.current = false
+    })
+  }, [isConfirmed, isPolymarketBridge, polymarketReturnToAgentHash, polymarketHelperOwner, paymentReceipt?.proof?.ogTxHash, paymentReceipt?.proof?.ogRootHash, paymentReceiptId, chain, txHash])
 
   // ────────────────────────────────────────────────────────────────────────────
   //  INVALID PARAMS
@@ -3299,6 +3344,15 @@ export default function PaymentPage() {
             <div className="divide-y divide-gray-100 rounded-xl border border-gray-100 bg-gray-50/60 overflow-hidden">
               <Row label="Amount"    value={`${formatAmount(effectiveAmt, meta.decimals)} ${meta.asset}`} mono={false} />
               <Row label="Network"   value={meta.label} mono={false} />
+              {isPolymarketBridge && (
+                <div className="flex items-center justify-between px-4 py-3">
+                  <span className="text-sm text-gray-500">For</span>
+                  <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-gray-800">
+                    Polymarket
+                    <img src={POLYMARKET_LOGO} alt="" className="h-4 w-4 rounded-full object-contain" />
+                  </span>
+                </div>
+              )}
               {!isPolymarketBridge && <Row label="Recipient" value={truncateAddress(activeRecipient, 4)} mono />}
               {!isPolymarketBridge && memo && <Row label={isPolymarketFunding ? 'Funding' : 'For'} value={isPolymarketFunding ? polymarketFundingLabel : memo} mono={false} />}
               {txHash && (
@@ -3359,7 +3413,7 @@ export default function PaymentPage() {
               )}
             </div>
 
-            {receiptReady && !isPolymarketBridge && (
+            {receiptReady && (!isPolymarketBridge || !polymarketReturnToAgentHash) && (
               <div className="grid gap-2">
                 <button
                   type="button"
@@ -3381,6 +3435,17 @@ export default function PaymentPage() {
                   <p className="text-center text-[11px] font-medium text-gray-400">
                     Receipt is ready. 0G archive proof will update automatically when finalized.
                   </p>
+                )}
+                {isPolymarketBridge && (
+                  <a
+                    href={POLYMARKET_SIGNUP_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98]"
+                  >
+                    <img src={POLYMARKET_LOGO} alt="" className="h-4 w-4 rounded-full object-contain" />
+                    Trade on Polymarket
+                  </a>
                 )}
               </div>
             )}
@@ -3435,8 +3500,16 @@ export default function PaymentPage() {
                   Tap to redirect
                 </a>
               </div>
+            ) : isPolymarketBridge && polymarketReturnToAgentHash ? (
+              <p className="flex items-center justify-center gap-1.5 text-center text-[11px] font-medium text-gray-400">
+                {ogProofValue ? 'Redirecting back to Agent Hash...' : 'Confirming your payment...'}
+                {!ogProofValue && <Loader2 className="h-3 w-3 animate-spin" />}
+              </p>
             ) : isPolymarketBridge ? (
-              <p className="text-center text-[11px] font-medium text-gray-400">Returning to Agent Hash...</p>
+              <p className="flex items-center justify-center gap-1.5 text-center text-[11px] font-medium text-gray-400">
+                {ogProofValue ? 'Funding complete.' : 'Confirming your payment...'}
+                {!ogProofValue && <Loader2 className="h-3 w-3 animate-spin" />}
+              </p>
             ) : isPolymarketFunding ? (
               <p className="text-center text-[11px] font-medium text-gray-400">Funding complete.</p>
             ) : telegramUrl ? (

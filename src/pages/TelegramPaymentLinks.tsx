@@ -332,6 +332,18 @@ type HelperMessage = {
   actionLinks?: Array<{ label: string; url: string }>
 }
 
+type StoredHelperThreadMessage = {
+  id: string
+  mode?: string
+  subMode?: string
+  question?: string
+  answer: string
+  actionLinks?: Array<{ label: string; url: string }>
+  receiptId?: string
+  txHash?: string
+  createdAt: number
+}
+
 type ZeroScoutSponsorship = {
   proofClass: 'zeroscout_sponsored_action'
   sponsor: 'ZeroScout'
@@ -364,6 +376,7 @@ type HelperProfile = {
   preferredPaymentSolanaWallet?: string
   preferences?: string[]
   memorySummary?: string
+  helperThread?: StoredHelperThreadMessage[]
   memoryProof?: {
     rootHash: string
     ogTxHash: string
@@ -406,6 +419,15 @@ function telegramWebAppStartParam() {
 }
 
 function telegramOwnerFromContext(searchParams: URLSearchParams, displayName: string) {
+  const explicitOwner = String(searchParams.get('helperOwner') ?? '').trim().slice(0, 160)
+  if (explicitOwner) {
+    return {
+      owner: explicitOwner,
+      legacyOwner: displayName === 'there' ? 'telegram-user' : displayName,
+      isStable: true,
+      username: String(searchParams.get('u') ?? searchParams.get('username') ?? '').replace(/^@+/, '').trim(),
+    }
+  }
   const webAppUser = telegramWebAppUser()
   const urlUserId = searchParams.get('telegramId') ?? searchParams.get('tgid') ?? searchParams.get('tid') ?? searchParams.get('userId')
   const stableId = String(webAppUser?.id ?? urlUserId ?? '').trim()
@@ -1560,6 +1582,8 @@ function TelegramHelperPanel({
   const [checkpointBusy, setCheckpointBusy] = useState(false)
   const helperScrollRef = useRef<HTMLDivElement | null>(null)
   const helperAbortRef = useRef<AbortController | null>(null)
+  const initialRouteAppliedRef = useRef(Boolean(initialNotice || initialHelperMode || initialPolyDeskSubMode))
+  const helperThreadHydratedRef = useRef(false)
   const helperIdentityKey = (ownerKey || telegramId || payer || cleanTelegramName || 'local-helper').trim().toLowerCase()
   const { authenticated: polyDeskAuthenticated, getAccessToken: getPolyDeskAccessToken } = usePrivy()
 
@@ -1603,6 +1627,10 @@ function TelegramHelperPanel({
   }
 
   useEffect(() => {
+    if (initialRouteAppliedRef.current) {
+      initialRouteAppliedRef.current = false
+      return
+    }
     setMessages([])
     setPaylinkDraft(null)
     setPolyPortfolioFundingDraft(null)
@@ -1640,6 +1668,14 @@ function TelegramHelperPanel({
         const recoveredName = data.profile?.telegramHandle || usableHelperName(data.profile?.displayName || '') || ''
         if (recoveredName) onRecoverTelegramName(recoveredName)
         if (data.profile?.memorySummary) setMemoryDraft(data.profile.memorySummary)
+        if (!helperThreadHydratedRef.current && data.profile?.helperThread?.length) {
+          helperThreadHydratedRef.current = true
+          setMessages(data.profile.helperThread.map(item => ({
+            question: item.question,
+            answer: item.answer,
+            actionLinks: item.actionLinks,
+          })))
+        }
       })
       .catch(err => {
         if (!cancelled) setProfileError(err instanceof Error ? err.message : 'Could not load helper profile.')
@@ -2315,6 +2351,7 @@ function TelegramHelperPanel({
         polymarketWallet: address,
         returnToAgentHash: true,
         requestId,
+        helperOwner: ownerKey || fallbackOwner || payer.trim(),
       })
       setPolyPortfolioFundingDraft(null)
       return {
@@ -5074,6 +5111,7 @@ function buildPolymarketPayLink({
   returnToPortfolio,
   returnToAgentHash,
   requestId,
+  helperOwner,
 }: {
   wallet: string
   amount: string
@@ -5083,6 +5121,7 @@ function buildPolymarketPayLink({
   returnToPortfolio?: boolean
   returnToAgentHash?: boolean
   requestId?: string
+  helperOwner?: string
 }) {
   const params = new URLSearchParams()
   params.set('a', amount)
@@ -5098,6 +5137,7 @@ function buildPolymarketPayLink({
   if (requestId) params.set('pmr', requestId)
   if (returnToAgentHash) params.set('return', 'agent-hash-polydesk-portfolio')
   if (returnToPortfolio) params.set('return', 'poly-portfolio')
+  if (helperOwner) params.set('helperOwner', helperOwner)
   if (funding) params.set('funding', funding)
   return `${window.location.origin}/pay?${params.toString()}`
 }

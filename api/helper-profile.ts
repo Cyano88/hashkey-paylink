@@ -30,12 +30,25 @@ type HelperProfile = {
   preferences?: string[]
   memorySummary?: string
   memoryProof?: HelperMemoryProof
+  helperThread?: HelperThreadMessage[]
   createdAt: number
   updatedAt: number
 }
 
 type Store = {
   profiles: Record<string, HelperProfile>
+}
+
+type HelperThreadMessage = {
+  id: string
+  mode?: string
+  subMode?: string
+  question?: string
+  answer: string
+  actionLinks?: Array<{ label: string; url: string }>
+  receiptId?: string
+  txHash?: string
+  createdAt: number
 }
 
 function cleanString(value: unknown, max = 256) {
@@ -53,6 +66,17 @@ function profileId(payer: string) {
 function cleanList(value: unknown) {
   if (!Array.isArray(value)) return []
   return value.map(item => cleanString(item, 80)).filter(Boolean).slice(0, 12)
+}
+
+function cleanActionLinks(value: unknown) {
+  if (!Array.isArray(value)) return []
+  return value.map(item => {
+    const record = item && typeof item === 'object' ? item as Record<string, unknown> : {}
+    const label = cleanString(record.label, 40)
+    const url = cleanString(record.url, 500)
+    if (!label || !url || !/^\/|^https?:\/\//i.test(url)) return null
+    return { label, url }
+  }).filter(Boolean).slice(0, 4) as Array<{ label: string; url: string }>
 }
 
 function compactMemoryText(value: string, max = 180) {
@@ -212,6 +236,8 @@ export default async function handler(req: Request, res: Response) {
     answer,
   })
 
+  const helperThread = existing?.helperThread ?? []
+
   const next: HelperProfile = {
     id,
     payer: payer || existing?.payer || storageKey,
@@ -227,8 +253,26 @@ export default async function handler(req: Request, res: Response) {
     preferences: cleanList(req.body?.preferences).length ? cleanList(req.body?.preferences) : existing?.preferences ?? [],
     memorySummary,
     memoryProof: existing?.memoryProof,
+    helperThread,
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
+  }
+
+  if (action === 'append-thread') {
+    const answer = cleanString(req.body?.answer, 1200)
+    if (!answer) return res.status(400).json({ ok: false, error: 'Missing helper answer.' })
+    const message: HelperThreadMessage = {
+      id: cleanString(req.body?.id, 80) || `helper-${now.toString(36)}-${crypto.randomBytes(3).toString('hex')}`,
+      mode: cleanString(req.body?.mode, 40),
+      subMode: cleanString(req.body?.subMode, 40),
+      question: cleanString(req.body?.question, 500),
+      answer,
+      actionLinks: cleanActionLinks(req.body?.actionLinks),
+      receiptId: cleanString(req.body?.receiptId, 120),
+      txHash: cleanString(req.body?.txHash, 120),
+      createdAt: now,
+    }
+    next.helperThread = [...helperThread.filter(item => item.id !== message.id), message].slice(-24)
   }
 
   if (action === 'checkpoint') {
