@@ -318,6 +318,8 @@ type HelperMessage = {
   proof?: { ogTxHash: string; ogExplorer: string }
   zeroscoutSponsorship?: ZeroScoutSponsorship
   paylink?: SavedRequest
+  actionLink?: { label: string; url: string }
+  actionLinks?: Array<{ label: string; url: string }>
 }
 
 type ZeroScoutSponsorship = {
@@ -1522,6 +1524,7 @@ function TelegramHelperPanel({
   const [agentStatus, setAgentStatus] = useState('Asking ZeroScout for guidance...')
   const [thinkingState, setThinkingState] = useState<HelperThinkingState>('light')
   const [askError, setAskError] = useState('')
+  const [helperToast, setHelperToast] = useState('')
   const [profile, setProfile] = useState<HelperProfile | null>(null)
   const [profileBusy, setProfileBusy] = useState(false)
   const [profileError, setProfileError] = useState('')
@@ -1650,6 +1653,25 @@ function TelegramHelperPanel({
       }
       return prev
     })
+  }
+
+  async function copyHelperActionLink(url: string) {
+    if (typeof navigator === 'undefined' || !navigator.clipboard) {
+      setHelperToast('Copy unavailable.')
+      window.setTimeout(() => setHelperToast(''), 1200)
+      return
+    }
+    try {
+      await navigator.clipboard.writeText(url)
+      setHelperToast('Link copied.')
+    } catch {
+      setHelperToast('Copy unavailable.')
+    }
+    window.setTimeout(() => setHelperToast(''), 1200)
+  }
+
+  function helperActionLinks(message: HelperMessage) {
+    return [message.actionLink, ...(message.actionLinks ?? [])].filter((link): link is { label: string; url: string } => Boolean(link?.url))
   }
 
   function chooseHelperMode(mode: HelperMode) {
@@ -2163,20 +2185,36 @@ function TelegramHelperPanel({
   async function portfolioAnswer(nextQuestion: string) {
     const portfolioUrl = polyDeskUrl('poly-portfolio')
     if (!polyDeskAuthenticated) {
-      return `Open PolyDesk Portfolio and sign in to connect your Polymarket profile first: ${portfolioUrl}`
+      return {
+        answer: 'Open PolyDesk Portfolio and sign in to connect your Polymarket profile first.',
+        actionLink: { label: 'Portfolio', url: portfolioUrl },
+      }
     }
     const token = await getPolyDeskAccessToken()
-    if (!token) return `Open PolyDesk Portfolio and sign in to continue: ${portfolioUrl}`
+    if (!token) {
+      return {
+        answer: 'Open PolyDesk Portfolio and sign in to continue.',
+        actionLink: { label: 'Portfolio', url: portfolioUrl },
+      }
+    }
     const profileRes = await fetch('/api/polymarket-portfolio?action=profile', {
       headers: { Authorization: `Bearer ${token}` },
     })
     const profileData = await profileRes.json() as { ok?: boolean; profile?: PolymarketProfile | null; error?: string }
     if (!profileRes.ok || !profileData.ok) throw new Error(profileData.error || 'Could not load PolyDesk profile.')
     const address = profileData.profile?.polymarketAddress
-    if (!address) return `Connect your Polymarket 0x profile in PolyDesk Portfolio first: ${portfolioUrl}`
+    if (!address) {
+      return {
+        answer: 'Connect your Polymarket 0x profile in PolyDesk Portfolio first.',
+        actionLink: { label: 'Portfolio', url: portfolioUrl },
+      }
+    }
 
     if (/\b(fund|deposit|top up|bridge)\b/i.test(nextQuestion)) {
-      return `Your saved Polymarket profile is ${shortAddress(address)}. Open Portfolio, choose Fund Polymarket, and Hash PayLink will prepare the bridge-backed checkout: ${portfolioUrl}`
+      return {
+        answer: `Your saved Polymarket profile is ${shortAddress(address)}. Open Portfolio and choose Fund Polymarket to prepare the bridge-backed checkout.`,
+        actionLink: { label: 'Portfolio', url: portfolioUrl },
+      }
     }
 
     const [valueRes, positionsRes] = await Promise.all([
@@ -2192,7 +2230,10 @@ function TelegramHelperPanel({
     const claimable = positions.filter(isClaimablePosition)
     const total = normalizePortfolioValue(valueData.value)?.value
     const claimableText = claimable.length ? ` ${claimable.length} claimable position${claimable.length === 1 ? '' : 's'} need attention.` : ' No claimables right now.'
-    return `Your saved Polymarket portfolio is ${formatUsd(total)} across ${active.length} open position${active.length === 1 ? '' : 's'}.${claimableText} Open Portfolio: ${portfolioUrl}`
+    return {
+      answer: `Your saved Polymarket portfolio is ${formatUsd(total)} across ${active.length} open position${active.length === 1 ? '' : 's'}.${claimableText}`,
+      actionLink: { label: 'Portfolio', url: portfolioUrl },
+    }
   }
 
   async function worldCupAnswer(nextQuestion: string) {
@@ -2204,9 +2245,17 @@ function TelegramHelperPanel({
       const data = await response.json() as PolyWorldCupFeed
       if (!response.ok || !data.ok) throw new Error('World Cup news is unavailable right now.')
       const articles = (data.articles ?? []).slice(0, 3)
-      if (!articles.length) return `I do not have verified World Cup news from the feed right now. Open PolyDesk News: ${newsUrl}`
+      if (!articles.length) {
+        return {
+          answer: 'I do not have verified World Cup news from the feed right now.',
+          actionLink: { label: 'News', url: newsUrl },
+        }
+      }
       const lines = articles.map((article, index) => `${index + 1}. ${article.title}${article.source ? ` (${article.source})` : ''}`)
-      return `Latest verified World Cup market news:\n${lines.join('\n')}\nOpen News: ${newsUrl}`
+      return {
+        answer: `Latest verified World Cup market news:\n${lines.join('\n')}`,
+        actionLink: { label: 'News', url: newsUrl },
+      }
     }
 
     const response = await fetch('/api/poly-stream')
@@ -2219,11 +2268,21 @@ function TelegramHelperPanel({
       const hits = words.filter(word => title.includes(word))
       return hits.length >= Math.min(2, Math.max(1, words.length))
     }) || (words.length ? undefined : matches[0])
-    if (!match) return `I do not have verified World Cup match data from the feed right now. Open the live board: ${scoresUrl}`
+    if (!match) {
+      return {
+        answer: 'I do not have verified World Cup match data from the feed right now.',
+        actionLink: { label: 'Live board', url: scoresUrl },
+      }
+    }
     const state = matchDisplayState(match)
     const score = hasMatchScore(match) ? `${match.homeScore}-${match.awayScore}` : state.center
-    const market = match.polymarketUrl ? ` Trade route: ${match.polymarketUrl}` : ''
-    return `${match.title}: ${state.tag}${state.phase ? `, ${state.phase}` : ''}. Score/status: ${score}. ${state.sub || match.time}.${market}\nOpen live board: ${scoresUrl}`
+    return {
+      answer: `${match.title}: ${state.tag}${state.phase ? `, ${state.phase}` : ''}. Score/status: ${score}. ${state.sub || match.time}.`,
+      actionLinks: [
+        { label: 'Live board', url: scoresUrl },
+        ...(match.polymarketUrl ? [{ label: 'Market', url: match.polymarketUrl }] : []),
+      ],
+    }
   }
 
   async function handlePolyDeskConversation(nextQuestion: string) {
@@ -2232,14 +2291,14 @@ function TelegramHelperPanel({
     setAgentStatus(polyDeskSubMode === 'lp-scout' ? 'Preparing LP Scout access...' : 'Reading PolyDesk data...')
 
     if (polyDeskSubMode === 'portfolio') {
-      const answer = await portfolioAnswer(nextQuestion)
-      finishHelperMessage(nextQuestion, { answer })
+      const result = await portfolioAnswer(nextQuestion)
+      finishHelperMessage(nextQuestion, result)
       return true
     }
 
     if (polyDeskSubMode === 'worldcup') {
-      const answer = await worldCupAnswer(nextQuestion)
-      finishHelperMessage(nextQuestion, { answer })
+      const result = await worldCupAnswer(nextQuestion)
+      finishHelperMessage(nextQuestion, result)
       return true
     }
 
@@ -2248,9 +2307,10 @@ function TelegramHelperPanel({
     finishHelperMessage(nextQuestion, {
       answer: [
         'LP Scout is paid access.',
-        `Agentic tip / x402 access: ${x402Url}`,
-        'Normal USDC access is available below. This is an access payment, not x402 LP proof.',
+        'Choose agentic x402 access for strict LP Scout proof, or pay normal USDC access below.',
+        'Normal USDC access is not LP Scout x402 proof.',
       ].join('\n'),
+      actionLink: { label: 'x402 access', url: x402Url },
       paylink: treasuryRequest,
     })
     return true
@@ -2469,7 +2529,7 @@ function TelegramHelperPanel({
     <div>
       <div className="space-y-3">
         <div className="overflow-hidden">
-              <div ref={helperScrollRef} className="max-h-[360px] min-h-[220px] space-y-4 overflow-y-auto border-t border-gray-100 p-3 scroll-smooth dark:border-white/10">
+              <div ref={helperScrollRef} className="max-h-[360px] min-h-[220px] space-y-4 overflow-y-auto border-t border-gray-100 p-3 scroll-smooth [scrollbar-width:none] dark:border-white/10 [&::-webkit-scrollbar]:hidden">
                 <div className="max-w-[82%] break-words rounded-[18px] rounded-bl-md bg-[#f0f0f0] px-3.5 py-2.5 text-sm leading-relaxed text-gray-900 shadow-sm dark:bg-white/[0.08] dark:text-gray-100">
                   <p>
                     Welcome back, {helperName || cleanTelegramName || 'there'}. Ask me about payments, Polymarket funding, StreamPay, agent setup, research, planning, or daily questions.
@@ -2555,6 +2615,31 @@ function TelegramHelperPanel({
                         {message.answer && (
                           <div className="max-w-[82%] break-words whitespace-pre-wrap rounded-[18px] rounded-bl-md bg-[#f0f0f0] px-3.5 py-2.5 text-sm leading-relaxed text-gray-900 shadow-sm dark:bg-white/[0.08] dark:text-gray-100">
                             {message.answer}
+                            {helperActionLinks(message).length > 0 && (
+                              <div className="mt-2 flex flex-wrap items-center gap-2">
+                                {helperActionLinks(message).map(link => (
+                                  <span key={`${link.label}-${link.url}`} className="inline-flex items-center gap-1.5">
+                                    <a
+                                      href={link.url}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-xs font-semibold text-gray-800 transition hover:bg-gray-50 dark:border-white/10 dark:bg-white/[0.08] dark:text-gray-100 dark:hover:bg-white/[0.12]"
+                                    >
+                                      <ExternalLink className="h-3 w-3" />
+                                      {link.label}
+                                    </a>
+                                    <button
+                                      type="button"
+                                      onClick={() => copyHelperActionLink(link.url)}
+                                      className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 transition hover:bg-gray-50 hover:text-gray-800 dark:border-white/10 dark:bg-white/[0.08] dark:text-gray-300 dark:hover:bg-white/[0.12]"
+                                      aria-label={`Copy ${link.label} link`}
+                                    >
+                                      <Copy className="h-3.5 w-3.5" />
+                                    </button>
+                                  </span>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         )}
                         {message.paylink && <HelperPaylinkCard request={message.paylink} />}
@@ -2564,6 +2649,9 @@ function TelegramHelperPanel({
                 ))}
 
                 {asking && <HelperThinkingIndicator statusText={agentStatus} state={thinkingState} />}
+                {helperToast && (
+                  <p className="w-fit rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-600 shadow-sm dark:border-white/10 dark:bg-white/[0.08] dark:text-gray-200">{helperToast}</p>
+                )}
                 {askError && (
                   <p className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs font-medium text-red-600 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200">{askError}</p>
                 )}
