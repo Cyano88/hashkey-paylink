@@ -566,19 +566,19 @@ function paylinkDraftSideQuestionFallback(draft: HelperPaylinkDraft, text: strin
   const target = draft.target ? friendlyName(draft.target) : 'the payer'
   const missing = describeMissingDraftFields(draft).filter(item => item !== 'receive wallet' || !draft.offeredSavedWallet)
   if (/\b(network|send through|send with|chain|base|solana|arc|arbitrum)\b/i.test(text)) {
-    return `Yes. Ask ${target} which network they can use first. I will keep this PayLink draft open while you confirm.`
+    return `Yes. Ask ${target} which network works for them. I will hold this draft here.`
   }
   if (/\b(wallet|receive address|address)\b/i.test(text)) {
-    return `Yes. You can confirm the receive wallet first. I will keep this draft open until you send the wallet or choose the saved one.`
+    return 'Yes. Confirm the receive wallet first; this draft stays open.'
   }
   if (/\b(answered|answer my question|not answered)\b/i.test(text)) {
     return missing.length
-      ? `You're right. I should answer the question first. You can confirm with ${target}, then send ${missing.join(', ')} when ready.`
-      : `You're right. I should answer the question first. This draft is still open, and I can continue from here.`
+      ? `You're right. Confirm with ${target} first, then send ${missing.join(', ')} when ready.`
+      : "You're right. This draft is still open, and I can continue from here."
   }
   return missing.length
-    ? `Yes. You can confirm that first. I will keep this PayLink draft open; send ${missing.join(', ')} when ready.`
-    : `Yes. This PayLink draft is still open, and I can continue from here.`
+    ? `Yes. I will hold the draft; send ${missing.join(', ')} when ready.`
+    : 'Yes. This draft is still open.'
 }
 
 function describeMissingDraftFields(draft: HelperPaylinkDraft, savedWallet?: string) {
@@ -1807,13 +1807,14 @@ function TelegramHelperPanel({
     if (!draft.wallet && savedWallet && !draft.offeredSavedWallet) {
       draft = { ...draft, offeredSavedWallet: true, offeredSavedWalletNetwork: draft.network }
       setPaylinkDraft(draft)
-      const fallbackAnswer = `I can prepare that PayLink. Do you want to continue with your saved ${draft.network ? requestNetworkLabels[draft.network] : 'payment'} wallet ${compactSavedWallet(savedWallet)}, or use a new receive wallet?`
+      const fallbackAnswer = `Use your saved ${draft.network ? requestNetworkLabels[draft.network] : 'payment'} wallet ${compactSavedWallet(savedWallet)}, or add a new receive wallet?`
       const answer = await polishLocalHelperResult(
         [
           'local_action=payment_request_saved_wallet_choice',
           `network=${draft.network ? requestNetworkLabels[draft.network] : 'payment'}`,
           `saved_wallet=${compactSavedWallet(savedWallet)}`,
-          'Ask whether to continue with the saved receive wallet or use a new one.',
+          'Ask whether to use the saved receive wallet or add a new one.',
+          'Do not say "I can prepare that PayLink".',
           'Return one short consumer chat sentence only.',
         ].join('\n'),
         fallbackAnswer,
@@ -1883,11 +1884,12 @@ function TelegramHelperPanel({
 
     if (!draft.wallet && savedWallet && draft.offeredSavedWallet && wantsNewWallet(nextQuestion)) {
       setPaylinkDraft(draft)
-      const fallbackAnswer = 'Send the new receive wallet. I will replace the saved wallet after this PayLink is ready.'
+      const fallbackAnswer = 'Send the new receive wallet. I will use it for this PayLink.'
       const answer = await polishLocalHelperResult(
         [
           'local_action=payment_request_new_wallet_needed',
           'Ask the user for the new receive wallet.',
+          'Do not mention replacing the saved wallet unless the user asks.',
           'Return one short consumer chat sentence only.',
         ].join('\n'),
         fallbackAnswer,
@@ -1932,9 +1934,10 @@ function TelegramHelperPanel({
     if (missing.length > 0) {
       setPaylinkDraft(draft)
       const missingNetworkOnly = missing.length === 1 && missing[0] === 'network'
+      const missingTarget = draft.target ? friendlyName(draft.target) : 'the payer'
       const fallbackAnswer = missingNetworkOnly
-        ? 'Which network should this use: Base, Arc, Arbitrum, Solana, or all networks?'
-        : `I need ${missing.join(', ')}. You can send it in one line.`
+        ? `Which network should ${missingTarget} use: Base, Arc, Arbitrum, Solana, or all networks?`
+        : `Send ${missing.join(', ')}. One line is fine.`
       const answer = await polishLocalHelperResult(
         [
           'local_action=payment_request_missing_fields',
@@ -1943,6 +1946,7 @@ function TelegramHelperPanel({
           `amount=${draft.amount}`,
           `purpose=${draft.label}`,
           'Ask only for the missing fields. Do not say a provided payer name is missing.',
+          'Use the payer name if available.',
           'Return one short consumer chat sentence only.',
         ].join('\n'),
         fallbackAnswer,
