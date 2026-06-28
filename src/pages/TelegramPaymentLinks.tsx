@@ -445,6 +445,25 @@ function cleanPaymentPurpose(value: string) {
     .slice(0, 80)
 }
 
+function cleanCollectionLabel(value: string) {
+  return cleanPaymentPurpose(value)
+    .replace(/\b(?:group|collection|fundraiser|fundraising|contributors|contribution|contributions)\b/gi, '')
+    .replace(/\b(?:from|with)\s+\d+\s+(?:people|friends|contributors|payers)\b/gi, '')
+    .replace(/\s+/g, ' ')
+    .replace(/^[,.;:\s-]+|[,.;:\s-]+$/g, '')
+    .trim()
+    .slice(0, 80)
+}
+
+function extractCollectionLabel(text: string) {
+  const clean = stripWallets(text).replace(/\s+/g, ' ').trim()
+  const match = clean.match(/\b(?:group donation|group collection|collection|fundraiser|fundraising|donation|dues|split)\s+(?:for|called|named|to|towards?)\s+([^?.!,;]+)/i)?.[1]?.trim()
+    ?? clean.match(/\b(?:collect|raise)\s+(?:\d+(?:\.\d{1,6})?\s*(?:usdc|usd)\s+)?(?:from\s+[^?.!,;]+?\s+)?for\s+([^?.!,;]+)/i)?.[1]?.trim()
+    ?? ''
+  if (!match) return ''
+  return cleanCollectionLabel(match)
+}
+
 function extractTarget(text: string, mode: RequestMode) {
   const clean = text.replace(/\s+/g, ' ').trim()
   const relationship = extractRelationshipMemory(clean)
@@ -532,7 +551,7 @@ function isDeepResearchIntent(text: string) {
 }
 
 function isGroupRequestIntent(text: string) {
-  return /\b(group|collection|multi payer|multi-payer|everyone|split|dues|donation|contributors|many people)\b/i.test(text)
+  return /\b(group|collection|multi payer|multi-payer|everyone|split|dues|donation|fundraiser|fundraising|contributors|contribution|contributions|many people|from \d+\s+(?:people|friends|contributors|payers))\b/i.test(text)
 }
 
 function wantsSavedWallet(text: string) {
@@ -584,8 +603,8 @@ function paylinkDraftSideQuestionFallback(draft: HelperPaylinkDraft, text: strin
 
 function describeMissingDraftFields(draft: HelperPaylinkDraft, savedWallet?: string) {
   const missing = [
-    !draft.target && (draft.mode === 'group' ? 'group or collection name' : 'payer name'),
-    !draft.amount && 'amount in USDC',
+    draft.mode !== 'group' && !draft.target && 'payer name',
+    draft.mode !== 'group' && !draft.amount && 'amount in USDC',
     !draft.network && !draft.wallet?.startsWith('0x') && 'network',
     !draft.label && 'purpose',
     !draft.wallet && !savedWallet && 'receive wallet',
@@ -1692,7 +1711,9 @@ function TelegramHelperPanel({
     const extractedTarget = extractTarget(text, mode)
     const targetFromText = payerCorrection || (!existing?.target ? extractedTarget : '')
     const inlineTarget = !targetFromText && existing && !existing.target ? extractInlinePayerName(text, mode) : ''
-    const purposeFromText = extractPurpose(text)
+    const purposeFromText = mode === 'group'
+      ? extractCollectionLabel(text) || extractPurpose(text)
+      : extractPurpose(text)
     const amountFromText = extractAmountCorrection(text) || extractAmount(text)
     const existingWallet = existing?.wallet || ''
     const keepExistingWallet = Boolean(existingWallet && !walletFromText && (!networkCorrection || walletMatchesNetwork(existingWallet, nextNetwork)))
@@ -1704,7 +1725,9 @@ function TelegramHelperPanel({
     )
     return {
       mode,
-      target: targetFromText || inlineTarget || existing?.target || '',
+      target: mode === 'group'
+        ? targetFromText || inlineTarget || existing?.target || purposeFromText || 'Group collection'
+        : targetFromText || inlineTarget || existing?.target || '',
       amount: amountFromText || existing?.amount || '',
       network: nextNetwork,
       label: purposeFromText || existing?.label || '',
@@ -1742,7 +1765,7 @@ function TelegramHelperPanel({
       evmWallet: network === 'solana' ? '' : walletForNetwork,
       solanaWallet: network === 'solana' ? walletForNetwork : '',
       label: draft.label,
-      target: draft.target,
+      target: draft.mode === 'group' ? draft.target || draft.label || 'Group collection' : draft.target,
       amount: draft.amount,
     }
     const res = await fetch('/api/telegram-request', {
