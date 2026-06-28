@@ -785,7 +785,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
 
   function openPaymentMode(push = true) {
     if (push) pushProductHistory('payment')
-    window.dispatchEvent(new CustomEvent('agent-hash-mode', { detail: { mode: 'payments', open: true } }))
+    window.dispatchEvent(new CustomEvent('agent-hash-mode', { detail: { mode: 'payments' } }))
     setProductHubOpen(false)
     setAccessMode(false)
     setPosMode(false)

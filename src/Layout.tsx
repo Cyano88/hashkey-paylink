@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Outlet, Link, useLocation, useSearchParams } from 'react-router-dom'
 import { useAccount, useDisconnect, useSwitchChain } from 'wagmi'
 import { usePrivy } from '@privy-io/react-auth'
-import { ChevronDown, LogOut, X, Send, ExternalLink, Search, Sun, Moon } from 'lucide-react'
+import { ChevronDown, LogOut, X, Send, ExternalLink, Sun, Moon } from 'lucide-react'
 import { useStarknet } from './lib/StarknetContext'
 import { useSolana }   from './lib/SolanaContext'
 import { useTheme }    from './lib/ThemeContext'
@@ -668,14 +668,6 @@ export default function Layout() {
     }
   }
 
-  function handleTrackPayment() {
-    setChatMessages(m => [...m, {
-      from: 'bot',
-      text: 'Please paste your transaction hash below. It begins with 0x and is typically 66 characters long on EVM networks.',
-    }])
-    scrollToBottom()
-  }
-
   return (
     <div className="min-h-screen bg-[#F5F5F7] dark:bg-[#111113] font-inter flex flex-col">
       {/* ── Sticky frosted-glass header ─────────────────────────────────── */}
@@ -884,12 +876,6 @@ export default function Layout() {
           </div>
 
           <div className="border-t border-gray-100 bg-white p-3 dark:border-white/10 dark:bg-[#111114]">
-            <div className="mb-2 flex items-center gap-2">
-              <button type="button" onClick={handleTrackPayment} className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-gray-500 transition hover:bg-gray-50 hover:text-gray-900 dark:border-white/10 dark:bg-white/[0.05] dark:text-gray-300 dark:hover:bg-white/[0.1]">
-                <Search className="h-3 w-3" />
-                Track payment
-              </button>
-            </div>
             <div className="flex items-center gap-2">
               <input
                 type="text"
@@ -913,7 +899,7 @@ export default function Layout() {
           ref={agentHashFabRef}
           type="button"
           onClick={toggleAgentHashWidget}
-          className="fixed bottom-5 right-4 z-50 flex h-14 w-14 items-center justify-center rounded-full border border-gray-100 bg-white shadow-[0_14px_40px_rgba(15,23,42,0.22)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_48px_rgba(15,23,42,0.28)] active:scale-95 dark:border-white/10 dark:bg-[#111114] sm:right-6"
+          className="fixed bottom-5 right-4 z-50 flex h-14 w-14 items-center justify-center transition-all duration-200 hover:-translate-y-0.5 active:scale-95 sm:right-6"
           title="Agent Hash"
         >
           {chatOpen
