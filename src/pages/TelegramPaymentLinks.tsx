@@ -313,7 +313,7 @@ type PolyDeskSubMode = 'portfolio' | 'worldcup' | 'lp-scout'
 type HelperThinkingState = 'light' | 'payment-draft' | 'payment-wallet' | 'paylink-build' | 'deep-research' | 'proof'
 
 type HelperMessage = {
-  question: string
+  question?: string
   answer?: string
   proof?: { ogTxHash: string; ogExplorer: string }
   zeroscoutSponsorship?: ZeroScoutSponsorship
@@ -1361,6 +1361,9 @@ export default function TelegramPaymentLinks() {
               fallbackOwner={telegramIdentity.legacyOwner}
               initialEventId={searchParams.get('eventId') ?? ''}
               initialPayer={searchParams.get('payer') ?? ''}
+              initialHelperMode={searchParams.get('mode') === 'polydesk' ? 'polydesk' : ''}
+              initialPolyDeskSubMode={searchParams.get('poly') === 'portfolio' ? 'portfolio' : searchParams.get('poly') === 'worldcup' ? 'worldcup' : searchParams.get('poly') === 'lp-scout' ? 'lp-scout' : ''}
+              initialNotice={searchParams.get('notice') ?? ''}
               onRecoverTelegramName={rememberRecoveredHelperName}
               onBack={() => setActiveService('')}
             />
@@ -1498,6 +1501,9 @@ function TelegramHelperPanel({
   fallbackOwner,
   initialEventId,
   initialPayer,
+  initialHelperMode,
+  initialPolyDeskSubMode,
+  initialNotice,
   onRecoverTelegramName,
   onBack,
 }: {
@@ -1507,6 +1513,9 @@ function TelegramHelperPanel({
   fallbackOwner: string
   initialEventId: string
   initialPayer: string
+  initialHelperMode?: HelperMode | ''
+  initialPolyDeskSubMode?: PolyDeskSubMode | ''
+  initialNotice?: string
   onRecoverTelegramName: (name: string) => void
   onBack: () => void
 }) {
@@ -1516,9 +1525,15 @@ function TelegramHelperPanel({
   const [helperNameDraft, setHelperNameDraft] = useState(() => usableHelperName(window.localStorage.getItem('hashpaylink-helper-name') ?? (initialPayer || cleanTelegramName)))
   const [eventId, setEventId] = useState(initialEventId)
   const [payer, setPayer] = useState(initialPayer || cleanTelegramName)
-  const [messages, setMessages] = useState<HelperMessage[]>([])
-  const [helperMode, setHelperMode] = useState<HelperMode | ''>('')
-  const [polyDeskSubMode, setPolyDeskSubMode] = useState<PolyDeskSubMode | ''>('')
+  const [messages, setMessages] = useState<HelperMessage[]>(() => {
+    if (initialNotice !== 'polymarket-funding-complete') return []
+    return [{
+      answer: 'Polymarket funding is complete. I can track open positions, claimables, alerts, and portfolio value right now; Polymarket cash balance should still be confirmed inside Polymarket.',
+      actionLink: { label: 'Portfolio', url: '/telegram/payment-links?section=market-tools&service=poly-portfolio' },
+    }]
+  })
+  const [helperMode, setHelperMode] = useState<HelperMode | ''>(initialHelperMode ?? '')
+  const [polyDeskSubMode, setPolyDeskSubMode] = useState<PolyDeskSubMode | ''>(initialHelperMode === 'polydesk' ? (initialPolyDeskSubMode ?? '') : '')
   const [question, setQuestion] = useState('')
   const [asking, setAsking] = useState(false)
   const [agentStatus, setAgentStatus] = useState('Asking ZeroScout for guidance...')
@@ -2269,7 +2284,7 @@ function TelegramHelperPanel({
         funding: 'Polymarket portfolio',
         network: finalNetwork,
         polymarketWallet: address,
-        returnToPortfolio: true,
+        returnToAgentHash: true,
       })
       return {
         answer: `Bridge checkout ready for ${requestedAmount} USDC to your Polymarket profile ${shortAddress(address)} on ${requestNetworkLabels[finalNetwork]}.`,
@@ -2792,11 +2807,13 @@ function TelegramHelperPanel({
 
                 {messages.map((message, index) => (
                   <div key={index} className="space-y-2.5">
-                    <div className="flex justify-end">
-                      <div className="max-w-[82%] break-words rounded-[18px] rounded-br-md bg-black px-3.5 py-2 text-sm leading-relaxed text-white shadow-sm dark:bg-white dark:text-gray-950">
-                        {message.question}
+                    {message.question && (
+                      <div className="flex justify-end">
+                        <div className="max-w-[82%] break-words rounded-[18px] rounded-br-md bg-black px-3.5 py-2 text-sm leading-relaxed text-white shadow-sm dark:bg-white dark:text-gray-950">
+                          {message.question}
+                        </div>
                       </div>
-                    </div>
+                    )}
                     {(message.answer || message.paylink) && (
                       <div>
                         {message.answer && (
@@ -5018,6 +5035,7 @@ function buildPolymarketPayLink({
   network,
   polymarketWallet,
   returnToPortfolio,
+  returnToAgentHash,
 }: {
   wallet: string
   amount: string
@@ -5025,6 +5043,7 @@ function buildPolymarketPayLink({
   network: RequestNetwork
   polymarketWallet: string
   returnToPortfolio?: boolean
+  returnToAgentHash?: boolean
 }) {
   const params = new URLSearchParams()
   params.set('a', amount)
@@ -5037,6 +5056,7 @@ function buildPolymarketPayLink({
   params.set('pm', '1')
   params.set('bridge', 'polymarket')
   params.set('pmw', polymarketWallet)
+  if (returnToAgentHash) params.set('return', 'agent-hash-polydesk-portfolio')
   if (returnToPortfolio) params.set('return', 'poly-portfolio')
   if (funding) params.set('funding', funding)
   return `${window.location.origin}/pay?${params.toString()}`

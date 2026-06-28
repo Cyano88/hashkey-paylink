@@ -312,9 +312,12 @@ export default function PaymentPage() {
   const isPolymarketBridge = isPolymarketFunding && searchParams.get('bridge') === 'polymarket'
   const polymarketWalletParam = (searchParams.get('pmw') || '').trim()
   const polymarketFundingLabel = (searchParams.get('funding') || searchParams.get('payer') || '').trim() || 'Self funding'
-  const polymarketReturnToPortfolio = searchParams.get('return') === 'poly-portfolio'
+  const polymarketReturnTarget = searchParams.get('return') ?? ''
+  const polymarketReturnToPortfolio = polymarketReturnTarget === 'poly-portfolio'
+  const polymarketReturnToAgentHash = polymarketReturnTarget === 'agent-hash-polydesk-portfolio'
   const telegramUrl = telegramReturnUrl(searchParams)
   const polymarketPortfolioUrl = '/telegram/payment-links?section=market-tools&service=poly-portfolio'
+  const polymarketAgentHashUrl = '/telegram/payment-links?service=hashpaylink-helper&open=1&mode=polydesk&poly=portfolio&notice=polymarket-funding-complete'
 
   const resolvedStark  = starkParam || (legacyChain === 'starknet' ? evmParam : '')
   const resolvedEvm    = legacyChain === 'starknet' ? '' : evmParam
@@ -343,6 +346,10 @@ export default function PaymentPage() {
     }
     if (isAgentOrWalletFunding) {
       window.location.assign(agentFundingBackUrl)
+      return
+    }
+    if (isPolymarketBridge) {
+      window.location.assign(polymarketReturnToAgentHash ? polymarketAgentHashUrl : polymarketPortfolioUrl)
       return
     }
     window.location.assign(ngPosBackUrl)
@@ -436,6 +443,7 @@ export default function PaymentPage() {
   const eventRegistered  = useRef(false)
   const ordinaryReceiptRegistered = useRef(false)
   const accessRedirected = useRef(false)
+  const polymarketReturnRedirected = useRef(false)
   const ngPosRegistered  = useRef(false)
   const requiresAttendeeName = (isEventMode || isNgPosPayment) && !isPolymarketFunding && !isAgentOrWalletFunding && !isHelperAccess
 
@@ -2961,6 +2969,39 @@ export default function PaymentPage() {
     }
   }
 
+  async function registerPolymarketFundingReceipt() {
+    if (!txHash || txHash.startsWith('manual_')) return
+    const payer = chain === 'starknet' ? (argentStarkSession?.address ?? starkAccount ?? '')
+      : chain === 'solana' ? (circleSolanaSession?.wallet.address ?? solanaWalletAddr ?? solanaVaultAddr ?? '')
+      : (address ?? circleEvmEmailSession?.wallet.address ?? circleSmartAccount ?? directVault ?? '')
+    const actualAmt = receivedAmount != null
+      ? (Number(receivedAmount) / Math.pow(10, meta.decimals)).toFixed(meta.decimals <= 6 ? 6 : 8)
+      : effectiveAmt
+    try {
+      const res = await fetch('/api/event-register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: `polymarket-funding-${chain}-${txHash}`,
+          txHash,
+          chain,
+          payer: payer || 'Polymarket funder',
+          memo: polymarketFundingLabel || 'Polymarket funding',
+          amount: actualAmt,
+          requestedAmount: effectiveAmt,
+          source: 'polymarket-funding',
+          merchantId: polymarketWalletParam || activeRecipient,
+          contextLabel: polymarketWalletParam ? `Polymarket ${truncateAddress(polymarketWalletParam, 8)}` : 'Polymarket funding',
+          settlementType: 'polymarket_bridge',
+        }),
+      })
+      const data = await res.json().catch(() => undefined) as { ok?: boolean; receiptId?: string } | undefined
+      if (data?.ok && data.receiptId) setPaymentReceiptId(data.receiptId)
+    } catch {
+      // Receipt registration is non-blocking; the funding transfer is already confirmed.
+    }
+  }
+
   useEffect(() => {
     if (!isConfirmed || !isEventMode || !eventId || eventRegistered.current) return
     const name = isAgentOrWalletFunding ? (memo || (isWalletManagerFunding ? 'x402 wallet funding' : 'Agent wallet funding')) : attendeeName.trim()
@@ -3007,6 +3048,13 @@ export default function PaymentPage() {
     if (!isReceiptablePaylinkPayment || isEventMode || isNgPosPayment || isPolymarketFunding || isAgentOrWalletFunding || isHelperAccess) return
     ordinaryReceiptRegistered.current = true
     void registerOrdinaryReceipt()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isConfirmed, txHash])
+
+  useEffect(() => {
+    if (!isConfirmed || !txHash || !isPolymarketFunding || ordinaryReceiptRegistered.current) return
+    ordinaryReceiptRegistered.current = true
+    void registerPolymarketFundingReceipt()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isConfirmed, txHash])
 
@@ -3062,6 +3110,15 @@ export default function PaymentPage() {
     }, isAgentOrWalletFunding ? 2600 : 900)
     return () => window.clearTimeout(timer)
   }, [autoAccessRedirect, isEventMode, agentUrl, eventRegStatus, eventId, attendeeName, isAgentOrWalletFunding, isWalletManagerFunding, memo])
+
+  useEffect(() => {
+    if (!isConfirmed || !isPolymarketBridge || !polymarketReturnToAgentHash || polymarketReturnRedirected.current) return
+    polymarketReturnRedirected.current = true
+    const timer = window.setTimeout(() => {
+      window.location.assign(polymarketAgentHashUrl)
+    }, 5200)
+    return () => window.clearTimeout(timer)
+  }, [isConfirmed, isPolymarketBridge, polymarketReturnToAgentHash, polymarketAgentHashUrl])
 
   // ────────────────────────────────────────────────────────────────────────────
   //  INVALID PARAMS
@@ -3132,13 +3189,13 @@ export default function PaymentPage() {
 
     return (
       <div className="mx-auto max-w-md animate-scale-in">
-        {isPolymarketBridge && polymarketReturnToPortfolio && (
+        {isPolymarketBridge && (polymarketReturnToPortfolio || polymarketReturnToAgentHash) && (
           <button
             type="button"
-            onClick={() => navigate(polymarketPortfolioUrl)}
+            onClick={() => navigate(polymarketReturnToAgentHash ? polymarketAgentHashUrl : polymarketPortfolioUrl)}
             className="mb-2 inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 transition-colors hover:text-gray-900"
           >
-            <ArrowLeft className="h-3.5 w-3.5" /> Portfolio
+            <ArrowLeft className="h-3.5 w-3.5" /> {polymarketReturnToAgentHash ? 'Agent Hash' : 'Portfolio'}
           </button>
         )}
         <div
@@ -3162,7 +3219,7 @@ export default function PaymentPage() {
             </div>
             <h2 className="text-xl font-bold text-gray-900">
               {isUnder ? 'Underpayment Detected'
-               : isPolymarketBridge ? 'USDC Sent to Bridge'
+               : isPolymarketBridge ? 'Polymarket Funding Sent'
                : isPolymarketFunding ? 'Funding Complete!'
                : 'Payment Sent!'}
             </h2>
@@ -3173,7 +3230,7 @@ export default function PaymentPage() {
                     {formatPaymentAmountDisplay(recipientAmt, meta.decimals)} {meta.asset}
                   </span>
                   {' '}
-                  {isUnder ? 'received - ' : isPolymarketBridge ? 'sent to Polymarket Bridge' : isPolymarketFunding ? 'delivered to funding wallet' : 'received by recipient'}
+                  {isUnder ? 'received - ' : isPolymarketBridge ? 'sent through the Polymarket bridge' : isPolymarketFunding ? 'delivered to funding wallet' : 'received by recipient'}
                   {isUnder && (
                     <span className={cn(
                       'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold',
@@ -3196,7 +3253,7 @@ export default function PaymentPage() {
                     {formatAmount(effectiveAmt, meta.decimals)} {meta.asset}
                   </span>{' '}
                   {isPolymarketBridge
-                    ? 'sent to Polymarket Bridge'
+                    ? 'sent through the Polymarket bridge'
                     : isPolymarketFunding
                     ? 'delivered to funding wallet'
                     : manualPayDetected && directStatus !== 'success'
@@ -3333,6 +3390,13 @@ export default function PaymentPage() {
               </div>
             )}
 
+            {isPolymarketBridge && (
+              <div className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-2.5 text-xs leading-relaxed text-blue-800">
+                Funding receipt and on-chain transfer are verified here. Agent Hash can track open positions, claimables, alerts, and portfolio value; confirm available Polymarket cash balance inside Polymarket.
+                {polymarketReturnToAgentHash && <span className="mt-1 block font-semibold">Returning to Agent Hash shortly...</span>}
+              </div>
+            )}
+
             {receiptReady && (
               <div className="grid gap-2">
                 <button
@@ -3407,6 +3471,24 @@ export default function PaymentPage() {
                   className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-2.5 text-sm font-medium text-white transition-all hover:bg-gray-800 active:scale-[0.98]"
                 >
                   Tap to redirect
+                </a>
+              </div>
+            ) : isPolymarketBridge ? (
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => navigate(polymarketReturnToAgentHash ? polymarketAgentHashUrl : polymarketPortfolioUrl)}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-2.5 text-sm font-medium text-white hover:bg-gray-800 transition-all active:scale-[0.98]"
+                >
+                  {polymarketReturnToAgentHash ? 'Return to Agent Hash' : 'Back to Portfolio'}
+                </button>
+                <a
+                  href={POLYMARKET_SIGNUP_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98]"
+                >
+                  Open Polymarket
                 </a>
               </div>
             ) : isPolymarketFunding ? (
