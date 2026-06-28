@@ -2336,16 +2336,32 @@ const helperThinkingCopy: Record<HelperThinkingState, string[]> = {
   proof: ['Polishing wording...', 'Validating flow...', 'Almost ready...'],
 }
 
+const helperSlowThinkingCopy = ['Putting things in order...', 'Almost ready...', 'Please be patient...']
+
+function helperSlowThinkingDelays(state: HelperThinkingState) {
+  if (state === 'deep-research') return [10000, 18000, 26000]
+  if (state === 'paylink-build') return [5000, 8500, 12500]
+  return [6500, 10500, 15000]
+}
+
 function HelperThinkingIndicator({ statusText, state }: { statusText: string; state: HelperThinkingState }) {
   const [stepIndex, setStepIndex] = useState(0)
+  const [slowPhase, setSlowPhase] = useState(-1)
   const steps = useMemo(() => helperThinkingCopy[state] ?? helperThinkingCopy.light, [state])
 
   useEffect(() => {
+    setSlowPhase(-1)
     setStepIndex(Math.floor(Math.random() * steps.length))
+    const slowTimers = helperSlowThinkingDelays(state).map((delay, index) => (
+      window.setTimeout(() => setSlowPhase(index), delay)
+    ))
     const timer = window.setInterval(() => {
       setStepIndex(index => (index + 1) % steps.length)
     }, 900)
-    return () => window.clearInterval(timer)
+    return () => {
+      slowTimers.forEach(window.clearTimeout)
+      window.clearInterval(timer)
+    }
   }, [statusText, state, steps.length])
 
   return (
@@ -2362,7 +2378,7 @@ function HelperThinkingIndicator({ statusText, state }: { statusText: string; st
         </span>
       </div>
       <p className="ml-3 mt-1 text-xs italic text-[#8e8e93] dark:text-gray-400">
-        {steps[stepIndex]}
+        {slowPhase >= 0 ? helperSlowThinkingCopy[slowPhase] : steps[stepIndex]}
       </p>
     </div>
   )
