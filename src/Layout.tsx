@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Outlet, Link, useLocation, useSearchParams } from 'react-router-dom'
 import { useAccount, useDisconnect, useSwitchChain } from 'wagmi'
 import { usePrivy } from '@privy-io/react-auth'
-import { ChevronDown, MessageCircle, LogOut, X, Send, ExternalLink, Search, Sun, Moon } from 'lucide-react'
+import { ChevronDown, LogOut, X, Send, ExternalLink, Search, Sun, Moon, Sparkles } from 'lucide-react'
 import { useStarknet } from './lib/StarknetContext'
 import { useSolana }   from './lib/SolanaContext'
 import { useTheme }    from './lib/ThemeContext'
@@ -33,6 +33,19 @@ type ChatMsg = {
   from: 'bot' | 'user'
   text: string
   link?: { label: string; href: string }
+}
+
+type AgentHashMode = 'support' | 'payments'
+
+const AGENT_HASH_WELCOME: Record<AgentHashMode, ChatMsg> = {
+  support: {
+    from: 'bot',
+    text: 'Agent Hash Support is ready. Tell me what is stuck, confusing, or not working, and I will help you fix it step by step.',
+  },
+  payments: {
+    from: 'bot',
+    text: 'Agent Hash Payments is ready. I can help with payment links, receipts, wallet details, supported networks, and payment troubleshooting.',
+  },
 }
 
 const WELCOME: ChatMsg = {
@@ -450,11 +463,46 @@ export default function Layout() {
 
   const { theme, toggle: toggleTheme } = useTheme()
 
+  const agentHashMode: AgentHashMode = isPayPage ? 'payments' : 'support'
+  const showAgentHashWidget = isCreatePage || isPayPage
+  const agentHashStorageKey = `agent-hash-widget:${agentHashMode}`
   const [chatOpen,     setChatOpen]     = useState(false)
   const [chatInput,    setChatInput]    = useState('')
-  const [chatMessages, setChatMessages] = useState<ChatMsg[]>([WELCOME])
+  const [chatMessages, setChatMessages] = useState<ChatMsg[]>([AGENT_HASH_WELCOME[agentHashMode]])
   const [isTyping,     setIsTyping]     = useState(false)
   const chatEndRef = useRef<HTMLDivElement>(null)
+  const agentHashPanelRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    setIsTyping(false)
+    setChatInput('')
+    try {
+      const saved = window.localStorage.getItem(agentHashStorageKey)
+      const parsed = saved ? JSON.parse(saved) as ChatMsg[] : null
+      setChatMessages(Array.isArray(parsed) && parsed.length ? parsed.slice(-30) : [AGENT_HASH_WELCOME[agentHashMode]])
+    } catch {
+      setChatMessages([AGENT_HASH_WELCOME[agentHashMode]])
+    }
+  }, [agentHashMode, agentHashStorageKey])
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(agentHashStorageKey, JSON.stringify(chatMessages.slice(-30)))
+    } catch {
+      // Local session persistence is best-effort.
+    }
+  }, [agentHashStorageKey, chatMessages])
+
+  useEffect(() => {
+    if (!chatOpen) return
+    function handleOutsideClick(event: MouseEvent) {
+      const target = event.target as Node | null
+      if (target && agentHashPanelRef.current?.contains(target)) return
+      setChatOpen(false)
+    }
+    window.addEventListener('mousedown', handleOutsideClick)
+    return () => window.removeEventListener('mousedown', handleOutsideClick)
+  }, [chatOpen])
 
   function scrollToBottom() {
     setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 60)
@@ -464,6 +512,15 @@ export default function Layout() {
     setChatMessages(m => [...m, ...msgs])
     setIsTyping(false)
     scrollToBottom()
+  }
+
+  function agentHashMemorySummary(nextQuestion: string) {
+    const recent = chatMessages
+      .slice(-8)
+      .map(msg => `${msg.from === 'user' ? 'User' : 'Agent Hash'}: ${msg.text.replace(/\s+/g, ' ').slice(0, 180)}`)
+      .join(' | ')
+    const pageContext = isPayPage ? 'Current page context: payer payment page.' : 'Current page context: Hash PayLink main app support.'
+    return `${pageContext} Agent Hash mode: ${agentHashMode}. Recent local widget context: ${recent || 'new session'}. Current message: ${nextQuestion}`.slice(0, 1600)
   }
 
   async function handleSend(text = chatInput) {
@@ -524,14 +581,34 @@ export default function Layout() {
       return
     }
 
-    // Keyword matching
-    const kwReply = keywordReply(trimmed)
-    if (kwReply) { pushBot([kwReply]); return }
-
-    pushBot([{
-      from: 'bot',
-      text: 'I can help with creating links, how to pay, transaction tracking, fees, chain behaviour, and more. Try asking things like "how do I pay?", "what is the platform fee?", or paste a transaction hash for a live status check.\n\nIf you need to speak to someone, type "contact" and I will share our support channels.',
-    }])
+    setIsTyping(true)
+    try {
+      const res = await fetch('/api/agent-ask', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: 'agent-hash-widget',
+          payer: 'Hash PayLink user',
+          question: trimmed,
+          accessMode: 'helper-free',
+          helperMode: agentHashMode,
+          memorySummary: agentHashMemorySummary(trimmed),
+        }),
+      })
+      const contentType = res.headers.get('content-type') || ''
+      const data = contentType.includes('application/json')
+        ? await res.json() as { answer?: string; error?: string }
+        : { error: 'Agent Hash is temporarily receiving a service page instead of an API response. Please try again shortly.' }
+      if (!res.ok || !data.answer) throw new Error(data.error || 'Agent Hash could not answer just now.')
+      pushBot([{ from: 'bot', text: data.answer }])
+    } catch (err) {
+      pushBot([{
+        from: 'bot',
+        text: err instanceof Error && err.message
+          ? err.message
+          : 'Agent Hash could not reach its intelligence layer just now. Please try again shortly.',
+      }])
+    }
   }
 
   function handleTrackPayment() {
@@ -681,9 +758,10 @@ export default function Layout() {
         </footer>
       )}
 
-      {/* ── Hash Assistant chat window ────────────────────────────────────── */}
-      {chatOpen && (
+      {/* Agent Hash floating widget */}
+      {showAgentHashWidget && chatOpen && (
         <div className="fixed bottom-20 right-4 sm:right-6 z-50 w-80 sm:w-96 rounded-2xl overflow-hidden shadow-2xl animate-slide-up"
+          ref={agentHashPanelRef}
           style={{ background: '#16181d', border: '1px solid rgba(255,255,255,0.08)' }}>
 
           {/* Header */}
@@ -691,12 +769,14 @@ export default function Layout() {
             style={{ background: '#1e2028', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
             <div className="flex items-center gap-2.5">
               <div className="flex h-7 w-7 items-center justify-center rounded-full"
-                style={{ background: 'rgba(59,130,246,0.15)', border: '1px solid rgba(59,130,246,0.3)' }}>
-                <MessageCircle className="h-3.5 w-3.5 text-blue-400" />
+                style={{ background: 'rgba(20,184,166,0.16)', border: '1px solid rgba(20,184,166,0.35)' }}>
+                <Sparkles className="h-3.5 w-3.5 text-teal-300" />
               </div>
               <div>
-                <p className="text-[13px] font-semibold text-white leading-none">Hash Assistant</p>
-                <p className="text-[10px] text-slate-400 mt-0.5">Payment Support · On-Chain</p>
+                <p className="text-[13px] font-semibold text-white leading-none">Agent Hash</p>
+                <p className="text-[10px] text-slate-400 mt-0.5">
+                  {agentHashMode === 'payments' ? 'Payments + support' : 'Support mode'} · Powered by ZeroScout
+                </p>
               </div>
             </div>
             <button onClick={() => setChatOpen(false)}
@@ -733,13 +813,16 @@ export default function Layout() {
 
             {isTyping && (
               <div className="flex justify-start">
-                <div className="rounded-2xl px-4 py-3" style={{ background: '#252830', borderBottomLeftRadius: 6 }}>
+                <div className="space-y-1 rounded-2xl px-4 py-3" style={{ background: '#252830', borderBottomLeftRadius: 6 }}>
                   <div className="flex gap-1 items-center h-3">
                     {[0, 1, 2].map(i => (
                       <span key={i} className="h-1.5 w-1.5 rounded-full bg-slate-500"
                         style={{ animation: `bounce 1s ${i * 0.15}s infinite` }} />
                     ))}
                   </div>
+                  <p className="text-[10px] italic text-slate-500">
+                    {agentHashMode === 'payments' ? 'Checking payment context...' : 'Putting things in order...'}
+                  </p>
                 </div>
               </div>
             )}
@@ -766,7 +849,7 @@ export default function Layout() {
               value={chatInput}
               onChange={e => setChatInput(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleSend()}
-              placeholder="Paste a tx hash or ask a question…"
+              placeholder={agentHashMode === 'payments' ? 'Ask about this payment...' : 'Ask Agent Hash...'}
               className="flex-1 bg-transparent text-[13px] text-slate-200 placeholder-slate-600 focus:outline-none"
             />
             <button
@@ -781,23 +864,25 @@ export default function Layout() {
       )}
 
       {/* FAB */}
-      <button
-        onClick={() => setChatOpen(v => !v)}
-        className="fixed bottom-6 right-4 sm:right-6 z-50 flex h-12 w-12 items-center justify-center rounded-full transition-all duration-200 active:scale-95 hover:shadow-lg"
-        style={{
-          background: chatOpen ? '#1e2028' : '#16181d',
-          border: '1px solid rgba(255,255,255,0.10)',
-          boxShadow: chatOpen
-            ? '0 0 0 3px rgba(59,130,246,0.15), 0 8px 24px rgba(0,0,0,0.4)'
-            : '0 4px 20px rgba(0,0,0,0.35)',
-        }}
-        title="Hash Assistant"
-      >
-        {chatOpen
-          ? <X className="h-5 w-5 text-slate-400" />
-          : <MessageCircle className="h-5 w-5 text-slate-300" />
-        }
-      </button>
+      {showAgentHashWidget && (
+        <button
+          onClick={() => setChatOpen(v => !v)}
+          className="fixed bottom-6 right-4 sm:right-6 z-50 flex h-12 w-12 items-center justify-center rounded-full transition-all duration-200 active:scale-95 hover:shadow-lg"
+          style={{
+            background: chatOpen ? '#1e2028' : '#16181d',
+            border: '1px solid rgba(255,255,255,0.10)',
+            boxShadow: chatOpen
+              ? '0 0 0 3px rgba(20,184,166,0.16), 0 8px 24px rgba(0,0,0,0.4)'
+              : '0 4px 20px rgba(0,0,0,0.35)',
+          }}
+          title="Agent Hash"
+        >
+          {chatOpen
+            ? <X className="h-5 w-5 text-slate-400" />
+            : <Sparkles className="h-5 w-5 text-teal-200" />
+          }
+        </button>
+      )}
 
       <style>{`
         @keyframes bounce {
