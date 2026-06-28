@@ -3746,7 +3746,7 @@ export default function PaymentPage() {
             return (
               <div className="space-y-1.5">
                 <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
-                  {isNgPosPayment ? 'Customer name' : 'Your Name or Handle'}
+                  {isNgPosPayment ? 'Customer name' : 'Your name or handle'}
                   {paid ? (
                     <span className="ml-auto text-[10px] font-semibold text-emerald-600">✓ Saved</span>
                   ) : attendeeName.trim() ? (
@@ -3761,7 +3761,7 @@ export default function PaymentPage() {
                 </label>
                 <input
                   type="text"
-                  placeholder={isNgPosPayment ? 'e.g. Chinedu or Table 4' : 'e.g. @Clinton or Jane Doe'}
+                  placeholder={isNgPosPayment ? 'e.g. Chinedu or Table 4' : 'e.g. Nana, @Clinton, or Jane Doe'}
                   value={attendeeName}
                   onChange={e => setAttendeeName(e.target.value)}
                   disabled={paid}
@@ -3775,8 +3775,8 @@ export default function PaymentPage() {
                 {!paid && (
                   <p className="text-[11px] text-gray-400 transition-opacity duration-300" style={{ opacity: attendeeName.trim() ? 0.5 : 1 }}>
                     {attendeeName.trim()
-                      ? isNgPosPayment ? 'Shown on the merchant receipt.' : 'Logged with your payment on the organizer dashboard.'
-                      : isNgPosPayment ? 'Enter your name to continue.' : 'Enter your name to unlock payment — it\'s logged with your payment.'}
+                      ? isNgPosPayment ? 'Shown on the merchant receipt.' : 'Shown beside your payment on the organizer dashboard.'
+                      : isNgPosPayment ? 'Enter your name to continue.' : 'Enter your name to continue. This helps the organizer track contributions.'}
                   </p>
                 )}
               </div>

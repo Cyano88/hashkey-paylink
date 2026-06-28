@@ -16,7 +16,6 @@ import {
   ChevronDown,
   Activity,
   MessageCircle,
-  Send,
   Tag,
   Coins,
   ExternalLink,
@@ -60,6 +59,7 @@ import { canUseCircleSolanaEmailWallet, connectCircleSolanaEmailWallet } from '.
 import { PrivyConnectButton } from '../lib/PrivyConnectButton'
 import { resolvePrivyCircleLink, savePrivyCircleLink } from '../lib/privyCircleLink'
 import AgentWorkspace from './AgentWorkspace'
+import PayLinkShareSheet from '../components/PayLinkShareSheet'
 
 // ─── Starknet address: 0x followed by exactly 64 hex chars ──────────────────
 const isValidStarkAddr = (v: string) => /^0x[0-9a-fA-F]{64}$/.test(v)
@@ -1180,10 +1180,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     setShareOpen(true)
   }
 
-  const shareMessage = `${memo.trim() ? `Pay ${formatAmount(amt, 6)} USDC for ${memo.trim()}` : `Pay ${formatAmount(amt, 6)} USDC with Hash PayLink`}\n${generatedLink}`
-  const encodedShareText = encodeURIComponent(memo.trim() ? `Pay ${formatAmount(amt, 6)} USDC for ${memo.trim()}` : `Pay ${formatAmount(amt, 6)} USDC with Hash PayLink`)
-  const encodedShareUrl = encodeURIComponent(generatedLink)
-  const encodedShareMessage = encodeURIComponent(shareMessage)
+  const shareMessage = memo.trim() ? `Pay ${formatAmount(amt, 6)} USDC for ${memo.trim()}` : `Pay ${formatAmount(amt, 6)} USDC with Hash PayLink`
 
   function handleReset() {
     setEvmAddr(''); setStarkAddr(''); setSolanaAddr(''); setAmt(''); setMemo('')
@@ -2743,82 +2740,14 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
         </div>
       )}
 
-      {shareOpen && generatedLink && (
-        <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/35 px-4 pb-5 sm:items-center sm:pb-0"
-          onClick={() => setShareOpen(false)}
-        >
-          <div
-            className="w-full max-w-sm rounded-2xl border border-gray-100 bg-white p-4 shadow-2xl"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="mb-3 flex items-center justify-between">
-              <div>
-                <p className="text-sm font-semibold text-gray-900">Share payment link</p>
-                <p className="text-xs text-gray-400">Copy it or send it directly.</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShareOpen(false)}
-                className="flex h-8 w-8 items-center justify-center rounded-xl bg-gray-50 text-gray-500 hover:bg-gray-100 hover:text-gray-900"
-                aria-label="Close share options"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <button
-              type="button"
-              onClick={handleCopy}
-              className={cn(
-                'mb-2 flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all active:scale-[0.98]',
-                copied
-                  ? 'border border-emerald-200 bg-emerald-50 text-emerald-700'
-                  : 'bg-black text-white hover:bg-gray-800',
-              )}
-            >
-              {copied ? <><CheckCheck className="h-4 w-4" /> Copied!</> : <><Copy className="h-4 w-4" /> Copy link</>}
-            </button>
-
-            <div className="grid grid-cols-2 gap-2">
-              <a
-                href={`https://wa.me/?text=${encodedShareMessage}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-medium text-gray-700 hover:border-gray-300 hover:bg-gray-50"
-              >
-                <MessageCircle className="h-4 w-4" />
-                WhatsApp
-              </a>
-              <a
-                href={`https://t.me/share/url?url=${encodedShareUrl}&text=${encodedShareText}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-medium text-gray-700 hover:border-gray-300 hover:bg-gray-50"
-              >
-                <Send className="h-4 w-4" />
-                Telegram
-              </a>
-              <a
-                href={`https://twitter.com/intent/tweet?url=${encodedShareUrl}&text=${encodedShareText}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-medium text-gray-700 hover:border-gray-300 hover:bg-gray-50"
-              >
-                <X className="h-4 w-4" />
-                X
-              </a>
-              <a
-                href={`mailto:?subject=${encodeURIComponent('Hash PayLink payment request')}&body=${encodedShareMessage}`}
-                className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-medium text-gray-700 hover:border-gray-300 hover:bg-gray-50"
-              >
-                <Mail className="h-4 w-4" />
-                Email
-              </a>
-            </div>
-          </div>
-        </div>
-      )}
+      <PayLinkShareSheet
+        open={shareOpen}
+        url={generatedLink}
+        copied={copied}
+        shareText={shareMessage}
+        onCopy={handleCopy}
+        onClose={() => setShareOpen(false)}
+      />
     </div>
   )
 }

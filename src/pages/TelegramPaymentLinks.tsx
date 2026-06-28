@@ -35,6 +35,7 @@ import { cn } from '../lib/utils'
 import { EVM_TREASURY } from '../lib/chains'
 import AgentWorkspace from './AgentWorkspace'
 import ZeroScoutPowerBadge from '../components/ZeroScoutPowerBadge'
+import PayLinkShareSheet from '../components/PayLinkShareSheet'
 
 const TELEGRAM_BOT_URL = import.meta.env.VITE_TELEGRAM_AGENT_URL || 'https://t.me/HashPayLinkBot'
 const PUBLIC_PAYLINK_ORIGIN = (import.meta.env.VITE_PUBLIC_PAYLINK_ORIGIN || 'https://hashpaylink.com').replace(/\/+$/, '')
@@ -281,6 +282,29 @@ const blockedPayerNames = new Set([
   'my',
   'myself',
   'you',
+  'yes',
+  'no',
+  'ok',
+  'okay',
+  'one',
+  'same',
+  'new',
+  'wallet',
+  'address',
+  'network',
+  'chain',
+  'purpose',
+  'reason',
+  'tuition',
+  'fee',
+  'love',
+  'care',
+  'asap',
+  'picked',
+  'prefers',
+  'preferred',
+  'wealthy',
+  'friend',
 ])
 
 type PolymarketMode = 'self' | 'friends' | ''
@@ -509,9 +533,21 @@ const helperModes: Array<{ id: HelperMode; label: string; intro: string }> = [
 ]
 
 function extractPayerCorrection(text: string) {
-  const match = text.match(/\b(?:change|update|correct|set)?\s*(?:payer(?: name)?|her name'?s?|her name is|his name'?s?|his name is|their name'?s?|their name is)\s*(?:to|is|=|:)?\s+(@?[a-zA-Z][\w.-]{1,40})\b/i)?.[1] ?? ''
-  const clean = normalizeHelperName(match)
-  return clean && !blockedPayerNames.has(clean.toLowerCase()) ? clean : ''
+  const match = text.match(/\b(?:change|update|correct|set)?\s*(?:payer(?: name)?|payee|sender|from|her name'?s?|her name is|his name'?s?|his name is|their name'?s?|their name is)\s*(?:to|is|=|:)?\s+(@?[\p{L}\p{M}][\p{L}\p{M}\w .'-]{1,40})\b/iu)?.[1] ?? ''
+  return cleanPayerCandidate(match)
+}
+
+function cleanPayerCandidate(value: string) {
+  const clean = usableHelperName(
+    value
+      .replace(/\s+\b(?:and\s+i|and\s+we|i\s+want|i\s+need|who|that|she|he|they|for|with|from|to|on|picked|prefers?)\b.*$/i, '')
+      .replace(/^[,.;:\s-]+|[,.;:\s-]+$/g, ''),
+  )
+  if (!clean) return ''
+  const firstToken = clean.split(/\s+/)[0]?.toLowerCase() ?? ''
+  if (blockedPayerNames.has(clean.toLowerCase()) || blockedPayerNames.has(firstToken)) return ''
+  if (!/^[\p{L}\p{M}@][\p{L}\p{M}\w.'-]{1,40}$/u.test(clean)) return ''
+  return friendlyName(clean)
 }
 
 function extractInlinePayerName(text: string, mode: RequestMode) {
@@ -520,12 +556,12 @@ function extractInlinePayerName(text: string, mode: RequestMode) {
     .replace(/\b\d+(?:\.\d{1,6})?\s*(?:usdc|usd)\b/gi, '')
     .replace(/\b(?:base|arc|solana|arbitrum|all networks?|any network|evm|usdc)\b/gi, '')
     .replace(/\b(?:for|purpose|memo|reason)\s+[^,.;]+/gi, '')
-    .replace(/\b(?:request|collect|charge|invoice|paylink|payment|link|continue|use|saved|wallet|new|receive|picked|please|prepare|asap|reason|name|generous|very)\b/gi, '')
+    .replace(/\b(?:request|collect|charge|invoice|paylink|payment|link|continue|use|saved|wallet|new|receive|picked|please|prepare|asap|reason|name|generous|very|would|like|confirm|network|prefers?|send|through|first|wait|hold|minute|ask|friend|called|named|wealthy)\b/gi, '')
     .replace(/[^\p{L}\p{M}' -]/gu, ' ')
     .replace(/\s+/g, ' ')
     .trim()
   const firstName = clean.match(/\b[\p{L}\p{M}][\p{L}\p{M}'-]{1,40}\b/u)?.[0] ?? ''
-  return blockedPayerNames.has(firstName.toLowerCase()) ? '' : firstName.slice(0, 48)
+  return cleanPayerCandidate(firstName)
 }
 
 function extractPurpose(text: string) {
@@ -542,7 +578,7 @@ function isExplicitDraftCorrection(text: string) {
 }
 
 function isPaymentRequestIntent(text: string) {
-  return /\b(request|collect|charge|invoice|paylink|payment link|receive (?:a )?payment|get paid|ask .*pay|split|dues|donation|group collection)\b/i.test(text)
+  return /\b(request|collect|charge|invoice|paylink|payment link|receive (?:a )?payments?|get paid|ask .*pay|split|dues|donation|group collection|contribution|fundraiser|fundraising)\b/i.test(text)
 }
 
 function isDeepResearchIntent(text: string) {
@@ -551,7 +587,28 @@ function isDeepResearchIntent(text: string) {
 }
 
 function isGroupRequestIntent(text: string) {
-  return /\b(group|collection|multi payer|multi-payer|everyone|split|dues|donation|fundraiser|fundraising|contributors|contribution|contributions|many people|from \d+\s+(?:people|friends|contributors|payers))\b/i.test(text)
+  const clean = text.replace(/\s+/g, ' ').trim()
+  return /\b(group|collection|multi payer|multi-payer|everyone|split|dues|donation|donations|fundraiser|fundraising|contributors|contributor|contribution|contributions|event|events|wedding|party|ticket|tickets|registration|class|team|club|community|committee|members|many people|multiple people|several people|from \d+\s+(?:people|friends|contributors|payers|members))\b/i.test(clean)
+    || /\b(?:collect|request|receive|get)\s+payments?\s+(?:from|for)\b/i.test(clean)
+    || /\bpayments?\s+(?:from|for)\s+(?:everyone|the group|my class|the class|my team|the team|members|contributors|an event|events|donations?)\b/i.test(clean)
+}
+
+function isSinglePayerRequestIntent(text: string) {
+  const clean = text.replace(/\s+/g, ' ').trim()
+  return /\b(?:from|payer is|payer name is|her name is|his name is|their name is)\s+[\p{L}\p{M}][\p{L}\p{M}'-]{1,40}\b/iu.test(clean)
+    || /\b(friend|client|customer|person|payer|sister|brother|mother|father|partner|colleague|boss|aunt|uncle|nana|chioma|julia)\b/i.test(clean)
+    || /\brequest\s+(?:a\s+)?payment\b/i.test(clean)
+}
+
+function inferPaylinkRequestMode(text: string, existing?: HelperPaylinkDraft | null): RequestMode {
+  if (existing?.mode) return existing.mode
+  const groupIntent = isGroupRequestIntent(text)
+  const singleIntent = isSinglePayerRequestIntent(text)
+  if (groupIntent && !singleIntent) return 'group'
+  if (groupIntent && singleIntent && /\b(collection|group|event|donation|donations|fundraiser|fundraising|contributors|contributions|dues|split|everyone|members)\b/i.test(text)) {
+    return 'group'
+  }
+  return 'person'
 }
 
 function wantsSavedWallet(text: string) {
@@ -572,7 +629,7 @@ function hasPaylinkDraftUpdate(text: string, draft: HelperPaylinkDraft | null) {
   if (isExplicitDraftCorrection(text)) return true
   if (extractAmount(text) || extractNetwork(text) || extractWallet(text) || extractPurpose(text)) return true
   if (!draft?.target) {
-    const mode = draft?.mode ?? (isGroupRequestIntent(text) ? 'group' : 'person')
+    const mode = inferPaylinkRequestMode(text, draft)
     return Boolean(extractTarget(text, mode) || extractInlinePayerName(text, mode))
   }
   return false
@@ -696,18 +753,18 @@ function extractRememberedName(text: string) {
 }
 
 function cleanRelationshipName(value: string) {
-  return value
+  return cleanPayerCandidate(value
     .replace(/\s+\b(?:and\s+i|and\s+we|i\s+want|i\s+need|who|that|she|he|they|for)\b.*$/i, '')
-    .trim()
+    .trim())
 }
 
 function extractRelationshipMemory(text: string) {
   const match = text.match(/\b(?:i have|my)\s+(?:a\s+|an\s+)?(friend|sister|brother|mother|father|partner|client|customer|payer|colleague)\s+(?:called|named|is)\s+(@?[a-zA-Z][\w .-]{1,40})/i)
   if (!match) return null
   const relation = match[1].toLowerCase()
-  const name = usableHelperName(cleanRelationshipName(match[2]))
+  const name = cleanRelationshipName(match[2])
   if (!name) return null
-  return { relation, name: friendlyName(name) }
+  return { relation, name }
 }
 
 function nameFromMemorySummary(value: string) {
@@ -1701,7 +1758,7 @@ function TelegramHelperPanel({
   }
 
   function buildDraftFromText(text: string, existing?: HelperPaylinkDraft | null): HelperPaylinkDraft {
-    const mode = existing?.mode ?? (isGroupRequestIntent(text) ? 'group' : 'person')
+    const mode = inferPaylinkRequestMode(text, existing)
     const walletCorrection = extractWalletCorrection(text)
     const walletFromText = walletCorrection || extractWallet(text)
     const networkCorrection = extractNetworkCorrection(text)
@@ -2397,11 +2454,10 @@ function HelperPaylinkCard({ request }: { request: SavedRequest }) {
     request.mode === 'group' ? 'Hash PayLink collection' : 'Hash PayLink payment request',
     `${request.label} - ${amountLine}`,
     request.mode === 'group' ? `Collection: ${target}` : `Payer: ${target}`,
-    'Please share the receipt after payment is confirmed.',
+    request.mode === 'group'
+      ? 'Open the link, enter your name, and contribute securely.'
+      : 'Please share the receipt after payment is confirmed.',
   ].join('\n')
-  const encodedShareText = encodeURIComponent(`${request.mode === 'group' ? 'Hash PayLink collection' : 'Hash PayLink payment request'}: ${request.label || 'Payment'}`)
-  const encodedShareUrl = encodeURIComponent(url)
-  const encodedShareMessage = encodeURIComponent(`${shareText}\n${url}`)
 
   async function copyLink() {
     await navigator.clipboard.writeText(url)
@@ -2452,7 +2508,7 @@ function HelperPaylinkCard({ request }: { request: SavedRequest }) {
           className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-emerald-200 bg-white px-2.5 py-2 text-xs font-semibold text-emerald-700 dark:border-emerald-300/20 dark:bg-white/[0.06] dark:text-emerald-100"
         >
           <ExternalLink className="h-3.5 w-3.5" />
-          {request.mode === 'group' ? 'Pay' : 'Open'}
+          {request.mode === 'group' ? 'Contribute' : 'Open'}
         </a>
       </div>
       {dashboardUrl && (
@@ -2463,88 +2519,25 @@ function HelperPaylinkCard({ request }: { request: SavedRequest }) {
           className="mt-1.5 inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-emerald-200 bg-white px-2.5 py-2 text-xs font-semibold text-emerald-700 dark:border-emerald-300/20 dark:bg-white/[0.06] dark:text-emerald-100"
         >
           <ExternalLink className="h-3.5 w-3.5" />
-          Track collection
+          Track payments
         </a>
       )}
       <p className="mt-2 text-[11px] font-medium text-emerald-700/80 dark:text-emerald-100/80">
-        Ask for the receipt after payment.
+        {request.mode === 'group'
+          ? 'Each payer enters their name before paying; the dashboard tracks every contribution.'
+          : 'Ask for the receipt after payment.'}
       </p>
-      {shareOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/35 px-4 pb-5 sm:items-center sm:pb-0"
-          onClick={() => setShareOpen(false)}
-        >
-          <div
-            className="w-full max-w-sm rounded-2xl border border-gray-100 bg-white p-4 shadow-2xl dark:border-white/10 dark:bg-gray-950"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="mb-3 flex items-center justify-between">
-              <div>
-                <p className="text-sm font-semibold text-gray-900 dark:text-white">Share PayLink</p>
-                <p className="text-xs text-gray-400">Send the payment request from chat.</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShareOpen(false)}
-                className="flex h-8 w-8 items-center justify-center rounded-xl bg-gray-50 text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:bg-white/[0.08] dark:text-gray-300 dark:hover:bg-white/[0.12]"
-                aria-label="Close share options"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => void copyLink()}
-              className={cn(
-                'mb-2 flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all active:scale-[0.98]',
-                copied
-                  ? 'border border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-300/20 dark:bg-emerald-300/10 dark:text-emerald-100'
-                  : 'bg-black text-white hover:bg-gray-800 dark:bg-white dark:text-gray-950',
-              )}
-            >
-              {copied ? <><CheckCircle2 className="h-4 w-4" /> Copied</> : <><Copy className="h-4 w-4" /> Copy link</>}
-            </button>
-
-            <div className="grid grid-cols-2 gap-2">
-              <a
-                href={`https://wa.me/?text=${encodedShareMessage}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-medium text-gray-700 hover:border-gray-300 hover:bg-gray-50 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:bg-white/[0.08]"
-              >
-                <MessageCircle className="h-4 w-4" />
-                WhatsApp
-              </a>
-              <a
-                href={`https://t.me/share/url?url=${encodedShareUrl}&text=${encodedShareText}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-medium text-gray-700 hover:border-gray-300 hover:bg-gray-50 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:bg-white/[0.08]"
-              >
-                <Send className="h-4 w-4" />
-                Telegram
-              </a>
-              <a
-                href={`https://twitter.com/intent/tweet?url=${encodedShareUrl}&text=${encodedShareText}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-medium text-gray-700 hover:border-gray-300 hover:bg-gray-50 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:bg-white/[0.08]"
-              >
-                <X className="h-4 w-4" />
-                X
-              </a>
-              <a
-                href={`mailto:?subject=${encodeURIComponent('Hash PayLink payment request')}&body=${encodedShareMessage}`}
-                className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-medium text-gray-700 hover:border-gray-300 hover:bg-gray-50 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:bg-white/[0.08]"
-              >
-                <Mail className="h-4 w-4" />
-                Email
-              </a>
-            </div>
-          </div>
-        </div>
-      )}
+      <PayLinkShareSheet
+        open={shareOpen}
+        url={url}
+        copied={copied}
+        shareText={shareText}
+        title="Share payment link"
+        subtitle="Copy it or send it directly."
+        emailSubject={request.mode === 'group' ? 'Hash PayLink collection' : 'Hash PayLink payment request'}
+        onCopy={copyLink}
+        onClose={() => setShareOpen(false)}
+      />
     </div>
   )
 }
@@ -4637,15 +4630,17 @@ function shareOrigin() {
 }
 
 function buildTelegramShareUrl(request: SavedRequest) {
-  const amountLine = request.amount ? `${request.amount} USDC` : 'USDC'
+  const amountLine = request.amount ? `${request.amount} USDC` : 'a flexible USDC amount'
   const targetLine = request.mode === 'group' ? `Group: ${request.target}` : `Payer: ${request.target}`
   const text = [
     request.mode === 'group' ? 'Hash PayLink collection' : 'Hash PayLink payment request',
     '',
-    `${request.label} requested ${amountLine}.`,
+    request.mode === 'group'
+      ? `${request.label} is collecting ${amountLine}.`
+      : `${request.label} requested ${amountLine}.`,
     targetLine,
     '',
-    'Tap to pay securely:',
+    request.mode === 'group' ? 'Tap to contribute securely:' : 'Tap to pay securely:',
   ].join('\n')
   const url = buildShortRequestPayLink(request)
   return `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`
