@@ -750,6 +750,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
 
   function openHubMode(push = true) {
     if (push) pushProductHistory('hub')
+    window.dispatchEvent(new CustomEvent('agent-hash-mode', { detail: { mode: 'support' } }))
     setProductHubOpen(true)
     setAccessMode(false)
     setPosMode(false)
@@ -784,6 +785,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
 
   function openPaymentMode(push = true) {
     if (push) pushProductHistory('payment')
+    window.dispatchEvent(new CustomEvent('agent-hash-mode', { detail: { mode: 'payments', open: true } }))
     setProductHubOpen(false)
     setAccessMode(false)
     setPosMode(false)

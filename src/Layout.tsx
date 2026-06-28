@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Outlet, Link, useLocation, useSearchParams } from 'react-router-dom'
 import { useAccount, useDisconnect, useSwitchChain } from 'wagmi'
 import { usePrivy } from '@privy-io/react-auth'
-import { ChevronDown, LogOut, X, Send, ExternalLink, Search, Sun, Moon, Sparkles } from 'lucide-react'
+import { ChevronDown, LogOut, X, Send, ExternalLink, Search, Sun, Moon } from 'lucide-react'
 import { useStarknet } from './lib/StarknetContext'
 import { useSolana }   from './lib/SolanaContext'
 import { useTheme }    from './lib/ThemeContext'
@@ -40,12 +40,30 @@ type AgentHashMode = 'support' | 'payments'
 const AGENT_HASH_WELCOME: Record<AgentHashMode, ChatMsg> = {
   support: {
     from: 'bot',
-    text: 'Agent Hash Support is ready. Tell me what is stuck, confusing, or not working, and I will help you fix it step by step.',
+    text: "Support mode is ready. Tell me what is stuck, confusing, or not working, and I'll help you fix it step by step.",
   },
   payments: {
     from: 'bot',
-    text: 'Agent Hash Payments is ready. I can help with payment links, receipts, wallet details, supported networks, and payment troubleshooting.',
+    text: 'Payments mode is ready. I can help you request money, create a PayLink, check a receipt, or clarify wallet and network details. What do you want to do?',
   },
+}
+
+function AgentHashCssIcon({ header = false, staticPose = false }: { header?: boolean; staticPose?: boolean }) {
+  return (
+    <div className={`ask-hash-live-agent shrink-0 ${staticPose ? 'ask-hash-live-agent--static' : ''} ${header ? 'ask-hash-live-agent--header' : ''}`} aria-hidden="true">
+      <span className="ask-hash-live-agent__head">
+        <span className="ask-hash-live-agent__eye ask-hash-live-agent__eye--left" />
+        <span className="ask-hash-live-agent__eye ask-hash-live-agent__eye--right" />
+        <span className="ask-hash-live-agent__mouth" />
+      </span>
+      <span className="ask-hash-live-agent__antenna" />
+      <span className="ask-hash-live-agent__bubble">
+        <span />
+        <span />
+        <span />
+      </span>
+    </div>
+  )
 }
 
 const WELCOME: ChatMsg = {
@@ -463,15 +481,53 @@ export default function Layout() {
 
   const { theme, toggle: toggleTheme } = useTheme()
 
-  const agentHashMode: AgentHashMode = isPayPage ? 'payments' : 'support'
+  const [agentHashSurfaceMode, setAgentHashSurfaceMode] = useState<AgentHashMode>('support')
+  const agentHashMode: AgentHashMode = isPayPage || (isCreatePage && searchParams.get('product') === 'payment') ? 'payments' : agentHashSurfaceMode
   const showAgentHashWidget = isCreatePage || isPayPage
   const agentHashStorageKey = `agent-hash-widget:${agentHashMode}`
   const [chatOpen,     setChatOpen]     = useState(false)
+  const [chatMounted,  setChatMounted]  = useState(false)
   const [chatInput,    setChatInput]    = useState('')
   const [chatMessages, setChatMessages] = useState<ChatMsg[]>([AGENT_HASH_WELCOME[agentHashMode]])
   const [isTyping,     setIsTyping]     = useState(false)
   const chatEndRef = useRef<HTMLDivElement>(null)
   const agentHashPanelRef = useRef<HTMLDivElement>(null)
+  const agentHashFabRef = useRef<HTMLButtonElement>(null)
+  const agentHashCloseTimerRef = useRef<number | null>(null)
+
+  function openAgentHashWidget(mode?: AgentHashMode) {
+    if (mode) setAgentHashSurfaceMode(mode)
+    if (agentHashCloseTimerRef.current) window.clearTimeout(agentHashCloseTimerRef.current)
+    setChatMounted(true)
+    window.requestAnimationFrame(() => setChatOpen(true))
+  }
+
+  function closeAgentHashWidget() {
+    setChatOpen(false)
+    if (agentHashCloseTimerRef.current) window.clearTimeout(agentHashCloseTimerRef.current)
+    agentHashCloseTimerRef.current = window.setTimeout(() => setChatMounted(false), 220)
+  }
+
+  function toggleAgentHashWidget() {
+    if (chatOpen) closeAgentHashWidget()
+    else openAgentHashWidget()
+  }
+
+  useEffect(() => {
+    if (isPayPage) setAgentHashSurfaceMode('payments')
+    else if (!isCreatePage || searchParams.get('product') !== 'payment') setAgentHashSurfaceMode('support')
+  }, [isCreatePage, isPayPage, pathname, searchParams])
+
+  useEffect(() => {
+    function handleModeEvent(event: Event) {
+      const detail = (event as CustomEvent<{ mode?: AgentHashMode; open?: boolean }>).detail
+      const mode = detail?.mode === 'payments' ? 'payments' : 'support'
+      setAgentHashSurfaceMode(mode)
+      if (detail?.open) openAgentHashWidget(mode)
+    }
+    window.addEventListener('agent-hash-mode', handleModeEvent)
+    return () => window.removeEventListener('agent-hash-mode', handleModeEvent)
+  }, [])
 
   useEffect(() => {
     setIsTyping(false)
@@ -498,7 +554,8 @@ export default function Layout() {
     function handleOutsideClick(event: MouseEvent) {
       const target = event.target as Node | null
       if (target && agentHashPanelRef.current?.contains(target)) return
-      setChatOpen(false)
+      if (target && agentHashFabRef.current?.contains(target)) return
+      closeAgentHashWidget()
     }
     window.addEventListener('mousedown', handleOutsideClick)
     return () => window.removeEventListener('mousedown', handleOutsideClick)
@@ -759,68 +816,65 @@ export default function Layout() {
       )}
 
       {/* Agent Hash floating widget */}
-      {showAgentHashWidget && chatOpen && (
-        <div className="fixed bottom-20 right-4 sm:right-6 z-50 w-80 sm:w-96 rounded-2xl overflow-hidden shadow-2xl animate-slide-up"
+      {showAgentHashWidget && chatMounted && (
+        <div
           ref={agentHashPanelRef}
-          style={{ background: '#16181d', border: '1px solid rgba(255,255,255,0.08)' }}>
-
-          {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3"
-            style={{ background: '#1e2028', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-            <div className="flex items-center gap-2.5">
-              <div className="flex h-7 w-7 items-center justify-center rounded-full"
-                style={{ background: 'rgba(20,184,166,0.16)', border: '1px solid rgba(20,184,166,0.35)' }}>
-                <Sparkles className="h-3.5 w-3.5 text-teal-300" />
-              </div>
-              <div>
-                <p className="text-[13px] font-semibold text-white leading-none">Agent Hash</p>
-                <p className="text-[10px] text-slate-400 mt-0.5">
-                  {agentHashMode === 'payments' ? 'Payments + support' : 'Support mode'} · Powered by ZeroScout
+          className={[
+            'fixed bottom-20 left-2 right-2 z-50 flex h-[min(680px,calc(100vh-7rem))] origin-bottom-right flex-col overflow-hidden rounded-[28px] border border-gray-100 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.22)] transition-all duration-200 ease-[cubic-bezier(.2,.9,.2,1.08)] dark:border-white/10 dark:bg-[#111114]',
+            'sm:left-auto sm:right-6 sm:w-[430px]',
+            chatOpen ? 'translate-y-0 scale-100 opacity-100' : 'pointer-events-none translate-y-4 scale-90 opacity-0',
+          ].join(' ')}
+        >
+          <div className="flex items-center justify-between border-b border-gray-100 bg-white px-4 py-3 dark:border-white/10 dark:bg-[#111114]">
+            <div className="flex min-w-0 items-center gap-3">
+              <AgentHashCssIcon header staticPose={!chatOpen} />
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">Agent Hash</p>
+                <p className="mt-0.5 truncate text-[11px] font-medium text-gray-400">
+                  {agentHashMode === 'payments' ? 'Payments mode' : 'Support mode'} · Powered by ZeroScout
                 </p>
               </div>
             </div>
-            <button onClick={() => setChatOpen(false)}
-              className="flex h-6 w-6 items-center justify-center rounded-full text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-all">
-              <X className="h-3.5 w-3.5" />
+            <button
+              type="button"
+              onClick={closeAgentHashWidget}
+              aria-label="Close Agent Hash"
+              className="flex h-8 w-8 items-center justify-center rounded-full text-gray-400 transition hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-white/[0.08] dark:hover:text-gray-200"
+            >
+              <X className="h-4 w-4" />
             </button>
           </div>
 
-          {/* Messages */}
-          <div className="h-64 overflow-y-auto px-4 py-3 space-y-3"
-            style={{ scrollbarWidth: 'thin', scrollbarColor: '#2d3039 transparent' }}>
+          <div className="flex-1 space-y-4 overflow-y-auto bg-[#fbfbfc] px-3 py-4 scroll-smooth dark:bg-[#0f0f12]" style={{ scrollbarWidth: 'thin', scrollbarColor: '#d8d8dd transparent' }}>
+            <div className="flex justify-center">
+              <span className="rounded-full border border-gray-200 bg-white px-3 py-1 text-[11px] font-semibold text-gray-600 shadow-sm dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200">
+                {agentHashMode === 'payments' ? 'Payments mode' : 'Support mode'}
+              </span>
+            </div>
+
             {chatMessages.map((msg, i) => (
-              <div key={i} className={`flex ${msg.from === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className="max-w-[85%] space-y-1.5">
-                  <div
-                    className="rounded-2xl px-3.5 py-2.5 text-[13px] leading-relaxed whitespace-pre-line"
-                    style={msg.from === 'user'
-                      ? { background: '#2563eb', color: '#fff', borderBottomRightRadius: 6 }
-                      : { background: '#252830', color: '#cbd5e1', borderBottomLeftRadius: 6 }
-                    }
-                  >
-                    {msg.text}
-                  </div>
-                  {msg.link && (
-                    <a href={msg.link.href} target="_blank" rel="noopener noreferrer"
-                      className="flex items-center gap-1.5 text-[11px] font-medium text-blue-400 hover:text-blue-300 transition-colors px-1">
-                      <ExternalLink className="h-3 w-3 shrink-0" />
-                      {msg.link.label}
-                    </a>
-                  )}
+              <div key={i} className={`space-y-1.5 ${msg.from === 'user' ? 'flex justify-end' : ''}`}>
+                <div className={`max-w-[82%] break-words whitespace-pre-line rounded-[18px] px-3.5 py-2.5 text-sm leading-relaxed shadow-sm ${msg.from === 'user' ? 'rounded-br-md bg-black text-white dark:bg-white dark:text-gray-950' : 'rounded-bl-md bg-[#f0f0f0] text-gray-900 dark:bg-white/[0.08] dark:text-gray-100'}`}>
+                  {msg.text}
                 </div>
+                {msg.link && (
+                  <a href={msg.link.href} target="_blank" rel="noopener noreferrer" className="ml-1 inline-flex items-center gap-1.5 text-[11px] font-semibold text-gray-500 transition hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100">
+                    <ExternalLink className="h-3 w-3 shrink-0" />
+                    {msg.link.label}
+                  </a>
+                )}
               </div>
             ))}
 
             {isTyping && (
               <div className="flex justify-start">
-                <div className="space-y-1 rounded-2xl px-4 py-3" style={{ background: '#252830', borderBottomLeftRadius: 6 }}>
-                  <div className="flex gap-1 items-center h-3">
+                <div className="max-w-[82%] rounded-[18px] rounded-bl-md bg-[#f0f0f0] px-3.5 py-2.5 text-sm shadow-sm dark:bg-white/[0.08]">
+                  <div className="flex h-4 items-center gap-1">
                     {[0, 1, 2].map(i => (
-                      <span key={i} className="h-1.5 w-1.5 rounded-full bg-slate-500"
-                        style={{ animation: `bounce 1s ${i * 0.15}s infinite` }} />
+                      <span key={i} className="h-1.5 w-1.5 rounded-full bg-gray-400 dark:bg-gray-500" style={{ animation: `bounce 1s ${i * 0.15}s infinite` }} />
                     ))}
                   </div>
-                  <p className="text-[10px] italic text-slate-500">
+                  <p className="mt-1 text-[11px] italic text-gray-400">
                     {agentHashMode === 'payments' ? 'Checking payment context...' : 'Putting things in order...'}
                   </p>
                 </div>
@@ -829,36 +883,26 @@ export default function Layout() {
             <div ref={chatEndRef} />
           </div>
 
-          {/* Quick actions */}
-          <div className="flex gap-2 px-4 py-2" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-            <button
-              onClick={handleTrackPayment}
-              className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-medium text-slate-300 hover:text-white hover:bg-white/8 transition-all"
-              style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}
-            >
-              <Search className="h-3 w-3" />
-              Track Payment
-            </button>
-          </div>
-
-          {/* Input */}
-          <div className="flex items-center gap-2 px-4 py-3"
-            style={{ borderTop: '1px solid rgba(255,255,255,0.06)', background: '#1a1c22' }}>
-            <input
-              type="text"
-              value={chatInput}
-              onChange={e => setChatInput(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleSend()}
-              placeholder={agentHashMode === 'payments' ? 'Ask about this payment...' : 'Ask Agent Hash...'}
-              className="flex-1 bg-transparent text-[13px] text-slate-200 placeholder-slate-600 focus:outline-none"
-            />
-            <button
-              onClick={() => handleSend()}
-              disabled={!chatInput.trim()}
-              className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-600 text-white transition-all hover:bg-blue-500 disabled:opacity-30 disabled:cursor-not-allowed active:scale-95"
-            >
-              <Send className="h-3.5 w-3.5" />
-            </button>
+          <div className="border-t border-gray-100 bg-white p-3 dark:border-white/10 dark:bg-[#111114]">
+            <div className="mb-2 flex items-center gap-2">
+              <button type="button" onClick={handleTrackPayment} className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-gray-500 transition hover:bg-gray-50 hover:text-gray-900 dark:border-white/10 dark:bg-white/[0.05] dark:text-gray-300 dark:hover:bg-white/[0.1]">
+                <Search className="h-3 w-3" />
+                Track payment
+              </button>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={chatInput}
+                onChange={e => setChatInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleSend()}
+                placeholder={agentHashMode === 'payments' ? 'Ask about this payment...' : 'Ask Agent Hash...'}
+                className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:ring-2 focus:ring-gray-200 dark:border-white/10 dark:bg-white/[0.05] dark:text-white"
+              />
+              <button type="button" onClick={() => handleSend()} disabled={!chatInput.trim()} aria-label="Send message" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-black text-white transition-all hover:bg-gray-800 active:scale-95 disabled:opacity-40 dark:bg-white dark:text-gray-950">
+                <Send className="h-4 w-4" />
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -866,20 +910,15 @@ export default function Layout() {
       {/* FAB */}
       {showAgentHashWidget && (
         <button
-          onClick={() => setChatOpen(v => !v)}
-          className="fixed bottom-6 right-4 sm:right-6 z-50 flex h-12 w-12 items-center justify-center rounded-full transition-all duration-200 active:scale-95 hover:shadow-lg"
-          style={{
-            background: chatOpen ? '#1e2028' : '#16181d',
-            border: '1px solid rgba(255,255,255,0.10)',
-            boxShadow: chatOpen
-              ? '0 0 0 3px rgba(20,184,166,0.16), 0 8px 24px rgba(0,0,0,0.4)'
-              : '0 4px 20px rgba(0,0,0,0.35)',
-          }}
+          ref={agentHashFabRef}
+          type="button"
+          onClick={toggleAgentHashWidget}
+          className="fixed bottom-5 right-4 z-50 flex h-14 w-14 items-center justify-center rounded-full border border-gray-100 bg-white shadow-[0_14px_40px_rgba(15,23,42,0.22)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_48px_rgba(15,23,42,0.28)] active:scale-95 dark:border-white/10 dark:bg-[#111114] sm:right-6"
           title="Agent Hash"
         >
           {chatOpen
-            ? <X className="h-5 w-5 text-slate-400" />
-            : <Sparkles className="h-5 w-5 text-teal-200" />
+            ? <X className="h-5 w-5 text-gray-500 dark:text-gray-300" />
+            : <AgentHashCssIcon staticPose />
           }
         </button>
       )}
