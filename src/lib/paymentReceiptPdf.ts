@@ -91,7 +91,7 @@ function receiptLabels(receipt: PaylinkReceipt) {
   return { heading, title, amountLabel, payer, context, contextValue, merchantLabel, merchantValue }
 }
 
-export async function createPaymentReceiptPdf(receipt: PaylinkReceipt) {
+export async function createPaymentReceiptImage(receipt: PaylinkReceipt) {
   const canvas = document.createElement('canvas')
   const scale = 2
   const width = 612
@@ -99,7 +99,7 @@ export async function createPaymentReceiptPdf(receipt: PaylinkReceipt) {
   canvas.width = width * scale
   canvas.height = height * scale
   const ctx = canvas.getContext('2d')
-  if (!ctx) return new Blob([], { type: 'application/pdf' })
+  if (!ctx) return ''
   ctx.scale(scale, scale)
 
   const [logo, ogLogo] = await Promise.all([
@@ -107,12 +107,18 @@ export async function createPaymentReceiptPdf(receipt: PaylinkReceipt) {
     loadImage('/brand/0g-logo.jpeg'),
   ])
   drawReceiptCanvas(ctx, receipt, width, height, logo, ogLogo)
-  const jpeg = await new Promise<string>((resolve) => canvas.toBlob(blob => {
+  return new Promise<string>((resolve) => canvas.toBlob(blob => {
     if (!blob) return resolve('')
     const reader = new FileReader()
     reader.onload = () => resolve(String(reader.result ?? ''))
     reader.readAsDataURL(blob)
   }, 'image/jpeg', 0.94))
+}
+
+export async function createPaymentReceiptPdf(receipt: PaylinkReceipt) {
+  const width = 612
+  const height = 792
+  const jpeg = await createPaymentReceiptImage(receipt)
   return createPdfWithJpeg(jpeg, width, height)
 }
 

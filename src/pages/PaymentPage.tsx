@@ -78,6 +78,23 @@ const CHAINS: ChainKey[] = ['base', 'solana', 'arbitrum']
 const POLYMARKET_SIGNUP_URL = 'https://polymarket.com'
 const POLYMARKET_LOGO = '/brand/polymarket-logo.png'
 
+function PolymarketMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className={className} fill="none">
+      <path
+        d="M6.25 5.8 18.4 2.75a1 1 0 0 1 1.24.97v16.56a1 1 0 0 1-1.24.97L6.25 18.2a1 1 0 0 1-.75-.97V6.77a1 1 0 0 1 .75-.97Z"
+        stroke="currentColor"
+        strokeWidth="2.1"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M7.2 8.45 17.2 5.9v5.35L7.2 8.45ZM7.2 15.55l10-2.8v5.35l-10-2.55Z"
+        fill="currentColor"
+      />
+    </svg>
+  )
+}
+
 function agentAvatarHue(seed: string) {
   let hash = 0
   for (let i = 0; i < seed.length; i += 1) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0
@@ -3294,7 +3311,7 @@ export default function PaymentPage() {
             </div>
             <h2 className="text-xl font-bold text-gray-900">
               {isUnder ? 'Underpayment Detected'
-               : isPolymarketFunding ? 'Completed'
+               : isPolymarketFunding ? 'Funded!'
                : 'Payment Sent!'}
             </h2>
             <p className="mt-1 text-sm text-gray-600">
@@ -3303,8 +3320,12 @@ export default function PaymentPage() {
                   <span className={cn('font-semibold', isUnder ? 'text-amber-700' : 'text-gray-900')}>
                     {formatPaymentAmountDisplay(recipientAmt, meta.decimals)} {meta.asset}
                   </span>
-                  {' '}
-                  {isUnder ? 'received - ' : isPolymarketFunding ? 'funded' : 'received by recipient'}
+                  {!isPolymarketFunding && (
+                    <>
+                      {' '}
+                      {isUnder ? 'received - ' : 'received by recipient'}
+                    </>
+                  )}
                   {isUnder && (
                     <span className={cn(
                       'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold',
@@ -3325,12 +3346,15 @@ export default function PaymentPage() {
                 <>
                   <span className="font-semibold text-gray-900">
                     {formatAmount(effectiveAmt, meta.decimals)} {meta.asset}
-                  </span>{' '}
-                  {isPolymarketFunding
-                    ? 'funded'
-                    : manualPayDetected && directStatus !== 'success'
-                    ? 'received by recipient'
-                    : 'delivered successfully'}
+                  </span>
+                  {!isPolymarketFunding && (
+                    <>
+                      {' '}
+                      {manualPayDetected && directStatus !== 'success'
+                        ? 'received by recipient'
+                        : 'delivered successfully'}
+                    </>
+                  )}
                 </>
               )}
             </p>
@@ -3344,9 +3368,7 @@ export default function PaymentPage() {
                 <div className="flex items-center justify-between px-4 py-3">
                   <span className="text-sm text-gray-500">For</span>
                   <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-gray-800">
-                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-gray-200 bg-gray-950 p-0.5">
-                      <img src={POLYMARKET_LOGO} alt="" className="h-full w-full rounded-full object-contain invert" />
-                    </span>
+                    <PolymarketMark className="h-5 w-5 text-[#1652f0]" />
                     <span>Polymarket funding</span>
                   </span>
                 </div>
@@ -3441,9 +3463,7 @@ export default function PaymentPage() {
                     rel="noopener noreferrer"
                     className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98]"
                   >
-                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-gray-200 bg-gray-950 p-0.5">
-                      <img src={POLYMARKET_LOGO} alt="" className="h-full w-full rounded-full object-contain invert" />
-                    </span>
+                    <PolymarketMark className="h-5 w-5 text-[#1652f0]" />
                     Trade on Polymarket
                   </a>
                 )}

@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, CheckCircle2, Download, ExternalLink, Loader2, Share2, ShieldCheck, XCircle } from 'lucide-react'
 import {
   compactReceiptAmount,
+  createPaymentReceiptImage,
   createPaymentReceiptPdf,
   paymentReceiptFileName,
   type PaylinkReceipt,
@@ -54,7 +55,7 @@ export default function X402Receipt() {
   const [busy, setBusy] = useState(true)
   const [shared, setShared] = useState(false)
   const [circleNotice, setCircleNotice] = useState(false)
-  const [paylinkReceiptUrl, setPaylinkReceiptUrl] = useState('')
+  const [paylinkReceiptImage, setPaylinkReceiptImage] = useState('')
 
   async function load() {
     setBusy(true)
@@ -117,23 +118,20 @@ export default function X402Receipt() {
 
   useEffect(() => {
     if (!paylinkReceipt) {
-      setPaylinkReceiptUrl('')
+      setPaylinkReceiptImage('')
       return
     }
     let cancelled = false
-    let objectUrl = ''
-    createPaymentReceiptPdf(paylinkReceipt)
-      .then(blob => {
+    createPaymentReceiptImage(paylinkReceipt)
+      .then(image => {
         if (cancelled) return
-        objectUrl = URL.createObjectURL(blob)
-        setPaylinkReceiptUrl(objectUrl)
+        setPaylinkReceiptImage(image)
       })
       .catch(() => {
-        if (!cancelled) setPaylinkReceiptUrl('')
+        if (!cancelled) setPaylinkReceiptImage('')
       })
     return () => {
       cancelled = true
-      if (objectUrl) URL.revokeObjectURL(objectUrl)
     }
   }, [paylinkReceipt])
 
@@ -208,11 +206,11 @@ export default function X402Receipt() {
           Back
         </button>
         <section className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-card dark:border-white/10 dark:bg-[#1c1c20]">
-          {paylinkReceiptUrl ? (
-            <iframe
-              title={paylinkReceipt.title || 'Hash PayLink receipt'}
-              src={paylinkReceiptUrl}
-              className="h-[min(82vh,900px)] w-full bg-white"
+          {paylinkReceiptImage ? (
+            <img
+              src={paylinkReceiptImage}
+              alt={paylinkReceipt.title || 'Hash PayLink receipt'}
+              className="block w-full bg-white"
             />
           ) : (
             <div className="flex min-h-[420px] items-center justify-center gap-2 text-sm font-semibold text-gray-500 dark:text-gray-300">
