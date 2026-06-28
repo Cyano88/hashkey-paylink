@@ -312,6 +312,7 @@ export default function PaymentPage() {
   const isPolymarketBridge = isPolymarketFunding && searchParams.get('bridge') === 'polymarket'
   const polymarketWalletParam = (searchParams.get('pmw') || '').trim()
   const polymarketFundingLabel = (searchParams.get('funding') || searchParams.get('payer') || '').trim() || 'Self funding'
+  const polymarketFundingRequestId = (searchParams.get('pmr') || '').trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64)
   const polymarketReturnTarget = searchParams.get('return') ?? ''
   const polymarketReturnToPortfolio = polymarketReturnTarget === 'poly-portfolio'
   const polymarketReturnToAgentHash = polymarketReturnTarget === 'agent-hash-polydesk-portfolio'
@@ -444,6 +445,8 @@ export default function PaymentPage() {
   const ordinaryReceiptRegistered = useRef(false)
   const accessRedirected = useRef(false)
   const polymarketReturnRedirected = useRef(false)
+  const polymarketFundingMarkRef = useRef('')
+  const polymarketFundingMarkInFlightRef = useRef('')
   const ngPosRegistered  = useRef(false)
   const requiresAttendeeName = (isEventMode || isNgPosPayment) && !isPolymarketFunding && !isAgentOrWalletFunding && !isHelperAccess
 
@@ -3002,6 +3005,27 @@ export default function PaymentPage() {
     }
   }
 
+  async function markPolymarketFundingComplete(status: 'confirmed' | 'complete') {
+    if (!txHash || !isPolymarketFunding || !privyAuthenticated) return false
+    const token = await getAccessToken().catch(() => null)
+    if (!token) return false
+    const res = await fetch('/api/polymarket-portfolio', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        action: 'complete-funding',
+        requestId: polymarketFundingRequestId,
+        network: chain,
+        amount: effectiveAmt,
+        status,
+        bridgeStatus: status,
+        txHash,
+        depositAddress: activeRecipient,
+      }),
+    }).catch(() => undefined)
+    return Boolean(res?.ok)
+  }
+
   useEffect(() => {
     if (!isConfirmed || !isEventMode || !eventId || eventRegistered.current) return
     const name = isAgentOrWalletFunding ? (memo || (isWalletManagerFunding ? 'x402 wallet funding' : 'Agent wallet funding')) : attendeeName.trim()
@@ -3057,6 +3081,22 @@ export default function PaymentPage() {
     void registerPolymarketFundingReceipt()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isConfirmed, txHash])
+
+  useEffect(() => {
+    if (!isConfirmed || !txHash || !isPolymarketFunding || !privyAuthenticated) return
+    const status = polymarketBridgeStatus === 'complete' ? 'complete' : 'confirmed'
+    const markKey = `${txHash}:${status}`
+    if (polymarketFundingMarkRef.current === markKey || polymarketFundingMarkInFlightRef.current === markKey) return
+    polymarketFundingMarkInFlightRef.current = markKey
+    void markPolymarketFundingComplete(status)
+      .then((ok) => {
+        if (ok) polymarketFundingMarkRef.current = markKey
+      })
+      .finally(() => {
+        if (polymarketFundingMarkInFlightRef.current === markKey) polymarketFundingMarkInFlightRef.current = ''
+      })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isConfirmed, txHash, isPolymarketFunding, polymarketBridgeStatus, privyAuthenticated])
 
   useEffect(() => {
     if (!paymentReceiptId) return

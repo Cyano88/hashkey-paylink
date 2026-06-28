@@ -621,6 +621,59 @@ export default async function handler(req: Request, res: Response) {
       return res.json({ ok: true, fundingAttempt: inserted.rows[0] })
     }
 
+    if (action === 'complete-funding') {
+      const network = cleanString(body.network, 12)
+      if (!SUPPORTED_NETWORKS.has(network)) return res.status(400).json({ ok: false, error: 'Unsupported funding network.' })
+      const amount = cleanAmount(body.amount)
+      if (!amount) return res.status(400).json({ ok: false, error: 'Provide a valid funding amount.' })
+      const requestId = cleanString(body.requestId, 64) || null
+      const txHash = cleanString(body.txHash, 96)
+      if (!txHash) return res.status(400).json({ ok: false, error: 'txHash is required.' })
+      const depositAddress = cleanString(body.depositAddress, 96) || null
+      const bridgeStatus = cleanString(body.bridgeStatus, 32)
+      const status = bridgeStatus === 'complete' ? 'bridge_complete' : 'confirmed'
+      const profileRow = (await requirePool().query(
+        'select polymarket_address from polymarket_profiles where privy_user_id = $1',
+        [privyUserId],
+      )).rows[0]
+      if (!profileRow) return res.status(409).json({ ok: false, error: 'Save a Polymarket profile address first.' })
+
+      let updated
+      if (requestId) {
+        updated = await requirePool().query(
+          `update polymarket_funding_attempts
+             set status = $1, tx_hash = $2, deposit_address = coalesce($3, deposit_address), updated_at = now()
+           where privy_user_id = $4 and request_id = $5
+           returning id, request_id, network, amount, status, tx_hash, deposit_address, created_at`,
+          [status, txHash, depositAddress, privyUserId, requestId],
+        )
+      }
+      if (!updated?.rowCount && depositAddress) {
+        updated = await requirePool().query(
+          `update polymarket_funding_attempts
+             set status = $1, tx_hash = $2, updated_at = now()
+           where id = (
+             select id from polymarket_funding_attempts
+              where privy_user_id = $3 and deposit_address = $4
+              order by created_at desc
+              limit 1
+           )
+           returning id, request_id, network, amount, status, tx_hash, deposit_address, created_at`,
+          [status, txHash, privyUserId, depositAddress],
+        )
+      }
+      if (updated?.rowCount) return res.json({ ok: true, fundingAttempt: updated.rows[0] })
+
+      const inserted = await requirePool().query(
+        `insert into polymarket_funding_attempts
+          (privy_user_id, polymarket_address, request_id, network, amount, status, tx_hash, deposit_address)
+         values ($1,$2,$3,$4,$5,$6,$7,$8)
+         returning id, request_id, network, amount, status, tx_hash, deposit_address, created_at`,
+        [privyUserId, String(profileRow.polymarket_address), requestId, network, amount, status, txHash, depositAddress],
+      )
+      return res.json({ ok: true, fundingAttempt: inserted.rows[0] })
+    }
+
     if (action === 'mark-alert-read') {
       const alertId = Number(body.alertId)
       if (!Number.isInteger(alertId) || alertId <= 0) return res.status(400).json({ ok: false, error: 'alertId is required.' })

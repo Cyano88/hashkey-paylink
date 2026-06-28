@@ -53,6 +53,11 @@ function shortAddress(value: string) {
   return value.length > 14 ? `${value.slice(0, 6)}...${value.slice(-4)}` : value
 }
 
+function polymarketFundingRequestId() {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID()
+  return `pmf-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+}
+
 type TelegramSectionId = 'payment-links' | 'agent-wallets' | 'market-tools' | 'streampay'
 type TelegramServiceId =
   | 'request-usdc'
@@ -2267,6 +2272,7 @@ function TelegramHelperPanel({
         throw new Error(bridgeData.error || 'Could not prepare Polymarket bridge checkout.')
       }
       const finalNetwork = (bridgeData.network ?? bridgeNetwork) as RequestNetwork
+      const requestId = polymarketFundingRequestId()
       await fetch('/api/polymarket-portfolio', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -2275,6 +2281,7 @@ function TelegramHelperPanel({
           network: finalNetwork,
           amount: requestedAmount,
           status: 'pending',
+          requestId,
           depositAddress: bridgeData.depositAddress,
         }),
       }).catch(() => undefined)
@@ -2285,6 +2292,7 @@ function TelegramHelperPanel({
         network: finalNetwork,
         polymarketWallet: address,
         returnToAgentHash: true,
+        requestId,
       })
       return {
         answer: `Bridge checkout ready for ${requestedAmount} USDC to your Polymarket profile ${shortAddress(address)} on ${requestNetworkLabels[finalNetwork]}.`,
@@ -5036,6 +5044,7 @@ function buildPolymarketPayLink({
   polymarketWallet,
   returnToPortfolio,
   returnToAgentHash,
+  requestId,
 }: {
   wallet: string
   amount: string
@@ -5044,6 +5053,7 @@ function buildPolymarketPayLink({
   polymarketWallet: string
   returnToPortfolio?: boolean
   returnToAgentHash?: boolean
+  requestId?: string
 }) {
   const params = new URLSearchParams()
   params.set('a', amount)
@@ -5056,6 +5066,7 @@ function buildPolymarketPayLink({
   params.set('pm', '1')
   params.set('bridge', 'polymarket')
   params.set('pmw', polymarketWallet)
+  if (requestId) params.set('pmr', requestId)
   if (returnToAgentHash) params.set('return', 'agent-hash-polydesk-portfolio')
   if (returnToPortfolio) params.set('return', 'poly-portfolio')
   if (funding) params.set('funding', funding)
@@ -5585,6 +5596,7 @@ function PolyPortfolioPanel({
       if (!bridgeRes.ok || !bridgeData.ok || !bridgeData.depositAddress) {
         throw new Error(bridgeData.error || 'Could not prepare bridge address.')
       }
+      const requestId = polymarketFundingRequestId()
       const token = await getAccessToken()
       if (token) {
         await fetch('/api/polymarket-portfolio', {
@@ -5595,6 +5607,7 @@ function PolyPortfolioPanel({
             network: bridgeData.network ?? network,
             amount: amt,
             status: 'pending',
+            requestId,
             depositAddress: bridgeData.depositAddress,
           }),
         }).catch(() => undefined)
@@ -5606,6 +5619,7 @@ function PolyPortfolioPanel({
         network: (bridgeData.network ?? network) as RequestNetwork,
         polymarketWallet: profile.polymarketAddress,
         returnToPortfolio: true,
+        requestId,
       })
       setFundResult({
         depositAddress: bridgeData.depositAddress,
