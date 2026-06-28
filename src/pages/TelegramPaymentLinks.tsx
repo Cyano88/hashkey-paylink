@@ -2265,13 +2265,26 @@ function TelegramHelperPanel({
     const matches = data.matches ?? []
     const wantsToday = /\b(today|tonight|now|live|playing)\b/i.test(nextQuestion)
     const wantsUpcoming = /\b(upcoming|next|schedule|fixtures|all fixtures|all upcoming)\b/i.test(nextQuestion)
+    const wantsTradeLink = /\b(trade|trading|link|open market|market link)\b/i.test(nextQuestion)
+    const wantsLiquidity = /\b(liquidity|volume|market price|prices?|odds)\b/i.test(nextQuestion)
+    const wantsGoals = /\b(goal|goals|scored|scorer|scorers|goalscorer|goalscorers)\b/i.test(nextQuestion)
+    const wantsCards = /\b(card|cards|yellow|red)\b/i.test(nextQuestion)
+    const wantsCorners = /\b(corner|corners)\b/i.test(nextQuestion)
+    const wantsStats = /\b(stat|stats|statistics)\b/i.test(nextQuestion) || wantsCards || wantsCorners
+    const wantsMatchDetail = wantsTradeLink || wantsLiquidity || wantsGoals || wantsCards || wantsCorners || wantsStats
     const todayMatches = matches.filter(match => {
       const kickoffTime = Date.parse(match.kickoffAt || match.time)
       if (/^(live|today)$/i.test(match.tag)) return true
       if (!Number.isFinite(kickoffTime)) return false
       return new Date(kickoffTime).toDateString() === new Date().toDateString()
     })
-    if (wantsToday && todayMatches.length) {
+    const words = nextQuestion.toLowerCase().match(/[a-z]{3,}/g)?.filter(word => !['what', 'when', 'score', 'scores', 'between', 'playing', 'their', 'next', 'world', 'cup', 'game', 'games', 'match', 'matches', 'fixture', 'fixtures', 'current', 'latest', 'today', 'tonight', 'live', 'upcoming', 'schedule', 'all', 'trade', 'trading', 'link', 'open', 'market', 'polymarket', 'liquidity', 'volume', 'price', 'prices', 'odds', 'goal', 'goals', 'scored', 'scorer', 'scorers', 'goalscorer', 'goalscorers', 'card', 'cards', 'yellow', 'red', 'corner', 'corners', 'stat', 'stats', 'statistics', 'played', 'particular'].includes(word)) ?? []
+    const matchedByWords = words.length ? matches.find(item => {
+      const title = item.title.toLowerCase()
+      const hits = words.filter(word => title.includes(word))
+      return hits.length >= Math.min(2, Math.max(1, words.length))
+    }) : undefined
+    if (wantsToday && todayMatches.length && !matchedByWords && !wantsMatchDetail) {
       const lines = todayMatches.slice(0, 4).map(match => {
         const state = matchDisplayState(match)
         const score = hasMatchScore(match) ? `${match.homeScore}-${match.awayScore}` : state.center
@@ -2280,6 +2293,78 @@ function TelegramHelperPanel({
       return {
         answer: `Today's verified World Cup matches:\n${lines.join('\n')}`,
         actionLink: { label: 'Live board', url: scoresUrl },
+      }
+    }
+    const match = matchedByWords || (words.length || wantsMatchDetail ? undefined : matches[0])
+    if (wantsMatchDetail && !match) {
+      return {
+        answer: 'Which match should I check? Send the fixture name, for example: South Africa vs Canada.',
+        actionLink: { label: 'Live board', url: scoresUrl },
+      }
+    }
+    if (match && wantsMatchDetail) {
+      const state = matchDisplayState(match)
+      const score = hasMatchScore(match) ? `${match.homeScore}-${match.awayScore}` : state.center
+      const actionLinks = [
+        { label: 'Live board', url: scoresUrl },
+        ...(match.polymarketUrl ? [{ label: 'Market', url: match.polymarketUrl }] : []),
+      ]
+      if (wantsTradeLink) {
+        return {
+          answer: match.polymarketUrl
+            ? `Trade route found for ${match.title}. Current board status: ${state.tag}, ${score}.`
+            : `I do not have a verified Polymarket trade route for ${match.title} right now.`,
+          actionLinks,
+        }
+      }
+      if (wantsLiquidity) {
+        const liquidity = match.polymarketLiquidity ? `Liquidity: ${match.polymarketLiquidity}.` : 'Liquidity is not verified in the feed right now.'
+        const volume = match.polymarketVolume ? `Volume: ${match.polymarketVolume}.` : ''
+        const price = match.probability ? `Market price: ${match.probability}.` : ''
+        return {
+          answer: `${match.title}: ${liquidity}${volume ? ` ${volume}` : ''}${price ? ` ${price}` : ''}`,
+          actionLinks,
+        }
+      }
+      if (wantsGoals) {
+        const goals = (match.goalScorers || []).map(goal => formatGoalScorer(goal, ...splitFixtureTitle(match.title))).filter(Boolean)
+        return {
+          answer: goals.length
+            ? `${match.title} goals:\n${goals.slice(0, 6).join('\n')}`
+            : `${match.title}: no verified goalscorer names are available in the feed right now. Score/status: ${score}.`,
+          actionLinks,
+        }
+      }
+      if (wantsCards) {
+        const [home, away] = splitFixtureTitle(match.title)
+        const cardEvents = (match.events || [])
+          .filter(event => /\b(card|yellow|red)\b/i.test(event))
+          .map(event => formatMatchEvent(event, home, away))
+          .filter((event): event is MatchEventDetail => Boolean(event))
+        const yellowCount = cardEvents.filter(event => event.kind === 'yellow' || event.kind === 'yellow-red').length
+        const redCount = cardEvents.filter(event => event.kind === 'red' || event.kind === 'yellow-red').length
+        return {
+          answer: cardEvents.length
+            ? `${match.title} cards: ${yellowCount} yellow, ${redCount} red.\n${cardEvents.slice(0, 6).map(event => event.text).join('\n')}`
+            : `${match.title}: no verified card events are available in the feed right now.`,
+          actionLinks,
+        }
+      }
+      if (wantsCorners) {
+        const cornerStats = (match.stats || []).filter(stat => /\bcorner|corners\b/i.test(stat))
+        return {
+          answer: cornerStats.length
+            ? `${match.title} corner stats:\n${cornerStats.slice(0, 4).join('\n')}`
+            : `${match.title}: verified corner stats are not available in the feed right now.`,
+          actionLinks,
+        }
+      }
+      const stats = (match.stats || []).filter(Boolean)
+      return {
+        answer: stats.length
+          ? `${match.title} verified stats:\n${stats.slice(0, 6).join('\n')}`
+          : `${match.title}: detailed verified match stats are not available in the feed right now. Score/status: ${score}.`,
+        actionLinks,
       }
     }
     const upcomingMatches = matches.filter(match => {
@@ -2297,12 +2382,6 @@ function TelegramHelperPanel({
         actionLink: { label: 'Live board', url: scoresUrl },
       }
     }
-    const words = nextQuestion.toLowerCase().match(/[a-z]{3,}/g)?.filter(word => !['what', 'when', 'score', 'scores', 'between', 'playing', 'their', 'next', 'world', 'cup', 'game', 'games', 'match', 'matches', 'fixture', 'fixtures', 'current', 'latest', 'today', 'tonight', 'live', 'upcoming', 'schedule', 'all'].includes(word)) ?? []
-    const match = matches.find(item => {
-      const title = item.title.toLowerCase()
-      const hits = words.filter(word => title.includes(word))
-      return hits.length >= Math.min(2, Math.max(1, words.length))
-    }) || (words.length ? undefined : matches[0])
     if (!match) {
       return {
         answer: 'I do not have verified World Cup match data from the feed right now.',
