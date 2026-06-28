@@ -48,6 +48,13 @@ const AGENT_HASH_WELCOME: Record<AgentHashMode, ChatMsg> = {
   },
 }
 
+const agentHashThinkingCopy: Record<AgentHashMode, string[]> = {
+  support: ['Reading this...', 'Checking context...', 'Preparing reply...', 'Putting things in order...'],
+  payments: ['Checking payment context...', 'Matching details...', 'Validating flow...', 'Preparing reply...'],
+}
+
+const agentHashSlowThinkingCopy = ['Putting things in order...', 'Almost ready...', 'Please be patient...']
+
 function AgentHashCssIcon({ header = false, staticPose = false }: { header?: boolean; staticPose?: boolean }) {
   return (
     <div className={`ask-hash-live-agent shrink-0 ${staticPose ? 'ask-hash-live-agent--static' : ''} ${header ? 'ask-hash-live-agent--header' : ''}`} aria-hidden="true">
@@ -62,6 +69,46 @@ function AgentHashCssIcon({ header = false, staticPose = false }: { header?: boo
         <span />
         <span />
       </span>
+    </div>
+  )
+}
+
+function AgentHashThinkingIndicator({ mode }: { mode: AgentHashMode }) {
+  const [stepIndex, setStepIndex] = useState(0)
+  const [slowPhase, setSlowPhase] = useState(-1)
+  const steps = agentHashThinkingCopy[mode]
+
+  useEffect(() => {
+    setSlowPhase(-1)
+    setStepIndex(Math.floor(Math.random() * steps.length))
+    const slowTimers = [6500, 10500, 15000].map((delay, index) => (
+      window.setTimeout(() => setSlowPhase(index), delay)
+    ))
+    const timer = window.setInterval(() => {
+      setStepIndex(index => (index + 1) % steps.length)
+    }, 900)
+    return () => {
+      slowTimers.forEach(window.clearTimeout)
+      window.clearInterval(timer)
+    }
+  }, [mode, steps.length])
+
+  return (
+    <div className="max-w-[82%]">
+      <div className="inline-flex items-center rounded-[18px] rounded-bl-md bg-[#f0f0f0] px-3.5 py-2.5 text-sm shadow-sm dark:bg-white/[0.08]">
+        <span className="inline-flex h-4 items-center gap-1">
+          {[0, 1, 2].map(index => (
+            <span
+              key={index}
+              className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-400 dark:bg-gray-500"
+              style={{ animationDelay: `${index * 120}ms` }}
+            />
+          ))}
+        </span>
+      </div>
+      <p className="ml-3 mt-1 text-[11px] italic text-gray-400">
+        {slowPhase >= 0 ? agentHashSlowThinkingCopy[slowPhase] : steps[stepIndex]}
+      </p>
     </div>
   )
 }
@@ -860,16 +907,7 @@ export default function Layout() {
 
             {isTyping && (
               <div className="flex justify-start">
-                <div className="max-w-[82%] rounded-[18px] rounded-bl-md bg-[#f0f0f0] px-3.5 py-2.5 text-sm shadow-sm dark:bg-white/[0.08]">
-                  <div className="flex h-4 items-center gap-1">
-                    {[0, 1, 2].map(i => (
-                      <span key={i} className="h-1.5 w-1.5 rounded-full bg-gray-400 dark:bg-gray-500" style={{ animation: `bounce 1s ${i * 0.15}s infinite` }} />
-                    ))}
-                  </div>
-                  <p className="mt-1 text-[11px] italic text-gray-400">
-                    {agentHashMode === 'payments' ? 'Checking payment context...' : 'Putting things in order...'}
-                  </p>
-                </div>
+                <AgentHashThinkingIndicator mode={agentHashMode} />
               </div>
             )}
             <div ref={chatEndRef} />
