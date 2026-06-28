@@ -356,6 +356,10 @@ export default function PaymentPage() {
   const isFlex         = hasPaylinkFlag(searchParams, 'flex', 'f')
 
   function goBackFromCheckout() {
+    if (isPolymarketBridge) {
+      window.location.assign(polymarketReturnToAgentHash ? polymarketAgentHashUrl : polymarketPortfolioUrl)
+      return
+    }
     if (window.history.length > 1) {
       window.history.back()
       return
@@ -376,10 +380,6 @@ export default function PaymentPage() {
     }
     if (isAgentOrWalletFunding) {
       window.location.assign(agentFundingBackUrl)
-      return
-    }
-    if (isPolymarketBridge) {
-      window.location.assign(polymarketReturnToAgentHash ? polymarketAgentHashUrl : polymarketPortfolioUrl)
       return
     }
     window.location.assign(ngPosBackUrl)

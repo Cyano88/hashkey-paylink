@@ -845,7 +845,7 @@ function todayKey() {
 
 export default function TelegramPaymentLinks() {
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const startPayload = (searchParams.get('start') ?? searchParams.get('tgWebAppStartParam') ?? telegramWebAppStartParam()).trim().toLowerCase()
   const initialMode: RequestMode | '' = searchParams.get('mode') === 'group' ? 'group' : searchParams.get('mode') === 'person' ? 'person' : ''
   const initialSectionParam = searchParams.get('section')
@@ -1038,6 +1038,17 @@ export default function TelegramPaymentLinks() {
     setActiveService('')
     setRequestMode('')
     setPolymarketMode('')
+    const next = new URLSearchParams(searchParams)
+    next.set('section', section)
+    ;['service', 'mode', 'poly', 'notice', 'open'].forEach(key => next.delete(key))
+    setSearchParams(next, { replace: true })
+  }
+
+  function clearTelegramServiceRoute(nextSection?: TelegramSectionId) {
+    const next = new URLSearchParams(searchParams)
+    if (nextSection) next.set('section', nextSection)
+    ;['service', 'mode', 'poly', 'notice', 'open', 'eventId', 'payer'].forEach(key => next.delete(key))
+    setSearchParams(next, { replace: true })
   }
 
   function openService(service: TelegramService) {
@@ -1172,6 +1183,34 @@ export default function TelegramPaymentLinks() {
   }
 
   function goBackFromTelegramDashboard() {
+    if (activeService) {
+      if (activeService === 'hashpaylink-helper') {
+        setActiveService('')
+        setActiveSection('payment-links')
+        clearTelegramServiceRoute('payment-links')
+        return
+      }
+      if (activeService === 'poly-worldcup-news' || activeService === 'poly-stream') {
+        setActiveService('poly-worldcup')
+        const next = new URLSearchParams(searchParams)
+        next.set('section', 'market-tools')
+        next.set('service', 'poly-worldcup')
+        ;['mode', 'poly', 'notice', 'open'].forEach(key => next.delete(key))
+        setSearchParams(next, { replace: true })
+        return
+      }
+      if (activeService === 'fund-polymarket' && polymarketMode) {
+        setPolymarketMode('')
+        return
+      }
+      if (activeService === 'request-usdc' && requestMode) {
+        setRequestMode('')
+        return
+      }
+      setActiveService('')
+      clearTelegramServiceRoute()
+      return
+    }
     if (window.history.length > 1) {
       navigate(-1)
       return
@@ -1394,8 +1433,8 @@ export default function TelegramPaymentLinks() {
               fallbackOwner={telegramIdentity.legacyOwner}
               initialEventId={searchParams.get('eventId') ?? ''}
               initialPayer={searchParams.get('payer') ?? ''}
-              initialHelperMode={searchParams.get('mode') === 'polydesk' ? 'polydesk' : ''}
-              initialPolyDeskSubMode={searchParams.get('poly') === 'portfolio' ? 'portfolio' : searchParams.get('poly') === 'worldcup' ? 'worldcup' : searchParams.get('poly') === 'lp-scout' ? 'lp-scout' : ''}
+              initialHelperMode={searchParams.get('notice') === 'polymarket-funding-complete' && searchParams.get('mode') === 'polydesk' ? 'polydesk' : ''}
+              initialPolyDeskSubMode={searchParams.get('notice') === 'polymarket-funding-complete' ? (searchParams.get('poly') === 'portfolio' ? 'portfolio' : searchParams.get('poly') === 'worldcup' ? 'worldcup' : searchParams.get('poly') === 'lp-scout' ? 'lp-scout' : '') : ''}
               initialNotice={searchParams.get('notice') ?? ''}
               onRecoverTelegramName={rememberRecoveredHelperName}
               onBack={() => setActiveService('')}
@@ -1658,7 +1697,7 @@ function TelegramHelperPanel({
     if (ownerKey) profileParams.set('owner', ownerKey)
     if (lookupPayer) profileParams.set('payer', lookupPayer)
     if (fallbackOwner) profileParams.set('fallbackOwner', fallbackOwner)
-    profileParams.set('threadId', activeHelperThreadId)
+    if (helperMode) profileParams.set('threadId', activeHelperThreadId)
     fetch(`/api/helper-profile?${profileParams.toString()}`)
       .then(res => res.json() as Promise<{ ok?: boolean; profile?: HelperProfile | null; error?: string }>)
       .then(data => {
@@ -1678,7 +1717,7 @@ function TelegramHelperPanel({
         const recoveredName = data.profile?.telegramHandle || usableHelperName(data.profile?.displayName || '') || ''
         if (recoveredName) onRecoverTelegramName(recoveredName)
         if (data.profile?.memorySummary) setMemoryDraft(data.profile.memorySummary)
-        if (data.profile?.helperThread?.length) {
+        if (helperMode && data.profile?.helperThread?.length) {
           const storedMessages = data.profile.helperThread.map(item => ({
             id: item.id,
             question: item.question,
@@ -1802,6 +1841,7 @@ function TelegramHelperPanel({
   function resetHelperMode() {
     setHelperMode('')
     setPolyDeskSubMode('')
+    setMessages([])
     setPaylinkDraft(null)
     setPolyPortfolioFundingDraft(null)
     setQuestion('')
