@@ -666,6 +666,10 @@ function isGroupRequestIntent(text: string) {
     || /\bpayments?\s+(?:from|for)\s+(?:everyone|the group|my class|the class|my team|the team|members|contributors|an event|events|donations?)\b/i.test(clean)
 }
 
+function hasStrongGroupCue(text: string) {
+  return /\b(group|collection|multi payer|multi-payer|everyone|split|dues|fundraiser|fundraising|contributors|contributor|contribution|contributions|event|events|wedding|party|ticket|tickets|registration|class|team|club|community|committee|members|many people|multiple people|several people|from \d+\s+(?:people|friends|contributors|payers|members)|each|per\s+(?:person|payer|contributor|donor)|minimum|min\.?|at\s+least|least)\b/i.test(text)
+}
+
 function isSinglePayerRequestIntent(text: string) {
   const clean = text.replace(/\s+/g, ' ').trim()
   return /\b(?:from|payer is|payer name is|her name is|his name is|their name is)\s+[\p{L}\p{M}][\p{L}\p{M}'-]{1,40}\b/iu.test(clean)
@@ -678,7 +682,7 @@ function inferPaylinkRequestMode(text: string, existing?: HelperPaylinkDraft | n
   const groupIntent = isGroupRequestIntent(text)
   const singleIntent = isSinglePayerRequestIntent(text)
   if (groupIntent && !singleIntent) return 'group'
-  if (groupIntent && singleIntent && /\b(collection|group|event|donation|donations|fundraiser|fundraising|contributors|contributions|dues|split|everyone|members)\b/i.test(text)) {
+  if (groupIntent && singleIntent && hasStrongGroupCue(text)) {
     return 'group'
   }
   return 'person'
@@ -688,6 +692,12 @@ function shouldStartFreshPersonDraft(text: string, existing?: HelperPaylinkDraft
   if (!existing || existing.mode !== 'group') return false
   if (isExplicitDraftCorrection(text) || isPaylinkRevisionIntent(text)) return false
   return isPaymentRequestIntent(text) && isSinglePayerRequestIntent(text) && !isGroupRequestIntent(text)
+}
+
+function shouldStartFreshGroupDraft(text: string, existing?: HelperPaylinkDraft | null) {
+  if (!existing || existing.mode !== 'person') return false
+  if (isExplicitDraftCorrection(text) || isPaylinkRevisionIntent(text)) return false
+  return isPaymentRequestIntent(text) && isGroupRequestIntent(text) && hasStrongGroupCue(text)
 }
 
 function wantsSavedWallet(text: string) {
@@ -2154,7 +2164,9 @@ function TelegramHelperPanel({
       })
       return true
     }
-    const activeDraft = shouldStartFreshPersonDraft(nextQuestion, paylinkDraft) ? null : paylinkDraft ?? revisionBase
+    const activeDraft = shouldStartFreshPersonDraft(nextQuestion, paylinkDraft) || shouldStartFreshGroupDraft(nextQuestion, paylinkDraft)
+      ? null
+      : paylinkDraft ?? revisionBase
     let draft = buildDraftFromText(nextQuestion, activeDraft)
     const savedWallet = preferredWalletFor(draft.network)
 
