@@ -226,6 +226,14 @@ const requestNetworkLabels: Record<RequestNetwork, string> = {
   all: 'All networks',
 }
 
+function isPolymarketBridgeNetwork(network: RequestNetwork | ''): network is PolymarketBridgeNetwork {
+  return network === 'base' || network === 'arbitrum' || network === 'solana'
+}
+
+function polymarketBridgeNetworkPrompt(amount: string) {
+  return `Which network should I use for this ${amount} USDC Polymarket funding checkout: Base, Arbitrum, or Solana?`
+}
+
 type SavedRequest = {
   id?: string
   eventId?: string
@@ -2506,15 +2514,21 @@ function TelegramHelperPanel({
           actionLink: { label: 'Portfolio', url: portfolioUrl },
         }
       }
-      const preferredNetwork = (profileData.profile?.preferredFundingNetwork || 'base') as RequestNetwork
-      const bridgeNetwork = (requestedNetwork || preferredNetwork || 'base') as RequestNetwork
-      if (!['base', 'arbitrum', 'solana'].includes(bridgeNetwork)) {
+      if (!requestedNetwork) {
+        setPolyPortfolioFundingDraft({ amount: requestedAmount, network: '' })
+        return {
+          answer: polymarketBridgeNetworkPrompt(requestedAmount),
+          actionLink: { label: 'Portfolio', url: portfolioUrl },
+        }
+      }
+      if (!isPolymarketBridgeNetwork(requestedNetwork)) {
         setPolyPortfolioFundingDraft({ amount: requestedAmount, network: '' })
         return {
           answer: 'Polymarket bridge checkout supports Base, Arbitrum, or Solana right now. Which one should I use?',
           actionLink: { label: 'Portfolio', url: portfolioUrl },
         }
       }
+      const bridgeNetwork = requestedNetwork
       const bridgeRes = await fetch('/api/polymarket-bridge', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
