@@ -3646,7 +3646,7 @@ const lpScoutOptions: LpScoutOption[] = [
   },
 ]
 
-function LpScoutPanel({
+export function LpScoutPanel({
   prefill,
   onPrefillConsumed,
   onOpenWalletManager,
@@ -3959,7 +3959,7 @@ function relativeNewsTime(value?: string) {
   return `${Math.floor(hours / 24)}d ago`
 }
 
-function PolyWorldCupNewsPanel({
+export function PolyWorldCupNewsPanel({
   onBack,
   onOpenScores,
   onOpenLpScout,
@@ -4763,7 +4763,7 @@ function HashLiveScoreWidget({
   )
 }
 
-function PolyStreamPanel({
+export function PolyStreamPanel({
   onBack,
   onOpenNews,
 }: {
@@ -5837,7 +5837,7 @@ function shortHex(value: string) {
   return value.length > 12 ? `${value.slice(0, 6)}...${value.slice(-4)}` : value
 }
 
-function PolyPortfolioPanel({
+export function PolyPortfolioPanel({
   onBack,
   onOpenLpScout,
   onOpenWorldCup,
@@ -6681,7 +6681,7 @@ function AlertToggle({ label, hint, value, onChange }: { label: string; hint: st
   )
 }
 
-function PolyWorldCupHubPanel({
+export function PolyWorldCupHubPanel({
   onBack,
   onOpenNews,
   onOpenScores,

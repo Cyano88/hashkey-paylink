@@ -2,9 +2,17 @@ import { LineChart, Radio, Wallet } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { cn } from '../lib/utils'
-import { TelegramHelperPanel } from './TelegramPaymentLinks'
+import {
+  LpScoutPanel,
+  PolyPortfolioPanel,
+  PolyStreamPanel,
+  PolyWorldCupHubPanel,
+  PolyWorldCupNewsPanel,
+  TelegramHelperPanel,
+} from './TelegramPaymentLinks'
 
 type PolyDeskLane = 'portfolio' | 'worldcup' | 'lp-scout'
+type PolyDeskServiceView = '' | PolyDeskLane | 'worldcup-news' | 'worldcup-scores'
 
 function PolymarketMark({ className }: { className?: string }) {
   return (
@@ -102,6 +110,8 @@ export default function PolyDesk() {
   const agentRouteOpen = searchParams.get('agent') === '1'
   const [isAgentOpen, setIsAgentOpen] = useState(Boolean(activeLane || agentRouteOpen))
   const [agentLane, setAgentLane] = useState<PolyDeskLane | ''>(activeLane)
+  const [serviceView, setServiceView] = useState<PolyDeskServiceView>('')
+  const [lpScoutPrefill, setLpScoutPrefill] = useState<any>(null)
   const [polyDeskResetSignal, setPolyDeskResetSignal] = useState(0)
   const [promptIndex, setPromptIndex] = useState(0)
   const helperKey = activeLane || 'choose-lane'
@@ -129,7 +139,19 @@ export default function PolyDesk() {
     setIsAgentOpen(true)
   }
 
+  function openServiceView(view: PolyDeskServiceView) {
+    setServiceView(view)
+    window.setTimeout(() => {
+      document.querySelector('[data-polydesk-service-view="true"]')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 40)
+  }
+
   function resetLane() {
+    if (serviceView) {
+      setServiceView('')
+      setLpScoutPrefill(null)
+      return
+    }
     if (activeLane || agentLane) {
       const next = new URLSearchParams(searchParams)
       next.set('agent', '1')
@@ -301,12 +323,12 @@ export default function PolyDesk() {
             <div className="mt-4 space-y-2">
               {polyDeskServices.map(service => {
                 const Icon = service.icon
-                const selected = activeLane === service.id
+                const selected = serviceView === service.id
                 return (
                   <button
                     key={service.id}
                     type="button"
-                    onClick={() => chooseLane(service.id)}
+                    onClick={() => openServiceView(service.id)}
                     className={cn(
                       'flex w-full items-start gap-3 rounded-xl border p-3 text-left transition-all active:scale-[0.99]',
                       selected
@@ -333,6 +355,53 @@ export default function PolyDesk() {
                 )
               })}
             </div>
+          </section>
+        )}
+
+        {serviceView && !isAgentOpen && (
+          <section
+            data-polydesk-service-view="true"
+            className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card dark:border-white/10 dark:bg-[#111114]"
+          >
+            {serviceView === 'portfolio' ? (
+              <PolyPortfolioPanel
+                onBack={() => setServiceView('')}
+                onOpenLpScout={() => openServiceView('lp-scout')}
+                onOpenWorldCup={() => openServiceView('worldcup')}
+                telegramOwner={ownerKey}
+                telegramId=""
+              />
+            ) : serviceView === 'worldcup' ? (
+              <PolyWorldCupHubPanel
+                onBack={() => setServiceView('')}
+                onOpenNews={() => openServiceView('worldcup-news')}
+                onOpenScores={() => openServiceView('worldcup-scores')}
+                onOpenPortfolio={() => openServiceView('portfolio')}
+              />
+            ) : serviceView === 'worldcup-news' ? (
+              <PolyWorldCupNewsPanel
+                onBack={() => openServiceView('worldcup')}
+                onOpenScores={() => openServiceView('worldcup-scores')}
+                onOpenLpScout={prefill => {
+                  setLpScoutPrefill(prefill)
+                  openServiceView('lp-scout')
+                }}
+              />
+            ) : serviceView === 'worldcup-scores' ? (
+              <PolyStreamPanel
+                onBack={() => openServiceView('worldcup')}
+                onOpenNews={() => openServiceView('worldcup-news')}
+              />
+            ) : (
+              <LpScoutPanel
+                prefill={lpScoutPrefill}
+                onPrefillConsumed={() => setLpScoutPrefill(null)}
+                onOpenWalletManager={() => {
+                  navigate('/agent?profile=agent&walletManager=service&src=lp-scout')
+                }}
+                onBack={() => setServiceView('')}
+              />
+            )}
           </section>
         )}
       </div>
