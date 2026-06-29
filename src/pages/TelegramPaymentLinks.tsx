@@ -1116,10 +1116,6 @@ export default function TelegramPaymentLinks() {
       telegramWebApp.close()
       return
     }
-    if (window.history.length > 1) {
-      navigate(-1)
-      return
-    }
     setActiveSection('payment-links')
     clearTelegramServiceRoute('payment-links')
   }
