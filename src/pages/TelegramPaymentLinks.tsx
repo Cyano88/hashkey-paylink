@@ -450,6 +450,13 @@ function extractAmount(text: string) {
   return loose.find(match => Number(match[2]) > 0)?.[2] ?? ''
 }
 
+function extractGroupContributionAmount(text: string) {
+  const clean = text.replace(/\s+/g, ' ').trim()
+  const match = clean.match(/\b(?:each|per\s+(?:person|payer|contributor|donor)|everyone|everybody|minimum|min\.?|at\s+least|least)\b[^.?!,;]{0,80}?\b(\d+(?:\.\d{1,6})?)\s*(?:usdc|usd|\$)\b/i)
+    ?? clean.match(/\b(\d+(?:\.\d{1,6})?)\s*(?:usdc|usd|\$)\b[^.?!,;]{0,80}?\b(?:each|per\s+(?:person|payer|contributor|donor)|minimum|min\.?|at\s+least|least)\b/i)
+  return match?.[1] ?? ''
+}
+
 function extractAmountCorrection(text: string) {
   if (!/\b(change|update|correct|set)\s+(?:the\s+)?amount\b|\bamount\s*(?:to|is|=|:)\b/i.test(text)) return ''
   return extractAmount(text)
@@ -1996,7 +2003,7 @@ function TelegramHelperPanel({
     const purposeFromText = mode === 'group'
       ? extractCollectionLabel(text) || extractPurpose(text)
       : extractPurpose(text)
-    const amountFromText = extractAmountCorrection(text) || extractAmount(text)
+    const amountFromText = extractAmountCorrection(text) || (mode === 'group' ? extractGroupContributionAmount(text) : '') || extractAmount(text)
     const existingWallet = existing?.wallet || ''
     const keepExistingWallet = Boolean(existingWallet && !walletFromText && (!networkCorrection || walletMatchesNetwork(existingWallet, nextNetwork)))
     const nextWallet = walletFromText || (keepExistingWallet ? existingWallet : '')
