@@ -2109,7 +2109,12 @@ function TelegramHelperPanel({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(request),
     })
-    const data = await res.json() as { ok?: boolean; request?: SavedRequest; error?: string }
+    let data: { ok?: boolean; request?: SavedRequest; error?: string }
+    try {
+      data = await res.json() as { ok?: boolean; request?: SavedRequest; error?: string }
+    } catch {
+      throw new Error('Could not create PayLink right now. Try again shortly.')
+    }
     if (!res.ok || !data.ok || !data.request) throw new Error(data.error || 'Could not create PayLink.')
     const saved = data.request
     const savedWallet = saved.wallet || walletForNetwork
@@ -2170,29 +2175,6 @@ function TelegramHelperPanel({
     let draft = buildDraftFromText(nextQuestion, activeDraft)
     const savedWallet = preferredWalletFor(draft.network)
     const savedWalletOwner = friendlyName(helperName || payer || cleanTelegramName || 'you')
-
-    if (
-      !draft.wallet
-      && savedWallet
-      && draft.mode === 'person'
-      && draft.target
-      && draft.amount
-      && draft.label
-      && isPaymentRequestIntent(nextQuestion)
-      && !wantsNewWallet(nextQuestion)
-      && !isExplicitDraftCorrection(nextQuestion)
-    ) {
-      const savedNetwork: RequestNetwork = savedWallet.startsWith('0x') ? 'base' : 'solana'
-      draft = {
-        ...draft,
-        network: draft.network || savedNetwork,
-        wallet: savedWallet,
-        evmWallet: savedWallet.startsWith('0x') ? savedWallet : draft.evmWallet,
-        solanaWallet: savedWallet.startsWith('0x') ? draft.solanaWallet : savedWallet,
-        offeredSavedWallet: true,
-        offeredSavedWalletNetwork: draft.network || savedNetwork,
-      }
-    }
 
     if (!draft.wallet && savedWallet && wantsSavedWallet(nextQuestion)) {
       const savedNetwork: RequestNetwork = savedWallet.startsWith('0x') ? 'base' : 'solana'
@@ -2383,7 +2365,18 @@ function TelegramHelperPanel({
 
     setThinkingState('paylink-build')
     setAgentStatus('Preparing PayLink...')
-    const saved = await createPaylinkFromDraft(draft)
+    let saved: SavedRequest
+    try {
+      saved = await createPaylinkFromDraft(draft)
+    } catch (err) {
+      const message = err instanceof Error && err.message
+        ? err.message
+        : 'Could not create PayLink right now. Try again shortly.'
+      finishHelperMessage(nextQuestion, {
+        answer: message,
+      })
+      return true
+    }
     consumePaymentQuota()
     setPaylinkDraft(null)
     setLastPaylinkDraft(draftFromSavedRequest(saved))
