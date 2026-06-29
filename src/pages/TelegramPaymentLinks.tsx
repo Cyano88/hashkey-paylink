@@ -683,6 +683,12 @@ function inferPaylinkRequestMode(text: string, existing?: HelperPaylinkDraft | n
   return 'person'
 }
 
+function shouldStartFreshPersonDraft(text: string, existing?: HelperPaylinkDraft | null) {
+  if (!existing || existing.mode !== 'group') return false
+  if (isExplicitDraftCorrection(text) || isPaylinkRevisionIntent(text)) return false
+  return isPaymentRequestIntent(text) && isSinglePayerRequestIntent(text) && !isGroupRequestIntent(text)
+}
+
 function wantsSavedWallet(text: string) {
   return /\b(saved|same|continue|use it|use that|use the one saved|saved wallet|my saved wallet|continue with my saved wallet|yes|ok|okay)\b/i.test(text)
 }
@@ -2147,7 +2153,8 @@ function TelegramHelperPanel({
       })
       return true
     }
-    let draft = buildDraftFromText(nextQuestion, paylinkDraft ?? revisionBase)
+    const activeDraft = shouldStartFreshPersonDraft(nextQuestion, paylinkDraft) ? null : paylinkDraft ?? revisionBase
+    let draft = buildDraftFromText(nextQuestion, activeDraft)
     const savedWallet = preferredWalletFor(draft.network)
 
     if (!draft.wallet && savedWallet && wantsSavedWallet(nextQuestion)) {
@@ -2171,8 +2178,13 @@ function TelegramHelperPanel({
       const answer = await polishLocalHelperResult(
         [
           'local_action=payment_request_saved_wallet_choice',
+          `mode=${draft.mode}`,
+          `payer=${draft.target ? friendlyName(draft.target) : ''}`,
           `network=${draft.network ? requestNetworkLabels[draft.network] : 'payment'}`,
           `saved_wallet=${compactSavedWallet(savedWallet)}`,
+          draft.mode === 'person'
+            ? 'This is a one-payer payment request. Do not call it a donation, collection, group payment, fundraiser, or contribution.'
+            : 'This is a group collection.',
           'Ask whether to use the saved receive wallet or add a new one.',
           'Do not say "I can prepare that PayLink".',
           'Return one short consumer chat sentence only.',
@@ -2300,16 +2312,23 @@ function TelegramHelperPanel({
       setPaylinkDraft(draft)
       const missingNetworkOnly = missing.length === 1 && missing[0] === 'network'
       const missingTarget = draft.target ? friendlyName(draft.target) : 'the payer'
+      const missingPurposeOnly = missing.length === 1 && missing[0] === 'purpose'
       const fallbackAnswer = missingNetworkOnly
         ? `Which network should ${missingTarget} use: Base, Arc, Arbitrum, Solana, or all networks?`
+        : missingPurposeOnly
+        ? `What is this payment for?`
         : `Send ${missing.join(', ')}. One line is fine.`
       const answer = await polishLocalHelperResult(
         [
           'local_action=payment_request_missing_fields',
+          `mode=${draft.mode}`,
           `missing_fields=${missing.join(', ')}`,
           `payer=${draft.target}`,
           `amount=${draft.amount}`,
           `purpose=${draft.label}`,
+          draft.mode === 'person'
+            ? 'This is a one-payer payment request. Do not call it a donation, collection, group payment, fundraiser, or contribution.'
+            : 'This is a group collection.',
           'Ask only for the missing fields. Do not say a provided payer name is missing.',
           'Use the payer name if available.',
           'Return one short consumer chat sentence only.',
@@ -3227,6 +3246,7 @@ function HelperPaylinkCard({ request }: { request: SavedRequest }) {
   const network = request.network ?? inferRequestNetwork(request)
   const isPolymarketFunding = request.kind === 'polymarket-funding'
   const url = request.payUrl || buildRequestPayLink(request)
+  const shareUrl = url.startsWith('http') ? url : `${PUBLIC_PAYLINK_ORIGIN}${url.startsWith('/') ? '' : '/'}${url}`
   const dashboardUrl = request.mode === 'group' ? request.dashboardUrl || buildRequestDashboardLink(request) : ''
   const amountLine = request.amount ? `${request.amount} USDC` : 'Flexible amount'
   const target = friendlyName(request.target)
@@ -3244,7 +3264,7 @@ function HelperPaylinkCard({ request }: { request: SavedRequest }) {
 
   async function copyLink() {
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
-      await navigator.clipboard.writeText(url)
+      await navigator.clipboard.writeText(shareUrl)
     }
     setCopied(true)
     window.setTimeout(() => setCopied(false), 1600)
@@ -3252,15 +3272,19 @@ function HelperPaylinkCard({ request }: { request: SavedRequest }) {
 
   async function shareLink() {
     if (typeof navigator !== 'undefined' && navigator.share) {
+      const title = isPolymarketFunding ? 'Polymarket funding checkout' : request.mode === 'group' ? 'Hash PayLink collection' : 'Hash PayLink payment request'
+      const richPayload = { title, text: shareText, url: shareUrl }
       try {
-        await navigator.share({
-          title: isPolymarketFunding ? 'Polymarket funding checkout' : request.mode === 'group' ? 'Hash PayLink collection' : 'Hash PayLink payment request',
-          text: shareText,
-          url,
-        })
+        await navigator.share(richPayload)
         return
       } catch (err) {
         if (err instanceof DOMException && err.name === 'AbortError') return
+        try {
+          await navigator.share({ title, url: shareUrl })
+          return
+        } catch (secondErr) {
+          if (secondErr instanceof DOMException && secondErr.name === 'AbortError') return
+        }
       }
     }
     await copyLink()
