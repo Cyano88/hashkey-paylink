@@ -710,7 +710,11 @@ function shouldStartFreshDraftRequest(text: string, existing?: HelperPaylinkDraf
 }
 
 function wantsSavedWallet(text: string) {
-  return /\b(saved|same|continue|use it|use that|use the one saved|saved wallet|my saved wallet|continue with my saved wallet|yes|ok|okay)\b/i.test(text)
+  const normalized = text.trim().toLowerCase().replace(/[.!?]+$/g, '')
+  if (/^(yes\s+)?(use|use it|use this|use this one|use that|continue|same|yes|yep|yeah|sure|ok|okay|saved|saved wallet|my saved wallet|use saved|use my saved wallet|use the one saved|continue with my saved wallet)$/.test(normalized)) {
+    return true
+  }
+  return /\b(use|continue)\s+(the\s+)?(saved|same|one saved|my saved)\b/i.test(text)
 }
 
 function wantsNewWallet(text: string) {
@@ -2201,7 +2205,8 @@ function TelegramHelperPanel({
       setThinkingState('payment-wallet')
       draft = { ...draft, offeredSavedWallet: true, offeredSavedWalletNetwork: draft.network }
       setPaylinkDraft(draft)
-      const fallbackAnswer = `Use your saved ${draft.network ? requestNetworkLabels[draft.network] : 'payment'} wallet ${compactSavedWallet(savedWallet)}, or add a new receive wallet?`
+      const savedWalletNetwork = draft.network ? requestNetworkLabels[draft.network] : walletNetworkLabel(savedWallet)
+      const fallbackAnswer = `Use your saved ${savedWalletNetwork} receive wallet ${compactSavedWallet(savedWallet)}, or add a new receive wallet?`
       finishHelperMessage(nextQuestion, {
         answer: fallbackAnswer,
       })
