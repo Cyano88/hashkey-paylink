@@ -3102,6 +3102,19 @@ function TelegramHelperPanel({
     <div>
       <div className="space-y-3">
         <div className="overflow-hidden">
+              {helperMode && (
+                <div className="border-t border-gray-100 px-3 pb-2 pt-2 dark:border-white/10">
+                  <button
+                    type="button"
+                    onClick={resetHelperMode}
+                    className="agent-hash-mode-back"
+                    aria-label="Back to Agent Hash categories"
+                  >
+                    <span className="agent-hash-mode-back__mark" aria-hidden="true" />
+                    <span>Back</span>
+                  </button>
+                </div>
+              )}
               <div ref={helperScrollRef} className="max-h-[360px] min-h-[220px] space-y-4 overflow-y-auto border-t border-gray-100 p-3 scroll-smooth [scrollbar-width:none] dark:border-white/10 [&::-webkit-scrollbar]:hidden">
                 <div className="max-w-[82%] break-words rounded-[18px] rounded-bl-md bg-[#f0f0f0] px-3.5 py-2.5 text-sm leading-relaxed text-gray-900 shadow-sm dark:bg-white/[0.08] dark:text-gray-100">
                   <p>

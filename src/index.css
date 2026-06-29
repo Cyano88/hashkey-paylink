@@ -708,6 +708,85 @@ html.dark .zeroscout-power-badge__mark {
   background: rgba(255, 255, 255, 0.08);
 }
 
+.agent-hash-mode-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.42rem;
+  height: 1.85rem;
+  border: 1px solid rgba(229, 231, 235, 0.92);
+  border-radius: 0.65rem;
+  background: rgba(255, 255, 255, 0.96);
+  padding: 0 0.68rem 0 0.4rem;
+  color: #4b5563;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06);
+  transition: border-color 160ms ease, background 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+.agent-hash-mode-back:hover {
+  border-color: rgba(209, 213, 219, 1);
+  background: #ffffff;
+  color: #111827;
+  transform: translateY(-1px);
+}
+
+.agent-hash-mode-back__mark {
+  position: relative;
+  width: 1.05rem;
+  height: 1.05rem;
+  border-radius: 0.34rem;
+  background: #111827;
+  animation: agentHashBackMark 5s ease-in-out infinite;
+}
+
+.agent-hash-mode-back__mark::before,
+.agent-hash-mode-back__mark::after {
+  content: "";
+  position: absolute;
+  left: 0.36rem;
+  width: 0.44rem;
+  height: 0.11rem;
+  border-radius: 999px;
+  background: #ffffff;
+  transform-origin: left center;
+  opacity: 0;
+  animation: agentHashBackArrow 5s ease-in-out infinite;
+}
+
+.agent-hash-mode-back__mark::before {
+  top: 0.38rem;
+  transform: rotate(-42deg) scaleX(0.5);
+}
+
+.agent-hash-mode-back__mark::after {
+  top: 0.58rem;
+  transform: rotate(42deg) scaleX(0.5);
+}
+
+html.dark .agent-hash-mode-back {
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.06);
+  color: #d1d5db;
+  box-shadow: none;
+}
+
+html.dark .agent-hash-mode-back:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+html.dark .agent-hash-mode-back__mark {
+  background: #ffffff;
+}
+
+html.dark .agent-hash-mode-back__mark::before,
+html.dark .agent-hash-mode-back__mark::after {
+  background: #111827;
+}
+
 @keyframes askHashRobotMorph {
   0%, 36%, 100% { opacity: 1; transform: scale(1) translateY(0); }
   44%, 68% { opacity: 0; transform: scale(0.42) translateY(0.12rem); }
@@ -734,6 +813,16 @@ html.dark .zeroscout-power-badge__mark {
   0% { width: 0; }
   12%, 78% { width: 100%; }
   96%, 100% { width: 0; }
+}
+
+@keyframes agentHashBackMark {
+  0%, 68%, 100% { border-radius: 0.34rem; transform: translateX(0) scale(1); }
+  76%, 88% { border-radius: 999px 0.34rem 0.34rem 999px; transform: translateX(-0.05rem) scale(1.02); }
+}
+
+@keyframes agentHashBackArrow {
+  0%, 68%, 100% { opacity: 0; }
+  76%, 88% { opacity: 1; }
 }
 
 @keyframes zeroscoutBadgeZs {
