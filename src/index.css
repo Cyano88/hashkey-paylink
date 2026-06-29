@@ -601,6 +601,59 @@ html.dark .ask-hash-live-agent__bubble span {
   background: #111827;
 }
 
+.polydesk-live-agent {
+  position: relative;
+  display: inline-flex;
+  width: 1.55rem;
+  height: 1.55rem;
+  align-items: center;
+  justify-content: center;
+  color: currentColor;
+}
+
+.polydesk-live-agent__mark {
+  position: relative;
+  z-index: 0;
+  width: 1.02rem;
+  height: 1.02rem;
+  transform-origin: center;
+  animation: askHashRobotMorph 10s ease-in-out infinite;
+}
+
+.polydesk-live-agent .ask-hash-live-agent__bubble {
+  z-index: 1;
+  width: 1.12rem;
+  height: 0.76rem;
+  gap: 0.1rem;
+  border-radius: 0.38rem;
+}
+
+.polydesk-live-agent .ask-hash-live-agent__bubble::after {
+  left: 0.18rem;
+  bottom: -0.12rem;
+  border-width: 0.18rem 0.18rem 0 0;
+}
+
+.polydesk-live-agent .ask-hash-live-agent__bubble span {
+  width: 0.11rem;
+  height: 0.11rem;
+}
+
+.polydesk-live-agent--static .polydesk-live-agent__mark,
+.polydesk-live-agent--static .ask-hash-live-agent__bubble,
+.polydesk-live-agent--static .ask-hash-live-agent__bubble span {
+  animation: none;
+}
+
+.polydesk-live-agent--static .polydesk-live-agent__mark {
+  opacity: 1;
+  transform: scale(1) translateY(0);
+}
+
+.polydesk-live-agent--static .ask-hash-live-agent__bubble {
+  display: none;
+}
+
 .telegram-agent-typewriter {
   display: inline-block;
   max-width: 100%;
@@ -708,83 +761,66 @@ html.dark .zeroscout-power-badge__mark {
   background: rgba(255, 255, 255, 0.08);
 }
 
-.agent-hash-mode-back {
+.back-btn {
   display: inline-flex;
   align-items: center;
-  gap: 0.42rem;
-  height: 1.85rem;
-  border: 1px solid rgba(229, 231, 235, 0.92);
-  border-radius: 0.65rem;
-  background: rgba(255, 255, 255, 0.96);
-  padding: 0 0.68rem 0 0.4rem;
-  color: #4b5563;
-  font-size: 0.72rem;
-  font-weight: 700;
-  line-height: 1;
-  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06);
-  transition: border-color 160ms ease, background 160ms ease, color 160ms ease, transform 160ms ease;
-}
-
-.agent-hash-mode-back:hover {
-  border-color: rgba(209, 213, 219, 1);
-  background: #ffffff;
-  color: #111827;
-  transform: translateY(-1px);
-}
-
-.agent-hash-mode-back__mark {
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  overflow: hidden;
   position: relative;
-  width: 1.05rem;
-  height: 1.05rem;
-  border-radius: 0.34rem;
-  background: #111827;
-  animation: agentHashBackMark 5s ease-in-out infinite;
+  color: currentColor;
 }
 
-.agent-hash-mode-back__mark::before,
-.agent-hash-mode-back__mark::after {
-  content: "";
+.arrow-container {
+  display: flex;
+  align-items: center;
+  position: relative;
+  width: 20px;
+  height: 14px;
+}
+
+.arrow-container--right {
+  transform: scaleX(-1);
+}
+
+.chevron {
   position: absolute;
-  left: 0.36rem;
-  width: 0.44rem;
-  height: 0.11rem;
-  border-radius: 999px;
-  background: #ffffff;
-  transform-origin: left center;
-  opacity: 0;
-  animation: agentHashBackArrow 5s ease-in-out infinite;
+  width: 6px;
+  height: 6px;
+  border-bottom: 2px solid currentColor;
+  border-left: 2px solid currentColor;
+  transform: rotate(45deg);
+  transition: all 0.4s ease;
+  animation: arrowWave 5s ease-in-out infinite;
 }
 
-.agent-hash-mode-back__mark::before {
-  top: 0.38rem;
-  transform: rotate(-42deg) scaleX(0.5);
+.c1 {
+  left: 0;
+  opacity: 1;
 }
 
-.agent-hash-mode-back__mark::after {
-  top: 0.58rem;
-  transform: rotate(42deg) scaleX(0.5);
+.c2 {
+  left: 5px;
+  opacity: 0.6;
 }
 
-html.dark .agent-hash-mode-back {
-  border-color: rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.06);
-  color: #d1d5db;
-  box-shadow: none;
+.c3 {
+  left: 10px;
+  opacity: 0.3;
 }
 
-html.dark .agent-hash-mode-back:hover {
-  border-color: rgba(255, 255, 255, 0.16);
-  background: rgba(255, 255, 255, 0.1);
-  color: #ffffff;
+.c1 {
+  animation-delay: 0s;
 }
 
-html.dark .agent-hash-mode-back__mark {
-  background: #ffffff;
+.c2 {
+  animation-delay: 0.15s;
 }
 
-html.dark .agent-hash-mode-back__mark::before,
-html.dark .agent-hash-mode-back__mark::after {
-  background: #111827;
+.c3 {
+  animation-delay: 0.3s;
 }
 
 @keyframes askHashRobotMorph {
@@ -815,14 +851,9 @@ html.dark .agent-hash-mode-back__mark::after {
   96%, 100% { width: 0; }
 }
 
-@keyframes agentHashBackMark {
-  0%, 68%, 100% { border-radius: 0.34rem; transform: translateX(0) scale(1); }
-  76%, 88% { border-radius: 999px 0.34rem 0.34rem 999px; transform: translateX(-0.05rem) scale(1.02); }
-}
-
-@keyframes agentHashBackArrow {
-  0%, 68%, 100% { opacity: 0; }
-  76%, 88% { opacity: 1; }
+@keyframes arrowWave {
+  0%, 18%, 100% { transform: rotate(45deg) scale(1); opacity: 0.3; }
+  7% { transform: rotate(45deg) translate(-2px, 2px) scale(1.1); opacity: 1; }
 }
 
 @keyframes zeroscoutBadgeZs {

@@ -73,6 +73,23 @@ function AgentHashCssIcon({ header = false, staticPose = false }: { header?: boo
   )
 }
 
+function PolymarketMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className={className} fill="none">
+      <path
+        d="M6.25 5.8 18.4 2.75a1 1 0 0 1 1.24.97v16.56a1 1 0 0 1-1.24.97L6.25 18.2a1 1 0 0 1-.75-.97V6.77a1 1 0 0 1 .75-.97Z"
+        stroke="currentColor"
+        strokeWidth="2.1"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M7.2 8.45 17.2 5.9v5.35L7.2 8.45ZM7.2 15.55l10-2.8v5.35l-10-2.55Z"
+        fill="currentColor"
+      />
+    </svg>
+  )
+}
+
 function AgentHashThinkingIndicator({ mode }: { mode: AgentHashMode }) {
   const [stepIndex, setStepIndex] = useState(0)
   const [slowPhase, setSlowPhase] = useState(-1)
@@ -390,6 +407,7 @@ function DashboardRecipientDropdown({ recipients }: { recipients: DashboardRecip
 export default function Layout() {
   const { pathname } = useLocation()
   const [searchParams] = useSearchParams()
+  const isPolyDeskSurface = pathname === '/polydesk' || window.location.hostname.toLowerCase().includes('polydesk')
   const isCreatePage = pathname === '/' || pathname === '/app'
   const isPayPage  = pathname === '/pay'
   const isNgPosPage = pathname === '/pos/ng'
@@ -541,6 +559,7 @@ export default function Layout() {
   const agentHashPanelRef = useRef<HTMLDivElement>(null)
   const agentHashFabRef = useRef<HTMLButtonElement>(null)
   const agentHashCloseTimerRef = useRef<number | null>(null)
+  const previousAgentHashModeRef = useRef<AgentHashMode | null>(null)
 
   function openAgentHashWidget(mode?: AgentHashMode) {
     if (mode) setAgentHashSurfaceMode(mode)
@@ -579,6 +598,13 @@ export default function Layout() {
   useEffect(() => {
     setIsTyping(false)
     setChatInput('')
+    if (previousAgentHashModeRef.current && previousAgentHashModeRef.current !== agentHashMode) {
+      previousAgentHashModeRef.current = agentHashMode
+      window.localStorage.removeItem(agentHashStorageKey)
+      setChatMessages([AGENT_HASH_WELCOME[agentHashMode]])
+      return
+    }
+    previousAgentHashModeRef.current = agentHashMode
     try {
       const saved = window.localStorage.getItem(agentHashStorageKey)
       const parsed = saved ? JSON.parse(saved) as ChatMsg[] : null
@@ -721,15 +747,26 @@ export default function Layout() {
       <header className="sticky top-0 z-50 border-b border-white/60 dark:border-white/5 bg-white/80 dark:bg-[#111113]/90 backdrop-blur-xl">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3 sm:px-6">
           {/* Wordmark */}
-          <Link to="/" className="group flex items-center gap-2.5 focus:outline-none">
-            <img
-              src="/hash-logo.png"
-              alt=""
-              className="w-8 h-8 object-contain transition-transform group-hover:scale-105 dark:invert dark:mix-blend-screen"
-            />
+          <Link to={isPolyDeskSurface ? '/polydesk' : '/'} className="group flex items-center gap-2.5 focus:outline-none">
+            {isPolyDeskSurface ? (
+              <span className="flex h-8 w-8 items-center justify-center text-gray-900 transition-transform group-hover:scale-105 dark:text-white">
+                <PolymarketMark className="h-5 w-5" />
+              </span>
+            ) : (
+              <img
+                src="/hash-logo.png"
+                alt=""
+                className="h-8 w-8 object-contain transition-transform group-hover:scale-105 dark:invert dark:mix-blend-screen"
+              />
+            )}
             <span className="text-[15px] font-semibold tracking-tight text-gray-900 dark:text-white">
-              Hash{' '}
-              <span className="text-[#0071E3]">PayLink</span>
+              {isPolyDeskSurface ? (
+                'PolyDesk'
+              ) : (
+                <>
+                  Hash <span className="text-[#0071E3]">PayLink</span>
+                </>
+              )}
             </span>
           </Link>
 
@@ -761,7 +798,7 @@ export default function Layout() {
             )}
 
             {/* Wallet controls — hidden on pay page and organizer dashboard (read-only pages) */}
-            {!isCreatePage && !isPayPage && !isDashPage && !isNgPosPage && !isTelegramPaymentLinksPage && !isReceiptPage && (
+            {!isPolyDeskSurface && !isCreatePage && !isPayPage && !isDashPage && !isNgPosPage && !isTelegramPaymentLinksPage && !isReceiptPage && (
               <>
                 {/* Connect Wallet — when disconnected */}
                 {!headerControlConnected && !isAgentProfilePage && (
@@ -833,7 +870,16 @@ export default function Layout() {
         <footer className="border-t border-gray-100 dark:border-white/5 bg-white/50 dark:bg-[#111113]/50 py-5">
           <div className="mx-auto max-w-5xl px-4 sm:px-6">
             <p className="text-center text-xs text-gray-400">
-              {isAgentProfilePage ? (
+              {isPolyDeskSurface ? (
+                <a
+                  href="https://x.com/Hash_PayLink"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center font-medium text-gray-500 no-underline transition-colors duration-200 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
+                >
+                  Powered by Hash PayLink
+                </a>
+              ) : isAgentProfilePage ? (
                 <>
                   Agent payments on{' '}
                   {agentNetworks.map((item, i, arr) => (

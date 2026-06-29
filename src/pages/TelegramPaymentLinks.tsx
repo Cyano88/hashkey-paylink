@@ -42,6 +42,35 @@ const PUBLIC_PAYLINK_ORIGIN = (import.meta.env.VITE_PUBLIC_PAYLINK_ORIGIN || 'ht
 const POLYMARKET_LOGO = '/brand/polymarket-logo.png'
 const HELPER_PAYMENT_REQUEST_DAILY_LIMIT = 20
 
+function TelegramServicesIcon({ className = '' }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 512 512"
+      aria-hidden="true"
+      className={className}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <rect x="42" y="260" width="76" height="158" rx="12" fill="#000000" />
+      <path
+        d="M138 276h65c20 0 43 8 62 19l42 24c9 5 13 15 9 24-3 7-10 12-18 12H207v12h99c10 0 19-2 27-7l113-48c14-6 30 2 34 16 3 10-1 21-11 27L297 459c-14 8-30 10-45 5l-137-44V292c7-10 14-16 23-16Z"
+        fill="#000000"
+      />
+      <path
+        d="M208 356h90c18 0 29-20 20-35"
+        stroke="#ffffff"
+        strokeWidth="10"
+        strokeLinecap="round"
+      />
+      <path
+        d="M314 64h52l10 47 39-27 37 37-27 39 47 10v52l-47 10 27 39-37 37-39-27-10 47h-52l-10-47-39 27-37-37 27-39-47-10v-52l47-10-27-39 37-37 39 27 10-47Z"
+        fill="#000000"
+      />
+      <circle cx="340" cy="196" r="56" fill="#ffffff" />
+    </svg>
+  )
+}
+
 function displayTelegramName(rawName: string | null, fallback = 'there') {
   const clean = (rawName ?? '').replace(/^@+/, '').trim()
   if (!clean) return fallback
@@ -960,6 +989,7 @@ export default function TelegramPaymentLinks() {
   const [recoveredTelegramName, setRecoveredTelegramName] = useState('')
   const [savedHelperName, setSavedHelperName] = useState(() => usableHelperName(window.localStorage.getItem('hashpaylink-helper-name') ?? ''))
   const [agentPromptIndex, setAgentPromptIndex] = useState(0)
+  const [helperBackSignal, setHelperBackSignal] = useState(0)
   const telegramName = useMemo(() => {
     const webAppUser = telegramWebAppUser()
     return displayTelegramName(
@@ -975,10 +1005,10 @@ export default function TelegramPaymentLinks() {
   const needsTelegramIdentity = activeSection === 'agent-wallets' && !telegramIdentity.isStable
   const agentGreetingName = friendlyName(savedHelperName || (telegramName === 'there' ? '' : telegramName) || recoveredTelegramName || 'there')
   const agentHeaderPrompts = useMemo(() => [
+    { text: 'I can help with payments and Hash PayLink services.', delayMs: 9500 },
     { text: 'I am Agent Hash.', delayMs: 7000 },
     { text: 'Tap to launch me.', delayMs: 3600 },
     { text: 'What do you want to fund or request today?', delayMs: 8500 },
-    { text: 'I can help with payments and Hash PayLink services.', delayMs: 9500 },
   ], [])
   const isAgentHashOpen = opened && activeService === 'hashpaylink-helper'
 
@@ -1254,13 +1284,7 @@ export default function TelegramPaymentLinks() {
   function goBackFromTelegramDashboard() {
     if (activeService) {
       if (activeService === 'hashpaylink-helper') {
-        const backTarget = internalBackTarget()
-        if (backTarget) {
-          navigate(backTarget)
-          return
-        }
-        setActiveService('')
-        clearTelegramServiceRoute(activeSection)
+        setHelperBackSignal(value => value + 1)
         return
       }
       if (activeService === 'poly-worldcup-news' || activeService === 'poly-stream') {
@@ -1289,14 +1313,22 @@ export default function TelegramPaymentLinks() {
 
   return (
     <div className="mx-auto w-full min-w-0 max-w-[calc(100vw-2rem)] animate-slide-up space-y-5 sm:max-w-md">
-      <button
-        type="button"
-        onClick={goBackFromTelegramDashboard}
-        className="inline-flex items-center gap-1.5 text-sm text-gray-500 transition-colors hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-      >
-        <ArrowLeft className="h-3.5 w-3.5" />
-        Back
-      </button>
+      {isAgentHashOpen && (
+        <button
+          type="button"
+          onClick={goBackFromTelegramDashboard}
+          className="inline-flex items-center gap-1.5 text-sm text-gray-500 transition-colors hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+        >
+          <span className="back-btn" aria-hidden="true">
+            <span className="arrow-container">
+              <span className="chevron c1" />
+              <span className="chevron c2" />
+              <span className="chevron c3" />
+            </span>
+          </span>
+          Back
+        </button>
+      )}
 
       <button
         type="button"
@@ -1304,7 +1336,7 @@ export default function TelegramPaymentLinks() {
         className={cn(
           'group w-full border border-gray-100 bg-white p-4 text-left shadow-card transition-all hover:border-gray-200 hover:shadow-lg active:scale-[0.995] dark:border-white/10 dark:bg-[#111114] dark:hover:bg-[#15151a]',
           isAgentHashOpen
-            ? 'rounded-t-2xl rounded-b-none border-b-0 pb-2 shadow-none'
+            ? '!mt-0 rounded-t-2xl rounded-b-none border-b-0 pb-1 shadow-none'
             : 'rounded-2xl',
         )}
       >
@@ -1324,7 +1356,13 @@ export default function TelegramPaymentLinks() {
                       Hello {agentGreetingName}
                     </p>
                   </div>
-                  <ArrowRight className="h-4 w-4 shrink-0 text-gray-300 transition-transform group-hover:translate-x-0.5 group-hover:text-gray-500" />
+                  <span className="back-btn shrink-0 text-gray-400 transition-transform group-hover:translate-x-0.5 group-hover:text-gray-600" aria-hidden="true">
+                    <span className="arrow-container arrow-container--right">
+                      <span className="chevron chevron--right c1" />
+                      <span className="chevron chevron--right c2" />
+                      <span className="chevron chevron--right c3" />
+                    </span>
+                  </span>
                 </div>
                 <div className="mt-3 rounded-2xl rounded-tl-md bg-gray-100 px-4 py-3 dark:bg-white/[0.07]">
                   <p
@@ -1345,7 +1383,7 @@ export default function TelegramPaymentLinks() {
           className={cn(
             'border border-gray-100 bg-white shadow-card dark:border-white/10 dark:bg-[#111114]',
             isAgentHashOpen
-              ? 'rounded-b-2xl border-t-0 p-0'
+              ? '!mt-0 rounded-b-2xl border-t-0 p-0'
               : 'rounded-2xl p-4',
           )}
         >
@@ -1359,7 +1397,9 @@ export default function TelegramPaymentLinks() {
                     Create payment actions and share them back into Telegram.
                   </p>
                 </div>
-                <img src="/hash-logo-transparent.png" alt="" className="h-9 w-9 rounded-lg border border-gray-100 bg-white object-contain p-1 dark:border-white/10 dark:bg-white/[0.06]" />
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-100 bg-white p-1 dark:border-white/10">
+                  <TelegramServicesIcon className="h-full w-full" />
+                </span>
               </div>
 
               <div className="mt-4 grid grid-cols-2 gap-2">
@@ -1505,6 +1545,7 @@ export default function TelegramPaymentLinks() {
               initialHelperMode={searchParams.get('notice') === 'polymarket-funding-complete' && searchParams.get('mode') === 'polydesk' ? 'polydesk' : ''}
               initialPolyDeskSubMode={searchParams.get('notice') === 'polymarket-funding-complete' ? (searchParams.get('poly') === 'portfolio' ? 'portfolio' : searchParams.get('poly') === 'worldcup' ? 'worldcup' : searchParams.get('poly') === 'lp-scout' ? 'lp-scout' : '') : ''}
               initialNotice={searchParams.get('notice') ?? ''}
+              helperBackSignal={helperBackSignal}
               onRecoverTelegramName={rememberRecoveredHelperName}
               onBack={goBackFromTelegramDashboard}
             />
@@ -1635,7 +1676,7 @@ function ConnectTelegramPanel({ onBack }: { onBack: () => void }) {
   )
 }
 
-function TelegramHelperPanel({
+export function TelegramHelperPanel({
   telegramName,
   ownerKey,
   telegramId,
@@ -1647,6 +1688,13 @@ function TelegramHelperPanel({
   initialNotice,
   onRecoverTelegramName,
   onBack,
+  lockedHelperMode = '',
+  welcomeText,
+  inputPlaceholder,
+  hideTopDivider = false,
+  polyDeskResetSignal = 0,
+  helperBackSignal = 0,
+  onPolyDeskSubModeChange,
 }: {
   telegramName: string
   ownerKey: string
@@ -1659,17 +1707,26 @@ function TelegramHelperPanel({
   initialNotice?: string
   onRecoverTelegramName: (name: string) => void
   onBack: () => void
+  lockedHelperMode?: HelperMode | ''
+  welcomeText?: string
+  inputPlaceholder?: string
+  hideTopDivider?: boolean
+  polyDeskResetSignal?: number
+  helperBackSignal?: number
+  onPolyDeskSubModeChange?: (mode: PolyDeskSubMode | '') => void
 }) {
   const cleanTelegramName = telegramName === 'there' ? '' : telegramName
   const helperSessionKeyBase = (ownerKey || telegramId || initialPayer || cleanTelegramName || 'local-helper').trim().toLowerCase()
   const helperModeStorageKey = `hashpaylink-helper-active-mode:${helperSessionKeyBase}`
   const storedHelperMode = (() => {
+    if (lockedHelperMode) return lockedHelperMode
     if (initialHelperMode) return initialHelperMode
     const saved = window.localStorage.getItem(helperModeStorageKey)
     return helperModes.some(mode => mode.id === saved) ? saved as HelperMode : ''
   })()
   const storedPolyDeskSubMode = (() => {
     if (initialPolyDeskSubMode) return initialPolyDeskSubMode
+    if (lockedHelperMode === 'polydesk') return ''
     if (storedHelperMode !== 'polydesk') return ''
     const saved = window.localStorage.getItem(`${helperModeStorageKey}:polydesk`)
     return polyDeskSubModes.some(mode => mode.id === saved) ? saved as PolyDeskSubMode : ''
@@ -1707,9 +1764,33 @@ function TelegramHelperPanel({
   const helperAbortRef = useRef<AbortController | null>(null)
   const initialRouteAppliedRef = useRef(Boolean(initialNotice || initialHelperMode || initialPolyDeskSubMode))
   const helperFirstScrollRef = useRef(true)
+  const suppressThreadHydrationRef = useRef(false)
+  const freshThreadIdsRef = useRef<Set<string>>(new Set())
   const helperIdentityKey = (ownerKey || telegramId || payer || cleanTelegramName || 'local-helper').trim().toLowerCase()
   const activeHelperThreadId = `mode:${helperMode || 'general'}${helperMode === 'polydesk' && polyDeskSubMode ? `:${polyDeskSubMode}` : ''}`
   const { authenticated: polyDeskAuthenticated, getAccessToken: getPolyDeskAccessToken } = usePrivy()
+
+  useEffect(() => {
+    if (lockedHelperMode && helperMode !== lockedHelperMode) {
+      setHelperMode(lockedHelperMode)
+    }
+  }, [helperMode, lockedHelperMode])
+
+  useEffect(() => {
+    if (!polyDeskResetSignal) return
+    setPolyDeskSubMode('')
+    setPolyPortfolioFundingDraft(null)
+    setQuestion('')
+    setAskError('')
+    setMessages([])
+    window.localStorage.removeItem(`${helperModeStorageKey}:polydesk`)
+    onPolyDeskSubModeChange?.('')
+  }, [polyDeskResetSignal]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!helperBackSignal) return
+    resetHelperMode()
+  }, [helperBackSignal]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useLayoutEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -1812,7 +1893,12 @@ function TelegramHelperPanel({
         const recoveredName = data.profile?.telegramHandle || usableHelperName(data.profile?.displayName || '') || ''
         if (recoveredName) onRecoverTelegramName(recoveredName)
         if (data.profile?.memorySummary) setMemoryDraft(data.profile.memorySummary)
-        if (helperMode && data.profile?.helperThread?.length) {
+        if (suppressThreadHydrationRef.current) {
+          suppressThreadHydrationRef.current = false
+          return
+        }
+        if (freshThreadIdsRef.current.has(activeHelperThreadId)) return
+        if (helperMode && data.profile?.helperThread?.length && !(lockedHelperMode === 'polydesk' && helperMode === 'polydesk' && !polyDeskSubMode)) {
           const storedMessages = data.profile.helperThread.map(item => ({
             id: item.id,
             question: item.question,
@@ -1947,15 +2033,29 @@ function TelegramHelperPanel({
     if (!selected || asking) return
     setHelperMode(mode)
     setPolyDeskSubMode('')
+    setPaylinkDraft(null)
     setPolyPortfolioFundingDraft(null)
+    setQuestion('')
     setAskError('')
-    setMessages(prev => [...prev, { question: selected.label, answer: selected.intro }])
+    suppressThreadHydrationRef.current = true
+    freshThreadIdsRef.current.add(`mode:${mode}`)
+    setMessages([{ question: selected.label, answer: selected.intro }])
     window.setTimeout(() => {
       document.querySelector<HTMLInputElement>('[data-agent-hash-input="true"]')?.focus()
     }, 40)
   }
 
   function resetHelperMode() {
+    if (lockedHelperMode) {
+      setPolyDeskSubMode('')
+      window.localStorage.removeItem(`${helperModeStorageKey}:polydesk`)
+      setMessages([])
+      setPaylinkDraft(null)
+      setPolyPortfolioFundingDraft(null)
+      setQuestion('')
+      setAskError('')
+      return
+    }
     setHelperMode('')
     setPolyDeskSubMode('')
     window.localStorage.removeItem(helperModeStorageKey)
@@ -1971,9 +2071,12 @@ function TelegramHelperPanel({
     const selected = polyDeskSubModes.find(item => item.id === mode)
     if (!selected || asking) return
     setPolyDeskSubMode(mode)
+    onPolyDeskSubModeChange?.(mode)
     setPolyPortfolioFundingDraft(null)
     setAskError('')
-    setMessages(prev => [...prev, { question: selected.label, answer: selected.intro }])
+    suppressThreadHydrationRef.current = true
+    freshThreadIdsRef.current.add(`mode:polydesk:${mode}`)
+    setMessages([{ question: selected.label, answer: selected.intro }])
     window.setTimeout(() => {
       document.querySelector<HTMLInputElement>('[data-agent-hash-input="true"]')?.focus()
     }, 40)
@@ -3102,30 +3205,23 @@ function TelegramHelperPanel({
     <div>
       <div className="space-y-3">
         <div className="overflow-hidden">
-              {helperMode && (
-                <div className="border-t border-gray-100 px-3 pb-2 pt-2 dark:border-white/10">
-                  <button
-                    type="button"
-                    onClick={resetHelperMode}
-                    className="agent-hash-mode-back"
-                    aria-label="Back to Agent Hash categories"
-                  >
-                    <span className="agent-hash-mode-back__mark" aria-hidden="true" />
-                    <span>Back</span>
-                  </button>
-                </div>
-              )}
-              <div ref={helperScrollRef} className="max-h-[360px] min-h-[220px] space-y-4 overflow-y-auto border-t border-gray-100 p-3 scroll-smooth [scrollbar-width:none] dark:border-white/10 [&::-webkit-scrollbar]:hidden">
+              <div
+                ref={helperScrollRef}
+                className={cn(
+                  'max-h-[360px] min-h-[220px] space-y-4 overflow-y-auto p-3 scroll-smooth [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
+                  !hideTopDivider && 'border-t border-gray-100 dark:border-white/10',
+                )}
+              >
                 <div className="max-w-[82%] break-words rounded-[18px] rounded-bl-md bg-[#f0f0f0] px-3.5 py-2.5 text-sm leading-relaxed text-gray-900 shadow-sm dark:bg-white/[0.08] dark:text-gray-100">
                   <p>
-                    Welcome back, {helperName || cleanTelegramName || 'there'}. Ask me about payments, Polymarket funding, StreamPay, agent setup, research, planning, or daily questions.
+                    {welcomeText ?? `Welcome back, ${helperName || cleanTelegramName || 'there'}. Ask me about payments, Polymarket funding, StreamPay, agent setup, research, planning, or daily questions.`}
                   </p>
                   <div className="mt-2">
                     <ZeroScoutPowerBadge compact />
                   </div>
                 </div>
 
-                {!helperMode && (
+                {!helperMode && !lockedHelperMode && (
                   <div className="max-w-[92%] rounded-[18px] rounded-bl-md bg-[#f0f0f0] px-3.5 py-3 text-sm text-gray-900 shadow-sm dark:bg-white/[0.08] dark:text-gray-100">
                     <p className="mb-2 font-medium">Choose how Agent Hash should help you first.</p>
                     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -3143,7 +3239,7 @@ function TelegramHelperPanel({
                   </div>
                 )}
 
-                {helperMode && (
+                {helperMode && !lockedHelperMode && (
                   <div className="flex justify-center">
                     <button
                       type="button"
@@ -3184,6 +3280,11 @@ function TelegramHelperPanel({
                       onClick={() => {
                         setPolyDeskSubMode('')
                         setPolyPortfolioFundingDraft(null)
+                        setMessages([])
+                        setQuestion('')
+                        setAskError('')
+                        window.localStorage.removeItem(`${helperModeStorageKey}:polydesk`)
+                        onPolyDeskSubModeChange?.('')
                       }}
                       className="rounded-full border border-gray-200 bg-white px-3 py-1 text-[11px] font-semibold text-gray-600 shadow-sm transition hover:bg-gray-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/[0.1]"
                     >
@@ -3255,7 +3356,7 @@ function TelegramHelperPanel({
                     value={question}
                     onChange={event => setQuestion(event.target.value)}
                     onKeyDown={event => event.key === 'Enter' && !event.shiftKey && !asking && askHelper()}
-                    placeholder={helperMode === 'polydesk' && !polyDeskSubMode ? 'Choose a PolyDesk lane' : helperMode ? 'Ask Hash...' : 'Choose a mode to start'}
+                    placeholder={helperMode === 'polydesk' && !polyDeskSubMode ? 'Choose a PolyDesk lane' : helperMode ? inputPlaceholder ?? 'Ask Hash...' : 'Choose a mode to start'}
                     disabled={!helperMode || (helperMode === 'polydesk' && !polyDeskSubMode)}
                     className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:ring-2 focus:ring-gray-200 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-white/[0.05] dark:text-white"
                   />

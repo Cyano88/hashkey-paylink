@@ -7,6 +7,7 @@ import Dashboard from './pages/Dashboard'
 import EventDashboard from './pages/EventDashboard'
 import AgentWorkspace from './pages/AgentWorkspace'
 import TelegramPaymentLinks from './pages/TelegramPaymentLinks'
+import PolyDesk from './pages/PolyDesk'
 import NigerianPos from './pages/NigerianPos'
 import X402Receipt   from './pages/X402Receipt'
 import AgentTerms    from './pages/AgentTerms'
@@ -34,6 +35,7 @@ import PrivacyDocs      from './pages/docs/PrivacyDocs'
 // local Streampay development without changing DNS.
 const { hostname, pathname, search } = window.location
 const IS_APP_HOST = hostname === 'app.hashpaylink.com'
+const IS_POLYDESK_HOST = hostname.includes('polydesk')
 const isStreamPayRoute =
   pathname === '/stream' ||
   pathname.startsWith('/stream/') ||
@@ -61,6 +63,7 @@ export default function App() {
       <Route path="event" element={<EventDashboard />} />
       <Route path="agent" element={<AgentWorkspace />} />
       <Route path="telegram/payment-links" element={<TelegramPaymentLinks />} />
+      <Route path="polydesk" element={<PolyDesk />} />
       <Route path="pos/ng" element={<NigerianPos />} />
       <Route path="agent-terms" element={<AgentTerms />} />
       <Route path="receipt/:activityId" element={<X402Receipt />} />
@@ -97,7 +100,7 @@ export default function App() {
           <Route path="terms"              element={<TermsDocs />} />
           <Route path="privacy"            element={<PrivacyDocs />} />
         </Route>
-        {!IS_APP_HOST && <Route index element={<FoundationPage />} />}
+        {IS_POLYDESK_HOST ? <Route index element={<PolyDesk />} /> : !IS_APP_HOST && <Route index element={<FoundationPage />} />}
         {appShellRoutes}
       </Routes>
     </BrowserRouter>

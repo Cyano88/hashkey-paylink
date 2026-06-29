@@ -1,0 +1,341 @@
+import { LineChart, Radio, Wallet } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { cn } from '../lib/utils'
+import { TelegramHelperPanel } from './TelegramPaymentLinks'
+
+type PolyDeskLane = 'portfolio' | 'worldcup' | 'lp-scout'
+
+function PolymarketMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className={className} fill="none">
+      <path
+        d="M6.25 5.8 18.4 2.75a1 1 0 0 1 1.24.97v16.56a1 1 0 0 1-1.24.97L6.25 18.2a1 1 0 0 1-.75-.97V6.77a1 1 0 0 1 .75-.97Z"
+        stroke="currentColor"
+        strokeWidth="2.1"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M7.2 8.45 17.2 5.9v5.35L7.2 8.45ZM7.2 15.55l10-2.8v5.35l-10-2.55Z"
+        fill="currentColor"
+      />
+    </svg>
+  )
+}
+
+function PolyDeskLiveAgentIcon({ isStatic = false }: { isStatic?: boolean }) {
+  return (
+    <span className={cn('polydesk-live-agent', isStatic && 'polydesk-live-agent--static')} aria-hidden="true">
+      <PolymarketMark className="polydesk-live-agent__mark" />
+      <span className="ask-hash-live-agent__bubble">
+        <span />
+        <span />
+        <span />
+      </span>
+    </span>
+  )
+}
+
+function ServiceDeskIcon({ className = '' }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 512 512"
+      aria-hidden="true"
+      className={className}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <rect x="42" y="260" width="76" height="158" rx="12" fill="currentColor" />
+      <path
+        d="M138 276h65c20 0 43 8 62 19l42 24c9 5 13 15 9 24-3 7-10 12-18 12H207v12h99c10 0 19-2 27-7l113-48c14-6 30 2 34 16 3 10-1 21-11 27L297 459c-14 8-30 10-45 5l-137-44V292c7-10 14-16 23-16Z"
+        fill="currentColor"
+      />
+      <path
+        d="M208 356h90c18 0 29-20 20-35"
+        stroke="#ffffff"
+        strokeWidth="10"
+        strokeLinecap="round"
+      />
+      <path
+        d="M314 64h52l10 47 39-27 37 37-27 39 47 10v52l-47 10 27 39-37 37-39-27-10 47h-52l-10-47-39 27-37-37 27-39-47-10v-52l47-10-27-39 37-37 39 27 10-47Z"
+        fill="currentColor"
+      />
+      <circle cx="340" cy="196" r="56" fill="#ffffff" />
+    </svg>
+  )
+}
+
+const polyDeskServices: Array<{
+  id: PolyDeskLane
+  title: string
+  body: string
+  icon: typeof Wallet
+}> = [
+  {
+    id: 'portfolio',
+    title: 'Portfolio',
+    body: 'Track balances, open positions, claimables, and risk alerts.',
+    icon: Wallet,
+  },
+  {
+    id: 'worldcup',
+    title: 'World Cup Markets',
+    body: 'Live scores, market odds, and direct trade routes.',
+    icon: Radio,
+  },
+  {
+    id: 'lp-scout',
+    title: 'LP Scout',
+    body: 'Paid x402 research for LP reward opportunities.',
+    icon: LineChart,
+  },
+]
+
+function normalizeLane(value: string | null): PolyDeskLane | '' {
+  return value === 'portfolio' || value === 'worldcup' || value === 'lp-scout' ? value : ''
+}
+
+export default function PolyDesk() {
+  const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const activeLane = normalizeLane(searchParams.get('lane'))
+  const agentRouteOpen = searchParams.get('agent') === '1'
+  const [isAgentOpen, setIsAgentOpen] = useState(Boolean(activeLane || agentRouteOpen))
+  const [agentLane, setAgentLane] = useState<PolyDeskLane | ''>(activeLane)
+  const [polyDeskResetSignal, setPolyDeskResetSignal] = useState(0)
+  const [promptIndex, setPromptIndex] = useState(0)
+  const helperKey = activeLane || 'choose-lane'
+  const welcomeText = 'Welcome back, there. Ask me about Polymarket funding, portfolio, World Cup markets, LP Scout, and live market context.'
+  const introPrompts = useMemo(() => [
+    { text: 'I am PolyDesk Agent.', delayMs: 5200 },
+    { text: 'Tap to launch me.', delayMs: 3600 },
+    { text: 'I can help with portfolio alerts.', delayMs: 6200 },
+    { text: 'I can read World Cup markets.', delayMs: 6200 },
+    { text: 'I can guide LP Scout access.', delayMs: 6200 },
+    { text: 'I can help fund Polymarket.', delayMs: 6200 },
+  ], [])
+
+  const ownerKey = useMemo(() => {
+    const email = searchParams.get('email')?.trim().toLowerCase()
+    const wallet = searchParams.get('wallet')?.trim().toLowerCase()
+    return email ? `email:${email}` : wallet ? `wallet:${wallet}` : 'polydesk-web'
+  }, [searchParams])
+
+  function chooseLane(lane: PolyDeskLane) {
+    const next = new URLSearchParams(searchParams)
+    next.set('agent', '1')
+    next.set('lane', lane)
+    setSearchParams(next, { replace: false })
+    setIsAgentOpen(true)
+  }
+
+  function resetLane() {
+    if (activeLane || agentLane) {
+      const next = new URLSearchParams(searchParams)
+      next.set('agent', '1')
+      next.delete('lane')
+      window.localStorage.removeItem(`hashpaylink-helper-active-mode:${ownerKey}:polydesk`)
+      setAgentLane('')
+      setPolyDeskResetSignal(value => value + 1)
+      if (activeLane) setSearchParams(next, { replace: false })
+      return
+    }
+    if (agentRouteOpen) {
+      const historyState = window.history.state as { idx?: number } | null
+      if ((historyState?.idx ?? 0) > 0) {
+        navigate(-1)
+        return
+      }
+      const next = new URLSearchParams(searchParams)
+      next.delete('lane')
+      next.delete('agent')
+      setSearchParams(next, { replace: true })
+      setIsAgentOpen(false)
+      return
+    }
+    if (isAgentOpen) {
+      setIsAgentOpen(false)
+      return
+    }
+    if (!activeLane) {
+      navigate(-1)
+      return
+    }
+  }
+
+  useEffect(() => {
+    if (isAgentOpen) return undefined
+    const delay = introPrompts[promptIndex]?.delayMs ?? 5200
+    const timer = window.setTimeout(() => {
+      setPromptIndex(index => (index + 1) % introPrompts.length)
+    }, delay)
+    return () => window.clearTimeout(timer)
+  }, [introPrompts, isAgentOpen, promptIndex])
+
+  useEffect(() => {
+    setIsAgentOpen(Boolean(activeLane || agentRouteOpen))
+    setAgentLane(activeLane)
+  }, [activeLane, agentRouteOpen])
+
+  function launchAgent() {
+    if (!agentRouteOpen) {
+      const next = new URLSearchParams(searchParams)
+      next.set('agent', '1')
+      setSearchParams(next, { replace: false })
+    }
+    setIsAgentOpen(true)
+  }
+
+  return (
+    <main className="text-gray-950 dark:text-white">
+      <div className="mx-auto w-full max-w-md space-y-5">
+        {isAgentOpen && (
+          <button
+            type="button"
+            onClick={resetLane}
+            className="inline-flex w-fit items-center gap-1.5 text-sm text-gray-500 transition-colors hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+          >
+            <span className="back-btn" aria-hidden="true">
+              <span className="arrow-container">
+                <span className="chevron c1" />
+                <span className="chevron c2" />
+                <span className="chevron c3" />
+              </span>
+            </span>
+            Back
+          </button>
+        )}
+
+        <button
+          type="button"
+          onClick={launchAgent}
+          className={cn(
+            'group w-full border border-gray-100 bg-white p-4 text-left shadow-card transition-all hover:border-gray-200 hover:shadow-lg active:scale-[0.995] dark:border-white/10 dark:bg-[#111114] dark:hover:bg-[#15151a]',
+            isAgentOpen ? '!mt-0 rounded-t-2xl rounded-b-none border-b-0 pb-3 shadow-none' : 'rounded-2xl',
+          )}
+        >
+          <div className="flex items-start gap-3">
+            <div className="flex shrink-0 items-start pt-0.5 text-gray-700 dark:text-gray-300">
+              <PolyDeskLiveAgentIcon isStatic={isAgentOpen} />
+            </div>
+            <div className="min-w-0 flex-1">
+              {isAgentOpen ? (
+                <p className="pt-0.5 text-sm font-semibold text-gray-900 dark:text-white">PolyDesk Agent</p>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">PolyDesk Agent</p>
+                      <p className="mt-1 truncate text-sm font-semibold text-gray-900 dark:text-white">Hello There</p>
+                    </div>
+                    <span className="back-btn shrink-0 text-gray-400 transition-transform group-hover:translate-x-0.5 group-hover:text-gray-600" aria-hidden="true">
+                      <span className="arrow-container arrow-container--right">
+                        <span className="chevron c1" />
+                        <span className="chevron c2" />
+                        <span className="chevron c3" />
+                      </span>
+                    </span>
+                  </div>
+                  <div className="mt-3 rounded-2xl rounded-tl-md bg-gray-100 px-4 py-3 dark:bg-white/[0.07]">
+                    <p
+                      key={promptIndex}
+                      className="telegram-agent-typewriter text-sm font-semibold leading-relaxed text-gray-800 dark:text-gray-100"
+                    >
+                      {introPrompts[promptIndex]?.text}
+                    </p>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </button>
+
+        {isAgentOpen && (
+          <section className="!mt-0 overflow-hidden rounded-b-2xl border border-t-0 border-gray-100 bg-white shadow-card dark:border-white/10 dark:bg-[#111114]">
+            <TelegramHelperPanel
+              key={helperKey}
+              telegramName="there"
+              ownerKey={ownerKey}
+              telegramId=""
+              fallbackOwner="polydesk-web"
+              initialEventId=""
+              initialPayer=""
+              initialHelperMode="polydesk"
+              initialPolyDeskSubMode={activeLane}
+              initialNotice=""
+              lockedHelperMode="polydesk"
+              welcomeText={welcomeText}
+              inputPlaceholder="Ask PolyDesk..."
+              hideTopDivider
+              polyDeskResetSignal={polyDeskResetSignal}
+              onPolyDeskSubModeChange={setAgentLane}
+              onRecoverTelegramName={() => undefined}
+              onBack={() => {
+                if (activeLane) {
+                  const next = new URLSearchParams(searchParams)
+                  next.delete('lane')
+                  setSearchParams(next, { replace: false })
+                }
+              }}
+            />
+          </section>
+        )}
+
+        {!isAgentOpen && (
+          <section className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card dark:border-white/10 dark:bg-[#111114]">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">PolyDesk</p>
+                <h2 className="mt-1 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">
+                  Service Desk
+                </h2>
+                <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
+                  For Polymarket funding, portfolio alerts, LP Scout, and live market context.
+                </p>
+              </div>
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center text-gray-900 dark:text-white">
+                <ServiceDeskIcon className="h-8 w-8" />
+              </span>
+            </div>
+
+            <div className="mt-4 space-y-2">
+              {polyDeskServices.map(service => {
+                const Icon = service.icon
+                const selected = activeLane === service.id
+                return (
+                  <button
+                    key={service.id}
+                    type="button"
+                    onClick={() => chooseLane(service.id)}
+                    className={cn(
+                      'flex w-full items-start gap-3 rounded-xl border p-3 text-left transition-all active:scale-[0.99]',
+                      selected
+                        ? 'border-gray-900 bg-gray-900 text-white dark:border-white dark:bg-white dark:text-gray-950'
+                        : 'border-gray-100 bg-gray-50 text-gray-900 hover:border-gray-200 hover:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:hover:bg-white/[0.07]',
+                    )}
+                  >
+                    <span className={cn(
+                      'mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border',
+                      selected ? 'border-white/20 bg-white/10 dark:border-gray-200 dark:bg-gray-100' : 'border-gray-100 bg-white dark:border-white/10 dark:bg-white/[0.06]',
+                    )}>
+                      <Icon className={cn('h-4 w-4', selected ? 'text-white dark:text-gray-950' : 'text-gray-500 dark:text-gray-300')} />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center justify-between gap-3">
+                        <span className="text-sm font-semibold">{service.title}</span>
+                        <span className={cn('text-[11px] font-semibold', selected ? 'text-white/70 dark:text-gray-500' : 'text-gray-400')}>Open</span>
+                      </span>
+                      <span className={cn('mt-1 block text-xs leading-relaxed', selected ? 'text-white/75 dark:text-gray-600' : 'text-gray-500 dark:text-gray-400')}>
+                        {service.body}
+                      </span>
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          </section>
+        )}
+      </div>
+    </main>
+  )
+}
