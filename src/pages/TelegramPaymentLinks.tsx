@@ -700,6 +700,15 @@ function shouldStartFreshGroupDraft(text: string, existing?: HelperPaylinkDraft 
   return isPaymentRequestIntent(text) && isGroupRequestIntent(text) && hasStrongGroupCue(text)
 }
 
+function shouldStartFreshDraftRequest(text: string, existing?: HelperPaylinkDraft | null) {
+  if (!existing) return false
+  if (isExplicitDraftCorrection(text) || isPaylinkRevisionIntent(text)) return false
+  if (!isPaymentRequestIntent(text)) return false
+  const mode = inferPaylinkRequestMode(text)
+  const target = extractTarget(text, mode) || extractInlinePayerName(text, mode)
+  return Boolean(extractAmount(text) && target)
+}
+
 function wantsSavedWallet(text: string) {
   return /\b(saved|same|continue|use it|use that|use the one saved|saved wallet|my saved wallet|continue with my saved wallet|yes|ok|okay)\b/i.test(text)
 }
@@ -2169,12 +2178,11 @@ function TelegramHelperPanel({
       })
       return true
     }
-    const activeDraft = shouldStartFreshPersonDraft(nextQuestion, paylinkDraft) || shouldStartFreshGroupDraft(nextQuestion, paylinkDraft)
+    const activeDraft = shouldStartFreshDraftRequest(nextQuestion, paylinkDraft) || shouldStartFreshPersonDraft(nextQuestion, paylinkDraft) || shouldStartFreshGroupDraft(nextQuestion, paylinkDraft)
       ? null
       : paylinkDraft ?? revisionBase
     let draft = buildDraftFromText(nextQuestion, activeDraft)
     const savedWallet = preferredWalletFor(draft.network)
-    const savedWalletOwner = friendlyName(helperName || payer || cleanTelegramName || 'you')
 
     if (!draft.wallet && savedWallet && wantsSavedWallet(nextQuestion)) {
       const savedNetwork: RequestNetwork = savedWallet.startsWith('0x') ? 'base' : 'solana'
@@ -2194,27 +2202,8 @@ function TelegramHelperPanel({
       draft = { ...draft, offeredSavedWallet: true, offeredSavedWalletNetwork: draft.network }
       setPaylinkDraft(draft)
       const fallbackAnswer = `Use your saved ${draft.network ? requestNetworkLabels[draft.network] : 'payment'} wallet ${compactSavedWallet(savedWallet)}, or add a new receive wallet?`
-      const answer = await polishLocalHelperResult(
-        [
-          'local_action=payment_request_saved_wallet_choice',
-          `mode=${draft.mode}`,
-          `payer=${draft.target ? friendlyName(draft.target) : ''}`,
-          `saved_wallet_owner=${savedWalletOwner}`,
-          `network=${draft.network ? requestNetworkLabels[draft.network] : 'payment'}`,
-          `saved_wallet=${compactSavedWallet(savedWallet)}`,
-          draft.mode === 'person'
-            ? 'This is a one-payer payment request. Do not call it a donation, collection, group payment, fundraiser, or contribution.'
-            : 'This is a group collection.',
-          'The saved wallet belongs to the current Agent Hash user, not the payer.',
-          'Do not address the payer as the wallet owner.',
-          'Ask whether to use the saved receive wallet or add a new one.',
-          'Do not say "I can prepare that PayLink".',
-          'Return one short consumer chat sentence only.',
-        ].join('\n'),
-        fallbackAnswer,
-      )
       finishHelperMessage(nextQuestion, {
-        answer,
+        answer: fallbackAnswer,
       })
       return true
     }
