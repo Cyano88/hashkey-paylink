@@ -87,13 +87,13 @@ export default function PayLinkShareSheet({
             Telegram
           </a>
           <a
-            href={`https://twitter.com/intent/tweet?url=${encodedShareUrl}&text=${encodedShareText}`}
+            href={`https://x.com/messages/compose?text=${encodedShareMessage}`}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-medium text-gray-700 hover:border-gray-300 hover:bg-gray-50"
           >
             <X className="h-4 w-4" />
-            X
+            X DM
           </a>
           <a
             href={`mailto:?subject=${encodeURIComponent(emailSubject)}&body=${encodedShareMessage}`}

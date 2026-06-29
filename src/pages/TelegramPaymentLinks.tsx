@@ -35,6 +35,7 @@ import { cn } from '../lib/utils'
 import { EVM_TREASURY } from '../lib/chains'
 import AgentWorkspace from './AgentWorkspace'
 import ZeroScoutPowerBadge from '../components/ZeroScoutPowerBadge'
+import PayLinkShareSheet from '../components/PayLinkShareSheet'
 
 const TELEGRAM_BOT_URL = import.meta.env.VITE_TELEGRAM_AGENT_URL || 'https://t.me/HashPayLinkBot'
 const PUBLIC_PAYLINK_ORIGIN = (import.meta.env.VITE_PUBLIC_PAYLINK_ORIGIN || 'https://hashpaylink.com').replace(/\/+$/, '')
@@ -3242,6 +3243,8 @@ function HelperThinkingIndicator({ statusText, state }: { statusText: string; st
 }
 
 function HelperPaylinkCard({ request }: { request: SavedRequest }) {
+  const [shareOpen, setShareOpen] = useState(false)
+  const [copied, setCopied] = useState(false)
   const network = request.network ?? inferRequestNetwork(request)
   const isPolymarketFunding = request.kind === 'polymarket-funding'
   const url = request.payUrl || buildRequestPayLink(request)
@@ -3262,18 +3265,34 @@ function HelperPaylinkCard({ request }: { request: SavedRequest }) {
   ].join('\n')
 
   async function shareLink() {
-    if (typeof navigator === 'undefined' || !navigator.share) return
     const title = isPolymarketFunding ? 'Polymarket funding checkout' : request.mode === 'group' ? 'Hash PayLink collection' : 'Hash PayLink payment request'
     const richPayload = { title, text: shareText, url: shareUrl }
-    try {
-      await navigator.share(richPayload)
-    } catch (err) {
-      if (err instanceof DOMException && err.name === 'AbortError') return
+    if (typeof navigator !== 'undefined' && navigator.share) {
       try {
-        await navigator.share({ title, url: shareUrl })
-      } catch {
+        await navigator.share(richPayload)
         return
+      } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') return
+        try {
+          await navigator.share({ title, url: shareUrl })
+          return
+        } catch {
+          setShareOpen(true)
+          return
+        }
       }
+    }
+    setShareOpen(true)
+  }
+
+  async function copyShareLink() {
+    if (typeof navigator === 'undefined' || !navigator.clipboard) return
+    try {
+      await navigator.clipboard.writeText(shareUrl)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1200)
+    } catch {
+      setCopied(false)
     }
   }
 
@@ -3339,6 +3358,17 @@ function HelperPaylinkCard({ request }: { request: SavedRequest }) {
           ? 'Each payer enters their name before paying; the dashboard tracks every contribution.'
           : 'Ask for the receipt after payment.'}
       </p>
+      <PayLinkShareSheet
+        open={shareOpen}
+        url={shareUrl}
+        copied={copied}
+        shareText={shareText}
+        title={isPolymarketFunding ? 'Share funding link' : request.mode === 'group' ? 'Share collection link' : 'Share payment link'}
+        subtitle="Send it through your preferred app."
+        emailSubject={isPolymarketFunding ? 'Polymarket funding checkout' : request.mode === 'group' ? 'Hash PayLink collection' : 'Hash PayLink payment request'}
+        onCopy={copyShareLink}
+        onClose={() => setShareOpen(false)}
+      />
     </div>
   )
 }
