@@ -764,7 +764,7 @@ function describeMissingDraftFields(draft: HelperPaylinkDraft, savedWallet?: str
   const missing = [
     draft.mode !== 'group' && !draft.target && 'payer name',
     draft.mode !== 'group' && !draft.amount && 'amount in USDC',
-    !draft.network && !draft.wallet?.startsWith('0x') && 'network',
+    !draft.network && 'network',
     !draft.label && 'purpose',
     !draft.wallet && !savedWallet && 'receive wallet',
   ].filter(Boolean)
@@ -2190,14 +2190,15 @@ function TelegramHelperPanel({
 
     if (!draft.wallet && savedWallet && wantsSavedWallet(nextQuestion)) {
       const savedNetwork: RequestNetwork = savedWallet.startsWith('0x') ? 'base' : 'solana'
+      const shouldDeferEvmNetworkChoice = savedWallet.startsWith('0x') && !draft.network
       draft = {
         ...draft,
-        network: draft.network || savedNetwork,
+        network: shouldDeferEvmNetworkChoice ? '' : draft.network || savedNetwork,
         wallet: savedWallet,
         evmWallet: savedWallet.startsWith('0x') ? savedWallet : draft.evmWallet,
         solanaWallet: savedWallet.startsWith('0x') ? draft.solanaWallet : savedWallet,
         offeredSavedWallet: true,
-        offeredSavedWalletNetwork: draft.network || savedNetwork,
+        offeredSavedWalletNetwork: shouldDeferEvmNetworkChoice ? '' : draft.network || savedNetwork,
       }
     }
 
@@ -2294,10 +2295,6 @@ function TelegramHelperPanel({
     if (draft.network === 'all') {
       draft = { ...draft, network: '' }
     }
-    if (!draft.network && draft.wallet?.startsWith('0x')) {
-      draft = { ...draft, network: 'base' }
-    }
-
     if (draft.wallet && !walletMatchesNetwork(draft.wallet, draft.network)) {
       setThinkingState('payment-wallet')
       setPaylinkDraft(draft)
@@ -2330,7 +2327,9 @@ function TelegramHelperPanel({
       const missingTarget = draft.target ? friendlyName(draft.target) : 'the payer'
       const missingPurposeOnly = missing.length === 1 && missing[0] === 'purpose'
       const fallbackAnswer = missingNetworkOnly
-        ? `Which network should ${missingTarget} use: Base, Arc, Arbitrum, Solana, or all networks?`
+        ? draft.wallet?.startsWith('0x')
+          ? `Which EVM network should ${missingTarget} use: Base, Arbitrum, or Arc?`
+          : `Which network should ${missingTarget} use: Base, Arc, Arbitrum, Solana, or all networks?`
         : missingPurposeOnly
         ? `What is this payment for?`
         : `Send ${missing.join(', ')}. One line is fine.`
