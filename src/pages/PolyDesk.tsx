@@ -164,13 +164,17 @@ export default function PolyDesk() {
     }, 40)
   }
 
+  function closeServiceView() {
+    setServiceView('')
+    setLpScoutPrefill(null)
+    const next = new URLSearchParams(searchParams)
+    next.delete('service')
+    setSearchParams(next, { replace: false })
+  }
+
   function resetLane() {
     if (serviceView) {
-      setServiceView('')
-      setLpScoutPrefill(null)
-      const next = new URLSearchParams(searchParams)
-      next.delete('service')
-      setSearchParams(next, { replace: false })
+      closeServiceView()
       return
     }
     if (activeLane || agentLane) {
@@ -334,7 +338,7 @@ export default function PolyDesk() {
           </section>
         )}
 
-        {!isAgentOpen && (
+        {!isAgentOpen && !serviceView && (
           <section className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card dark:border-white/10 dark:bg-[#111114]">
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -396,7 +400,7 @@ export default function PolyDesk() {
           >
             {serviceView === 'portfolio' ? (
               <PolyPortfolioPanel
-                onBack={() => setServiceView('')}
+                onBack={closeServiceView}
                 onOpenLpScout={() => openServiceView('lp-scout')}
                 onOpenWorldCup={() => openServiceView('worldcup')}
                 telegramOwner={ownerKey}
@@ -404,7 +408,7 @@ export default function PolyDesk() {
               />
             ) : serviceView === 'worldcup' ? (
               <PolyWorldCupHubPanel
-                onBack={() => setServiceView('')}
+                onBack={closeServiceView}
                 onOpenNews={() => openServiceView('worldcup-news')}
                 onOpenScores={() => openServiceView('worldcup-scores')}
                 onOpenPortfolio={() => openServiceView('portfolio')}
@@ -430,7 +434,7 @@ export default function PolyDesk() {
                 onOpenWalletManager={() => {
                   navigate('/agent?profile=agent&walletManager=service&src=lp-scout')
                 }}
-                onBack={() => setServiceView('')}
+                onBack={closeServiceView}
               />
             )}
           </section>
