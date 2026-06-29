@@ -35,7 +35,6 @@ import { cn } from '../lib/utils'
 import { EVM_TREASURY } from '../lib/chains'
 import AgentWorkspace from './AgentWorkspace'
 import ZeroScoutPowerBadge from '../components/ZeroScoutPowerBadge'
-import PayLinkShareSheet from '../components/PayLinkShareSheet'
 
 const TELEGRAM_BOT_URL = import.meta.env.VITE_TELEGRAM_AGENT_URL || 'https://t.me/HashPayLinkBot'
 const PUBLIC_PAYLINK_ORIGIN = (import.meta.env.VITE_PUBLIC_PAYLINK_ORIGIN || 'https://hashpaylink.com').replace(/\/+$/, '')
@@ -3194,7 +3193,6 @@ function HelperThinkingIndicator({ statusText, state }: { statusText: string; st
 
 function HelperPaylinkCard({ request }: { request: SavedRequest }) {
   const [copied, setCopied] = useState(false)
-  const [shareOpen, setShareOpen] = useState(false)
   const network = request.network ?? inferRequestNetwork(request)
   const isPolymarketFunding = request.kind === 'polymarket-funding'
   const url = request.payUrl || buildRequestPayLink(request)
@@ -3214,9 +3212,27 @@ function HelperPaylinkCard({ request }: { request: SavedRequest }) {
   ].join('\n')
 
   async function copyLink() {
-    await navigator.clipboard.writeText(url)
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      await navigator.clipboard.writeText(url)
+    }
     setCopied(true)
     window.setTimeout(() => setCopied(false), 1600)
+  }
+
+  async function shareLink() {
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      try {
+        await navigator.share({
+          title: isPolymarketFunding ? 'Polymarket funding checkout' : request.mode === 'group' ? 'Hash PayLink collection' : 'Hash PayLink payment request',
+          text: shareText,
+          url,
+        })
+        return
+      } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') return
+      }
+    }
+    await copyLink()
   }
 
   return (
@@ -3249,11 +3265,11 @@ function HelperPaylinkCard({ request }: { request: SavedRequest }) {
       <div className="mt-2 grid grid-cols-2 gap-1.5">
         <button
           type="button"
-          onClick={() => setShareOpen(true)}
+          onClick={shareLink}
           className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-gray-950 px-2.5 py-2 text-xs font-semibold text-white dark:bg-white dark:text-gray-950"
         >
           <Share2 className="h-3.5 w-3.5" />
-          Share
+          {copied ? 'Copied' : 'Share'}
         </button>
         <a
           href={url}
@@ -3281,17 +3297,6 @@ function HelperPaylinkCard({ request }: { request: SavedRequest }) {
           ? 'Each payer enters their name before paying; the dashboard tracks every contribution.'
           : 'Ask for the receipt after payment.'}
       </p>
-      <PayLinkShareSheet
-        open={shareOpen}
-        url={url}
-        copied={copied}
-        shareText={shareText}
-        title="Share payment link"
-        subtitle="Copy it or send it directly."
-        emailSubject={request.mode === 'group' ? 'Hash PayLink collection' : 'Hash PayLink payment request'}
-        onCopy={copyLink}
-        onClose={() => setShareOpen(false)}
-      />
     </div>
   )
 }
