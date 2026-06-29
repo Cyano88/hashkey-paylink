@@ -338,6 +338,7 @@ type StoredHelperThreadMessage = {
   subMode?: string
   question?: string
   answer: string
+  paylink?: SavedRequest
   actionLinks?: Array<{ label: string; url: string }>
   receiptId?: string
   txHash?: string
@@ -1598,6 +1599,19 @@ function TelegramHelperPanel({
   onBack: () => void
 }) {
   const cleanTelegramName = telegramName === 'there' ? '' : telegramName
+  const helperSessionKeyBase = (ownerKey || telegramId || initialPayer || cleanTelegramName || 'local-helper').trim().toLowerCase()
+  const helperModeStorageKey = `hashpaylink-helper-active-mode:${helperSessionKeyBase}`
+  const storedHelperMode = (() => {
+    if (initialHelperMode) return initialHelperMode
+    const saved = window.localStorage.getItem(helperModeStorageKey)
+    return helperModes.some(mode => mode.id === saved) ? saved as HelperMode : ''
+  })()
+  const storedPolyDeskSubMode = (() => {
+    if (initialPolyDeskSubMode) return initialPolyDeskSubMode
+    if (storedHelperMode !== 'polydesk') return ''
+    const saved = window.localStorage.getItem(`${helperModeStorageKey}:polydesk`)
+    return polyDeskSubModes.some(mode => mode.id === saved) ? saved as PolyDeskSubMode : ''
+  })()
   const [started, setStarted] = useState(true)
   const [helperName, setHelperName] = useState(() => usableHelperName(window.localStorage.getItem('hashpaylink-helper-name') ?? (initialPayer || cleanTelegramName)))
   const [helperNameDraft, setHelperNameDraft] = useState(() => usableHelperName(window.localStorage.getItem('hashpaylink-helper-name') ?? (initialPayer || cleanTelegramName)))
@@ -1610,8 +1624,8 @@ function TelegramHelperPanel({
       actionLink: { label: 'Portfolio', url: '/telegram/payment-links?section=market-tools&service=poly-portfolio' },
     }]
   })
-  const [helperMode, setHelperMode] = useState<HelperMode | ''>(initialHelperMode ?? '')
-  const [polyDeskSubMode, setPolyDeskSubMode] = useState<PolyDeskSubMode | ''>(initialHelperMode === 'polydesk' ? (initialPolyDeskSubMode ?? '') : '')
+  const [helperMode, setHelperMode] = useState<HelperMode | ''>(storedHelperMode)
+  const [polyDeskSubMode, setPolyDeskSubMode] = useState<PolyDeskSubMode | ''>(storedHelperMode === 'polydesk' ? storedPolyDeskSubMode : '')
   const [question, setQuestion] = useState('')
   const [asking, setAsking] = useState(false)
   const [agentStatus, setAgentStatus] = useState('Asking ZeroScout for guidance...')
@@ -1681,6 +1695,19 @@ function TelegramHelperPanel({
   }
 
   useEffect(() => {
+    if (helperMode) {
+      window.localStorage.setItem(helperModeStorageKey, helperMode)
+    } else {
+      window.localStorage.removeItem(helperModeStorageKey)
+    }
+    if (helperMode === 'polydesk' && polyDeskSubMode) {
+      window.localStorage.setItem(`${helperModeStorageKey}:polydesk`, polyDeskSubMode)
+    } else if (helperMode !== 'polydesk') {
+      window.localStorage.removeItem(`${helperModeStorageKey}:polydesk`)
+    }
+  }, [helperMode, polyDeskSubMode, helperModeStorageKey])
+
+  useEffect(() => {
     if (initialRouteAppliedRef.current) {
       initialRouteAppliedRef.current = false
       return
@@ -1728,6 +1755,7 @@ function TelegramHelperPanel({
             id: item.id,
             question: item.question,
             answer: item.answer,
+            paylink: item.paylink,
             actionLinks: item.actionLinks,
           }))
           setMessages(prev => {
@@ -1804,6 +1832,7 @@ function TelegramHelperPanel({
           id: message.id || `helper-${helperIdentityKey}-${Date.now().toString(36)}`,
           question: nextQuestion,
           answer,
+          paylink: message.paylink,
           actionLinks: helperActionLinks({ ...message, answer }),
         }),
       })
@@ -1847,6 +1876,8 @@ function TelegramHelperPanel({
   function resetHelperMode() {
     setHelperMode('')
     setPolyDeskSubMode('')
+    window.localStorage.removeItem(helperModeStorageKey)
+    window.localStorage.removeItem(`${helperModeStorageKey}:polydesk`)
     setMessages([])
     setPaylinkDraft(null)
     setPolyPortfolioFundingDraft(null)

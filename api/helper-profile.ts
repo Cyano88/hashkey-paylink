@@ -57,10 +57,28 @@ type HelperThreadMessage = {
   subMode?: string
   question?: string
   answer: string
+  paylink?: StoredPaylink
   actionLinks?: Array<{ label: string; url: string }>
   receiptId?: string
   txHash?: string
   createdAt: number
+}
+
+type StoredPaylink = {
+  id?: string
+  eventId?: string
+  kind?: 'payment-request' | 'polymarket-funding'
+  mode: string
+  wallet: string
+  network?: string
+  evmWallet?: string
+  solanaWallet?: string
+  polymarketWallet?: string
+  label: string
+  target: string
+  amount: string
+  payUrl?: string
+  dashboardUrl?: string
 }
 
 let pgSchemaReady: Promise<void> | null = null
@@ -93,6 +111,36 @@ function cleanActionLinks(value: unknown) {
   }).filter(Boolean).slice(0, 4) as Array<{ label: string; url: string }>
 }
 
+function cleanPaylink(value: unknown): StoredPaylink | undefined {
+  const record = value && typeof value === 'object' ? value as Record<string, unknown> : null
+  if (!record) return undefined
+  const mode = cleanString(record.mode, 24)
+  const wallet = cleanString(record.wallet, 120)
+  const label = cleanString(record.label, 160)
+  const target = cleanString(record.target, 120)
+  const amount = cleanString(record.amount, 40)
+  if (!mode || !wallet || !label || !target || !amount) return undefined
+  const kind = cleanString(record.kind, 40)
+  const payUrl = cleanString(record.payUrl, 500)
+  const dashboardUrl = cleanString(record.dashboardUrl, 500)
+  return {
+    id: cleanString(record.id, 120) || undefined,
+    eventId: cleanString(record.eventId, 120) || undefined,
+    kind: kind === 'polymarket-funding' ? 'polymarket-funding' : kind === 'payment-request' ? 'payment-request' : undefined,
+    mode,
+    wallet,
+    network: cleanString(record.network, 24) || undefined,
+    evmWallet: cleanString(record.evmWallet, 120) || undefined,
+    solanaWallet: cleanString(record.solanaWallet, 120) || undefined,
+    polymarketWallet: cleanString(record.polymarketWallet, 120) || undefined,
+    label,
+    target,
+    amount,
+    payUrl: payUrl && /^\/|^https?:\/\//i.test(payUrl) ? payUrl : undefined,
+    dashboardUrl: dashboardUrl && /^\/|^https?:\/\//i.test(dashboardUrl) ? dashboardUrl : undefined,
+  }
+}
+
 function cleanThreadId(value: unknown, fallback: string) {
   const id = cleanString(value, 80).replace(/[^a-zA-Z0-9:_-]/g, '')
   return id || fallback
@@ -105,6 +153,7 @@ function normalizeThreadMessage(row: Record<string, unknown>): HelperThreadMessa
     subMode: cleanString(row.sub_mode, 40) || undefined,
     question: cleanString(row.question, 500) || undefined,
     answer: cleanString(row.answer, 2000),
+    paylink: cleanPaylink(row.paylink),
     actionLinks: cleanActionLinks(row.action_links),
     receiptId: cleanString(row.receipt_id, 120) || undefined,
     txHash: cleanString(row.tx_hash, 120) || undefined,
@@ -197,12 +246,15 @@ async function ensurePgSchema() {
       sub_mode text,
       question text,
       answer text not null,
+      paylink jsonb,
       action_links jsonb not null default '[]'::jsonb,
       receipt_id text,
       tx_hash text,
       created_at bigint not null,
       primary key (profile_id, thread_id, id)
     );
+    alter table helper_thread_messages
+      add column if not exists paylink jsonb;
     create index if not exists helper_thread_messages_profile_created_idx
       on helper_thread_messages(profile_id, created_at desc);
   `).then(() => undefined)
@@ -258,13 +310,14 @@ async function appendPgThreadMessage(profileId: string, threadId: string, messag
   await ensurePgSchema()
   await pool.query(
     `insert into helper_thread_messages
-      (profile_id, thread_id, id, mode, sub_mode, question, answer, action_links, receipt_id, tx_hash, created_at)
-      values ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11)
+      (profile_id, thread_id, id, mode, sub_mode, question, answer, paylink, action_links, receipt_id, tx_hash, created_at)
+      values ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10, $11, $12)
       on conflict (profile_id, thread_id, id) do update set
         mode = excluded.mode,
         sub_mode = excluded.sub_mode,
         question = excluded.question,
         answer = excluded.answer,
+        paylink = excluded.paylink,
         action_links = excluded.action_links,
         receipt_id = excluded.receipt_id,
         tx_hash = excluded.tx_hash,
@@ -277,6 +330,7 @@ async function appendPgThreadMessage(profileId: string, threadId: string, messag
       message.subMode || null,
       message.question || null,
       message.answer,
+      message.paylink ? JSON.stringify(message.paylink) : null,
       JSON.stringify(message.actionLinks ?? []),
       message.receiptId || null,
       message.txHash || null,
@@ -469,6 +523,7 @@ export default async function handler(req: Request, res: Response) {
       subMode: cleanString(req.body?.subMode, 40),
       question: cleanString(req.body?.question, 500),
       answer,
+      paylink: cleanPaylink(req.body?.paylink),
       actionLinks: cleanActionLinks(req.body?.actionLinks),
       receiptId: cleanString(req.body?.receiptId, 120),
       txHash: cleanString(req.body?.txHash, 120),
