@@ -26,9 +26,13 @@ export default function PayLinkShareSheet({
 }: PayLinkShareSheetProps) {
   if (!open || !url) return null
 
-  const encodedShareUrl = encodeURIComponent(url)
+  const absoluteUrl = /^https?:\/\//i.test(url)
+    ? url
+    : `${window.location.origin}${url.startsWith('/') ? '' : '/'}${url}`
+  const shareMessage = [shareText.trim(), absoluteUrl].filter(Boolean).join('\n\n')
+  const encodedShareUrl = encodeURIComponent(absoluteUrl)
   const encodedShareText = encodeURIComponent(shareText.split('\n')[0] || 'Hash PayLink payment request')
-  const encodedShareMessage = encodeURIComponent(`${shareText}\n${url}`)
+  const encodedShareMessage = encodeURIComponent(shareMessage)
 
   return (
     <div

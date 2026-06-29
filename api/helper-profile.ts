@@ -119,7 +119,7 @@ function cleanPaylink(value: unknown): StoredPaylink | undefined {
   const label = cleanString(record.label, 160)
   const target = cleanString(record.target, 120)
   const amount = cleanString(record.amount, 40)
-  if (!mode || !wallet || !label || !target || !amount) return undefined
+  if (!mode || !wallet || !label || !target) return undefined
   const kind = cleanString(record.kind, 40)
   const payUrl = cleanString(record.payUrl, 500)
   const dashboardUrl = cleanString(record.dashboardUrl, 500)
