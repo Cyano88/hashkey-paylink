@@ -3242,7 +3242,6 @@ function HelperThinkingIndicator({ statusText, state }: { statusText: string; st
 }
 
 function HelperPaylinkCard({ request }: { request: SavedRequest }) {
-  const [copied, setCopied] = useState(false)
   const network = request.network ?? inferRequestNetwork(request)
   const isPolymarketFunding = request.kind === 'polymarket-funding'
   const url = request.payUrl || buildRequestPayLink(request)
@@ -3262,32 +3261,20 @@ function HelperPaylinkCard({ request }: { request: SavedRequest }) {
       : 'Please share the receipt after payment is confirmed.',
   ].join('\n')
 
-  async function copyLink() {
-    if (typeof navigator !== 'undefined' && navigator.clipboard) {
-      await navigator.clipboard.writeText(shareUrl)
-    }
-    setCopied(true)
-    window.setTimeout(() => setCopied(false), 1600)
-  }
-
   async function shareLink() {
-    if (typeof navigator !== 'undefined' && navigator.share) {
-      const title = isPolymarketFunding ? 'Polymarket funding checkout' : request.mode === 'group' ? 'Hash PayLink collection' : 'Hash PayLink payment request'
-      const richPayload = { title, text: shareText, url: shareUrl }
+    if (typeof navigator === 'undefined' || !navigator.share) return
+    const title = isPolymarketFunding ? 'Polymarket funding checkout' : request.mode === 'group' ? 'Hash PayLink collection' : 'Hash PayLink payment request'
+    const richPayload = { title, text: shareText, url: shareUrl }
+    try {
+      await navigator.share(richPayload)
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return
       try {
-        await navigator.share(richPayload)
+        await navigator.share({ title, url: shareUrl })
+      } catch {
         return
-      } catch (err) {
-        if (err instanceof DOMException && err.name === 'AbortError') return
-        try {
-          await navigator.share({ title, url: shareUrl })
-          return
-        } catch (secondErr) {
-          if (secondErr instanceof DOMException && secondErr.name === 'AbortError') return
-        }
       }
     }
-    await copyLink()
   }
 
   return (
@@ -3324,7 +3311,7 @@ function HelperPaylinkCard({ request }: { request: SavedRequest }) {
           className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-gray-950 px-2.5 py-2 text-xs font-semibold text-white dark:bg-white dark:text-gray-950"
         >
           <Share2 className="h-3.5 w-3.5" />
-          {copied ? 'Copied' : 'Share'}
+          Share
         </button>
         <a
           href={url}
