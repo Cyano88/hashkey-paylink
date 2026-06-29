@@ -118,7 +118,7 @@ type TelegramService = {
 }
 
 type LpScoutMode = 'best' | 'theme' | 'market'
-type LpScoutPrefill = {
+export type LpScoutPrefill = {
   mode: LpScoutMode
   query: string
   budget?: string

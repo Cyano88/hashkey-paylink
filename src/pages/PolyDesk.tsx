@@ -4,6 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { cn } from '../lib/utils'
 import {
   LpScoutPanel,
+  type LpScoutPrefill,
   PolyPortfolioPanel,
   PolyStreamPanel,
   PolyWorldCupHubPanel,
@@ -103,15 +104,22 @@ function normalizeLane(value: string | null): PolyDeskLane | '' {
   return value === 'portfolio' || value === 'worldcup' || value === 'lp-scout' ? value : ''
 }
 
+function normalizeServiceView(value: string | null): PolyDeskServiceView {
+  return value === 'portfolio' || value === 'worldcup' || value === 'lp-scout' || value === 'worldcup-news' || value === 'worldcup-scores'
+    ? value
+    : ''
+}
+
 export default function PolyDesk() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const activeLane = normalizeLane(searchParams.get('lane'))
+  const activeServiceView = normalizeServiceView(searchParams.get('service'))
   const agentRouteOpen = searchParams.get('agent') === '1'
   const [isAgentOpen, setIsAgentOpen] = useState(Boolean(activeLane || agentRouteOpen))
   const [agentLane, setAgentLane] = useState<PolyDeskLane | ''>(activeLane)
-  const [serviceView, setServiceView] = useState<PolyDeskServiceView>('')
-  const [lpScoutPrefill, setLpScoutPrefill] = useState<any>(null)
+  const [serviceView, setServiceView] = useState<PolyDeskServiceView>(activeServiceView)
+  const [lpScoutPrefill, setLpScoutPrefill] = useState<LpScoutPrefill | null>(null)
   const [polyDeskResetSignal, setPolyDeskResetSignal] = useState(0)
   const [promptIndex, setPromptIndex] = useState(0)
   const helperKey = activeLane || 'choose-lane'
@@ -135,11 +143,21 @@ export default function PolyDesk() {
     const next = new URLSearchParams(searchParams)
     next.set('agent', '1')
     next.set('lane', lane)
+    next.delete('service')
     setSearchParams(next, { replace: false })
+    setServiceView('')
     setIsAgentOpen(true)
   }
 
   function openServiceView(view: PolyDeskServiceView) {
+    const next = new URLSearchParams(searchParams)
+    next.delete('agent')
+    next.delete('lane')
+    if (view) next.set('service', view)
+    else next.delete('service')
+    setSearchParams(next, { replace: false })
+    setIsAgentOpen(false)
+    setAgentLane('')
     setServiceView(view)
     window.setTimeout(() => {
       document.querySelector('[data-polydesk-service-view="true"]')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -150,6 +168,9 @@ export default function PolyDesk() {
     if (serviceView) {
       setServiceView('')
       setLpScoutPrefill(null)
+      const next = new URLSearchParams(searchParams)
+      next.delete('service')
+      setSearchParams(next, { replace: false })
       return
     }
     if (activeLane || agentLane) {
@@ -199,12 +220,22 @@ export default function PolyDesk() {
     setAgentLane(activeLane)
   }, [activeLane, agentRouteOpen])
 
+  useEffect(() => {
+    setServiceView(activeServiceView)
+    if (activeServiceView) {
+      setIsAgentOpen(false)
+      setAgentLane('')
+    }
+  }, [activeServiceView])
+
   function launchAgent() {
     if (!agentRouteOpen) {
       const next = new URLSearchParams(searchParams)
       next.set('agent', '1')
+      next.delete('service')
       setSearchParams(next, { replace: false })
     }
+    setServiceView('')
     setIsAgentOpen(true)
   }
 
