@@ -123,7 +123,7 @@ function describeMissingDraftFields(draft, savedWallet = '') {
   return [
     draft.mode !== 'group' && !draft.target && 'payer name',
     draft.mode !== 'group' && !draft.amount && 'amount in USDC',
-    !draft.network && !draft.wallet?.startsWith('0x') && 'network',
+    !draft.network && 'network',
     !draft.label && 'purpose',
     !draft.wallet && !savedWallet && 'receive wallet',
   ].filter(Boolean)
@@ -143,6 +143,7 @@ assert.equal(isGroupRequestIntent('collect from 10 people for class dues'), true
 assert.equal(extractCollectionLabel('create a group donation for my birthday'), 'my birthday')
 assert.equal(extractCollectionLabel('collect 500 USDC from 10 people for class dues'), 'class dues')
 assert.deepEqual(describeMissingDraftFields({ mode: 'group', target: '', amount: '', network: 'base', label: 'class dues', wallet: '0xCEB57B0C27C47657C7B2f847196C953Fc7f155Ce' }), [])
+assert.deepEqual(describeMissingDraftFields({ mode: 'person', target: 'James', amount: '1', network: '', label: 'dinner', wallet: '0xCEB57B0C27C47657C7B2f847196C953Fc7f155Ce' }), ['network'])
 assert.deepEqual(describeMissingDraftFields({ mode: 'person', target: '', amount: '', network: 'base', label: 'tuition', wallet: '0xCEB57B0C27C47657C7B2f847196C953Fc7f155Ce' }), ['payer name', 'amount in USDC'])
 
 console.log('agent hash payments parser smoke ok')

@@ -516,15 +516,19 @@ export default async function handler(req: Request, res: Response) {
 
   if (action === 'append-thread') {
     const answer = cleanString(req.body?.answer, 1200)
-    if (!answer) return res.status(400).json({ ok: false, error: 'Missing helper answer.' })
+    const paylink = cleanPaylink(req.body?.paylink)
+    const actionLinks = cleanActionLinks(req.body?.actionLinks)
+    if (!answer && !paylink && actionLinks.length === 0) {
+      return res.status(400).json({ ok: false, error: 'Missing helper message.' })
+    }
     const message: HelperThreadMessage = {
       id: cleanString(req.body?.id, 80) || `helper-${now.toString(36)}-${crypto.randomBytes(3).toString('hex')}`,
       mode: cleanString(req.body?.mode, 40),
       subMode: cleanString(req.body?.subMode, 40),
       question: cleanString(req.body?.question, 500),
       answer,
-      paylink: cleanPaylink(req.body?.paylink),
-      actionLinks: cleanActionLinks(req.body?.actionLinks),
+      paylink,
+      actionLinks,
       receiptId: cleanString(req.body?.receiptId, 120),
       txHash: cleanString(req.body?.txHash, 120),
       createdAt: now,

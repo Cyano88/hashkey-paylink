@@ -1846,7 +1846,8 @@ function TelegramHelperPanel({
 
   async function appendHelperThreadMessage(nextQuestion: string, message: Omit<HelperMessage, 'question'>) {
     const answer = (message.answer ?? '').trim()
-    if (!answer) return
+    const actionLinks = helperActionLinks({ ...message, answer })
+    if (!answer && !message.paylink && actionLinks.length === 0) return
     try {
       await fetch('/api/helper-profile', {
         method: 'POST',
@@ -1863,7 +1864,7 @@ function TelegramHelperPanel({
           question: nextQuestion,
           answer,
           paylink: message.paylink,
-          actionLinks: helperActionLinks({ ...message, answer }),
+          actionLinks,
         }),
       })
     } catch {
@@ -1887,7 +1888,26 @@ function TelegramHelperPanel({
   }
 
   function helperActionLinks(message: HelperMessage) {
-    return [message.actionLink, ...(message.actionLinks ?? [])].filter((link): link is { label: string; url: string } => Boolean(link?.url))
+    const paylink = message.paylink
+    const cardLinks = paylink
+      ? [
+          {
+            label: paylink.kind === 'polymarket-funding'
+              ? 'Funding'
+              : paylink.mode === 'group'
+              ? 'Collection'
+              : 'PayLink',
+            url: paylink.payUrl || buildRequestPayLink(paylink),
+          },
+          paylink.mode === 'group'
+            ? {
+                label: 'Dashboard',
+                url: paylink.dashboardUrl || buildRequestDashboardLink(paylink),
+              }
+            : null,
+        ]
+      : []
+    return [message.actionLink, ...(message.actionLinks ?? []), ...cardLinks].filter((link): link is { label: string; url: string } => Boolean(link?.url))
   }
 
   function chooseHelperMode(mode: HelperMode) {
