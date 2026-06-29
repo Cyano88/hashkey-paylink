@@ -103,6 +103,10 @@ export default function PayLinkShareSheet({
             Email
           </a>
         </div>
+
+        <p className="mt-5 text-center text-[11px] font-medium text-gray-400">
+          Powered by Hash PayLink
+        </p>
       </div>
     </div>
   )
