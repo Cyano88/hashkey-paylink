@@ -1092,8 +1092,36 @@ export default function TelegramPaymentLinks() {
   function clearTelegramServiceRoute(nextSection?: TelegramSectionId) {
     const next = new URLSearchParams(searchParams)
     if (nextSection) next.set('section', nextSection)
-    ;['service', 'mode', 'poly', 'notice', 'open', 'eventId', 'payer'].forEach(key => next.delete(key))
+    ;['service', 'mode', 'poly', 'notice', 'open', 'eventId', 'payer', 'back'].forEach(key => next.delete(key))
     setSearchParams(next, { replace: true })
+  }
+
+  function internalBackTarget() {
+    const raw = (searchParams.get('back') || '').trim()
+    if (!raw) return ''
+    try {
+      const url = new URL(raw, window.location.origin)
+      if (url.origin !== window.location.origin) return ''
+      return `${url.pathname}${url.search}${url.hash}`
+    } catch {
+      return raw.startsWith('/') && !raw.startsWith('//') ? raw : ''
+    }
+  }
+
+  function closeTelegramOrFallback() {
+    const telegramWebApp = (window as Window & {
+      Telegram?: { WebApp?: { close?: () => void } }
+    }).Telegram?.WebApp
+    if (telegramWebApp?.close) {
+      telegramWebApp.close()
+      return
+    }
+    if (window.history.length > 1) {
+      navigate(-1)
+      return
+    }
+    setActiveSection('payment-links')
+    clearTelegramServiceRoute('payment-links')
   }
 
   function openService(service: TelegramService) {
@@ -1230,13 +1258,13 @@ export default function TelegramPaymentLinks() {
   function goBackFromTelegramDashboard() {
     if (activeService) {
       if (activeService === 'hashpaylink-helper') {
-        if (window.history.length > 1) {
-          navigate(-1)
+        const backTarget = internalBackTarget()
+        if (backTarget) {
+          navigate(backTarget)
           return
         }
         setActiveService('')
-        setActiveSection('payment-links')
-        clearTelegramServiceRoute('payment-links')
+        clearTelegramServiceRoute(activeSection)
         return
       }
       if (activeService === 'poly-worldcup-news' || activeService === 'poly-stream') {
@@ -1260,11 +1288,7 @@ export default function TelegramPaymentLinks() {
       clearTelegramServiceRoute()
       return
     }
-    if (window.history.length > 1) {
-      navigate(-1)
-      return
-    }
-    navigate('/app')
+    closeTelegramOrFallback()
   }
 
   return (

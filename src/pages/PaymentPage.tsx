@@ -329,6 +329,7 @@ export default function PaymentPage() {
       notice: 'polymarket-funding-complete',
     })
     if (polymarketHelperOwner) params.set('helperOwner', polymarketHelperOwner)
+    params.set('back', `${window.location.pathname}${window.location.search}${window.location.hash}`)
     return `/telegram/payment-links?${params.toString()}`
   })()
 
