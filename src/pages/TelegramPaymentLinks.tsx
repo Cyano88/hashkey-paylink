@@ -2113,6 +2113,19 @@ function TelegramHelperPanel({
     let draft = buildDraftFromText(nextQuestion, paylinkDraft ?? revisionBase)
     const savedWallet = preferredWalletFor(draft.network)
 
+    if (!draft.wallet && savedWallet && wantsSavedWallet(nextQuestion)) {
+      const savedNetwork: RequestNetwork = savedWallet.startsWith('0x') ? 'base' : 'solana'
+      draft = {
+        ...draft,
+        network: draft.network || savedNetwork,
+        wallet: savedWallet,
+        evmWallet: savedWallet.startsWith('0x') ? savedWallet : draft.evmWallet,
+        solanaWallet: savedWallet.startsWith('0x') ? draft.solanaWallet : savedWallet,
+        offeredSavedWallet: true,
+        offeredSavedWalletNetwork: draft.network || savedNetwork,
+      }
+    }
+
     if (!draft.wallet && savedWallet && !draft.offeredSavedWallet) {
       setThinkingState('payment-wallet')
       draft = { ...draft, offeredSavedWallet: true, offeredSavedWalletNetwork: draft.network }
