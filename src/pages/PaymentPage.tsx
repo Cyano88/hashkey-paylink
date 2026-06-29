@@ -4153,34 +4153,22 @@ export default function PaymentPage() {
 
           {showPolymarketFundingChoice && (
             <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
-              <div className="px-1 text-center">
-                <p className="text-sm font-semibold text-gray-900 dark:text-white">Add USDC to your Polymarket funding wallet</p>
-                <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Review the wallet, then continue with Circle USDC checkout.</p>
-              </div>
               <button
                 type="button"
                 onClick={() => setPolymarketFundingStep('fund')}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-6 py-3.5 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-6 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
               >
                 <Wallet className="h-4 w-4" />
-                Continue to funding
+                Continue
               </button>
-              <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
-                Not on Polymarket yet?
-              </p>
               <a
                 href={POLYMARKET_SIGNUP_URL}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex w-full flex-col items-center justify-center gap-1 rounded-xl border border-gray-200 bg-white px-6 py-3 text-sm font-semibold text-gray-800 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-white dark:hover:bg-white/[0.1]"
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-6 py-3 text-sm font-semibold text-gray-800 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-white dark:hover:bg-white/[0.1]"
               >
-                <span className="inline-flex items-center gap-2">
-                  <ExternalLink className="h-4 w-4" />
-                  Create Polymarket account
-                </span>
-                <span className="text-[11px] font-medium text-gray-400 dark:text-gray-500">
-                  For best experience, sign up with email
-                </span>
+                <ExternalLink className="h-4 w-4" />
+                Create Polymarket account
               </a>
             </div>
           )}

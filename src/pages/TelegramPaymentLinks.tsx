@@ -1230,6 +1230,10 @@ export default function TelegramPaymentLinks() {
   function goBackFromTelegramDashboard() {
     if (activeService) {
       if (activeService === 'hashpaylink-helper') {
+        if (window.history.length > 1) {
+          navigate(-1)
+          return
+        }
         setActiveService('')
         setActiveSection('payment-links')
         clearTelegramServiceRoute('payment-links')
@@ -1482,7 +1486,7 @@ export default function TelegramPaymentLinks() {
               initialPolyDeskSubMode={searchParams.get('notice') === 'polymarket-funding-complete' ? (searchParams.get('poly') === 'portfolio' ? 'portfolio' : searchParams.get('poly') === 'worldcup' ? 'worldcup' : searchParams.get('poly') === 'lp-scout' ? 'lp-scout' : '') : ''}
               initialNotice={searchParams.get('notice') ?? ''}
               onRecoverTelegramName={rememberRecoveredHelperName}
-              onBack={() => setActiveService('')}
+              onBack={goBackFromTelegramDashboard}
             />
           ) : activeService === 'agent-dashboard' || activeService === 'fund-agent-wallet' || activeService === 'create-your-agent' ? (
             <TelegramX402WalletPanel
