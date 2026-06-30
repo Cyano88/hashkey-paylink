@@ -37,6 +37,7 @@ import AgentWorkspace from './AgentWorkspace'
 import ZeroScoutPowerBadge from '../components/ZeroScoutPowerBadge'
 import PayLinkShareSheet from '../components/PayLinkShareSheet'
 import { PrivyWalletConnectButton } from '../lib/PrivyWalletConnectButton'
+import { PrivyDisconnectButton } from '../lib/PrivyDisconnectButton'
 import { PRIVY_AUTH_ENABLED } from '../lib/authMode'
 
 const TELEGRAM_BOT_URL = import.meta.env.VITE_TELEGRAM_AGENT_URL || 'https://t.me/HashPayLinkBot'
@@ -4538,6 +4539,7 @@ function HashLiveScoreWidget({
   tradeBusyKey,
   tradeNotice,
   builderHandoff,
+  signingWalletAddress,
 }: {
   matches: PolyStreamMatch[]
   loading: boolean
@@ -4550,6 +4552,7 @@ function HashLiveScoreWidget({
   tradeBusyKey: string
   tradeNotice: string
   builderHandoff: Record<string, unknown> | null
+  signingWalletAddress: string
 }) {
   const [selectedMatchKey, setSelectedMatchKey] = useState('')
   const [detailIndex, setDetailIndex] = useState(0)
@@ -4777,6 +4780,25 @@ function HashLiveScoreWidget({
           )}
           {featured && tradeMenuOpen && featuredCanPrepareTrade && (
             <div className="relative z-10 mt-1.5 rounded-lg border border-white/10 bg-black/35 p-2 backdrop-blur-sm">
+              <div className="mb-1.5 flex items-center justify-between gap-2">
+                <p className="truncate text-[10px] font-semibold text-white/55">
+                  {signingWalletAddress ? `Wallet ${shortHex(signingWalletAddress)}` : 'Connect a wallet to trade'}
+                </p>
+                {signingWalletAddress ? (
+                  <PrivyDisconnectButton
+                    title="Sign out wallet"
+                    className="inline-flex items-center justify-center gap-1 rounded-md border border-white/10 bg-white/10 px-2 py-1 text-[10px] font-bold text-white/75 transition hover:bg-white/15 hover:text-white"
+                  >
+                    <LogOut className="h-3 w-3" />
+                    Sign out
+                  </PrivyDisconnectButton>
+                ) : (
+                  <PrivyWalletConnectButton className="inline-flex items-center justify-center gap-1 rounded-md border border-white/10 bg-white px-2 py-1 text-[10px] font-black text-gray-950 transition hover:bg-gray-100">
+                    <Wallet className="h-3 w-3" />
+                    Connect
+                  </PrivyWalletConnectButton>
+                )}
+              </div>
               <input
                 value={tradeAmount}
                 onChange={event => onTradeAmountChange(event.target.value)}
@@ -4815,6 +4837,9 @@ function HashLiveScoreWidget({
                       </p>
                       <p className="mt-0.5 text-[9px] font-semibold text-emerald-100/65">
                         FOK order. Wallet signs first, then PolyDesk submits with builder attribution.
+                      </p>
+                      <p className="mt-0.5 text-[9px] font-semibold text-emerald-100/65">
+                        Your wallet may show Polymarket CTF Exchange details. That is the official order signature.
                       </p>
                     </div>
                     <button
@@ -4987,6 +5012,7 @@ export function PolyStreamPanel({
         0,
         signingWalletAddress,
       )
+      setTradeNotice('Review the Polymarket order in your wallet. The wallet may show raw CTF Exchange fields; no gas is charged for this signature.')
       const signedOrder = await signingClient.createMarketOrder(
         {
           tokenID: option.tokenId,
@@ -5054,8 +5080,11 @@ export function PolyStreamPanel({
           ? `Submitted ${option.label} to Polymarket with builder attribution.${handoffMode}`
           : 'Signed order created, but builder attribution is not configured.',
       )
-    } catch {
-      setTradeNotice('Could not sign the World Cup order.')
+    } catch (err) {
+      const message = err instanceof Error ? err.message.toLowerCase() : ''
+      setTradeNotice(message.includes('reject') || message.includes('denied') || message.includes('cancel')
+        ? 'Wallet signature was cancelled.'
+        : 'Could not sign the World Cup order.')
     } finally {
       setTradeBusyKey('')
     }
@@ -5145,6 +5174,7 @@ export function PolyStreamPanel({
           tradeBusyKey={tradeBusyKey}
           tradeNotice={tradeNotice}
           builderHandoff={builderHandoff}
+          signingWalletAddress={signingWalletAddress}
         />
         <p className="px-1 pb-1 text-[10px] font-medium leading-relaxed text-gray-400 dark:text-gray-500">
           Live markets move fast. Confirm the latest score and odds on Polymarket before trading.
@@ -6860,9 +6890,18 @@ export function PolyPortfolioPanel({
             </p>
           </div>
           {signingWalletAddress ? (
-            <span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-bold uppercase text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-200">
-              Ready
-            </span>
+            <div className="flex shrink-0 items-center gap-1.5">
+              <span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-bold uppercase text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-200">
+                Ready
+              </span>
+              <PrivyDisconnectButton
+                title="Sign out wallet"
+                className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-[11px] font-semibold text-gray-700 transition hover:bg-gray-50 dark:border-white/10 dark:text-gray-200 dark:hover:bg-white/[0.04]"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                Sign out
+              </PrivyDisconnectButton>
+            </div>
           ) : (
             <PrivyWalletConnectButton className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 py-1.5 text-[11px] font-semibold text-gray-700 transition hover:bg-gray-50 dark:border-white/10 dark:text-gray-200 dark:hover:bg-white/[0.04]">
               <Wallet className="h-3.5 w-3.5" />
