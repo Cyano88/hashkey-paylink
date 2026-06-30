@@ -6062,6 +6062,8 @@ type PolymarketBridgeNetwork = 'base' | 'arbitrum' | 'solana'
 
 type PolymarketProfile = {
   polymarketAddress: string
+  watchedAddress?: string | null
+  tradingAddress?: string | null
   preferredFundingNetwork: string
   telegramOwner?: string | null
   telegramId?: string | null
@@ -6296,6 +6298,8 @@ export function PolyPortfolioPanel({
   const settings = bundle?.settings ?? null
   const signingWallet = privyWallets.find(wallet => /^0x[a-fA-F0-9]{40}$/.test(wallet.address ?? '')) ?? null
   const signingWalletAddress = signingWallet?.address ?? ''
+  const watchedAddress = profile?.watchedAddress || profile?.polymarketAddress || ''
+  const tradingAddress = profile?.tradingAddress || signingWalletAddress || ''
 
   const claimablePositions = useMemo(
     () => livePositions.filter(isClaimablePosition),
@@ -6395,16 +6399,16 @@ export function PolyPortfolioPanel({
   }, [privyReady, authenticated, fetchBundle])
 
   useEffect(() => {
-    if (profile?.polymarketAddress) {
-      void fetchLiveData(profile.polymarketAddress)
+    if (watchedAddress) {
+      void fetchLiveData(watchedAddress)
     }
-  }, [profile?.polymarketAddress, fetchLiveData])
+  }, [watchedAddress, fetchLiveData])
 
   useEffect(() => {
-    if (!profile?.polymarketAddress) return
+    if (!watchedAddress) return
     const refreshOnReturn = () => {
       if (document.visibilityState === 'visible') {
-        void fetchLiveData(profile.polymarketAddress)
+        void fetchLiveData(watchedAddress)
         void fetchBundle()
       }
     }
@@ -6414,21 +6418,21 @@ export function PolyPortfolioPanel({
       window.removeEventListener('focus', refreshOnReturn)
       document.removeEventListener('visibilitychange', refreshOnReturn)
     }
-  }, [profile?.polymarketAddress, fetchLiveData, fetchBundle])
+  }, [watchedAddress, fetchLiveData, fetchBundle])
 
   useEffect(() => {
-    if (profile?.polymarketAddress && livePositions.length >= 0 && !liveLoading) {
+    if (watchedAddress && livePositions.length >= 0 && !liveLoading) {
       void evaluateAlerts()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile?.polymarketAddress, livePositions.length])
+  }, [watchedAddress, livePositions.length])
 
   useEffect(() => {
     if (settings) setSettingsDraft(settings)
   }, [settings])
 
-  async function saveProfile() {
-    const address = addressInput.trim()
+  async function saveProfile(addressOverride?: string) {
+    const address = (addressOverride ?? addressInput).trim()
     if (!/^0x[a-fA-F0-9]{40}$/.test(address)) {
       setProfileError('Enter a valid 0x Polymarket profile address.')
       return
@@ -6444,6 +6448,7 @@ export function PolyPortfolioPanel({
         body: JSON.stringify({
           action: 'save-profile',
           address,
+          mode: unsignedPortfolioAction === 'trading' ? 'trading' : 'watch',
           fundingNetwork: networkInput,
           telegramOwner,
           telegramId,
@@ -6474,11 +6479,17 @@ export function PolyPortfolioPanel({
       const res = await fetch('/api/polymarket-portfolio', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ action: 'disconnect' }),
+        body: JSON.stringify({ action: 'disconnect-watch' }),
       })
-      const data = await readPolyDeskJson<{ ok?: boolean; error?: string }>(res, 'Could not disconnect.')
+      const data = await readPolyDeskJson<{ ok?: boolean; error?: string } & PolymarketPortfolioBundle>(res, 'Could not disconnect.')
       if (!res.ok || !data.ok) throw new Error(data.error || 'Could not disconnect.')
-      setBundle({ profile: null, settings: null, watchlist: [], fundingAttempts: [], alerts: [] })
+      setBundle({
+        profile: data.profile,
+        settings: data.settings,
+        watchlist: data.watchlist ?? [],
+        fundingAttempts: data.fundingAttempts ?? [],
+        alerts: data.alerts ?? [],
+      })
       setLiveValue(null)
       setLivePositions([])
       setLiveError('')
@@ -6498,7 +6509,10 @@ export function PolyPortfolioPanel({
   }
 
   async function startFund(marketUrlForCta = '') {
-    if (!profile) return
+    if (!tradingAddress) {
+      setFundError('Connect or save a trading wallet before funding.')
+      return
+    }
     setFundError('')
     const amt = fundAmount.trim()
     if (!/^\d+(?:\.\d{1,6})?$/.test(amt) || Number(amt) < 3) {
@@ -6507,12 +6521,12 @@ export function PolyPortfolioPanel({
     }
     setFundBusy(true)
     try {
-      const network = (profile.preferredFundingNetwork as PolymarketBridgeNetwork) || 'base'
+      const network = (profile?.preferredFundingNetwork as PolymarketBridgeNetwork) || 'base'
       const bridgeRes = await fetch('/api/polymarket-bridge', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          polymarketWallet: profile.polymarketAddress,
+          polymarketWallet: tradingAddress,
           network,
         }),
       })
@@ -6547,7 +6561,7 @@ export function PolyPortfolioPanel({
         amount: amt,
         funding: 'Polymarket portfolio',
         network: (bridgeData.network ?? network) as RequestNetwork,
-        polymarketWallet: profile.polymarketAddress,
+        polymarketWallet: tradingAddress,
         returnToPortfolio: true,
         requestId,
       })
@@ -6659,9 +6673,9 @@ export function PolyPortfolioPanel({
   }
 
   function copyAddress() {
-    if (!profile) return
+    if (!watchedAddress) return
     if (typeof navigator === 'undefined' || !navigator.clipboard) return
-    navigator.clipboard.writeText(profile.polymarketAddress).then(() => {
+    navigator.clipboard.writeText(watchedAddress).then(() => {
       setAddressCopied(true)
       window.setTimeout(() => setAddressCopied(false), 1500)
     }).catch(() => undefined)
@@ -6929,17 +6943,74 @@ export function PolyPortfolioPanel({
   }
 
   // Connect screen — no saved profile yet
-  if (!profile) {
+  if (!unsignedPortfolioAction) {
+    const portfolioActions = [
+      ['watch', 'Watch Polymarket account', watchedAddress ? `Watching ${shortHex(watchedAddress)}` : 'Read-only alerts for any public profile.'],
+      ['trading', 'Trading wallet', tradingAddress ? `Trading with ${shortHex(tradingAddress)}` : 'Connect and persist the wallet used for trades.'],
+      ['external', 'External funding', 'Send funds to another Polymarket wallet.'],
+    ] as const
+    return (
+      <div className="mt-4 space-y-3">
+        <PolyDeskBackButton onClick={onBack} />
+        <div className="space-y-2">
+          {portfolioActions.map(([key, label, body]) => (
+            <PolyDeskMenuCard key={key} title={label} body={body} onClick={() => setUnsignedPortfolioAction(key)} />
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  if (unsignedPortfolioAction === 'external') {
+    return (
+      <div className="mt-4 space-y-3">
+        <PolyDeskBackButton onClick={() => setUnsignedPortfolioAction(null)} />
+        <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#111216]">
+          <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">External funding</p>
+          <h2 className="mt-1 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Fund another Polymarket wallet</h2>
+          <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
+            One-off funding only. This wallet will not become your watched account or trading wallet.
+          </p>
+          <div className="mt-3 space-y-3">
+            <InputBlock label="External Polymarket wallet" value={unsignedExternalAddress} onChange={value => { setUnsignedExternalAddress(value); setUnsignedExternalResult(null) }} placeholder="0x... wallet to fund" />
+            <InputBlock label="Amount USDC" value={unsignedExternalAmount} onChange={value => { setUnsignedExternalAmount(value); setUnsignedExternalResult(null) }} placeholder="0.00" inputMode="decimal" />
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Funding network</p>
+              <NetworkChipGroup value={unsignedExternalNetwork} onChange={value => {
+                if (value === 'base' || value === 'arbitrum' || value === 'solana') {
+                  setUnsignedExternalNetwork(value)
+                  setUnsignedExternalResult(null)
+                }
+              }} options={polymarketBridgeNetworks} />
+            </div>
+            {unsignedExternalError && <p className="text-xs text-red-500 dark:text-red-300">{unsignedExternalError}</p>}
+            {!unsignedExternalResult ? (
+              <button type="button" onClick={prepareUnsignedExternalFunding} disabled={unsignedExternalBusy} className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200">
+                {unsignedExternalBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
+                Prepare checkout
+              </button>
+            ) : (
+              <a href={unsignedExternalResult.payUrl} className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200">
+                <ExternalLink className="h-4 w-4" /> Open checkout
+              </a>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!watchedAddress && unsignedPortfolioAction === 'watch') {
     return (
       <div className="mt-4">
-        <PolyDeskBackButton onClick={onBack} />
+        <PolyDeskBackButton onClick={() => setUnsignedPortfolioAction(null)} />
         <div className="flex items-center gap-2">
           <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.06]">
             <img src={POLYMARKET_LOGO} alt="" className="h-4 w-4 invert dark:invert-0" />
           </span>
           <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">PolyDesk</p>
         </div>
-        <h2 className="mt-2 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Track a public Polymarket profile</h2>
+        <h2 className="mt-2 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Watch a public Polymarket account</h2>
         <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
           Paste the public 0x address from a Polymarket account panel. PolyDesk uses it to show positions, claimables, alerts, and funding history. It does not give PolyDesk control of that account.
         </p>
@@ -6948,7 +7019,7 @@ export function PolyPortfolioPanel({
         </div>
         <div className="mt-4 space-y-3">
           <InputBlock
-            label="Public Polymarket profile address"
+            label="Watched account address"
             value={addressInput}
             onChange={setAddressInput}
             placeholder="0x... public profile address"
@@ -6972,8 +7043,43 @@ export function PolyPortfolioPanel({
             className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
           >
             {savingProfile ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-            Save public profile
+            Save watched account
           </button>
+        </div>
+      </div>
+    )
+  }
+
+  if (!profile && unsignedPortfolioAction === 'trading') {
+    return (
+      <div className="mt-4 space-y-3">
+        <PolyDeskBackButton onClick={() => setUnsignedPortfolioAction(null)} />
+        <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#111216]">
+          <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Trading wallet</p>
+          <h2 className="mt-1 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Connect your trading wallet</h2>
+          <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
+            This wallet funds and signs PolyDesk trades. It is separate from any public account you watch.
+          </p>
+          <div className="mt-3">
+            {signingWalletAddress ? (
+              <button
+                type="button"
+                onClick={() => {
+                  void saveProfile(signingWalletAddress)
+                }}
+                disabled={savingProfile}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+              >
+                {savingProfile ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                Save trading wallet
+              </button>
+            ) : (
+              <PrivyWalletConnectButton className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200">
+                <Wallet className="h-4 w-4" />
+                Connect wallet
+              </PrivyWalletConnectButton>
+            )}
+          </div>
         </div>
       </div>
     )
@@ -6992,7 +7098,8 @@ export function PolyPortfolioPanel({
     <div className="mt-4 space-y-4">
       <PolyDeskBackButton onClick={onBack} />
 
-      {/* Profile / balance card */}
+      {/* Watched account card */}
+      {unsignedPortfolioAction === 'watch' && (
       <div className="rounded-2xl border border-gray-100 bg-white p-3.5 shadow-sm dark:border-white/10 dark:bg-[#0f1014]">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
@@ -7010,14 +7117,14 @@ export function PolyPortfolioPanel({
               onClick={copyAddress}
               className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-gray-50 px-2.5 py-1 text-[11px] font-semibold text-gray-700 hover:bg-gray-100 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:bg-white/[0.08]"
             >
-              <span className="font-mono tabular-nums">{shortHex(profile.polymarketAddress)}</span>
+              <span className="font-mono tabular-nums">{shortHex(watchedAddress)}</span>
               {addressCopied ? <CheckCircle2 className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3 opacity-60" />}
             </button>
           </div>
           <div className="flex items-center gap-1.5">
             <button
               type="button"
-              onClick={() => profile && void fetchLiveData(profile.polymarketAddress)}
+              onClick={() => watchedAddress && void fetchLiveData(watchedAddress)}
               disabled={liveLoading}
               className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 dark:border-white/10 dark:text-gray-300 dark:hover:bg-white/[0.04]"
               aria-label="Refresh"
@@ -7138,14 +7245,16 @@ export function PolyPortfolioPanel({
           </div>
         )}
       </div>
+      )}
 
       {/* Trading wallet card */}
+      {unsignedPortfolioAction === 'trading' && (
       <div className="rounded-2xl border border-gray-100 bg-white p-3.5 shadow-sm dark:border-white/10 dark:bg-[#0f1014]">
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">PolyDesk trading wallet</p>
             <p className="mt-0.5 text-sm font-semibold text-gray-900 dark:text-white">
-              {signingWalletAddress ? shortHex(signingWalletAddress) : 'Not connected'}
+              {tradingAddress ? shortHex(tradingAddress) : 'Not connected'}
             </p>
           </div>
           {signingWalletAddress ? (
@@ -7169,8 +7278,19 @@ export function PolyPortfolioPanel({
           )}
         </div>
         <p className="mt-1.5 text-xs leading-snug text-gray-500 dark:text-gray-400">
-          This wallet signs PolyDesk trades. Your saved public profile is only used for tracking and funding context.
+          This wallet funds and signs PolyDesk trades. It is separate from watched public accounts.
         </p>
+        {signingWalletAddress && profile?.tradingAddress !== signingWalletAddress && (
+          <button
+            type="button"
+            onClick={() => void saveProfile(signingWalletAddress)}
+            disabled={savingProfile}
+            className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 py-1.5 text-[11px] font-semibold text-gray-700 transition hover:bg-gray-50 disabled:opacity-50 dark:border-white/10 dark:text-gray-200 dark:hover:bg-white/[0.04]"
+          >
+            {savingProfile ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+            Save for next time
+          </button>
+        )}
         {tradeTicket ? (
           <div className="mt-2.5 space-y-2.5 rounded-xl border border-gray-100 bg-gray-50 p-3 dark:border-white/10 dark:bg-white/[0.04]">
             <div className="flex items-start justify-between gap-3">
@@ -7230,8 +7350,10 @@ export function PolyPortfolioPanel({
           </p>
         )}
       </div>
+      )}
 
       {/* Alerts card */}
+      {unsignedPortfolioAction === 'watch' && (
       <div className="rounded-2xl border border-gray-100 bg-white p-3.5 shadow-sm dark:border-white/10 dark:bg-[#0f1014]">
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -7354,9 +7476,10 @@ export function PolyPortfolioPanel({
           </p>
         )}
       </div>
+      )}
 
       {/* Claimables card */}
-      {claimablePositions.length > 0 && (
+      {unsignedPortfolioAction === 'watch' && claimablePositions.length > 0 && (
         <div className="rounded-2xl border border-emerald-100 bg-emerald-50/40 p-3.5 shadow-sm dark:border-emerald-300/20 dark:bg-emerald-400/[0.04]">
           <div className="flex items-center justify-between gap-3">
             <p className="text-[11px] font-semibold uppercase tracking-widest text-emerald-700 dark:text-emerald-300">Claimable on Polymarket</p>
@@ -7374,7 +7497,7 @@ export function PolyPortfolioPanel({
                   target="_blank"
                   rel="noreferrer"
                   onClick={() => {
-                    if (profile?.polymarketAddress) window.setTimeout(() => void fetchLiveData(profile.polymarketAddress), 4000)
+                    if (watchedAddress) window.setTimeout(() => void fetchLiveData(watchedAddress), 4000)
                   }}
                   className="inline-flex items-center gap-1.5 rounded-lg bg-black px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
                 >
@@ -7387,6 +7510,7 @@ export function PolyPortfolioPanel({
       )}
 
       {/* Open positions card */}
+      {unsignedPortfolioAction === 'watch' && (
       <div className="rounded-2xl border border-gray-100 bg-white p-3.5 shadow-sm dark:border-white/10 dark:bg-[#0f1014]">
         <div className="flex items-center justify-between gap-3">
           <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Open positions</p>
@@ -7443,6 +7567,7 @@ export function PolyPortfolioPanel({
           </ul>
         )}
       </div>
+      )}
 
       {/* Quick links */}
       <div className="grid grid-cols-2 gap-2">

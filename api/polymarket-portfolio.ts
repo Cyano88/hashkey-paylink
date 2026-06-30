@@ -40,6 +40,8 @@ function ensureSchema() {
       create table if not exists polymarket_profiles (
         privy_user_id text primary key,
         polymarket_address text not null,
+        watched_address text,
+        trading_address text,
         preferred_funding_network text not null default 'base',
         telegram_owner text,
         telegram_id text,
@@ -59,6 +61,8 @@ function ensureSchema() {
       );
 
       alter table polymarket_profiles
+        add column if not exists watched_address text,
+        add column if not exists trading_address text,
         add column if not exists telegram_owner text,
         add column if not exists telegram_id text;
 
@@ -277,6 +281,12 @@ async function loadProfileBundle(privyUserId: string) {
   return {
     profile: {
       polymarketAddress: profile.polymarket_address as string,
+      watchedAddress: profile.watched_address
+        ? String(profile.watched_address)
+        : profile.trading_address
+          ? null
+          : String(profile.polymarket_address),
+      tradingAddress: profile.trading_address ? String(profile.trading_address) : null,
       // Clamp to a known network so a stale/corrupt value doesn't reach the
       // bridge call with a confusing 502.
       preferredFundingNetwork: SUPPORTED_NETWORKS.has(String(profile.preferred_funding_network))
@@ -491,20 +501,28 @@ export default async function handler(req: Request, res: Response) {
     if (action === 'save-profile') {
       const address = cleanString(body.address, 64)
       const network = cleanString(body.fundingNetwork, 12) || 'base'
+      const mode = cleanString(body.mode, 16) || 'watch'
       const telegramOwner = cleanString(body.telegramOwner, 96) || null
       const telegramId = cleanString(body.telegramId, 48) || null
       if (!isAddress(address)) return res.status(400).json({ ok: false, error: 'Provide a valid 0x Polymarket address.' })
       if (!SUPPORTED_NETWORKS.has(network)) return res.status(400).json({ ok: false, error: 'Unsupported funding network.' })
+      const watchedAddress = mode === 'trading' ? null : address
+      const tradingAddress = mode === 'trading' ? address : null
       await requirePool().query(
-        `insert into polymarket_profiles (privy_user_id, polymarket_address, preferred_funding_network, telegram_owner, telegram_id)
-         values ($1,$2,$3,$4,$5)
+        `insert into polymarket_profiles (privy_user_id, polymarket_address, watched_address, trading_address, preferred_funding_network, telegram_owner, telegram_id)
+         values ($1,$2,$3,$4,$5,$6,$7)
          on conflict (privy_user_id) do update set
-           polymarket_address = excluded.polymarket_address,
+           polymarket_address = case
+             when $8 = 'trading' and coalesce(polymarket_profiles.watched_address, '') <> '' then polymarket_profiles.polymarket_address
+             else excluded.polymarket_address
+           end,
+           watched_address = coalesce(excluded.watched_address, polymarket_profiles.watched_address),
+           trading_address = coalesce(excluded.trading_address, polymarket_profiles.trading_address),
            preferred_funding_network = excluded.preferred_funding_network,
            telegram_owner = coalesce(excluded.telegram_owner, polymarket_profiles.telegram_owner),
            telegram_id = coalesce(excluded.telegram_id, polymarket_profiles.telegram_id),
            updated_at = now()`,
-        [privyUserId, address, network, telegramOwner, telegramId],
+        [privyUserId, address, watchedAddress, tradingAddress, network, telegramOwner, telegramId, mode],
       )
       await requirePool().query(
         `insert into polymarket_alert_settings (privy_user_id) values ($1)
@@ -523,6 +541,32 @@ export default async function handler(req: Request, res: Response) {
       return res.json({ ok: true, profile: null, settings: null, watchlist: [], fundingAttempts: [], alerts: [] })
     }
 
+    if (action === 'disconnect-watch') {
+      await requirePool().query(
+        `update polymarket_profiles
+            set watched_address = null,
+                polymarket_address = coalesce(trading_address, polymarket_address),
+                updated_at = now()
+          where privy_user_id = $1`,
+        [privyUserId],
+      )
+      await requirePool().query('delete from polymarket_alert_history where privy_user_id = $1', [privyUserId])
+      const bundle = await loadProfileBundle(privyUserId)
+      return res.json({ ok: true, ...bundle })
+    }
+
+    if (action === 'disconnect-trading') {
+      await requirePool().query(
+        `update polymarket_profiles
+            set trading_address = null,
+                updated_at = now()
+          where privy_user_id = $1`,
+        [privyUserId],
+      )
+      const bundle = await loadProfileBundle(privyUserId)
+      return res.json({ ok: true, ...bundle })
+    }
+
     if (action === 'save-alert-settings') {
       // 0 means "loss alerts disabled" — see evaluateAlerts. 95 is the
       // generous upper bound (anything beyond is effectively the same as off).
@@ -532,8 +576,8 @@ export default async function handler(req: Request, res: Response) {
       const movement = Boolean(body.movementAlertsEnabled)
       const alertEmail = cleanEmail(body.alertEmail)
       if (alertEmail === '') return res.status(400).json({ ok: false, error: 'Enter a valid alert email or leave it blank.' })
-      const profileExists = (await requirePool().query('select 1 from polymarket_profiles where privy_user_id = $1', [privyUserId])).rowCount
-      if (!profileExists) return res.status(409).json({ ok: false, error: 'Save a Polymarket profile address first.' })
+      const profileExists = (await requirePool().query('select 1 from polymarket_profiles where privy_user_id = $1 and coalesce(watched_address, polymarket_address) is not null', [privyUserId])).rowCount
+      if (!profileExists) return res.status(409).json({ ok: false, error: 'Save a watched Polymarket account first.' })
       await requirePool().query(
         `insert into polymarket_alert_settings
           (privy_user_id, loss_threshold_percent, resolved_alerts_enabled, claimable_alerts_enabled, movement_alerts_enabled, alert_email)
@@ -562,8 +606,8 @@ export default async function handler(req: Request, res: Response) {
     if (action === 'add-watch') {
       const marketId = cleanString(body.marketId, 96)
       if (!marketId) return res.status(400).json({ ok: false, error: 'marketId is required.' })
-      const profileExists = (await requirePool().query('select 1 from polymarket_profiles where privy_user_id = $1', [privyUserId])).rowCount
-      if (!profileExists) return res.status(409).json({ ok: false, error: 'Save a Polymarket profile address first.' })
+      const profileExists = (await requirePool().query('select 1 from polymarket_profiles where privy_user_id = $1 and coalesce(watched_address, polymarket_address) is not null', [privyUserId])).rowCount
+      if (!profileExists) return res.status(409).json({ ok: false, error: 'Save a watched Polymarket account first.' })
       const marketSlug = cleanString(body.marketSlug, 160) || null
       const marketUrl = cleanString(body.marketUrl, 280) || null
       const label = cleanString(body.label, 80) || null
@@ -607,10 +651,10 @@ export default async function handler(req: Request, res: Response) {
       const txHash = cleanString(body.txHash, 96) || null
       const depositAddress = cleanString(body.depositAddress, 96) || null
       const profileRow = (await requirePool().query(
-        'select polymarket_address from polymarket_profiles where privy_user_id = $1',
+        'select coalesce(trading_address, polymarket_address) as polymarket_address from polymarket_profiles where privy_user_id = $1',
         [privyUserId],
       )).rows[0]
-      if (!profileRow) return res.status(409).json({ ok: false, error: 'Save a Polymarket profile address first.' })
+      if (!profileRow?.polymarket_address) return res.status(409).json({ ok: false, error: 'Save a trading wallet first.' })
       const inserted = await requirePool().query(
         `insert into polymarket_funding_attempts
           (privy_user_id, polymarket_address, request_id, network, amount, status, tx_hash, deposit_address)
@@ -633,10 +677,10 @@ export default async function handler(req: Request, res: Response) {
       const bridgeStatus = cleanString(body.bridgeStatus, 32)
       const status = bridgeStatus === 'complete' ? 'bridge_complete' : 'confirmed'
       const profileRow = (await requirePool().query(
-        'select polymarket_address from polymarket_profiles where privy_user_id = $1',
+        'select coalesce(trading_address, polymarket_address) as polymarket_address from polymarket_profiles where privy_user_id = $1',
         [privyUserId],
       )).rows[0]
-      if (!profileRow) return res.status(409).json({ ok: false, error: 'Save a Polymarket profile address first.' })
+      if (!profileRow?.polymarket_address) return res.status(409).json({ ok: false, error: 'Save a trading wallet first.' })
 
       let updated
       if (requestId) {
@@ -686,10 +730,10 @@ export default async function handler(req: Request, res: Response) {
 
     if (action === 'evaluate-alerts') {
       const profileRow = (await requirePool().query(
-        'select polymarket_address from polymarket_profiles where privy_user_id = $1',
+        'select coalesce(watched_address, polymarket_address) as polymarket_address from polymarket_profiles where privy_user_id = $1',
         [privyUserId],
       )).rows[0]
-      if (!profileRow) return res.status(409).json({ ok: false, error: 'Save a Polymarket profile address first.' })
+      if (!profileRow?.polymarket_address) return res.status(409).json({ ok: false, error: 'Save a watched Polymarket account first.' })
       const inserted = await evaluateAlerts(privyUserId, String(profileRow.polymarket_address))
       const rows = (await requirePool().query(
         'select * from polymarket_alert_history where privy_user_id = $1 order by created_at desc limit 50',
