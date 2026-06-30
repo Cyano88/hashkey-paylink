@@ -12,7 +12,9 @@ import {
   CheckCircle2,
   Coins,
   Copy,
+  Download,
   ExternalLink,
+  Activity,
   LineChart,
   LogIn,
   Loader2,
@@ -6293,6 +6295,8 @@ export function PolyPortfolioPanel({
     network: PolymarketBridgeNetwork
     payUrl: string
   } | null>(null)
+  const [tradingWalletTab, setTradingWalletTab] = useState<'balance' | 'fund' | 'withdraw' | 'positions'>('balance')
+  const [tradingWalletNetwork, setTradingWalletNetwork] = useState<'base' | 'arbitrum' | 'arc' | 'solana'>('base')
 
   const profile = bundle?.profile ?? null
   const settings = bundle?.settings ?? null
@@ -6853,7 +6857,7 @@ export function PolyPortfolioPanel({
               {unsignedPortfolioAction === 'trading' && (
                 <>
                   <p className="mt-3 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-                    Connect the wallet you will use to fund, prepare, and sign PolyDesk trades. This stays separate from watched public accounts.
+                    Sign in to open Main Wallet for PolyDesk funding.
                   </p>
                   <button
                     type="button"
@@ -6868,7 +6872,7 @@ export function PolyPortfolioPanel({
               {unsignedPortfolioAction === 'external' && (
                 <div className="mt-3 space-y-3">
                   <p className="text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-                    Fund another Polymarket wallet without connecting it as your PolyDesk trading wallet.
+                    Fund another Polymarket wallet without changing your Main Wallet.
                   </p>
                   <InputBlock
                     label="External Polymarket wallet"
@@ -7055,13 +7059,26 @@ export function PolyPortfolioPanel({
       <div className="mt-4 space-y-3">
         <PolyDeskBackButton onClick={() => setUnsignedPortfolioAction(null)} />
         <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#111216]">
-          <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Trading wallet</p>
-          <h2 className="mt-1 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Connect your trading wallet</h2>
+          <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Balance</p>
+          <h2 className="mt-1 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Main Wallet</h2>
           <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-            This wallet funds and signs PolyDesk trades. It is separate from any public account you watch.
+            Add USDC, send it out, or use it across PolyDesk.
           </p>
+          <div className="mt-3 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#0f1014]">
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Total available</p>
+            <p className="mt-1 text-2xl font-black tracking-tight text-gray-950 dark:text-white">$0</p>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Across Base, Arbitrum, Arc, and Solana.</p>
+          </div>
           <div className="mt-3">
-            {signingWalletAddress ? (
+            {!authenticated ? (
+              <>
+                <PrivyConnectButton className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200">
+                  <Mail className="h-4 w-4" />
+                  Sign in to continue
+                </PrivyConnectButton>
+                <p className="mt-2 text-center text-xs font-medium text-gray-400 dark:text-gray-500">Start with email</p>
+              </>
+            ) : signingWalletAddress ? (
               <button
                 type="button"
                 onClick={() => {
@@ -7250,36 +7267,155 @@ export function PolyPortfolioPanel({
       {/* Trading wallet card */}
       {unsignedPortfolioAction === 'trading' && (
       <div className="rounded-2xl border border-gray-100 bg-white p-3.5 shadow-sm dark:border-white/10 dark:bg-[#0f1014]">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">PolyDesk trading wallet</p>
-            <p className="mt-0.5 text-sm font-semibold text-gray-900 dark:text-white">
-              {tradingAddress ? shortHex(tradingAddress) : 'Not connected'}
-            </p>
-          </div>
-          {signingWalletAddress ? (
-            <div className="flex shrink-0 items-center gap-1.5">
-              <span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-bold uppercase text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-200">
-                Ready
-              </span>
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Balance</p>
+          <div className="mt-1 flex items-start justify-between gap-3">
+            <div>
+              <h2 className="text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">Main Wallet</h2>
+              <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
+                Add USDC, send it out, or use it across PolyDesk.
+              </p>
+            </div>
+            {signingWalletAddress && (
               <PrivyDisconnectButton
                 title="Sign out wallet"
-                className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-[11px] font-semibold text-gray-700 transition hover:bg-gray-50 dark:border-white/10 dark:text-gray-200 dark:hover:bg-white/[0.04]"
+                className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-[11px] font-semibold text-gray-700 transition hover:bg-gray-50 dark:border-white/10 dark:text-gray-200 dark:hover:bg-white/[0.04]"
               >
                 <LogOut className="h-3.5 w-3.5" />
                 Sign out
               </PrivyDisconnectButton>
-            </div>
-          ) : (
-            <PrivyWalletConnectButton className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 py-1.5 text-[11px] font-semibold text-gray-700 transition hover:bg-gray-50 dark:border-white/10 dark:text-gray-200 dark:hover:bg-white/[0.04]">
-              <Wallet className="h-3.5 w-3.5" />
-              Connect
-            </PrivyWalletConnectButton>
-          )}
+            )}
+          </div>
         </div>
-        <p className="mt-1.5 text-xs leading-snug text-gray-500 dark:text-gray-400">
-          This wallet funds and signs PolyDesk trades. It is separate from watched public accounts.
-        </p>
+
+        <div className="mt-4 grid grid-cols-4 gap-1 rounded-xl border border-gray-200 bg-white p-1 shadow-sm dark:border-white/10 dark:bg-[#17181d]">
+          {[
+            { key: 'balance', label: 'Balance', icon: Activity },
+            { key: 'fund', label: 'Fund', icon: Download },
+            { key: 'withdraw', label: 'Withdraw', icon: ArrowRight },
+            { key: 'positions', label: 'Positions', icon: LineChart },
+          ].map(({ key, label, icon: Icon }) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setTradingWalletTab(key as typeof tradingWalletTab)}
+              className={cn(
+                'flex min-h-[46px] flex-col items-center justify-center gap-1 rounded-lg border px-1.5 text-[10px] font-bold transition-all',
+                tradingWalletTab === key
+                  ? 'border-gray-300 bg-gray-100 text-gray-950 shadow-sm dark:border-white/15 dark:bg-white/[0.12] dark:text-white'
+                  : 'border-transparent bg-transparent text-gray-500 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-white/[0.06] dark:hover:text-gray-200',
+              )}
+            >
+              <Icon className="h-3.5 w-3.5" />
+              {label}
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-3 grid grid-cols-4 gap-1.5">
+          {[
+            { key: 'base', label: 'Base' },
+            { key: 'arbitrum', label: 'Arbitrum' },
+            { key: 'arc', label: 'Arc' },
+            { key: 'solana', label: 'Solana' },
+          ].map(network => (
+            <button
+              key={network.key}
+              type="button"
+              onClick={() => setTradingWalletNetwork(network.key as typeof tradingWalletNetwork)}
+              className={cn(
+                'rounded-lg border px-2 py-2 text-[11px] font-bold transition-all',
+                tradingWalletNetwork === network.key
+                  ? 'border-gray-950 bg-gray-950 text-white dark:border-white dark:bg-white dark:text-gray-950'
+                  : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:text-gray-900 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-400 dark:hover:border-white/20 dark:hover:text-gray-200',
+              )}
+            >
+              {network.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-3 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#111216]">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Total available</p>
+              <p className="mt-1 text-2xl font-black tracking-tight text-gray-950 dark:text-white">$0</p>
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Across Base, Arbitrum, Arc, and Solana.</p>
+              {tradingAddress && (
+                <p className="mt-2 text-[11px] font-semibold text-gray-400">{shortHex(tradingAddress)}</p>
+              )}
+            </div>
+            <button
+              type="button"
+              disabled
+              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-gray-600 opacity-60 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300"
+              aria-label="Refresh PolyDesk wallet balance"
+            >
+              <RefreshCw className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+        {tradingWalletTab === 'positions' && (
+          <div className="mt-3 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#111216]">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Active Polymarket positions</p>
+              {activeOpenPositions.length > 0 && <p className="text-xs font-semibold text-gray-500 dark:text-gray-400">{activeOpenPositions.length}</p>}
+            </div>
+            {liveLoading && livePositions.length === 0 ? (
+              <div className="mt-3 flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+                <Loader2 className="h-4 w-4 animate-spin" /> Fetching positions...
+              </div>
+            ) : activeOpenPositions.length === 0 ? (
+              <p className="mt-3 text-xs leading-relaxed text-gray-500 dark:text-gray-400">No active Polymarket positions yet.</p>
+            ) : (
+              <div className="mt-3 max-h-[220px] space-y-2 overflow-y-auto pr-1 [scrollbar-width:thin] [scrollbar-color:rgba(156,163,175,0.35)_transparent]">
+                {activeOpenPositions.slice(0, 5).map(position => {
+                  const pnl = position.percentPnl
+                  const tone = typeof pnl === 'number'
+                    ? pnl >= 0 ? 'text-emerald-600 dark:text-emerald-300' : 'text-red-500 dark:text-red-300'
+                    : 'text-gray-400'
+                  return (
+                    <div key={polymarketPositionKey(position)} className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">{position.title ?? 'Polymarket position'}</p>
+                          <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                            {position.outcome ?? 'Position'} - {formatUsd(position.currentValue)}
+                          </p>
+                        </div>
+                        <p className={cn('text-sm font-semibold tabular-nums', tone)}>{formatPercent(pnl)}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => prepareTradeTicket(position)}
+                        className="mt-2 inline-flex items-center gap-1 rounded-lg bg-black px-2.5 py-1.5 text-[11px] font-semibold text-white transition hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+                      >
+                        Prepare trade
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {!authenticated ? (
+          <div className="mt-3 overflow-hidden rounded-2xl border border-gray-100 bg-gradient-to-br from-white to-gray-50 p-4 shadow-sm dark:border-white/10 dark:from-[#111216] dark:to-white/[0.04]">
+            <PrivyConnectButton className="group flex w-full items-center justify-center gap-2 rounded-xl bg-gray-950 px-4 py-3 text-sm font-bold text-white shadow-sm transition-all hover:bg-black active:scale-[0.98] disabled:opacity-60 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-100">
+              <Mail className="h-4 w-4" />
+              Sign in to continue
+            </PrivyConnectButton>
+            <p className="mt-2 text-center text-xs font-medium text-gray-400 dark:text-gray-500">Start with email</p>
+          </div>
+        ) : !signingWalletAddress ? (
+          <PrivyWalletConnectButton className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-gray-950 px-4 py-3 text-sm font-bold text-white shadow-sm transition-all hover:bg-black active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-100">
+            <Wallet className="h-4 w-4" />
+            Connect wallet
+          </PrivyWalletConnectButton>
+        ) : null}
+
         {signingWalletAddress && profile?.tradingAddress !== signingWalletAddress && (
           <button
             type="button"
@@ -7346,7 +7482,7 @@ export function PolyPortfolioPanel({
           </div>
         ) : (
           <p className="mt-2 rounded-xl bg-gray-50 px-3 py-1.5 text-xs leading-snug text-gray-500 dark:bg-white/[0.04] dark:text-gray-400">
-            Open positions can prepare trade tickets. Order signing is not live yet.
+            Choose an open position to prepare a trade ticket.
           </p>
         )}
       </div>
