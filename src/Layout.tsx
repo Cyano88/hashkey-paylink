@@ -421,6 +421,37 @@ export default function Layout() {
     !!searchParams.get('wallet') ||
     !!searchParams.get('e')
   )
+  const polyDeskService = searchParams.get('service') ?? ''
+  const polyDeskLane = searchParams.get('lane') ?? ''
+  const polyDeskAgentOpen = searchParams.get('agent') === '1'
+  const activePolyDeskNav = polyDeskAgentOpen || polyDeskLane || !polyDeskService
+    ? 'agent'
+    : polyDeskService === 'portfolio'
+      ? 'portfolio'
+      : polyDeskService === 'worldcup' || polyDeskService === 'worldcup-news' || polyDeskService === 'worldcup-scores'
+        ? 'worldcup'
+        : polyDeskService === 'lp-scout'
+          ? 'lp-scout'
+          : 'agent'
+  const makePolyDeskNavTo = (id: 'agent' | 'portfolio' | 'worldcup' | 'lp-scout') => {
+    const next = new URLSearchParams(searchParams)
+    next.delete('lane')
+    if (id === 'agent') {
+      next.delete('agent')
+      next.delete('service')
+    } else {
+      next.delete('agent')
+      next.set('service', id)
+    }
+    const qs = next.toString()
+    return `/polydesk${qs ? `?${qs}` : ''}`
+  }
+  const polyDeskNavItems = [
+    { label: 'Desk Agent', id: 'agent', to: makePolyDeskNavTo('agent'), active: activePolyDeskNav === 'agent' },
+    { label: 'Portfolio', id: 'portfolio', to: makePolyDeskNavTo('portfolio'), active: activePolyDeskNav === 'portfolio' },
+    { label: 'World Cup', id: 'worldcup', to: makePolyDeskNavTo('worldcup'), active: activePolyDeskNav === 'worldcup' },
+    { label: 'LP Scout', id: 'lp-scout', to: makePolyDeskNavTo('lp-scout'), active: activePolyDeskNav === 'lp-scout' },
+  ] as const
   const agentNetworks = [CHAIN_META.base, CHAIN_META.arbitrum, { label: 'Arc Testnet', explorerUrl: CHAIN_META.arc.explorerUrl }] as const
   // Both the pay page and the dashboard show a locked chain pill from the URL param
   const pageNetParam = (isPayPage || isDashPage) ? (getPaylinkParam(searchParams, 'net', 'n') as ChainKey | '') : ''
@@ -745,7 +776,7 @@ export default function Layout() {
     <div className="min-h-screen bg-[#F5F5F7] dark:bg-[#111113] font-inter flex flex-col">
       {/* ── Sticky frosted-glass header ─────────────────────────────────── */}
       <header className="sticky top-0 z-50 border-b border-white/60 dark:border-white/5 bg-white/80 dark:bg-[#111113]/90 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3 sm:px-6">
+        <div className={`mx-auto flex max-w-5xl items-center justify-between px-4 sm:px-6 ${isPolyDeskSurface ? 'pt-3 pb-2' : 'py-3'}`}>
           {/* Wordmark */}
           <Link to={isPolyDeskSurface ? '/polydesk' : '/'} className="group flex items-center gap-2.5 focus:outline-none">
             {isPolyDeskSurface ? (
@@ -772,6 +803,22 @@ export default function Layout() {
 
           {/* Right side — single horizontal baseline */}
           <div className="flex items-center gap-x-2">
+            {isPolyDeskSurface && (
+              <div className="hidden sm:flex items-center rounded-full border border-gray-200 bg-gray-50/80 p-0.5 dark:border-white/10 dark:bg-[#1c1c20]">
+                {polyDeskNavItems.map(item => (
+                  <Link
+                    key={item.id}
+                    to={item.to}
+                    className="rounded-full px-3 py-1 text-[11px] font-semibold transition-all"
+                    style={item.active
+                      ? { background: '#ffffff', color: '#111827', boxShadow: '0 1px 2px rgba(0,0,0,0.06)' }
+                      : { color: '#9ca3af' }}
+                  >
+                    <span>{item.label}</span>
+                  </Link>
+                ))}
+              </div>
+            )}
 
             {/* Recipient address — dashboard only, truncated, muted */}
             {isDashPage && !isNgPosDashboard && dashboardRecipients.length > 0 && (
@@ -852,6 +899,26 @@ export default function Layout() {
 
           </div>
         </div>
+        {isPolyDeskSurface && (
+          <div className="mx-auto flex max-w-5xl px-4 pb-3 sm:hidden">
+            <div className="grid w-full grid-cols-4 gap-1 rounded-full border border-gray-200 bg-gray-50/80 p-0.5 dark:border-white/10 dark:bg-[#1c1c20]">
+              {polyDeskNavItems.map(item => (
+                <Link
+                  key={item.id}
+                  to={item.to}
+                  className={[
+                    'rounded-full px-2 py-1.5 text-center text-[10px] font-semibold transition-all',
+                    item.active
+                      ? 'bg-white text-gray-900 shadow-sm dark:bg-white dark:text-gray-950'
+                      : 'text-gray-400',
+                  ].join(' ')}
+                >
+                  <span>{item.label}</span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
       </header>
 
       {/* ── Page content ─────────────────────────────────────────────────── */}
@@ -867,18 +934,14 @@ export default function Layout() {
 
       {/* ── Footer ───────────────────────────────────────────────────────── */}
       {!isPayPage && (
-        <footer className="border-t border-gray-100 dark:border-white/5 bg-white/50 dark:bg-[#111113]/50 py-5">
-          <div className="mx-auto max-w-5xl px-4 sm:px-6">
+        <footer className={isPolyDeskSurface ? 'flex min-h-14 items-center border-t border-gray-100 bg-white/50 py-0 dark:border-white/5 dark:bg-[#111113]/50' : 'border-t border-gray-100 dark:border-white/5 bg-white/50 dark:bg-[#111113]/50 py-5'}>
+          <div className="mx-auto w-full max-w-5xl px-4 sm:px-6">
             <p className="text-center text-xs text-gray-400">
               {isPolyDeskSurface ? (
-                <a
-                  href="https://x.com/Hash_PayLink"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center font-medium text-gray-500 no-underline transition-colors duration-200 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
-                >
-                  Powered by Hash PayLink
-                </a>
+                <span className="polydesk-powered-footer">
+                  <span>Powered by</span>
+                  <strong>Hash PayLink</strong>
+                </span>
               ) : isAgentProfilePage ? (
                 <>
                   Agent payments on{' '}

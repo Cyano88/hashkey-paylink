@@ -8,14 +8,17 @@ import {
   BellRing,
   Bot,
   Building2,
+  ChevronDown,
   CheckCircle2,
   Coins,
   Copy,
   ExternalLink,
   LineChart,
+  LogIn,
   Loader2,
   LogOut,
   Mail,
+  MessageCircle,
   Newspaper,
   Pencil,
   PlusCircle,
@@ -964,7 +967,7 @@ export default function TelegramPaymentLinks() {
       : initialServiceParam === 'agentic-lp-research'
       ? 'agentic-lp-research'
       : ''
-  const initialAgentService = initialService === 'create-your-agent' || initialService === 'agent-dashboard'
+  const initialAgentService = initialService === 'agent-dashboard'
   const initialHelperService = initialService === 'hashpaylink-helper'
   const initialMarketService = initialService === 'poly-portfolio' || initialService === 'lp-scout' || initialService === 'poly-worldcup' || initialService === 'poly-worldcup-news' || initialService === 'poly-stream' || initialService === 'agentic-lp-research'
   const initialPersonTarget = displayTelegramName(searchParams.get('target') ?? searchParams.get('payer') ?? searchParams.get('p'), '')
@@ -1955,7 +1958,14 @@ export function TelegramHelperPanel({
     const messageId = message.id || `helper-${helperIdentityKey}-${Date.now().toString(36)}`
     setMessages(prev => {
       const next = [...prev]
-      const pendingIndex = next.findLastIndex(item => item.question === nextQuestion && !item.answer && !item.paylink)
+      let pendingIndex = -1
+      for (let index = next.length - 1; index >= 0; index -= 1) {
+        const item = next[index]
+        if (item.question === nextQuestion && !item.answer && !item.paylink) {
+          pendingIndex = index
+          break
+        }
+      }
       const finished = { question: nextQuestion, ...message, id: messageId }
       if (pendingIndex >= 0) {
         next[pendingIndex] = finished
@@ -2542,7 +2552,7 @@ export function TelegramHelperPanel({
         `mode=${saved.mode}`,
         `target=${target}`,
         `amount=${saved.amount} USDC`,
-        `network=${requestNetworkLabels[saved.network] ?? saved.network}`,
+        `network=${saved.network ? requestNetworkLabels[saved.network] : ''}`,
         `purpose=${saved.label}`,
         'Return one short consumer chat sentence only.',
         'Do not repeat amount, wallet, network, or purpose because the card shows those details.',
@@ -2706,8 +2716,8 @@ export function TelegramHelperPanel({
       return {
         answer: `Bridge checkout ready for ${requestedAmount} USDC to your Polymarket profile ${shortAddress(address)} on ${requestNetworkLabels[finalNetwork]}.`,
         paylink: {
-          kind: 'polymarket-funding',
-          mode: 'person',
+          kind: 'polymarket-funding' as const,
+          mode: 'person' as const,
           network: finalNetwork,
           wallet: bridgeData.depositAddress,
           evmWallet: finalNetwork === 'solana' ? '' : bridgeData.depositAddress,
@@ -3257,7 +3267,7 @@ export function TelegramHelperPanel({
 
                 {helperMode === 'polydesk' && !polyDeskSubMode && (
                   <div className="max-w-[92%] rounded-[18px] rounded-bl-md bg-[#f0f0f0] px-3.5 py-3 text-sm text-gray-900 shadow-sm dark:bg-white/[0.08] dark:text-gray-100">
-                    <p className="mb-2 font-medium">Choose your PolyDesk lane.</p>
+                    <p className="mb-2 font-medium">Choose your Desk Agent lane.</p>
                     <div className="grid gap-2 sm:grid-cols-3">
                       {polyDeskSubModes.map(mode => {
                         const Icon = mode.icon
@@ -3292,7 +3302,7 @@ export function TelegramHelperPanel({
                       }}
                       className="rounded-full border border-gray-200 bg-white px-3 py-1 text-[11px] font-semibold text-gray-600 shadow-sm transition hover:bg-gray-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/[0.1]"
                     >
-                      PolyDesk / {polyDeskSubModes.find(mode => mode.id === polyDeskSubMode)?.label}
+                      Desk Agent / {polyDeskSubModes.find(mode => mode.id === polyDeskSubMode)?.label}
                     </button>
                   </div>
                 )}
@@ -3360,7 +3370,7 @@ export function TelegramHelperPanel({
                     value={question}
                     onChange={event => setQuestion(event.target.value)}
                     onKeyDown={event => event.key === 'Enter' && !event.shiftKey && !asking && askHelper()}
-                    placeholder={helperMode === 'polydesk' && !polyDeskSubMode ? 'Choose a PolyDesk lane' : helperMode ? inputPlaceholder ?? 'Ask Hash...' : 'Choose a mode to start'}
+                    placeholder={helperMode === 'polydesk' && !polyDeskSubMode ? 'Choose a Desk Agent lane' : helperMode ? inputPlaceholder ?? 'Ask Hash...' : 'Choose a mode to start'}
                     disabled={!helperMode || (helperMode === 'polydesk' && !polyDeskSubMode)}
                     className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:ring-2 focus:ring-gray-200 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-white/[0.05] dark:text-white"
                   />
@@ -3612,6 +3622,43 @@ function TelegramX402WalletPanel({
 type LpScoutPath = '' | 'access' | 'daily'
 type LpScoutStep = 'service' | 'agent'
 
+function PolyDeskBackButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex w-fit items-center gap-1.5 text-sm text-gray-500 transition-colors hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+    >
+      <span className="back-btn" aria-hidden="true">
+        <span className="arrow-container">
+          <span className="chevron c1" />
+          <span className="chevron c2" />
+          <span className="chevron c3" />
+        </span>
+      </span>
+      Back
+    </button>
+  )
+}
+
+function PolyDeskMenuCard({ title, body, onClick }: { title: string; body: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="group flex w-full items-center justify-between gap-3 rounded-2xl border border-gray-100 bg-white p-3.5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-gray-200 hover:shadow-md active:scale-[0.99] dark:border-white/10 dark:bg-[#111216] dark:hover:border-white/20"
+    >
+      <span className="min-w-0">
+        <span className="block text-[14px] font-black text-gray-950 dark:text-white">{title}</span>
+        <span className="mt-1 block text-[12px] leading-5 text-gray-500 dark:text-gray-400">{body}</span>
+      </span>
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gray-950 text-white transition-transform group-hover:translate-x-0.5 dark:bg-white dark:text-gray-950">
+        <ChevronDown className="-rotate-90 h-4 w-4" />
+      </span>
+    </button>
+  )
+}
+
 type LpScoutOption = {
   id: LpScoutMode
   title: string
@@ -3738,16 +3785,9 @@ export function LpScoutPanel({
   if (!path) {
     return (
       <div className="mt-4 space-y-4">
+        <PolyDeskBackButton onClick={onBack} />
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <button
-              type="button"
-              onClick={onBack}
-              className="mb-2 inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 transition-colors hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
-            >
-              <ArrowLeft className="h-3.5 w-3.5" />
-              Back
-            </button>
             <div className="flex items-center gap-2">
               <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.06]">
                 <img src={POLYMARKET_LOGO} alt="" className="h-4 w-4 invert dark:invert-0" />
@@ -3761,15 +3801,13 @@ export function LpScoutPanel({
           </div>
         </div>
 
-        <div className="grid gap-2">
-          <RequestModeButton
-            icon={Bot}
+        <div className="space-y-2">
+          <PolyDeskMenuCard
             title="Tip for LP Scout access"
             body="Pick a Polymarket scout category, then use your x402 Wallet Manager to pay Hash PayLink through Circle Gateway."
             onClick={startAccessFlow}
           />
-          <RequestModeButton
-            icon={Radio}
+          <PolyDeskMenuCard
             title="Stream daily LP intelligence"
             body="Stream USDC to Hash PayLink for daily Polymarket LP research delivered to your email."
             onClick={startDailyFlow}
@@ -3781,16 +3819,9 @@ export function LpScoutPanel({
 
   return (
     <div className="mt-4 space-y-4">
+      <PolyDeskBackButton onClick={backFromPath} />
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <button
-            type="button"
-            onClick={backFromPath}
-            className="mb-2 inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 transition-colors hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            Back
-          </button>
           <div className="flex items-center gap-2">
             <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.06]">
               <img src={POLYMARKET_LOGO} alt="" className="h-4 w-4 invert dark:invert-0" />
@@ -4033,16 +4064,9 @@ export function PolyWorldCupNewsPanel({
 
   return (
     <div className="mt-4 space-y-3">
+      <PolyDeskBackButton onClick={onBack} />
       <div className="flex flex-col items-start justify-between gap-2.5 sm:flex-row">
         <div className="min-w-0">
-          <button
-            type="button"
-            onClick={onBack}
-            className="mb-2 inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 transition-colors hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            Back
-          </button>
           <div className="flex items-center gap-2">
             <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.06]">
               <Newspaper className="h-4 w-4 text-gray-800 dark:text-gray-100" />
@@ -5165,16 +5189,9 @@ export function PolyStreamPanel({
 
   return (
     <div className="mt-4 space-y-3">
+      <PolyDeskBackButton onClick={onBack} />
       <div className="flex flex-col items-start justify-between gap-3 sm:flex-row">
         <div className="min-w-0">
-          <button
-            type="button"
-            onClick={onBack}
-            className="mb-2 inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 transition-colors hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            Back
-          </button>
           <div className="flex items-center gap-2">
             <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.06]">
               <Radio className="h-4 w-4 text-gray-800 dark:text-gray-100" />
@@ -5269,16 +5286,9 @@ function AgenticLpResearchPanel({ onBack }: { onBack: () => void }) {
 
   return (
     <div className="mt-4 space-y-4">
+      <PolyDeskBackButton onClick={onBack} />
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <button
-            type="button"
-            onClick={onBack}
-            className="mb-2 inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 transition-colors hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            Back
-          </button>
           <div className="flex items-center gap-2">
             <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-100 bg-white text-gray-700 shadow-sm dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200">
               <Sparkles className="h-4 w-4" />
@@ -6269,6 +6279,18 @@ export function PolyPortfolioPanel({
   const [tradeTicket, setTradeTicket] = useState<PolyDeskTradeTicket | null>(null)
   const [tradeAmount, setTradeAmount] = useState('')
   const [tradeNotice, setTradeNotice] = useState('')
+  const [unsignedPortfolioAction, setUnsignedPortfolioAction] = useState<'watch' | 'trading' | 'external' | null>(null)
+  const [unsignedWatchAddress, setUnsignedWatchAddress] = useState('')
+  const [unsignedExternalAddress, setUnsignedExternalAddress] = useState('')
+  const [unsignedExternalAmount, setUnsignedExternalAmount] = useState('')
+  const [unsignedExternalNetwork, setUnsignedExternalNetwork] = useState<PolymarketBridgeNetwork>('base')
+  const [unsignedExternalBusy, setUnsignedExternalBusy] = useState(false)
+  const [unsignedExternalError, setUnsignedExternalError] = useState('')
+  const [unsignedExternalResult, setUnsignedExternalResult] = useState<{
+    depositAddress: string
+    network: PolymarketBridgeNetwork
+    payUrl: string
+  } | null>(null)
 
   const profile = bundle?.profile ?? null
   const settings = bundle?.settings ?? null
@@ -6544,6 +6566,57 @@ export function PolyPortfolioPanel({
     }
   }
 
+  async function prepareUnsignedExternalFunding() {
+    setUnsignedExternalError('')
+    setUnsignedExternalResult(null)
+    const wallet = unsignedExternalAddress.trim()
+    const amount = unsignedExternalAmount.trim()
+    if (!/^0x[a-fA-F0-9]{40}$/.test(wallet)) {
+      setUnsignedExternalError('Enter the external Polymarket 0x wallet you want to fund.')
+      return
+    }
+    if (!/^\d+(?:\.\d{1,6})?$/.test(amount) || Number(amount) < 3) {
+      setUnsignedExternalError('Enter at least 3 USDC.')
+      return
+    }
+    setUnsignedExternalBusy(true)
+    try {
+      const bridgeRes = await fetch('/api/polymarket-bridge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          polymarketWallet: wallet,
+          network: unsignedExternalNetwork,
+        }),
+      })
+      const bridgeData = await bridgeRes.json() as {
+        ok?: boolean
+        depositAddress?: string
+        network?: PolymarketBridgeNetwork
+        error?: string
+      }
+      if (!bridgeRes.ok || !bridgeData.ok || !bridgeData.depositAddress) {
+        throw new Error(bridgeData.error || 'Could not prepare external funding.')
+      }
+      const network = (bridgeData.network ?? unsignedExternalNetwork) as PolymarketBridgeNetwork
+      setUnsignedExternalResult({
+        depositAddress: bridgeData.depositAddress,
+        network,
+        payUrl: buildPolymarketPayLink({
+          wallet: bridgeData.depositAddress,
+          amount,
+          funding: 'External Polymarket account',
+          network: network as RequestNetwork,
+          polymarketWallet: wallet,
+        }),
+      })
+    } catch (err) {
+      setUnsignedExternalError(err instanceof Error ? err.message : 'Could not prepare external funding.')
+    } finally {
+      setUnsignedExternalBusy(false)
+    }
+  }
+
   async function saveAlertSettings() {
     if (!settingsDraft) return
     setSettingsSaving(true)
@@ -6651,9 +6724,7 @@ export function PolyPortfolioPanel({
   if (!PRIVY_AUTH_ENABLED) {
     return (
       <div className="mt-4 space-y-3">
-        <button type="button" onClick={onBack} className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200">
-          <ArrowLeft className="h-3.5 w-3.5" /> Back
-        </button>
+        <PolyDeskBackButton onClick={onBack} />
         <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#0f1014]">
           <div className="flex items-center gap-2">
             <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.06]">
@@ -6676,9 +6747,7 @@ export function PolyPortfolioPanel({
   if (!privyReady && privyWaitExpired) {
     return (
       <div className="mt-4 space-y-3">
-        <button type="button" onClick={onBack} className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200">
-          <ArrowLeft className="h-3.5 w-3.5" /> Back
-        </button>
+        <PolyDeskBackButton onClick={onBack} />
         <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#0f1014]">
           <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
             <Loader2 className="h-4 w-4 animate-spin" /> Loading PolyDesk session...
@@ -6710,28 +6779,143 @@ export function PolyPortfolioPanel({
   }
 
   if (!authenticated) {
+    const portfolioActions = [
+      ['watch', 'Watch account', 'Track a public Polymarket profile.'],
+      ['trading', 'Trading account', 'Connect the wallet that signs trades.'],
+      ['external', 'Fund external', 'Send funds to another Poly account.'],
+    ] as const
+    const selectedAction = portfolioActions.find(([key]) => key === unsignedPortfolioAction)
+    const backHandler = selectedAction ? () => setUnsignedPortfolioAction(null) : onBack
+
     return (
-      <div className="mt-4">
-        <button type="button" onClick={onBack} className="mb-2 inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200">
-          <ArrowLeft className="h-3.5 w-3.5" /> Back
-        </button>
-        <div className="flex items-center gap-2">
-          <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.06]">
-            <img src={POLYMARKET_LOGO} alt="" className="h-4 w-4 invert dark:invert-0" />
-          </span>
-          <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">PolyDesk</p>
-        </div>
-        <h2 className="mt-2 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">PolyDesk Portfolio</h2>
-        <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-          Sign in to save a public Polymarket profile for portfolio tracking. Trading later uses your connected PolyDesk wallet, not this saved profile address.
-        </p>
-        <button
-          type="button"
-          onClick={() => login()}
-          className="mt-4 inline-flex items-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
-        >
-          <ShieldCheck className="h-4 w-4" /> Sign in to continue
-        </button>
+      <div className="mt-4 space-y-3">
+        <PolyDeskBackButton onClick={backHandler} />
+
+        {!selectedAction ? (
+          <div className="space-y-2">
+            {portfolioActions.map(([key, label, body]) => (
+              <PolyDeskMenuCard
+                key={key}
+                title={label}
+                body={body}
+                onClick={() => setUnsignedPortfolioAction(key)}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#111216]">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">PolyDesk Portfolio</p>
+                  <h2 className="mt-1 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">{selectedAction[1]}</h2>
+                </div>
+              </div>
+
+              {unsignedPortfolioAction === 'watch' && (
+                <div className="mt-3 space-y-3">
+                  <p className="text-sm leading-relaxed text-gray-500 dark:text-gray-400">
+                    Paste any public Polymarket 0x profile. Watching is read-only and never funds or controls that account.
+                  </p>
+                  <InputBlock
+                    label="Public profile address"
+                    value={unsignedWatchAddress}
+                    onChange={setUnsignedWatchAddress}
+                    placeholder="0x... public profile"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAddressInput(unsignedWatchAddress.trim())
+                      void login()
+                    }}
+                    disabled={!/^0x[a-fA-F0-9]{40}$/.test(unsignedWatchAddress.trim())}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+                  >
+                    <ArrowRight className="h-4 w-4" /> Continue to watch setup
+                  </button>
+                </div>
+              )}
+
+              {unsignedPortfolioAction === 'trading' && (
+                <>
+                  <p className="mt-3 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
+                    Connect the wallet you will use to fund, prepare, and sign PolyDesk trades. This stays separate from watched public accounts.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => login()}
+                    className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+                  >
+                    <LogIn className="h-4 w-4" /> Sign in to continue
+                  </button>
+                </>
+              )}
+
+              {unsignedPortfolioAction === 'external' && (
+                <div className="mt-3 space-y-3">
+                  <p className="text-sm leading-relaxed text-gray-500 dark:text-gray-400">
+                    Fund another Polymarket wallet without connecting it as your PolyDesk trading wallet.
+                  </p>
+                  <InputBlock
+                    label="External Polymarket wallet"
+                    value={unsignedExternalAddress}
+                    onChange={value => {
+                      setUnsignedExternalAddress(value)
+                      setUnsignedExternalResult(null)
+                    }}
+                    placeholder="0x... wallet to fund"
+                  />
+                  <InputBlock
+                    label="Amount USDC"
+                    value={unsignedExternalAmount}
+                    onChange={value => {
+                      setUnsignedExternalAmount(value)
+                      setUnsignedExternalResult(null)
+                    }}
+                    placeholder="0.00"
+                    inputMode="decimal"
+                  />
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Funding network</p>
+                    <NetworkChipGroup
+                      value={unsignedExternalNetwork}
+                      onChange={value => {
+                        if (value === 'base' || value === 'arbitrum' || value === 'solana') {
+                          setUnsignedExternalNetwork(value)
+                          setUnsignedExternalResult(null)
+                        }
+                      }}
+                      options={polymarketBridgeNetworks}
+                    />
+                  </div>
+                  {unsignedExternalError && <p className="text-xs text-red-500 dark:text-red-300">{unsignedExternalError}</p>}
+                  {!unsignedExternalResult ? (
+                    <button
+                      type="button"
+                      onClick={prepareUnsignedExternalFunding}
+                      disabled={unsignedExternalBusy}
+                      className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+                    >
+                      {unsignedExternalBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
+                      Prepare checkout
+                    </button>
+                  ) : (
+                    <div className="space-y-2 rounded-xl border border-gray-100 bg-gray-50 p-3 dark:border-white/10 dark:bg-white/[0.04]">
+                      <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                        Checkout is ready on {unsignedExternalResult.network.toUpperCase()}.
+                      </p>
+                      <a
+                        href={unsignedExternalResult.payUrl}
+                        className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+                      >
+                        <ExternalLink className="h-4 w-4" /> Open checkout
+                      </a>
+                    </div>
+                  )}
+                </div>
+              )}
+          </div>
+        )}
       </div>
     )
   }
@@ -6748,9 +6932,7 @@ export function PolyPortfolioPanel({
   if (!profile) {
     return (
       <div className="mt-4">
-        <button type="button" onClick={onBack} className="mb-2 inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200">
-          <ArrowLeft className="h-3.5 w-3.5" /> Back
-        </button>
+        <PolyDeskBackButton onClick={onBack} />
         <div className="flex items-center gap-2">
           <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.06]">
             <img src={POLYMARKET_LOGO} alt="" className="h-4 w-4 invert dark:invert-0" />
@@ -6808,9 +6990,7 @@ export function PolyPortfolioPanel({
 
   return (
     <div className="mt-4 space-y-4">
-      <button type="button" onClick={onBack} className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200">
-        <ArrowLeft className="h-3.5 w-3.5" /> Back
-      </button>
+      <PolyDeskBackButton onClick={onBack} />
 
       {/* Profile / balance card */}
       <div className="rounded-2xl border border-gray-100 bg-white p-3.5 shadow-sm dark:border-white/10 dark:bg-[#0f1014]">
@@ -7335,10 +7515,8 @@ export function PolyWorldCupHubPanel({
   }, [authenticated, getAccessToken])
 
   return (
-    <div className="mt-4">
-      <button type="button" onClick={onBack} className="mb-2 inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200">
-        <ArrowLeft className="h-3.5 w-3.5" /> Back
-      </button>
+    <div className="mt-4 space-y-4">
+      <PolyDeskBackButton onClick={onBack} />
       <div className="flex items-center gap-2">
         <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.06]">
           <Radio className="h-4 w-4 text-gray-500" />
@@ -7350,45 +7528,24 @@ export function PolyWorldCupHubPanel({
         Live scores come from the matchday feed. Market odds and trade routes come from Polymarket. No stale fallbacks.
       </p>
 
-      {hasProfile && (
-        <button
-          type="button"
-          onClick={onOpenPortfolio}
-          className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-gray-50 px-3 py-1.5 text-[11px] font-semibold text-gray-700 hover:bg-gray-100 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:bg-white/[0.08]"
-        >
-          <Wallet className="h-3 w-3" /> Check portfolio exposure
-        </button>
-      )}
-
-      <div className="mt-4 space-y-2">
-        <button
-          type="button"
+      <div className="space-y-2">
+        <PolyDeskMenuCard
+          title="World Cup markets"
+          body="Live match centre with exact Polymarket fixture routing."
           onClick={onOpenScores}
-          className="flex w-full items-start gap-3 rounded-xl border border-gray-100 bg-white p-3 text-left shadow-sm hover:bg-gray-50 dark:border-white/10 dark:bg-[#0f1014] dark:hover:bg-white/[0.04]"
-        >
-          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-gray-100 text-gray-600 dark:bg-white/[0.06] dark:text-gray-200">
-            <Radio className="h-4 w-4" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-gray-900 dark:text-white">Live Scores</p>
-            <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">Live match centre with exact Polymarket fixture routing.</p>
-          </div>
-          <ArrowRight className="mt-1 h-4 w-4 text-gray-400" />
-        </button>
-        <button
-          type="button"
+        />
+        <PolyDeskMenuCard
+          title="World Cup news"
+          body="Headlines that move Polymarket prices and LP risk."
           onClick={onOpenNews}
-          className="flex w-full items-start gap-3 rounded-xl border border-gray-100 bg-white p-3 text-left shadow-sm hover:bg-gray-50 dark:border-white/10 dark:bg-[#0f1014] dark:hover:bg-white/[0.04]"
-        >
-          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-gray-100 text-gray-600 dark:bg-white/[0.06] dark:text-gray-200">
-            <Newspaper className="h-4 w-4" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-gray-900 dark:text-white">News &amp; market signals</p>
-            <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">Headlines that move Polymarket prices and LP risk.</p>
-          </div>
-          <ArrowRight className="mt-1 h-4 w-4 text-gray-400" />
-        </button>
+        />
+        {hasProfile && (
+          <PolyDeskMenuCard
+            title="Portfolio exposure"
+            body="Check watched and trading wallet exposure before opening a trade."
+            onClick={onOpenPortfolio}
+          />
+        )}
       </div>
     </div>
   )

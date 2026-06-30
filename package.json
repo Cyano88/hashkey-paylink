@@ -9,8 +9,9 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "node scripts/verify-prebuilt-dist.mjs",
-    "build:frontend": "node scripts/verify-prebuilt-dist.mjs",
+    "build": "vite build",
+    "build:frontend": "vite build",
+    "verify:dist": "node scripts/verify-prebuilt-dist.mjs",
     "typecheck": "tsc",
     "preview": "vite preview",
     "start": "tsx server.ts"

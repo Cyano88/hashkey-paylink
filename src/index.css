@@ -775,6 +775,36 @@ html.dark .zeroscout-power-badge__mark {
   background: rgba(255, 255, 255, 0.08);
 }
 
+.polydesk-powered-footer {
+  min-height: 46px;
+  padding: 10px 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+.polydesk-powered-footer span {
+  color: #6b7280;
+  font-size: 9px;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+}
+
+.polydesk-powered-footer strong {
+  color: #111827;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+html.dark .polydesk-powered-footer span {
+  color: #9ca3af;
+}
+
+html.dark .polydesk-powered-footer strong {
+  color: #f9fafb;
+}
+
 .back-btn {
   display: inline-flex;
   align-items: center;

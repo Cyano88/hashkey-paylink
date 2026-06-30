@@ -16,6 +16,10 @@ services:
       # ── Frontend (baked in at build time by Vite) ──────────────────────────
       - key: VITE_WALLETCONNECT_PROJECT_ID
         sync: false                   # set manually in Render dashboard
+      - key: VITE_AUTH_BRIDGE
+        value: "hybrid"               # enables Privy-backed public PolyDesk sessions
+      - key: VITE_PRIVY_APP_ID
+        sync: false                   # browser-visible Privy app id
       - key: VITE_FACTORY_V2
         value: "0x2268B8aad138a550FEf46C621756fEb26b587F78"
       - key: VITE_RPC_URL
@@ -70,6 +74,10 @@ services:
         sync: false                   # Upstash Redis REST token
       - key: DATABASE_URL
         sync: false                   # Postgres connection string for durable StreamPay Arena rooms
+      - key: PRIVY_APP_ID
+        sync: false                   # server-side Privy app id; can match VITE_PRIVY_APP_ID
+      - key: PRIVY_APP_SECRET
+        sync: false                   # server-side Privy secret for authenticated PolyDesk APIs
       - key: CIRCLE_RECIPIENT_WALLET_KEY_PREFIX
         value: "circle-recipient-wallet"
       - key: RESEND_API_KEY
@@ -128,6 +136,26 @@ services:
         sync: false                   # Solana treasury wallet address for fee collection
       - key: POLYMARKET_BUILDER_CODE
         sync: false                   # Polymarket builder code for bridge calls and future CLOB order attribution
+      - key: POLYMARKET_BUILDER_API_KEY
+        sync: false                   # Builder API key from Polymarket Builders dashboard
+      - key: POLYMARKET_BUILDER_SECRET
+        sync: false                   # Builder API secret from Polymarket Builders dashboard
+      - key: POLYMARKET_BUILDER_PASSPHRASE
+        sync: false                   # Builder API passphrase from Polymarket Builders dashboard
+      - key: POLY_STREAM_PROVIDER
+        value: "sportmonks"
+      - key: POLY_STREAM_API_KEY
+        sync: false                   # Sportmonks or API-Football key for World Cup live board
+      - key: POLY_STREAM_LEAGUE_ID
+        value: "732"
+      - key: POLY_STREAM_SEASON
+        value: "2026"
+      - key: POLY_STREAM_FIXTURE_MODE
+        value: "auto"
+      - key: POLY_STREAM_LIMIT
+        value: "64"
+      - key: POLYMARKET_MATCH_URLS
+        sync: false                   # JSON map from fixture/team keys to eligible World Cup Polymarket URLs
 
 # ── External cron (sweep-keeper) ──────────────────────────────────────────────
 # Render free tier does not include cron jobs.
