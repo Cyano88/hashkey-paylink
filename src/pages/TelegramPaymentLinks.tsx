@@ -6418,6 +6418,11 @@ export function PolyPortfolioPanel({
 
   const totalValue = liveValue?.value
   const unreadAlerts = bundle?.alerts.filter(a => !a.readAt) ?? []
+  const uniqueUnreadAlerts = Array.from(
+    new Map(unreadAlerts.map(alert => [`${alert.alertType}:${alert.title}:${alert.body ?? ''}`, alert])).values(),
+  )
+  const visibleAlerts = uniqueUnreadAlerts.slice(0, 4)
+  const hiddenAlertCount = Math.max(0, uniqueUnreadAlerts.length - visibleAlerts.length)
   const latestFunding = bundle?.fundingAttempts?.[0] ?? null
 
   return (
@@ -6491,7 +6496,7 @@ export function PolyPortfolioPanel({
               </p>
             </div>
             <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-              Cash balance is confirmed inside Polymarket after Bridge credit. Hash PayLink shows live positions, claimables, alerts, and recent funding attempts from this profile.
+              Cash balance updates inside Polymarket. PolyDesk tracks positions, claimables, alerts, and funding attempts.
             </p>
           </div>
         )}
@@ -6591,7 +6596,7 @@ export function PolyPortfolioPanel({
           )}
         </div>
         <p className="mt-2 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-          Viewing portfolio {shortHex(profile.polymarketAddress)}. Signed trades will use the connected trading wallet, not the read-only profile unless both addresses match.
+          Portfolio {shortHex(profile.polymarketAddress)}. Trades use this connected wallet.
         </p>
         {tradeTicket ? (
           <div className="mt-3 space-y-3 rounded-xl border border-gray-100 bg-gray-50 p-3 dark:border-white/10 dark:bg-white/[0.04]">
@@ -6642,7 +6647,7 @@ export function PolyPortfolioPanel({
           </div>
         ) : (
           <p className="mt-3 rounded-xl bg-gray-50 px-3 py-2 text-xs leading-relaxed text-gray-500 dark:bg-white/[0.04] dark:text-gray-400">
-            Open positions can prepare a PolyDesk trade ticket. Real order placement stays disabled until CLOB signing is fully wired.
+            Open positions can prepare trade tickets. Order signing is not live yet.
           </p>
         )}
       </div>
@@ -6653,7 +6658,7 @@ export function PolyPortfolioPanel({
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Alerts</p>
             <p className="mt-0.5 text-sm font-semibold text-gray-900 dark:text-white">
-              {unreadAlerts.length > 0 ? `${unreadAlerts.length} active` : 'No active alerts'}
+              {uniqueUnreadAlerts.length > 0 ? `${uniqueUnreadAlerts.length} active` : 'No active alerts'}
             </p>
           </div>
           <button
@@ -6729,10 +6734,11 @@ export function PolyPortfolioPanel({
           </div>
         )}
 
-        {unreadAlerts.length > 0 ? (
-          <ul className="mt-3 max-h-[252px] space-y-2 overflow-y-auto pr-1 [scrollbar-width:thin] [scrollbar-color:rgba(156,163,175,0.35)_transparent]">
-            {unreadAlerts.map(alert => (
-              <li key={alert.id} className="flex items-start gap-2 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.04]">
+        {visibleAlerts.length > 0 ? (
+          <div className="mt-3 space-y-2">
+            <ul className="space-y-2">
+              {visibleAlerts.map(alert => (
+              <li key={alert.id} className="flex items-start gap-2 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">
                 <span className={cn(
                   'mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md',
                   alert.severity === 'warning' ? 'bg-amber-100 text-amber-700 dark:bg-amber-400/10 dark:text-amber-300' :
@@ -6745,7 +6751,7 @@ export function PolyPortfolioPanel({
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold text-gray-900 dark:text-white">{alert.title}</p>
-                  {alert.body && <p className="mt-0.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">{alert.body}</p>}
+                  {alert.body && <p className="mt-0.5 line-clamp-1 text-xs text-gray-500 dark:text-gray-400">{alert.body}</p>}
                 </div>
                 <button
                   type="button"
@@ -6756,7 +6762,13 @@ export function PolyPortfolioPanel({
                 </button>
               </li>
             ))}
-          </ul>
+            </ul>
+            {hiddenAlertCount > 0 && (
+              <p className="rounded-xl bg-gray-50 px-3 py-2 text-xs font-medium text-gray-500 dark:bg-white/[0.04] dark:text-gray-400">
+                +{hiddenAlertCount} more. Open Settings to tune alerts.
+              </p>
+            )}
+          </div>
         ) : (
           <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
             No active alerts. We watch your saved positions against your alert settings each time you open Portfolio.
