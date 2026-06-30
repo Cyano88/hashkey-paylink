@@ -24,7 +24,7 @@ import {
   CheckCircle2, AlertCircle, Loader2, Send,
   ExternalLink, ArrowLeft, ArrowRight, ShieldCheck, Zap,
   Wallet, Radio, Copy, Bot, Sparkles,
-  RefreshCw,
+  RefreshCw, Mail,
 } from 'lucide-react'
 
 async function readAgentWalletJson<T>(response: Response): Promise<T> {
@@ -1928,26 +1928,28 @@ export default function AgentWorkspace({ embedded = false, forceProfile = false 
 
           {showAgentWalletAccessPanel && (
             <div className="mt-4 w-full min-w-0 space-y-2 overflow-hidden rounded-xl border border-gray-200 bg-gray-50/70 p-3 transition-all dark:border-white/10 dark:bg-white/[0.04]">
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                  {hasPendingLpScoutRequest
-                    ? embeddedWalletManager ? 'Authorize wallet' : 'Authorize paying agent'
-                    : currentAgentWallet
-                    ? 'Wallet access'
-                    : agentEmailConnected
-                    ? 'Wallet access'
-                    : 'Sign in'}
-                </p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  {hasPendingLpScoutRequest
-                    ? embeddedWalletManager ? 'Confirm this wallet before x402 services run.' : 'Confirm this agent before it tips Hash PayLink through x402.'
-                    : currentAgentWallet
-                    ? embeddedWalletManager ? 'Confirm the Circle email for this wallet to view balances and receipts.' : 'Confirm the Circle email for this agent to view balances and receipts.'
-                    : agentEmailConnected
-                    ? embeddedWalletManager ? 'Create or link a Circle wallet for x402 services.' : 'Create or link a Circle agent wallet.'
-                    : 'Email sign-in is required before wallet setup.'}
-                </p>
-              </div>
+              {!(PRIVY_AUTH_ENABLED && !currentAgentWallet && !privyAuthenticated) && (
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                    {hasPendingLpScoutRequest
+                      ? embeddedWalletManager ? 'Authorize wallet' : 'Authorize paying agent'
+                      : currentAgentWallet
+                      ? 'Wallet access'
+                      : agentEmailConnected
+                      ? 'Wallet access'
+                      : 'Sign in'}
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    {hasPendingLpScoutRequest
+                      ? embeddedWalletManager ? 'Confirm this wallet before x402 services run.' : 'Confirm this agent before it tips Hash PayLink through x402.'
+                      : currentAgentWallet
+                      ? embeddedWalletManager ? 'Confirm the Circle email for this wallet to view balances and receipts.' : 'Confirm the Circle email for this agent to view balances and receipts.'
+                      : agentEmailConnected
+                      ? embeddedWalletManager ? 'Create or link a Circle wallet for x402 services.' : 'Create or link a Circle agent wallet.'
+                      : 'Email sign-in is required before wallet setup.'}
+                  </p>
+                </div>
+              )}
 
               {PRIVY_AUTH_ENABLED && !currentAgentWallet && !privyAuthenticated ? (
                 <>
@@ -1961,11 +1963,11 @@ export default function AgentWorkspace({ embedded = false, forceProfile = false 
                     disabled={walletBusy || !privyReady}
                     className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-6 py-3.5 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-60 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
                   >
-                    <img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert mix-blend-screen dark:invert-0 dark:mix-blend-multiply" />
-                    {currentAgentWallet ? 'Link wallet' : 'Sign in with email'}
+                    <Mail className="h-4 w-4" />
+                    Sign in to continue
                   </PrivyConnectButton>
                   <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
-                    Privy email
+                    Email sign-in is required before wallet setup.
                   </p>
                 </>
               ) : walletMode === 'choose' ? (

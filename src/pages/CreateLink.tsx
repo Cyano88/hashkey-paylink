@@ -42,10 +42,11 @@ import {
   Store,
   UserRound,
   Briefcase,
+  Landmark,
 } from 'lucide-react'
 import { QRCodeCanvas } from 'qrcode.react'
 import { FX_CURRENCIES, getFxMeta, formatLocalAmt, fetchFxRate } from '../lib/fx'
-import { isAddress, type Address } from 'viem'
+import { isAddress, parseUnits, type Address } from 'viem'
 import { cn, truncateAddress, formatAmount, copyToClipboard } from '../lib/utils'
 import { useStarknet } from '../lib/StarknetContext'
 import { useSolana }   from '../lib/SolanaContext'
@@ -54,10 +55,11 @@ import { isValidSolanaAddress } from '../lib/solanaAddress'
 import { setPaylinkParam } from '../lib/paylinkParams'
 import { PRIVY_AUTH_ENABLED } from '../lib/authMode'
 import { EVM_CLIENTS, ERC20_BALANCE_OF_ABI } from '../lib/router'
-import { canUseCircleEvmEmailWallet, connectCircleEvmEmailWallet } from '../lib/circleEvmEmailWallet'
-import { canUseCircleSolanaEmailWallet, connectCircleSolanaEmailWallet } from '../lib/circleSolanaEmailWallet'
+import { canUseCircleEvmEmailWallet, connectCircleEvmEmailWallet, sendCircleEvmEmailWithdraw } from '../lib/circleEvmEmailWallet'
+import { canUseCircleSolanaEmailWallet, connectCircleSolanaEmailWallet, signCircleSolanaTransaction } from '../lib/circleSolanaEmailWallet'
 import { PrivyConnectButton } from '../lib/PrivyConnectButton'
 import { resolvePrivyCircleLink, savePrivyCircleLink } from '../lib/privyCircleLink'
+import { queryBalances, type UnifiedBalanceBreakdown } from '../lib/unifiedBalance'
 import AgentWorkspace from './AgentWorkspace'
 import PayLinkShareSheet from '../components/PayLinkShareSheet'
 
@@ -141,11 +143,20 @@ function PaymentHubMark({ className }: { className?: string }) {
 type VaultStep = 'idle' | 'ready'
 type ReceiveMode = 'email' | 'paste'
 type PaymentMode = 'personal' | 'business'
+type PaymentTab = PaymentMode | 'pos' | 'bills'
 type PosNetwork = 'base' | 'arbitrum' | 'arc' | 'solana'
+type CirclePocketView = 'chooser' | 'main' | 'x402'
+type CirclePocketTab = 'balance' | 'fund' | 'withdraw' | 'activity'
 type PosCountry = 'NG' | 'KE' | 'GH'
 type PosSettlementPath = 'USDC_WALLET' | 'SPENDA_NAIRA'
-type CreateProduct = 'payment' | 'agent' | 'pos' | 'streampay' | 'polymarket'
+type CreateProduct = 'payment' | 'agent' | 'circle-pocket' | 'pos' | 'streampay' | 'polymarket'
 type AccessView = 'overview' | 'wallet'
+type CirclePocketWallet = {
+  address: string
+  walletId?: string
+  blockchain?: string
+}
+type CirclePocketWallets = Partial<Record<PosNetwork, CirclePocketWallet>>
 type PosMerchant = {
   merchant_id: string
   display_name: string
@@ -158,6 +169,31 @@ function telegramStartUrl(payload: string) {
   const base = TELEGRAM_AGENT_URL.trim().replace(/\/+$/, '') || 'https://t.me/HashPayLinkBot'
   const cleanPayload = payload.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64) || 'start'
   return base.includes('?') ? `${base}&start=${encodeURIComponent(cleanPayload)}` : `${base}?start=${encodeURIComponent(cleanPayload)}`
+}
+
+async function readApiJson<T>(res: Response, label: string): Promise<T> {
+  const text = await res.text()
+  let data: unknown = {}
+  if (text) {
+    try {
+      data = JSON.parse(text)
+    } catch {
+      throw new Error(`${label} returned a non-JSON response.`)
+    }
+  }
+  if (!res.ok) {
+    const message = data && typeof data === 'object' && 'error' in data
+      ? String((data as { error?: unknown }).error)
+      : `${label} request failed.`
+    throw new Error(message)
+  }
+  return data as T
+}
+
+function readableErrorMsg(err: unknown, fallback: string) {
+  if (err instanceof Error && err.message) return err.message
+  if (typeof err === 'string' && err) return err
+  return fallback
 }
 
 const POS_NETWORK_OPTIONS: Array<{ key: PosNetwork; label: string; badge?: string }> = [
@@ -530,9 +566,11 @@ function CircleReceiveSelector({
 export default function CreateLink({ initialProduct = 'payment' }: { initialProduct?: 'payment' | 'polymarket' } = {}) {
   const [searchParams] = useSearchParams()
   const productParam = searchParams.get('product')
+  const paymentTabParam = searchParams.get('tab')
   const initialProductTarget = (productParam ?? '').toLowerCase()
   const startsInProduct = Boolean(initialProductTarget) || initialProduct === 'polymarket' || window.location.pathname === '/polymarket'
-  const { authenticated: privyAuthenticated, logout: logoutPrivy } = usePrivy()
+  const { authenticated: privyAuthenticated, user: privyUser, logout: logoutPrivy, getAccessToken } = usePrivy()
+  const privyEmail = emailFromPrivyUser(privyUser).trim().toLowerCase()
   const [evmAddr,       setEvmAddr]       = useState('')
   const [starkAddr,     setStarkAddr]     = useState('')
   const [solanaAddr,    setSolanaAddr]    = useState('')
@@ -551,9 +589,31 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   const [agentUrl,       setAgentUrl]       = useState('')
   const [agentUrlStatus, setAgentUrlStatus] = useState<'idle' | 'checking' | 'ok' | 'incompatible'>('idle')
   const [receiveMode,    setReceiveMode]    = useState<ReceiveMode>('paste')
+  const [circlePocketMode, setCirclePocketMode] = useState(false)
+  const [circlePocketView, setCirclePocketView] = useState<CirclePocketView>('chooser')
+  const [circlePocketTab, setCirclePocketTab] = useState<CirclePocketTab>('balance')
+  const [circlePocketNetwork, setCirclePocketNetwork] = useState<PosNetwork>('base')
+  const [circlePocketWallets, setCirclePocketWallets] = useState<CirclePocketWallets>({})
+  const [circlePocketEvmSession, setCirclePocketEvmSession] = useState<Awaited<ReturnType<typeof connectCircleEvmEmailWallet>> | null>(null)
+  const [circlePocketSolanaSession, setCirclePocketSolanaSession] = useState<Awaited<ReturnType<typeof connectCircleSolanaEmailWallet>> | null>(null)
+  const [circlePocketRows, setCirclePocketRows] = useState<UnifiedBalanceBreakdown[]>([])
+  const [circlePocketGlobalBalance, setCirclePocketGlobalBalance] = useState(0)
+  const [circlePocketBusy, setCirclePocketBusy] = useState(false)
+  const [circlePocketBalanceBusy, setCirclePocketBalanceBusy] = useState(false)
+  const [circlePocketError, setCirclePocketError] = useState('')
+  const [circlePocketCopied, setCirclePocketCopied] = useState(false)
+  const [circlePocketWithdrawAddress, setCirclePocketWithdrawAddress] = useState('')
+  const [circlePocketWithdrawAmount, setCirclePocketWithdrawAmount] = useState('')
+  const [circlePocketWithdrawPending, setCirclePocketWithdrawPending] = useState(false)
+  const [circlePocketWithdrawNotice, setCirclePocketWithdrawNotice] = useState('')
+  const [circlePocketWithdrawTxHash, setCirclePocketWithdrawTxHash] = useState('')
+  const [circlePocketActivity, setCirclePocketActivity] = useState<string[]>([])
   const [posMode,        setPosMode]        = useState(false)
+  const [billsMode,      setBillsMode]      = useState(false)
   const [streamMode,     setStreamMode]     = useState(false)
+  const [streamSpotlightIndex, setStreamSpotlightIndex] = useState(0)
   const [polymarketMode, setPolymarketMode] = useState(initialProduct === 'polymarket' || window.location.pathname === '/polymarket')
+  const [polymarketSpotlightIndex, setPolymarketSpotlightIndex] = useState(0)
   const [productHubOpen, setProductHubOpen] = useState(!startsInProduct)
   const [posCountry,     setPosCountry]     = useState<PosCountry | null>(null)
   const [posSettlementPath, setPosSettlementPath] = useState<PosSettlementPath | null>(null)
@@ -748,12 +808,23 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     window.history.pushState({ hpCreateProduct: product }, '', `${url.pathname}${url.search}${url.hash}`)
   }
 
+  function pushPaymentTabHistory(tab: PaymentTab) {
+    if (typeof window === 'undefined') return
+    const url = new URL(window.location.href)
+    url.searchParams.set('product', 'payment')
+    if (tab === 'personal') url.searchParams.delete('tab')
+    else url.searchParams.set('tab', tab)
+    window.history.pushState({ hpCreateProduct: 'payment', hpPaymentTab: tab }, '', `${url.pathname}${url.search}${url.hash}`)
+  }
+
   function openHubMode(push = true) {
     if (push) pushProductHistory('hub')
     window.dispatchEvent(new CustomEvent('agent-hash-mode', { detail: { mode: 'support' } }))
     setProductHubOpen(true)
     setAccessMode(false)
+    setCirclePocketMode(false)
     setPosMode(false)
+    setBillsMode(false)
     setStreamMode(false)
     setPolymarketMode(false)
     setAccessView('overview')
@@ -764,7 +835,9 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   function toggleAccessMode(on: boolean, push = true) {
     if (on && push) pushProductHistory('agent')
     setProductHubOpen(false)
+    setCirclePocketMode(false)
     setPosMode(false)
+    setBillsMode(false)
     setStreamMode(false)
     setPolymarketMode(false)
     setAccessMode(on)
@@ -783,12 +856,42 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     openHubMode()
   }
 
+  function openCirclePocketMode(push = true, view: CirclePocketView = 'chooser') {
+    if (push) pushProductHistory('circle-pocket')
+    window.dispatchEvent(new CustomEvent('agent-hash-mode', { detail: { mode: 'payments' } }))
+    setProductHubOpen(false)
+    setCirclePocketMode(true)
+    setCirclePocketView(view)
+    setAccessMode(false)
+    setPosMode(false)
+    setBillsMode(false)
+    setStreamMode(false)
+    setPolymarketMode(false)
+    setAccessView('overview')
+    setGeneratedLink('')
+    setCopied(false)
+    setVaultStep('idle')
+    setCirclePocketError('')
+  }
+
+  function closeCirclePocketMode() {
+    if (circlePocketView !== 'chooser') {
+      setCirclePocketView('chooser')
+      setAccessView('overview')
+      setCirclePocketError('')
+      return
+    }
+    openHubMode()
+  }
+
   function openPaymentMode(push = true) {
     if (push) pushProductHistory('payment')
     window.dispatchEvent(new CustomEvent('agent-hash-mode', { detail: { mode: 'payments' } }))
     setProductHubOpen(false)
     setAccessMode(false)
+    setCirclePocketMode(false)
     setPosMode(false)
+    setBillsMode(false)
     setStreamMode(false)
     setPolymarketMode(false)
     setAccessView('overview')
@@ -797,10 +900,15 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     setVaultStep('idle')
   }
 
-  function openPosMode(push = true) {
-    if (push) pushProductHistory('pos')
+  function openPosMode(push = true, paymentTab = false) {
+    if (push) {
+      if (paymentTab) pushPaymentTabHistory('pos')
+      else pushProductHistory('pos')
+    }
     setProductHubOpen(false)
     setPosMode(true)
+    setCirclePocketMode(false)
+    setBillsMode(false)
     setAccessMode(false)
     setStreamMode(false)
     setPolymarketMode(false)
@@ -812,8 +920,8 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   }
 
   function closePosMode() {
-    pushProductHistory('hub')
-    setProductHubOpen(true)
+    pushPaymentTabHistory('personal')
+    setProductHubOpen(false)
     setPosMode(false)
     setPosCountry(null)
     setPosSettlementPath(null)
@@ -822,11 +930,29 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     setPosError('')
   }
 
+  function openBillsMode(push = true) {
+    if (push) pushPaymentTabHistory('bills')
+    window.dispatchEvent(new CustomEvent('agent-hash-mode', { detail: { mode: 'payments' } }))
+    setProductHubOpen(false)
+    setBillsMode(true)
+    setCirclePocketMode(false)
+    setPosMode(false)
+    setAccessMode(false)
+    setStreamMode(false)
+    setPolymarketMode(false)
+    setGeneratedLink('')
+    setCopied(false)
+    setVaultStep('idle')
+    setAccessView('overview')
+  }
+
   function openStreamMode(push = true) {
     if (push) pushProductHistory('streampay')
     setProductHubOpen(false)
     setStreamMode(true)
+    setCirclePocketMode(false)
     setPosMode(false)
+    setBillsMode(false)
     setAccessMode(false)
     setPolymarketMode(false)
     setGeneratedLink('')
@@ -845,7 +971,9 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     setProductHubOpen(false)
     setPolymarketMode(true)
     setStreamMode(false)
+    setCirclePocketMode(false)
     setPosMode(false)
+    setBillsMode(false)
     setAccessMode(false)
     setGeneratedLink('')
     setCopied(false)
@@ -863,18 +991,35 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     setProductHubOpen(false)
 
     if (product === 'payment') {
+      const tab = (paymentTabParam ?? '').toLowerCase()
       setAccessMode(false)
+      setCirclePocketMode(false)
       setPosMode(false)
+      setBillsMode(false)
       setStreamMode(false)
       setPolymarketMode(false)
       setGeneratedLink('')
       setCopied(false)
       setVaultStep('idle')
+      if (tab === 'pos') {
+        openPosMode(false, true)
+        return
+      }
+      if (tab === 'bills') {
+        openBillsMode(false)
+        return
+      }
+      setPaymentMode(tab === 'business' ? 'business' : 'personal')
       return
     }
 
     if (product === 'agent') {
       toggleAccessMode(true, false)
+      return
+    }
+
+    if (product === 'circle-pocket') {
+      openCirclePocketMode(false)
       return
     }
 
@@ -891,17 +1036,27 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     if (product === 'polymarket') {
       openPolymarketMode(false)
     }
-  }, [productParam]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [productParam, paymentTabParam]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const onPopState = () => {
-      const product = (new URL(window.location.href).searchParams.get('product') ?? '').toLowerCase() as CreateProduct | ''
+      const url = new URL(window.location.href)
+      const product = (url.searchParams.get('product') ?? '').toLowerCase() as CreateProduct | ''
+      const tab = (url.searchParams.get('tab') ?? '').toLowerCase()
       if (!product) {
         openHubMode(false)
         return
       }
-      if (product === 'payment') openPaymentMode(false)
+      if (product === 'payment') {
+        if (tab === 'pos') openPosMode(false, true)
+        else if (tab === 'bills') openBillsMode(false)
+        else {
+          openPaymentMode(false)
+          setPaymentMode(tab === 'business' ? 'business' : 'personal')
+        }
+      }
       if (product === 'agent') toggleAccessMode(true, false)
+      if (product === 'circle-pocket') openCirclePocketMode(false)
       if (product === 'pos') openPosMode(false)
       if (product === 'streampay') openStreamMode(false)
       if (product === 'polymarket') openPolymarketMode(false)
@@ -909,6 +1064,242 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     window.addEventListener('popstate', onPopState)
     return () => window.removeEventListener('popstate', onPopState)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!streamMode) {
+      setStreamSpotlightIndex(0)
+      return
+    }
+    const timer = window.setInterval(() => {
+      setStreamSpotlightIndex(current => (current + 1) % 3)
+    }, 7_000)
+    return () => window.clearInterval(timer)
+  }, [streamMode])
+
+  useEffect(() => {
+    if (!polymarketMode) {
+      setPolymarketSpotlightIndex(0)
+      return
+    }
+    const timer = window.setInterval(() => {
+      setPolymarketSpotlightIndex(current => (current + 1) % 3)
+    }, 7_000)
+    return () => window.clearInterval(timer)
+  }, [polymarketMode])
+
+  const circlePocketSelectedWallet = circlePocketWallets[circlePocketNetwork]
+  const circlePocketSelectedBalance = circlePocketRows.find(row => row.key === circlePocketNetwork)?.balance ?? 0
+  const circlePocketNetworkLabel = circlePocketNetwork === 'solana' ? 'Solana' : CHAIN_META[circlePocketNetwork].label
+  const circlePocketSelectedAddress = circlePocketSelectedWallet?.address ?? ''
+
+  async function unlockCirclePocketWallet(network = circlePocketNetwork) {
+    setCirclePocketError('')
+    if (!PRIVY_AUTH_ENABLED) throw new Error('Circle Pocket requires Privy email sign-in.')
+    if (!privyAuthenticated) throw new Error('Sign in with email to open Circle Pocket.')
+    if (!privyEmail) throw new Error('Sign in with an email account to open Circle Pocket.')
+    if (network === 'solana' && !canUseCircleSolanaEmailWallet()) throw new Error('Circle Solana wallet is not configured.')
+    if (network !== 'solana' && !canUseCircleEvmEmailWallet(network)) throw new Error(`${CHAIN_META[network].label} Circle wallet is not configured.`)
+
+    const token = await getAccessToken()
+    if (!token) throw new Error('Email session is not ready. Sign in again and retry.')
+    const existing = await resolvePrivyCircleLink({ accessToken: token, chain: network })
+    if (existing.link?.circleWalletAddress) {
+      const wallet = {
+        address: existing.link.circleWalletAddress,
+        walletId: existing.link.circleWalletId,
+        blockchain: existing.link.circleBlockchain,
+      }
+      setCirclePocketWallets(current => ({ ...current, [network]: wallet }))
+      return wallet
+    }
+
+    if (network === 'solana') {
+      const session = await connectCircleSolanaEmailWallet(privyEmail)
+      setCirclePocketSolanaSession(session)
+      await savePrivyCircleLink({
+        accessToken: token,
+        chain: 'solana',
+        email: privyEmail,
+        wallet: {
+          id: session.wallet.id,
+          address: session.wallet.address,
+          blockchain: session.wallet.blockchain,
+        },
+      })
+      const wallet = {
+        address: session.wallet.address,
+        walletId: session.wallet.id,
+        blockchain: session.wallet.blockchain,
+      }
+      setCirclePocketWallets(current => ({ ...current, solana: wallet }))
+      return wallet
+    }
+
+    const session = await connectCircleEvmEmailWallet(privyEmail, network)
+    setCirclePocketEvmSession(session)
+    await savePrivyCircleLink({
+      accessToken: token,
+      chain: network,
+      email: privyEmail,
+      wallet: session.wallet,
+    })
+    const wallet = {
+      address: session.wallet.address,
+      walletId: session.wallet.id,
+      blockchain: session.wallet.blockchain,
+    }
+    setCirclePocketWallets(current => ({ ...current, [network]: wallet }))
+    return wallet
+  }
+
+  async function refreshCirclePocketBalances(wallets = circlePocketWallets) {
+    const networks = POS_NETWORK_OPTIONS.map(item => item.key)
+    setCirclePocketBalanceBusy(true)
+    setCirclePocketError('')
+    try {
+      const rows: UnifiedBalanceBreakdown[] = []
+      for (const network of networks) {
+        const wallet = wallets[network]
+        if (!wallet?.address) {
+          rows.push({
+            key: network,
+            label: network === 'solana' ? 'Solana' : CHAIN_META[network].label,
+            balance: 0,
+            status: 'ok',
+          })
+          continue
+        }
+        const result = await queryBalances({
+          chains: [network],
+          evmAddress: network === 'solana' ? undefined : wallet.address,
+          solanaAddress: network === 'solana' ? wallet.address : undefined,
+        })
+        rows.push(...result.rows)
+      }
+      setCirclePocketRows(rows)
+      setCirclePocketGlobalBalance(rows.reduce((sum, row) => sum + row.balance, 0))
+    } catch (err) {
+      setCirclePocketError(readableErrorMsg(err, 'Circle Pocket balance refresh failed.'))
+    } finally {
+      setCirclePocketBalanceBusy(false)
+    }
+  }
+
+  async function handleCirclePocketSetup(network = circlePocketNetwork) {
+    setCirclePocketBusy(true)
+    setCirclePocketError('')
+    try {
+      const wallet = await unlockCirclePocketWallet(network)
+      const nextWallets = { ...circlePocketWallets, [network]: wallet }
+      await refreshCirclePocketBalances(nextWallets)
+      setCirclePocketActivity(current => [`${network === 'solana' ? 'Solana' : CHAIN_META[network].label} wallet ready`, ...current].slice(0, 5))
+    } catch (err) {
+      setCirclePocketError(readableErrorMsg(err, 'Circle Pocket setup failed.'))
+    } finally {
+      setCirclePocketBusy(false)
+    }
+  }
+
+  async function handleCirclePocketCopy() {
+    if (!circlePocketSelectedAddress) return
+    await copyToClipboard(circlePocketSelectedAddress)
+    setCirclePocketCopied(true)
+    setCirclePocketActivity(current => [`Copied ${circlePocketNetworkLabel} funding address`, ...current].slice(0, 5))
+    setTimeout(() => setCirclePocketCopied(false), 1800)
+  }
+
+  function handleCirclePocketWithdrawMax() {
+    if (circlePocketSelectedBalance <= 0) return
+    setCirclePocketWithdrawAmount(String(circlePocketSelectedBalance))
+  }
+
+  async function handleCirclePocketWithdraw() {
+    setCirclePocketError('')
+    setCirclePocketWithdrawNotice('')
+    setCirclePocketWithdrawTxHash('')
+    const recipient = circlePocketWithdrawAddress.trim()
+    const decimals = circlePocketNetwork === 'solana' ? 6 : CHAIN_META[circlePocketNetwork].decimals
+    if (circlePocketNetwork === 'solana' ? !isValidSolanaAddress(recipient) : !isAddress(recipient)) {
+      setCirclePocketError('Enter a valid destination address for the selected network.')
+      return
+    }
+    let amountUnits: bigint
+    try {
+      amountUnits = parseUnits(circlePocketWithdrawAmount || '0', decimals)
+    } catch {
+      setCirclePocketError('Enter a valid amount.')
+      return
+    }
+    if (amountUnits <= 0n) {
+      setCirclePocketError('Enter an amount to withdraw.')
+      return
+    }
+    if (circlePocketSelectedBalance > 0) {
+      const selectedUnits = parseUnits(String(circlePocketSelectedBalance), decimals)
+      if (amountUnits > selectedUnits) {
+        setCirclePocketError('Amount is higher than your wallet balance.')
+        return
+      }
+    }
+
+    setCirclePocketWithdrawPending(true)
+    try {
+      const wallet = circlePocketSelectedWallet ?? await unlockCirclePocketWallet(circlePocketNetwork)
+      if (circlePocketNetwork === 'solana') {
+        let session = circlePocketSolanaSession
+        if (!session || session.wallet.address !== wallet.address) {
+          session = await connectCircleSolanaEmailWallet(privyEmail)
+          setCirclePocketSolanaSession(session)
+        }
+        const buildRes = await fetch('/api/solana-build-tx', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            from: session.wallet.address,
+            to: recipient,
+            amount: circlePocketWithdrawAmount,
+            mode: 'withdraw',
+          }),
+        })
+        const buildData = await readApiJson<{ ok: boolean; tx?: string; lastValidBlockHeight?: number; error?: string }>(buildRes, 'Solana build')
+        if (!buildData.ok || !buildData.tx || !buildData.lastValidBlockHeight) throw new Error(buildData.error ?? 'Failed to build withdraw transaction')
+        const signedB64 = await signCircleSolanaTransaction({
+          session,
+          rawTransaction: buildData.tx,
+          memo: `Hash PayLink Circle Pocket withdraw ${formatAmount(circlePocketWithdrawAmount, 6)} USDC`,
+        })
+        const relayRes = await fetch('/api/solana-relay', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tx: signedB64, lastValidBlockHeight: buildData.lastValidBlockHeight }),
+        })
+        const relayData = await readApiJson<{ ok: boolean; txHash?: string; error?: string }>(relayRes, 'Solana relay')
+        if (!relayData.ok || !relayData.txHash) throw new Error(relayData.error ?? 'Relay failed')
+        setCirclePocketWithdrawTxHash(relayData.txHash)
+      } else {
+        let session = circlePocketEvmSession
+        if (!session || session.chain !== circlePocketNetwork || session.wallet.address.toLowerCase() !== wallet.address.toLowerCase()) {
+          session = await connectCircleEvmEmailWallet(privyEmail, circlePocketNetwork)
+          setCirclePocketEvmSession(session)
+        }
+        const txHash = await sendCircleEvmEmailWithdraw({
+          session,
+          recipient: recipient as Address,
+          amount: circlePocketWithdrawAmount,
+        })
+        if (txHash) setCirclePocketWithdrawTxHash(txHash)
+      }
+      setCirclePocketWithdrawNotice('Withdraw sent. Check the destination wallet in a moment.')
+      setCirclePocketActivity(current => [`Withdrew ${circlePocketWithdrawAmount} USDC on ${circlePocketNetworkLabel}`, ...current].slice(0, 5))
+      setCirclePocketWithdrawAmount('')
+      setCirclePocketWithdrawAddress('')
+      await refreshCirclePocketBalances()
+    } catch (err) {
+      setCirclePocketError(readableErrorMsg(err, 'Withdraw failed.'))
+    } finally {
+      setCirclePocketWithdrawPending(false)
+    }
+  }
 
   function handlePosBack() {
     if (posMerchant) {
@@ -1187,16 +1578,23 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     setGeneratedLink(''); setCopied(false); setMultiChainMode(false); setFlexAmount(false)
     setEventMode(false)
     setVaultStep('idle')
-    setAccessMode(false); setPolymarketMode(false); setAgentUrl(''); setAgentUrlStatus('idle')
+    setAccessMode(false); setCirclePocketMode(false); setPosMode(false); setBillsMode(false); setPolymarketMode(false); setAgentUrl(''); setAgentUrlStatus('idle')
   }
 
   const linkReady = generatedLink !== ''
-  const chatCta = productHubOpen || posMode || streamMode || accessMode
+  const chatCta = productHubOpen || posMode || billsMode || streamMode || accessMode || circlePocketMode
     ? null
     : polymarketMode
-      ? { label: 'Open PolyDesk in Telegram', url: telegramStartUrl('polymarket') }
+      ? { label: 'Open PolyDesk', url: telegramStartUrl('polymarket') }
       : { label: 'Open payments in Telegram', url: telegramStartUrl('payment_links') }
-  const isPaymentView = !productHubOpen && !accessMode && !posMode && !streamMode && !polymarketMode
+  const isPaymentView = !productHubOpen && !accessMode && !circlePocketMode && !posMode && !billsMode && !streamMode && !polymarketMode
+  const activePaymentTab: PaymentTab = posMode ? 'pos' : billsMode ? 'bills' : paymentMode
+  const paymentTabs = [
+    { key: 'personal', title: 'Personal', icon: UserRound },
+    { key: 'business', title: 'Business', icon: Briefcase },
+    { key: 'pos', title: 'POS', icon: Store },
+    { key: 'bills', title: 'Bills', icon: Landmark },
+  ] as const
   const howItWorksSteps = productHubOpen
     ? [
         { n: '1', title: 'Receive payments', body: 'Personal, business, POS, and QR payment flows' },
@@ -1233,6 +1631,46 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
         { n: '3', title: 'Get paid', body: 'Anyone pays from any wallet' },
       ]
 
+  function setPaymentTab(tab: PaymentTab) {
+    if (tab === 'personal' || tab === 'business') {
+      pushPaymentTabHistory(tab)
+      openPaymentMode(false)
+      setPaymentMode(tab)
+      return
+    }
+    if (tab === 'pos') {
+      openPosMode(true, true)
+      return
+    }
+    openBillsMode(true)
+  }
+
+  function PaymentTabs() {
+    return (
+      <div className="grid min-w-0 grid-cols-4 border-b border-gray-100 bg-white p-1.5 dark:border-white/10 dark:bg-white/[0.04]">
+        {paymentTabs.map(({ key, title, icon: Icon }) => {
+          const active = activePaymentTab === key
+          return (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setPaymentTab(key)}
+              className={cn(
+                'flex h-[52px] min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl text-[11px] font-semibold transition-all',
+                active
+                  ? 'bg-gray-950 text-white shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:text-white dark:ring-white/10'
+                  : 'text-gray-500 hover:bg-gray-50 hover:text-gray-800 dark:hover:bg-white/[0.06] dark:hover:text-gray-200',
+              )}
+            >
+              <Icon className="h-5 w-5" />
+              {title}
+            </button>
+          )
+        })}
+      </div>
+    )
+  }
+
   return (
     <div className="mx-auto w-[calc(100vw-2rem)] max-w-lg min-w-0 animate-fade-in sm:w-[32rem]">
       {/* ── Hero ──────────────────────────────────────────────────────── */}
@@ -1247,15 +1685,19 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
           </span>
         )}
         <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-[2.25rem]">
-          {productHubOpen ? 'What do you want to do?' : polymarketMode ? 'PolyDesk' : posMode ? 'Retail POS' : streamMode ? 'StreamPay' : accessMode ? accessView === 'wallet' ? 'x402 Wallet Manager' : 'x402 Wallet Manager' : 'Request a payment'}
+          {productHubOpen ? 'What do you want to do?' : circlePocketMode ? 'Circle Pocket' : polymarketMode ? 'PolyDesk' : posMode ? 'Retail POS' : billsMode ? 'Bills' : streamMode ? 'StreamPay' : accessMode ? accessView === 'wallet' ? 'x402 Wallet Manager' : 'x402 Wallet Manager' : 'Request a payment'}
         </h1>
         <p className="mt-2 text-[15px] text-gray-500 text-balance dark:text-gray-400">
           {productHubOpen
-            ? 'Receive payments, manage x402, run POS, StreamPay, or PolyDesk.'
+            ? 'Receive payments, manage x402, run StreamPay, or PolyDesk.'
+            : circlePocketMode
+            ? 'Choose the wallet area to manage.'
             : polymarketMode
-            ? 'Open the Telegram chat layer for Polymarket funding, positions, and LP Scout.'
+            ? 'Fund, track, and scout Polymarket from one desk.'
             : posMode
             ? 'Choose a country, select settlement, and create one static QR.'
+            : billsMode
+            ? 'Utility bill payment will live here when it is ready.'
             : streamMode
               ? 'Stream USDC for payroll, agent services, and Arena games.'
               : accessMode
@@ -1266,7 +1708,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
         </p>
 
         {/* ── Chain preview toggle — hidden in multi-chain mode (all chains active) */}
-        {!productHubOpen && !multiChainMode && !accessMode && !posMode && !streamMode && !polymarketMode && <div className="mt-5 flex w-full flex-col items-center gap-2.5">
+        {!productHubOpen && !multiChainMode && !accessMode && !circlePocketMode && !posMode && !billsMode && !streamMode && !polymarketMode && <div className="mt-5 flex w-full flex-col items-center gap-2.5">
           <div className="mx-auto flex w-[17.5rem] max-w-full items-center justify-start gap-0.5 overflow-x-auto rounded-xl border border-gray-200 bg-gray-100/80 p-1 [scrollbar-width:none] dark:border-white/10 dark:bg-white/[0.05] [&::-webkit-scrollbar]:hidden sm:inline-flex sm:w-auto sm:justify-center sm:gap-1">
             {VISIBLE_CREATE_CHAINS.map((c) => {
               const m = CHAIN_META[c]
@@ -1312,7 +1754,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
         </div>}
 
         {/* Multi-chain mode active badge */}
-        {!productHubOpen && multiChainMode && !accessMode && !posMode && !streamMode && !polymarketMode && (
+        {!productHubOpen && multiChainMode && !accessMode && !circlePocketMode && !posMode && !billsMode && !streamMode && !polymarketMode && (
           <div className="mt-5 flex w-full justify-center">
             <span className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-gray-700 shadow-sm dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200">
               <Globe className="h-3 w-3" />
@@ -1334,11 +1776,10 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
         {productHubOpen ? (
           <div className="space-y-2">
             {[
+              { icon: Wallet, title: 'Circle Pocket Wallet', body: 'Fund services, pay bills, and send money from one Circle balance.', action: () => openCirclePocketMode() },
               { icon: Coins, title: 'Payment', body: 'Create personal or business PayLinks.', action: () => openPaymentMode() },
-              { icon: Bot, title: 'x402', body: 'Fund wallet balance, activate x402, and use paid services.', action: () => toggleAccessMode(true) },
-              { icon: Store, title: 'POS', body: 'Create QR checkout and print receipts.', action: () => openPosMode() },
-              { icon: Radio, title: 'Stream', body: 'Creator, payroll, and Arena on Arc.', action: () => openStreamMode() },
-              { icon: PolymarketMark, title: 'Poly', body: 'Polymarket tools through chat.', action: () => openPolymarketMode() },
+              { icon: Radio, title: 'Stream', body: 'Creator, payroll, and Arena on Arc.', action: () => { window.location.href = '/stream' } },
+              { icon: PolymarketMark, title: 'Poly', body: 'Funding, positions, and LP Scout.', action: () => openPolymarketMode() },
             ].map(({ icon: Icon, title, body, action }) => (
               <button
                 key={title}
@@ -1364,46 +1805,382 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
         ) : (
           <>
         <div className="space-y-0 p-0">
-          {polymarketMode ? (
+          {circlePocketMode ? (
+            <div className="space-y-5 p-4 sm:p-5">
+              <div className="flex items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={closeCirclePocketMode}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/[0.1]"
+                >
+                  <span className="back-btn text-gray-500 dark:text-gray-300" aria-hidden="true">
+                    <span className="arrow-container">
+                      <span className="chevron c1" />
+                      <span className="chevron c2" />
+                      <span className="chevron c3" />
+                    </span>
+                  </span>
+                  Back
+                </button>
+                {privyAuthenticated && (
+                  <button
+                    type="button"
+                    onClick={() => void logoutPrivy()}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-500 transition-all hover:border-gray-300 hover:bg-gray-50 hover:text-gray-900 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-400 dark:hover:bg-white/[0.1] dark:hover:text-gray-100"
+                  >
+                    <LogOut className="h-3.5 w-3.5" />
+                    Sign out
+                  </button>
+                )}
+              </div>
+
+              {circlePocketView === 'chooser' ? (
+                <div className="space-y-3">
+                  {[
+                    {
+                      icon: Wallet,
+                      title: 'Main Wallet',
+                      body: 'Balance, fund, withdraw, and track USDC.',
+                      action: () => setCirclePocketView('main'),
+                    },
+                    {
+                      icon: Radio,
+                      title: 'x402 Wallet',
+                      body: 'Move available funds into paid service balance.',
+                      action: () => setCirclePocketView('x402'),
+                    },
+                  ].map(({ icon: Icon, title, body, action }) => (
+                    <button
+                      key={title}
+                      type="button"
+                      onClick={action}
+                      className="group flex w-full items-center justify-between gap-3 rounded-2xl border border-gray-100 bg-white p-3.5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-gray-200 hover:shadow-md active:scale-[0.99] dark:border-white/10 dark:bg-[#111216] dark:hover:border-white/20"
+                    >
+                      <span className="flex min-w-0 items-center gap-3">
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-gray-600 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300">
+                          <Icon className="h-[18px] w-[18px]" />
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block text-[14px] font-black text-gray-950 dark:text-white">{title}</span>
+                          <span className="mt-1 block text-[12px] leading-5 text-gray-500 dark:text-gray-400">{body}</span>
+                        </span>
+                      </span>
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gray-950 text-white transition-transform group-hover:translate-x-0.5 dark:bg-white dark:text-gray-950">
+                        <ChevronDown className="-rotate-90 h-4 w-4" />
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ) : circlePocketView === 'x402' ? (
+                <AgentWorkspace embedded forceProfile />
+              ) : (
+                <>
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Balance</p>
+                    <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">Main Wallet</h2>
+                    <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
+                      Add USDC, send it out, or use it across Hash PayLink.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-4 gap-1 rounded-xl border border-gray-200 bg-white p-1 shadow-sm dark:border-white/10 dark:bg-[#17181d]">
+                    {[
+                      { key: 'balance', label: 'Balance', icon: Activity },
+                      { key: 'fund', label: 'Fund', icon: Download },
+                      { key: 'withdraw', label: 'Withdraw', icon: ArrowRight },
+                      { key: 'activity', label: 'Activity', icon: LayoutDashboard },
+                    ].map(({ key, label, icon: Icon }) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => setCirclePocketTab(key as CirclePocketTab)}
+                        className={cn(
+                          'flex min-h-[46px] flex-col items-center justify-center gap-1 rounded-lg border px-1.5 text-[10px] font-bold transition-all',
+                          circlePocketTab === key
+                            ? 'border-gray-300 bg-gray-100 text-gray-950 shadow-sm dark:border-white/15 dark:bg-white/[0.12] dark:text-white'
+                            : 'border-transparent bg-transparent text-gray-500 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-white/[0.06] dark:hover:text-gray-200',
+                        )}
+                      >
+                        <Icon className="h-3.5 w-3.5" />
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {POS_NETWORK_OPTIONS.map(network => (
+                      <button
+                        key={network.key}
+                        type="button"
+                        onClick={() => setCirclePocketNetwork(network.key)}
+                        className={cn(
+                          'rounded-lg border px-2 py-2 text-[11px] font-bold transition-all',
+                          circlePocketNetwork === network.key
+                            ? 'border-gray-950 bg-gray-950 text-white dark:border-white dark:bg-white dark:text-gray-950'
+                            : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:text-gray-900 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-400 dark:hover:border-white/20 dark:hover:text-gray-200',
+                        )}
+                      >
+                        {network.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#111216]">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Total available</p>
+                        <p className="mt-1 text-2xl font-black tracking-tight text-gray-950 dark:text-white">
+                          ${formatAmount(circlePocketGlobalBalance, 6)}
+                        </p>
+                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Across Base, Arbitrum, Arc, and Solana.</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => refreshCirclePocketBalances()}
+                        disabled={!privyAuthenticated || circlePocketBalanceBusy}
+                        className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-gray-600 transition-all hover:bg-gray-100 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300"
+                        aria-label="Refresh Circle Pocket balance"
+                      >
+                        <RefreshCw className={cn('h-4 w-4', circlePocketBalanceBusy && 'animate-spin')} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {!privyAuthenticated ? (
+                    <div className="overflow-hidden rounded-2xl border border-gray-100 bg-gradient-to-br from-white to-gray-50 p-4 shadow-sm dark:border-white/10 dark:from-[#111216] dark:to-white/[0.04]">
+                      <PrivyConnectButton className="group flex w-full items-center justify-center gap-2 rounded-xl bg-gray-950 px-4 py-3 text-sm font-bold text-white shadow-sm transition-all hover:bg-black active:scale-[0.98] disabled:opacity-60 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-100">
+                        <Mail className="h-4 w-4" />
+                        Sign in to continue
+                        <span className="back-btn shrink-0 transition-transform group-hover:translate-x-0.5" aria-hidden="true">
+                          <span className="arrow-container arrow-container--right">
+                            <span className="chevron c1" />
+                            <span className="chevron c2" />
+                            <span className="chevron c3" />
+                          </span>
+                        </span>
+                      </PrivyConnectButton>
+                      <p className="mt-2 text-center text-xs font-medium text-gray-400 dark:text-gray-500">Start with email</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {circlePocketTab === 'balance' && (
+                        <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-[#111216]">
+                          <div className="space-y-2 p-2">
+                            {POS_NETWORK_OPTIONS.map(network => {
+                              const row = circlePocketRows.find(item => item.key === network.key)
+                              const wallet = circlePocketWallets[network.key]
+                              return (
+                                <div key={network.key} className="flex items-center justify-between gap-3 rounded-xl p-3">
+                                  <div className="min-w-0">
+                                    <p className="text-sm font-bold text-gray-950 dark:text-white">{network.label}</p>
+                                    <p className="mt-0.5 text-[11px] text-gray-400">{wallet?.address ? truncateAddress(wallet.address) : 'Wallet not opened'}</p>
+                                  </div>
+                                  <div className="text-right">
+                                    <p className="text-sm font-black text-gray-950 dark:text-white">${formatAmount(row?.balance ?? 0, 6)}</p>
+                                    <p className={cn('mt-0.5 text-[10px] font-bold uppercase tracking-wider', row?.status === 'error' ? 'text-red-500' : 'text-emerald-500')}>
+                                      {row?.status === 'error' ? 'Retry' : wallet?.address ? 'Ready' : 'Setup'}
+                                    </p>
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {circlePocketTab === 'fund' && (
+                        <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#111216]">
+                          <p className="text-sm font-bold text-gray-950 dark:text-white">Fund on {circlePocketNetworkLabel}</p>
+                          <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">Send USDC to this address on the selected network.</p>
+                          {circlePocketSelectedAddress ? (
+                            <div className="mt-3 rounded-xl border border-gray-100 bg-gray-50 p-3 dark:border-white/10 dark:bg-white/[0.04]">
+                              <p className="break-all text-xs font-semibold text-gray-700 dark:text-gray-200">{circlePocketSelectedAddress}</p>
+                              <button
+                                type="button"
+                                onClick={handleCirclePocketCopy}
+                                className="mt-3 inline-flex items-center gap-2 rounded-lg bg-gray-950 px-3 py-2 text-xs font-bold text-white dark:bg-white dark:text-gray-950"
+                              >
+                                {circlePocketCopied ? <CheckCheck className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                                {circlePocketCopied ? 'Copied' : 'Copy address'}
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleCirclePocketSetup()}
+                              disabled={circlePocketBusy}
+                              className="mt-3 inline-flex items-center gap-2 rounded-xl bg-gray-950 px-4 py-3 text-sm font-bold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950"
+                            >
+                              {circlePocketBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wallet className="h-4 w-4" />}
+                              Open {circlePocketNetworkLabel} wallet
+                            </button>
+                          )}
+                        </div>
+                      )}
+
+                      {circlePocketTab === 'withdraw' && (
+                        <div className="space-y-3 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#111216]">
+                          <div>
+                            <p className="text-sm font-bold text-gray-950 dark:text-white">Withdraw from {circlePocketNetworkLabel}</p>
+                            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Available: ${formatAmount(circlePocketSelectedBalance, 6)} USDC</p>
+                          </div>
+                          <input
+                            type="text"
+                            value={circlePocketWithdrawAddress}
+                            onChange={(event) => setCirclePocketWithdrawAddress(event.target.value.trim())}
+                            placeholder={circlePocketNetwork === 'solana' ? 'Destination Solana address' : '0x destination address'}
+                            className="w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-medium text-gray-900 outline-none transition focus:border-gray-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-white"
+                          />
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              value={circlePocketWithdrawAmount}
+                              onChange={(event) => setCirclePocketWithdrawAmount(event.target.value)}
+                              placeholder="0.00"
+                              className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-medium text-gray-900 outline-none transition focus:border-gray-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-white"
+                            />
+                            <button
+                              type="button"
+                              onClick={handleCirclePocketWithdrawMax}
+                              className="rounded-xl border border-gray-200 px-3 text-xs font-black text-gray-700 dark:border-white/10 dark:text-gray-200"
+                            >
+                              Max
+                            </button>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleCirclePocketWithdraw}
+                            disabled={circlePocketWithdrawPending}
+                            className="flex w-full items-center justify-center gap-2 rounded-xl bg-gray-950 px-4 py-3 text-sm font-bold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950"
+                          >
+                            {circlePocketWithdrawPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
+                            Withdraw
+                          </button>
+                          {circlePocketWithdrawNotice && <p className="text-xs font-medium text-emerald-600 dark:text-emerald-400">{circlePocketWithdrawNotice}</p>}
+                          {circlePocketWithdrawTxHash && <p className="break-all text-[11px] text-gray-400">Tx: {circlePocketWithdrawTxHash}</p>}
+                        </div>
+                      )}
+
+                      {circlePocketTab === 'activity' && (
+                        <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#111216]">
+                          <p className="text-sm font-bold text-gray-950 dark:text-white">Recent Circle Pocket activity</p>
+                          <div className="mt-3 space-y-2">
+                            {(circlePocketActivity.length ? circlePocketActivity : ['No local wallet activity yet.']).map((item, index) => (
+                              <div key={`${item}-${index}`} className="rounded-xl bg-gray-50 px-3 py-2 text-xs font-medium text-gray-500 dark:bg-white/[0.04] dark:text-gray-400">
+                                {item}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {circlePocketError && (
+                        <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200">
+                          {circlePocketError}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          ) : polymarketMode ? (
             <div className="space-y-5 p-4 sm:p-5">
               <button
                 type="button"
                 onClick={closePolymarketMode}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/[0.1]"
               >
-                <ArrowLeft className="h-3.5 w-3.5" />
+                <span className="back-btn text-gray-500 dark:text-gray-300" aria-hidden="true">
+                  <span className="arrow-container">
+                    <span className="chevron c1" />
+                    <span className="chevron c2" />
+                    <span className="chevron c3" />
+                  </span>
+                </span>
                 Back
               </button>
 
               <div>
-                <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Chat layer</p>
-                <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">PolyDesk services</h2>
+                <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Polymarket tools</p>
+                <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">Choose a PolyDesk flow</h2>
                 <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-                  Funding, positions, World Cup markets, and LP Scout open inside Telegram.
+                  Fund markets, watch positions, and scout opportunities.
                 </p>
               </div>
 
-              <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-[#111216]">
-                <div className="space-y-2 p-2">
-                  {[
-                    { icon: Wallet, title: 'Fund Polymarket', body: 'Add USDC and manage market balances from chat.' },
-                    { icon: Activity, title: 'Positions', body: 'Track open positions, claimable markets, and alerts.' },
-                    { icon: Bot, title: 'LP Scout', body: 'Ask for market depth and reward checks.' },
-                  ].map(({ icon: Icon, title, body }) => (
-                    <div
-                      key={title}
-                      className="flex w-full items-center gap-3 rounded-xl p-3 text-left"
+              <div>
+                {(() => {
+                  const flows = [
+                    {
+                      icon: Wallet,
+                      title: 'Fund Polymarket',
+                      body: 'Add USDC and check funding status.',
+                      accent: 'text-blue-100',
+                      bg: 'from-gray-950 via-blue-950 to-gray-900',
+                    },
+                    {
+                      icon: Activity,
+                      title: 'Positions',
+                      body: 'Watch positions, claims, and alerts.',
+                      accent: 'text-cyan-200',
+                      bg: 'from-blue-700 via-gray-950 to-gray-900',
+                    },
+                    {
+                      icon: Bot,
+                      title: 'LP Scout',
+                      body: 'Check depth, rewards, and risk.',
+                      accent: 'text-emerald-300',
+                      bg: 'from-gray-950 via-gray-900 to-gray-800',
+                    },
+                  ]
+                  const flow = flows[polymarketSpotlightIndex % flows.length]
+                  const Icon = flow.icon
+                  return (
+                    <a
+                      key={flow.title}
+                      href={telegramStartUrl('polymarket')}
+                      target="_blank"
+                      rel="noreferrer"
+                      className={cn(
+                        'group relative block min-h-[178px] overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br p-5 text-left text-white shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md',
+                        flow.bg,
+                      )}
                     >
-                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-gray-600 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300">
-                        <Icon className="h-[18px] w-[18px]" />
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-[14px] font-bold text-gray-950 dark:text-white">{title}</span>
-                        <span className="mt-1 block text-[12px] leading-relaxed text-gray-500 dark:text-gray-400">{body}</span>
-                      </span>
-                    </div>
-                  ))}
-                </div>
+                      <div key={flow.title} className="stream-card-slide flex min-h-[138px] flex-col justify-between gap-6">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex min-w-0 gap-3">
+                            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/10 text-white">
+                              <Icon className="h-5 w-5" />
+                            </span>
+                            <span className="min-w-0">
+                              <p className={cn('text-[10px] font-bold uppercase tracking-[0.16em]', flow.accent)}>Live</p>
+                              <p className="mt-2 text-xl font-black tracking-tight">{flow.title}</p>
+                              <p className="mt-2 max-w-[280px] text-[13px] leading-relaxed text-white/70">
+                                {flow.body}
+                              </p>
+                            </span>
+                          </div>
+                          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-white px-2.5 py-1 text-[11px] font-bold text-gray-950">
+                            Open <ArrowRight className="h-3 w-3" />
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          {flows.map((item, index) => (
+                            <span
+                              key={item.title}
+                              className={cn(
+                                'h-1.5 rounded-full transition-all',
+                                index === polymarketSpotlightIndex % flows.length ? 'w-6 bg-white' : 'w-1.5 bg-white/35',
+                              )}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    </a>
+                  )
+                })()}
               </div>
             </div>
           ) : streamMode ? (
@@ -1413,7 +2190,13 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                 onClick={closeStreamMode}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/[0.1]"
               >
-                <ArrowLeft className="h-3.5 w-3.5" />
+                <span className="back-btn text-gray-500 dark:text-gray-300" aria-hidden="true">
+                  <span className="arrow-container">
+                    <span className="chevron c1" />
+                    <span className="chevron c2" />
+                    <span className="chevron c3" />
+                  </span>
+                </span>
                 Back
               </button>
 
@@ -1426,79 +2209,68 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               </div>
 
               <div className="space-y-3">
-                <Link
-                  to="/creator?app=streampay"
-                  className="group relative block overflow-hidden rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-600 to-gray-950 p-4 text-left text-white shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-blue-400/20"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-blue-100">Live</p>
-                      <p className="mt-1 text-[15px] font-black">Creator Studio</p>
-                      <p className="mt-1 max-w-[270px] text-[12px] leading-snug text-white/70">
-                        Gate articles or private links and earn USDC by the second while readers consume.
-                      </p>
-                    </div>
-                    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-white px-2.5 py-1 text-[11px] font-bold text-gray-950">
-                      Open <ArrowRight className="h-3 w-3" />
-                    </span>
-                  </div>
-                </Link>
-
-                <Link
-                  to="/arena?app=streampay&game=trivia"
-                  className="group relative block overflow-hidden rounded-2xl border border-gray-200 bg-gradient-to-br from-gray-950 to-gray-800 p-4 text-left text-white shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-white/10"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-300">Live</p>
-                      <p className="mt-1 text-[15px] font-black">Arena</p>
-                      <p className="mt-1 max-w-[260px] text-[12px] leading-snug text-white/65">
-                        Private USDC trivia rooms on Arc. Per-room escrow, claimable unstreamed deposits.
-                      </p>
-                    </div>
-                    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-white px-2.5 py-1 text-[11px] font-bold text-gray-950">
-                      Open <ArrowRight className="h-3 w-3" />
-                    </span>
-                  </div>
-                </Link>
-
-                <button
-                  type="button"
-                  disabled
-                  className="group relative block w-full overflow-hidden rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-4 text-left opacity-70 dark:border-white/10 dark:bg-white/[0.04]"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-gray-400">Coming soon</p>
-                      <p className="mt-1 text-[15px] font-black text-gray-700 dark:text-gray-200">Streams</p>
-                      <p className="mt-1 max-w-[260px] text-[12px] leading-snug text-gray-500 dark:text-gray-500">
-                        Continuous USDC payouts with on-chain receipts and 0G archive.
-                      </p>
-                    </div>
-                    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-white px-2.5 py-1 text-[11px] font-bold text-gray-400 dark:bg-white/10">
-                      Soon
-                    </span>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  disabled
-                  className="group relative block w-full overflow-hidden rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-4 text-left opacity-70 dark:border-white/10 dark:bg-white/[0.04]"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-gray-400">Coming soon</p>
-                      <p className="mt-1 text-[15px] font-black text-gray-700 dark:text-gray-200">Telegram services</p>
-                      <p className="mt-1 max-w-[260px] text-[12px] leading-snug text-gray-500 dark:text-gray-500">
-                        Spin up paid StreamPay flows directly from a Telegram chat.
-                      </p>
-                    </div>
-                    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-white px-2.5 py-1 text-[11px] font-bold text-gray-400 dark:bg-white/10">
-                      Soon
-                    </span>
-                  </div>
-                </button>
+                {(() => {
+                  const flows = [
+                    {
+                      title: 'Payroll',
+                      body: 'Create Arc USDC streams for payroll and scheduled payouts.',
+                      to: '/stream',
+                      accent: 'text-cyan-200',
+                      bg: 'from-gray-950 via-blue-950 to-gray-900',
+                    },
+                    {
+                      title: 'Creator Studio',
+                      body: 'Gate articles or private links and earn USDC by the second while readers consume.',
+                      to: '/creator?app=streampay',
+                      accent: 'text-blue-100',
+                      bg: 'from-blue-600 via-blue-900 to-gray-950',
+                    },
+                    {
+                      title: 'Arena',
+                      body: 'Private USDC trivia rooms on Arc. Per-room escrow, claimable unstreamed deposits.',
+                      to: '/arena?app=streampay&game=trivia',
+                      accent: 'text-emerald-300',
+                      bg: 'from-gray-950 via-gray-900 to-gray-800',
+                    },
+                  ]
+                  const flow = flows[streamSpotlightIndex % flows.length]
+                  return (
+                    <Link
+                      key={flow.title}
+                      to={flow.to}
+                      className={cn(
+                        'group relative block min-h-[178px] overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br p-5 text-left text-white shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md',
+                        flow.bg,
+                      )}
+                    >
+                      <div key={flow.title} className="stream-card-slide flex min-h-[138px] flex-col justify-between gap-6">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className={cn('text-[10px] font-bold uppercase tracking-[0.16em]', flow.accent)}>Live</p>
+                            <p className="mt-2 text-xl font-black tracking-tight">{flow.title}</p>
+                            <p className="mt-2 max-w-[310px] text-[13px] leading-relaxed text-white/70">
+                              {flow.body}
+                            </p>
+                          </div>
+                          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-white px-2.5 py-1 text-[11px] font-bold text-gray-950">
+                            Open <ArrowRight className="h-3 w-3" />
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          {flows.map((item, index) => (
+                            <span
+                              key={item.title}
+                              className={cn(
+                                'h-1.5 rounded-full transition-all',
+                                index === streamSpotlightIndex % flows.length ? 'w-6 bg-white' : 'w-1.5 bg-white/35',
+                              )}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    </Link>
+                  )
+                })()}
               </div>
 
               <p className="text-center text-[11px] text-gray-400">
@@ -1506,15 +2278,19 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               </p>
             </div>
           ) : posMode ? (
+            <>
+            <PaymentTabs />
             <div className="space-y-5 p-4 sm:p-5">
-              <button
-                type="button"
-                onClick={handlePosBack}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/[0.1]"
-              >
-                <ArrowLeft className="h-3.5 w-3.5" />
-                Back
-              </button>
+              {(posCountry || posSettlementPath || posMerchant) && (
+                <button
+                  type="button"
+                  onClick={handlePosBack}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/[0.1]"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5" />
+                  Back
+                </button>
+              )}
 
               {!posCountry ? (
                 <div className="space-y-4">
@@ -1786,107 +2562,46 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                 </div>
               )}
             </div>
+            </>
+          ) : billsMode ? (
+            <>
+            <PaymentTabs />
+            <div className="space-y-5 p-4 sm:p-5">
+              <div className="rounded-2xl border border-gray-100 bg-gray-50 p-5 text-center dark:border-white/10 dark:bg-white/[0.04]">
+                <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl border border-gray-200 bg-white text-gray-700 shadow-sm dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200">
+                  <Landmark className="h-5 w-5" />
+                </span>
+                <p className="mt-4 text-[11px] font-semibold uppercase tracking-widest text-gray-400">Bills</p>
+                <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">Utility bill payment coming soon</h2>
+                <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-gray-500 dark:text-gray-400">
+                  Bills will support utility payments from the same payment networks used here.
+                </p>
+              </div>
+            </div>
+            </>
           ) : accessMode ? (
             <div className="space-y-5 p-4 sm:p-5">
-              {accessView === 'wallet' ? (
-                <div className="space-y-4">
-                  <button
-                    type="button"
-                    onClick={() => setAccessView('overview')}
-                    className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 transition-colors hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
-                  >
-                    <ArrowLeft className="h-3.5 w-3.5" />
-                    Back
-                  </button>
-                  <AgentWorkspace embedded forceProfile />
-                  <a
-                    href="/agent?walletManager=service"
-                    className="block text-center text-[11px] font-medium text-gray-400 transition-colors hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200"
-                  >
-                    Open wallet manager full screen
-                  </a>
-                </div>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    onClick={closeAccessMode}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/[0.1]"
-                  >
-                    <ArrowLeft className="h-3.5 w-3.5" />
-                    Back
-                  </button>
-
-                  <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Wallet to x402</p>
-                    <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">x402 wallet setup</h2>
-                    <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-                      Keep USDC in your Circle wallet, move what you need into x402 service balance, then use paid services.
-                    </p>
-                  </div>
-
-                  <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-[#111216]">
-                    <div className="space-y-2 p-2">
-                      {[
-                        { icon: Wallet, title: 'Wallet balance', body: 'USDC held in your Circle wallet before x402 activation.' },
-                        { icon: Radio, title: 'x402 service balance', body: 'USDC moved into Circle Gateway for paid service calls.' },
-                        { icon: Zap, title: 'StreamPay services', body: 'Creator, payroll, and Arena flows stay on Arc.' },
-                      ].map(({ icon: Icon, title, body }) => (
-                        <div
-                          key={title}
-                          className="flex w-full items-center gap-3 rounded-xl p-3 text-left"
-                        >
-                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-gray-600 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300">
-                            <Icon className="h-[18px] w-[18px]" />
-                          </span>
-                          <span className="min-w-0 flex-1">
-                            <span className="block text-[14px] font-bold text-gray-950 dark:text-white">{title}</span>
-                            <span className="mt-1 block text-[12px] leading-relaxed text-gray-500 dark:text-gray-400">{body}</span>
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => setAccessView('wallet')}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-gray-950 px-4 py-3 text-sm font-bold text-white shadow-sm transition-all hover:bg-black active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-100"
-                  >
-                    Open wallet manager
-                    <ArrowRight className="h-4 w-4" />
-                  </button>
-                </>
-              )}
+              <button
+                type="button"
+                onClick={closeAccessMode}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/[0.1]"
+              >
+                <span className="back-btn text-gray-500 dark:text-gray-300" aria-hidden="true">
+                  <span className="arrow-container">
+                    <span className="chevron c1" />
+                    <span className="chevron c2" />
+                    <span className="chevron c3" />
+                  </span>
+                </span>
+                Back
+              </button>
+              <AgentWorkspace embedded forceProfile />
             </div>
           ) : (
             <>
           <div className="overflow-hidden bg-gray-50/60 dark:bg-white/[0.035]">
             {!accessMode && (
-              <div className="grid min-w-0 grid-cols-2 border-b border-gray-100 bg-white p-1.5 dark:border-white/10 dark:bg-white/[0.04]">
-                {([
-                  { key: 'personal', title: 'Personal', icon: UserRound },
-                  { key: 'business', title: 'Business', icon: Briefcase },
-                ] as const).map(({ key, title, icon: Icon }) => {
-                  const active = paymentMode === key
-                  return (
-                    <button
-                      key={key}
-                      type="button"
-                      onClick={() => setPaymentMode(key)}
-                      className={cn(
-                        'flex h-[52px] min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl text-[11px] font-semibold transition-all',
-                        active
-                          ? 'bg-gray-950 text-white shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:text-white dark:ring-white/10'
-                          : 'text-gray-500 hover:bg-gray-50 hover:text-gray-800 dark:hover:bg-white/[0.06] dark:hover:text-gray-200',
-                      )}
-                    >
-                      <Icon className="h-5 w-5" />
-                      {title}
-                    </button>
-                  )
-                })}
-              </div>
+              <PaymentTabs />
             )}
 
             <div className="space-y-3.5 px-3.5 py-3 sm:p-4">

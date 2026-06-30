@@ -1545,10 +1545,15 @@ export default function FoundationPage() {
         </div>
       </section>
 
-      <footer id="contact" className="border-t border-black/10 px-5 py-8 sm:px-8 lg:px-10" style={{ scrollSnapAlign: 'end' }}>
+      <footer id="contact" className="flex h-[60px] items-center border-t border-black/10 px-5 py-0 sm:px-8 lg:px-10" style={{ scrollSnapAlign: 'end' }}>
         <div className="mx-auto grid w-full max-w-7xl gap-3 text-xs text-gray-500 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
           <div className="hidden sm:block" />
-          <p className="text-center text-gray-400">Powered by Circle USDC</p>
+          <p className="text-center text-gray-400">
+            <span className="polydesk-powered-footer">
+              <span>Powered by</span>
+              <strong>Circle USDC</strong>
+            </span>
+          </p>
           <div className="flex justify-center gap-4 sm:justify-end">
             <a href="mailto:support@hashpaylink.com" className="hover:text-gray-900">Email</a>
             <a href="https://x.com/Hash_PayLink" target="_blank" rel="noreferrer" className="hover:text-gray-900">X</a>

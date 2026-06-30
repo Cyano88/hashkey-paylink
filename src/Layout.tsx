@@ -934,7 +934,7 @@ export default function Layout() {
 
       {/* ── Footer ───────────────────────────────────────────────────────── */}
       {!isPayPage && (
-        <footer className={isPolyDeskSurface ? 'flex min-h-14 items-center border-t border-gray-100 bg-white/50 py-0 dark:border-white/5 dark:bg-[#111113]/50' : 'border-t border-gray-100 dark:border-white/5 bg-white/50 dark:bg-[#111113]/50 py-5'}>
+        <footer className={isPolyDeskSurface ? 'flex h-[60px] items-center border-t border-gray-100 bg-white/50 py-0 dark:border-white/5 dark:bg-[#111113]/50' : 'flex h-[60px] items-center border-t border-gray-100 bg-white/50 py-0 dark:border-white/5 dark:bg-[#111113]/50'}>
           <div className="mx-auto w-full max-w-5xl px-4 sm:px-6">
             <p className="text-center text-xs text-gray-400">
               {isPolyDeskSurface ? (
@@ -956,7 +956,10 @@ export default function Layout() {
                   ))}
                 </>
               ) : (
-                'Powered by Circle USDC'
+                <span className="polydesk-powered-footer">
+                  <span>Powered by</span>
+                  <strong>Circle USDC</strong>
+                </span>
               )}
             </p>
           </div>
