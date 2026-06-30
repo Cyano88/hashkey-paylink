@@ -27,13 +27,11 @@ import {
   RefreshCw,
   Send,
   Share2,
-  ShieldCheck,
   Sparkles,
   TrendingDown,
   UserRound,
   UsersRound,
   Wallet,
-  X,
 } from 'lucide-react'
 import { cn } from '../lib/utils'
 import { EVM_TREASURY } from '../lib/chains'
@@ -6132,14 +6130,6 @@ type PolymarketPosition = {
   marketStatus?: string
 }
 
-type PolyDeskTradeTicket = {
-  marketTitle: string
-  marketUrl: string
-  tokenId: string
-  outcome: 'Yes' | 'No'
-  suggestedPrice?: number
-}
-
 function formatUsd(value: unknown, fallback = '—') {
   const n = typeof value === 'number' ? value : Number(value)
   if (!Number.isFinite(n)) return fallback
@@ -6281,9 +6271,6 @@ export function PolyPortfolioPanel({
   const [settingsDraft, setSettingsDraft] = useState<PolymarketAlertSettings | null>(null)
   const [settingsSaving, setSettingsSaving] = useState(false)
   const [addressCopied, setAddressCopied] = useState(false)
-  const [tradeTicket, setTradeTicket] = useState<PolyDeskTradeTicket | null>(null)
-  const [tradeAmount, setTradeAmount] = useState('')
-  const [tradeNotice, setTradeNotice] = useState('')
   const [unsignedPortfolioAction, setUnsignedPortfolioAction] = useState<'watch' | 'trading' | 'external' | null>(null)
   const [unsignedWatchAddress, setUnsignedWatchAddress] = useState('')
   const [unsignedExternalAddress, setUnsignedExternalAddress] = useState('')
@@ -6516,7 +6503,7 @@ export function PolyPortfolioPanel({
 
   async function startFund(marketUrlForCta = '') {
     if (!tradingAddress) {
-      setFundError('Connect or save a trading wallet before funding.')
+      setFundError('Sign in to Main Wallet before funding.')
       return
     }
     setFundError('')
@@ -6685,59 +6672,6 @@ export function PolyPortfolioPanel({
       setAddressCopied(true)
       window.setTimeout(() => setAddressCopied(false), 1500)
     }).catch(() => undefined)
-  }
-
-  function prepareTradeTicket(position: PolymarketPosition) {
-    setTradeAmount('')
-    setTradeNotice('')
-    setTradeTicket({
-      marketTitle: position.title || position.market || 'Polymarket position',
-      marketUrl: polymarketEventUrl(position),
-      tokenId: String(position.asset ?? ''),
-      outcome: normalizeTradeOutcome(position.outcome),
-      suggestedPrice: typeof position.curPrice === 'number' ? position.curPrice : undefined,
-    })
-  }
-
-  async function checkTradeReadiness() {
-    if (!tradeTicket) return
-    setTradeNotice('')
-    if (!signingWalletAddress) {
-      setTradeNotice('Connect a signing wallet before PolyDesk can prepare signed orders.')
-      return
-    }
-    if (!/^\d+(?:\.\d{1,6})?$/.test(tradeAmount.trim()) || Number(tradeAmount) <= 0) {
-      setTradeNotice('Enter the USDC amount you want to trade.')
-      return
-    }
-    try {
-      const res = await fetch('/api/polymarket-order', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          marketTitle: tradeTicket.marketTitle,
-          marketUrl: tradeTicket.marketUrl,
-          tokenId: tradeTicket.tokenId,
-          outcome: tradeTicket.outcome,
-          action: 'prepare',
-          side: 'buy',
-          amount: tradeAmount.trim(),
-          signer: signingWalletAddress,
-        }),
-      })
-      const data = await res.json() as { error?: string; ok?: boolean; builderCodeConfigured?: boolean; builderCodePreview?: string; builderCredentialMode?: string }
-      if (!res.ok || !data.ok) {
-        setTradeNotice(data.error || 'Trade route is not ready yet.')
-        return
-      }
-      setTradeNotice(
-        data.builderCodeConfigured
-          ? `Trade prepared for Polymarket signing with builder attribution (${data.builderCodePreview ?? 'configured'}). Builder signer: ${data.builderCredentialMode ?? 'unconfigured'}.`
-          : 'Trade prepared. Builder attribution still needs configuration.',
-      )
-    } catch {
-      setTradeNotice('Polymarket order signing is not enabled yet.')
-    }
   }
 
   // ── Render ────────────────────────────────────────────────────────────
@@ -6996,7 +6930,7 @@ export function PolyPortfolioPanel({
           <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">External funding</p>
           <h2 className="mt-1 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Fund another Polymarket wallet</h2>
           <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-            One-off funding only. This wallet will not become your watched account or trading wallet.
+            One-off funding only. This wallet will not replace your watched account or Main Wallet.
           </p>
           <div className="mt-3 space-y-3">
             <InputBlock label="External Polymarket wallet" value={unsignedExternalAddress} onChange={value => { setUnsignedExternalAddress(value); setUnsignedExternalResult(null) }} placeholder="0x... wallet to fund" />
@@ -7042,7 +6976,7 @@ export function PolyPortfolioPanel({
           Paste the public 0x address from a Polymarket account panel. PolyDesk uses it to show positions, claimables, alerts, and funding history. It does not give PolyDesk control of that account.
         </p>
         <div className="mt-3 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs leading-relaxed text-blue-800 dark:border-blue-400/20 dark:bg-blue-400/10 dark:text-blue-100">
-          Public profile tracking is separate from your trading wallet. To buy from PolyDesk, connect the wallet that will sign the trade.
+          Public profile tracking is separate from Main Wallet. PolyDesk only reads this address for positions and alerts.
         </div>
         <div className="mt-4 space-y-3">
           <InputBlock
@@ -7111,7 +7045,7 @@ export function PolyPortfolioPanel({
                 className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
               >
                 {savingProfile ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                Save trading wallet
+                Open Main Wallet
               </button>
             ) : (
               <PrivyWalletConnectButton className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200">
@@ -7290,7 +7224,7 @@ export function PolyPortfolioPanel({
       </div>
       )}
 
-      {/* Trading wallet card */}
+      {/* Main wallet card */}
       {unsignedPortfolioAction === 'trading' && (
       <div className="rounded-2xl border border-gray-100 bg-white p-3.5 shadow-sm dark:border-white/10 dark:bg-[#0f1014]">
         <div>
@@ -7412,13 +7346,6 @@ export function PolyPortfolioPanel({
                         </div>
                         <p className={cn('text-sm font-semibold tabular-nums', tone)}>{formatPercent(pnl)}</p>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => prepareTradeTicket(position)}
-                        className="mt-2 inline-flex items-center gap-1 rounded-lg bg-black px-2.5 py-1.5 text-[11px] font-semibold text-white transition hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
-                      >
-                        Prepare trade
-                      </button>
                     </div>
                   )
                 })}
@@ -7442,75 +7369,6 @@ export function PolyPortfolioPanel({
           </PrivyWalletConnectButton>
         ) : null}
 
-        {signingWalletAddress && profile?.tradingAddress !== signingWalletAddress && (
-          <button
-            type="button"
-            onClick={() => void saveProfile(signingWalletAddress)}
-            disabled={savingProfile}
-            className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 py-1.5 text-[11px] font-semibold text-gray-700 transition hover:bg-gray-50 disabled:opacity-50 dark:border-white/10 dark:text-gray-200 dark:hover:bg-white/[0.04]"
-          >
-            {savingProfile ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-            Save for next time
-          </button>
-        )}
-        {tradeTicket ? (
-          <div className="mt-2.5 space-y-2.5 rounded-xl border border-gray-100 bg-gray-50 p-3 dark:border-white/10 dark:bg-white/[0.04]">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Trade ticket</p>
-                <p className="mt-1 truncate text-sm font-semibold text-gray-900 dark:text-white">{tradeTicket.marketTitle}</p>
-                <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                  Buy {tradeTicket.outcome}{tradeTicket.suggestedPrice ? ` near ${(tradeTicket.suggestedPrice * 100).toFixed(1)}c` : ''}
-                </p>
-                {tradeTicket.tokenId && (
-                  <p className="mt-0.5 truncate font-mono text-[10px] text-gray-400">Token {tradeTicket.tokenId}</p>
-                )}
-              </div>
-              <button
-                type="button"
-                onClick={() => { setTradeTicket(null); setTradeNotice(''); setTradeAmount('') }}
-                className="rounded-lg p-1 text-gray-400 hover:bg-white hover:text-gray-700 dark:hover:bg-white/[0.08] dark:hover:text-white"
-                aria-label="Close trade ticket"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            <InputBlock
-              label="Amount USDC"
-              value={tradeAmount}
-              onChange={setTradeAmount}
-              placeholder="0.00"
-              inputMode="decimal"
-            />
-            {tradeNotice && <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">{tradeNotice}</p>}
-            <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-              PolyDesk keeps builder attribution server-side and never custodies user funds, private keys, or reusable CLOB secrets.
-            </p>
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <button
-                type="button"
-                onClick={checkTradeReadiness}
-                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-black px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
-              >
-                <ShieldCheck className="h-4 w-4" />
-                Prepare trade
-              </button>
-              <a
-                href={tradeTicket.marketUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-gray-200 px-5 py-2.5 text-sm font-semibold text-gray-700 transition hover:bg-white dark:border-white/10 dark:text-gray-200 dark:hover:bg-white/[0.04]"
-              >
-                <ExternalLink className="h-4 w-4" />
-                Open market
-              </a>
-            </div>
-          </div>
-        ) : (
-          <p className="mt-2 rounded-xl bg-gray-50 px-3 py-1.5 text-xs leading-snug text-gray-500 dark:bg-white/[0.04] dark:text-gray-400">
-            Choose an open position to prepare a trade ticket.
-          </p>
-        )}
       </div>
       )}
 
@@ -7707,13 +7565,6 @@ export function PolyPortfolioPanel({
                     </div>
                   </div>
                   <div className="mt-2 flex flex-wrap items-center justify-end gap-2">
-                    <button
-                      type="button"
-                      onClick={() => prepareTradeTicket(position)}
-                      className="inline-flex items-center gap-1 rounded-lg bg-black px-2.5 py-1.5 text-[11px] font-semibold text-white transition hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
-                    >
-                      Prepare trade
-                    </button>
                     <a
                       href={polymarketEventUrl(position)}
                       target="_blank"
@@ -7829,7 +7680,7 @@ export function PolyWorldCupHubPanel({
         {hasProfile && (
           <PolyDeskMenuCard
             title="Portfolio exposure"
-            body="Check watched and trading wallet exposure before opening a trade."
+            body="Check watched positions and market exposure before opening a trade."
             onClick={onOpenPortfolio}
           />
         )}
