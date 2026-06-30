@@ -76,6 +76,20 @@
     }
   }
 
+  @keyframes hpDollarFall {
+    0% {
+      opacity: 0;
+      transform: translateY(-12px) rotate(-8deg);
+    }
+    20% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(72px) rotate(12deg);
+    }
+  }
+
   .text-balance {
     text-wrap: balance;
   }

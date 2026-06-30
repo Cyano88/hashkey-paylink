@@ -4509,6 +4509,23 @@ function polymarketTickSize(value?: number): '0.1' | '0.01' | '0.001' | '0.0001'
   return text === '0.1' || text === '0.01' || text === '0.001' || text === '0.0001' ? text : ''
 }
 
+function friendlyTradeError(err: unknown) {
+  const message = err instanceof Error ? err.message.toLowerCase() : String(err ?? '').toLowerCase()
+  if (/\b(reject|rejected|denied|cancel|cancelled|user rejected)\b/.test(message)) {
+    return 'Order approval was cancelled.'
+  }
+  if (/\b(insufficient|not enough|balance|funds|allowance|collateral)\b/.test(message)) {
+    return 'Not enough USDC available for this order. Add funds or lower the amount.'
+  }
+  if (/\b(network|timeout|fetch|failed to fetch|503|502|504|unavailable)\b/.test(message)) {
+    return 'Connection issue while sending the order. Please try again.'
+  }
+  if (/\b(price|fillable|liquidity|minimum|min size|too small|market)\b/.test(message)) {
+    return 'This market moved before the order finished. Refresh and try again.'
+  }
+  return 'We could not complete the order. Please try again.'
+}
+
 function EventMark({ kind }: { kind: MatchEventDetail['kind'] }) {
   if (kind === 'yellow') {
     return <span className="h-2.5 w-2 rounded-[2px] bg-yellow-300 shadow-sm ring-1 ring-black/20" aria-label="yellow card" />
@@ -4538,7 +4555,7 @@ function HashLiveScoreWidget({
   onTradeAmountChange,
   tradeBusyKey,
   tradeNotice,
-  builderHandoff,
+  tradeSuccess,
   signingWalletAddress,
 }: {
   matches: PolyStreamMatch[]
@@ -4551,7 +4568,7 @@ function HashLiveScoreWidget({
   onTradeAmountChange: (value: string) => void
   tradeBusyKey: string
   tradeNotice: string
-  builderHandoff: Record<string, unknown> | null
+  tradeSuccess: { matchKey: string; label: string; amount: string } | null
   signingWalletAddress: string
 }) {
   const [selectedMatchKey, setSelectedMatchKey] = useState('')
@@ -4559,7 +4576,6 @@ function HashLiveScoreWidget({
   const [detailPageIndex, setDetailPageIndex] = useState(0)
   const [tradeMenuOpen, setTradeMenuOpen] = useState(false)
   const [selectedTradeOption, setSelectedTradeOption] = useState<PolyStreamTradeOption | null>(null)
-  const [tradeReviewOpen, setTradeReviewOpen] = useState(false)
   const [, setCountdownTick] = useState(0)
   const featured = matches.find(match => matchKey(match) === selectedMatchKey) || matches[0]
   const rest = featured ? matches.filter(match => matchKey(match) !== matchKey(featured)) : []
@@ -4571,6 +4587,7 @@ function HashLiveScoreWidget({
   const featuredMarketMatched = featured?.marketStatus === 'matched' && Boolean(featured.polymarketUrl)
   const featuredTradeOptions = featured?.polymarketTradeOptions ?? []
   const featuredCanPrepareTrade = featuredMarketMatched && featuredTradeOptions.length > 0
+  const featuredTradeSuccess = featured && tradeSuccess?.matchKey === matchKey(featured) ? tradeSuccess : null
   const activeDetail = featuredDetails.length ? featuredDetails[detailIndex % featuredDetails.length] : null
   const activePagedItems = activeDetail?.type === 'goals'
     ? detailPages(activeDetail.goals)
@@ -4589,7 +4606,6 @@ function HashLiveScoreWidget({
     setDetailPageIndex(0)
     setTradeMenuOpen(false)
     setSelectedTradeOption(null)
-    setTradeReviewOpen(false)
   }, [selectedMatchKey])
 
   useEffect(() => {
@@ -4818,7 +4834,6 @@ function HashLiveScoreWidget({
                       type="button"
                       onClick={() => {
                         setSelectedTradeOption(option)
-                        setTradeReviewOpen(false)
                       }}
                       disabled={Boolean(tradeBusyKey)}
                       className={cn(
@@ -4833,7 +4848,33 @@ function HashLiveScoreWidget({
                   )
                 })}
               </div>
-              {selectedTradeOption && (
+              {featuredTradeSuccess ? (
+                <div className="relative mt-1.5 overflow-hidden rounded-lg border border-emerald-200/30 bg-emerald-300/15 p-2.5 shadow-sm">
+                  <div className="pointer-events-none absolute inset-0 overflow-hidden">
+                    {['$', '$', '$', '$', '$', '$'].map((symbol, index) => (
+                      <span
+                        key={`${symbol}-${index}`}
+                        className="absolute top-[-10px] text-[11px] font-black text-emerald-200/80 [animation:hpDollarFall_1.8s_ease-in-out_infinite]"
+                        style={{ left: `${12 + index * 14}%`, animationDelay: `${index * 0.16}s` }}
+                      >
+                        {symbol}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="relative flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-100/70">Bought</p>
+                      <p className="mt-1 truncate text-sm font-black text-white">
+                        {featuredTradeSuccess.label}
+                      </p>
+                      <p className="mt-0.5 text-[10px] font-semibold leading-snug text-emerald-50/75">
+                        Your {featuredTradeSuccess.amount} USDC order was sent. You can follow it from your wallet or Polymarket account.
+                      </p>
+                    </div>
+                    <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-200" />
+                  </div>
+                </div>
+              ) : selectedTradeOption && (
                 <div className="mt-1.5 rounded-md border border-emerald-300/25 bg-emerald-300/10 p-2">
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
@@ -4841,92 +4882,25 @@ function HashLiveScoreWidget({
                         Buy {selectedTradeOption.label}{selectedTradeOption.price ? ` near ${selectedTradeOption.price}` : ''}
                       </p>
                       <p className="mt-0.5 text-[9px] font-semibold text-emerald-100/65">
-                        FOK order. Wallet signs first, then PolyDesk submits with builder attribution.
+                        Confirm in your wallet. Signing is free and does not move funds by itself.
                       </p>
                       <p className="mt-0.5 text-[9px] font-semibold text-emerald-100/65">
-                        PolyDesk review keeps advanced fields expandable before your wallet opens.
+                        After approval, PolyDesk sends your order securely.
                       </p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setTradeReviewOpen(true)}
-                      disabled={Boolean(tradeBusyKey)}
-                      className="inline-flex min-h-8 shrink-0 items-center justify-center gap-1 rounded-md bg-emerald-300 px-2 text-[10px] font-black text-emerald-950 transition hover:bg-emerald-200 disabled:cursor-wait disabled:opacity-60"
-                    >
-                      {tradeBusyKey ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
-                      Review
-                    </button>
-                  </div>
-                </div>
-              )}
-              {featured && selectedTradeOption && tradeReviewOpen && (
-                <div className="mt-1.5 rounded-lg border border-white/12 bg-white/[0.08] p-2.5 shadow-sm">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-[10px] font-black uppercase tracking-[0.14em] text-white/45">PolyDesk review</p>
-                      <p className="mt-1 text-xs font-black text-white">
-                        Buy {selectedTradeOption.label} in {featured.polymarketTitle || featured.title}
-                      </p>
-                      <p className="mt-1 text-[10px] font-semibold leading-snug text-white/65">
-                        Stake {tradeAmount.trim() || '0'} USDC. Wallet signing has no gas fee; PolyDesk submits the signed order with builder attribution.
-                        Your wallet provider controls the final confirmation screen.
-                      </p>
-                    </div>
-                    <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-200" />
-                  </div>
-                  <div className="mt-2 grid grid-cols-2 gap-1.5 text-[10px]">
-                    <div className="rounded-md bg-black/20 px-2 py-1.5">
-                      <p className="font-semibold text-white/45">Selection</p>
-                      <p className="mt-0.5 truncate font-black text-white">{selectedTradeOption.label}</p>
-                    </div>
-                    <div className="rounded-md bg-black/20 px-2 py-1.5">
-                      <p className="font-semibold text-white/45">Price</p>
-                      <p className="mt-0.5 truncate font-black text-white">{selectedTradeOption.price ?? 'Market'}</p>
-                    </div>
-                    <div className="rounded-md bg-black/20 px-2 py-1.5">
-                      <p className="font-semibold text-white/45">Order</p>
-                      <p className="mt-0.5 truncate font-black text-white">Fill or kill</p>
-                    </div>
-                    <div className="rounded-md bg-black/20 px-2 py-1.5">
-                      <p className="font-semibold text-white/45">Wallet</p>
-                      <p className="mt-0.5 truncate font-black text-white">{signingWalletAddress ? shortHex(signingWalletAddress) : 'Not connected'}</p>
-                    </div>
-                  </div>
-                  <details className="mt-2 rounded-md border border-white/10 bg-black/20 px-2 py-1.5">
-                    <summary className="cursor-pointer text-[10px] font-black text-white/75">
-                      Advanced order message fields
-                    </summary>
-                    <div className="mt-1.5 space-y-1 text-[9px] font-semibold leading-snug text-white/55">
-                      <p>Domain: Polymarket CTF Exchange, Polygon chain 137</p>
-                      <p>Verifying contract: official Polymarket exchange contract</p>
-                      <p>Token ID: <span className="break-all text-white/75">{selectedTradeOption.tokenId}</span></p>
-                      <p>Signer: <span className="break-all text-white/75">{signingWalletAddress || 'Connect wallet'}</span></p>
-                      <p>Fields may include salt, makerAmount, takerAmount, nonce, feeRateBps, side, and signatureType.</p>
-                    </div>
-                  </details>
-                  <div className="mt-2 flex items-center justify-end gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => setTradeReviewOpen(false)}
-                      disabled={Boolean(tradeBusyKey)}
-                      className="inline-flex min-h-8 items-center justify-center rounded-md border border-white/10 bg-white/10 px-2 text-[10px] font-black text-white/75 transition hover:bg-white/15 disabled:cursor-wait disabled:opacity-60"
-                    >
-                      Back
-                    </button>
                     <button
                       type="button"
                       onClick={() => onSubmitTrade(featured, selectedTradeOption)}
                       disabled={Boolean(tradeBusyKey)}
-                      className="inline-flex min-h-8 items-center justify-center gap-1 rounded-md bg-white px-2.5 text-[10px] font-black text-gray-950 transition hover:bg-gray-100 disabled:cursor-wait disabled:opacity-60"
+                      className="inline-flex min-h-8 shrink-0 items-center justify-center gap-1 rounded-md bg-emerald-300 px-2 text-[10px] font-black text-emerald-950 transition hover:bg-emerald-200 disabled:cursor-wait disabled:opacity-60"
                     >
                       {tradeBusyKey ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
-                      Sign order
+                      Continue
                     </button>
                   </div>
                 </div>
               )}
               {tradeNotice && <p className="mt-1.5 text-[10px] font-semibold leading-snug text-white/70">{tradeNotice}</p>}
-              {builderHandoff && <p className="mt-1 text-[10px] font-semibold text-emerald-100/80">Submitted with builder attribution.</p>}
             </div>
           )}
         </div>
@@ -4977,7 +4951,7 @@ export function PolyStreamPanel({
   const [tradeAmount, setTradeAmount] = useState('')
   const [tradeBusyKey, setTradeBusyKey] = useState('')
   const [tradeNotice, setTradeNotice] = useState('')
-  const [builderHandoff, setBuilderHandoff] = useState<Record<string, unknown> | null>(null)
+  const [tradeSuccess, setTradeSuccess] = useState<{ matchKey: string; label: string; amount: string } | null>(null)
   const mountedRef = useRef(true)
   const matches = feed?.matches ?? []
   const signingWalletAddress = privyWallets.find(wallet => /^0x[a-fA-F0-9]{40}$/.test(wallet.address ?? ''))?.address ?? ''
@@ -5010,28 +4984,28 @@ export function PolyStreamPanel({
 
   const signWorldCupTrade = useCallback(async (match: PolyStreamMatch, option: PolyStreamTradeOption) => {
     setTradeNotice('')
-    setBuilderHandoff(null)
+    setTradeSuccess(null)
     if (!signingWalletAddress) {
-      setTradeNotice('Connect a wallet before PolyDesk can prepare the Polymarket signature.')
+      setTradeNotice('Connect your wallet to continue.')
       return
     }
     const signingWallet = privyWallets.find(wallet => wallet.address?.toLowerCase() === signingWalletAddress.toLowerCase())
     if (!signingWallet || typeof signingWallet.getEthereumProvider !== 'function') {
-      setTradeNotice('Connected wallet cannot sign Polymarket orders here.')
+      setTradeNotice('This wallet cannot approve the order here. Try another wallet.')
       return
     }
     const amount = tradeAmount.trim()
     if (!/^\d+(?:\.\d{1,6})?$/.test(amount) || Number(amount) <= 0) {
-      setTradeNotice('Enter the USDC amount first.')
+      setTradeNotice('Enter how much USDC you want to use.')
       return
     }
     if (typeof option.minSize === 'number' && Number(amount) < option.minSize) {
-      setTradeNotice(`Minimum size for this Polymarket market is ${option.minSize} USDC.`)
+      setTradeNotice(`Minimum order for this market is ${option.minSize} USDC.`)
       return
     }
     const tickSize = polymarketTickSize(option.tickSize)
     if (!tickSize) {
-      setTradeNotice('Polymarket tick size is missing for this World Cup market.')
+      setTradeNotice('This market is not ready for in-app buying yet.')
       return
     }
     const busyKey = `${matchKey(match)}:${option.outcome}`
@@ -5057,11 +5031,11 @@ export function PolyStreamPanel({
       })
       const data = await response.json() as { ok?: boolean; error?: string; builderCode?: string; builderCodeConfigured?: boolean; builderCodePreview?: string; builderCredentialMode?: string }
       if (!response.ok || !data.ok) {
-        setTradeNotice(data.error || 'World Cup trade route is not ready.')
+        setTradeNotice('This market is not ready for in-app buying yet. Try again shortly.')
         return
       }
       if (!data.builderCode || !/^0x[a-fA-F0-9]{64}$/.test(data.builderCode)) {
-        setTradeNotice('Polymarket builder code is not ready for attributed trading.')
+        setTradeNotice('Buying is temporarily unavailable. Try again shortly.')
         return
       }
       if (typeof signingWallet.switchChain === 'function') {
@@ -5087,7 +5061,7 @@ export function PolyStreamPanel({
         0,
         signingWalletAddress,
       )
-      setTradeNotice('Review the Polymarket order in your wallet. The wallet may show raw CTF Exchange fields; no gas is charged for this signature.')
+      setTradeNotice('Confirm the order in your wallet. Signing is free.')
       const signedOrder = await signingClient.createMarketOrder(
         {
           tokenID: option.tokenId,
@@ -5097,7 +5071,7 @@ export function PolyStreamPanel({
         },
         { tickSize, negRisk: option.negRisk === true },
       )
-      setTradeNotice('Order signed. Preparing builder-attributed submission.')
+      setTradeNotice('Approved. Sending your order...')
       const userCreds = await signingClient.createOrDeriveApiKey()
       const orderPayload = orderToJson(signedOrder, userCreds.key, OrderType.FOK, false)
       const builderAttributedPayload = {
@@ -5130,10 +5104,10 @@ export function PolyStreamPanel({
         handoff?: { orderPayload?: typeof builderAttributedPayload }
       }
       if (!handoffResponse.ok || !handoff.ok) {
-        setTradeNotice(handoff.error || 'Signed order could not be packaged for builder handoff.')
+        setTradeNotice('Your approval was received, but the order could not be sent. Please try again.')
         return
       }
-      setTradeNotice('Submitting signed order through PolyDesk with builder attribution.')
+      setTradeNotice('Sending your order...')
       const finalOrderPayload = handoff.handoff?.orderPayload ?? builderAttributedPayload
       const orderBody = JSON.stringify(finalOrderPayload)
       const l2Headers = await createL2Headers(walletClient, userCreds, {
@@ -5162,18 +5136,10 @@ export function PolyStreamPanel({
         const errorMessage = submitResult && typeof submitResult === 'object' && 'error' in submitResult ? String(submitResult.error) : 'Polymarket rejected the submitted order.'
         throw new Error(errorMessage)
       }
-      setBuilderHandoff(handoff)
-      const handoffMode = handoff.builderCredentialMode && handoff.builderCredentialMode !== 'unconfigured' ? ` Builder signer: ${handoff.builderCredentialMode}.` : ''
-      setTradeNotice(
-        data.builderCodeConfigured
-          ? `Submitted ${option.label} to Polymarket through PolyDesk with builder attribution.${handoffMode}`
-          : 'Signed order created, but builder attribution is not configured.',
-      )
+      setTradeSuccess({ matchKey: matchKey(match), label: option.label, amount })
+      setTradeNotice('')
     } catch (err) {
-      const message = err instanceof Error ? err.message.toLowerCase() : ''
-      setTradeNotice(message.includes('reject') || message.includes('denied') || message.includes('cancel')
-        ? 'Wallet signature was cancelled.'
-        : 'Could not sign the World Cup order.')
+      setTradeNotice(friendlyTradeError(err))
     } finally {
       setTradeBusyKey('')
     }
@@ -5262,7 +5228,7 @@ export function PolyStreamPanel({
           onTradeAmountChange={setTradeAmount}
           tradeBusyKey={tradeBusyKey}
           tradeNotice={tradeNotice}
-          builderHandoff={builderHandoff}
+          tradeSuccess={tradeSuccess}
           signingWalletAddress={signingWalletAddress}
         />
         <p className="px-1 pb-1 text-[10px] font-medium leading-relaxed text-gray-400 dark:text-gray-500">
