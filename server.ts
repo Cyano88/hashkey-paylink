@@ -52,6 +52,7 @@ import polymarketBuilderHandoffHandler from './api/polymarket-builder-handoff.js
 import polymarketBuilderSignerHandler from './api/polymarket-builder-signer.js'
 import polymarketOrderHandler from './api/polymarket-order.js'
 import polymarketPortfolioHandler from './api/polymarket-portfolio.js'
+import polymarketSubmitOrderHandler from './api/polymarket-submit-order.js'
 import ngPosHandler from './api/ng-pos.js'
 import streamRecipientInviteHandler from './api/stream-recipient-invite.js'
 import streamHistoryHandler from './api/stream-history.js'
@@ -156,6 +157,7 @@ app.post('/api/polymarket-builder-handoff', strictLimiter, polymarketBuilderHand
 app.post('/api/polymarket-builder-signer', strictLimiter, polymarketBuilderSignerHandler)
 app.post('/api/polymarket-order',       strictLimiter, polymarketOrderHandler)
 app.all('/api/polymarket-portfolio',    readLimiter,   polymarketPortfolioHandler)
+app.post('/api/polymarket-submit-order', strictLimiter, polymarketSubmitOrderHandler)
 app.all('/api/ng-pos',                  strictLimiter, ngPosHandler)
 app.post('/api/stream-recipient-invite', strictLimiter, streamRecipientInviteHandler)
 app.get('/api/stream-history',         readLimiter, streamHistoryHandler)

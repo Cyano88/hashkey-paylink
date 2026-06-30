@@ -4997,10 +4997,9 @@ export function PolyStreamPanel({
         await signingWallet.switchChain(137)
       }
       const provider = await signingWallet.getEthereumProvider()
-      const [{ ClobClient, Side, OrderType, createL2Headers }, { orderToJson }, { BuilderConfig }, { createWalletClient, custom }, { polygon }] = await Promise.all([
+      const [{ ClobClient, Side, OrderType, createL2Headers }, { orderToJson }, { createWalletClient, custom }, { polygon }] = await Promise.all([
         import('@polymarket/clob-client'),
         import('@polymarket/clob-client/dist/utilities.js'),
-        import('@polymarket/builder-signing-sdk'),
         import('viem'),
         import('viem/chains'),
       ])
@@ -5063,8 +5062,7 @@ export function PolyStreamPanel({
         setTradeNotice(handoff.error || 'Signed order could not be packaged for builder handoff.')
         return
       }
-      const remoteSigner = handoff.remoteBuilderSigner
-      setTradeNotice('Submitting signed order to Polymarket with builder attribution.')
+      setTradeNotice('Submitting signed order through PolyDesk with builder attribution.')
       const finalOrderPayload = handoff.handoff?.orderPayload ?? builderAttributedPayload
       const orderBody = JSON.stringify(finalOrderPayload)
       const l2Headers = await createL2Headers(walletClient, userCreds, {
@@ -5072,22 +5070,21 @@ export function PolyStreamPanel({
         requestPath: '/order',
         body: orderBody,
       })
-      const builderHeaders = remoteSigner?.url && remoteSigner.token
-        ? await new BuilderConfig({
-          remoteBuilderConfig: {
-            url: `${window.location.origin}${remoteSigner.url}`,
-            token: remoteSigner.token,
-          },
-        }).generateBuilderHeaders('POST', '/order', orderBody)
-        : {}
-      const submitResponse = await fetch('https://clob.polymarket.com/order', {
+      const submitResponse = await fetch('/api/polymarket-submit-order', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...l2Headers,
-          ...builderHeaders,
-        },
-        body: orderBody,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          source: 'world-cup-moneyline',
+          marketTitle: match.polymarketTitle || match.title,
+          marketUrl: match.polymarketUrl,
+          outcome: option.label,
+          tokenId: option.tokenId,
+          signer: signingWalletAddress,
+          orderType: OrderType.FOK,
+          order: signedOrder,
+          orderPayload: finalOrderPayload,
+          userHeaders: l2Headers,
+        }),
       })
       const submitResult = await submitResponse.json().catch(() => ({}))
       if (!submitResponse.ok || (submitResult && typeof submitResult === 'object' && 'error' in submitResult)) {
@@ -5098,7 +5095,7 @@ export function PolyStreamPanel({
       const handoffMode = handoff.builderCredentialMode && handoff.builderCredentialMode !== 'unconfigured' ? ` Builder signer: ${handoff.builderCredentialMode}.` : ''
       setTradeNotice(
         data.builderCodeConfigured
-          ? `Submitted ${option.label} to Polymarket with PolyDesk builder attribution.${handoffMode}`
+          ? `Submitted ${option.label} to Polymarket through PolyDesk with builder attribution.${handoffMode}`
           : 'Signed order created, but builder attribution is not configured.',
       )
     } catch (err) {
