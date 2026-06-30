@@ -16,7 +16,6 @@ import {
   ExternalLink,
   Activity,
   LineChart,
-  LogIn,
   Loader2,
   LogOut,
   Mail,
@@ -6802,7 +6801,7 @@ export function PolyPortfolioPanel({
   if (!authenticated) {
     const portfolioActions = [
       ['watch', 'Watch account', 'Track a public Polymarket profile.'],
-      ['trading', 'Trading account', 'Connect the wallet that signs trades.'],
+      ['trading', 'Main Wallet', 'Add USDC, withdraw, and view active positions.'],
       ['external', 'Fund external', 'Send funds to another Poly account.'],
     ] as const
     const selectedAction = portfolioActions.find(([key]) => key === unsignedPortfolioAction)
@@ -6858,18 +6857,39 @@ export function PolyPortfolioPanel({
               )}
 
               {unsignedPortfolioAction === 'trading' && (
-                <>
-                  <p className="mt-3 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-                    Sign in to open Main Wallet for PolyDesk funding.
+                <div className="mt-3 space-y-3">
+                  <p className="text-sm leading-relaxed text-gray-500 dark:text-gray-400">
+                    Add USDC, send it out, or use it across PolyDesk.
                   </p>
+                  <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#0f1014]">
+                    <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Total available</p>
+                    <p className="mt-1 text-2xl font-black tracking-tight text-gray-950 dark:text-white">$0</p>
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Across Base, Arbitrum, Arc, and Solana.</p>
+                  </div>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {['Base', 'Arbitrum', 'Arc', 'Solana'].map((network, index) => (
+                      <span
+                        key={network}
+                        className={cn(
+                          'rounded-lg border px-2 py-2 text-center text-[11px] font-bold',
+                          index === 0
+                            ? 'border-gray-950 bg-gray-950 text-white dark:border-white dark:bg-white dark:text-gray-950'
+                            : 'border-gray-200 bg-white text-gray-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-400',
+                        )}
+                      >
+                        {network}
+                      </span>
+                    ))}
+                  </div>
                   <button
                     type="button"
                     onClick={() => login()}
-                    className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-4 py-3 text-sm font-bold text-white transition hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
                   >
-                    <LogIn className="h-4 w-4" /> Sign in to continue
+                    <Mail className="h-4 w-4" /> Sign in to continue
                   </button>
-                </>
+                  <p className="text-center text-xs font-medium text-gray-400 dark:text-gray-500">Start with email</p>
+                </div>
               )}
 
               {unsignedPortfolioAction === 'external' && (
