@@ -315,6 +315,7 @@ export default function PolyDesk() {
                 onOpenWorldCup={() => openServiceView('worldcup')}
                 telegramOwner={ownerKey}
                 telegramId=""
+                surface="standalone"
               />
             ) : serviceView === 'worldcup' ? (
               <PolyWorldCupHubPanel

@@ -6239,12 +6239,14 @@ export function PolyPortfolioPanel({
   onOpenWorldCup,
   telegramOwner,
   telegramId,
+  surface = 'telegram',
 }: {
   onBack: () => void
   onOpenLpScout: () => void
   onOpenWorldCup: () => void
   telegramOwner?: string
   telegramId?: string
+  surface?: 'telegram' | 'standalone'
 }) {
   const { ready: privyReady, authenticated, login, getAccessToken } = usePrivy()
   const { wallets: privyWallets } = useWallets()
@@ -6304,6 +6306,7 @@ export function PolyPortfolioPanel({
   const signingWalletAddress = signingWallet?.address ?? ''
   const watchedAddress = profile?.watchedAddress || profile?.polymarketAddress || ''
   const tradingAddress = profile?.tradingAddress || signingWalletAddress || ''
+  const mainWalletCopy = 'Add USDC, send it out, or use it across PolyDesk.'
 
   const claimablePositions = useMemo(
     () => livePositions.filter(isClaimablePosition),
@@ -7062,7 +7065,7 @@ export function PolyPortfolioPanel({
           <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Balance</p>
           <h2 className="mt-1 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Main Wallet</h2>
           <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-            Add USDC, send it out, or use it across PolyDesk.
+            {mainWalletCopy}
           </p>
           <div className="mt-3 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#0f1014]">
             <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Total available</p>
@@ -7117,7 +7120,10 @@ export function PolyPortfolioPanel({
 
       {/* Watched account card */}
       {unsignedPortfolioAction === 'watch' && (
-      <div className="rounded-2xl border border-gray-100 bg-white p-3.5 shadow-sm dark:border-white/10 dark:bg-[#0f1014]">
+      <div
+        className="rounded-2xl border border-gray-100 bg-white p-3.5 shadow-sm dark:border-white/10 dark:bg-[#0f1014]"
+        data-polydesk-surface={surface}
+      >
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
@@ -7273,7 +7279,7 @@ export function PolyPortfolioPanel({
             <div>
               <h2 className="text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">Main Wallet</h2>
               <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-                Add USDC, send it out, or use it across PolyDesk.
+                {mainWalletCopy}
               </p>
             </div>
             {signingWalletAddress && (
