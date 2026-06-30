@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { usePrivy } from '@privy-io/react-auth'
+import { usePrivy, useWallets } from '@privy-io/react-auth'
 import {
   ArrowLeft,
   ArrowRight,
@@ -36,6 +36,8 @@ import { EVM_TREASURY } from '../lib/chains'
 import AgentWorkspace from './AgentWorkspace'
 import ZeroScoutPowerBadge from '../components/ZeroScoutPowerBadge'
 import PayLinkShareSheet from '../components/PayLinkShareSheet'
+import { PrivyWalletConnectButton } from '../lib/PrivyWalletConnectButton'
+import { PRIVY_AUTH_ENABLED } from '../lib/authMode'
 
 const TELEGRAM_BOT_URL = import.meta.env.VITE_TELEGRAM_AGENT_URL || 'https://t.me/HashPayLinkBot'
 const PUBLIC_PAYLINK_ORIGIN = (import.meta.env.VITE_PUBLIC_PAYLINK_ORIGIN || 'https://hashpaylink.com').replace(/\/+$/, '')
@@ -5763,6 +5765,13 @@ type PolymarketPosition = {
   marketStatus?: string
 }
 
+type PolyDeskTradeTicket = {
+  marketTitle: string
+  marketUrl: string
+  outcome: 'Yes' | 'No'
+  suggestedPrice?: number
+}
+
 function formatUsd(value: unknown, fallback = '—') {
   const n = typeof value === 'number' ? value : Number(value)
   if (!Number.isFinite(n)) return fallback
@@ -5797,6 +5806,12 @@ function formatPercent(value: unknown) {
 function polymarketEventUrl(position: PolymarketPosition) {
   const slug = (position.eventSlug ?? position.slug ?? '').trim()
   return slug ? `https://polymarket.com/event/${slug}` : 'https://polymarket.com'
+}
+
+function normalizeTradeOutcome(value: unknown): 'Yes' | 'No' {
+  const text = String(value ?? '').trim().toLowerCase()
+  if (text === 'no' || text === 'false' || text === '0') return 'No'
+  return 'Yes'
 }
 
 function polymarketPositionKey(position: PolymarketPosition) {
@@ -5851,7 +5866,9 @@ export function PolyPortfolioPanel({
   telegramId?: string
 }) {
   const { ready: privyReady, authenticated, login, getAccessToken } = usePrivy()
+  const { wallets: privyWallets } = useWallets()
 
+  const [privyWaitExpired, setPrivyWaitExpired] = useState(false)
   const [bundle, setBundle] = useState<PolymarketPortfolioBundle | null>(null)
   const [bundleLoading, setBundleLoading] = useState(false)
   const [bundleError, setBundleError] = useState('')
@@ -5882,9 +5899,14 @@ export function PolyPortfolioPanel({
   const [settingsDraft, setSettingsDraft] = useState<PolymarketAlertSettings | null>(null)
   const [settingsSaving, setSettingsSaving] = useState(false)
   const [addressCopied, setAddressCopied] = useState(false)
+  const [tradeTicket, setTradeTicket] = useState<PolyDeskTradeTicket | null>(null)
+  const [tradeAmount, setTradeAmount] = useState('')
+  const [tradeNotice, setTradeNotice] = useState('')
 
   const profile = bundle?.profile ?? null
   const settings = bundle?.settings ?? null
+  const tradingWallet = privyWallets.find(wallet => /^0x[a-fA-F0-9]{40}$/.test(wallet.address ?? '')) ?? null
+  const tradingWalletAddress = tradingWallet?.address ?? ''
 
   const claimablePositions = useMemo(
     () => livePositions.filter(isClaimablePosition),
@@ -5895,6 +5917,15 @@ export function PolyPortfolioPanel({
     () => livePositions.filter(isActiveOpenPosition),
     [livePositions],
   )
+
+  useEffect(() => {
+    if (privyReady) {
+      setPrivyWaitExpired(false)
+      return
+    }
+    const timer = window.setTimeout(() => setPrivyWaitExpired(true), 12000)
+    return () => window.clearTimeout(timer)
+  }, [privyReady])
 
   const losers = useMemo(() => {
     if (!settings) return []
@@ -6196,7 +6227,102 @@ export function PolyPortfolioPanel({
     }).catch(() => undefined)
   }
 
+  function prepareTradeTicket(position: PolymarketPosition) {
+    setTradeAmount('')
+    setTradeNotice('')
+    setTradeTicket({
+      marketTitle: position.title || position.market || 'Polymarket position',
+      marketUrl: polymarketEventUrl(position),
+      outcome: normalizeTradeOutcome(position.outcome),
+      suggestedPrice: typeof position.curPrice === 'number' ? position.curPrice : undefined,
+    })
+  }
+
+  async function checkTradeReadiness() {
+    if (!tradeTicket) return
+    setTradeNotice('')
+    if (!tradingWalletAddress) {
+      setTradeNotice('Connect a trading wallet before PolyDesk can prepare signed orders.')
+      return
+    }
+    if (!/^\d+(?:\.\d{1,6})?$/.test(tradeAmount.trim()) || Number(tradeAmount) <= 0) {
+      setTradeNotice('Enter the USDC amount you want to trade.')
+      return
+    }
+    try {
+      const res = await fetch('/api/polymarket-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          marketTitle: tradeTicket.marketTitle,
+          marketUrl: tradeTicket.marketUrl,
+          outcome: tradeTicket.outcome,
+          side: 'buy',
+          amount: tradeAmount.trim(),
+          signer: tradingWalletAddress,
+        }),
+      })
+      const data = await res.json() as { error?: string }
+      setTradeNotice(data.error || (res.ok ? 'Trade route is ready.' : 'Trade signing is not enabled yet.'))
+    } catch {
+      setTradeNotice('Trade signing is not enabled yet.')
+    }
+  }
+
   // ── Render ────────────────────────────────────────────────────────────
+  if (!PRIVY_AUTH_ENABLED) {
+    return (
+      <div className="mt-4 space-y-3">
+        <button type="button" onClick={onBack} className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200">
+          <ArrowLeft className="h-3.5 w-3.5" /> Back
+        </button>
+        <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#0f1014]">
+          <div className="flex items-center gap-2">
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.06]">
+              <img src={POLYMARKET_LOGO} alt="" className="h-4 w-4 invert dark:invert-0" />
+            </span>
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">PolyDesk Portfolio</p>
+          </div>
+          <h2 className="mt-2 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Sign-in is not enabled here</h2>
+          <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
+            Portfolio, alerts, funding history, and trading-wallet readiness need the Hash PayLink Privy session. Enable Privy for this environment, then refresh PolyDesk.
+          </p>
+          <p className="mt-3 rounded-xl bg-gray-50 px-3 py-2 text-xs leading-relaxed text-gray-500 dark:bg-white/[0.04] dark:text-gray-400">
+            Local env needed: VITE_PRIVY_APP_ID and VITE_AUTH_BRIDGE=hybrid.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!privyReady && privyWaitExpired) {
+    return (
+      <div className="mt-4 space-y-3">
+        <button type="button" onClick={onBack} className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200">
+          <ArrowLeft className="h-3.5 w-3.5" /> Back
+        </button>
+        <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#0f1014]">
+          <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+            <Loader2 className="h-4 w-4 animate-spin" /> Loading PolyDesk session...
+          </div>
+          <div className="mt-3 space-y-3">
+            <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+              PolyDesk is still waiting for the wallet session. Refresh this page if it does not continue.
+            </p>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 dark:border-white/10 dark:text-gray-200 dark:hover:bg-white/[0.04]"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              Refresh PolyDesk
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   if (!privyReady) {
     return (
       <div className="mt-4 flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
@@ -6444,6 +6570,83 @@ export function PolyPortfolioPanel({
         )}
       </div>
 
+      {/* Trading wallet card */}
+      <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#0f1014]">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Trading wallet</p>
+            <p className="mt-0.5 text-sm font-semibold text-gray-900 dark:text-white">
+              {tradingWalletAddress ? shortHex(tradingWalletAddress) : 'Not connected'}
+            </p>
+          </div>
+          {tradingWalletAddress ? (
+            <span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-bold uppercase text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-200">
+              Ready
+            </span>
+          ) : (
+            <PrivyWalletConnectButton className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 py-1.5 text-[11px] font-semibold text-gray-700 transition hover:bg-gray-50 dark:border-white/10 dark:text-gray-200 dark:hover:bg-white/[0.04]">
+              <Wallet className="h-3.5 w-3.5" />
+              Connect
+            </PrivyWalletConnectButton>
+          )}
+        </div>
+        <p className="mt-2 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+          Viewing portfolio {shortHex(profile.polymarketAddress)}. Signed trades will use the connected trading wallet, not the read-only profile unless both addresses match.
+        </p>
+        {tradeTicket ? (
+          <div className="mt-3 space-y-3 rounded-xl border border-gray-100 bg-gray-50 p-3 dark:border-white/10 dark:bg-white/[0.04]">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Trade ticket</p>
+                <p className="mt-1 truncate text-sm font-semibold text-gray-900 dark:text-white">{tradeTicket.marketTitle}</p>
+                <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                  Buy {tradeTicket.outcome}{tradeTicket.suggestedPrice ? ` near ${(tradeTicket.suggestedPrice * 100).toFixed(1)}c` : ''}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setTradeTicket(null); setTradeNotice(''); setTradeAmount('') }}
+                className="rounded-lg p-1 text-gray-400 hover:bg-white hover:text-gray-700 dark:hover:bg-white/[0.08] dark:hover:text-white"
+                aria-label="Close trade ticket"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <InputBlock
+              label="Amount USDC"
+              value={tradeAmount}
+              onChange={setTradeAmount}
+              placeholder="0.00"
+              inputMode="decimal"
+            />
+            {tradeNotice && <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">{tradeNotice}</p>}
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <button
+                type="button"
+                onClick={checkTradeReadiness}
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-black px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+              >
+                <ShieldCheck className="h-4 w-4" />
+                Check signing route
+              </button>
+              <a
+                href={tradeTicket.marketUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-gray-200 px-5 py-2.5 text-sm font-semibold text-gray-700 transition hover:bg-white dark:border-white/10 dark:text-gray-200 dark:hover:bg-white/[0.04]"
+              >
+                <ExternalLink className="h-4 w-4" />
+                Open market
+              </a>
+            </div>
+          </div>
+        ) : (
+          <p className="mt-3 rounded-xl bg-gray-50 px-3 py-2 text-xs leading-relaxed text-gray-500 dark:bg-white/[0.04] dark:text-gray-400">
+            Open positions can prepare a PolyDesk trade ticket. Real order placement stays disabled until CLOB signing is fully wired.
+          </p>
+        )}
+      </div>
+
       {/* Alerts card */}
       <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#0f1014]">
         <div className="flex items-start justify-between gap-3">
@@ -6626,7 +6829,14 @@ export function PolyPortfolioPanel({
                       {isLoser && <p className="text-[10px] font-semibold uppercase tracking-widest text-amber-600 dark:text-amber-300">Below threshold</p>}
                     </div>
                   </div>
-                  <div className="mt-2 flex items-center justify-end">
+                  <div className="mt-2 flex flex-wrap items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => prepareTradeTicket(position)}
+                      className="inline-flex items-center gap-1 rounded-lg bg-black px-2.5 py-1.5 text-[11px] font-semibold text-white transition hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+                    >
+                      Prepare trade
+                    </button>
                     <a
                       href={polymarketEventUrl(position)}
                       target="_blank"

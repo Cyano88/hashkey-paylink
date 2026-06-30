@@ -126,6 +126,8 @@ services:
         sync: false                   # Solana relayer keypair; wallet needs SOL for sponsored payments
       - key: SOLANA_TREASURY
         sync: false                   # Solana treasury wallet address for fee collection
+      - key: POLYMARKET_BUILDER_CODE
+        sync: false                   # Polymarket builder code for bridge calls and future CLOB order attribution
 
 # ── External cron (sweep-keeper) ──────────────────────────────────────────────
 # Render free tier does not include cron jobs.
