@@ -4195,6 +4195,7 @@ type PolyStreamMatch = {
   polymarketTitle?: string
   polymarketLiquidity?: string
   polymarketVolume?: string
+  polymarketTradeOptions?: PolyStreamTradeOption[]
   marketStatus?: 'matched' | 'pending'
   goalScorers?: string[]
   weather?: string
@@ -4205,6 +4206,17 @@ type PolyStreamMatch = {
   marketContext: string
   sourceUrl: string
   polymarketUrl?: string
+}
+
+type PolyStreamTradeOption = {
+  label: string
+  outcome: 'home' | 'draw' | 'away'
+  tokenId: string
+  price?: string
+  conditionId?: string
+  tickSize?: number
+  minSize?: number
+  negRisk?: boolean
 }
 
 type PolyStreamFeed = {
@@ -4491,6 +4503,11 @@ function MarketPricePill({ value }: { value?: string }) {
   )
 }
 
+function polymarketTickSize(value?: number): '0.1' | '0.01' | '0.001' | '0.0001' | '' {
+  const text = String(value ?? '')
+  return text === '0.1' || text === '0.01' || text === '0.001' || text === '0.0001' ? text : ''
+}
+
 function EventMark({ kind }: { kind: MatchEventDetail['kind'] }) {
   if (kind === 'yellow') {
     return <span className="h-2.5 w-2 rounded-[2px] bg-yellow-300 shadow-sm ring-1 ring-black/20" aria-label="yellow card" />
@@ -4515,16 +4532,30 @@ function HashLiveScoreWidget({
   providerReady,
   error,
   onRetry,
+  onSubmitTrade,
+  tradeAmount,
+  onTradeAmountChange,
+  tradeBusyKey,
+  tradeNotice,
+  builderHandoff,
 }: {
   matches: PolyStreamMatch[]
   loading: boolean
   providerReady: boolean
   error: string
   onRetry: () => void
+  onSubmitTrade: (match: PolyStreamMatch, option: PolyStreamTradeOption) => void
+  tradeAmount: string
+  onTradeAmountChange: (value: string) => void
+  tradeBusyKey: string
+  tradeNotice: string
+  builderHandoff: Record<string, unknown> | null
 }) {
   const [selectedMatchKey, setSelectedMatchKey] = useState('')
   const [detailIndex, setDetailIndex] = useState(0)
   const [detailPageIndex, setDetailPageIndex] = useState(0)
+  const [tradeMenuOpen, setTradeMenuOpen] = useState(false)
+  const [selectedTradeOption, setSelectedTradeOption] = useState<PolyStreamTradeOption | null>(null)
   const [, setCountdownTick] = useState(0)
   const featured = matches.find(match => matchKey(match) === selectedMatchKey) || matches[0]
   const rest = featured ? matches.filter(match => matchKey(match) !== matchKey(featured)) : []
@@ -4534,6 +4565,8 @@ function HashLiveScoreWidget({
   const awayFlag = flagUrlForTeam(away)
   const featuredDetails = useMemo(() => featured ? detailItems(featured) : [], [featured])
   const featuredMarketMatched = featured?.marketStatus === 'matched' && Boolean(featured.polymarketUrl)
+  const featuredTradeOptions = featured?.polymarketTradeOptions ?? []
+  const featuredCanPrepareTrade = featuredMarketMatched && featuredTradeOptions.length > 0
   const activeDetail = featuredDetails.length ? featuredDetails[detailIndex % featuredDetails.length] : null
   const activePagedItems = activeDetail?.type === 'goals'
     ? detailPages(activeDetail.goals)
@@ -4550,6 +4583,8 @@ function HashLiveScoreWidget({
   useEffect(() => {
     setDetailIndex(0)
     setDetailPageIndex(0)
+    setTradeMenuOpen(false)
+    setSelectedTradeOption(null)
   }, [selectedMatchKey])
 
   useEffect(() => {
@@ -4646,7 +4681,16 @@ function HashLiveScoreWidget({
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,.12),transparent_38%),linear-gradient(180deg,rgba(0,0,0,.18),rgba(0,0,0,.62))]" />
           <div className="relative z-10 grid grid-cols-[1fr_auto_1fr] items-center gap-1.5">
             <span className="truncate text-[10px] font-semibold text-white/65">{compactMatchTime(featured)}</span>
-            {featuredMarketMatched ? (
+            {featuredCanPrepareTrade ? (
+              <button
+                type="button"
+                onClick={() => setTradeMenuOpen(open => !open)}
+                className="inline-flex items-center justify-center gap-1 rounded-full border border-white/15 bg-black/35 px-2 py-1 text-[10px] font-black leading-none text-white shadow-sm backdrop-blur-sm transition-all hover:bg-black/50 active:scale-[0.98]"
+              >
+                <img src={POLYMARKET_LOGO} alt="" className="h-3 w-3 invert-0" />
+                Trade
+              </button>
+            ) : featuredMarketMatched ? (
               <a
                 href={featured.polymarketUrl}
                 target="_blank"
@@ -4654,7 +4698,7 @@ function HashLiveScoreWidget({
                 className="inline-flex items-center justify-center gap-1 rounded-full border border-white/15 bg-black/35 px-2 py-1 text-[10px] font-black leading-none text-white shadow-sm backdrop-blur-sm transition-all hover:bg-black/50 active:scale-[0.98]"
               >
                 <img src={POLYMARKET_LOGO} alt="" className="h-3 w-3 invert-0" />
-                Trade
+                Market
               </a>
             ) : (
               <span className="inline-flex items-center justify-center rounded-full border border-white/10 bg-black/20 px-2 py-1 text-[10px] font-black text-white/55 backdrop-blur-sm">
@@ -4731,6 +4775,64 @@ function HashLiveScoreWidget({
               )}
             </div>
           )}
+          {featured && tradeMenuOpen && featuredCanPrepareTrade && (
+            <div className="relative z-10 mt-1.5 rounded-lg border border-white/10 bg-black/35 p-2 backdrop-blur-sm">
+              <input
+                value={tradeAmount}
+                onChange={event => onTradeAmountChange(event.target.value)}
+                placeholder={`Amount, min ${featuredTradeOptions[0]?.minSize ?? 5} USDC`}
+                inputMode="decimal"
+                className="h-8 w-full rounded-md border border-white/10 bg-white/10 px-2 text-xs font-semibold text-white placeholder:text-white/45 outline-none focus:border-white/30"
+              />
+              <div className="mt-1.5 grid grid-cols-3 gap-1">
+                {featuredTradeOptions.map(option => {
+                  const busy = tradeBusyKey === `${matchKey(featured)}:${option.outcome}`
+                  const selected = selectedTradeOption?.tokenId === option.tokenId
+                  return (
+                    <button
+                      key={`${option.outcome}-${option.tokenId}`}
+                      type="button"
+                      onClick={() => setSelectedTradeOption(option)}
+                      disabled={Boolean(tradeBusyKey)}
+                      className={cn(
+                        'inline-flex min-h-8 items-center justify-center gap-1 rounded-md px-1.5 text-[10px] font-black transition disabled:cursor-wait disabled:opacity-60',
+                        selected ? 'bg-emerald-300 text-emerald-950' : 'bg-white text-gray-950 hover:bg-gray-100',
+                      )}
+                    >
+                      {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                      <span className="truncate">{option.label}</span>
+                      {option.price && <span className={cn('shrink-0', selected ? 'text-emerald-800' : 'text-gray-500')}>{option.price}</span>}
+                    </button>
+                  )
+                })}
+              </div>
+              {selectedTradeOption && (
+                <div className="mt-1.5 rounded-md border border-emerald-300/25 bg-emerald-300/10 p-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-[10px] font-black text-emerald-50">
+                        Buy {selectedTradeOption.label}{selectedTradeOption.price ? ` near ${selectedTradeOption.price}` : ''}
+                      </p>
+                      <p className="mt-0.5 text-[9px] font-semibold text-emerald-100/65">
+                        FOK order. Wallet signs first, then PolyDesk submits with builder attribution.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => onSubmitTrade(featured, selectedTradeOption)}
+                      disabled={Boolean(tradeBusyKey)}
+                      className="inline-flex min-h-8 shrink-0 items-center justify-center gap-1 rounded-md bg-emerald-300 px-2 text-[10px] font-black text-emerald-950 transition hover:bg-emerald-200 disabled:cursor-wait disabled:opacity-60"
+                    >
+                      {tradeBusyKey ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                      Confirm
+                    </button>
+                  </div>
+                </div>
+              )}
+              {tradeNotice && <p className="mt-1.5 text-[10px] font-semibold leading-snug text-white/70">{tradeNotice}</p>}
+              {builderHandoff && <p className="mt-1 text-[10px] font-semibold text-emerald-100/80">Submitted with builder attribution.</p>}
+            </div>
+          )}
         </div>
       )}
 
@@ -4772,11 +4874,17 @@ export function PolyStreamPanel({
   onBack: () => void
   onOpenNews: () => void
 }) {
+  const { wallets: privyWallets } = useWallets()
   const [feed, setFeed] = useState<PolyStreamFeed | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [tradeAmount, setTradeAmount] = useState('')
+  const [tradeBusyKey, setTradeBusyKey] = useState('')
+  const [tradeNotice, setTradeNotice] = useState('')
+  const [builderHandoff, setBuilderHandoff] = useState<Record<string, unknown> | null>(null)
   const mountedRef = useRef(true)
   const matches = feed?.matches ?? []
+  const signingWalletAddress = privyWallets.find(wallet => /^0x[a-fA-F0-9]{40}$/.test(wallet.address ?? ''))?.address ?? ''
   const providerReady = Boolean(feed?.providerConfigured && feed.providerStatus === 'connected' && !error)
   const statusText = loading
     ? 'Refreshing'
@@ -4803,6 +4911,155 @@ export function PolyStreamPanel({
       if (mountedRef.current) setLoading(false)
     }
   }, [])
+
+  const signWorldCupTrade = useCallback(async (match: PolyStreamMatch, option: PolyStreamTradeOption) => {
+    setTradeNotice('')
+    setBuilderHandoff(null)
+    if (!signingWalletAddress) {
+      setTradeNotice('Connect a wallet before PolyDesk can prepare the Polymarket signature.')
+      return
+    }
+    const signingWallet = privyWallets.find(wallet => wallet.address?.toLowerCase() === signingWalletAddress.toLowerCase())
+    if (!signingWallet || typeof signingWallet.getEthereumProvider !== 'function') {
+      setTradeNotice('Connected wallet cannot sign Polymarket orders here.')
+      return
+    }
+    const amount = tradeAmount.trim()
+    if (!/^\d+(?:\.\d{1,6})?$/.test(amount) || Number(amount) <= 0) {
+      setTradeNotice('Enter the USDC amount first.')
+      return
+    }
+    if (typeof option.minSize === 'number' && Number(amount) < option.minSize) {
+      setTradeNotice(`Minimum size for this Polymarket market is ${option.minSize} USDC.`)
+      return
+    }
+    const tickSize = polymarketTickSize(option.tickSize)
+    if (!tickSize) {
+      setTradeNotice('Polymarket tick size is missing for this World Cup market.')
+      return
+    }
+    const busyKey = `${matchKey(match)}:${option.outcome}`
+    setTradeBusyKey(busyKey)
+    try {
+      const response = await fetch('/api/polymarket-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          marketTitle: match.polymarketTitle || match.title,
+          marketUrl: match.polymarketUrl,
+          tokenId: option.tokenId,
+          outcome: option.label,
+          action: 'prepare',
+          side: 'buy',
+          amount,
+          signer: signingWalletAddress,
+          tickSize: option.tickSize,
+          minSize: option.minSize,
+          negRisk: option.negRisk,
+          worldCup: true,
+        }),
+      })
+      const data = await response.json() as { ok?: boolean; error?: string; builderCodeConfigured?: boolean; builderCodePreview?: string; builderCredentialMode?: string }
+      if (!response.ok || !data.ok) {
+        setTradeNotice(data.error || 'World Cup trade route is not ready.')
+        return
+      }
+      if (typeof signingWallet.switchChain === 'function') {
+        await signingWallet.switchChain(137)
+      }
+      const provider = await signingWallet.getEthereumProvider()
+      const [{ ClobClient, Side, OrderType, orderToJson }, { BuilderConfig }, { createWalletClient, custom }, { polygon }] = await Promise.all([
+        import('@polymarket/clob-client'),
+        import('@polymarket/builder-signing-sdk'),
+        import('viem'),
+        import('viem/chains'),
+      ])
+      const walletClient = createWalletClient({
+        account: signingWalletAddress as `0x${string}`,
+        chain: polygon,
+        transport: custom(provider),
+      })
+      const signingClient = new ClobClient(
+        'https://clob.polymarket.com',
+        137,
+        walletClient,
+        undefined,
+        0,
+        signingWalletAddress,
+      )
+      const signedOrder = await signingClient.createMarketOrder(
+        {
+          tokenID: option.tokenId,
+          amount: Number(amount),
+          side: Side.BUY,
+          orderType: OrderType.FOK,
+        },
+        { tickSize, negRisk: option.negRisk === true },
+      )
+      setTradeNotice('Order signed. Preparing builder-attributed submission.')
+      const userCreds = await signingClient.createOrDeriveApiKey()
+      const orderPayload = orderToJson(signedOrder, userCreds.key, OrderType.FOK, false)
+      const handoffResponse = await fetch('/api/polymarket-builder-handoff', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          source: 'world-cup-moneyline',
+          marketTitle: match.polymarketTitle || match.title,
+          marketUrl: match.polymarketUrl,
+          outcome: option.label,
+          tokenId: option.tokenId,
+          signer: signingWalletAddress,
+          orderType: OrderType.FOK,
+          order: signedOrder,
+          orderPayload,
+        }),
+      })
+      const handoff = await handoffResponse.json() as Record<string, unknown> & {
+        ok?: boolean
+        error?: string
+        builderCredentialMode?: string
+        remoteBuilderSigner?: { url?: string; token?: string }
+      }
+      if (!handoffResponse.ok || !handoff.ok) {
+        setTradeNotice(handoff.error || 'Signed order could not be packaged for builder handoff.')
+        return
+      }
+      const remoteSigner = handoff.remoteBuilderSigner
+      if (!remoteSigner?.url || !remoteSigner.token) {
+        setTradeNotice('Builder signer is not ready for attributed submission.')
+        return
+      }
+      setTradeNotice('Submitting signed order to Polymarket with builder attribution.')
+      const submitClient = new ClobClient(
+        'https://clob.polymarket.com',
+        137,
+        walletClient,
+        userCreds,
+        0,
+        signingWalletAddress,
+        undefined,
+        undefined,
+        new BuilderConfig({
+          remoteBuilderConfig: {
+            url: `${window.location.origin}${remoteSigner.url}`,
+            token: remoteSigner.token,
+          },
+        }),
+      )
+      await submitClient.postOrder(signedOrder, OrderType.FOK)
+      setBuilderHandoff(handoff)
+      const handoffMode = handoff.builderCredentialMode ? ` Builder signer: ${handoff.builderCredentialMode}.` : ''
+      setTradeNotice(
+        data.builderCodeConfigured
+          ? `Submitted ${option.label} to Polymarket with builder attribution.${handoffMode}`
+          : 'Signed order created, but builder attribution is not configured.',
+      )
+    } catch {
+      setTradeNotice('Could not sign the World Cup order.')
+    } finally {
+      setTradeBusyKey('')
+    }
+  }, [privyWallets, signingWalletAddress, tradeAmount])
 
   useEffect(() => {
     mountedRef.current = true
@@ -4882,6 +5139,12 @@ export function PolyStreamPanel({
           providerReady={providerReady}
           error={error}
           onRetry={() => void loadStream()}
+          onSubmitTrade={(match, option) => void signWorldCupTrade(match, option)}
+          tradeAmount={tradeAmount}
+          onTradeAmountChange={setTradeAmount}
+          tradeBusyKey={tradeBusyKey}
+          tradeNotice={tradeNotice}
+          builderHandoff={builderHandoff}
         />
         <p className="px-1 pb-1 text-[10px] font-medium leading-relaxed text-gray-400 dark:text-gray-500">
           Live markets move fast. Confirm the latest score and odds on Polymarket before trading.
@@ -5768,6 +6031,7 @@ type PolymarketPosition = {
 type PolyDeskTradeTicket = {
   marketTitle: string
   marketUrl: string
+  tokenId: string
   outcome: 'Yes' | 'No'
   suggestedPrice?: number
 }
@@ -5905,8 +6169,8 @@ export function PolyPortfolioPanel({
 
   const profile = bundle?.profile ?? null
   const settings = bundle?.settings ?? null
-  const tradingWallet = privyWallets.find(wallet => /^0x[a-fA-F0-9]{40}$/.test(wallet.address ?? '')) ?? null
-  const tradingWalletAddress = tradingWallet?.address ?? ''
+  const signingWallet = privyWallets.find(wallet => /^0x[a-fA-F0-9]{40}$/.test(wallet.address ?? '')) ?? null
+  const signingWalletAddress = signingWallet?.address ?? ''
 
   const claimablePositions = useMemo(
     () => livePositions.filter(isClaimablePosition),
@@ -6233,6 +6497,7 @@ export function PolyPortfolioPanel({
     setTradeTicket({
       marketTitle: position.title || position.market || 'Polymarket position',
       marketUrl: polymarketEventUrl(position),
+      tokenId: String(position.asset ?? ''),
       outcome: normalizeTradeOutcome(position.outcome),
       suggestedPrice: typeof position.curPrice === 'number' ? position.curPrice : undefined,
     })
@@ -6241,8 +6506,8 @@ export function PolyPortfolioPanel({
   async function checkTradeReadiness() {
     if (!tradeTicket) return
     setTradeNotice('')
-    if (!tradingWalletAddress) {
-      setTradeNotice('Connect a trading wallet before PolyDesk can prepare signed orders.')
+    if (!signingWalletAddress) {
+      setTradeNotice('Connect a signing wallet before PolyDesk can prepare signed orders.')
       return
     }
     if (!/^\d+(?:\.\d{1,6})?$/.test(tradeAmount.trim()) || Number(tradeAmount) <= 0) {
@@ -6256,16 +6521,26 @@ export function PolyPortfolioPanel({
         body: JSON.stringify({
           marketTitle: tradeTicket.marketTitle,
           marketUrl: tradeTicket.marketUrl,
+          tokenId: tradeTicket.tokenId,
           outcome: tradeTicket.outcome,
+          action: 'prepare',
           side: 'buy',
           amount: tradeAmount.trim(),
-          signer: tradingWalletAddress,
+          signer: signingWalletAddress,
         }),
       })
-      const data = await res.json() as { error?: string }
-      setTradeNotice(data.error || (res.ok ? 'Trade route is ready.' : 'Trade signing is not enabled yet.'))
+      const data = await res.json() as { error?: string; ok?: boolean; builderCodeConfigured?: boolean; builderCodePreview?: string; builderCredentialMode?: string }
+      if (!res.ok || !data.ok) {
+        setTradeNotice(data.error || 'Trade route is not ready yet.')
+        return
+      }
+      setTradeNotice(
+        data.builderCodeConfigured
+          ? `Trade prepared for Polymarket signing with builder attribution (${data.builderCodePreview ?? 'configured'}). Builder signer: ${data.builderCredentialMode ?? 'unconfigured'}.`
+          : 'Trade prepared. Builder attribution still needs configuration.',
+      )
     } catch {
-      setTradeNotice('Trade signing is not enabled yet.')
+      setTradeNotice('Polymarket order signing is not enabled yet.')
     }
   }
 
@@ -6581,10 +6856,10 @@ export function PolyPortfolioPanel({
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Trading wallet</p>
             <p className="mt-0.5 text-sm font-semibold text-gray-900 dark:text-white">
-              {tradingWalletAddress ? shortHex(tradingWalletAddress) : 'Not connected'}
+              {signingWalletAddress ? shortHex(signingWalletAddress) : 'Not connected'}
             </p>
           </div>
-          {tradingWalletAddress ? (
+          {signingWalletAddress ? (
             <span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-bold uppercase text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-200">
               Ready
             </span>
@@ -6607,6 +6882,9 @@ export function PolyPortfolioPanel({
                 <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
                   Buy {tradeTicket.outcome}{tradeTicket.suggestedPrice ? ` near ${(tradeTicket.suggestedPrice * 100).toFixed(1)}c` : ''}
                 </p>
+                {tradeTicket.tokenId && (
+                  <p className="mt-0.5 truncate font-mono text-[10px] text-gray-400">Token {tradeTicket.tokenId}</p>
+                )}
               </div>
               <button
                 type="button"
@@ -6625,6 +6903,9 @@ export function PolyPortfolioPanel({
               inputMode="decimal"
             />
             {tradeNotice && <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">{tradeNotice}</p>}
+            <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+              PolyDesk keeps builder attribution server-side and never custodies user funds, private keys, or reusable CLOB secrets.
+            </p>
             <div className="flex flex-col gap-2 sm:flex-row">
               <button
                 type="button"
@@ -6632,7 +6913,7 @@ export function PolyPortfolioPanel({
                 className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-black px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
               >
                 <ShieldCheck className="h-4 w-4" />
-                Check signing route
+                Prepare trade
               </button>
               <a
                 href={tradeTicket.marketUrl}

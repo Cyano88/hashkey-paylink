@@ -22,6 +22,7 @@ type ScoreMatch = {
   polymarketTitle?: string
   polymarketLiquidity?: string
   polymarketVolume?: string
+  polymarketTradeOptions?: PolymarketTradeOption[]
   goalScorers?: string[]
   weather?: string
   h2h?: string
@@ -32,6 +33,17 @@ type ScoreMatch = {
   marketContext: string
   sourceUrl: string
   polymarketUrl?: string
+}
+
+type PolymarketTradeOption = {
+  label: string
+  outcome: 'home' | 'draw' | 'away'
+  tokenId: string
+  price?: string
+  conditionId?: string
+  tickSize?: number
+  minSize?: number
+  negRisk?: boolean
 }
 
 type ScoreFeed = {
@@ -873,6 +885,63 @@ function readMarketOutcomePriceForTerms(market: ProviderMatch, terms: string[]) 
   return undefined
 }
 
+function readStringArray(value: unknown) {
+  return parseJsonArray(value).map(item => String(item).trim()).filter(Boolean)
+}
+
+function yesOutcomeIndex(market: ProviderMatch) {
+  const outcomes = readStringArray(market.outcomes)
+  const index = outcomes.findIndex(outcome => /^yes$/i.test(outcome))
+  return index >= 0 ? index : 0
+}
+
+function classifyMoneylineMarket(market: ProviderMatch, home: string, away: string): PolymarketTradeOption['outcome'] | '' {
+  const label = normalizeSearchText([
+    asString(market.groupItemTitle),
+    asString(market.group_item_title),
+    asString(market.question),
+    asString(market.title),
+  ].filter(Boolean).join(' '))
+  if (!label) return ''
+  if (/\bdraw\b|\btie\b/.test(label)) return 'draw'
+  const homeTerms = teamSearchTerms(home)
+  const awayTerms = teamSearchTerms(away)
+  if (homeTerms.some(term => label === term || label.includes(`will ${term} win`) || label.includes(`${term} win`))) return 'home'
+  if (awayTerms.some(term => label === term || label.includes(`will ${term} win`) || label.includes(`${term} win`))) return 'away'
+  return ''
+}
+
+function moneylineTradeOptions(candidate: ProviderMatch, home: string, away: string): PolymarketTradeOption[] {
+  const eventNegRisk = asRecord(candidate).negRisk === true || asString(asRecord(candidate).negRisk).toLowerCase() === 'true'
+  const options = marketArray(candidate)
+    .filter(market => asString(market.sportsMarketType) === 'moneyline')
+    .filter(market => market.acceptingOrders === true || asString(market.acceptingOrders).toLowerCase() === 'true')
+    .filter(market => market.enableOrderBook === true || asString(market.enableOrderBook).toLowerCase() === 'true')
+    .map(market => {
+      const outcome = classifyMoneylineMarket(market, home, away)
+      if (!outcome) return null
+      const tokenIds = readStringArray(market.clobTokenIds)
+      const index = yesOutcomeIndex(market)
+      const tokenId = tokenIds[index]
+      if (!/^\d+$/.test(tokenId || '')) return null
+      const price = readMarketOutcomePrice(market)
+      return {
+        label: outcome === 'home' ? home : outcome === 'away' ? away : 'Draw',
+        outcome,
+        tokenId,
+        price: price !== undefined ? formatProbability(price) : undefined,
+        conditionId: asString(market.conditionId),
+        tickSize: asNumber(market.orderPriceMinTickSize),
+        minSize: asNumber(market.orderMinSize),
+        negRisk: market.negRisk === true || asString(market.negRisk).toLowerCase() === 'true' || eventNegRisk,
+      } satisfies PolymarketTradeOption
+    })
+    .filter((option): option is PolymarketTradeOption => Boolean(option))
+
+  const order: PolymarketTradeOption['outcome'][] = ['home', 'draw', 'away']
+  return options.sort((a, b) => order.indexOf(a.outcome) - order.indexOf(b.outcome))
+}
+
 function formatProbability(price: number) {
   const percent = price * 100
   if (percent > 0 && percent < 1) return '<1%'
@@ -969,6 +1038,7 @@ function polymarketMatchFromCandidates(match: ScoreMatch, candidates: Array<{ ki
   const marketsForValues = marketArray(best.item)
   const firstMarket = marketsForValues[0] || {}
   const prices = polymarketPriceSummary(best.item, home, away)
+  const tradeOptions = moneylineTradeOptions(best.item, home, away)
   const url = readPolymarketUrl(best.item, best.kind)
   if (!isAllowedPolymarketMatchUrl(url)) return null
   return {
@@ -980,6 +1050,7 @@ function polymarketMatchFromCandidates(match: ScoreMatch, candidates: Array<{ ki
     drawMarketPrice: prices.draw,
     liquidity: formatUsd(record.liquidity ?? record.liquidityNum ?? firstMarket.liquidity ?? firstMarket.liquidityNum),
     volume: formatUsd(record.volume ?? record.volumeNum ?? record.volume24hr ?? firstMarket.volume ?? firstMarket.volumeNum),
+    tradeOptions,
   }
 }
 
@@ -1033,6 +1104,7 @@ async function enrichMatchesWithPolymarket(matches: ScoreMatch[]) {
       drawMarketPrice: found.drawMarketPrice,
       polymarketLiquidity: found.liquidity,
       polymarketVolume: found.volume,
+      polymarketTradeOptions: found.tradeOptions,
     })
   }))
   return enriched.map(withMarketStatus)

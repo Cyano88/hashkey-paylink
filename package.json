@@ -24,6 +24,8 @@
     "@circle-fin/w3s-pw-web-sdk": "^1.1.11",
     "@circle-fin/x402-batching": "^3.0.4",
     "@coral-xyz/anchor": "^0.32.1",
+    "@polymarket/builder-signing-sdk": "^1.0.0",
+    "@polymarket/clob-client": "^5.8.1",
     "@privy-io/react-auth": "^3.28.0",
     "@privy-io/server-auth": "^1.32.5",
     "@privy-io/wagmi": "^4.0.10",
