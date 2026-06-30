@@ -4844,7 +4844,7 @@ function HashLiveScoreWidget({
                         FOK order. Wallet signs first, then PolyDesk submits with builder attribution.
                       </p>
                       <p className="mt-0.5 text-[9px] font-semibold text-emerald-100/65">
-                        PolyDesk will show a clean review before the wallet signature opens.
+                        PolyDesk review keeps advanced fields expandable before your wallet opens.
                       </p>
                     </div>
                     <button
@@ -4869,6 +4869,7 @@ function HashLiveScoreWidget({
                       </p>
                       <p className="mt-1 text-[10px] font-semibold leading-snug text-white/65">
                         Stake {tradeAmount.trim() || '0'} USDC. Wallet signing has no gas fee; PolyDesk submits the signed order with builder attribution.
+                        Your wallet provider controls the final confirmation screen.
                       </p>
                     </div>
                     <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-200" />
@@ -4893,7 +4894,7 @@ function HashLiveScoreWidget({
                   </div>
                   <details className="mt-2 rounded-md border border-white/10 bg-black/20 px-2 py-1.5">
                     <summary className="cursor-pointer text-[10px] font-black text-white/75">
-                      Advanced wallet message fields
+                      Advanced order message fields
                     </summary>
                     <div className="mt-1.5 space-y-1 text-[9px] font-semibold leading-snug text-white/55">
                       <p>Domain: Polymarket CTF Exchange, Polygon chain 137</p>
