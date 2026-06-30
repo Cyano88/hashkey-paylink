@@ -1,4 +1,4 @@
-import { LineChart, Radio, Wallet } from 'lucide-react'
+import { ChevronDown, LineChart, Radio, Wallet } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { cn } from '../lib/utils'
@@ -14,6 +14,7 @@ import {
 
 type PolyDeskLane = 'portfolio' | 'worldcup' | 'lp-scout'
 type PolyDeskServiceView = '' | PolyDeskLane | 'worldcup-news' | 'worldcup-scores'
+type PolyDeskMenuKey = 'agent' | PolyDeskLane
 
 function PolymarketMark({ className }: { className?: string }) {
   return (
@@ -88,7 +89,7 @@ const polyDeskServices: Array<{
   },
   {
     id: 'worldcup',
-    title: 'World Cup Markets',
+    title: 'World Cup',
     body: 'Live scores, market odds, and direct trade routes.',
     icon: Radio,
   },
@@ -98,6 +99,20 @@ const polyDeskServices: Array<{
     body: 'Paid x402 research for LP reward opportunities.',
     icon: LineChart,
   },
+]
+
+const polyDeskMenuItems: Array<{
+  id: PolyDeskMenuKey
+  title: string
+  body: string
+  icon?: typeof Wallet
+}> = [
+  {
+    id: 'agent',
+    title: 'Desk Agent',
+    body: 'Ask PolyDesk for market context, wallet readiness, funding guidance, and LP Scout routing.',
+  },
+  ...polyDeskServices,
 ]
 
 function normalizeLane(value: string | null): PolyDeskLane | '' {
@@ -121,17 +136,8 @@ export default function PolyDesk() {
   const [serviceView, setServiceView] = useState<PolyDeskServiceView>(activeServiceView)
   const [lpScoutPrefill, setLpScoutPrefill] = useState<LpScoutPrefill | null>(null)
   const [polyDeskResetSignal, setPolyDeskResetSignal] = useState(0)
-  const [promptIndex, setPromptIndex] = useState(0)
   const helperKey = activeLane || 'choose-lane'
   const welcomeText = 'Welcome back, there. Ask me about Polymarket funding, portfolio, World Cup markets, LP Scout, and live market context.'
-  const introPrompts = useMemo(() => [
-    { text: 'I am PolyDesk Agent.', delayMs: 5200 },
-    { text: 'Tap to launch me.', delayMs: 3600 },
-    { text: 'I can help with portfolio alerts.', delayMs: 6200 },
-    { text: 'I can read World Cup markets.', delayMs: 6200 },
-    { text: 'I can guide LP Scout access.', delayMs: 6200 },
-    { text: 'I can help fund Polymarket.', delayMs: 6200 },
-  ], [])
 
   const ownerKey = useMemo(() => {
     const email = searchParams.get('email')?.trim().toLowerCase()
@@ -139,14 +145,26 @@ export default function PolyDesk() {
     return email ? `email:${email}` : wallet ? `wallet:${wallet}` : 'polydesk-web'
   }, [searchParams])
 
-  function chooseLane(lane: PolyDeskLane) {
+  function openAgent() {
     const next = new URLSearchParams(searchParams)
     next.set('agent', '1')
-    next.set('lane', lane)
+    next.delete('lane')
     next.delete('service')
     setSearchParams(next, { replace: false })
     setServiceView('')
+    setAgentLane('')
     setIsAgentOpen(true)
+    window.setTimeout(() => {
+      document.querySelector('[data-polydesk-active-view="true"]')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 40)
+  }
+
+  function openMenuItem(item: PolyDeskMenuKey) {
+    if (item === 'agent') {
+      openAgent()
+      return
+    }
+    openServiceView(item)
   }
 
   function openServiceView(view: PolyDeskServiceView) {
@@ -211,15 +229,6 @@ export default function PolyDesk() {
   }
 
   useEffect(() => {
-    if (isAgentOpen) return undefined
-    const delay = introPrompts[promptIndex]?.delayMs ?? 5200
-    const timer = window.setTimeout(() => {
-      setPromptIndex(index => (index + 1) % introPrompts.length)
-    }, delay)
-    return () => window.clearTimeout(timer)
-  }, [introPrompts, isAgentOpen, promptIndex])
-
-  useEffect(() => {
     setIsAgentOpen(Boolean(activeLane || agentRouteOpen))
     setAgentLane(activeLane)
   }, [activeLane, agentRouteOpen])
@@ -232,83 +241,76 @@ export default function PolyDesk() {
     }
   }, [activeServiceView])
 
-  function launchAgent() {
-    if (!agentRouteOpen) {
-      const next = new URLSearchParams(searchParams)
-      next.set('agent', '1')
-      next.delete('service')
-      setSearchParams(next, { replace: false })
-    }
-    setServiceView('')
-    setIsAgentOpen(true)
-  }
-
   return (
     <main className="text-gray-950 dark:text-white">
-      <div className="mx-auto w-full max-w-md space-y-5">
+      <div className="mx-auto mt-6 w-full max-w-lg space-y-6 sm:mt-8">
+        <div className="px-1">
+          <h1 className="text-[22px] font-black tracking-tight text-gray-950 dark:text-white">PolyDesk</h1>
+          <p className="mt-1 text-[13px] leading-5 text-gray-500 dark:text-gray-400">
+            Polymarket watch, trading, World Cup markets, and LP Scout.
+          </p>
+        </div>
+
         {isAgentOpen && (
           <button
             type="button"
             onClick={resetLane}
-            className="inline-flex w-fit items-center gap-1.5 text-sm text-gray-500 transition-colors hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+            className="inline-flex items-center gap-1.5 px-1 text-[12px] font-bold text-gray-400 transition-colors hover:text-gray-800 dark:hover:text-gray-200"
           >
-            <span className="back-btn" aria-hidden="true">
-              <span className="arrow-container">
-                <span className="chevron c1" />
-                <span className="chevron c2" />
-                <span className="chevron c3" />
-              </span>
-            </span>
+            <ChevronDown className="h-3.5 w-3.5 rotate-90" />
             Back
           </button>
         )}
 
-        <button
-          type="button"
-          onClick={launchAgent}
-          className={cn(
-            'group w-full border border-gray-100 bg-white p-4 text-left shadow-card transition-all hover:border-gray-200 hover:shadow-lg active:scale-[0.995] dark:border-white/10 dark:bg-[#111114] dark:hover:bg-[#15151a]',
-            isAgentOpen ? '!mt-0 rounded-t-2xl rounded-b-none border-b-0 pb-3 shadow-none' : 'rounded-2xl',
-          )}
-        >
-          <div className="flex items-start gap-3">
-            <div className="flex shrink-0 items-start pt-0.5 text-gray-700 dark:text-gray-300">
-              <PolyDeskLiveAgentIcon isStatic={isAgentOpen} />
-            </div>
-            <div className="min-w-0 flex-1">
-              {isAgentOpen ? (
-                <p className="pt-0.5 text-sm font-semibold text-gray-900 dark:text-white">PolyDesk Agent</p>
-              ) : (
-                <>
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">PolyDesk Agent</p>
-                      <p className="mt-1 truncate text-sm font-semibold text-gray-900 dark:text-white">Hello There</p>
-                    </div>
-                    <span className="back-btn shrink-0 text-gray-400 transition-transform group-hover:translate-x-0.5 group-hover:text-gray-600" aria-hidden="true">
-                      <span className="arrow-container arrow-container--right">
-                        <span className="chevron c1" />
-                        <span className="chevron c2" />
-                        <span className="chevron c3" />
-                      </span>
+        {!isAgentOpen && !serviceView && (
+          <section className="space-y-2">
+            {polyDeskMenuItems.map(item => {
+              const Icon = item.icon
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => openMenuItem(item.id)}
+                  className="group flex w-full items-center justify-between gap-3 rounded-2xl border border-gray-100 bg-white p-3.5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-gray-200 hover:shadow-md active:scale-[0.99] dark:border-white/10 dark:bg-[#111216] dark:hover:border-white/20"
+                >
+                  <span className="flex min-w-0 items-start gap-3">
+                    <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-gray-100 bg-gray-50 text-gray-700 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200">
+                      {item.id === 'agent' ? (
+                        <PolyDeskLiveAgentIcon isStatic />
+                      ) : Icon ? (
+                        <Icon className="h-4 w-4" />
+                      ) : (
+                        <ServiceDeskIcon className="h-5 w-5" />
+                      )}
                     </span>
-                  </div>
-                  <div className="mt-3 rounded-2xl rounded-tl-md bg-gray-100 px-4 py-3 dark:bg-white/[0.07]">
-                    <p
-                      key={promptIndex}
-                      className="telegram-agent-typewriter text-sm font-semibold leading-relaxed text-gray-800 dark:text-gray-100"
-                    >
-                      {introPrompts[promptIndex]?.text}
-                    </p>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        </button>
+                    <span className="min-w-0">
+                      <span className="block text-[14px] font-black text-gray-950 dark:text-white">{item.title}</span>
+                      <span className="mt-1 block text-[12px] leading-5 text-gray-500 dark:text-gray-400">{item.body}</span>
+                    </span>
+                  </span>
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gray-950 text-white transition-transform group-hover:translate-x-0.5 dark:bg-white dark:text-gray-950">
+                    <ChevronDown className="-rotate-90 h-4 w-4" />
+                  </span>
+                </button>
+              )
+            })}
+          </section>
+        )}
 
         {isAgentOpen && (
-          <section className="!mt-0 overflow-hidden rounded-b-2xl border border-t-0 border-gray-100 bg-white shadow-card dark:border-white/10 dark:bg-[#111114]">
+          <section
+            data-polydesk-active-view="true"
+            className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-[#111216]"
+          >
+            <div className="border-b border-gray-100 p-4 dark:border-white/10">
+              <div className="flex items-center gap-2">
+                <PolyDeskLiveAgentIcon isStatic />
+                <div>
+                  <p className="text-[13px] font-bold text-gray-900 dark:text-white">Desk Agent</p>
+                  <p className="text-[11px] text-gray-400">Polymarket service assistant</p>
+                </div>
+              </div>
+            </div>
             <TelegramHelperPanel
               key={helperKey}
               telegramName="there"
@@ -335,61 +337,6 @@ export default function PolyDesk() {
                 }
               }}
             />
-          </section>
-        )}
-
-        {!isAgentOpen && !serviceView && (
-          <section className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card dark:border-white/10 dark:bg-[#111114]">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">PolyDesk</p>
-                <h2 className="mt-1 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">
-                  Service Desk
-                </h2>
-                <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-                  For Polymarket funding, portfolio alerts, LP Scout, and live market context.
-                </p>
-              </div>
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center text-gray-900 dark:text-white">
-                <ServiceDeskIcon className="h-8 w-8" />
-              </span>
-            </div>
-
-            <div className="mt-4 space-y-2">
-              {polyDeskServices.map(service => {
-                const Icon = service.icon
-                const selected = serviceView === service.id
-                return (
-                  <button
-                    key={service.id}
-                    type="button"
-                    onClick={() => openServiceView(service.id)}
-                    className={cn(
-                      'flex w-full items-start gap-3 rounded-xl border p-3 text-left transition-all active:scale-[0.99]',
-                      selected
-                        ? 'border-gray-900 bg-gray-900 text-white dark:border-white dark:bg-white dark:text-gray-950'
-                        : 'border-gray-100 bg-gray-50 text-gray-900 hover:border-gray-200 hover:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:hover:bg-white/[0.07]',
-                    )}
-                  >
-                    <span className={cn(
-                      'mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border',
-                      selected ? 'border-white/20 bg-white/10 dark:border-gray-200 dark:bg-gray-100' : 'border-gray-100 bg-white dark:border-white/10 dark:bg-white/[0.06]',
-                    )}>
-                      <Icon className={cn('h-4 w-4', selected ? 'text-white dark:text-gray-950' : 'text-gray-500 dark:text-gray-300')} />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="flex items-center justify-between gap-3">
-                        <span className="text-sm font-semibold">{service.title}</span>
-                        <span className={cn('text-[11px] font-semibold', selected ? 'text-white/70 dark:text-gray-500' : 'text-gray-400')}>Open</span>
-                      </span>
-                      <span className={cn('mt-1 block text-xs leading-relaxed', selected ? 'text-white/75 dark:text-gray-600' : 'text-gray-500 dark:text-gray-400')}>
-                        {service.body}
-                      </span>
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
           </section>
         )}
 
