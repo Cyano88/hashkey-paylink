@@ -70,6 +70,11 @@ function validOrderPayload(value: unknown, signedOrder: unknown, orderType: stri
   )
 }
 
+function validBuilderAttributedOrderPayload(value: unknown, builderCode: string) {
+  if (!isRecord(value) || !isRecord(value.order)) return false
+  return String(value.order.builderCode) === builderCode
+}
+
 export default async function handler(req: Request, res: Response) {
   if (req.method !== 'POST') {
     return res.status(405).json({ ok: false, error: 'Method not allowed' })
@@ -108,13 +113,16 @@ export default async function handler(req: Request, res: Response) {
   if (!validOrderPayload(orderPayload, signedOrder, orderType)) {
     return res.status(400).json({ ok: false, ready: false, error: 'Polymarket order payload is missing or does not match the signed order.' })
   }
+  if (!validBuilderAttributedOrderPayload(orderPayload, builderCode as string)) {
+    return res.status(400).json({ ok: false, ready: false, error: 'Polymarket order payload is missing the configured builder code.' })
+  }
 
   const credentialMode = builderCredentialMode()
   const orderBody = JSON.stringify(orderPayload)
   const session = credentialMode !== 'unconfigured' ? createBuilderSession(orderBody) : null
   return res.status(200).json({
     ok: true,
-    ready: credentialMode !== 'unconfigured',
+    ready: true,
     mode: 'builder-handoff',
     clobHost: 'https://clob.polymarket.com',
     clobPath: '/order',
@@ -123,6 +131,7 @@ export default async function handler(req: Request, res: Response) {
     deferExec: false,
     postOnly: false,
     builderCodeConfigured: true,
+    builderCode,
     builderCodePreview: builderCodePreview(builderCode as string),
     builderCredentialMode: credentialMode,
     submittedByPolyDesk: false,
@@ -144,8 +153,9 @@ export default async function handler(req: Request, res: Response) {
       orderPayload,
     },
     submissionRequirements: [
-      'Submit this signed order to Polymarket CLOB /order from the user browser after wallet signing.',
-      'Use the one-time remote builder signer only for the exact /order request body.',
+      'Submit this exact signed order payload to Polymarket CLOB /order from the user browser after wallet signing.',
+      'Keep the configured builderCode on order.builderCode so Polymarket can attribute PolyDesk builder volume.',
+      'Use the one-time remote builder signer only when present for backwards-compatible builder-header auth.',
       'Do not alter the signed order fields after user signature.',
       'PolyDesk does not custody user funds, private keys, or reusable user CLOB secrets.',
     ],
