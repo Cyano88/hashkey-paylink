@@ -4559,6 +4559,7 @@ function HashLiveScoreWidget({
   const [detailPageIndex, setDetailPageIndex] = useState(0)
   const [tradeMenuOpen, setTradeMenuOpen] = useState(false)
   const [selectedTradeOption, setSelectedTradeOption] = useState<PolyStreamTradeOption | null>(null)
+  const [tradeReviewOpen, setTradeReviewOpen] = useState(false)
   const [, setCountdownTick] = useState(0)
   const featured = matches.find(match => matchKey(match) === selectedMatchKey) || matches[0]
   const rest = featured ? matches.filter(match => matchKey(match) !== matchKey(featured)) : []
@@ -4588,6 +4589,7 @@ function HashLiveScoreWidget({
     setDetailPageIndex(0)
     setTradeMenuOpen(false)
     setSelectedTradeOption(null)
+    setTradeReviewOpen(false)
   }, [selectedMatchKey])
 
   useEffect(() => {
@@ -4814,7 +4816,10 @@ function HashLiveScoreWidget({
                     <button
                       key={`${option.outcome}-${option.tokenId}`}
                       type="button"
-                      onClick={() => setSelectedTradeOption(option)}
+                      onClick={() => {
+                        setSelectedTradeOption(option)
+                        setTradeReviewOpen(false)
+                      }}
                       disabled={Boolean(tradeBusyKey)}
                       className={cn(
                         'inline-flex min-h-8 items-center justify-center gap-1 rounded-md px-1.5 text-[10px] font-black transition disabled:cursor-wait disabled:opacity-60',
@@ -4839,17 +4844,82 @@ function HashLiveScoreWidget({
                         FOK order. Wallet signs first, then PolyDesk submits with builder attribution.
                       </p>
                       <p className="mt-0.5 text-[9px] font-semibold text-emerald-100/65">
-                        Your wallet may show Polymarket CTF Exchange details. That is the official order signature.
+                        PolyDesk will show a clean review before the wallet signature opens.
                       </p>
                     </div>
                     <button
                       type="button"
-                      onClick={() => onSubmitTrade(featured, selectedTradeOption)}
+                      onClick={() => setTradeReviewOpen(true)}
                       disabled={Boolean(tradeBusyKey)}
                       className="inline-flex min-h-8 shrink-0 items-center justify-center gap-1 rounded-md bg-emerald-300 px-2 text-[10px] font-black text-emerald-950 transition hover:bg-emerald-200 disabled:cursor-wait disabled:opacity-60"
                     >
                       {tradeBusyKey ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
-                      Confirm
+                      Review
+                    </button>
+                  </div>
+                </div>
+              )}
+              {featured && selectedTradeOption && tradeReviewOpen && (
+                <div className="mt-1.5 rounded-lg border border-white/12 bg-white/[0.08] p-2.5 shadow-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-black uppercase tracking-[0.14em] text-white/45">PolyDesk review</p>
+                      <p className="mt-1 text-xs font-black text-white">
+                        Buy {selectedTradeOption.label} in {featured.polymarketTitle || featured.title}
+                      </p>
+                      <p className="mt-1 text-[10px] font-semibold leading-snug text-white/65">
+                        Stake {tradeAmount.trim() || '0'} USDC. Wallet signing has no gas fee; PolyDesk submits the signed order with builder attribution.
+                      </p>
+                    </div>
+                    <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-200" />
+                  </div>
+                  <div className="mt-2 grid grid-cols-2 gap-1.5 text-[10px]">
+                    <div className="rounded-md bg-black/20 px-2 py-1.5">
+                      <p className="font-semibold text-white/45">Selection</p>
+                      <p className="mt-0.5 truncate font-black text-white">{selectedTradeOption.label}</p>
+                    </div>
+                    <div className="rounded-md bg-black/20 px-2 py-1.5">
+                      <p className="font-semibold text-white/45">Price</p>
+                      <p className="mt-0.5 truncate font-black text-white">{selectedTradeOption.price ?? 'Market'}</p>
+                    </div>
+                    <div className="rounded-md bg-black/20 px-2 py-1.5">
+                      <p className="font-semibold text-white/45">Order</p>
+                      <p className="mt-0.5 truncate font-black text-white">Fill or kill</p>
+                    </div>
+                    <div className="rounded-md bg-black/20 px-2 py-1.5">
+                      <p className="font-semibold text-white/45">Wallet</p>
+                      <p className="mt-0.5 truncate font-black text-white">{signingWalletAddress ? shortHex(signingWalletAddress) : 'Not connected'}</p>
+                    </div>
+                  </div>
+                  <details className="mt-2 rounded-md border border-white/10 bg-black/20 px-2 py-1.5">
+                    <summary className="cursor-pointer text-[10px] font-black text-white/75">
+                      Advanced wallet message fields
+                    </summary>
+                    <div className="mt-1.5 space-y-1 text-[9px] font-semibold leading-snug text-white/55">
+                      <p>Domain: Polymarket CTF Exchange, Polygon chain 137</p>
+                      <p>Verifying contract: official Polymarket exchange contract</p>
+                      <p>Token ID: <span className="break-all text-white/75">{selectedTradeOption.tokenId}</span></p>
+                      <p>Signer: <span className="break-all text-white/75">{signingWalletAddress || 'Connect wallet'}</span></p>
+                      <p>Fields may include salt, makerAmount, takerAmount, nonce, feeRateBps, side, and signatureType.</p>
+                    </div>
+                  </details>
+                  <div className="mt-2 flex items-center justify-end gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setTradeReviewOpen(false)}
+                      disabled={Boolean(tradeBusyKey)}
+                      className="inline-flex min-h-8 items-center justify-center rounded-md border border-white/10 bg-white/10 px-2 text-[10px] font-black text-white/75 transition hover:bg-white/15 disabled:cursor-wait disabled:opacity-60"
+                    >
+                      Back
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onSubmitTrade(featured, selectedTradeOption)}
+                      disabled={Boolean(tradeBusyKey)}
+                      className="inline-flex min-h-8 items-center justify-center gap-1 rounded-md bg-white px-2.5 text-[10px] font-black text-gray-950 transition hover:bg-gray-100 disabled:cursor-wait disabled:opacity-60"
+                    >
+                      {tradeBusyKey ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                      Sign order
                     </button>
                   </div>
                 </div>
