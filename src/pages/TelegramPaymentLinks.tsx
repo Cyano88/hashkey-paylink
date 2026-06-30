@@ -36,6 +36,7 @@ import { EVM_TREASURY } from '../lib/chains'
 import AgentWorkspace from './AgentWorkspace'
 import ZeroScoutPowerBadge from '../components/ZeroScoutPowerBadge'
 import PayLinkShareSheet from '../components/PayLinkShareSheet'
+import { PrivyConnectButton } from '../lib/PrivyConnectButton'
 import { PrivyWalletConnectButton } from '../lib/PrivyWalletConnectButton'
 import { PrivyDisconnectButton } from '../lib/PrivyDisconnectButton'
 import { PRIVY_AUTH_ENABLED } from '../lib/authMode'
@@ -4811,10 +4812,15 @@ function HashLiveScoreWidget({
                     Sign out
                   </PrivyDisconnectButton>
                 ) : (
-                  <PrivyWalletConnectButton className="inline-flex items-center justify-center gap-1 rounded-md border border-white/10 bg-white px-2 py-1 text-[10px] font-black text-gray-950 transition hover:bg-gray-100">
+                  <PrivyConnectButton
+                    debugLabel="polydesk-trade-login"
+                    loginOptions={{ loginMethods: ['email', 'wallet'] }}
+                    logoutOnAuthenticated={false}
+                    className="inline-flex items-center justify-center gap-1 rounded-md border border-white/10 bg-white px-2 py-1 text-[10px] font-black text-gray-950 transition hover:bg-gray-100"
+                  >
                     <Wallet className="h-3 w-3" />
-                    Connect
-                  </PrivyWalletConnectButton>
+                    Sign in
+                  </PrivyConnectButton>
                 )}
               </div>
               <input
