@@ -2668,13 +2668,13 @@ export function TelegramHelperPanel({
           network: bridgeNetwork,
         }),
       })
-      const bridgeData = await bridgeRes.json() as {
+      const bridgeData = await readPolyDeskJson<{
         ok?: boolean
         depositAddress?: string
         network?: PolymarketBridgeNetwork
         minimumUsdc?: number
         error?: string
-      }
+      }>(bridgeRes, 'Could not prepare bridge address.')
       if (!bridgeRes.ok || !bridgeData.ok || !bridgeData.depositAddress) {
         throw new Error(bridgeData.error || 'Could not prepare Polymarket bridge checkout.')
       }
@@ -6207,6 +6207,18 @@ function shortHex(value: string) {
   return value.length > 12 ? `${value.slice(0, 6)}...${value.slice(-4)}` : value
 }
 
+async function readPolyDeskJson<T>(res: Response, fallbackMessage: string): Promise<T> {
+  const contentType = res.headers.get('content-type') ?? ''
+  if (contentType.toLowerCase().includes('application/json')) {
+    return await res.json() as T
+  }
+  const text = await res.text().catch(() => '')
+  if (text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<html')) {
+    throw new Error('PolyDesk portfolio service is not reachable from this page. Refresh and try again, or check the API deployment.')
+  }
+  throw new Error(fallbackMessage)
+}
+
 export function PolyPortfolioPanel({
   onBack,
   onOpenLpScout,
@@ -6300,7 +6312,7 @@ export function PolyPortfolioPanel({
       const res = await fetch('/api/polymarket-portfolio?action=profile', {
         headers: { Authorization: `Bearer ${token}` },
       })
-      const data = await res.json() as { ok?: boolean; error?: string } & PolymarketPortfolioBundle
+      const data = await readPolyDeskJson<{ ok?: boolean; error?: string } & PolymarketPortfolioBundle>(res, 'Could not load Polymarket portfolio.')
       if (!res.ok || !data.ok) throw new Error(data.error || 'Could not load Polymarket portfolio.')
       setBundle({
         profile: data.profile,
@@ -6324,8 +6336,8 @@ export function PolyPortfolioPanel({
         fetch(`/api/polymarket-portfolio?action=value&address=${encodeURIComponent(address)}`),
         fetch(`/api/polymarket-portfolio?action=positions&address=${encodeURIComponent(address)}&sizeThreshold=0&limit=100`),
       ])
-      const valueData = await valueRes.json() as { ok?: boolean; value?: unknown; error?: string }
-      const positionsData = await positionsRes.json() as { ok?: boolean; positions?: PolymarketPosition[]; error?: string }
+      const valueData = await readPolyDeskJson<{ ok?: boolean; value?: unknown; error?: string }>(valueRes, 'Could not load portfolio value.')
+      const positionsData = await readPolyDeskJson<{ ok?: boolean; positions?: PolymarketPosition[]; error?: string }>(positionsRes, 'Could not load positions.')
       if (!valueRes.ok || !valueData.ok) throw new Error(valueData.error || 'Could not load portfolio value.')
       if (!positionsRes.ok || !positionsData.ok) throw new Error(positionsData.error || 'Could not load positions.')
       setLiveValue(normalizePortfolioValue(valueData.value))
@@ -6347,7 +6359,7 @@ export function PolyPortfolioPanel({
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ action: 'evaluate-alerts' }),
       })
-      const data = await res.json() as { ok?: boolean; alerts?: PolymarketAlertRecord[] }
+      const data = await readPolyDeskJson<{ ok?: boolean; alerts?: PolymarketAlertRecord[] }>(res, 'Could not evaluate alerts.')
       if (res.ok && data.ok && Array.isArray(data.alerts)) {
         setBundle(prev => prev ? { ...prev, alerts: data.alerts ?? [] } : prev)
       }
@@ -6415,7 +6427,7 @@ export function PolyPortfolioPanel({
           telegramId,
         }),
       })
-      const data = await res.json() as { ok?: boolean; error?: string } & PolymarketPortfolioBundle
+      const data = await readPolyDeskJson<{ ok?: boolean; error?: string } & PolymarketPortfolioBundle>(res, 'Could not save profile.')
       if (!res.ok || !data.ok) throw new Error(data.error || 'Could not save profile.')
       setBundle({
         profile: data.profile,
@@ -6442,7 +6454,7 @@ export function PolyPortfolioPanel({
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ action: 'disconnect' }),
       })
-      const data = await res.json() as { ok?: boolean; error?: string }
+      const data = await readPolyDeskJson<{ ok?: boolean; error?: string }>(res, 'Could not disconnect.')
       if (!res.ok || !data.ok) throw new Error(data.error || 'Could not disconnect.')
       setBundle({ profile: null, settings: null, watchlist: [], fundingAttempts: [], alerts: [] })
       setLiveValue(null)
@@ -6543,7 +6555,7 @@ export function PolyPortfolioPanel({
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ action: 'save-alert-settings', ...settingsDraft }),
       })
-      const data = await res.json() as { ok?: boolean; settings?: PolymarketAlertSettings; error?: string }
+      const data = await readPolyDeskJson<{ ok?: boolean; settings?: PolymarketAlertSettings; error?: string }>(res, 'Could not save alert settings.')
       if (!res.ok || !data.ok || !data.settings) throw new Error(data.error || 'Could not save alert settings.')
       setBundle(prev => prev ? { ...prev, settings: data.settings ?? null } : prev)
       setSettingsOpen(false)
@@ -6711,7 +6723,7 @@ export function PolyPortfolioPanel({
         </div>
         <h2 className="mt-2 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">PolyDesk Portfolio</h2>
         <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-          Sign in to bind a Polymarket profile address to your Hash PayLink session. Your live positions, claimables, and alerts stay tied to your sign-in across devices.
+          Sign in to save a public Polymarket profile for portfolio tracking. Trading later uses your connected PolyDesk wallet, not this saved profile address.
         </p>
         <button
           type="button"
@@ -6745,16 +6757,19 @@ export function PolyPortfolioPanel({
           </span>
           <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">PolyDesk</p>
         </div>
-        <h2 className="mt-2 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Connect Polymarket profile</h2>
+        <h2 className="mt-2 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Track a public Polymarket profile</h2>
         <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-          Paste your Polymarket profile address (the 0x address shown on your Polymarket account panel). We store the address against your Hash PayLink session — never a key, signature, or cookie.
+          Paste the public 0x address from a Polymarket account panel. PolyDesk uses it to show positions, claimables, alerts, and funding history. It does not give PolyDesk control of that account.
         </p>
+        <div className="mt-3 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs leading-relaxed text-blue-800 dark:border-blue-400/20 dark:bg-blue-400/10 dark:text-blue-100">
+          Public profile tracking is separate from your trading wallet. To buy from PolyDesk, connect the wallet that will sign the trade.
+        </div>
         <div className="mt-4 space-y-3">
           <InputBlock
-            label="Profile address"
+            label="Public Polymarket profile address"
             value={addressInput}
             onChange={setAddressInput}
-            placeholder="0x... profile address"
+            placeholder="0x... public profile address"
           />
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Preferred funding network</p>
@@ -6775,7 +6790,7 @@ export function PolyPortfolioPanel({
             className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
           >
             {savingProfile ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-            Save profile
+            Save public profile
           </button>
         </div>
       </div>
@@ -6805,8 +6820,11 @@ export function PolyPortfolioPanel({
               <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.06]">
                 <img src={POLYMARKET_LOGO} alt="" className="h-4 w-4 invert dark:invert-0" />
               </span>
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">PolyDesk Portfolio</p>
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Public Polymarket profile</p>
             </div>
+            <p className="mt-1.5 text-xs leading-snug text-gray-500 dark:text-gray-400">
+              Read-only tracking address for positions, claimables, alerts, and funding history.
+            </p>
             <button
               type="button"
               onClick={copyAddress}
@@ -6945,7 +6963,7 @@ export function PolyPortfolioPanel({
       <div className="rounded-2xl border border-gray-100 bg-white p-3.5 shadow-sm dark:border-white/10 dark:bg-[#0f1014]">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Trading wallet</p>
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">PolyDesk trading wallet</p>
             <p className="mt-0.5 text-sm font-semibold text-gray-900 dark:text-white">
               {signingWalletAddress ? shortHex(signingWalletAddress) : 'Not connected'}
             </p>
@@ -6971,7 +6989,7 @@ export function PolyPortfolioPanel({
           )}
         </div>
         <p className="mt-1.5 text-xs leading-snug text-gray-500 dark:text-gray-400">
-          Portfolio {shortHex(profile.polymarketAddress)}. Trades use this connected wallet.
+          This wallet signs PolyDesk trades. Your saved public profile is only used for tracking and funding context.
         </p>
         {tradeTicket ? (
           <div className="mt-2.5 space-y-2.5 rounded-xl border border-gray-100 bg-gray-50 p-3 dark:border-white/10 dark:bg-white/[0.04]">
