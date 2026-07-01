@@ -6807,10 +6807,25 @@ export function PolyPortfolioPanel({
   }
 
   // ── Render ────────────────────────────────────────────────────────────
-  if (!PRIVY_AUTH_ENABLED) {
+  const sessionlessExternalMode = !PRIVY_AUTH_ENABLED && unsignedPortfolioAction === 'external'
+
+  if (!PRIVY_AUTH_ENABLED && !sessionlessExternalMode) {
+    const portfolioActions = [
+      ['watch', 'Watch Polymarket account', 'Sign-in required for saved alerts.'],
+      ['trading', 'Trading wallet', 'Sign-in required for Main Wallet readiness.'],
+      ['external', 'External funding', 'Check or fund another Polymarket wallet.'],
+    ] as const
+    const selectedAction = portfolioActions.find(([key]) => key === unsignedPortfolioAction)
     return (
       <div className="mt-4 space-y-3">
-        <PolyDeskBackButton onClick={onBack} />
+        <PolyDeskBackButton onClick={selectedAction ? () => setUnsignedPortfolioAction(null) : onBack} />
+        {!selectedAction ? (
+          <div className="space-y-2">
+            {portfolioActions.map(([key, label, body]) => (
+              <PolyDeskMenuCard key={key} title={label} body={body} onClick={() => setUnsignedPortfolioAction(key)} />
+            ))}
+          </div>
+        ) : (
         <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#0f1014]">
           <div className="flex items-center gap-2">
             <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.06]">
@@ -6818,19 +6833,27 @@ export function PolyPortfolioPanel({
             </span>
             <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">PolyDesk Portfolio</p>
           </div>
-          <h2 className="mt-2 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Sign-in is not enabled here</h2>
+          <h2 className="mt-2 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">{selectedAction[1]} needs sign-in</h2>
           <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-            Portfolio alerts and trading-wallet readiness need the Hash PayLink Privy session. Enable Privy for this environment, then refresh PolyDesk.
+            Saved portfolio alerts and trading-wallet readiness need the Hash PayLink Privy session. External Polymarket wallet checks and funding still work without sign-in.
           </p>
           <p className="mt-3 rounded-xl bg-gray-50 px-3 py-2 text-xs leading-relaxed text-gray-500 dark:bg-white/[0.04] dark:text-gray-400">
-            Local env needed: VITE_PRIVY_APP_ID and VITE_AUTH_BRIDGE=hybrid.
+            Build env needed: VITE_PRIVY_APP_ID and VITE_AUTH_BRIDGE=hybrid.
           </p>
+          <button
+            type="button"
+            onClick={() => setUnsignedPortfolioAction('external')}
+            className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+          >
+            <ExternalLink className="h-4 w-4" /> Use external funding
+          </button>
         </div>
+        )}
       </div>
     )
   }
 
-  if (!privyReady && privyWaitExpired) {
+  if (!sessionlessExternalMode && !privyReady && privyWaitExpired) {
     return (
       <div className="mt-4 space-y-3">
         <PolyDeskBackButton onClick={onBack} />
@@ -6856,7 +6879,7 @@ export function PolyPortfolioPanel({
     )
   }
 
-  if (!privyReady) {
+  if (!sessionlessExternalMode && !privyReady) {
     return (
       <div className="mt-4 flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
         <Loader2 className="h-4 w-4 animate-spin" /> Loading…
@@ -6864,7 +6887,7 @@ export function PolyPortfolioPanel({
     )
   }
 
-  if (!authenticated) {
+  if (!sessionlessExternalMode && !authenticated) {
     const portfolioActions = [
       ['watch', 'Watch account', 'Track a public Polymarket profile.'],
       ['trading', 'Main Wallet', 'Add USDC, withdraw, and view active positions.'],
