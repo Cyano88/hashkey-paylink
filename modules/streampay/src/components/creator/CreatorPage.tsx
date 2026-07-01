@@ -1415,7 +1415,10 @@ function SettlementDashboard({
 
 export function CreatorAdminPage() {
   const [adminKey, setAdminKey] = useState(() => {
-    try { return window.localStorage.getItem('streampay_creator_admin_key') ?? '' } catch { return '' }
+    try {
+      window.localStorage.removeItem('streampay_creator_admin_key')
+      return window.sessionStorage.getItem('streampay_creator_admin_key') ?? ''
+    } catch { return '' }
   })
   const [status, setStatus] = useState<'pending' | 'approved' | 'rejected'>('pending')
   const [posts, setPosts] = useState<PublishedContent[]>([])
@@ -1437,7 +1440,7 @@ export function CreatorAdminPage() {
       const data = await res.json() as { ok?: boolean; posts?: ServerCreatorPost[]; error?: string }
       if (!res.ok || !data.ok) throw new Error(data.error || 'Could not load creator approvals.')
       setPosts((data.posts || []).map(contentFromServerPost))
-      try { window.localStorage.setItem('streampay_creator_admin_key', adminKey.trim()) } catch {}
+      try { window.sessionStorage.setItem('streampay_creator_admin_key', adminKey.trim()) } catch {}
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load creator approvals.')
       setPosts([])
@@ -1445,10 +1448,6 @@ export function CreatorAdminPage() {
       setLoading(false)
     }
   }, [adminKey, status])
-
-  useEffect(() => {
-    void loadPosts()
-  }, [loadPosts])
 
   async function reviewPost(post: PublishedContent, action: 'approve' | 'reject') {
     if (!post.contentId) return

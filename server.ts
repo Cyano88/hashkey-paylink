@@ -105,8 +105,9 @@ app.use((_req, res, next) => {
   next()
 })
 
-// Parse JSON bodies before any route handler sees req.body.
-app.use(express.json({ limit: '64kb' }))
+// Parse JSON bodies before any route handler sees req.body. Creator Studio
+// publish payloads can include sanitized article HTML plus a compressed cover.
+app.use(express.json({ limit: '256kb' }))
 
 const strictLimiter = rateLimit({ name: 'strict', windowMs: 60_000, max: 20 })
 const relayLimiter = rateLimit({ name: 'relay', windowMs: 60_000, max: 30 })

@@ -111,11 +111,6 @@ export function StreamPayHeader() {
                 ].join(' ')}
               >
                 <span>{item.label}</span>
-                {item.status && (
-                  <span className="ml-0.5 text-[7px] font-black uppercase tracking-wide opacity-55">
-                    {item.status}
-                  </span>
-                )}
               </Link>
             ))}
           </div>

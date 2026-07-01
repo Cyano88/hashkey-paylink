@@ -7,6 +7,7 @@
 
 import type { Request, Response } from 'express'
 import pg from 'pg'
+import { timingSafeEqual } from 'node:crypto'
 import {
   createPublicClient, http, defineChain,
   parseAbi, isAddress, keccak256, toBytes, verifyMessage, verifyTypedData, hashTypedData,
@@ -354,6 +355,15 @@ function cleanCategory(value: unknown) {
   return ['worldcup-news', 'live-scores', 'ebooks', 'crypto'].includes(category) ? category : 'crypto'
 }
 
+function isSafePrivateUrl(value: string) {
+  try {
+    const url = new URL(value)
+    return url.protocol === 'http:' || url.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
 function baseUrl() {
   return (process.env.HASH_PAYLINK_BASE_URL ?? process.env.PUBLIC_APP_URL ?? 'https://hashpaylink.com').replace(/\/+$/, '')
 }
@@ -414,8 +424,13 @@ function requireCreatorAdmin(req: Request, res: Response) {
   }
   const headerKey = String(req.headers['x-creator-admin-key'] ?? '').trim()
   const bodyKey = String((req.body as { adminKey?: unknown } | undefined)?.adminKey ?? '').trim()
-  const queryKey = String((req.query as { adminKey?: string }).adminKey ?? '').trim()
-  if (headerKey !== CREATOR_ADMIN_KEY && bodyKey !== CREATOR_ADMIN_KEY && queryKey !== CREATOR_ADMIN_KEY) {
+  const matchesAdminKey = [headerKey, bodyKey].some(candidate => {
+    if (!candidate) return false
+    const candidateBuffer = Buffer.from(candidate)
+    const expectedBuffer = Buffer.from(CREATOR_ADMIN_KEY)
+    return candidateBuffer.length === expectedBuffer.length && timingSafeEqual(candidateBuffer, expectedBuffer)
+  })
+  if (!matchesAdminKey) {
     res.status(401).json({ ok: false, error: 'Admin approval key is invalid.' })
     return false
   }
@@ -575,6 +590,9 @@ export async function storeContent(req: Request, res: Response) {
   }
   if (type !== 'text' && type !== 'url') {
     return res.status(400).json({ ok: false, error: 'type must be "text" or "url"' })
+  }
+  if (type === 'url' && !isSafePrivateUrl(content.trim())) {
+    return res.status(400).json({ ok: false, error: 'private URL must use http or https' })
   }
   if (!isAddress(creator)) {
     return res.status(400).json({ ok: false, error: 'creator must be a valid EVM address' })

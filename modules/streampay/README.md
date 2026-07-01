@@ -46,6 +46,15 @@ Set in Render → Service → **Environment**.
 | `ARC_POA_CONTRACT` | Server | `PoASettlement` address |
 | `VITE_POA_CONTRACT` | Browser | Same — must match server value |
 | `DATABASE_URL` | Server | Durable Creator Studio content, signed viewer vaults, Arena rooms, and Privy/Circle mappings |
+| `CREATOR_ADMIN_KEY` | Server | Password for the hidden `/creator-admin` approval queue |
+| `CREATOR_OFFICIAL_WALLET` | Server | Official StreamPay creator wallet for built-in World Cup cards |
+| `VITE_CREATOR_OFFICIAL_WALLET` | Browser | Same official creator wallet for client-built gate links |
+| `CREATOR_WORLD_CUP_NEWS_URL` | Server | Fallback paid World Cup news source URL |
+| `CREATOR_WORLD_CUP_NEWS_PRICE_RAW` | Server | Built-in World Cup news unlock price in USDC base units |
+| `CREATOR_WORLD_CUP_SCORES_PRICE_RAW` | Server | Built-in live scores unlock price in USDC base units |
+| `X402_CREATOR_ACCEPT_NETWORKS` | Server | Circle x402 networks accepted for creator unlocks, default `eip155:5042002` |
+| `X402_CREATOR_FACILITATOR_URL` | Server | Optional creator-specific x402 facilitator URL |
+| `CREATOR_AGENT_X402_PAY_CHAIN` | Server | Agent wallet payment chain for `/api/creator-unlock-x402`, default `ARC-TESTNET` |
 
 `VITE_` prefixed variables are baked into the frontend bundle at build time.  
 Never add `VITE_` to private keys — they would be exposed to the browser.
@@ -55,6 +64,8 @@ Never add `VITE_` to private keys — they would be exposed to the browser.
 ### Durable Storage
 
 StreamPay uses Postgres when `DATABASE_URL` is configured. Creator Studio stores gated content in `streampay_creator_content` and signed viewer vaults in `streampay_creator_vaults`, so shared links and creator earnings survive Render restarts. Arena stores private room settings in `arena_rooms`. Tables are created or migrated automatically on first use.
+
+Creator Studio can run without Postgres for local demos, but public use should keep `DATABASE_URL` configured. Without it, creator posts and approval state live only in process memory and disappear on restart.
 
 Postgres does not custody funds. Real-money Arena deposits, stream halts, refunds, platform fee collection, and winner claims go through `ArenaRoomEscrow` contracts deployed by `ArenaRoomEscrowFactory`. When `ARENA_ESCROW_FACTORY_ADDRESS`, `VITE_ARENA_ESCROW_FACTORY_ADDRESS`, and a matching server-side `ARENA_RELAYER_PRIVATE_KEY` are configured, `/api/arena-room` deploys one deterministic escrow per private room and stores that escrow address with `payment_status = deposit_open`. If the relayer key is missing or does not match the factory relayer, the room remains saved as `escrow_pending` and paid deposits stay disabled.
 
@@ -140,12 +151,21 @@ Stream links look like: `/stream/0xVaultAddress?reason=April+Salary`
 
 ## Creator / PoA Flow
 
+Creator Studio is available at `/creator?app=streampay` and is organized around three public tabs:
+
+- `Discover` shows approved paid posts, official World Cup news, live score cards, and creator drafts from the current browser.
+- `Publish` lets a creator sign in, open an Arc Circle wallet or use an external EVM wallet, upload a cover, write an article or private URL, set a fixed unlock price or streaming cap, and publish a gate link.
+- `Earnings` lets the creator paste a gate link, see signed viewer vaults, and claim settled USDC through `/api/settle-poa`.
+
+New creator submissions are saved as `pending` and do not appear in public Discover until an operator approves them at `/creator-admin?app=streampay` with `CREATOR_ADMIN_KEY`. Creators still receive a shareable gate link immediately after publishing, so they can test the gate before public listing.
+
 ```
 Creator                        Viewer                   Arc Network
   │                               │                          │
-  ├─ paste content / private URL  │                          │
+  ├─ write article / private URL  │                          │
+  ├─ sign creator proof           │                          │
   ├─ POST /api/store-content ────>│                          │
-  ├─ generate gate link           │                          │
+  ├─ receive pending gate link    │                          │
   │                               │                          │
   │                ── gate link ──>│                          │
   │                               ├─ connect wallet          │
@@ -168,6 +188,8 @@ Creator                        Viewer                   Arc Network
 ```
 
 Gate links look like: `/gate?id=abc123&cr=0xCreator&r=1000&cap=100000`
+
+The gate also supports Circle Gateway/x402 reader unlocks through `/api/get-content-x402` and `/api/creator-unlock-x402`. The PoA path remains available for session signatures and creator settlement.
 
 ---
 
@@ -214,13 +236,16 @@ STREAM_FACTORY_ADDRESS=0xBAecf54084A0cB65b77a88cbDEf2b663Be71c61b
 VITE_STREAM_FACTORY_ADDRESS=0xBAecf54084A0cB65b77a88cbDEf2b663Be71c61b
 ARC_POA_CONTRACT=0x91DbDb49c8C68e5775554D42A1B5ce15C89C814B
 VITE_POA_CONTRACT=0x91DbDb49c8C68e5775554D42A1B5ce15C89C814B
+CREATOR_ADMIN_KEY=change-me
+CREATOR_OFFICIAL_WALLET=0x...
+VITE_CREATOR_OFFICIAL_WALLET=0x...
 ```
 
 ---
 
 ## Known Limitations (Testnet)
 
-- **In-memory storage** — content registry and vault registry are in-memory Maps. Data is lost when Render restarts (free tier sleeps after 15 min). Add Redis for persistence.
+- **Postgres required for public durability** — content, approvals, vaults, and rooms are durable only when `DATABASE_URL` is configured. In-memory fallback is for local demos.
 - **No Arc Paymaster** — the "First $0.02 sponsored" label is UI copy only. Viewers pay their own USDC gas for the approval transaction.
 - **No Arc Smart Account / JIT provisioning** — viewers use regular EVM wallets. Passkey is a local auth gate, not linked to an on-chain account.
 - **PoASettlement requires USDC approval** — the settlement contract calls `transferFrom`. Viewers must approve the contract (Step 4 in the gate) before settlement works.
