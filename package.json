@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "vite",
     "build": "node scripts/verify-prebuilt-dist.mjs",
-    "build:frontend": "vite build",
+    "build:frontend": "node scripts/verify-prebuilt-dist.mjs",
     "build:source": "vite build",
     "typecheck": "tsc",
     "preview": "vite preview",
