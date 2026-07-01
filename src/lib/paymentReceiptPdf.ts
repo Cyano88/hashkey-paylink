@@ -33,6 +33,65 @@ export type ReceiptLookupResponse = {
   receipt?: PaylinkReceipt
 }
 
+export type X402ReceiptLike = {
+  activityId?: string
+  receiptId?: string
+  receiptHash?: string
+  agentSlug?: string
+  title?: string
+  amount?: string
+  asset?: string
+  chain?: string
+  txHash?: string
+  payer?: string
+  memo?: string
+  merchantId?: string
+  source?: string
+  detail?: string
+  createdAt?: number
+  proof?: Record<string, unknown>
+  og?: {
+    rootHash?: string
+    ogTxHash?: string
+    ogExplorer?: string
+  }
+}
+
+export function createX402PaylinkReceipt(receipt: X402ReceiptLike, activityId: string): PaylinkReceipt {
+  const proof = receipt.proof ?? {}
+  const txRef = String(proof.transaction ?? receipt.txHash ?? '')
+  const proofHash = String(proof.proofHash ?? proof.receiptHash ?? receipt.receiptHash ?? receipt.activityId ?? activityId)
+  const amountText = String(proof.amount ?? receipt.amount ?? '0')
+  const amountMatch = amountText.match(/-?\d+(?:\.\d+)?/)
+  const amount = amountMatch?.[0] ?? '0'
+  const payer = String(proof.payer ?? proof.buyerAgent ?? receipt.payer ?? '')
+  const creator = String(proof.seller ?? proof.sellerAgent ?? receipt.merchantId ?? '')
+  return {
+    type: 'circle_gateway_x402_receipt',
+    receiptId: receipt.activityId ?? activityId,
+    receiptHash: proofHash,
+    title: receipt.title || 'Creator content unlocked',
+    status: 'confirmed',
+    eventId: String(proof.service ?? receipt.agentSlug ?? 'creator-x402'),
+    txHash: txRef || proofHash,
+    chain: 'arc',
+    payer,
+    memo: receipt.detail || 'Creator content unlocked by Circle Gateway x402',
+    amount,
+    asset: 'USDC',
+    createdAt: receipt.createdAt ?? Date.now(),
+    source: 'x402',
+    merchantId: creator,
+    settlementType: 'circle-gateway-x402',
+    proof: {
+      receiptHash: proofHash,
+      ogRootHash: receipt.og?.rootHash ? String(receipt.og.rootHash) : String(proof.ogRootHash ?? ''),
+      ogTxHash: receipt.og?.ogTxHash ? String(receipt.og.ogTxHash) : String(proof.ogTxHash ?? ''),
+      ogExplorer: receipt.og?.ogExplorer ? String(receipt.og.ogExplorer) : String(proof.ogExplorer ?? ''),
+    },
+  }
+}
+
 export function receiptChainKey(value?: string): ChainKey {
   return value === 'solana' || value === 'starknet' || value === 'arc' || value === 'arbitrum' || value === 'hashkey'
     ? value

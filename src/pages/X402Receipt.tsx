@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, CheckCircle2, Download, ExternalLink, Loader2, Share2, ShieldCheck, XCircle } from 'lucide-react'
 import {
   compactReceiptAmount,
+  createX402PaylinkReceipt,
   createPaymentReceiptImage,
   createPaymentReceiptPdf,
   paymentReceiptFileName,
@@ -99,38 +100,8 @@ export default function X402Receipt() {
     const receipt = data?.receipt
     if (!receipt) return null
     if (receipt.receiptId) return receipt as PaylinkReceipt
-    const txRef = String(proof.transaction ?? receipt.txHash ?? '')
-    const proofHash = String(proof.proofHash ?? proof.receiptHash ?? receipt.receiptHash ?? receipt.activityId ?? activityId)
-    const amountText = String(proof.amount ?? receipt.amount ?? '0')
-    const amountMatch = amountText.match(/-?\d+(?:\.\d+)?/)
-    const amount = amountMatch?.[0] ?? '0'
-    const payer = String(proof.payer ?? proof.buyerAgent ?? receipt.payer ?? '')
-    const creator = String(proof.seller ?? proof.sellerAgent ?? receipt.merchantId ?? '')
-    return {
-      type: 'circle_gateway_x402_receipt',
-      receiptId: receipt.activityId ?? activityId,
-      receiptHash: proofHash,
-      title: receipt.title || 'Creator content unlocked',
-      status: 'confirmed',
-      eventId: String(proof.service ?? receipt.agentSlug ?? 'creator-x402'),
-      txHash: txRef || proofHash,
-      chain: 'arc',
-      payer,
-      memo: receipt.detail || 'Creator content unlocked by Circle Gateway x402',
-      amount,
-      asset: 'USDC',
-      createdAt: receipt.createdAt,
-      source: 'x402',
-      merchantId: creator,
-      settlementType: 'circle-gateway-x402',
-      proof: {
-        receiptHash: proofHash,
-        ogRootHash: og?.rootHash,
-        ogTxHash: og?.ogTxHash,
-        ogExplorer: og?.ogExplorer,
-      },
-    } satisfies PaylinkReceipt
-  }, [activityId, data?.receipt, og?.ogExplorer, og?.ogTxHash, og?.rootHash, proof])
+    return createX402PaylinkReceipt({ ...receipt, og }, activityId)
+  }, [activityId, data?.receipt, og])
   const receiptFile = useMemo(() => {
     const receipt = data?.receipt
     if (!receipt) return ''

@@ -8,6 +8,12 @@ import { usePoAStream }       from '../../hooks/usePoAStream'
 import { usePasskey }         from '../../hooks/usePasskey'
 import { PRIVY_AUTH_ENABLED } from '../../../../../src/lib/authMode'
 import { resolvePrivyCircleLink } from '../../../../../src/lib/privyCircleLink'
+import {
+  createPaymentReceiptPdf,
+  createX402PaylinkReceipt,
+  paymentReceiptFileName,
+  type X402ReceiptLike,
+} from '../../../../../src/lib/paymentReceiptPdf'
 
 // ── Arc standalone client ─────────────────────────────────────────────────────
 const arcClient = createPublicClient({
@@ -620,10 +626,40 @@ export function StreamGate() {
   const [gatewayTx, setGatewayTx] = useState<string | null>(null)
   const [gatewayReceiptId, setGatewayReceiptId] = useState<string | null>(null)
   const [gatewayReferenceCopied, setGatewayReferenceCopied] = useState(false)
+  const [gatewayReceiptOpening, setGatewayReceiptOpening] = useState(false)
   const gatewayTxIsExplorerHash = /^0x[a-fA-F0-9]{64}$/.test(gatewayTx ?? '')
 
   const legacyFullyAuthorised = isConnected && isOnArc && passkey.registered && isApproved
   const fullyAuthorised = paymentMode === 'x402' ? contentState === 'ready' : legacyFullyAuthorised
+
+  async function openGatewayReceiptPdf() {
+    if (!gatewayReceiptId || gatewayReceiptOpening) return
+    setGatewayReceiptOpening(true)
+    try {
+      const res = await fetch(`/api/x402/receipt?id=${encodeURIComponent(gatewayReceiptId)}`)
+      const data = await res.json().catch(() => ({})) as { ok?: boolean; receipt?: X402ReceiptLike }
+      if (!res.ok || !data.ok || !data.receipt) throw new Error('Receipt unavailable')
+      const receipt = data.receipt.receiptId
+        ? data.receipt as unknown as Parameters<typeof createPaymentReceiptPdf>[0]
+        : createX402PaylinkReceipt(data.receipt, gatewayReceiptId)
+      const blob = await createPaymentReceiptPdf(receipt)
+      const url = URL.createObjectURL(blob)
+      const win = window.open(url, '_blank', 'noopener,noreferrer')
+      if (!win) {
+        const link = document.createElement('a')
+        link.href = url
+        link.download = paymentReceiptFileName(receipt)
+        document.body.appendChild(link)
+        link.click()
+        link.remove()
+      }
+      window.setTimeout(() => URL.revokeObjectURL(url), 30_000)
+    } catch {
+      window.open(`/receipt/${gatewayReceiptId}`, '_blank', 'noopener,noreferrer')
+    } finally {
+      setGatewayReceiptOpening(false)
+    }
+  }
 
   async function unlockWithAgentX402(agentSlugOverride?: string) {
     if (gatewayPaying) return
@@ -636,6 +672,7 @@ export function StreamGate() {
     }
     setGatewayPaying(true)
     setGatewayReferenceCopied(false)
+    setGatewayReceiptOpening(false)
     setContentError(null)
     setContentState('loading')
     try {
@@ -1643,10 +1680,11 @@ export function StreamGate() {
               {gatewayReceiptId && (
                 <button
                   type="button"
-                  onClick={() => window.open(`/receipt/${gatewayReceiptId}`, '_blank', 'noopener,noreferrer')}
+                  onClick={openGatewayReceiptPdf}
+                  disabled={gatewayReceiptOpening}
                   className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-[12px] font-semibold text-white transition-colors hover:bg-emerald-700"
                 >
-                  View receipt
+                  {gatewayReceiptOpening ? 'Opening receipt...' : 'View receipt'}
                 </button>
               )}
               <div className={gatewayTxIsExplorerHash ? 'grid grid-cols-2 gap-2' : 'grid gap-2'}>
