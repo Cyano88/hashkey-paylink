@@ -830,6 +830,19 @@ export function StreamGate() {
     window.setTimeout(() => setCopiedWallet(false), 1500)
   }
 
+  function x402WalletManagerHref() {
+    const p = new URLSearchParams()
+    p.set('product', 'agent')
+    p.set('profile', 'agent')
+    p.set('n', 'arc')
+    p.set('src', 'creator-checkout')
+    p.set('returnTo', `${window.location.pathname}${window.location.search}${window.location.hash}`)
+    const paymentSlug = selectedAgent?.slug || safeAgentSlug
+    if (paymentSlug) p.set('agent', paymentSlug)
+    if (selectedAgent?.walletAddress) p.set('expectedWallet', selectedAgent.walletAddress)
+    return `/app?${p.toString()}`
+  }
+
   async function refreshPaymentWalletStatus(slug: string) {
     const cleanSlug = cleanAgentSlug(slug)
     if (!cleanSlug) return
@@ -1230,9 +1243,9 @@ export function StreamGate() {
                       <div className="border-b border-gray-100 pb-3">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <p className="text-[13px] font-bold text-gray-900">Manage x402 wallet</p>
+                            <p className="text-[13px] font-bold text-gray-900">Activate Arc x402</p>
                             <p className="mt-1 text-[12px] leading-relaxed text-gray-500">
-                              Fund and activate x402 from the main Hash PayLink wallet manager, then return here to unlock.
+                              Move Arc Testnet USDC from this reader wallet into x402 service balance, then unlock this content.
                             </p>
                           </div>
                           <button
@@ -1308,14 +1321,52 @@ export function StreamGate() {
                           )}
                         </div>
                       )}
+                      <div className="rounded-xl border border-gray-100 bg-white px-3 py-3">
+                        <label className="block space-y-1.5">
+                          <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-gray-400">Activation amount</span>
+                          <div className="flex min-h-[46px] items-center rounded-xl border border-gray-200 bg-gray-50 px-3 focus-within:border-blue-300">
+                            <input
+                              type="number"
+                              min="0.5"
+                              step="0.1"
+                              value={fundAmount}
+                              onChange={event => {
+                                setFundAmount(event.target.value)
+                                setWalletError(null)
+                                setFundMessage(null)
+                              }}
+                              className="min-w-0 flex-1 bg-transparent text-[15px] font-bold text-gray-900 outline-none"
+                            />
+                            <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-gray-400">USDC</span>
+                          </div>
+                        </label>
+                        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                          <button
+                            type="button"
+                            onClick={() => void activatePaymentBalance()}
+                            disabled={fundBusy || gatewayActivationBlocked}
+                            className="flex min-h-[46px] items-center justify-center rounded-xl bg-gray-950 px-3 py-3 text-[12px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {fundBusy ? <><Spinner />Activating...</> : 'Activate x402'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void checkPaymentActivation()}
+                            disabled={fundBusy || fundingNeedsReconnect}
+                            className="min-h-[46px] rounded-xl border border-gray-200 bg-white px-3 py-3 text-[12px] font-bold text-gray-700 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            Check activation
+                          </button>
+                        </div>
+                      </div>
                       <a
-                        href="/app?product=agent"
-                        className="flex min-h-[48px] w-full items-center justify-center rounded-xl bg-gray-950 px-3 py-3 text-[12px] font-bold text-white"
+                        href={x402WalletManagerHref()}
+                        className="flex min-h-[44px] w-full items-center justify-center rounded-xl border border-gray-200 bg-white px-3 py-3 text-[12px] font-bold text-gray-700"
                       >
-                        Open x402 wallet manager
+                        Open wallet manager instead
                       </a>
                       <p className="text-center text-[11px] leading-relaxed text-gray-400">
-                        After funding or activation, return to this content and tap Unlock content again.
+                        After activation, return here and tap Unlock content again.
                       </p>
                     </div>
                   )}

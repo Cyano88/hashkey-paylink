@@ -66,6 +66,18 @@ function isEvmAddress(value: string) {
   return /^0x[a-fA-F0-9]{40}$/.test(value.trim())
 }
 
+function sameOriginReturnPath(value: string) {
+  const raw = value.trim()
+  if (!raw) return ''
+  try {
+    const url = raw.startsWith('/') ? new URL(raw, window.location.origin) : new URL(raw)
+    if (url.origin !== window.location.origin) return ''
+    return `${url.pathname}${url.search}${url.hash}`
+  } catch {
+    return ''
+  }
+}
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 type VerifyResult = {
@@ -426,6 +438,7 @@ export default function AgentWorkspace({ embedded = false, forceProfile = false 
   const savedLpScoutIntent = readSavedLpScoutIntent(normalizedAgentSlug)
   const rawUrlAgentWallet = params.get('wallet') ?? params.get('e') ?? ''
   const rawExpectedAgentWallet = params.get('expectedWallet') ?? ''
+  const x402ReturnPath = sameOriginReturnPath(params.get('returnTo') ?? '')
   const urlAgentWallet = isEvmAddress(rawUrlAgentWallet) ? rawUrlAgentWallet : ''
   const expectedAgentWallet = isEvmAddress(rawExpectedAgentWallet) ? rawExpectedAgentWallet : ''
   const agentWallet = urlAgentWallet || (shouldOpenWalletLinkPanel ? expectedAgentWallet : '')
@@ -766,7 +779,8 @@ export default function AgentWorkspace({ embedded = false, forceProfile = false 
     try {
       const slug = normalizedAgentSlug
       if (!slug) throw new Error('Sign in with email before checking x402 balance.')
-      const res = await fetch(`/api/agent-wallet?agent=${encodeURIComponent(slug)}&x402=1`)
+      const gatewayChain = agentNetwork === 'arc' ? '&gatewayChain=arc' : ''
+      const res = await fetch(`/api/agent-wallet?agent=${encodeURIComponent(slug)}&x402=1${gatewayChain}`)
       const data = await res.json() as {
         ok?: boolean
         gatewayBalance?: string
@@ -1183,21 +1197,23 @@ export default function AgentWorkspace({ embedded = false, forceProfile = false 
     setX402BalanceError('')
     setX402ActivationSuccess('')
     try {
-      if (agentNetwork === 'arc') throw new Error('x402 Gateway activation supports Base or Arbitrum funding. Open this agent dashboard on Base or Arbitrum to activate x402.')
       const payerAgentSlug = normalizedAgentSlug || (embeddedWalletManager ? '' : PLATFORM_AGENT_SLUG)
       if (!payerAgentSlug) throw new Error('Sign in with email before activating x402.')
       const amount = Number(x402Amount)
       if (!Number.isFinite(amount) || amount <= 0) throw new Error('Enter a valid x402 amount.')
       if (amount < MIN_X402_ACTIVATION_USDC) throw new Error(`Minimum x402 top up is ${MIN_X402_ACTIVATION_USDC} USDC.`)
+      const activationBody = agentNetwork === 'arc'
+        ? { action: 'gateway-deposit-arc', agentSlug: payerAgentSlug, amount: String(amount) }
+        : {
+            action: 'gateway-deposit',
+            agentSlug: payerAgentSlug,
+            amount: String(amount),
+            chain: agentNetwork === 'arbitrum' ? 'ARBITRUM' : 'BASE',
+          }
       const res = await fetch('/api/agent-wallet', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'gateway-deposit',
-          agentSlug: payerAgentSlug,
-          amount: String(amount),
-          chain: agentNetwork === 'arbitrum' ? 'ARBITRUM' : 'BASE',
-        }),
+        body: JSON.stringify(activationBody),
       })
       const data = await res.json() as { ok?: boolean; error?: string; amount?: string }
       if (!res.ok || !data.ok) throw new Error(data.error ?? 'x402 activation failed')
@@ -1206,6 +1222,12 @@ export default function AgentWorkspace({ embedded = false, forceProfile = false 
       setX402ModalOpen(false)
       await refreshX402Balance()
       await loadAgentWallet()
+      if (x402ReturnPath) {
+        window.setTimeout(() => {
+          window.location.assign(x402ReturnPath)
+        }, 900)
+        return
+      }
       window.setTimeout(() => {
         setX402ActivationSuccess('')
         refreshX402Balance().catch(() => undefined)
@@ -1335,9 +1357,7 @@ export default function AgentWorkspace({ embedded = false, forceProfile = false 
   const treasuryBalanceKnown = treasuryBalanceNumber !== null && Number.isFinite(treasuryBalanceNumber)
   const treasuryEmpty = treasuryBalanceKnown && treasuryBalanceNumber <= 0
   const x402AmountExceedsTreasury = treasuryBalanceKnown && Number.isFinite(x402AmountNumber) && x402AmountNumber > treasuryBalanceNumber
-  const x402ValidationMessage = agentNetwork === 'arc'
-    ? 'x402 activation currently supports Base or Arbitrum.'
-    : treasuryEmpty
+  const x402ValidationMessage = treasuryEmpty
     ? embeddedWalletManager ? 'Fund wallet balance first, then activate x402.' : 'Fund treasury first, then activate x402.'
     : x402AmountInvalid
     ? 'Enter a valid x402 amount.'
@@ -1346,7 +1366,7 @@ export default function AgentWorkspace({ embedded = false, forceProfile = false 
     : x402AmountBelowMinimum
     ? `Minimum x402 top up is ${MIN_X402_ACTIVATION_USDC} USDC.`
     : ''
-  const x402ActivationBlocked = Boolean(agentNetwork === 'arc' || !x402Amount || x402AmountInvalid || x402AmountBelowMinimum || treasuryEmpty || x402AmountExceedsTreasury)
+  const x402ActivationBlocked = Boolean(!x402Amount || x402AmountInvalid || x402AmountBelowMinimum || treasuryEmpty || x402AmountExceedsTreasury)
   const displayAgentProfile = agentProfile ?? (agentSlug === PLATFORM_AGENT_SLUG || (!agentSlug && !embeddedWalletManager) ? PLATFORM_AGENT_PROFILE : null)
   const displayAgentName = embeddedWalletManager
     ? 'x402 Wallet Manager'
