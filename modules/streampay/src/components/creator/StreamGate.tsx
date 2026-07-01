@@ -1408,7 +1408,7 @@ export function StreamGate() {
                     className="flex min-h-[48px] items-center justify-center gap-2 rounded-xl px-5 py-3 text-[13px] font-semibold text-white transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
                     style={{ background: '#111827' }}
                   >
-                    {walletConnectPending ? <><Spinner />Connecting...</> : 'Connect wallet'}
+                    {walletConnectPending ? <><Spinner />Connecting...</> : connectors.length === 0 && !PRIVY_AUTH_ENABLED ? 'No browser wallet found' : 'Connect wallet'}
                   </button>
                 )}
 

@@ -1,5 +1,6 @@
 import { createConfig } from '@privy-io/wagmi'
 import { http } from 'wagmi'
+import { injected } from 'wagmi/connectors'
 import { base, arbitrum } from 'viem/chains'
 import { hashkeyMainnet, arcChain } from './chains'
 
@@ -12,6 +13,7 @@ const RPC_URLS = {
 
 export const privyWagmiConfig = createConfig({
   chains: [base, arcChain, arbitrum, hashkeyMainnet],
+  connectors: [injected()],
   transports: {
     [base.id]:           http(RPC_URLS.base),
     [arcChain.id]:       http(RPC_URLS.arc),
