@@ -29,6 +29,7 @@ const MAX_SERVICE_AMOUNT = Number(process.env.AGENT_WALLET_MAX_SERVICE_AMOUNT ??
 const MAX_GATEWAY_DEPOSIT_AMOUNT = Number(process.env.AGENT_WALLET_MAX_GATEWAY_DEPOSIT_AMOUNT ?? '5')
 const GATEWAY_BALANCE_CHAIN = process.env.AGENT_WALLET_GATEWAY_BALANCE_CHAIN ?? 'MATIC'
 const GATEWAY_DEPOSIT_CHAIN = process.env.AGENT_WALLET_GATEWAY_DEPOSIT_CHAIN ?? 'BASE'
+const ARC_TESTNET_GATEWAY_CHAIN = 'ARC-TESTNET'
 const GATEWAY_DEPOSIT_VERIFY_ATTEMPTS = Math.max(1, Number(process.env.AGENT_WALLET_GATEWAY_DEPOSIT_VERIFY_ATTEMPTS ?? '6') || 6)
 const GATEWAY_DEPOSIT_VERIFY_DELAY_MS = Math.max(500, Number(process.env.AGENT_WALLET_GATEWAY_DEPOSIT_VERIFY_DELAY_MS ?? '5000') || 5000)
 
@@ -855,6 +856,108 @@ export default async function handler(req: Request, res: Response) {
         gatewayBalance,
         gatewayBalanceChain,
         raw: output.slice(0, 1200),
+      })
+    }
+
+    if (action === 'gateway-deposit-arc') {
+      const amount = clampAmount(req.body?.amount, MAX_GATEWAY_DEPOSIT_AMOUNT)
+      if (!amount) return res.status(400).json({ ok: false, error: 'Invalid Arc x402 activation amount.' })
+
+      const store = await readStore()
+      const record = resolveAgentRecord(store, agentSlug)
+      if (!record?.walletAddress || !record.sessionId) {
+        return res.status(404).json({ ok: false, error: 'Arc reader wallet session not found. Reconnect the reader wallet first.' })
+      }
+
+      const serviceKey = `${agentSlug}_${record.sessionId}`
+      let output = ''
+      try {
+        output = await runCircle([
+          'gateway',
+          'deposit',
+          '--amount',
+          String(amount),
+          '--address',
+          record.walletAddress,
+          '--chain',
+          ARC_TESTNET_GATEWAY_CHAIN,
+          '--method',
+          'direct',
+        ], serviceKey, 120_000)
+      } catch (err) {
+        if (isCircleLoginExpired(err)) {
+          return res.status(409).json({
+            ok: false,
+            code: 'circle_session_expired',
+            error: 'Circle Agent Wallet is connected, but the secure session expired. Reconnect the Arc reader wallet, then retry x402 activation.',
+          })
+        }
+        throw err
+      }
+
+      let balanceOutput = ''
+      let gatewayBalance: string | undefined
+      let balanceError: unknown
+      for (let attempt = 1; attempt <= GATEWAY_DEPOSIT_VERIFY_ATTEMPTS; attempt += 1) {
+        try {
+          try {
+            balanceOutput = await runCircle(['gateway', 'balance', '--address', record.walletAddress, '--chain', ARC_TESTNET_GATEWAY_CHAIN, '--output', 'json'], serviceKey, 30_000)
+          } catch {
+            balanceOutput = await runCircle(['gateway', 'balance', '--address', record.walletAddress, '--chain', ARC_TESTNET_GATEWAY_CHAIN], serviceKey, 30_000)
+          }
+          gatewayBalance = parseBalance(balanceOutput)
+          balanceError = undefined
+          if (Number(gatewayBalance ?? '0') >= Number(amount)) break
+        } catch (err) {
+          balanceError = err
+        }
+        if (attempt < GATEWAY_DEPOSIT_VERIFY_ATTEMPTS) await delay(GATEWAY_DEPOSIT_VERIFY_DELAY_MS)
+      }
+
+      if (balanceError && !balanceOutput) {
+        return res.status(502).json({
+          ok: false,
+          code: 'arc_gateway_balance_verify_failed',
+          error: balanceError instanceof Error ? balanceError.message.slice(0, 240) : 'Arc Gateway balance verification failed after deposit.',
+          depositChain: ARC_TESTNET_GATEWAY_CHAIN,
+          raw: output.slice(0, 3000),
+        })
+      }
+
+      if (Number(gatewayBalance ?? '0') < Number(amount)) {
+        return res.status(202).json({
+          ok: false,
+          code: 'arc_gateway_deposit_pending',
+          error: `Arc Gateway deposit was submitted, but Circle Gateway has not made ${amount} USDC available yet. Wait a moment, then check activation again.`,
+          gatewayBalance: gatewayBalance ?? '0',
+          gatewayBalanceChain: ARC_TESTNET_GATEWAY_CHAIN,
+          raw: output.slice(0, 3000),
+          balanceRaw: balanceOutput.slice(0, 1200),
+        })
+      }
+
+      await appendAgentActivity({
+        agentSlug,
+        type: 'gateway_activated',
+        title: 'Activated Arc x402 Gateway balance',
+        amount: String(amount),
+        asset: 'USDC',
+        direction: 'in',
+        network: 'Arc Testnet',
+        wallet: record.walletAddress,
+        detail: 'Deposited from Arc Testnet via direct Gateway deposit',
+      })
+
+      return res.json({
+        ok: true,
+        agentSlug,
+        walletAddress: record.walletAddress,
+        amount: String(amount),
+        depositChain: ARC_TESTNET_GATEWAY_CHAIN,
+        gatewayBalanceChain: ARC_TESTNET_GATEWAY_CHAIN,
+        gatewayBalance,
+        response: extractJsonFromCliOutput(output),
+        raw: output.slice(0, 3000),
       })
     }
 

@@ -73,11 +73,6 @@ type AgentWalletStatus = {
   gatewayBalanceError?: string
   gatewayBalanceChecked?: boolean
 }
-type EvmBalanceResponse = {
-  ok?: boolean
-  balance?: string
-  error?: string
-}
 type AgentOption = AgentProfile & {
   connected?: boolean
   balance?: string
@@ -92,12 +87,8 @@ type AgentOption = AgentProfile & {
   source?: 'platform' | 'saved' | 'linked' | 'env' | 'store'
 }
 type UnlockStep = 'intro' | 'choose' | 'email' | 'otp' | 'fund'
-type FundingChain = 'BASE' | 'ARBITRUM'
-
-const GATEWAY_FUNDING_CHAINS: Array<{ key: FundingChain; label: string; apiChain: 'base' | 'arbitrum' }> = [
-  { key: 'BASE', label: 'Base', apiChain: 'base' },
-  { key: 'ARBITRUM', label: 'Arbitrum', apiChain: 'arbitrum' },
-]
+const CREATOR_X402_GATEWAY_CHAIN = 'arc'
+const CREATOR_X402_GATEWAY_LABEL = 'Arc Testnet'
 
 function hasWorldCupScore(match: WorldCupScoreMatch) {
   const home = String(match.homeScore ?? '').trim().toLowerCase()
@@ -416,7 +407,6 @@ export function StreamGate() {
   const [walletBusy, setWalletBusy] = useState(false)
   const [walletError, setWalletError] = useState<string | null>(null)
   const [fundAmount, setFundAmount] = useState('0.5')
-  const [fundChain, setFundChain] = useState<FundingChain>('BASE')
   const [fundBusy, setFundBusy] = useState(false)
   const [fundMessage, setFundMessage] = useState<string | null>(null)
   const gatewayActivationPending = isGatewayPendingMessage(fundMessage)
@@ -460,10 +450,9 @@ export function StreamGate() {
   const selectedWalletNeedsReconnect = Boolean(selectedAgent?.walletAddress && !selectedAgent.connected)
   const readerWalletSessionError = /reconnect|sign in|session|wallet session|activation did not complete/i.test(walletError || '')
   const fundingNeedsReconnect = selectedWalletNeedsReconnect || readerWalletSessionError
-  const fundingChainMeta = GATEWAY_FUNDING_CHAINS.find(chain => chain.key === fundChain) || GATEWAY_FUNDING_CHAINS[0]
   const fundAmountNumber = Number(fundAmount)
-  const fundingBalanceNumber = selectedAgent?.fundingBalance !== undefined ? Number(selectedAgent.fundingBalance) : null
-  const fundingBalanceKnown = Boolean(selectedAgent?.fundingBalanceChecked && fundingBalanceNumber !== null && Number.isFinite(fundingBalanceNumber))
+  const fundingBalanceNumber = selectedAgent?.balance !== undefined ? Number(selectedAgent.balance) : null
+  const fundingBalanceKnown = Boolean(selectedAgent?.balanceChecked && fundingBalanceNumber !== null && Number.isFinite(fundingBalanceNumber))
   const fundingAmountInvalid = !Number.isFinite(fundAmountNumber) || fundAmountNumber <= 0
   const fundingAmountExceedsBalance = Boolean(fundingBalanceKnown && Number.isFinite(fundAmountNumber) && fundAmountNumber > Number(fundingBalanceNumber))
   const gatewayActivationBlocked = fundingNeedsReconnect || fundingAmountInvalid || fundingAmountExceedsBalance
@@ -501,10 +490,9 @@ export function StreamGate() {
           // Status lookup below still gives enough information to let the user reconnect.
         }
         try {
-          const statusRes = await fetch(`/api/agent-wallet?agent=${encodeURIComponent(cleanSlug)}&balance=1&chain=arc&x402=1&gatewayChain=${encodeURIComponent(fundChain)}`)
+          const statusRes = await fetch(`/api/agent-wallet?agent=${encodeURIComponent(cleanSlug)}&balance=1&chain=arc&x402=1&gatewayChain=${encodeURIComponent(CREATOR_X402_GATEWAY_CHAIN)}`)
           const status = await statusRes.json().catch(() => ({})) as AgentWalletStatus
           if (statusRes.ok && status.ok !== false) {
-            const fundingStatus = await lookupGatewayFundingUsdcBalance(status.walletAddress || option.walletAddress)
             option = {
               ...option,
               walletAddress: status.walletAddress || option.walletAddress,
@@ -513,7 +501,6 @@ export function StreamGate() {
               balance: status.balance,
               balanceError: status.balanceError,
               balanceChecked: status.balanceChecked,
-              ...(fundingStatus || {}),
               gatewayBalance: status.gatewayBalance,
               gatewayBalanceError: status.gatewayBalanceError,
               gatewayBalanceChecked: status.gatewayBalanceChecked,
@@ -843,34 +830,15 @@ export function StreamGate() {
     window.setTimeout(() => setCopiedWallet(false), 1500)
   }
 
-  async function lookupGatewayFundingUsdcBalance(walletAddress?: string) {
-    if (!walletAddress) return null
-    try {
-      const res = await fetch('/api/evm-balance', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chain: fundingChainMeta.apiChain, address: walletAddress }),
-      })
-      const data = await res.json().catch(() => ({})) as EvmBalanceResponse
-      if (!res.ok || !data.ok) {
-        return { fundingBalanceChecked: true, fundingBalanceError: data.error || `${fundingChainMeta.label} balance unavailable.` }
-      }
-      return { fundingBalance: data.balance, fundingBalanceChecked: true, fundingBalanceError: undefined }
-    } catch {
-      return { fundingBalanceChecked: true, fundingBalanceError: `${fundingChainMeta.label} balance unavailable.` }
-    }
-  }
-
   async function refreshPaymentWalletStatus(slug: string) {
     const cleanSlug = cleanAgentSlug(slug)
     if (!cleanSlug) return
     try {
-      const res = await fetch(`/api/agent-wallet?agent=${encodeURIComponent(cleanSlug)}&balance=1&chain=arc&x402=1&gatewayChain=${encodeURIComponent(fundChain)}`)
+      const res = await fetch(`/api/agent-wallet?agent=${encodeURIComponent(cleanSlug)}&balance=1&chain=arc&x402=1&gatewayChain=${encodeURIComponent(CREATOR_X402_GATEWAY_CHAIN)}`)
       const data = await res.json().catch(() => ({})) as AgentWalletStatus
       if (!res.ok || data.ok === false) return
       const walletAddress = data.walletAddress
-      const fundingStatus = await lookupGatewayFundingUsdcBalance(walletAddress)
-      const status = { ...data, ...(fundingStatus || {}) }
+      const status = { ...data }
       setAgentOptions(current => current.map(agent => (
         agent.slug === cleanSlug
           ? {
@@ -880,7 +848,6 @@ export function StreamGate() {
               balance: data.balance,
               balanceError: data.balanceError,
               balanceChecked: data.balanceChecked,
-              ...(fundingStatus || {}),
               gatewayBalance: data.gatewayBalance,
               gatewayBalanceError: data.gatewayBalanceError,
               gatewayBalanceChecked: data.gatewayBalanceChecked,
@@ -896,7 +863,7 @@ export function StreamGate() {
   useEffect(() => {
     if (paymentMode !== 'x402' || !safeAgentSlug || !selectedAgent?.walletAddress) return
     void refreshPaymentWalletStatus(safeAgentSlug)
-  }, [fundChain]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedAgent?.walletAddress]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function activatePaymentBalance() {
     const paymentSlug = selectedAgent?.slug || safeAgentSlug
@@ -916,7 +883,7 @@ export function StreamGate() {
       return
     }
     if (fundingAmountExceedsBalance) {
-      setWalletError(`Fund this wallet with more USDC on ${fundingChainMeta.label}, then activate x402.`)
+      setWalletError(`Fund this wallet with more USDC on ${CREATOR_X402_GATEWAY_LABEL}, then activate x402.`)
       return
     }
     setFundBusy(true)
@@ -924,7 +891,7 @@ export function StreamGate() {
       const res = await fetch('/api/agent-wallet', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'gateway-deposit', agentSlug: paymentSlug, amount: fundAmount, chain: fundChain }),
+        body: JSON.stringify({ action: 'gateway-deposit-arc', agentSlug: paymentSlug, amount: fundAmount }),
       })
       const data = await res.json().catch(() => ({})) as {
         ok?: boolean
@@ -1309,9 +1276,9 @@ export function StreamGate() {
                               {copiedWallet ? 'Copied' : 'Copy'}
                             </button>
                           </div>
-                          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
                             <div className="rounded-lg border border-white bg-white px-3 py-2">
-                              <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400">Arc wallet</p>
+                              <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400">{CREATOR_X402_GATEWAY_LABEL} wallet</p>
                               <p className="mt-0.5 truncate text-[12px] font-bold text-gray-900">
                                 {formatBalanceLabel(selectedAgent.balance) || (selectedAgent.balanceChecked ? '0 USDC' : 'Checking...')}
                               </p>
@@ -1320,16 +1287,7 @@ export function StreamGate() {
                               )}
                             </div>
                             <div className="rounded-lg border border-white bg-white px-3 py-2">
-                              <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400">{fundingChainMeta.label}</p>
-                              <p className="mt-0.5 truncate text-[12px] font-bold text-gray-900">
-                                {formatBalanceLabel(selectedAgent.fundingBalance) || (selectedAgent.fundingBalanceChecked ? '0 USDC' : 'Checking...')}
-                              </p>
-                              {selectedAgent.fundingBalanceError && (
-                                <p className="mt-1 text-[10px] font-medium text-amber-600">{selectedAgent.fundingBalanceError}</p>
-                              )}
-                            </div>
-                            <div className="rounded-lg border border-white bg-white px-3 py-2">
-                              <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400">Activated x402</p>
+                              <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400">Activated Arc x402</p>
                               <p className="mt-0.5 truncate text-[12px] font-bold text-gray-900">
                                 {formatBalanceLabel(selectedAgent.gatewayBalance) || (selectedAgent.gatewayBalanceChecked ? '0 USDC' : 'Checking...')}
                               </p>
@@ -1338,14 +1296,14 @@ export function StreamGate() {
                               )}
                             </div>
                           </div>
-                          {selectedAgent.fundingBalanceChecked && numericBalance(selectedAgent.fundingBalance) <= 0 && (
+                          {selectedAgent.balanceChecked && numericBalance(selectedAgent.balance) <= 0 && (
                             <p className="mt-2 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-[11px] font-medium leading-relaxed text-amber-700">
-                              Gateway activation needs USDC on {fundingChainMeta.label}. Arc USDC remains separate from x402 activation.
+                              Arc creator unlocks activate x402 from this reader wallet's Arc Testnet USDC balance.
                             </p>
                           )}
                           {fundingAmountExceedsBalance && (
                             <p className="mt-2 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-[11px] font-medium leading-relaxed text-amber-700">
-                              Amount is higher than the current {fundingChainMeta.label} balance.
+                              Amount is higher than the current {CREATOR_X402_GATEWAY_LABEL} wallet balance.
                             </p>
                           )}
                         </div>
