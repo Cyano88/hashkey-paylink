@@ -9,7 +9,9 @@
  */
 
 import express from 'express'
+import type { Response } from 'express'
 import { config as loadEnv } from 'dotenv'
+import { readFileSync } from 'fs'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import relayV2Handler         from './api/relay-v2.js'
@@ -83,6 +85,33 @@ loadEnv({ path: '.env', override: false })
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const app = express()
+
+function publicEnv(...names: string[]) {
+  for (const name of names) {
+    const value = process.env[name]?.trim()
+    if (value) return value
+  }
+  return ''
+}
+
+function runtimePublicConfigScript() {
+  const privyAppId = publicEnv('VITE_PRIVY_APP_ID', 'PRIVY_APP_ID')
+  const authBridge = publicEnv('VITE_AUTH_BRIDGE', 'AUTH_BRIDGE') || 'legacy'
+  const payload = JSON.stringify({
+    auth: {
+      authBridge,
+      privyAppId,
+      privyEnabled: Boolean(privyAppId && authBridge !== 'legacy'),
+    },
+  }).replace(/</g, '\\u003c')
+  return `<script>window.__HASH_PAYLINK_CONFIG__=${payload};</script>`
+}
+
+function sendSpaIndex(res: Response) {
+  const indexPath = join(__dirname, 'dist', 'index.html')
+  const html = readFileSync(indexPath, 'utf8')
+  res.type('html').send(html.replace('</head>', `${runtimePublicConfigScript()}</head>`))
+}
 
 app.use((_req, res, next) => {
   res.setHeader('X-Frame-Options', 'DENY')
@@ -203,11 +232,11 @@ app.use('/api', (req, res) => {
   res.status(404).json({ ok: false, error: `API route not found: ${req.method} ${req.originalUrl}` })
 })
 
-app.use(express.static(join(__dirname, 'dist')))
+app.use(express.static(join(__dirname, 'dist'), { index: false }))
 
 // ── SPA fallback — send index.html for all non-API routes ────────────────────
 app.get('*', (_req, res) => {
-  res.sendFile(join(__dirname, 'dist', 'index.html'))
+  sendSpaIndex(res)
 })
 
 // ── Listen ───────────────────────────────────────────────────────────────────

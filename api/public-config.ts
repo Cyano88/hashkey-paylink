@@ -10,8 +10,15 @@ function publicEnv(...names: string[]) {
 
 export default function handler(_req: Request, res: Response) {
   res.setHeader('Cache-Control', 'no-store')
+  const privyAppId = publicEnv('VITE_PRIVY_APP_ID', 'PRIVY_APP_ID')
+  const authBridge = publicEnv('VITE_AUTH_BRIDGE', 'AUTH_BRIDGE') || 'legacy'
   res.json({
     ok: true,
+    auth: {
+      authBridge,
+      privyAppId,
+      privyEnabled: Boolean(privyAppId && authBridge !== 'legacy'),
+    },
     circle: {
       userWalletAppId: publicEnv('VITE_CIRCLE_USER_WALLET_APP_ID', 'CIRCLE_USER_WALLET_APP_ID'),
       arcTestnetUserWalletAppId: publicEnv(
