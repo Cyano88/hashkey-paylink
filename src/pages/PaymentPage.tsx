@@ -78,6 +78,25 @@ const CHAINS: ChainKey[] = ['base', 'solana', 'arbitrum']
 const POLYMARKET_SIGNUP_URL = 'https://polymarket.com'
 const POLYMARKET_LOGO = '/brand/polymarket-logo.png'
 
+function PolyDeskVectorIcon({ className = '' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className={className} fill="none">
+      <path
+        d="M5.75 4.75h12.5v12.5H5.75z"
+        stroke="currentColor"
+        strokeWidth="1.9"
+        strokeLinejoin="round"
+      />
+      <path
+        d="m5.75 17.25 12.5-12.5M8.9 4.75v12.5M15.1 4.75v12.5"
+        stroke="currentColor"
+        strokeWidth="1.9"
+        strokeLinecap="round"
+      />
+    </svg>
+  )
+}
+
 function agentAvatarHue(seed: string) {
   let hash = 0
   for (let i = 0; i < seed.length; i += 1) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0
@@ -319,8 +338,8 @@ export default function PaymentPage() {
   const polymarketReturnToAgentHash = polymarketReturnTarget === 'agent-hash-polydesk-portfolio'
   const polymarketHelperOwner = (searchParams.get('helperOwner') || '').trim().slice(0, 160)
   const telegramUrl = telegramReturnUrl(searchParams)
-  const polymarketPortfolioUrl = '/telegram/payment-links?section=market-tools&service=poly-portfolio'
-  const polymarketStandalonePortfolioUrl = '/polydesk?service=portfolio'
+  const polymarketPortfolioTradingUrl = '/telegram/payment-links?section=market-tools&service=poly-portfolio&notice=polymarket-funding-complete&portfolio=trading&wallet=balance'
+  const polymarketStandalonePortfolioTradingUrl = '/polydesk?service=portfolio&notice=polymarket-funding-complete&portfolio=trading&wallet=balance'
   const polymarketAgentHashUrl = (() => {
     const params = new URLSearchParams({
       section: 'market-tools',
@@ -329,6 +348,8 @@ export default function PaymentPage() {
       mode: 'polydesk',
       poly: 'portfolio',
       notice: 'polymarket-funding-complete',
+      portfolio: 'trading',
+      wallet: 'balance',
     })
     if (polymarketHelperOwner) params.set('helperOwner', polymarketHelperOwner)
     params.set('back', `${window.location.pathname}${window.location.search}${window.location.hash}`)
@@ -347,8 +368,8 @@ export default function PaymentPage() {
         polymarketReturnToAgentHash
           ? polymarketAgentHashUrl
           : polymarketReturnToStandalonePortfolio
-          ? polymarketStandalonePortfolioUrl
-          : polymarketPortfolioUrl,
+          ? polymarketStandalonePortfolioTradingUrl
+          : polymarketPortfolioTradingUrl,
       )
       return
     }
@@ -3452,13 +3473,11 @@ export default function PaymentPage() {
                 )}
                 {isPolymarketBridge && (
                   <a
-                    href={POLYMARKET_SIGNUP_URL}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                    href={polymarketReturnToStandalonePortfolio ? polymarketStandalonePortfolioTradingUrl : polymarketPortfolioTradingUrl}
                     className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98]"
                   >
-                    <img src={POLYMARKET_LOGO} alt="" className="h-4 w-4 invert dark:invert-0" />
-                    Trade on Polymarket
+                    <PolyDeskVectorIcon className="h-4 w-4" />
+                    Trade on PolyDesk
                   </a>
                 )}
               </div>
