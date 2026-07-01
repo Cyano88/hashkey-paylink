@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { usePrivy } from '@privy-io/react-auth'
 import { useSearchParams }    from 'react-router-dom'
-import { useAccount, useChainId, useSwitchChain, useWriteContract } from 'wagmi'
+import { useAccount, useChainId, useConnect, useSwitchChain, useWriteContract } from 'wagmi'
 import { useQuery }           from '@tanstack/react-query'
 import { createPublicClient, http, defineChain, parseAbi } from 'viem'
 import { usePoAStream }       from '../../hooks/usePoAStream'
@@ -387,6 +387,7 @@ export function StreamGate() {
 
   const { address, isConnected }  = useAccount()
   const chainId                   = useChainId()
+  const { connect, connectors, isPending: walletConnectPending } = useConnect()
   const { switchChain }           = useSwitchChain()
   const { writeContractAsync }    = useWriteContract()
   const isOnArc = chainId === ARC_CHAIN_ID
@@ -719,6 +720,15 @@ export function StreamGate() {
       return
     }
     await unlockWithAgentX402(selectedAgent.slug)
+  }
+
+  function handleConnectWallet() {
+    if (PRIVY_AUTH_ENABLED) {
+      loginPrivy()
+      return
+    }
+    const connector = connectors.find(item => item.id === 'injected') ?? connectors[0]
+    if (connector) connect({ connector })
   }
 
   async function startPaymentWalletLogin(slugOverride?: string) {
@@ -1392,19 +1402,14 @@ export function StreamGate() {
             ) : (
               <>
                 {!isConnected && (
-                  PRIVY_AUTH_ENABLED ? (
-                    <button
-                      onClick={() => loginPrivy()}
-                      className="flex min-h-[48px] items-center justify-center gap-2 rounded-xl px-5 py-3 text-[13px] font-semibold text-white transition-all active:scale-[0.98]"
-                      style={{ background: '#111827' }}
-                    >
-                      Connect wallet
-                    </button>
-                  ) : (
-                    <div className="rounded-xl border border-gray-100 bg-gray-50 px-5 py-3 text-center text-[12px] text-gray-500">
-                      Connect your wallet to continue.
-                    </div>
-                  )
+                  <button
+                    onClick={handleConnectWallet}
+                    disabled={!PRIVY_AUTH_ENABLED && (walletConnectPending || connectors.length === 0)}
+                    className="flex min-h-[48px] items-center justify-center gap-2 rounded-xl px-5 py-3 text-[13px] font-semibold text-white transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+                    style={{ background: '#111827' }}
+                  >
+                    {walletConnectPending ? <><Spinner />Connecting...</> : 'Connect wallet'}
+                  </button>
                 )}
 
                 {isConnected && !isOnArc && (
