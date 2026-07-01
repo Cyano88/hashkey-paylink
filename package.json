@@ -9,7 +9,7 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "node scripts/verify-prebuilt-dist.mjs",
+    "build": "vite build",
     "build:frontend": "vite build",
     "build:source": "vite build",
     "typecheck": "tsc",
