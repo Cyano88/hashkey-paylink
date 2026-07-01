@@ -1506,6 +1506,8 @@ export default function TelegramPaymentLinks() {
               onOpenWorldCup={() => setActiveService('poly-worldcup')}
               telegramOwner={telegramIdentity.isStable ? telegramIdentity.owner : ''}
               telegramId={telegramIdentity.isStable ? telegramIdentity.owner.replace(/^telegram:/, '') : ''}
+              initialPortfolioAction={searchParams.get('portfolio') === 'trading' ? 'trading' : null}
+              initialTradingWalletTab={searchParams.get('wallet') === 'balance' ? 'balance' : undefined}
             />
           ) : activeService === 'poly-worldcup' ? (
             <PolyWorldCupHubPanel
@@ -5918,6 +5920,7 @@ function buildPolymarketPayLink({
   returnToPortfolio,
   returnToStandalonePortfolio,
   returnToAgentHash,
+  returnToTradingWallet,
   requestId,
   helperOwner,
 }: {
@@ -5929,6 +5932,7 @@ function buildPolymarketPayLink({
   returnToPortfolio?: boolean
   returnToStandalonePortfolio?: boolean
   returnToAgentHash?: boolean
+  returnToTradingWallet?: boolean
   requestId?: string
   helperOwner?: string
 }) {
@@ -5947,6 +5951,10 @@ function buildPolymarketPayLink({
   if (returnToAgentHash) params.set('return', 'agent-hash-polydesk-portfolio')
   if (returnToStandalonePortfolio) params.set('return', 'polydesk-portfolio')
   if (returnToPortfolio) params.set('return', 'poly-portfolio')
+  if (returnToTradingWallet) {
+    params.set('portfolio', 'trading')
+    params.set('wallet', 'balance')
+  }
   if (helperOwner) params.set('helperOwner', helperOwner)
   if (funding) params.set('funding', funding)
   return `${window.location.origin}/pay?${params.toString()}`
@@ -6270,6 +6278,8 @@ export function PolyPortfolioPanel({
   telegramOwner,
   telegramId,
   surface = 'telegram',
+  initialPortfolioAction = null,
+  initialTradingWalletTab,
 }: {
   onBack: () => void
   onOpenLpScout: () => void
@@ -6277,6 +6287,8 @@ export function PolyPortfolioPanel({
   telegramOwner?: string
   telegramId?: string
   surface?: 'telegram' | 'standalone'
+  initialPortfolioAction?: 'watch' | 'trading' | 'external' | null
+  initialTradingWalletTab?: 'balance' | 'fund' | 'withdraw' | 'positions'
 }) {
   const { ready: privyReady, authenticated, login, getAccessToken } = usePrivy()
   const { wallets: privyWallets } = useWallets()
@@ -6333,7 +6345,8 @@ export function PolyPortfolioPanel({
   const [settingsDraft, setSettingsDraft] = useState<PolymarketAlertSettings | null>(null)
   const [settingsSaving, setSettingsSaving] = useState(false)
   const [addressCopied, setAddressCopied] = useState(false)
-  const [unsignedPortfolioAction, setUnsignedPortfolioAction] = useState<'watch' | 'trading' | 'external' | null>(null)
+  const initialPortfolioActionApplied = useRef(Boolean(initialPortfolioAction))
+  const [unsignedPortfolioAction, setUnsignedPortfolioAction] = useState<'watch' | 'trading' | 'external' | null>(initialPortfolioAction)
   const [unsignedWatchAddress, setUnsignedWatchAddress] = useState('')
   const [unsignedExternalAddress, setUnsignedExternalAddress] = useState('')
   const [unsignedExternalAmount, setUnsignedExternalAmount] = useState('')
@@ -6353,7 +6366,7 @@ export function PolyPortfolioPanel({
   const [tradingPusdBalance, setTradingPusdBalance] = useState<{ raw: string; formatted: string } | null>(null)
   const [tradingPusdLoading, setTradingPusdLoading] = useState(false)
   const [tradingPusdError, setTradingPusdError] = useState('')
-  const [tradingWalletTab, setTradingWalletTab] = useState<'balance' | 'fund' | 'withdraw' | 'positions'>('balance')
+  const [tradingWalletTab, setTradingWalletTab] = useState<'balance' | 'fund' | 'withdraw' | 'positions'>(initialPortfolioAction === 'trading' ? (initialTradingWalletTab ?? 'balance') : 'balance')
   const [tradingWalletNetwork, setTradingWalletNetwork] = useState<PolymarketBridgeNetwork>('base')
   const [watchAccountTab, setWatchAccountTab] = useState<'balance' | 'positions' | 'alerts'>('balance')
   const [positionStatusTab, setPositionStatusTab] = useState<PolymarketPositionStatus>('live')
@@ -6396,6 +6409,15 @@ export function PolyPortfolioPanel({
     () => livePositions.filter(position => polymarketPositionStatus(position) === positionStatusTab),
     [livePositions, positionStatusTab],
   )
+
+  useEffect(() => {
+    if (!initialPortfolioAction || initialPortfolioActionApplied.current) return
+    initialPortfolioActionApplied.current = true
+    setUnsignedPortfolioAction(initialPortfolioAction)
+    if (initialPortfolioAction === 'trading') {
+      setTradingWalletTab(initialTradingWalletTab ?? 'balance')
+    }
+  }, [initialPortfolioAction, initialTradingWalletTab])
 
   useEffect(() => {
     if (privyReady) {
@@ -6731,6 +6753,7 @@ export function PolyPortfolioPanel({
         polymarketWallet: polymarketDepositWallet,
         returnToPortfolio: surface !== 'standalone',
         returnToStandalonePortfolio: surface === 'standalone',
+        returnToTradingWallet: true,
         requestId,
       })
       setFundResult({

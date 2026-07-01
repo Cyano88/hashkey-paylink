@@ -320,6 +320,8 @@ export default function PolyDesk() {
                 telegramOwner={ownerKey}
                 telegramId=""
                 surface="standalone"
+                initialPortfolioAction={searchParams.get('portfolio') === 'trading' ? 'trading' : null}
+                initialTradingWalletTab={searchParams.get('wallet') === 'balance' ? 'balance' : undefined}
               />
             ) : serviceView === 'worldcup' ? (
               <PolyWorldCupHubPanel
