@@ -618,6 +618,8 @@ export function StreamGate() {
   const [contentError,  setContentError]  = useState<string | null>(null)
   const [gatewayPaying, setGatewayPaying] = useState(false)
   const [gatewayTx, setGatewayTx] = useState<string | null>(null)
+  const [gatewayReceiptId, setGatewayReceiptId] = useState<string | null>(null)
+  const gatewayTxIsExplorerHash = /^0x[a-fA-F0-9]{64}$/.test(gatewayTx ?? '')
 
   const legacyFullyAuthorised = isConnected && isOnArc && passkey.registered && isApproved
   const fullyAuthorised = paymentMode === 'x402' ? contentState === 'ready' : legacyFullyAuthorised
@@ -645,6 +647,7 @@ export function StreamGate() {
         type?: string
         content?: string
         payment?: { transaction?: string } | null
+        receiptActivityId?: string | null
         walletAddress?: string
         error?: string
         code?: string
@@ -652,6 +655,7 @@ export function StreamGate() {
       if (!data.ok || !data.type || !data.content) throw new Error(data.error ?? 'Could not unlock content')
       setFetchedContent({ type: data.type as 'text' | 'url' | 'scores', content: data.content })
       setGatewayTx(data.payment?.transaction ?? null)
+      setGatewayReceiptId(data.receiptActivityId ?? null)
       setContentState('ready')
       setCircleNotice(data.walletAddress ? `Paid by ${shortAddress(data.walletAddress)}` : 'Payment complete')
     } catch (err) {
@@ -1621,14 +1625,37 @@ export function StreamGate() {
         )}
 
         {paymentMode === 'x402' && fullyAuthorised && gatewayTx && (
-          <div className="border-t border-gray-100 bg-emerald-50/60 px-4 py-3">
-            <button
-              type="button"
-              onClick={() => window.open(`https://testnet.arcscan.app/tx/${gatewayTx}`, '_blank', 'noopener,noreferrer')}
-              className="flex w-full items-center justify-center gap-1.5 text-[11px] font-semibold text-emerald-700 hover:text-emerald-800 transition-colors"
-            >
+          <div className="border-t border-gray-100 bg-emerald-50/60 px-4 py-3 space-y-2">
+            <div className="flex items-center justify-center gap-1.5 text-[11px] font-semibold text-emerald-700">
               <CheckIcon />Circle Gateway paid - {gatewayTx.slice(0, 8)}...{gatewayTx.slice(-6)}
-            </button>
+            </div>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              {gatewayReceiptId && (
+                <button
+                  type="button"
+                  onClick={() => window.open(`/receipt/${gatewayReceiptId}`, '_blank', 'noopener,noreferrer')}
+                  className="rounded-lg border border-emerald-200 bg-white px-2.5 py-1.5 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-50 transition-colors"
+                >
+                  View receipt
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => navigator.clipboard?.writeText(gatewayTx).catch(() => {})}
+                className="rounded-lg border border-emerald-200 bg-white px-2.5 py-1.5 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-50 transition-colors"
+              >
+                Copy reference
+              </button>
+              {gatewayTxIsExplorerHash && (
+                <button
+                  type="button"
+                  onClick={() => window.open(`https://testnet.arcscan.app/tx/${gatewayTx}`, '_blank', 'noopener,noreferrer')}
+                  className="rounded-lg border border-emerald-200 bg-white px-2.5 py-1.5 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-50 transition-colors"
+                >
+                  ArcScan
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>

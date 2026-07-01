@@ -44,7 +44,7 @@ type ReceiptResponse = {
     status?: string
     error?: string
     httpStatus?: number
-    transfer?: unknown
+    transfer?: Record<string, unknown>
   }
 }
 
@@ -53,8 +53,8 @@ export default function X402Receipt() {
   const navigate = useNavigate()
   const [data, setData] = useState<ReceiptResponse | null>(null)
   const [busy, setBusy] = useState(true)
+  const [verifyingCircle, setVerifyingCircle] = useState(false)
   const [shared, setShared] = useState(false)
-  const [circleNotice, setCircleNotice] = useState(false)
   const [paylinkReceiptImage, setPaylinkReceiptImage] = useState('')
 
   async function load() {
@@ -91,6 +91,10 @@ export default function X402Receipt() {
   const legal = data?.receipt?.legal ?? {}
   const governance = data?.receipt?.governance ?? {}
   const circleOk = data?.circle?.ok
+  const circleTransfer = data?.circle?.transfer
+  const circleStatus = String(circleTransfer?.status ?? data?.circle?.status ?? '')
+  const circleTxHash = String(circleTransfer?.transactionHash ?? '')
+  const circleTxIsExplorerHash = /^0x[a-fA-F0-9]{64}$/.test(circleTxHash)
   const paylinkReceipt = data?.receipt?.receiptId ? data.receipt as PaylinkReceipt : null
   const receiptFile = useMemo(() => {
     const receipt = data?.receipt
@@ -176,9 +180,15 @@ export default function X402Receipt() {
     window.setTimeout(() => setShared(false), 1800)
   }
 
-  function showCircleComingSoon() {
-    setCircleNotice(true)
-    window.setTimeout(() => setCircleNotice(false), 5000)
+  async function verifyWithCircle() {
+    if (!activityId || verifyingCircle) return
+    setVerifyingCircle(true)
+    try {
+      const res = await fetch(`/api/x402/receipt?id=${encodeURIComponent(activityId)}&verify=1`)
+      setData(await res.json() as ReceiptResponse)
+    } finally {
+      setVerifyingCircle(false)
+    }
   }
 
   async function downloadReceipt() {
@@ -308,24 +318,34 @@ export default function X402Receipt() {
                   : 'border-amber-100 bg-amber-50 text-amber-700 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-200'
               }`}>
                 {circleOk ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
-                {circleOk ? 'Circle transfer verified' : data.circle.error ?? 'Circle verification unavailable'}
+                {circleOk
+                  ? `Circle transfer verified${circleStatus ? ` - ${circleStatus}` : ''}`
+                  : data.circle.error ?? 'Circle verification unavailable'}
               </div>
             )}
 
-            {circleNotice && (
-              <div className="mt-3 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-700 dark:border-white/10 dark:bg-white/[0.05] dark:text-gray-200">
-                Circle verification is coming soon.
-              </div>
+            {circleTxIsExplorerHash && (
+              <a
+                href={`https://testnet.arcscan.app/tx/${circleTxHash}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-3 flex items-center gap-2 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 transition-colors hover:bg-emerald-100 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-200"
+              >
+                <CheckCircle2 className="h-4 w-4" />
+                Circle settlement transaction
+                <ExternalLink className="h-3 w-3" />
+              </a>
             )}
 
             <div className="mt-5 grid gap-2 sm:grid-cols-2">
               <button
                 type="button"
-                onClick={showCircleComingSoon}
+                onClick={verifyWithCircle}
+                disabled={verifyingCircle}
                 className="inline-flex items-center justify-center gap-2 rounded-xl bg-gray-900 px-4 py-3 text-sm font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950"
               >
-                <ShieldCheck className="h-4 w-4" />
-                Verify with Circle
+                {verifyingCircle ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                {verifyingCircle ? 'Checking Circle' : 'Verify with Circle'}
               </button>
               <button
                 type="button"
