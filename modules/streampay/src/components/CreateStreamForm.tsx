@@ -1310,7 +1310,7 @@ export function CreateStreamForm() {
     if (isAgenticStreaming && !agenticReportEmailValid) return 'Enter the email that should receive daily LP research'
     if (isAgenticStreaming) return 'Daily LP research starts after your stream is live'
     if (circleAvailable) return 'Secure email sign-in starts your Arc stream'
-    if (!isConnected) return 'Connect your wallet in the header above to continue'
+    if (!isConnected) return 'Connect your wallet to continue'
     if (!isOnArc) return null
     if (insufficientFunds) return null
     if (recipientEmailMode) return 'Send recipient invite, then check readiness before deploying'

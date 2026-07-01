@@ -1392,9 +1392,19 @@ export function StreamGate() {
             ) : (
               <>
                 {!isConnected && (
-                  <div className="rounded-xl border border-gray-100 bg-gray-50 px-5 py-3 text-center text-[12px] text-gray-500">
-                    Connect your wallet in the header above
-                  </div>
+                  PRIVY_AUTH_ENABLED ? (
+                    <button
+                      onClick={() => loginPrivy()}
+                      className="flex min-h-[48px] items-center justify-center gap-2 rounded-xl px-5 py-3 text-[13px] font-semibold text-white transition-all active:scale-[0.98]"
+                      style={{ background: '#111827' }}
+                    >
+                      Connect wallet
+                    </button>
+                  ) : (
+                    <div className="rounded-xl border border-gray-100 bg-gray-50 px-5 py-3 text-center text-[12px] text-gray-500">
+                      Connect your wallet to continue.
+                    </div>
+                  )
                 )}
 
                 {isConnected && !isOnArc && (
