@@ -7,7 +7,7 @@ import type {
   UnifiedBalanceChainIdentifier,
 } from '@circle-fin/unified-balance-kit'
 
-export type UnifiedBalanceChainKey = 'base' | 'arc' | 'arbitrum' | 'solana' | 'starknet'
+export type UnifiedBalanceChainKey = 'base' | 'arc' | 'arbitrum' | 'solana'
 
 export interface UnifiedBalanceBreakdown {
   key: UnifiedBalanceChainKey
@@ -20,7 +20,6 @@ export interface UnifiedBalanceBreakdown {
 export interface UnifiedBalanceQuery {
   evmAddress?: string
   solanaAddress?: string
-  starknetAddress?: string
   chains: UnifiedBalanceChainKey[]
 }
 
@@ -43,7 +42,6 @@ const LABEL_BY_KEY: Record<UnifiedBalanceChainKey, string> = {
   arc: 'Arc',
   arbitrum: 'Arbitrum',
   solana: 'Solana',
-  starknet: 'Starknet',
 }
 
 const BALANCE_TIMEOUT_MS = 10_000
@@ -146,23 +144,11 @@ async function querySolanaWalletBalance(address: string): Promise<number> {
   return Number(BigInt(data.balance ?? '0')) / 1_000_000
 }
 
-async function queryStarknetBalance(address: string): Promise<number> {
-  const response = await fetchJsonWithTimeout('/api/starknet-balance', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ accountAddress: address }),
-  }, 'Starknet')
-  const data = await response.json() as { ok?: boolean; balance?: string; error?: string }
-  if (!response.ok || !data.ok) throw new Error(data.error ?? 'Starknet balance query failed')
-  return Number(BigInt(data.balance ?? '0x0')) / 1_000_000
-}
-
 export async function queryBalances(query: UnifiedBalanceQuery): Promise<UnifiedBalanceResult> {
   const selected = Array.from(new Set(query.chains))
   let rows = emptyRows(selected)
 
   for (const key of selected) {
-    if (key === 'starknet') continue
     const address = key === 'solana' ? query.solanaAddress : query.evmAddress
     if (!address) continue
     try {
@@ -192,18 +178,6 @@ export async function queryBalances(query: UnifiedBalanceQuery): Promise<Unified
           error: error instanceof Error ? error.message : 'Balance query failed',
         })
       }
-    }
-  }
-
-  if (query.starknetAddress && selected.includes('starknet')) {
-    try {
-      const balance = await queryStarknetBalance(query.starknetAddress)
-      rows = updateRow(rows, 'starknet', { balance, status: 'ok', error: undefined })
-    } catch (error) {
-      rows = updateRow(rows, 'starknet', {
-        status: 'error',
-        error: error instanceof Error ? error.message : 'Starknet balance query failed',
-      })
     }
   }
 

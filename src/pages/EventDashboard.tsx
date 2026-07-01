@@ -55,7 +55,6 @@ export default function EventDashboard() {
   const eventId   = searchParams.get('id')    ?? ''
   const evm       = getPaylinkParam(searchParams, 'evm', 'e')
   const sol       = getPaylinkParam(searchParams, 'sol', 's')
-  const stark     = getPaylinkParam(searchParams, 'stark', 'k')
   const amt       = getPaylinkParam(searchParams, 'amt', 'a')
   const eventName = getPaylinkParam(searchParams, 'name', 'm') || 'Event'
   const netParam   = getPaylinkParam(searchParams, 'net', 'n')
@@ -69,17 +68,14 @@ export default function EventDashboard() {
   const telegramUrl = telegramReturnUrl(searchParams)
   const evmValid = isAddress(evm)
   const solanaValid = isValidSolanaAddress(sol)
-  const starkValid = /^0x[0-9a-fA-F]{64}$/.test(stark)
   const balanceChains: UnifiedBalanceChainKey[] = (() => {
     if (multiParam === '1') {
       const chains: UnifiedBalanceChainKey[] = []
       if (evmValid) chains.push('base', 'arc', 'arbitrum')
       if (solanaValid) chains.push('solana')
-      if (starkValid) chains.push('starknet')
       return chains
     }
     if (netParam === 'solana') return solanaValid ? ['solana'] : []
-    if (netParam === 'starknet') return starkValid ? ['starknet'] : []
     if (netParam === 'base' || netParam === 'arc' || netParam === 'arbitrum') return evmValid ? [netParam] : []
     return evmValid ? ['base'] : []
   })()
@@ -96,17 +92,14 @@ export default function EventDashboard() {
     netParam                ? [] :
     ['base', 'arc', 'arbitrum']
   const watchSolana = solanaValid && (multiParam === '1' || netParam === 'solana')
-  const watchStarknet = starkValid && (multiParam === '1' || netParam === 'starknet')
 
   // Human-readable label for the live-watching indicator
   const watchLabel =
     multiParam === '1'       ? 'All Chains' :
     netParam === 'base'      ? 'Base'       :
     netParam === 'arc'       ? 'Arc'        :
-    netParam === 'starknet'  ? 'Starknet'   :
     netParam === 'solana'    ? 'Solana'     :
     netParam === 'arbitrum'  ? 'Arbitrum'   :
-    netParam === 'hashkey'   ? 'HashKey'    :
     'EVM Chains'
 
   // Server registry is the single source of truth for the payment log.
@@ -116,7 +109,6 @@ export default function EventDashboard() {
   const [lastRefresh,  setLastRefresh]  = useState<Date | null>(null)
   const [dashCopied,   setDashCopied]   = useState(false)
   const [linkCopied,   setLinkCopied]   = useState(false)
-  const [hskPrice,     setHskPrice]     = useState<number | null>(null)
   const [counterFlash, setCounterFlash] = useState(false)
   const [toasts,       setToasts]       = useState<Toast[]>([])
   const [balanceRows,  setBalanceRows]  = useState<UnifiedBalanceBreakdown[]>([])
@@ -129,19 +121,6 @@ export default function EventDashboard() {
   const qrHiResRef = useRef<HTMLDivElement>(null)
   const toastId    = useRef(0)
 
-  // Fetch HSK price once for display — only when dashboard has HSK payments
-  useEffect(() => {
-    const hasHsk = netParam === 'hashkey' || payments.some(p => p.chain === 'hashkey')
-    if (!hasHsk || hskPrice !== null) return
-    fetch('https://api.coingecko.com/api/v3/simple/price?ids=hashkey-token&vs_currencies=usd', { signal: AbortSignal.timeout(5_000) })
-      .then(r => r.json())
-      .then((d: { 'hashkey-token'?: { usd?: number } }) => {
-        const price = d['hashkey-token']?.usd
-        if (price && price > 0) setHskPrice(price)
-      })
-      .catch(() => { /* price display is optional — fail silently */ })
-  }, [netParam, payments, hskPrice])
-
   const paymentLink = (() => {
     const p = new URLSearchParams({ m: eventName, v: '1', id: eventId })
     if (flexParam === '1') p.set('f', '1')
@@ -149,7 +128,6 @@ export default function EventDashboard() {
     if (multiParam === '1') {
       p.set('x', '1')
       setPaylinkParam(p, 'e', evm)
-      setPaylinkParam(p, 'k', stark)
       if (solanaValid) setPaylinkParam(p, 's', sol.trim())
     } else {
       setPaylinkParam(p, 'n', netParam)
@@ -185,7 +163,6 @@ export default function EventDashboard() {
     queryBalances({
       evmAddress: evmValid ? evm : undefined,
       solanaAddress: solanaValid ? sol : undefined,
-      starknetAddress: starkValid ? stark : undefined,
       chains: balanceChains,
     })
       .then(result => {
@@ -200,7 +177,7 @@ export default function EventDashboard() {
         setGlobalBalance(0)
         setBalanceRows(balanceChains.map(key => ({
           key,
-          label: key === 'base' ? 'Base' : key === 'arc' ? 'Arc' : key === 'arbitrum' ? 'Arbitrum' : key === 'solana' ? 'Solana' : 'Starknet',
+          label: key === 'base' ? 'Base' : key === 'arc' ? 'Arc' : key === 'arbitrum' ? 'Arbitrum' : 'Solana',
           balance: 0,
           status: 'error',
         })))
@@ -211,7 +188,7 @@ export default function EventDashboard() {
 
     return () => { cancelled = true }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [evm, sol, stark, multiParam, netParam])
+  }, [evm, sol, multiParam, netParam])
 
   // ── Server registry poll (every 5s) — only source for the payment log ──────
   const fetchPayments = useCallback(async () => {
@@ -238,10 +215,10 @@ export default function EventDashboard() {
   // This gives the organiser an instant visual ping when a payment arrives,
   // regardless of whether the payer's name has been registered yet.
   useEffect(() => {
-    if (evmChainsToWatch.length === 0 && !watchSolana && !watchStarknet) return
+    if (evmChainsToWatch.length === 0 && !watchSolana) return
 
     const fromBlock: Record<string, bigint> = {}
-    const lastBalance: Partial<Record<'solana' | 'starknet', number>> = {}
+    const lastBalance: Partial<Record<'solana', number>> = {}
 
     function flashReceived(addr: string, amount: string, chainLabel: string) {
       setCounterFlash(true)
@@ -300,40 +277,20 @@ export default function EventDashboard() {
       } catch { /* silent - watcher is best-effort */ }
     }
 
-    async function pollStarknetBalance() {
-      try {
-        const response = await fetch('/api/starknet-balance', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ accountAddress: stark.trim() }),
-        })
-        const data = await response.json() as { ok?: boolean; balance?: string }
-        if (!response.ok || !data.ok) return
-        const balance = Number(BigInt(data.balance ?? '0x0')) / 1_000_000
-        const previous = lastBalance.starknet
-        lastBalance.starknet = balance
-        if (previous == null) return
-        const delta = balance - previous
-        if (delta > 0.0000005) flashReceived(stark.trim(), delta.toFixed(2), CHAIN_META.starknet.label)
-      } catch { /* silent - watcher is best-effort */ }
-    }
-
     const t = setInterval(() => {
       for (const key of evmChainsToWatch) {
         void pollChain(key, CHAIN_META[key].label, CHAIN_META[key].decimals)
       }
       if (watchSolana) void pollSolanaBalance()
-      if (watchStarknet) void pollStarknetBalance()
     }, 5_000)
 
     for (const key of evmChainsToWatch) {
       void pollChain(key, CHAIN_META[key].label, CHAIN_META[key].decimals)
     }
     if (watchSolana) void pollSolanaBalance()
-    if (watchStarknet) void pollStarknetBalance()
 
     return () => clearInterval(t)
-  }, [evm, evmChainsToWatch.join(','), fetchPayments, sol, stark, watchSolana, watchStarknet])
+  }, [evm, evmChainsToWatch.join(','), fetchPayments, sol, watchSolana])
 
   // ── QR download ───────────────────────────────────────────────────────────
   function downloadQR() {
@@ -386,7 +343,7 @@ export default function EventDashboard() {
     setLinkCopied(true); setTimeout(() => setLinkCopied(false), 2000)
   }
 
-  if (!eventId || (!evm && !sol && !stark)) {
+  if (!eventId || (!evm && !sol)) {
     return (
       <div className="mx-auto max-w-md py-20 text-center animate-fade-in">
         <p className="text-gray-500 text-sm">Invalid event link — missing event ID or recipient address.</p>
@@ -608,9 +565,7 @@ export default function EventDashboard() {
                           {parseFloat(p.amount || '0').toFixed(4)} HSK
                         </p>
                         <p className="text-[10px] text-gray-400">
-                          {hskPrice
-                            ? `≈ $${(parseFloat(p.amount || '0') * hskPrice).toFixed(2)}`
-                            : 'HashKey'}
+                          Legacy HashKey
                         </p>
                       </>
                     ) : (

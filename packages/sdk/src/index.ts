@@ -16,14 +16,12 @@ export {
   PLATFORM_TREASURY,
   EVM_TREASURY,
   SOLANA_TREASURY_OWNER,
-  STARK_TREASURY,
 } from './chains'
 export {
   buildPayLinkUrl,
   isLikelySolanaAddress,
   isSupportedNetwork,
   isValidEvmAddress,
-  isValidStarknetAddress,
   isValidUsdcAmount,
 } from './url'
 export type { ChainKey } from './chains'

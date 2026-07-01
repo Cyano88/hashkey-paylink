@@ -3,7 +3,6 @@ import { Outlet, Link, useLocation, useSearchParams } from 'react-router-dom'
 import { useAccount, useDisconnect, useSwitchChain } from 'wagmi'
 import { usePrivy } from '@privy-io/react-auth'
 import { ChevronDown, LogOut, X, Send, ExternalLink, Sun, Moon } from 'lucide-react'
-import { useStarknet } from './lib/StarknetContext'
 import { useSolana }   from './lib/SolanaContext'
 import { useTheme }    from './lib/ThemeContext'
 import { CHAIN_META } from './lib/chains'
@@ -17,8 +16,6 @@ import { PrivyDisconnectButton } from './lib/PrivyDisconnectButton'
 const TX_HASH_RE = /^0x[0-9a-fA-F]{1,64}$/
 const EVM_ADDR_RE = /^0x[0-9a-fA-F]{40}$/
 const SOLANA_ADDR_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/
-const STARKNET_ADDR_RE = /^0x[0-9a-fA-F]{64}$/
-
 const fmtAddr = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`
 
 function detectInput(raw: string): 'tx_hash' | 'evm_addr' | 'unknown' {
@@ -132,7 +129,7 @@ function AgentHashThinkingIndicator({ mode }: { mode: AgentHashMode }) {
 
 const WELCOME: ChatMsg = {
   from: 'bot',
-  text: 'Hello! I am the Hash PayLink support assistant.\n\nI can help you create payment links, understand how to pay, track transactions, explain fees, and answer questions about Base, HashKey, Arc, Starknet, and Solana.\n\nPaste a transaction hash to track it instantly, or describe what you need help with.',
+  text: 'Hello! I am the Hash PayLink support assistant.\n\nI can help you create payment links, understand how to pay, track transactions, explain fees, and answer questions about Base, Arc, Arbitrum, and Solana.\n\nPaste a transaction hash to track it instantly, or describe what you need help with.',
 }
 
 const CONTACT_MSG: ChatMsg = {
@@ -150,7 +147,7 @@ function keywordReply(input: string): ChatMsg | null {
 
   // ── Multi-payer / event / collection / dashboard ─────────────────────────────
   if (has('multi', 'multi-payer', 'collection', 'collect', 'event', 'group payment', 'organis', 'organiz', 'dashboard', 'attendee', 'fundrais', 'contributor', 'many payers', 'multiple payers', 'multiple people', 'many people', 'group order', 'split'))
-    return { from: 'bot', text: 'Multi-Payer Collection mode lets you collect payments from many people with a single link — ideal for events, group orders, or fundraises.\n\nHow it works:\n1. Enable "Multi-Payer Collection" when creating your link.\n2. Share the link or QR code with participants.\n3. Each payer enters their name or handle before paying — this is logged automatically.\n4. The organizer dashboard shows every payment in real time: name, amount, chain, and timestamp.\n5. Export the full payment list as CSV anytime.\n\nThe dashboard auto-refreshes every 5 seconds. Payments across Base, HashKey, Arc, Starknet, and Solana all appear in one unified view.' }
+    return { from: 'bot', text: 'Multi-Payer Collection mode lets you collect payments from many people with a single link — ideal for events, group orders, or fundraises.\n\nHow it works:\n1. Enable "Multi-Payer Collection" when creating your link.\n2. Share the link or QR code with participants.\n3. Each payer enters their name or handle before paying — this is logged automatically.\n4. The organizer dashboard shows every payment in real time: name, amount, chain, and timestamp.\n5. Export the full payment list as CSV anytime.\n\nThe dashboard auto-refreshes every 5 seconds. Payments across Base, Arc, Arbitrum, and Solana all appear in one unified view.' }
 
   // ── Flexible amount ──────────────────────────────────────────────────────────
   if (has('flex', 'flexible', 'any amount', 'payer choose', 'custom amount', 'tip', 'tips', 'pay what', 'open amount', 'variable'))
@@ -166,7 +163,7 @@ function keywordReply(input: string): ChatMsg | null {
 
   // ── Creating a link ──────────────────────────────────────────────────────────
   if (has('create', 'generate', 'make', 'build', 'new link', 'payment link', 'share link', 'set up', 'setup', 'get started', 'merchant', 'seller', 'receive payment', 'start accepting'))
-    return { from: 'bot', text: 'To create a payment link:\n1. Go to the home page and connect your wallet.\n2. Enter the amount (or enable Flexible Amount so the payer chooses).\n3. Select your chain — Base, HashKey, Arc, Starknet, or Solana.\n4. Optionally enable Multi-Payer Collection or add a memo.\n5. Click Generate Link — share the URL or QR code.\n\nYour wallet address is embedded in the link. No account or KYC required.' }
+    return { from: 'bot', text: 'To create a payment link:\n1. Go to the home page and connect your wallet.\n2. Enter the amount (or enable Flexible Amount so the payer chooses).\n3. Select your network — Base, Arc, Arbitrum, or Solana.\n4. Optionally enable Multi-Payer Collection or add a memo.\n5. Click Generate Link — share the URL or QR code.\n\nYour wallet address is embedded in the link. No account or KYC required.' }
 
   // ── FX / local currency ──────────────────────────────────────────────────────
   if (has('naira', 'ngn', 'ghana', 'ghs', 'kenya', 'kes', 'singapore', 'sgd', 'fx', 'local currency', 'exchange rate', 'fixer', 'black market rate', 'street rate', 'local price', 'currency display', 'local equivalent'))
@@ -186,11 +183,11 @@ function keywordReply(input: string): ChatMsg | null {
 
   // ── Gas / gasless ────────────────────────────────────────────────────────────
   if (has('gas', 'gasless', 'free gas', 'sponsored', 'network fee', 'transaction fee', 'avnu', 'paymaster'))
-    return { from: 'bot', text: 'Gas is sponsored on Base smart-wallet/paymaster flows, Arc, Starknet, HashKey, and Solana wallet-connect payments. Sponsored EVM payments can include a configured USDC recovery amount routed to treasury as part of settlement.' }
+    return { from: 'bot', text: 'Gas is sponsored on Base and Arbitrum smart-wallet/paymaster flows, Arc, and Solana wallet-connect payments. Sponsored EVM payments can include a configured USDC recovery amount routed to treasury as part of settlement.' }
 
   // ── Confirmation time ────────────────────────────────────────────────────────
   if (has('how long', 'how fast', 'speed', 'instant', 'confirmation time', 'finality', 'settlement time', 'how quick'))
-    return { from: 'bot', text: 'Confirmation times:\n• Base: 2–5 seconds\n• HashKey: 2–5 seconds\n• Arc: 2–5 seconds\n• Starknet: seconds for ACCEPTED_ON_L2 (final); L1 settlement 2–4 hours (not needed for payment)\n• Solana: under 1 second\n\nAll chains provide near-instant finality for practical purposes.' }
+    return { from: 'bot', text: 'Confirmation times:\n• Base: 2–5 seconds\n• Arc: 2–5 seconds\n• Arbitrum: a few seconds once sequenced\n• Solana: under 1 second\n\nAll supported networks provide near-instant finality for practical payment UX.' }
 
   // ── Wrong chain / network ────────────────────────────────────────────────────
   if (has('wrong chain', 'wrong network', 'different chain', 'incorrect chain', 'sent to wrong', 'sent on wrong', 'recover funds', 'recovery'))
@@ -198,7 +195,7 @@ function keywordReply(input: string): ChatMsg | null {
 
   // ── Pending / stuck ──────────────────────────────────────────────────────────
   if (has('pending', 'stuck', 'not arrived', 'not received', 'not confirmed', 'delayed', 'taking long', 'waiting', 'not showing', 'missing payment', 'where is my'))
-    return { from: 'bot', text: 'If a payment is pending:\n• Base/Arc: paste the tx hash here for a live status check.\n• HashKey: confirms in 2–5 seconds normally.\n• Starknet: wait for ACCEPTED_ON_L2 status.\n• Solana: under 1 second — if stuck 30+ seconds, the tx may have dropped, retry.\n\nPaste your transaction hash and I will check it now.' }
+    return { from: 'bot', text: 'If a payment is pending:\n• Base, Arc, or Arbitrum: paste the tx hash here for a live status check.\n• Solana: under 1 second — if stuck 30+ seconds, the tx may have dropped, retry.\n\nPaste your transaction hash and I will check it now.' }
 
   // ── Refund / cancel ──────────────────────────────────────────────────────────
   if (has('refund', 'cancel', 'reverse', 'undo', 'wrong amount', 'sent wrong', 'mistake', 'accidentally', 'chargeback'))
@@ -206,7 +203,7 @@ function keywordReply(input: string): ChatMsg | null {
 
   // ── Track / status ───────────────────────────────────────────────────────────
   if (has('track', 'status', 'check', 'verify', 'look up', 'tx hash', 'txhash', 'transaction hash', 'confirmed'))
-    return { from: 'bot', text: 'Paste your transaction hash directly into this chat and I will query it live across Base, HashKey, Arc, and Starknet. An EVM transaction hash starts with 0x and is 66 characters long.' }
+    return { from: 'bot', text: 'Paste your transaction hash directly into this chat and I will query it live across Base, Arc, and Arbitrum. An EVM transaction hash starts with 0x and is 66 characters long.' }
 
   // ── Chains — Base ────────────────────────────────────────────────────────────
   if ((has('base') && !has('database')) || has('basescan', 'metamask', 'layer 2', 'ethereum l2'))
@@ -214,7 +211,7 @@ function keywordReply(input: string): ChatMsg | null {
 
   // ── Chains — HashKey ─────────────────────────────────────────────────────────
   if (has('hashkey', 'hsk', 'hash key', 'hashkey chain'))
-    return { from: 'bot', text: 'HashKey Chain is EVM-compatible and uses HSK as its native token. Payments are made in HSK via "Send via Address" — no wallet connection needed. The platform collects a 0.2% fee at settlement. Explorer: explorer.hsk.xyz' }
+    return { from: 'bot', text: 'HashKey payments are no longer part of the active Hash PayLink checkout surface. Use Base, Arc, Arbitrum, or Solana for Circle-focused USDC payments.' }
 
   // ── Chains — Arc ─────────────────────────────────────────────────────────────
   if (has('arc', 'arcscan', 'arc testnet', 'arc chain', 'testnet'))
@@ -222,7 +219,7 @@ function keywordReply(input: string): ChatMsg | null {
 
   // ── Chains — Starknet ────────────────────────────────────────────────────────
   if (has('starknet', 'argent', 'argentx', 'braavos', 'starkscan', 'l2 stark'))
-    return { from: 'bot', text: 'Starknet payments use Circle native USDC. Compatible wallets: ArgentX and Braavos. Gas is sponsored by AVNU Paymaster — no STRK needed. Final when ACCEPTED_ON_L2. Explorer: starkscan.co' }
+    return { from: 'bot', text: 'Starknet payments are no longer part of the active Hash PayLink checkout surface. Use Base, Arc, Arbitrum, or Solana for Circle-focused USDC payments.' }
 
   // ── Chains — Solana ──────────────────────────────────────────────────────────
   if (has('solana', 'phantom', 'solflare', 'solscan'))
@@ -230,7 +227,7 @@ function keywordReply(input: string): ChatMsg | null {
 
   // ── Wallet setup / connect ───────────────────────────────────────────────────
   if (has('wallet', 'connect wallet', 'which wallet', 'walletconnect', 'install wallet', 'coinbase wallet'))
-    return { from: 'bot', text: 'Supported wallets:\n• Base / Arc / HashKey: Privy-supported EVM wallets, including MetaMask and Coinbase Smart Wallet.\n• Starknet: ArgentX or Braavos.\n• Solana: Phantom or Solflare.\n\nOr skip wallets entirely — use "Send via Address" to pay from any exchange or cold wallet.' }
+    return { from: 'bot', text: 'Supported wallets:\n• Base / Arc / Arbitrum: Privy-supported EVM wallets, including MetaMask and Coinbase Smart Wallet.\n• Solana: Phantom or Solflare.\n\nOr skip wallets entirely — use "Send via Address" to pay from any exchange or cold wallet.' }
 
   // ── Security / non-custodial ─────────────────────────────────────────────────
   if (has('safe', 'secure', 'trust', 'custody', 'custodial', 'non-custodial', 'open source', 'trustless', 'audit', 'smart contract'))
@@ -238,7 +235,7 @@ function keywordReply(input: string): ChatMsg | null {
 
   // ── USDC ─────────────────────────────────────────────────────────────────────
   if (has('usdc', 'usd coin', 'stablecoin', 'stable coin'))
-    return { from: 'bot', text: 'Hash PayLink settles in USDC on Base, Arc, and Starknet; native HSK on HashKey; and native USDC on Solana. All USDC is Circle-issued — not bridged or wrapped. The contract-backed flow deducts the platform fee at settlement.' }
+    return { from: 'bot', text: 'Hash PayLink settles in Circle USDC on Base, Arc, Arbitrum, and Solana. The contract-backed flow deducts the platform fee at settlement.' }
 
   // ── Memo / label / tag ───────────────────────────────────────────────────────
   if (has('memo', 'label', 'tag', 'note', 'reference', 'description'))
@@ -250,7 +247,7 @@ function keywordReply(input: string): ChatMsg | null {
 
   // ── Platform overview — true catch-all for generic questions ─────────────────
   if (has('what is', 'overview', 'hash paylink', 'introduction', 'intro', 'about') || (has('how') && has('work')) || (has('tell') && has('me')) || (has('explain') && !has('multi', 'flex', 'fee', 'gas', 'chain', 'wallet', 'pay', 'send', 'qr', 'sdk')))
-    return { from: 'bot', text: 'Hash PayLink is a non-custodial, multi-chain payment platform. Merchants create a shareable payment link in seconds — no account or KYC required. Payers pay by connecting a wallet OR sending directly from any exchange or CEX using "Send via Address". Supported chains: Base, HashKey, Arc, Starknet, and Solana. A platform fee is deducted at settlement.' }
+    return { from: 'bot', text: 'Hash PayLink is a non-custodial, Circle-focused payment platform. Merchants create a shareable payment link in seconds — no account or KYC required. Payers pay by connecting a wallet OR sending directly from any exchange or CEX using "Send via Address". Supported networks: Base, Arc, Arbitrum, and Solana. A platform fee is deducted at settlement.' }
 
   return null
 }
@@ -265,15 +262,8 @@ export type LayoutOutletContext = {
 }
 
 // ─── Network Toolkit ─────────────────────────────────────────────────────────
-const ALL_NETWORKS = [CHAIN_META.base, CHAIN_META.arbitrum, CHAIN_META.solana]
-
-function StarknetIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <path d="M12 2L14 10L22 12L14 14L12 22L10 14L2 12L10 10Z" />
-    </svg>
-  )
-}
+const ALL_NETWORKS = [CHAIN_META.base, CHAIN_META.arc, CHAIN_META.arbitrum, CHAIN_META.solana]
+const SUPPORTED_NETWORK_KEYS = new Set<ChainKey>(ALL_NETWORKS.map(network => network.key))
 
 // Pure display component — all switching logic lives in Layout.
 function NetworkToolkit({
@@ -309,11 +299,7 @@ function NetworkToolkit({
           locked ? 'cursor-default' : 'hover:bg-gray-50 dark:hover:bg-white/5',
         ].join(' ')}
       >
-        {displayNet?.key === 'starknet' ? (
-          <StarknetIcon className="h-2.5 w-2.5 shrink-0 text-purple-500" />
-        ) : (
-          <span className={`h-2 w-2 shrink-0 rounded-full ${displayNet?.dotColor ?? 'bg-gray-400'}`} />
-        )}
+        <span className={`h-2 w-2 shrink-0 rounded-full ${displayNet?.dotColor ?? 'bg-gray-400'}`} />
         <span className="hidden sm:inline">{displayLabel}</span>
         {!locked && <ChevronDown className="h-3.5 w-3.5 text-gray-400 dark:text-gray-500" />}
       </button>
@@ -333,11 +319,7 @@ function NetworkToolkit({
                   onClick={() => handleSwitch(net.key)}
                   className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left transition-colors hover:bg-gray-50 dark:hover:bg-white/5"
                 >
-                  {net.key === 'starknet' ? (
-                    <StarknetIcon className="h-3.5 w-3.5 shrink-0 text-purple-500" />
-                  ) : (
-                    <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${net.dotColor}`} />
-                  )}
+                  <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${net.dotColor}`} />
                   <span className="flex-1 text-[13px] font-medium text-gray-800 dark:text-gray-100">{net.label}</span>
                   {isTestnet && (
                     <span className="rounded border border-amber-100 bg-amber-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-600">
@@ -455,24 +437,20 @@ export default function Layout() {
   const agentNetworks = [CHAIN_META.base, CHAIN_META.arbitrum, { label: 'Arc Testnet', explorerUrl: CHAIN_META.arc.explorerUrl }] as const
   // Both the pay page and the dashboard show a locked chain pill from the URL param
   const pageNetParam = (isPayPage || isDashPage) ? (getPaylinkParam(searchParams, 'net', 'n') as ChainKey | '') : ''
-  const activeNet = (pageNetParam && pageNetParam in CHAIN_META) ? pageNetParam : null
+  const activeNet = (pageNetParam && SUPPORTED_NETWORK_KEYS.has(pageNetParam)) ? pageNetParam : null
   const dashEvm = getPaylinkParam(searchParams, 'evm', 'e').trim()
   const dashSol = getPaylinkParam(searchParams, 'sol', 's').trim()
-  const dashStark = getPaylinkParam(searchParams, 'stark', 'k').trim()
   const dashMulti = hasPaylinkFlag(searchParams, 'multi', 'x')
   const dashEvmValid = EVM_ADDR_RE.test(dashEvm)
   const dashSolValid = SOLANA_ADDR_RE.test(dashSol)
-  const dashStarkValid = STARKNET_ADDR_RE.test(dashStark)
   const dashboardRecipients: DashboardRecipient[] = isDashPage
     ? [
         ...(dashEvmValid ? [{ label: dashMulti ? 'EVM networks' : activeNet ? CHAIN_META[activeNet].label : 'EVM', address: dashEvm }] : []),
         ...(dashSolValid ? [{ label: 'Solana', address: dashSol }] : []),
-        ...(dashStarkValid ? [{ label: 'Starknet', address: dashStark }] : []),
       ]
     : []
   const dashboardSingleNetwork =
-    dashMulti && !dashEvmValid && dashSolValid && !dashStarkValid ? 'solana' :
-    dashMulti && !dashEvmValid && !dashSolValid && dashStarkValid ? 'starknet' :
+    dashMulti && !dashEvmValid && dashSolValid ? 'solana' :
     null
   const dashboardActiveNet = isDashPage ? (dashboardSingleNetwork ?? activeNet) : activeNet
   const dashboardNetworkLabel = isDashPage && dashMulti
@@ -480,25 +458,23 @@ export default function Layout() {
     : undefined
   const payRecipientNetworkCount =
     (dashEvmValid ? 1 : 0) +
-    (dashSolValid ? 1 : 0) +
-    (dashStarkValid ? 1 : 0)
+    (dashSolValid ? 1 : 0)
   const showPayNetworkPill = isPayPage && dashMulti && payRecipientNetworkCount > 1
 
   // ── Wallet connections ───────────────────────────────────────────────────────
   const { isConnected: evmConnected, chainId: evmChainId } = useAccount()
   const { disconnect: disconnectEvm } = useDisconnect()
   const { switchChain }               = useSwitchChain()
-  const { address: starkAddress,  connect: connectStarknet,  disconnect: disconnectStarknet  } = useStarknet()
   const { address: solanaAddress, connect: connectSolana,   disconnect: disconnectSolana    } = useSolana()
   const { authenticated: privyAuthenticated } = usePrivy()
 
-  const anyConnected = evmConnected || !!starkAddress || !!solanaAddress
+  const anyConnected = evmConnected || !!solanaAddress
   const agentEmailConnected = Boolean(isAgentProfilePage && PRIVY_AUTH_ENABLED && privyAuthenticated)
   const headerControlConnected = anyConnected || agentEmailConnected
   const evmNetKey    = evmConnected
-    ? ([CHAIN_META.base, CHAIN_META.arbitrum, CHAIN_META.hashkey] as const).find(n => n.chainId === evmChainId)?.key ?? null
+    ? ([CHAIN_META.base, CHAIN_META.arc, CHAIN_META.arbitrum] as const).find(n => n.chainId === evmChainId)?.key ?? null
     : null
-  const connectedNetKey: ChainKey | null = starkAddress ? 'starknet' : solanaAddress ? 'solana' : evmNetKey
+  const connectedNetKey: ChainKey | null = solanaAddress ? 'solana' : evmNetKey
 
   // selectedNet = user's intent (which network they want); may lead connectedNetKey during transition
   const [selectedNet, setSelectedNet] = useState<ChainKey | null>(null)
@@ -515,41 +491,28 @@ export default function Layout() {
   useEffect(() => {
     if (evmConnected && evmNetKey && selectedNet !== 'solana') setSelectedNet(evmNetKey)
   }, [evmConnected, evmNetKey])  // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    if (starkAddress && selectedNet !== 'solana') setSelectedNet('starknet')
-  }, [starkAddress])  // eslint-disable-line react-hooks/exhaustive-deps
-
   // ── Network-select handler (called by NetworkToolkit dropdown) ────────────
   function handleNetworkSelect(key: ChainKey) {
     setSelectedNet(key)
 
     if (key === 'solana') {
-      // Switching to Solana: drop EVM/Starknet connections
+      // Switching to Solana: drop EVM connections
       if (evmConnected) disconnectEvm()
-      if (starkAddress) disconnectStarknet()
       return
     }
     // Switching away from Solana: drop Solana connection
     if (solanaAddress) disconnectSolana()
-    if (evmConnected && key !== 'starknet') {
+    if (evmConnected) {
       // EVM → EVM: switch chain in-place, wallet stays connected
       const id = (CHAIN_META[key] as { chainId?: number }).chainId
       if (id) switchChain({ chainId: id })
-    } else if (evmConnected && key === 'starknet') {
-      // EVM → Starknet: drop EVM, user must click Connect Wallet for Starknet
-      disconnectEvm()
-    } else if (starkAddress && key !== 'starknet') {
-      // Starknet → EVM: drop Starknet, user must click Connect Wallet for EVM
-      disconnectStarknet()
     }
     // Fully disconnected: just update intent, Connect Wallet will act on it
   }
 
   // ── Connect Wallet handler (action depends on selectedNet intent) ─────────
   function handleConnectWallet() {
-    if (selectedNet === 'starknet') {
-      connectStarknet()
-    } else if (selectedNet === 'solana') {
+    if (selectedNet === 'solana') {
       connectSolana({ includeEmail: true })
     } else {
       // EVM wallet connection is handled by PrivyConnectButton in production.
@@ -567,7 +530,6 @@ export default function Layout() {
 
   function disconnectAll() {
     if (evmConnected)  disconnectEvm()
-    if (starkAddress)  disconnectStarknet()
     if (solanaAddress) disconnectSolana()
     payWalletDisconnect?.()
     setPayWalletConnected(false)
@@ -698,7 +660,7 @@ export default function Layout() {
       setIsTyping(true)
       setChatMessages(m => [...m, {
         from: 'bot',
-        text: 'Investigating transaction across Base, HashKey, Arc, and Starknet. Please wait…',
+        text: 'Investigating transaction across Base, Arc, and Arbitrum. Please wait...',
       }])
       scrollToBottom()
 
@@ -849,7 +811,7 @@ export default function Layout() {
               <>
                 {/* Connect Wallet — when disconnected */}
                 {!headerControlConnected && !isAgentProfilePage && (
-                  PRIVY_AUTH_ENABLED && selectedNet !== 'starknet' && selectedNet !== 'solana' ? (
+                  PRIVY_AUTH_ENABLED && selectedNet !== 'solana' ? (
                     <PrivyConnectButton className="inline-flex h-9 items-center gap-1.5 rounded-full border border-gray-200 dark:border-white/10 bg-white dark:bg-[#1c1c20] px-3 text-[13px] font-medium text-gray-700 dark:text-gray-200 shadow-sm hover:bg-gray-50 dark:hover:bg-white/5 transition-colors disabled:opacity-60">
                       <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500 animate-pulse" />
                       <span className="hidden sm:inline">Sign in</span>
@@ -861,7 +823,7 @@ export default function Layout() {
                     >
                       <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500 animate-pulse" />
                       <span className="hidden sm:inline">
-                        {selectedNet === 'starknet' ? 'Connect Starknet' : 'Sign in'}
+                        Sign in
                       </span>
                     </button>
                   )

@@ -35,7 +35,7 @@ import {
   AlertTriangle, Radio, Mail, X, Bot, Share2,
 } from 'lucide-react'
 import {
-  CHAIN_META, PLATFORM_FEE_BPS, EVM_TREASURY, STARK_TREASURY, type ChainKey,
+  CHAIN_META, PLATFORM_FEE_BPS, EVM_TREASURY, type ChainKey,
 } from '../lib/chains'
 import {
   EVM_CLIENTS,
@@ -43,9 +43,7 @@ import {
   ERC20_BALANCE_OF_ABI,
   FACTORY_V2_ADDRESSES,
 } from '../lib/router'
-import { useStarknet } from '../lib/StarknetContext'
 import { useSolana }   from '../lib/SolanaContext'
-import { computeStarkGhostAddress } from '../lib/starknet-ghost'
 import { cn, truncateAddress, formatAmount, memoToHex, copyToClipboard } from '../lib/utils'
 import { getFxMeta, formatLocalAmt, fetchFxRate } from '../lib/fx'
 import { getCirclePaymasterConfig } from '../lib/circlePaymaster'
@@ -53,7 +51,6 @@ import { sendCirclePaymasterPayment } from '../lib/circlePaymasterPayment'
 import { canUseCirclePasskeyPayments, prepareCirclePasskeyWallet, sendCirclePasskeyPayment } from '../lib/circlePasskeyPayment'
 import { canUseCircleEvmEmailWallet, connectCircleEvmEmailWallet, sendCircleEvmEmailPayment, sendCircleEvmEmailWithdraw } from '../lib/circleEvmEmailWallet'
 import { canUseCircleSolanaEmailWallet, connectCircleSolanaEmailWallet, signCircleSolanaTransaction } from '../lib/circleSolanaEmailWallet'
-import { canUseArgentStarknetEmailWallet, connectArgentStarknetEmailWallet } from '../lib/argentStarknetWallet'
 import { getSponsoredGasRecoveryUnits } from '../lib/gasRecovery'
 import { isValidSolanaAddress } from '../lib/solanaAddress'
 import { getPaylinkParam, hasPaylinkFlag, isTelegramSourceParam } from '../lib/paylinkParams'
@@ -72,11 +69,16 @@ import {
 
 type CircleSolanaSession = Awaited<ReturnType<typeof connectCircleSolanaEmailWallet>>
 type CircleEvmEmailSession = Awaited<ReturnType<typeof connectCircleEvmEmailWallet>>
-type ArgentStarknetSession = Awaited<ReturnType<typeof connectArgentStarknetEmailWallet>>
+type ArgentStarknetSession = { address?: string; account?: { execute?: (calls: unknown[]) => Promise<{ transaction_hash: string }> } }
 
 const CHAINS: ChainKey[] = ['base', 'solana', 'arbitrum']
 const POLYMARKET_SIGNUP_URL = 'https://polymarket.com'
 const POLYMARKET_LOGO = '/brand/polymarket-logo.png'
+type SupportedEvmPayChain = 'base' | 'arc' | 'arbitrum'
+
+function isSupportedEvmPayChain(value: ChainKey): value is SupportedEvmPayChain {
+  return value === 'base' || value === 'arc' || value === 'arbitrum'
+}
 
 function PolyDeskVectorIcon({ className = '' }: { className?: string }) {
   return (
@@ -120,9 +122,6 @@ const CHAIN_DISPLAY_NAMES: Record<number, string> = {
   43114:   'Avalanche',
   5042002: 'Arc',
 }
-
-// ─── Starknet RPC ─────────────────────────────────────────────────────────────
-const STARKNET_RPC = 'https://rpc.starknet.lava.build'
 
 // ─── Multicall3 ──────────────────────────────────────────────────────────────
 const MULTICALL3_ADDRESS = '0xcA11bde05977b3631167028862bE2a173976CA11' as `0x${string}`
@@ -191,25 +190,9 @@ const ERC20_PERMIT_DOMAIN_ABI = [
 
 // ─── Starknet helpers ─────────────────────────────────────────────────────────
 async function pollStarknetReceipt(txHash: string, signal: AbortSignal): Promise<void> {
-  const deadline = Date.now() + 3 * 60_000
-  while (Date.now() < deadline && !signal.aborted) {
-    await new Promise((r) => setTimeout(r, 4000))
-    if (signal.aborted) break
-    try {
-      const res = await fetch(STARKNET_RPC, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jsonrpc: '2.0', method: 'starknet_getTransactionReceipt', params: [txHash], id: 1 }),
-        signal,
-      })
-      const json = await res.json()
-      const status: string = json?.result?.finality_status ?? ''
-      if (status === 'ACCEPTED_ON_L2' || status === 'ACCEPTED_ON_L1') return
-      if (json?.result?.execution_status === 'REVERTED') throw new Error('Transaction reverted on Starknet')
-    } catch (err) {
-      if ((err as Error)?.name === 'AbortError') break
-    }
-  }
+  void txHash
+  void signal
+  throw new Error('Starknet payments are no longer supported.')
 }
 
 /**
@@ -217,14 +200,9 @@ async function pollStarknetReceipt(txHash: string, signal: AbortSignal): Promise
  * Direct browser→Starknet RPC calls are blocked by CORS; the backend proxy has no such restriction.
  */
 async function starkUsdcBalance(tokenAddress: string, accountAddress: string): Promise<bigint> {
-  const res = await fetch('/api/starknet-balance', {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ tokenAddress, accountAddress }),
-  })
-  const data = await res.json() as { ok: boolean; balance?: string; error?: string }
-  if (!data.ok) throw new Error(data.error ?? 'starknet-balance API failed')
-  return BigInt(data.balance ?? '0x0')
+  void tokenAddress
+  void accountAddress
+  throw new Error('Starknet balances are no longer supported.')
 }
 
 // ─── Error message normaliser ─────────────────────────────────────────────────
@@ -400,9 +378,8 @@ export default function PaymentPage() {
 
   // netParam (from new link format) takes priority; legacy chain param as fallback
   const [chain, setChain] = useState<ChainKey>(() => {
-    if (netParam === 'base' || netParam === 'starknet' || netParam === 'hashkey' || netParam === 'arc' || netParam === 'solana' || netParam === 'arbitrum') return netParam
-    if (legacyChain === 'base' || legacyChain === 'starknet' || legacyChain === 'hashkey' || legacyChain === 'arc') return legacyChain
-    if (resolvedStark && !resolvedEvm) return 'starknet'
+    if (netParam === 'base' || netParam === 'arc' || netParam === 'solana' || netParam === 'arbitrum') return netParam
+    if (legacyChain === 'base' || legacyChain === 'arc' || legacyChain === 'arbitrum' || legacyChain === 'solana') return legacyChain
     if (resolvedSolana && !resolvedEvm && !resolvedStark) return 'solana'
     return 'base'
   })
@@ -414,7 +391,7 @@ export default function PaymentPage() {
     ? [chain]
     : CHAINS.filter(c =>
         (c === 'solana' && !!resolvedSolana) ||
-        (c !== 'starknet' && c !== 'solana' && !!resolvedEvm),
+        (c !== 'solana' && !!resolvedEvm),
       )
 
   // Sync header pill with initial chain on mount
@@ -568,7 +545,7 @@ export default function PaymentPage() {
   const hasExternalPrivyEvmWallet = !!connectedPrivyWallet && connectedPrivyWallet.walletClientType !== 'privy'
   const isPrivyEmbeddedWalletConnected = connectedPrivyWallet?.walletClientType === 'privy'
   const { data: walletClient }   = useWalletClient({
-    chainId: chain === 'base' ? CHAIN_META.base.chainId : chain === 'arc' ? CHAIN_META.arc.chainId : chain === 'arbitrum' ? CHAIN_META.arbitrum.chainId : CHAIN_META.hashkey.chainId,
+    chainId: chain === 'base' ? CHAIN_META.base.chainId : chain === 'arc' ? CHAIN_META.arc.chainId : chain === 'arbitrum' ? CHAIN_META.arbitrum.chainId : CHAIN_META.base.chainId,
   })
 
   const {
@@ -631,7 +608,7 @@ export default function PaymentPage() {
   const { isLoading: isCirclePaymasterConfirming, isSuccess: isCirclePaymasterConfirmed } =
     useWaitForTransactionReceipt({
       hash: circlePaymasterTxHash ?? undefined,
-      chainId: chain === 'base' ? CHAIN_META.base.chainId : chain === 'arc' ? CHAIN_META.arc.chainId : chain === 'arbitrum' ? CHAIN_META.arbitrum.chainId : CHAIN_META.hashkey.chainId,
+      chainId: chain === 'base' ? CHAIN_META.base.chainId : chain === 'arc' ? CHAIN_META.arc.chainId : chain === 'arbitrum' ? CHAIN_META.arbitrum.chainId : CHAIN_META.base.chainId,
     })
   const {
     data: basePaymasterStatus,
@@ -727,7 +704,9 @@ export default function PaymentPage() {
   })
 
   // ── Starknet ──────────────────────────────────────────────────────────────
-  const { address: starkAccount, isConnecting: isStarkConnecting, connect: connectStarknet } = useStarknet()
+  const starkAccount = ''
+  const isStarkConnecting = false
+  const connectStarknet = () => setStarkError('Starknet payments are no longer supported.')
   const [starkTxHash,       setStarkTxHash]      = useState<string | null>(null)
   const [isStarkPending,    setIsStarkPending]    = useState(false)
   const [isStarkConfirming, setIsStarkConfirming] = useState(false)
@@ -803,7 +782,7 @@ export default function PaymentPage() {
     chain === 'base'     ? CHAIN_META.base.chainId     :
     chain === 'arc'      ? CHAIN_META.arc.chainId      :
     chain === 'arbitrum' ? CHAIN_META.arbitrum.chainId :
-    CHAIN_META.hashkey.chainId
+    CHAIN_META.base.chainId
   const isCorrectNetwork = isEvmChain ? chainId === targetChainId : true
   const feeAmount        = (parseFloat(effectiveAmt) || 0) * (PLATFORM_FEE_BPS / 10_000)
 
@@ -875,7 +854,7 @@ export default function PaymentPage() {
     payMode === 'wallet' &&
     !showCircleEmailBridgePay &&
     !showCirclePaymasterButton
-  const showArgentStarknetEmailPay = chain === 'starknet' && canUseArgentStarknetEmailWallet()
+  const showArgentStarknetEmailPay = false
   const walletConnectBlocked = smartWalletOnlyFunding && !PRIVY_AUTH_ENABLED
   const canStartPolymarketCircleFunding =
     showCircleEvmEmailPay ||
@@ -1139,9 +1118,9 @@ export default function PaymentPage() {
   // ── Step 1: Predict router address + check deployment ────────────────────
   // ── Step 2: Real-time payment listener ───────────────────────────────────
   useEffect(() => {
-    if (manualPayDetected || chain === 'starknet' || chain === 'solana' || !resolvedEvm) return
+    if (manualPayDetected || !isSupportedEvmPayChain(chain) || !resolvedEvm) return
 
-    const evmChain = chain as 'base' | 'hashkey' | 'arc' | 'arbitrum'
+    const evmChain = chain
     const client   = EVM_CLIENTS[evmChain]
 
     let unwatchTransfer: (() => void) | undefined
@@ -1228,14 +1207,14 @@ export default function PaymentPage() {
   // ── Auto-sweep keeper ─────────────────────────────────────────────────────
   // ── Reset payMode on chain switch: Smart Wallet is primary; direct is explicit ─
   useEffect(() => {
-    setPayMode(modeParam === 'direct' && chain !== 'starknet' && isMainHashPaylinkPayment ? 'direct' : 'wallet')
+    setPayMode(modeParam === 'direct' && isSupportedEvmPayChain(chain) && isMainHashPaylinkPayment ? 'direct' : 'wallet')
   }, [chain, modeParam, isMainHashPaylinkPayment])
 
   // ── V2 EVM: Generate linkId + compute ghost vault address ─────────────────
   useEffect(() => {
     if (payMode !== 'direct') return
-    if (chain === 'starknet') return
-    const factoryAddr = FACTORY_V2_ADDRESSES[chain as 'base' | 'arc' | 'hashkey' | 'arbitrum']
+    if (!isSupportedEvmPayChain(chain)) return
+    const factoryAddr = FACTORY_V2_ADDRESSES[chain]
     if (!factoryAddr) {
       setDirectError('Direct payment is not configured for this network.')
       setDirectStatus('error')
@@ -1256,7 +1235,7 @@ export default function PaymentPage() {
     }
     setDirectLinkId(linkId)
 
-    const client = EVM_CLIENTS[chain as 'base' | 'arc' | 'hashkey' | 'arbitrum']
+    const client = EVM_CLIENTS[chain]
     let cancelled = false
     client.readContract({
       address:      factoryAddr,
@@ -1278,31 +1257,25 @@ export default function PaymentPage() {
   }, [payMode, resolvedEvm, chain])
 
   // ── V2 EVM: Poll balance at ghost vault; trigger relay on arrival ─────────
-  // Base/Arc: polls ERC-20 USDC balance
-  // HashKey:  polls native HSK balance (no ERC-20 token on HashKey)
+  // Base/Arc/Arbitrum: polls ERC-20 USDC balance.
   useEffect(() => {
     if (directStatus !== 'waiting' || !directVault || !directLinkId) return
-    if (chain === 'starknet') return
+    if (!isSupportedEvmPayChain(chain)) return
 
-    const evmChain  = chain as 'base' | 'arc' | 'hashkey' | 'arbitrum'
+    const evmChain  = chain
     const client    = EVM_CLIENTS[evmChain]
-    const isNative  = chain === 'hashkey'
-    const token     = isNative ? null : (CHAIN_META[evmChain as 'base' | 'arc' | 'arbitrum'].tokenAddress as `0x${string}`)
+    const token     = CHAIN_META[evmChain].tokenAddress as `0x${string}`
 
     const check = async () => {
       if (directRelayedRef.current) return
       try {
         let balance: bigint
-        if (isNative) {
-          balance = await client.getBalance({ address: directVault! })
-        } else {
-          balance = await client.readContract({
-            address:      token!,
-            abi:          ERC20_BALANCE_OF_ABI,
-            functionName: 'balanceOf',
-            args:         [directVault],
-          }) as bigint
-        }
+        balance = await client.readContract({
+          address:      token,
+          abi:          ERC20_BALANCE_OF_ABI,
+          functionName: 'balanceOf',
+          args:         [directVault],
+        }) as bigint
 
         if (balance > 0n && !directRelayedRef.current) {
           directRelayedRef.current = true
@@ -1482,7 +1455,8 @@ export default function PaymentPage() {
     if (isManualChecking) return
     setIsManualChecking(true)
     try {
-      const evmChain = chain as 'base' | 'hashkey' | 'arc' | 'arbitrum'
+      if (!isSupportedEvmPayChain(chain)) return
+      const evmChain = chain
       const client   = EVM_CLIENTS[evmChain]
       const knownTxHash = (circlePaymasterTxHash ?? basePaymasterTxHash ?? evmTxHash) as `0x${string}` | null
       if (knownTxHash) {
@@ -1663,12 +1637,11 @@ export default function PaymentPage() {
     setDirectStatus('idle'); setDirectTxHash(null); setDirectError(null)
     directRelayedRef.current = false
     if (directPollRef.current) { clearInterval(directPollRef.current); directPollRef.current = null }
-    if (isConnected && c !== 'starknet' && c !== 'solana') {
+    if (isConnected && isSupportedEvmPayChain(c)) {
       const cid =
         c === 'base'    ? CHAIN_META.base.chainId    :
         c === 'arc'     ? CHAIN_META.arc.chainId     :
-        c === 'arbitrum' ? CHAIN_META.arbitrum.chainId :
-        CHAIN_META.hashkey.chainId
+        CHAIN_META.arbitrum.chainId
       switchChain({ chainId: cid })
     }
   }
@@ -2003,7 +1976,7 @@ export default function PaymentPage() {
     if (!walletAddress) return
     setArgentStarkFetching(true)
     try {
-      const balance = await starkUsdcBalance(CHAIN_META.starknet.tokenAddress, walletAddress)
+      const balance = await starkUsdcBalance('', walletAddress)
       setArgentStarkBalance(balance)
     } catch {
       // Balance polling is advisory; payment submit still validates on-chain.
@@ -2041,7 +2014,7 @@ export default function PaymentPage() {
     try {
       let session = argentStarkSession
       if (!session) {
-        session = await connectArgentStarknetEmailWallet()
+        throw new Error('Starknet payments are no longer supported.')
         setArgentStarkSession(session)
         await refreshArgentStarkBalance(session.address)
         return
@@ -2765,61 +2738,13 @@ export default function PaymentPage() {
   }
 
   function handleHashKeyPay() {
-    if (chainId !== CHAIN_META.hashkey.chainId) {
-      setBasePaymasterError(`Switch your wallet to ${CHAIN_META.hashkey.label}, then retry payment.`)
-      switchChain({ chainId: CHAIN_META.hashkey.chainId })
-      return
-    }
-    const requestedNative = parseEther(effectiveAmt || '0')
-    const feeBps          = BigInt(PLATFORM_FEE_BPS)
-    const feeNative       = requestedNative * feeBps / 10_000n
-    const recipientNative = grossUpPlatformCharges ? requestedNative : requestedNative - feeNative
-    const totalNative     = grossUpPlatformCharges ? requestedNative + feeNative : requestedNative
-    sendTransaction({
-      to: MULTICALL3_ADDRESS, value: totalNative,
-      data: encodeFunctionData({
-        abi: MULTICALL3_AGGREGATE3VALUE_ABI, functionName: 'aggregate3Value',
-        args: [[
-          { target: activeRecipient as `0x${string}`, allowFailure: false, value: recipientNative,
-            callData: (effectiveMemo.trim() ? memoToHex(effectiveMemo.trim()) : '0x') as `0x${string}` },
-          { target: EVM_TREASURY, allowFailure: false, value: feeNative, callData: '0x' },
-        ]],
-      }),
-    })
+    void chainId
+    setBasePaymasterError('HashKey payments are no longer supported. Use Base, Arc, Arbitrum, or Solana.')
   }
 
   async function handleStarknetPay(sessionAccount?: ArgentStarknetSession) {
-    const provider = window.starknet
-    if (!sessionAccount && !provider?.account) { setStarkError('Wallet not connected.'); return }
-    setIsStarkPending(true); setStarkError(null)
-    try {
-      const totalUnits = BigInt(Math.round(parseFloat(effectiveAmt || '0') * 1e6))
-      const feeUnits   = totalUnits * BigInt(PLATFORM_FEE_BPS) / 10_000n
-      const recipUnits = grossUpPlatformCharges ? totalUnits : totalUnits - feeUnits
-      const toU256 = (n: bigint) => ({
-        low:  '0x' + (n & BigInt('0xffffffffffffffffffffffffffffffff')).toString(16),
-        high: '0x0',
-      })
-      const calls = [
-        { contractAddress: CHAIN_META.starknet.tokenAddress, entrypoint: 'transfer',
-          calldata: [resolvedStark, toU256(recipUnits).low, toU256(recipUnits).high] },
-        { contractAddress: CHAIN_META.starknet.tokenAddress, entrypoint: 'transfer',
-          calldata: [STARK_TREASURY, toU256(feeUnits).low, toU256(feeUnits).high] },
-      ]
-      const result = sessionAccount
-        ? await sessionAccount.execute(calls)
-        : await provider!.account!.execute(calls)
-      setStarkTxHash(result.transaction_hash)
-      setIsStarkPending(false); setIsStarkConfirming(true)
-      const ctrl = new AbortController()
-      starkPollAbort.current = ctrl
-      await pollStarknetReceipt(result.transaction_hash, ctrl.signal)
-      if (!ctrl.signal.aborted) { setIsStarkConfirming(false); setIsStarkConfirmed(true) }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Transaction rejected'
-      setStarkError(msg.slice(0, 160))
-      setIsStarkPending(false); setIsStarkConfirming(false)
-    }
+    void sessionAccount
+    setStarkError('Starknet payments are no longer supported. Use Base, Arc, Arbitrum, or Solana.')
   }
 
   // ── Unified aliases ───────────────────────────────────────────────────────
@@ -3911,7 +3836,7 @@ export default function PaymentPage() {
           })()}
 
           {/* ── Direct Send panel (Base / Arc / HashKey / Arbitrum) ─────── */}
-          {payMode === 'direct' && (chain === 'base' || chain === 'arc' || chain === 'hashkey' || chain === 'arbitrum') && (
+          {payMode === 'direct' && isSupportedEvmPayChain(chain) && (
             <div className="space-y-3">
               {/* Loading ghost address */}
               {!directDisplayAddr && directStatus !== 'error' ? (
