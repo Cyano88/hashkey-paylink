@@ -315,10 +315,12 @@ export default function PaymentPage() {
   const polymarketFundingRequestId = (searchParams.get('pmr') || '').trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64)
   const polymarketReturnTarget = searchParams.get('return') ?? ''
   const polymarketReturnToPortfolio = polymarketReturnTarget === 'poly-portfolio'
+  const polymarketReturnToStandalonePortfolio = polymarketReturnTarget === 'polydesk-portfolio'
   const polymarketReturnToAgentHash = polymarketReturnTarget === 'agent-hash-polydesk-portfolio'
   const polymarketHelperOwner = (searchParams.get('helperOwner') || '').trim().slice(0, 160)
   const telegramUrl = telegramReturnUrl(searchParams)
   const polymarketPortfolioUrl = '/telegram/payment-links?section=market-tools&service=poly-portfolio'
+  const polymarketStandalonePortfolioUrl = '/polydesk?service=portfolio'
   const polymarketAgentHashUrl = (() => {
     const params = new URLSearchParams({
       section: 'market-tools',
@@ -341,7 +343,13 @@ export default function PaymentPage() {
 
   function goBackFromCheckout() {
     if (isPolymarketBridge) {
-      window.location.assign(polymarketReturnToAgentHash ? polymarketAgentHashUrl : polymarketPortfolioUrl)
+      window.location.assign(
+        polymarketReturnToAgentHash
+          ? polymarketAgentHashUrl
+          : polymarketReturnToStandalonePortfolio
+          ? polymarketStandalonePortfolioUrl
+          : polymarketPortfolioUrl,
+      )
       return
     }
     if (window.history.length > 1) {
@@ -3035,6 +3043,7 @@ export default function PaymentPage() {
         bridgeStatus: status,
         txHash,
         depositAddress: activeRecipient,
+        polymarketWallet: polymarketWalletParam,
       }),
     }).catch(() => undefined)
     return Boolean(res?.ok)

@@ -34,8 +34,9 @@ import PrivacyDocs      from './pages/docs/PrivacyDocs'
 // which React app is mounted. Add ?app=streampay to any localhost URL for
 // local Streampay development without changing DNS.
 const { hostname, pathname, search } = window.location
+const searchParams = new URLSearchParams(search)
 const IS_APP_HOST = hostname === 'app.hashpaylink.com'
-const IS_POLYDESK_HOST = hostname.includes('polydesk')
+const IS_POLYDESK_HOST = hostname.includes('polydesk') || searchParams.get('app') === 'polydesk'
 const isStreamPayRoute =
   pathname === '/stream' ||
   pathname.startsWith('/stream/') ||
@@ -45,7 +46,7 @@ const IS_STREAMPAY =
   hostname.endsWith('.streampay.xyz')                    ||  // subdomains
   hostname.includes('streampay')                         ||  // onrender.com service named streampay-*
   isStreamPayRoute                                       ||  // StreamPay share links on hashpaylink.com
-  new URLSearchParams(search).get('app') === 'streampay'    // localhost dev toggle
+  searchParams.get('app') === 'streampay'                      // localhost dev toggle
 
 export default function App() {
   // Streampay domain → mount the Streampay sub-app (full separate router)

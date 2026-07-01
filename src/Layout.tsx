@@ -407,8 +407,8 @@ function DashboardRecipientDropdown({ recipients }: { recipients: DashboardRecip
 export default function Layout() {
   const { pathname } = useLocation()
   const [searchParams] = useSearchParams()
-  const isPolyDeskSurface = pathname === '/polydesk' || window.location.hostname.toLowerCase().includes('polydesk')
-  const isCreatePage = pathname === '/' || pathname === '/app'
+  const isPolyDeskSurface = pathname === '/polydesk' || window.location.hostname.toLowerCase().includes('polydesk') || searchParams.get('app') === 'polydesk'
+  const isCreatePage = pathname === '/' || pathname === '/app' || pathname === '/polymarket'
   const isPayPage  = pathname === '/pay'
   const isNgPosPage = pathname === '/pos/ng'
   const isTelegramPaymentLinksPage = pathname === '/telegram/payment-links'

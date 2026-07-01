@@ -306,7 +306,11 @@ export default function PolyDesk() {
         {serviceView && !isAgentOpen && (
           <section
             data-polydesk-service-view="true"
-            className="rounded-2xl border border-gray-100 bg-white p-4 shadow-card dark:border-white/10 dark:bg-[#111114]"
+            className={cn(
+              serviceView === 'portfolio'
+                ? 'p-0'
+                : 'rounded-2xl border border-gray-100 bg-white p-4 shadow-card dark:border-white/10 dark:bg-[#111114]',
+            )}
           >
             {serviceView === 'portfolio' ? (
               <PolyPortfolioPanel

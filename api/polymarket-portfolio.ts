@@ -650,17 +650,21 @@ export default async function handler(req: Request, res: Response) {
       const requestId = cleanString(body.requestId, 64) || null
       const txHash = cleanString(body.txHash, 96) || null
       const depositAddress = cleanString(body.depositAddress, 96) || null
+      const polymarketWallet = cleanString(body.polymarketWallet, 64)
+      if (!isAddress(polymarketWallet)) return res.status(400).json({ ok: false, error: 'Provide the funded Polymarket wallet.' })
       const profileRow = (await requirePool().query(
-        'select coalesce(trading_address, polymarket_address) as polymarket_address from polymarket_profiles where privy_user_id = $1',
+        'select trading_address from polymarket_profiles where privy_user_id = $1',
         [privyUserId],
       )).rows[0]
-      if (!profileRow?.polymarket_address) return res.status(409).json({ ok: false, error: 'Save a trading wallet first.' })
+      if (!profileRow?.trading_address || String(profileRow.trading_address).toLowerCase() !== polymarketWallet.toLowerCase()) {
+        return res.status(409).json({ ok: false, error: 'Save this trading wallet before funding.' })
+      }
       const inserted = await requirePool().query(
         `insert into polymarket_funding_attempts
           (privy_user_id, polymarket_address, request_id, network, amount, status, tx_hash, deposit_address)
          values ($1,$2,$3,$4,$5,$6,$7,$8)
          returning id, request_id, network, amount, status, tx_hash, deposit_address, created_at`,
-        [privyUserId, String(profileRow.polymarket_address), requestId, network, amount, status, txHash, depositAddress],
+        [privyUserId, polymarketWallet, requestId, network, amount, status, txHash, depositAddress],
       )
       return res.json({ ok: true, fundingAttempt: inserted.rows[0] })
     }
@@ -674,22 +678,26 @@ export default async function handler(req: Request, res: Response) {
       const txHash = cleanString(body.txHash, 96)
       if (!txHash) return res.status(400).json({ ok: false, error: 'txHash is required.' })
       const depositAddress = cleanString(body.depositAddress, 96) || null
+      const polymarketWallet = cleanString(body.polymarketWallet, 64)
+      if (!isAddress(polymarketWallet)) return res.status(400).json({ ok: false, error: 'Provide the funded Polymarket wallet.' })
       const bridgeStatus = cleanString(body.bridgeStatus, 32)
       const status = bridgeStatus === 'complete' ? 'bridge_complete' : 'confirmed'
       const profileRow = (await requirePool().query(
-        'select coalesce(trading_address, polymarket_address) as polymarket_address from polymarket_profiles where privy_user_id = $1',
+        'select trading_address from polymarket_profiles where privy_user_id = $1',
         [privyUserId],
       )).rows[0]
-      if (!profileRow?.polymarket_address) return res.status(409).json({ ok: false, error: 'Save a trading wallet first.' })
+      if (!profileRow?.trading_address || String(profileRow.trading_address).toLowerCase() !== polymarketWallet.toLowerCase()) {
+        return res.status(409).json({ ok: false, error: 'Save this trading wallet before funding.' })
+      }
 
       let updated
       if (requestId) {
         updated = await requirePool().query(
           `update polymarket_funding_attempts
              set status = $1, tx_hash = $2, deposit_address = coalesce($3, deposit_address), updated_at = now()
-           where privy_user_id = $4 and request_id = $5
+           where privy_user_id = $4 and request_id = $5 and lower(polymarket_address) = lower($6)
            returning id, request_id, network, amount, status, tx_hash, deposit_address, created_at`,
-          [status, txHash, depositAddress, privyUserId, requestId],
+          [status, txHash, depositAddress, privyUserId, requestId, polymarketWallet],
         )
       }
       if (!updated?.rowCount && depositAddress) {
@@ -698,12 +706,12 @@ export default async function handler(req: Request, res: Response) {
              set status = $1, tx_hash = $2, updated_at = now()
            where id = (
              select id from polymarket_funding_attempts
-              where privy_user_id = $3 and deposit_address = $4
+              where privy_user_id = $3 and deposit_address = $4 and lower(polymarket_address) = lower($5)
               order by created_at desc
               limit 1
            )
            returning id, request_id, network, amount, status, tx_hash, deposit_address, created_at`,
-          [status, txHash, privyUserId, depositAddress],
+          [status, txHash, privyUserId, depositAddress, polymarketWallet],
         )
       }
       if (updated?.rowCount) return res.json({ ok: true, fundingAttempt: updated.rows[0] })
@@ -713,7 +721,7 @@ export default async function handler(req: Request, res: Response) {
           (privy_user_id, polymarket_address, request_id, network, amount, status, tx_hash, deposit_address)
          values ($1,$2,$3,$4,$5,$6,$7,$8)
          returning id, request_id, network, amount, status, tx_hash, deposit_address, created_at`,
-        [privyUserId, String(profileRow.polymarket_address), requestId, network, amount, status, txHash, depositAddress],
+        [privyUserId, polymarketWallet, requestId, network, amount, status, txHash, depositAddress],
       )
       return res.json({ ok: true, fundingAttempt: inserted.rows[0] })
     }

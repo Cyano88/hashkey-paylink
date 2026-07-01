@@ -2694,6 +2694,7 @@ export function TelegramHelperPanel({
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           action: 'log-funding',
+          polymarketWallet: address,
           network: finalNetwork,
           amount: requestedAmount,
           status: 'pending',
@@ -5915,6 +5916,7 @@ function buildPolymarketPayLink({
   network,
   polymarketWallet,
   returnToPortfolio,
+  returnToStandalonePortfolio,
   returnToAgentHash,
   requestId,
   helperOwner,
@@ -5925,6 +5927,7 @@ function buildPolymarketPayLink({
   network: RequestNetwork
   polymarketWallet: string
   returnToPortfolio?: boolean
+  returnToStandalonePortfolio?: boolean
   returnToAgentHash?: boolean
   requestId?: string
   helperOwner?: string
@@ -5942,6 +5945,7 @@ function buildPolymarketPayLink({
   params.set('pmw', polymarketWallet)
   if (requestId) params.set('pmr', requestId)
   if (returnToAgentHash) params.set('return', 'agent-hash-polydesk-portfolio')
+  if (returnToStandalonePortfolio) params.set('return', 'polydesk-portfolio')
   if (returnToPortfolio) params.set('return', 'poly-portfolio')
   if (helperOwner) params.set('helperOwner', helperOwner)
   if (funding) params.set('funding', funding)
@@ -6274,8 +6278,8 @@ export function PolyPortfolioPanel({
   const [livePositions, setLivePositions] = useState<PolymarketPosition[]>([])
   const [liveLoading, setLiveLoading] = useState(false)
   const [liveError, setLiveError] = useState('')
+  const [liveLoadedAddress, setLiveLoadedAddress] = useState('')
 
-  const [fundOpen, setFundOpen] = useState(false)
   const [fundAmount, setFundAmount] = useState('')
   const [fundBusy, setFundBusy] = useState(false)
   const [fundError, setFundError] = useState('')
@@ -6298,13 +6302,19 @@ export function PolyPortfolioPanel({
   const [unsignedExternalNetwork, setUnsignedExternalNetwork] = useState<PolymarketBridgeNetwork>('base')
   const [unsignedExternalBusy, setUnsignedExternalBusy] = useState(false)
   const [unsignedExternalError, setUnsignedExternalError] = useState('')
+  const [unsignedExternalTab, setUnsignedExternalTab] = useState<'balance' | 'fund'>('balance')
+  const [unsignedExternalValue, setUnsignedExternalValue] = useState<{ value?: number } | null>(null)
+  const [unsignedExternalPositions, setUnsignedExternalPositions] = useState<PolymarketPosition[]>([])
+  const [unsignedExternalLoading, setUnsignedExternalLoading] = useState(false)
   const [unsignedExternalResult, setUnsignedExternalResult] = useState<{
     depositAddress: string
     network: PolymarketBridgeNetwork
     payUrl: string
+    minimumUsdc: number
   } | null>(null)
   const [tradingWalletTab, setTradingWalletTab] = useState<'balance' | 'fund' | 'withdraw' | 'positions'>('balance')
   const [tradingWalletNetwork, setTradingWalletNetwork] = useState<PolymarketBridgeNetwork>('base')
+  const [watchAccountTab, setWatchAccountTab] = useState<'balance' | 'positions' | 'alerts'>('balance')
   const [positionStatusTab, setPositionStatusTab] = useState<PolymarketPositionStatus>('live')
 
   const profile = bundle?.profile ?? null
@@ -6312,7 +6322,8 @@ export function PolyPortfolioPanel({
   const signingWallet = privyWallets.find(wallet => /^0x[a-fA-F0-9]{40}$/.test(wallet.address ?? '')) ?? null
   const signingWalletAddress = signingWallet?.address ?? ''
   const watchedAddress = profile?.watchedAddress || profile?.polymarketAddress || ''
-  const tradingAddress = profile?.tradingAddress || signingWalletAddress || ''
+  const savedTradingAddress = profile?.tradingAddress || ''
+  const tradingAddress = savedTradingAddress || signingWalletAddress || ''
   const liveDataAddress = unsignedPortfolioAction === 'trading' ? tradingAddress : watchedAddress
   const mainWalletCopy = 'View Polymarket cash, fund your account, and track positions.'
 
@@ -6377,6 +6388,7 @@ export function PolyPortfolioPanel({
   const fetchLiveData = useCallback(async (address: string) => {
     setLiveLoading(true)
     setLiveError('')
+    setLiveLoadedAddress('')
     try {
       const [valueRes, positionsRes] = await Promise.all([
         fetch(`/api/polymarket-portfolio?action=value&address=${encodeURIComponent(address)}`),
@@ -6388,6 +6400,7 @@ export function PolyPortfolioPanel({
       if (!positionsRes.ok || !positionsData.ok) throw new Error(positionsData.error || 'Could not load positions.')
       setLiveValue(normalizePortfolioValue(valueData.value))
       setLivePositions(Array.isArray(positionsData.positions) ? positionsData.positions : [])
+      setLiveLoadedAddress(address)
     } catch (err) {
       setLiveError(err instanceof Error ? err.message : 'Could not load live portfolio data.')
     } finally {
@@ -6441,11 +6454,11 @@ export function PolyPortfolioPanel({
   }, [liveDataAddress, fetchLiveData, fetchBundle])
 
   useEffect(() => {
-    if (watchedAddress && livePositions.length >= 0 && !liveLoading) {
-      void evaluateAlerts()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [watchedAddress, livePositions.length])
+    if (unsignedPortfolioAction !== 'watch') return
+    if (!watchedAddress || liveLoading) return
+    if (liveLoadedAddress.toLowerCase() !== watchedAddress.toLowerCase()) return
+    void evaluateAlerts()
+  }, [unsignedPortfolioAction, watchedAddress, liveLoadedAddress, liveLoading, livePositions.length, evaluateAlerts])
 
   useEffect(() => {
     if (settings) setSettingsDraft(settings)
@@ -6514,7 +6527,6 @@ export function PolyPortfolioPanel({
       setLivePositions([])
       setLiveError('')
       setFundResult(null)
-      setFundOpen(false)
       setFundAmount('')
       setFundError('')
       setAddressInput('')
@@ -6529,8 +6541,8 @@ export function PolyPortfolioPanel({
   }
 
   async function startFund(marketUrlForCta = '') {
-    if (!tradingAddress) {
-      setFundError('Sign in to Main Wallet before funding.')
+    if (!savedTradingAddress) {
+      setFundError('Open Main Wallet before funding.')
       return
     }
     setFundError('')
@@ -6546,7 +6558,7 @@ export function PolyPortfolioPanel({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          polymarketWallet: tradingAddress,
+          polymarketWallet: savedTradingAddress,
           network,
         }),
       })
@@ -6568,6 +6580,7 @@ export function PolyPortfolioPanel({
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify({
             action: 'log-funding',
+            polymarketWallet: savedTradingAddress,
             network: bridgeData.network ?? network,
             amount: amt,
             status: 'pending',
@@ -6581,8 +6594,9 @@ export function PolyPortfolioPanel({
         amount: amt,
         funding: 'Polymarket portfolio',
         network: (bridgeData.network ?? network) as RequestNetwork,
-        polymarketWallet: tradingAddress,
-        returnToPortfolio: true,
+        polymarketWallet: savedTradingAddress,
+        returnToPortfolio: surface !== 'standalone',
+        returnToStandalonePortfolio: surface === 'standalone',
         requestId,
       })
       setFundResult({
@@ -6627,6 +6641,7 @@ export function PolyPortfolioPanel({
         ok?: boolean
         depositAddress?: string
         network?: PolymarketBridgeNetwork
+        minimumUsdc?: number
         error?: string
       }
       if (!bridgeRes.ok || !bridgeData.ok || !bridgeData.depositAddress) {
@@ -6636,18 +6651,47 @@ export function PolyPortfolioPanel({
       setUnsignedExternalResult({
         depositAddress: bridgeData.depositAddress,
         network,
+        minimumUsdc: bridgeData.minimumUsdc ?? 3,
         payUrl: buildPolymarketPayLink({
           wallet: bridgeData.depositAddress,
           amount,
           funding: 'External Polymarket account',
           network: network as RequestNetwork,
           polymarketWallet: wallet,
+          returnToPortfolio: surface !== 'standalone',
+          returnToStandalonePortfolio: surface === 'standalone',
         }),
       })
     } catch (err) {
       setUnsignedExternalError(err instanceof Error ? err.message : 'Could not prepare external funding.')
     } finally {
       setUnsignedExternalBusy(false)
+    }
+  }
+
+  async function loadUnsignedExternalBalance() {
+    setUnsignedExternalError('')
+    const wallet = unsignedExternalAddress.trim()
+    if (!/^0x[a-fA-F0-9]{40}$/.test(wallet)) {
+      setUnsignedExternalError('Enter a valid external Polymarket 0x wallet first.')
+      return
+    }
+    setUnsignedExternalLoading(true)
+    try {
+      const [valueRes, positionsRes] = await Promise.all([
+        fetch(`/api/polymarket-portfolio?action=value&address=${encodeURIComponent(wallet)}`),
+        fetch(`/api/polymarket-portfolio?action=positions&address=${encodeURIComponent(wallet)}&sizeThreshold=0&limit=100`),
+      ])
+      const valueData = await readPolyDeskJson<{ ok?: boolean; value?: number; error?: string }>(valueRes, 'Could not load external balance.')
+      const positionsData = await readPolyDeskJson<{ ok?: boolean; positions?: PolymarketPosition[]; error?: string }>(positionsRes, 'Could not load external positions.')
+      if (!valueRes.ok || !valueData.ok) throw new Error(valueData.error || 'Could not load external balance.')
+      if (!positionsRes.ok || !positionsData.ok) throw new Error(positionsData.error || 'Could not load external positions.')
+      setUnsignedExternalValue({ value: valueData.value })
+      setUnsignedExternalPositions(Array.isArray(positionsData.positions) ? positionsData.positions : [])
+    } catch (err) {
+      setUnsignedExternalError(err instanceof Error ? err.message : 'Could not load external account.')
+    } finally {
+      setUnsignedExternalLoading(false)
     }
   }
 
@@ -6715,7 +6759,7 @@ export function PolyPortfolioPanel({
           </div>
           <h2 className="mt-2 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Sign-in is not enabled here</h2>
           <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-            Portfolio, alerts, funding history, and trading-wallet readiness need the Hash PayLink Privy session. Enable Privy for this environment, then refresh PolyDesk.
+            Portfolio alerts and trading-wallet readiness need the Hash PayLink Privy session. Enable Privy for this environment, then refresh PolyDesk.
           </p>
           <p className="mt-3 rounded-xl bg-gray-50 px-3 py-2 text-xs leading-relaxed text-gray-500 dark:bg-white/[0.04] dark:text-gray-400">
             Local env needed: VITE_PRIVY_APP_ID and VITE_AUTH_BRIDGE=hybrid.
@@ -6841,64 +6885,134 @@ export function PolyPortfolioPanel({
               {unsignedPortfolioAction === 'external' && (
                 <div className="mt-3 space-y-3">
                   <p className="text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-                    Fund another Polymarket wallet without changing your Main Wallet.
+                    Enter the recipient 0x wallet from the Polymarket account you want to fund. PolyDesk can check public activity, but it cannot verify ownership.
                   </p>
+                  <div className="grid grid-cols-2 gap-1 rounded-xl border border-gray-200 bg-white p-1 shadow-sm dark:border-white/10 dark:bg-[#17181d]">
+                    {[
+                      { key: 'balance', label: 'Balance', icon: Activity },
+                      { key: 'fund', label: 'Fund', icon: Download },
+                    ].map(({ key, label, icon: Icon }) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => setUnsignedExternalTab(key as typeof unsignedExternalTab)}
+                        className={cn(
+                          'flex min-h-[46px] flex-col items-center justify-center gap-1 rounded-lg border px-1.5 text-[10px] font-bold transition-all',
+                          unsignedExternalTab === key
+                            ? 'border-gray-300 bg-gray-100 text-gray-950 shadow-sm dark:border-white/15 dark:bg-white/[0.12] dark:text-white'
+                            : 'border-transparent bg-transparent text-gray-500 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-white/[0.06] dark:hover:text-gray-200',
+                        )}
+                      >
+                        <Icon className="h-3.5 w-3.5" />
+                        {label}
+                      </button>
+                    ))}
+                  </div>
                   <InputBlock
-                    label="External Polymarket wallet"
+                    label="Polymarket wallet"
                     value={unsignedExternalAddress}
                     onChange={value => {
                       setUnsignedExternalAddress(value)
                       setUnsignedExternalResult(null)
+                      setUnsignedExternalValue(null)
+                      setUnsignedExternalPositions([])
                     }}
                     placeholder="0x... wallet to fund"
                   />
-                  <InputBlock
-                    label="Amount USDC"
-                    value={unsignedExternalAmount}
-                    onChange={value => {
-                      setUnsignedExternalAmount(value)
-                      setUnsignedExternalResult(null)
-                    }}
-                    placeholder="0.00"
-                    inputMode="decimal"
-                  />
-                  <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Funding network</p>
-                    <NetworkChipGroup
-                      value={unsignedExternalNetwork}
-                      onChange={value => {
-                        if (value === 'base' || value === 'arbitrum' || value === 'solana') {
-                          setUnsignedExternalNetwork(value)
-                          setUnsignedExternalResult(null)
-                        }
-                      }}
-                      options={polymarketBridgeNetworks}
-                    />
-                  </div>
-                  {unsignedExternalError && <p className="text-xs text-red-500 dark:text-red-300">{unsignedExternalError}</p>}
-                  {!unsignedExternalResult ? (
-                    <button
-                      type="button"
-                      onClick={prepareUnsignedExternalFunding}
-                      disabled={unsignedExternalBusy}
-                      className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
-                    >
-                      {unsignedExternalBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
-                      Prepare checkout
-                    </button>
-                  ) : (
-                    <div className="space-y-2 rounded-xl border border-gray-100 bg-gray-50 p-3 dark:border-white/10 dark:bg-white/[0.04]">
-                      <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                        Checkout is ready on {unsignedExternalResult.network.toUpperCase()}.
-                      </p>
-                      <a
-                        href={unsignedExternalResult.payUrl}
-                        className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+
+                  {unsignedExternalTab === 'balance' && (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-2 gap-2.5">
+                        <div className="rounded-xl bg-gray-50 px-3 py-2 dark:bg-white/[0.04]">
+                          <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">Portfolio value</p>
+                          <p className="mt-1 text-base font-semibold tabular-nums text-gray-900 dark:text-white">
+                            {unsignedExternalLoading ? <Loader2 className="inline h-3.5 w-3.5 animate-spin" /> : formatUsd(unsignedExternalValue?.value)}
+                          </p>
+                        </div>
+                        <div className="rounded-xl bg-gray-50 px-3 py-2 dark:bg-white/[0.04]">
+                          <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">Open positions</p>
+                          <p className="mt-1 text-base font-semibold tabular-nums text-gray-900 dark:text-white">
+                            {unsignedExternalLoading ? <Loader2 className="inline h-3.5 w-3.5 animate-spin" /> : unsignedExternalPositions.filter(isActiveOpenPosition).length}
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={loadUnsignedExternalBalance}
+                        disabled={unsignedExternalLoading || !/^0x[a-fA-F0-9]{40}$/.test(unsignedExternalAddress.trim())}
+                        className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
                       >
-                        <ExternalLink className="h-4 w-4" /> Open checkout
-                      </a>
+                        {unsignedExternalLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                        Check account
+                      </button>
                     </div>
                   )}
+
+                  {unsignedExternalTab === 'fund' && (
+                    <div className="space-y-3">
+                      <InputBlock
+                        label="Amount USDC"
+                        value={unsignedExternalAmount}
+                        onChange={value => {
+                          setUnsignedExternalAmount(value)
+                          setUnsignedExternalResult(null)
+                        }}
+                        placeholder="0.00"
+                        inputMode="decimal"
+                      />
+                      <div className="grid grid-cols-3 gap-1.5">
+                        {polymarketBridgeNetworks.map(network => (
+                          <button
+                            key={network.key}
+                            type="button"
+                            onClick={() => {
+                              if (network.key === 'base' || network.key === 'arbitrum' || network.key === 'solana') {
+                                setUnsignedExternalNetwork(network.key)
+                                setUnsignedExternalResult(null)
+                              }
+                            }}
+                            className={cn(
+                              'rounded-lg border px-2 py-2 text-[11px] font-bold transition-all',
+                              unsignedExternalNetwork === network.key
+                                ? 'border-gray-950 bg-gray-950 text-white dark:border-white dark:bg-white dark:text-gray-950'
+                                : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:text-gray-900 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-400 dark:hover:border-white/20 dark:hover:text-gray-200',
+                            )}
+                          >
+                            {network.label}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                        {unsignedExternalNetwork === 'solana'
+                          ? 'Solana checkout creates an SVM deposit address that credits the 0x Polymarket wallet above.'
+                          : `${requestNetworkLabels[unsignedExternalNetwork]} checkout creates an EVM deposit address that credits the 0x Polymarket wallet above.`}
+                      </p>
+                      {!unsignedExternalResult ? (
+                        <button
+                          type="button"
+                          onClick={prepareUnsignedExternalFunding}
+                          disabled={unsignedExternalBusy || !/^0x[a-fA-F0-9]{40}$/.test(unsignedExternalAddress.trim())}
+                          className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+                        >
+                          {unsignedExternalBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
+                          Prepare checkout
+                        </button>
+                      ) : (
+                        <div className="space-y-2 rounded-xl border border-gray-100 bg-gray-50 p-3 dark:border-white/10 dark:bg-white/[0.04]">
+                          <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                            Checkout is ready on {requestNetworkLabels[unsignedExternalResult.network]}.
+                          </p>
+                          <a
+                            href={unsignedExternalResult.payUrl}
+                            className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+                          >
+                            <ExternalLink className="h-4 w-4" /> Open checkout
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {unsignedExternalError && <p className="text-xs text-red-500 dark:text-red-300">{unsignedExternalError}</p>}
                 </div>
               )}
           </div>
@@ -6919,7 +7033,7 @@ export function PolyPortfolioPanel({
   if (!unsignedPortfolioAction) {
     const portfolioActions = [
       ['watch', 'Watch Polymarket account', watchedAddress ? `Watching ${shortHex(watchedAddress)}` : 'Read-only alerts for any public profile.'],
-      ['trading', 'Trading wallet', tradingAddress ? `Trading with ${shortHex(tradingAddress)}` : 'Connect and persist the wallet used for trades.'],
+      ['trading', 'Trading wallet', savedTradingAddress ? `Trading with ${shortHex(savedTradingAddress)}` : 'Connect and persist the wallet used for trades.'],
       ['external', 'External funding', 'Send funds to another Polymarket wallet.'],
     ] as const
     return (
@@ -6935,38 +7049,150 @@ export function PolyPortfolioPanel({
   }
 
   if (unsignedPortfolioAction === 'external') {
+    const externalOpenPositions = unsignedExternalPositions.filter(isActiveOpenPosition)
+    const externalWalletValid = /^0x[a-fA-F0-9]{40}$/.test(unsignedExternalAddress.trim())
     return (
       <div className="mt-4 space-y-3">
         <PolyDeskBackButton onClick={() => setUnsignedPortfolioAction(null)} />
-        <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#111216]">
-          <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">External funding</p>
-          <h2 className="mt-1 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Fund another Polymarket wallet</h2>
-          <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-            One-off funding only. This wallet will not replace your watched account or Main Wallet.
-          </p>
-          <div className="mt-3 space-y-3">
-            <InputBlock label="External Polymarket wallet" value={unsignedExternalAddress} onChange={value => { setUnsignedExternalAddress(value); setUnsignedExternalResult(null) }} placeholder="0x... wallet to fund" />
-            <InputBlock label="Amount USDC" value={unsignedExternalAmount} onChange={value => { setUnsignedExternalAmount(value); setUnsignedExternalResult(null) }} placeholder="0.00" inputMode="decimal" />
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Funding network</p>
-              <NetworkChipGroup value={unsignedExternalNetwork} onChange={value => {
-                if (value === 'base' || value === 'arbitrum' || value === 'solana') {
-                  setUnsignedExternalNetwork(value)
-                  setUnsignedExternalResult(null)
-                }
-              }} options={polymarketBridgeNetworks} />
-            </div>
-            {unsignedExternalError && <p className="text-xs text-red-500 dark:text-red-300">{unsignedExternalError}</p>}
-            {!unsignedExternalResult ? (
-              <button type="button" onClick={prepareUnsignedExternalFunding} disabled={unsignedExternalBusy} className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200">
-                {unsignedExternalBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
-                Prepare checkout
+        <div className="rounded-2xl border border-gray-100 bg-white p-3.5 shadow-sm dark:border-white/10 dark:bg-[#0f1014]">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">External account</p>
+            <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-white">Fund a Polymarket wallet</h2>
+            <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
+              Enter the recipient 0x wallet from the Polymarket account you want to fund. PolyDesk can check public activity, but it cannot verify ownership.
+            </p>
+          </div>
+
+          <div className="mt-4 grid grid-cols-2 gap-1 rounded-xl border border-gray-200 bg-white p-1 shadow-sm dark:border-white/10 dark:bg-[#17181d]">
+            {[
+              { key: 'balance', label: 'Balance', icon: Activity },
+              { key: 'fund', label: 'Fund', icon: Download },
+            ].map(({ key, label, icon: Icon }) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setUnsignedExternalTab(key as typeof unsignedExternalTab)}
+                className={cn(
+                  'flex min-h-[46px] flex-col items-center justify-center gap-1 rounded-lg border px-1.5 text-[10px] font-bold transition-all',
+                  unsignedExternalTab === key
+                    ? 'border-gray-300 bg-gray-100 text-gray-950 shadow-sm dark:border-white/15 dark:bg-white/[0.12] dark:text-white'
+                    : 'border-transparent bg-transparent text-gray-500 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-white/[0.06] dark:hover:text-gray-200',
+                )}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                {label}
               </button>
-            ) : (
-              <a href={unsignedExternalResult.payUrl} className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200">
-                <ExternalLink className="h-4 w-4" /> Open checkout
-              </a>
+            ))}
+          </div>
+
+          <div className="mt-3 space-y-3">
+            <InputBlock
+              label="Polymarket wallet"
+              value={unsignedExternalAddress}
+              onChange={value => {
+                setUnsignedExternalAddress(value)
+                setUnsignedExternalResult(null)
+                setUnsignedExternalValue(null)
+                setUnsignedExternalPositions([])
+              }}
+              placeholder="0x... wallet to fund"
+            />
+
+            {unsignedExternalTab === 'balance' && (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div className="rounded-xl bg-gray-50 px-3 py-2 dark:bg-white/[0.04]">
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">Portfolio value</p>
+                    <p className="mt-1 text-base font-semibold tabular-nums text-gray-900 dark:text-white">
+                      {unsignedExternalLoading ? <Loader2 className="inline h-3.5 w-3.5 animate-spin" /> : formatUsd(unsignedExternalValue?.value)}
+                    </p>
+                  </div>
+                  <div className="rounded-xl bg-gray-50 px-3 py-2 dark:bg-white/[0.04]">
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">Open positions</p>
+                    <p className="mt-1 text-base font-semibold tabular-nums text-gray-900 dark:text-white">
+                      {unsignedExternalLoading ? <Loader2 className="inline h-3.5 w-3.5 animate-spin" /> : externalOpenPositions.length}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={loadUnsignedExternalBalance}
+                  disabled={unsignedExternalLoading || !externalWalletValid}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+                >
+                  {unsignedExternalLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                  Check account
+                </button>
+              </div>
             )}
+
+            {unsignedExternalTab === 'fund' && (
+              <div className="space-y-3">
+                <InputBlock
+                  label="Amount USDC"
+                  value={unsignedExternalAmount}
+                  onChange={value => {
+                    setUnsignedExternalAmount(value)
+                    setUnsignedExternalResult(null)
+                  }}
+                  placeholder="0.00"
+                  inputMode="decimal"
+                />
+                <div className="grid grid-cols-3 gap-1.5">
+                  {polymarketBridgeNetworks.map(network => (
+                    <button
+                      key={network.key}
+                      type="button"
+                      onClick={() => {
+                        if (network.key === 'base' || network.key === 'arbitrum' || network.key === 'solana') {
+                          setUnsignedExternalNetwork(network.key)
+                          setUnsignedExternalResult(null)
+                        }
+                      }}
+                      className={cn(
+                        'rounded-lg border px-2 py-2 text-[11px] font-bold transition-all',
+                        unsignedExternalNetwork === network.key
+                          ? 'border-gray-950 bg-gray-950 text-white dark:border-white dark:bg-white dark:text-gray-950'
+                          : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:text-gray-900 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-400 dark:hover:border-white/20 dark:hover:text-gray-200',
+                      )}
+                    >
+                      {network.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                  {unsignedExternalNetwork === 'solana'
+                    ? 'Solana checkout creates an SVM deposit address that credits the 0x Polymarket wallet above.'
+                    : `${requestNetworkLabels[unsignedExternalNetwork]} checkout creates an EVM deposit address that credits the 0x Polymarket wallet above.`}
+                </p>
+                {!unsignedExternalResult ? (
+                  <button
+                    type="button"
+                    onClick={prepareUnsignedExternalFunding}
+                    disabled={unsignedExternalBusy || !externalWalletValid}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+                  >
+                    {unsignedExternalBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
+                    Prepare checkout
+                  </button>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="rounded-xl border border-gray-100 bg-gray-50 p-3 dark:border-white/10 dark:bg-white/[0.04]">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-[11px] font-semibold uppercase tracking-widest text-emerald-600 dark:text-emerald-300">Checkout ready</p>
+                        <p className="text-xs font-semibold text-gray-500 dark:text-gray-400">Min {unsignedExternalResult.minimumUsdc} USDC</p>
+                      </div>
+                      <p className="mt-2 break-all font-mono text-xs text-gray-700 dark:text-gray-200">{unsignedExternalResult.depositAddress}</p>
+                    </div>
+                    <a href={unsignedExternalResult.payUrl} className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200">
+                      <ExternalLink className="h-4 w-4" /> Open checkout
+                    </a>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {unsignedExternalError && <p className="text-xs text-red-500 dark:text-red-300">{unsignedExternalError}</p>}
           </div>
         </div>
       </div>
@@ -6985,7 +7211,7 @@ export function PolyPortfolioPanel({
         </div>
         <h2 className="mt-2 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Watch a public Polymarket account</h2>
         <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-          Paste the public 0x address from a Polymarket account panel. PolyDesk uses it to show positions, claimables, alerts, and funding history. It does not give PolyDesk control of that account.
+          Paste the public 0x address from a Polymarket account panel. PolyDesk uses it to show positions, claimables, and alerts. It does not give PolyDesk control of that account.
         </p>
         <div className="mt-3 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs leading-relaxed text-blue-800 dark:border-blue-400/20 dark:bg-blue-400/10 dark:text-blue-100">
           Public profile tracking is separate from Main Wallet. PolyDesk only reads this address for positions and alerts.
@@ -6997,16 +7223,6 @@ export function PolyPortfolioPanel({
             onChange={setAddressInput}
             placeholder="0x... public profile address"
           />
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Preferred funding network</p>
-            <NetworkChipGroup
-              value={networkInput}
-              onChange={value => {
-                if (value === 'base' || value === 'arbitrum' || value === 'solana') setNetworkInput(value)
-              }}
-              options={polymarketBridgeNetworks}
-            />
-          </div>
           {profileError && <p className="text-xs text-red-500 dark:text-red-300">{profileError}</p>}
           {bundleError && <p className="text-xs text-red-500 dark:text-red-300">{bundleError}</p>}
           <button
@@ -7096,10 +7312,10 @@ export function PolyPortfolioPanel({
               <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.06]">
                 <img src={POLYMARKET_LOGO} alt="" className="h-4 w-4 invert dark:invert-0" />
               </span>
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Public Polymarket profile</p>
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Read-only profile</p>
             </div>
             <p className="mt-1.5 text-xs leading-snug text-gray-500 dark:text-gray-400">
-              Read-only tracking address for positions, claimables, alerts, and funding history.
+              Track a public Polymarket profile without signing trades.
             </p>
             <button
               type="button"
@@ -7115,7 +7331,7 @@ export function PolyPortfolioPanel({
               type="button"
               onClick={() => watchedAddress && void fetchLiveData(watchedAddress)}
               disabled={liveLoading}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 dark:border-white/10 dark:text-gray-300 dark:hover:bg-white/[0.04]"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-50 dark:border-white/10 dark:text-gray-300 dark:hover:bg-white/[0.04]"
               aria-label="Refresh"
             >
               <RefreshCw className={cn('h-3.5 w-3.5', liveLoading && 'animate-spin')} />
@@ -7124,7 +7340,7 @@ export function PolyPortfolioPanel({
               type="button"
               onClick={disconnectProfile}
               disabled={savingProfile}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 dark:border-white/10 dark:text-gray-300 dark:hover:bg-white/[0.04]"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-50 dark:border-white/10 dark:text-gray-300 dark:hover:bg-white/[0.04]"
               aria-label="Disconnect"
             >
               <LogOut className="h-3.5 w-3.5" />
@@ -7132,7 +7348,32 @@ export function PolyPortfolioPanel({
           </div>
         </div>
 
-        <div className="mt-3 grid grid-cols-2 gap-2.5">
+        <div className="mt-4 grid grid-cols-3 gap-1 rounded-xl border border-gray-200 bg-white p-1 shadow-sm dark:border-white/10 dark:bg-[#17181d]">
+          {[
+            { key: 'balance', label: 'Balance', icon: Activity },
+            { key: 'positions', label: 'Positions', icon: LineChart },
+            { key: 'alerts', label: 'Alerts', icon: Bell },
+          ].map(({ key, label, icon: Icon }) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setWatchAccountTab(key as typeof watchAccountTab)}
+              className={cn(
+                'flex min-h-[46px] flex-col items-center justify-center gap-1 rounded-lg border px-1.5 text-[10px] font-bold transition-all',
+                watchAccountTab === key
+                  ? 'border-gray-300 bg-gray-100 text-gray-950 shadow-sm dark:border-white/15 dark:bg-white/[0.12] dark:text-white'
+                  : 'border-transparent bg-transparent text-gray-500 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-white/[0.06] dark:hover:text-gray-200',
+              )}
+            >
+              <Icon className="h-3.5 w-3.5" />
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {watchAccountTab === 'balance' && (
+        <div className="mt-3 space-y-2.5">
+        <div className="grid grid-cols-2 gap-2.5">
           <div className="rounded-xl bg-gray-50 px-3 py-2 dark:bg-white/[0.04]">
             <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">Position value</p>
             <p className="mt-1 text-base font-semibold tabular-nums text-gray-900 dark:text-white">
@@ -7146,93 +7387,10 @@ export function PolyPortfolioPanel({
             </p>
           </div>
         </div>
-
-        {latestFunding && (
-          <div className="mt-2.5 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">Recent bridge funding</p>
-              <p className="text-xs font-semibold tabular-nums text-gray-800 dark:text-gray-100">
-                {latestFunding.amount} USDC
-              </p>
-            </div>
-            <p className="mt-0.5 text-xs leading-snug text-gray-500 dark:text-gray-400">
-              Cash balance updates inside Polymarket. PolyDesk tracks positions, claimables, alerts, and funding attempts.
-            </p>
-          </div>
+        </div>
         )}
 
         {liveError && <p className="mt-2 text-xs text-red-500 dark:text-red-300">{liveError}</p>}
-
-        <button
-          type="button"
-          onClick={() => { setFundOpen(open => !open); setFundResult(null); setFundError('') }}
-          className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-2.5 text-sm font-semibold text-white hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
-        >
-          <Send className="h-4 w-4" /> Fund Polymarket
-        </button>
-
-        {fundOpen && (
-          <div className="mt-2.5 rounded-xl border border-gray-100 bg-gray-50 p-3 dark:border-white/10 dark:bg-white/[0.04]">
-            {!fundResult ? (
-              <div className="space-y-3">
-                <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">
-                  Bridge checkout · {profile.preferredFundingNetwork || 'base'}
-                </p>
-                <InputBlock
-                  label="Amount USDC"
-                  value={fundAmount}
-                  onChange={setFundAmount}
-                  placeholder="0.00"
-                  inputMode="decimal"
-                />
-                <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                  Funded address is your saved Polymarket profile. Minimum bridge amount is 3 USDC.
-                </p>
-                {fundError && <p className="text-xs text-red-500 dark:text-red-300">{fundError}</p>}
-                <button
-                  type="button"
-                  onClick={() => startFund()}
-                  disabled={fundBusy}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-2.5 text-sm font-semibold text-white hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
-                >
-                  {fundBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
-                  Open bridge checkout
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <p className="text-[11px] font-semibold uppercase tracking-widest text-emerald-600 dark:text-emerald-300">Bridge prepared</p>
-                <p className="text-sm text-gray-700 dark:text-gray-200">
-                  Send <span className="font-semibold tabular-nums">{fundAmount} USDC</span> via {fundResult.network.toUpperCase()} to the bridge address. Min {fundResult.minimumUsdc} USDC.
-                </p>
-                <a
-                  href={fundResult.payUrl}
-                  className="block truncate rounded-lg bg-white px-3 py-2 font-mono text-xs text-gray-800 shadow-sm dark:bg-white/[0.06] dark:text-gray-200"
-                  rel="noreferrer"
-                >
-                  {fundResult.depositAddress}
-                </a>
-                <div className="flex flex-col gap-2 sm:flex-row">
-                  <a
-                    href={fundResult.payUrl}
-                    className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-black px-5 py-2.5 text-sm font-semibold text-white hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
-                  >
-                    <ExternalLink className="h-4 w-4" /> Open Hash PayLink checkout
-                  </a>
-                  <a
-                    href={fundResult.marketUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-gray-200 px-5 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:border-white/10 dark:text-gray-200 dark:hover:bg-white/[0.04]"
-                  >
-                    <ExternalLink className="h-4 w-4" />
-                    {fundResult.marketUrl === 'https://polymarket.com' ? 'Sign in and trade on Polymarket' : 'Sign in and trade this market'}
-                  </a>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
       </div>
       )}
 
@@ -7259,6 +7417,41 @@ export function PolyPortfolioPanel({
             )}
           </div>
         </div>
+
+        {!savedTradingAddress && (
+          <div className="mt-3 rounded-2xl border border-gray-100 bg-gray-50 p-3 dark:border-white/10 dark:bg-white/[0.04]">
+            <p className="text-sm font-semibold text-gray-900 dark:text-white">Open Main Wallet</p>
+            <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+              Save the wallet that will fund and prepare PolyDesk trades.
+            </p>
+            <div className="mt-3">
+              {!authenticated ? (
+                <PrivyConnectButton className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200">
+                  <Mail className="h-4 w-4" />
+                  Sign in to continue
+                </PrivyConnectButton>
+              ) : signingWalletAddress ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    void saveProfile(signingWalletAddress)
+                  }}
+                  disabled={savingProfile}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+                >
+                  {savingProfile ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                  Open Main Wallet
+                </button>
+              ) : (
+                <PrivyWalletConnectButton className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200">
+                  <Wallet className="h-4 w-4" />
+                  Connect wallet
+                </PrivyWalletConnectButton>
+              )}
+            </div>
+            {profileError && <p className="mt-2 text-xs text-red-500 dark:text-red-300">{profileError}</p>}
+          </div>
+        )}
 
         <div className="mt-4 grid grid-cols-4 gap-1 rounded-xl border border-gray-200 bg-white p-1 shadow-sm dark:border-white/10 dark:bg-[#17181d]">
           {[
@@ -7356,7 +7549,7 @@ export function PolyPortfolioPanel({
                 <button
                   type="button"
                   onClick={() => startFund()}
-                  disabled={fundBusy || !tradingAddress}
+                  disabled={fundBusy || !savedTradingAddress}
                   className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-2.5 text-sm font-semibold text-white hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
                 >
                   {fundBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
@@ -7503,7 +7696,7 @@ export function PolyPortfolioPanel({
       )}
 
       {/* Alerts card */}
-      {unsignedPortfolioAction === 'watch' && (
+      {unsignedPortfolioAction === 'watch' && watchAccountTab === 'alerts' && (
       <div className="rounded-2xl border border-gray-100 bg-white p-3.5 shadow-sm dark:border-white/10 dark:bg-[#0f1014]">
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -7629,7 +7822,7 @@ export function PolyPortfolioPanel({
       )}
 
       {/* Claimables card */}
-      {unsignedPortfolioAction === 'watch' && claimablePositions.length > 0 && (
+      {unsignedPortfolioAction === 'watch' && watchAccountTab === 'alerts' && claimablePositions.length > 0 && (
         <div className="rounded-2xl border border-emerald-100 bg-emerald-50/40 p-3.5 shadow-sm dark:border-emerald-300/20 dark:bg-emerald-400/[0.04]">
           <div className="flex items-center justify-between gap-3">
             <p className="text-[11px] font-semibold uppercase tracking-widest text-emerald-700 dark:text-emerald-300">Claimable on Polymarket</p>
@@ -7660,7 +7853,7 @@ export function PolyPortfolioPanel({
       )}
 
       {/* Open positions card */}
-      {unsignedPortfolioAction === 'watch' && (
+      {unsignedPortfolioAction === 'watch' && watchAccountTab === 'positions' && (
       <div className="rounded-2xl border border-gray-100 bg-white p-3.5 shadow-sm dark:border-white/10 dark:bg-[#0f1014]">
         <div className="flex items-center justify-between gap-3">
           <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Open positions</p>
@@ -7709,26 +7902,6 @@ export function PolyPortfolioPanel({
             })}
           </ul>
         )}
-      </div>
-      )}
-
-      {/* Quick links */}
-      {unsignedPortfolioAction === 'watch' && (
-      <div className="grid grid-cols-2 gap-2">
-        <button
-          type="button"
-          onClick={onOpenWorldCup}
-          className="flex items-center gap-2 rounded-xl border border-gray-100 bg-white px-3 py-2.5 text-left text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:border-white/10 dark:bg-[#0f1014] dark:text-gray-200 dark:hover:bg-white/[0.04]"
-        >
-          <Radio className="h-4 w-4 text-gray-400" /> World Cup
-        </button>
-        <button
-          type="button"
-          onClick={onOpenLpScout}
-          className="flex items-center gap-2 rounded-xl border border-gray-100 bg-white px-3 py-2.5 text-left text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:border-white/10 dark:bg-[#0f1014] dark:text-gray-200 dark:hover:bg-white/[0.04]"
-        >
-          <LineChart className="h-4 w-4 text-gray-400" /> LP Scout
-        </button>
       </div>
       )}
     </div>
