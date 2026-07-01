@@ -6350,6 +6350,9 @@ export function PolyPortfolioPanel({
     payUrl: string
     minimumUsdc: number
   } | null>(null)
+  const [tradingPusdBalance, setTradingPusdBalance] = useState<{ raw: string; formatted: string } | null>(null)
+  const [tradingPusdLoading, setTradingPusdLoading] = useState(false)
+  const [tradingPusdError, setTradingPusdError] = useState('')
   const [tradingWalletTab, setTradingWalletTab] = useState<'balance' | 'fund' | 'withdraw' | 'positions'>('balance')
   const [tradingWalletNetwork, setTradingWalletNetwork] = useState<PolymarketBridgeNetwork>('base')
   const [watchAccountTab, setWatchAccountTab] = useState<'balance' | 'positions' | 'alerts'>('balance')
@@ -6368,6 +6371,12 @@ export function PolyPortfolioPanel({
   const tradingAddress = savedTradingAddress || signingWalletAddress || ''
   const tradingPortfolioAddress = polymarketDepositWallet || tradingAddress
   const liveDataAddress = unsignedPortfolioAction === 'trading' ? tradingPortfolioAddress : watchedAddress
+  const tradingPusdValue = tradingPusdBalance?.formatted ? Number(tradingPusdBalance.formatted) : null
+  const tradingPusdDisplay = tradingPusdLoading
+    ? null
+    : tradingPusdValue !== null && Number.isFinite(tradingPusdValue)
+      ? formatUsd(tradingPusdValue)
+      : '--'
   const mainWalletCopy = 'View pUSD trading cash, fund your account, withdraw as USDC, and track positions.'
 
   const claimablePositions = useMemo(
@@ -6535,6 +6544,13 @@ export function PolyPortfolioPanel({
     depositWalletStatus,
     depositWalletBusy,
   ])
+
+  useEffect(() => {
+    if (unsignedPortfolioAction !== 'trading') return
+    if (tradingWalletTab !== 'balance') return
+    if (!polymarketWalletReady || !polymarketDepositWallet) return
+    void loadTradingPusdBalance(polymarketDepositWallet)
+  }, [unsignedPortfolioAction, tradingWalletTab, polymarketWalletReady, polymarketDepositWallet])
 
   async function saveProfile(addressOverride?: string): Promise<PolymarketPortfolioBundle | null> {
     const address = (addressOverride ?? addressInput).trim()
@@ -6725,10 +6741,41 @@ export function PolyPortfolioPanel({
         marketUrl: marketUrlForCta || 'https://polymarket.com',
       })
       void fetchBundle()
+      void loadTradingPusdBalance(polymarketDepositWallet)
     } catch (err) {
       setFundError(err instanceof Error ? err.message : 'Could not prepare funding.')
     } finally {
       setFundBusy(false)
+    }
+  }
+
+  async function loadTradingPusdBalance(wallet = polymarketDepositWallet) {
+    if (!wallet || !/^0x[a-fA-F0-9]{40}$/.test(wallet)) return
+    setTradingPusdLoading(true)
+    setTradingPusdError('')
+    try {
+      const res = await fetch('/api/polymarket-bridge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'balance',
+          polymarketWallet: wallet,
+        }),
+      })
+      const data = await readPolyDeskJson<{
+        ok?: boolean
+        balance?: { raw?: string; formatted?: string }
+        error?: string
+      }>(res, 'Could not load pUSD balance.')
+      if (!res.ok || !data.ok || !data.balance) throw new Error(data.error || 'Could not load pUSD balance.')
+      setTradingPusdBalance({
+        raw: data.balance.raw ?? '0',
+        formatted: data.balance.formatted ?? '0',
+      })
+    } catch (err) {
+      setTradingPusdError(err instanceof Error ? err.message : 'Could not load pUSD balance.')
+    } finally {
+      setTradingPusdLoading(false)
     }
   }
 
@@ -8001,8 +8048,14 @@ export function PolyPortfolioPanel({
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">pUSD trading cash</p>
-                  <p className="mt-1 text-2xl font-black tracking-tight text-gray-950 dark:text-white">--</p>
-                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">pUSD balance requires Polymarket account access.</p>
+                  <p className="mt-1 text-2xl font-black tracking-tight text-gray-950 dark:text-white">
+                    {tradingPusdLoading ? <Loader2 className="inline h-5 w-5 animate-spin" /> : tradingPusdDisplay}
+                  </p>
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    {tradingPusdError
+                      ? tradingPusdError
+                      : polymarketWalletReady ? 'Live pUSD balance on the Polymarket wallet.' : 'Activates after Polymarket wallet is ready.'}
+                  </p>
                 </div>
               </div>
             </div>
@@ -8018,12 +8071,15 @@ export function PolyPortfolioPanel({
                 </div>
                 <button
                   type="button"
-                  onClick={() => tradingPortfolioAddress && void fetchLiveData(tradingPortfolioAddress)}
-                  disabled={liveLoading || !tradingPortfolioAddress}
+                  onClick={() => {
+                    if (tradingPortfolioAddress) void fetchLiveData(tradingPortfolioAddress)
+                    if (polymarketDepositWallet) void loadTradingPusdBalance(polymarketDepositWallet)
+                  }}
+                  disabled={(liveLoading && tradingPusdLoading) || !tradingPortfolioAddress}
                   className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-gray-600 transition hover:bg-gray-100 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300 dark:hover:bg-white/[0.1]"
                   aria-label="Refresh PolyDesk portfolio value"
                 >
-                  <RefreshCw className={cn('h-4 w-4', liveLoading && 'animate-spin')} />
+                  <RefreshCw className={cn('h-4 w-4', (liveLoading || tradingPusdLoading) && 'animate-spin')} />
                 </button>
               </div>
             </div>
