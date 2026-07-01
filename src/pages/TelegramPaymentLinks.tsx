@@ -6067,6 +6067,10 @@ type PolymarketProfile = {
   polymarketAddress: string
   watchedAddress?: string | null
   tradingAddress?: string | null
+  depositWalletAddress?: string | null
+  depositWalletStatus?: string | null
+  depositWalletTxId?: string | null
+  depositWalletTxHash?: string | null
   preferredFundingNetwork: string
   telegramOwner?: string | null
   telegramId?: string | null
@@ -6273,6 +6277,9 @@ export function PolyPortfolioPanel({
   const [networkInput, setNetworkInput] = useState<PolymarketBridgeNetwork>('base')
   const [savingProfile, setSavingProfile] = useState(false)
   const [profileError, setProfileError] = useState('')
+  const [depositWalletBusy, setDepositWalletBusy] = useState(false)
+  const [depositWalletError, setDepositWalletError] = useState('')
+  const depositWalletAutoKey = useRef('')
 
   const [liveValue, setLiveValue] = useState<{ value?: number } | null>(null)
   const [livePositions, setLivePositions] = useState<PolymarketPosition[]>([])
@@ -6323,8 +6330,11 @@ export function PolyPortfolioPanel({
   const signingWalletAddress = signingWallet?.address ?? ''
   const watchedAddress = profile?.watchedAddress || profile?.polymarketAddress || ''
   const savedTradingAddress = profile?.tradingAddress || ''
+  const polymarketDepositWallet = profile?.depositWalletAddress || ''
+  const polymarketWalletReady = Boolean(polymarketDepositWallet)
   const tradingAddress = savedTradingAddress || signingWalletAddress || ''
-  const liveDataAddress = unsignedPortfolioAction === 'trading' ? tradingAddress : watchedAddress
+  const tradingPortfolioAddress = polymarketDepositWallet || tradingAddress
+  const liveDataAddress = unsignedPortfolioAction === 'trading' ? tradingPortfolioAddress : watchedAddress
   const mainWalletCopy = 'View Polymarket cash, fund your account, and track positions.'
 
   const claimablePositions = useMemo(
@@ -6464,11 +6474,20 @@ export function PolyPortfolioPanel({
     if (settings) setSettingsDraft(settings)
   }, [settings])
 
-  async function saveProfile(addressOverride?: string) {
+  useEffect(() => {
+    if (unsignedPortfolioAction !== 'trading') return
+    if (!authenticated || !savedTradingAddress || polymarketDepositWallet || depositWalletBusy) return
+    const key = savedTradingAddress.toLowerCase()
+    if (depositWalletAutoKey.current === key) return
+    depositWalletAutoKey.current = key
+    void activatePolymarketWallet(savedTradingAddress)
+  }, [unsignedPortfolioAction, authenticated, savedTradingAddress, polymarketDepositWallet, depositWalletBusy])
+
+  async function saveProfile(addressOverride?: string): Promise<PolymarketPortfolioBundle | null> {
     const address = (addressOverride ?? addressInput).trim()
     if (!/^0x[a-fA-F0-9]{40}$/.test(address)) {
       setProfileError('Enter a valid 0x Polymarket profile address.')
-      return
+      return null
     }
     setProfileError('')
     setSavingProfile(true)
@@ -6489,18 +6508,56 @@ export function PolyPortfolioPanel({
       })
       const data = await readPolyDeskJson<{ ok?: boolean; error?: string } & PolymarketPortfolioBundle>(res, 'Could not save profile.')
       if (!res.ok || !data.ok) throw new Error(data.error || 'Could not save profile.')
-      setBundle({
+      const nextBundle = {
         profile: data.profile,
         settings: data.settings,
         watchlist: data.watchlist ?? [],
         fundingAttempts: data.fundingAttempts ?? [],
         alerts: data.alerts ?? [],
-      })
+      }
+      setBundle(nextBundle)
       setAddressInput('')
+      return nextBundle
     } catch (err) {
       setProfileError(err instanceof Error ? err.message : 'Could not save profile.')
+      return null
     } finally {
       setSavingProfile(false)
+    }
+  }
+
+  async function activatePolymarketWallet(ownerAddress = savedTradingAddress || signingWalletAddress) {
+    const owner = ownerAddress.trim()
+    if (!/^0x[a-fA-F0-9]{40}$/.test(owner)) {
+      setDepositWalletError('Connect Main Wallet before activating Polymarket wallet.')
+      return null
+    }
+    setDepositWalletBusy(true)
+    setDepositWalletError('')
+    try {
+      const token = await getAccessToken()
+      if (!token) throw new Error('Sign in required.')
+      const res = await fetch('/api/polymarket-portfolio', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: 'ensure-deposit-wallet', ownerAddress: owner }),
+      })
+      const data = await readPolyDeskJson<{ ok?: boolean; error?: string } & PolymarketPortfolioBundle>(res, 'Could not activate Polymarket wallet.')
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Could not activate Polymarket wallet.')
+      const nextBundle = {
+        profile: data.profile,
+        settings: data.settings,
+        watchlist: data.watchlist ?? [],
+        fundingAttempts: data.fundingAttempts ?? [],
+        alerts: data.alerts ?? [],
+      }
+      setBundle(nextBundle)
+      return nextBundle
+    } catch (err) {
+      setDepositWalletError(err instanceof Error ? err.message : 'Could not activate Polymarket wallet.')
+      return null
+    } finally {
+      setDepositWalletBusy(false)
     }
   }
 
@@ -6545,6 +6602,10 @@ export function PolyPortfolioPanel({
       setFundError('Open Main Wallet before funding.')
       return
     }
+    if (!polymarketDepositWallet) {
+      setFundError('Activate Polymarket Wallet before funding.')
+      return
+    }
     setFundError('')
     const amt = fundAmount.trim()
     if (!/^\d+(?:\.\d{1,6})?$/.test(amt) || Number(amt) < 3) {
@@ -6558,7 +6619,7 @@ export function PolyPortfolioPanel({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          polymarketWallet: savedTradingAddress,
+          polymarketWallet: polymarketDepositWallet,
           network,
         }),
       })
@@ -6580,7 +6641,7 @@ export function PolyPortfolioPanel({
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify({
             action: 'log-funding',
-            polymarketWallet: savedTradingAddress,
+            polymarketWallet: polymarketDepositWallet,
             network: bridgeData.network ?? network,
             amount: amt,
             status: 'pending',
@@ -6594,7 +6655,7 @@ export function PolyPortfolioPanel({
         amount: amt,
         funding: 'Polymarket portfolio',
         network: (bridgeData.network ?? network) as RequestNetwork,
-        polymarketWallet: savedTradingAddress,
+        polymarketWallet: polymarketDepositWallet,
         returnToPortfolio: surface !== 'standalone',
         returnToStandalonePortfolio: surface === 'standalone',
         requestId,
@@ -7266,13 +7327,14 @@ export function PolyPortfolioPanel({
             ) : signingWalletAddress ? (
               <button
                 type="button"
-                onClick={() => {
-                  void saveProfile(signingWalletAddress)
+                onClick={async () => {
+                  const saved = await saveProfile(signingWalletAddress)
+                  if (saved?.profile?.tradingAddress) void activatePolymarketWallet(saved.profile.tradingAddress)
                 }}
-                disabled={savingProfile}
+                disabled={savingProfile || depositWalletBusy}
                 className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
               >
-                {savingProfile ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                {savingProfile || depositWalletBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
                 Open Main Wallet
               </button>
             ) : (
@@ -7433,13 +7495,14 @@ export function PolyPortfolioPanel({
               ) : signingWalletAddress ? (
                 <button
                   type="button"
-                  onClick={() => {
-                    void saveProfile(signingWalletAddress)
+                  onClick={async () => {
+                    const saved = await saveProfile(signingWalletAddress)
+                    if (saved?.profile?.tradingAddress) void activatePolymarketWallet(saved.profile.tradingAddress)
                   }}
-                  disabled={savingProfile}
+                  disabled={savingProfile || depositWalletBusy}
                   className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
                 >
-                  {savingProfile ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                  {savingProfile || depositWalletBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
                   Open Main Wallet
                 </button>
               ) : (
@@ -7450,6 +7513,47 @@ export function PolyPortfolioPanel({
               )}
             </div>
             {profileError && <p className="mt-2 text-xs text-red-500 dark:text-red-300">{profileError}</p>}
+          </div>
+        )}
+
+        {savedTradingAddress && (
+          <div className="mt-3 grid gap-2 rounded-2xl border border-gray-100 bg-gray-50 p-3 dark:border-white/10 dark:bg-white/[0.04]">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">Owner wallet</p>
+                <p className="mt-1 font-mono text-xs font-semibold text-gray-800 dark:text-gray-100">{shortHex(savedTradingAddress)}</p>
+              </div>
+              <span className="rounded-full bg-white px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-gray-500 dark:bg-white/[0.06] dark:text-gray-300">Signer</span>
+            </div>
+            <div className="flex items-center justify-between gap-3 border-t border-gray-200 pt-2 dark:border-white/10">
+              <div className="min-w-0">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">Polymarket wallet</p>
+                <p className="mt-1 font-mono text-xs font-semibold text-gray-800 dark:text-gray-100">
+                  {polymarketDepositWallet ? shortHex(polymarketDepositWallet) : depositWalletBusy ? 'Activating...' : 'Not active'}
+                </p>
+                <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                  Funding goes to this Polymarket deposit wallet, not the owner wallet.
+                </p>
+              </div>
+              {!polymarketDepositWallet && (
+                <button
+                  type="button"
+                  onClick={() => void activatePolymarketWallet(savedTradingAddress)}
+                  disabled={depositWalletBusy}
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-black px-3 py-2 text-[11px] font-semibold text-white transition hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+                >
+                  {depositWalletBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                  Activate
+                </button>
+              )}
+            </div>
+            {depositWalletError && <p className="text-xs text-red-500 dark:text-red-300">{depositWalletError}</p>}
+            {profile?.depositWalletStatus && polymarketDepositWallet && (
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Status: <span className="font-semibold">{profile.depositWalletStatus}</span>
+                {profile.depositWalletTxHash ? ` - ${shortHex(profile.depositWalletTxHash)}` : ''}
+              </p>
+            )}
           </div>
         )}
 
@@ -7515,12 +7619,12 @@ export function PolyPortfolioPanel({
                   <p className="mt-1 text-2xl font-black tracking-tight text-gray-950 dark:text-white">
                     {liveLoading ? <Loader2 className="inline h-5 w-5 animate-spin" /> : formatUsd(totalValue)}
                   </p>
-                  {tradingAddress && <p className="mt-1 text-xs font-semibold text-gray-400">{shortHex(tradingAddress)}</p>}
+                  {tradingPortfolioAddress && <p className="mt-1 text-xs font-semibold text-gray-400">{shortHex(tradingPortfolioAddress)}</p>}
                 </div>
                 <button
                   type="button"
-                  onClick={() => tradingAddress && void fetchLiveData(tradingAddress)}
-                  disabled={liveLoading || !tradingAddress}
+                  onClick={() => tradingPortfolioAddress && void fetchLiveData(tradingPortfolioAddress)}
+                  disabled={liveLoading || !tradingPortfolioAddress}
                   className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-gray-600 transition hover:bg-gray-100 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300 dark:hover:bg-white/[0.1]"
                   aria-label="Refresh PolyDesk portfolio value"
                 >
@@ -7543,13 +7647,18 @@ export function PolyPortfolioPanel({
                   inputMode="decimal"
                 />
                 <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                  Funds are routed through the Polymarket bridge on {requestNetworkLabels[tradingWalletNetwork]}. Minimum bridge amount is 3 USDC.
+                  Funds are routed to your Polymarket wallet on {requestNetworkLabels[tradingWalletNetwork]}. Minimum bridge amount is 3 USDC.
                 </p>
+                {!polymarketWalletReady && (
+                  <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 dark:border-amber-300/20 dark:bg-amber-300/10 dark:text-amber-100">
+                    Activate Polymarket Wallet before funding.
+                  </p>
+                )}
                 {fundError && <p className="text-xs text-red-500 dark:text-red-300">{fundError}</p>}
                 <button
                   type="button"
                   onClick={() => startFund()}
-                  disabled={fundBusy || !savedTradingAddress}
+                  disabled={fundBusy || !polymarketWalletReady}
                   className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-2.5 text-sm font-semibold text-white hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
                 >
                   {fundBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
@@ -7606,8 +7715,8 @@ export function PolyPortfolioPanel({
               </div>
               <button
                 type="button"
-                onClick={() => tradingAddress && void fetchLiveData(tradingAddress)}
-                disabled={liveLoading || !tradingAddress}
+                onClick={() => tradingPortfolioAddress && void fetchLiveData(tradingPortfolioAddress)}
+                disabled={liveLoading || !tradingPortfolioAddress}
                 className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-gray-600 transition hover:bg-gray-100 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300 dark:hover:bg-white/[0.1]"
                 aria-label="Refresh PolyDesk positions"
               >

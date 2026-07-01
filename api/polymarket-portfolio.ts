@@ -11,6 +11,18 @@ const ALERT_FROM_EMAIL = process.env.POLYMARKET_ALERT_FROM_EMAIL
   ?? process.env.AGENTIC_STREAMING_FROM_EMAIL
   ?? process.env.STREAM_INVITE_FROM_EMAIL
 const ALERT_FROM_NAME = process.env.POLYMARKET_ALERT_FROM_NAME ?? 'Hash PayLink Polymarket'
+const POLYMARKET_RELAYER_URL = (process.env.POLYMARKET_RELAYER_URL ?? process.env.RELAYER_URL ?? '').trim()
+const POLYMARKET_CHAIN_ID = Number(process.env.POLYMARKET_CHAIN_ID ?? 137)
+const POLYMARKET_RPC_URL = (process.env.POLYMARKET_RPC_URL ?? process.env.POLYGON_RPC_URL ?? '').trim()
+const POLYMARKET_BUILDER_API_KEY = (process.env.POLYMARKET_BUILDER_API_KEY ?? process.env.BUILDER_API_KEY ?? '').trim()
+const POLYMARKET_BUILDER_SECRET = (process.env.POLYMARKET_BUILDER_SECRET ?? process.env.BUILDER_SECRET ?? '').trim()
+const POLYMARKET_BUILDER_PASS_PHRASE = (
+  process.env.POLYMARKET_BUILDER_PASS_PHRASE
+  ?? process.env.POLYMARKET_BUILDER_PASSPHRASE
+  ?? process.env.BUILDER_PASS_PHRASE
+  ?? process.env.BUILDER_PASSPHRASE
+  ?? ''
+).trim()
 
 const { Pool } = pg
 const DATABASE_URL = (process.env.DATABASE_URL ?? process.env.POSTGRES_URL ?? '').trim()
@@ -63,6 +75,10 @@ function ensureSchema() {
       alter table polymarket_profiles
         add column if not exists watched_address text,
         add column if not exists trading_address text,
+        add column if not exists deposit_wallet_address text,
+        add column if not exists deposit_wallet_status text,
+        add column if not exists deposit_wallet_tx_id text,
+        add column if not exists deposit_wallet_tx_hash text,
         add column if not exists telegram_owner text,
         add column if not exists telegram_id text;
 
@@ -162,6 +178,68 @@ function cleanEmail(value: unknown) {
 }
 
 const SUPPORTED_NETWORKS = new Set(['base', 'arbitrum', 'solana'])
+
+function hasPolymarketRelayerConfig() {
+  return Boolean(
+    POLYMARKET_RELAYER_URL
+    && POLYMARKET_BUILDER_API_KEY
+    && POLYMARKET_BUILDER_SECRET
+    && POLYMARKET_BUILDER_PASS_PHRASE,
+  )
+}
+
+async function createDepositWalletClient(ownerAddress: string) {
+  if (!hasPolymarketRelayerConfig()) {
+    const err = new Error('Polymarket deposit wallet relayer is not configured.')
+    ;(err as Error & { status?: number }).status = 503
+    throw err
+  }
+  const [{ RelayClient }, { BuilderConfig }, { createWalletClient, http }, { polygon }] = await Promise.all([
+    import('@polymarket/builder-relayer-client'),
+    import('@polymarket/builder-signing-sdk'),
+    import('viem'),
+    import('viem/chains'),
+  ])
+  const walletClient = createWalletClient({
+    account: { address: ownerAddress as `0x${string}`, type: 'json-rpc' },
+    chain: polygon,
+    transport: http(POLYMARKET_RPC_URL || undefined),
+  })
+  const builderConfig = new BuilderConfig({
+    localBuilderCreds: {
+      key: POLYMARKET_BUILDER_API_KEY,
+      secret: POLYMARKET_BUILDER_SECRET,
+      passphrase: POLYMARKET_BUILDER_PASS_PHRASE,
+    },
+  })
+  return new RelayClient(POLYMARKET_RELAYER_URL, POLYMARKET_CHAIN_ID, walletClient, builderConfig, undefined, { chain: polygon })
+}
+
+async function ensurePolymarketDepositWallet(ownerAddress: string) {
+  const client = await createDepositWalletClient(ownerAddress)
+  const depositWalletAddress = await client.deriveDepositWalletAddress()
+  let deployed = false
+  try {
+    deployed = await client.getDeployed(depositWalletAddress, 'WALLET')
+  } catch {
+    deployed = false
+  }
+  if (deployed) {
+    return {
+      depositWalletAddress,
+      depositWalletStatus: 'ready',
+      depositWalletTxId: null as string | null,
+      depositWalletTxHash: null as string | null,
+    }
+  }
+  const response = await client.deployDepositWallet()
+  return {
+    depositWalletAddress,
+    depositWalletStatus: response.state || 'pending',
+    depositWalletTxId: response.transactionID || null,
+    depositWalletTxHash: response.transactionHash || null,
+  }
+}
 
 async function dataApiFetch<T>(path: string): Promise<T> {
   const controller = new AbortController()
@@ -287,6 +365,10 @@ async function loadProfileBundle(privyUserId: string) {
           ? null
           : String(profile.polymarket_address),
       tradingAddress: profile.trading_address ? String(profile.trading_address) : null,
+      depositWalletAddress: profile.deposit_wallet_address ? String(profile.deposit_wallet_address) : null,
+      depositWalletStatus: profile.deposit_wallet_status ? String(profile.deposit_wallet_status) : null,
+      depositWalletTxId: profile.deposit_wallet_tx_id ? String(profile.deposit_wallet_tx_id) : null,
+      depositWalletTxHash: profile.deposit_wallet_tx_hash ? String(profile.deposit_wallet_tx_hash) : null,
       // Clamp to a known network so a stale/corrupt value doesn't reach the
       // bridge call with a confusing 502.
       preferredFundingNetwork: SUPPORTED_NETWORKS.has(String(profile.preferred_funding_network))
@@ -533,6 +615,52 @@ export default async function handler(req: Request, res: Response) {
       return res.json({ ok: true, ...bundle })
     }
 
+    if (action === 'ensure-deposit-wallet') {
+      const ownerAddress = cleanString(body.ownerAddress, 64)
+      if (!isAddress(ownerAddress)) return res.status(400).json({ ok: false, error: 'Provide a valid owner wallet address.' })
+      const profileRow = (await requirePool().query(
+        'select trading_address, deposit_wallet_address, deposit_wallet_status from polymarket_profiles where privy_user_id = $1',
+        [privyUserId],
+      )).rows[0]
+      if (profileRow?.trading_address && String(profileRow.trading_address).toLowerCase() !== ownerAddress.toLowerCase()) {
+        return res.status(409).json({ ok: false, error: 'Connect the saved Main Wallet before activating Polymarket wallet.' })
+      }
+      if (profileRow?.deposit_wallet_address && String(profileRow.deposit_wallet_status || '').toLowerCase() === 'ready') {
+        const bundle = await loadProfileBundle(privyUserId)
+        return res.json({ ok: true, ...bundle })
+      }
+
+      const wallet = await ensurePolymarketDepositWallet(ownerAddress)
+      await requirePool().query(
+        `insert into polymarket_profiles
+          (privy_user_id, polymarket_address, trading_address, deposit_wallet_address, deposit_wallet_status, deposit_wallet_tx_id, deposit_wallet_tx_hash)
+         values ($1,$2,$3,$4,$5,$6,$7)
+         on conflict (privy_user_id) do update set
+           trading_address = coalesce(polymarket_profiles.trading_address, excluded.trading_address),
+           deposit_wallet_address = excluded.deposit_wallet_address,
+           deposit_wallet_status = excluded.deposit_wallet_status,
+           deposit_wallet_tx_id = excluded.deposit_wallet_tx_id,
+           deposit_wallet_tx_hash = excluded.deposit_wallet_tx_hash,
+           updated_at = now()`,
+        [
+          privyUserId,
+          ownerAddress,
+          ownerAddress,
+          wallet.depositWalletAddress,
+          wallet.depositWalletStatus,
+          wallet.depositWalletTxId,
+          wallet.depositWalletTxHash,
+        ],
+      )
+      await requirePool().query(
+        `insert into polymarket_alert_settings (privy_user_id) values ($1)
+         on conflict (privy_user_id) do nothing`,
+        [privyUserId],
+      )
+      const bundle = await loadProfileBundle(privyUserId)
+      return res.json({ ok: true, ...bundle })
+    }
+
     if (action === 'disconnect') {
       await requirePool().query('delete from polymarket_watchlist where privy_user_id = $1', [privyUserId])
       await requirePool().query('delete from polymarket_funding_attempts where privy_user_id = $1', [privyUserId])
@@ -559,6 +687,10 @@ export default async function handler(req: Request, res: Response) {
       await requirePool().query(
         `update polymarket_profiles
             set trading_address = null,
+                deposit_wallet_address = null,
+                deposit_wallet_status = null,
+                deposit_wallet_tx_id = null,
+                deposit_wallet_tx_hash = null,
                 updated_at = now()
           where privy_user_id = $1`,
         [privyUserId],
@@ -653,11 +785,12 @@ export default async function handler(req: Request, res: Response) {
       const polymarketWallet = cleanString(body.polymarketWallet, 64)
       if (!isAddress(polymarketWallet)) return res.status(400).json({ ok: false, error: 'Provide the funded Polymarket wallet.' })
       const profileRow = (await requirePool().query(
-        'select trading_address from polymarket_profiles where privy_user_id = $1',
+        'select trading_address, deposit_wallet_address from polymarket_profiles where privy_user_id = $1',
         [privyUserId],
       )).rows[0]
-      if (!profileRow?.trading_address || String(profileRow.trading_address).toLowerCase() !== polymarketWallet.toLowerCase()) {
-        return res.status(409).json({ ok: false, error: 'Save this trading wallet before funding.' })
+      const fundedWallet = profileRow?.deposit_wallet_address ? String(profileRow.deposit_wallet_address) : ''
+      if (!profileRow?.trading_address || !fundedWallet || fundedWallet.toLowerCase() !== polymarketWallet.toLowerCase()) {
+        return res.status(409).json({ ok: false, error: 'Activate this Polymarket wallet before funding.' })
       }
       const inserted = await requirePool().query(
         `insert into polymarket_funding_attempts
@@ -683,11 +816,12 @@ export default async function handler(req: Request, res: Response) {
       const bridgeStatus = cleanString(body.bridgeStatus, 32)
       const status = bridgeStatus === 'complete' ? 'bridge_complete' : 'confirmed'
       const profileRow = (await requirePool().query(
-        'select trading_address from polymarket_profiles where privy_user_id = $1',
+        'select trading_address, deposit_wallet_address from polymarket_profiles where privy_user_id = $1',
         [privyUserId],
       )).rows[0]
-      if (!profileRow?.trading_address || String(profileRow.trading_address).toLowerCase() !== polymarketWallet.toLowerCase()) {
-        return res.status(409).json({ ok: false, error: 'Save this trading wallet before funding.' })
+      const fundedWallet = profileRow?.deposit_wallet_address ? String(profileRow.deposit_wallet_address) : ''
+      if (!profileRow?.trading_address || !fundedWallet || fundedWallet.toLowerCase() !== polymarketWallet.toLowerCase()) {
+        return res.status(409).json({ ok: false, error: 'Activate this Polymarket wallet before funding.' })
       }
 
       let updated
