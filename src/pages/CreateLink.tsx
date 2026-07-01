@@ -48,7 +48,6 @@ import { QRCodeCanvas } from 'qrcode.react'
 import { FX_CURRENCIES, getFxMeta, formatLocalAmt, fetchFxRate } from '../lib/fx'
 import { isAddress, parseUnits, type Address } from 'viem'
 import { cn, truncateAddress, formatAmount, copyToClipboard } from '../lib/utils'
-import { useStarknet } from '../lib/StarknetContext'
 import { useSolana }   from '../lib/SolanaContext'
 import { CHAIN_META, type ChainKey } from '../lib/chains'
 import { isValidSolanaAddress } from '../lib/solanaAddress'
@@ -661,7 +660,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   // ── Wallet hooks ──────────────────────────────────────────────────────────
   const { address: connectedEvm } = useAccount()
   const { disconnect: disconnectEvm } = useDisconnect()
-  const { address: connectedStark }            = useStarknet()
+  const connectedStark = ''
   const { address: connectedSolana, disconnect: disconnectSolana } = useSolana()
 
   function disconnectConnectedEvmRecipient() {

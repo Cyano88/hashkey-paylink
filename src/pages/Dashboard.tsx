@@ -85,7 +85,7 @@ interface EventPaymentRow {
 }
 
 function chainKey(value: string | undefined): keyof typeof CHAIN_META {
-  return value === 'solana' || value === 'starknet' || value === 'arc' || value === 'arbitrum' || value === 'hashkey'
+  return value === 'solana' || value === 'arc' || value === 'arbitrum'
     ? value
     : 'base'
 }
@@ -240,7 +240,6 @@ export default function Dashboard() {
   const [searchParams] = useSearchParams()
   const evmAddr = getPaylinkParam(searchParams, 'evm', 'e').trim()
   const solanaAddr = getPaylinkParam(searchParams, 'sol', 's').trim()
-  const starkAddr = getPaylinkParam(searchParams, 'stark', 'k').trim()
   const eventId = (searchParams.get('id') ?? '').trim()
   const netParam = getPaylinkParam(searchParams, 'net', 'n').trim() as UnifiedBalanceChainKey | ''
   const isMultiChain = hasPaylinkFlag(searchParams, 'multi', 'x')
@@ -274,10 +273,9 @@ export default function Dashboard() {
   const meta   = CHAIN_META.base
   const evmValid = isAddress(evmAddr)
   const solanaValid = isValidSolanaAddress(solanaAddr)
-  const starkValid = /^0x[0-9a-fA-F]{64}$/.test(starkAddr)
-  const hasDashboardAddress = evmValid || solanaValid || starkValid
+  const hasDashboardAddress = evmValid || solanaValid
   const posMerchantId = eventId.startsWith('ngpos-') ? eventId.slice(6) : ''
-  const receiptAddress = evmValid ? evmAddr : solanaValid ? solanaAddr : starkAddr
+  const receiptAddress = evmValid ? evmAddr : solanaValid ? solanaAddr : ''
   const shortReceiptAddress = receiptAddress
     ? receiptAddress.startsWith('0x')
       ? `0x..${receiptAddress.slice(-4)}`
@@ -299,11 +297,9 @@ export default function Dashboard() {
       const chains: UnifiedBalanceChainKey[] = []
       if (evmValid) chains.push('base', 'arc', 'arbitrum')
       if (solanaValid) chains.push('solana')
-      if (starkValid) chains.push('starknet')
       return chains
     }
     if (netParam === 'solana') return solanaValid ? ['solana'] : []
-    if (netParam === 'starknet') return starkValid ? ['starknet'] : []
     if (netParam === 'arc' || netParam === 'arbitrum' || netParam === 'base') return evmValid ? [netParam] : []
     return evmValid ? ['base'] : []
   })()
@@ -356,7 +352,6 @@ export default function Dashboard() {
     queryBalances({
       evmAddress: evmValid ? evmAddr : undefined,
       solanaAddress: solanaValid ? solanaAddr : undefined,
-      starknetAddress: starkValid ? starkAddr : undefined,
       chains: balanceChains,
     })
       .then(result => {
@@ -370,7 +365,7 @@ export default function Dashboard() {
         setBalanceError(error instanceof Error ? error.message.slice(0, 120) : 'Unified balance query failed')
         setBalanceRows(balanceChains.map(key => ({
           key,
-          label: key === 'base' ? 'Base' : key === 'arc' ? 'Arc' : key === 'arbitrum' ? 'Arbitrum' : key === 'solana' ? 'Solana' : 'Starknet',
+          label: key === 'base' ? 'Base' : key === 'arc' ? 'Arc' : key === 'arbitrum' ? 'Arbitrum' : 'Solana',
           balance: 0,
           status: 'error',
         })))
@@ -382,7 +377,7 @@ export default function Dashboard() {
 
     return () => { cancelled = true }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [evmAddr, solanaAddr, starkAddr, eventId, isMultiChain, netParam])
+  }, [evmAddr, solanaAddr, eventId, isMultiChain, netParam])
 
   // Load payment events through the backend reader.
   const loadPayments = useCallback(async (opts?: { silent?: boolean; fromBlock?: bigint; merge?: boolean }) => {
@@ -849,7 +844,7 @@ export default function Dashboard() {
                 ? truncateAddress(evmAddr, 12)
                 : solanaValid
                   ? truncateAddress(solanaAddr, 12)
-                  : truncateAddress(starkAddr, 12)}
+                  : 'No supported address'}
             </p>
           )}
         </div>

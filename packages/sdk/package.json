@@ -11,8 +11,8 @@
     "directory": "packages/sdk"
   },
   "keywords": [
-    "web3", "payments", "stablecoins", "usdc", "arc", "base", "arbitrum", "solana", "starknet",
-    "hashkey", "payfi", "react", "crypto", "defi"
+    "web3", "payments", "stablecoins", "usdc", "arc", "base", "arbitrum", "solana",
+    "payfi", "react", "crypto", "defi"
   ],
   "type": "module",
   "main": "./dist/index.cjs",

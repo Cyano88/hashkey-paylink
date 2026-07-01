@@ -6,7 +6,6 @@
   "scripts": {
     "compile":        "hardhat compile",
     "deploy:base":    "hardhat run scripts/deploy.ts --network base",
-    "deploy:hashkey": "hardhat run scripts/deploy.ts --network hashkey",
     "deploy:arc":     "hardhat run scripts/deploy.ts --network arc",
     "verify:base":    "hardhat verify --network base"
   },

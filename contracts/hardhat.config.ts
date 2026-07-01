@@ -30,11 +30,6 @@ const config: HardhatUserConfig = {
       chainId:  8453,
       accounts: PK,
     },
-    hashkey: {
-      url:      'https://mainnet.hsk.xyz',
-      chainId:  177,
-      accounts: PK,
-    },
     arc: {
       url:      'https://rpc.testnet.arc.network',
       chainId:  5042002,
@@ -58,14 +53,6 @@ const config: HardhatUserConfig = {
       arbitrum: process.env.ARBISCAN_API_KEY  ?? '',
     },
     customChains: [
-      {
-        network: 'hashkey',
-        chainId: 177,
-        urls: {
-          apiURL:     'https://explorer.hsk.xyz/api',
-          browserURL: 'https://explorer.hsk.xyz',
-        },
-      },
       {
         network: 'arc',
         chainId: 5042002,

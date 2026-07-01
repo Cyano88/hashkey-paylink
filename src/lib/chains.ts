@@ -1,37 +1,17 @@
 import { defineChain } from 'viem'
 import { base } from 'viem/chains'
 
-export type ChainKey = 'base' | 'starknet' | 'hashkey' | 'arc' | 'solana' | 'arbitrum'
+export type ChainKey = 'base' | 'arc' | 'solana' | 'arbitrum'
 
 // ─── Platform fee engine ─────────────────────────────────────────────────────
 /** 0.2% platform fee in basis points (20 bps). Collected by Hash PayLink settlement flows. */
 export const PLATFORM_FEE_BPS = 20
-/** EVM treasury — receives the platform fee on Base, Arc, and HashKey. */
+/** EVM treasury — receives the platform fee on supported EVM USDC networks. */
 export const EVM_TREASURY = '0xcE5dF9e1115F81a2Fc2F65941B20B820d508e753' as `0x${string}`
 /** Multicall3 — canonical address on all EVM chains; used for atomic permit+split */
 export const MULTICALL3_ADDRESS = '0xcA11bde05977b3631167028862bE2a173976CA11' as `0x${string}`
-/** Starknet treasury — receives the platform fee on Starknet. */
-export const STARK_TREASURY = '0x0483AB5539B281c08777F1C8337Beeba05c2610feDcbA191B989E35eDc2767C3'
-/** @deprecated — use EVM_TREASURY or STARK_TREASURY */
+/** @deprecated — use EVM_TREASURY */
 export const PLATFORM_TREASURY = EVM_TREASURY
-
-// ─── HashKey Mainnet (Chain 177) ────────────────────────────────────────────
-export const hashkeyMainnet = defineChain({
-  id: 177,
-  name: 'HashKey Chain',
-  nativeCurrency: { decimals: 18, name: 'HashKey', symbol: 'HSK' },
-  rpcUrls: {
-    default: { http: ['https://mainnet.hsk.xyz'] },
-    public: { http: ['https://mainnet.hsk.xyz'] },
-  },
-  blockExplorers: {
-    default: {
-      name: 'HashKey Explorer',
-      url: 'https://explorer.hsk.xyz',
-      apiUrl: 'https://explorer.hsk.xyz/api',
-    },
-  },
-})
 
 export { base as baseMainnet }
 
@@ -101,45 +81,6 @@ export const CHAIN_META = {
     headerBg: 'from-blue-50 to-sky-50',
     dotColor: 'bg-[#0052FF]',
     engineLabel: 'Smart Wallet · Gas Sponsored',
-  },
-  starknet: {
-    key: 'starknet' as const,
-    label: 'Starknet',
-    asset: 'USDC',
-    decimals: 6,
-    // Circle native USDC on Starknet Mainnet — required for AVNU gasless payments
-    tokenAddress: '0x053c91253bc9682c04929ca02ed00b3e423f6710d2ee7e0d5ebb06f3ecf368a8',
-    explorerUrl: 'https://starkscan.co',
-    explorerName: 'Starkscan',
-    // Glow: Vibrant Purple #6236FF
-    glowStyle: '0 0 52px -8px rgba(98,54,255,0.25), 0 0 0 1px rgba(98,54,255,0.12)',
-    accentColor: '#6236FF',
-    badgeBg: 'bg-purple-50',
-    badgeText: 'text-purple-700',
-    badgeBorder: 'border-purple-200',
-    toggleActive: 'bg-[#6236FF] text-white shadow-sm',
-    headerBg: 'from-purple-50 to-violet-50',
-    dotColor: 'bg-[#6236FF]',
-    engineLabel: 'Smart Wallet · USDC Gas',
-  },
-  hashkey: {
-    key: 'hashkey' as const,
-    label: 'HashKey',
-    asset: 'HSK',
-    decimals: 18,
-    chainId: 177,
-    explorerUrl: 'https://explorer.hsk.xyz',
-    explorerName: 'HashKey Explorer',
-    // Glow: Gold
-    glowStyle: '0 0 52px -8px rgba(201,162,39,0.28), 0 0 0 1px rgba(201,162,39,0.15)',
-    accentColor: '#C9A227',
-    badgeBg: 'bg-amber-50',
-    badgeText: 'text-amber-700',
-    badgeBorder: 'border-amber-200',
-    toggleActive: 'bg-[#C9A227] text-white shadow-sm',
-    headerBg: 'from-amber-50 to-yellow-50',
-    dotColor: 'bg-amber-400',
-    engineLabel: 'HashKey Mainnet · Native HSK',
   },
   arc: {
     key: 'arc' as const,

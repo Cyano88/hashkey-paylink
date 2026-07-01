@@ -15,13 +15,11 @@ export interface PayLinkUrlOptions {
   baseUrl?: string
   /** Preferred checkout network for single-chain links. */
   network?: ChainKey
-  /** EVM recipient address for Base, Arbitrum, Arc, or HashKey. */
+  /** EVM recipient address for Base, Arbitrum, or Arc. */
   recipientEVM?: string
   /** Solana recipient address. */
   recipientSolana?: string
-  /** Starknet recipient address. */
-  recipientStark?: string
-  /** Fixed payment amount in USDC unless network is hashkey native HSK. */
+  /** Fixed payment amount in USDC. */
   amount?: string
   /** Let payer enter amount at checkout. */
   flexibleAmount?: boolean

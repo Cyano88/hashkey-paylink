@@ -8,18 +8,16 @@
 
 import { createPublicClient, http } from 'viem'
 import { base, arbitrum } from 'viem/chains'
-import { hashkeyMainnet, arcChain } from './chains'
+import { arcChain } from './chains'
 
 const RPC_URLS = {
   base:     import.meta.env.VITE_RPC_URL_BASE     ?? import.meta.env.VITE_RPC_URL     ?? 'https://mainnet.base.org',
-  hashkey:  import.meta.env.VITE_RPC_URL_HASHKEY  ?? 'https://mainnet.hsk.xyz',
   arc:      import.meta.env.VITE_RPC_URL_ARC      ?? 'https://rpc.testnet.arc.network',
   arbitrum: import.meta.env.VITE_RPC_URL_ARB      ?? 'https://arb1.arbitrum.io/rpc',
 } as const
 
 export const EVM_CLIENTS = {
   base:     createPublicClient({ chain: base,           transport: http(RPC_URLS.base) }),
-  hashkey:  createPublicClient({ chain: hashkeyMainnet, transport: http(RPC_URLS.hashkey) }),
   arc:      createPublicClient({ chain: arcChain,       transport: http(RPC_URLS.arc) }),
   arbitrum: createPublicClient({ chain: arbitrum,       transport: http(RPC_URLS.arbitrum) }),
 } as const
@@ -48,10 +46,9 @@ export const ERC20_BALANCE_OF_ABI = [{
  * Per-chain PayLinkFactoryV2 addresses.
  * All chains fall back to VITE_FACTORY_V2 if their dedicated var is not set.
  */
-export const FACTORY_V2_ADDRESSES: Partial<Record<'base' | 'arc' | 'hashkey' | 'arbitrum', `0x${string}`>> = {
+export const FACTORY_V2_ADDRESSES: Partial<Record<'base' | 'arc' | 'arbitrum', `0x${string}`>> = {
   base:     (import.meta.env.VITE_FACTORY_V2         ?? '') as `0x${string}`,
   arc:      (import.meta.env.VITE_FACTORY_V2_ARC     ?? import.meta.env.VITE_FACTORY_V2 ?? '') as `0x${string}`,
-  hashkey:  (import.meta.env.VITE_FACTORY_V2_HASHKEY ?? import.meta.env.VITE_FACTORY_V2 ?? '') as `0x${string}`,
   arbitrum: (import.meta.env.VITE_FACTORY_V2_ARB     ?? import.meta.env.VITE_FACTORY_V2 ?? '') as `0x${string}`,
 }
 

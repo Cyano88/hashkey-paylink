@@ -9,9 +9,8 @@ import './index.css'
 
 import App from './App'
 import { privyWagmiConfig } from './lib/privyWagmi'
-import { StarknetProvider } from './lib/StarknetContext'
 import { ThemeProvider, useTheme } from './lib/ThemeContext'
-import { arcChain, hashkeyMainnet, baseMainnet } from './lib/chains'
+import { arcChain, baseMainnet } from './lib/chains'
 import { arbitrum } from 'viem/chains'
 import { PRIVY_APP_ID, PRIVY_AUTH_ENABLED } from './lib/authMode'
 import { PrivyLoginProvider } from './lib/PrivyLoginProvider'
@@ -33,7 +32,7 @@ function AppProviders() {
     loginMethods: ['email', 'wallet'],
     allowOAuthInEmbeddedBrowsers: true,
     defaultChain: baseMainnet,
-    supportedChains: [baseMainnet, arcChain, arbitrum, hashkeyMainnet],
+    supportedChains: [baseMainnet, arcChain, arbitrum],
     embeddedWallets: {
       ethereum: {
         createOnLogin: 'off',
@@ -53,11 +52,7 @@ function AppProviders() {
     },
   }), [theme])
 
-  const app = (
-    <StarknetProvider>
-      <App />
-    </StarknetProvider>
-  )
+  const app = <App />
 
   if (!PRIVY_AUTH_ENABLED) {
     return (
