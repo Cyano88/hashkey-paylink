@@ -863,6 +863,7 @@ export async function unlockContentX402WithAgent(req: Request, res: Response) {
       type: response?.type ?? entry.type,
       content: response?.content ?? entry.content,
       payment: response?.payment ?? null,
+      receiptActivityId: paid.receiptActivityId ?? null,
       walletAddress: paid.walletAddress,
     })
   } catch (err) {

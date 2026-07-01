@@ -186,7 +186,7 @@ export async function payAgentX402Service(params: {
     maxAmount: String(params.maxAmount),
     circleOutput: output,
   })
-  await appendAgentActivity({
+  const spendActivity = await appendAgentActivity({
     agentSlug: params.agentSlug,
     type: 'x402_spent',
     title: params.spendTitle ?? 'Bought LP Scout API',
@@ -233,6 +233,8 @@ export async function payAgentX402Service(params: {
   return {
     walletAddress: record.walletAddress,
     response: parsedResponse,
+    receiptActivityId: spendActivity?.id,
+    proof,
     raw: output.slice(0, 3000),
   }
 }

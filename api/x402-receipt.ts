@@ -2,7 +2,7 @@ import type { Request, Response } from 'express'
 import { ensureAgentActivityArchived, findAgentActivity } from './agent-activity.js'
 import { getAgentGovernanceProfile, getAgentLegalProfile } from './agent-legal.js'
 
-const CIRCLE_GATEWAY_API_BASE = (process.env.CIRCLE_GATEWAY_API_BASE ?? 'https://api.circle.com').replace(/\/+$/, '')
+const CIRCLE_GATEWAY_API_BASE = (process.env.CIRCLE_GATEWAY_API_BASE ?? 'https://gateway-api-testnet.circle.com').replace(/\/+$/, '')
 const CIRCLE_API_KEY = String(
   process.env.CIRCLE_X402_RECEIPT_API_KEY
   ?? process.env.CIRCLE_GATEWAY_API_KEY
@@ -12,7 +12,7 @@ const CIRCLE_API_KEY = String(
 
 async function verifyCircleTransfer(transaction: string) {
   if (!transaction) return { ok: false, status: 'missing_transaction', error: 'No Circle transaction reference is stored on this receipt.' }
-  const response = await fetch(`${CIRCLE_GATEWAY_API_BASE}/gateway/v1/x402/transfers/${encodeURIComponent(transaction)}`, {
+  const response = await fetch(`${CIRCLE_GATEWAY_API_BASE}/v1/transfer/${encodeURIComponent(transaction)}`, {
     headers: {
       Accept: 'application/json',
       ...(CIRCLE_API_KEY ? { Authorization: `Bearer ${CIRCLE_API_KEY}` } : {}),
