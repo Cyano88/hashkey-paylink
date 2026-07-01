@@ -619,6 +619,7 @@ export function StreamGate() {
   const [gatewayPaying, setGatewayPaying] = useState(false)
   const [gatewayTx, setGatewayTx] = useState<string | null>(null)
   const [gatewayReceiptId, setGatewayReceiptId] = useState<string | null>(null)
+  const [gatewayReferenceCopied, setGatewayReferenceCopied] = useState(false)
   const gatewayTxIsExplorerHash = /^0x[a-fA-F0-9]{64}$/.test(gatewayTx ?? '')
 
   const legacyFullyAuthorised = isConnected && isOnArc && passkey.registered && isApproved
@@ -634,6 +635,7 @@ export function StreamGate() {
       return
     }
     setGatewayPaying(true)
+    setGatewayReferenceCopied(false)
     setContentError(null)
     setContentState('loading')
     try {
@@ -1625,36 +1627,50 @@ export function StreamGate() {
         )}
 
         {paymentMode === 'x402' && fullyAuthorised && gatewayTx && (
-          <div className="border-t border-gray-100 bg-emerald-50/60 px-4 py-3 space-y-2">
-            <div className="flex items-center justify-center gap-1.5 text-[11px] font-semibold text-emerald-700">
-              <CheckIcon />Circle Gateway paid - {gatewayTx.slice(0, 8)}...{gatewayTx.slice(-6)}
+          <div className="border-t border-gray-100 bg-emerald-50/70 px-4 py-3 space-y-3">
+            <div className="flex items-start gap-2">
+              <span className="mt-0.5 text-emerald-600"><CheckIcon /></span>
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-700">
+                  Content unlocked
+                </p>
+                <p className="mt-0.5 truncate font-mono text-[11px] font-semibold text-emerald-800">
+                  Circle Gateway paid - {gatewayTx.slice(0, 8)}...{gatewayTx.slice(-6)}
+                </p>
+              </div>
             </div>
-            <div className="flex flex-wrap items-center justify-center gap-2">
+            <div className="grid gap-2">
               {gatewayReceiptId && (
                 <button
                   type="button"
                   onClick={() => window.open(`/receipt/${gatewayReceiptId}`, '_blank', 'noopener,noreferrer')}
-                  className="rounded-lg border border-emerald-200 bg-white px-2.5 py-1.5 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-50 transition-colors"
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-[12px] font-semibold text-white transition-colors hover:bg-emerald-700"
                 >
                   View receipt
                 </button>
               )}
-              <button
-                type="button"
-                onClick={() => navigator.clipboard?.writeText(gatewayTx).catch(() => {})}
-                className="rounded-lg border border-emerald-200 bg-white px-2.5 py-1.5 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-50 transition-colors"
-              >
-                Copy reference
-              </button>
-              {gatewayTxIsExplorerHash && (
+              <div className={gatewayTxIsExplorerHash ? 'grid grid-cols-2 gap-2' : 'grid gap-2'}>
                 <button
                   type="button"
-                  onClick={() => window.open(`https://testnet.arcscan.app/tx/${gatewayTx}`, '_blank', 'noopener,noreferrer')}
-                  className="rounded-lg border border-emerald-200 bg-white px-2.5 py-1.5 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-50 transition-colors"
+                  onClick={() => {
+                    navigator.clipboard?.writeText(gatewayTx).catch(() => {})
+                    setGatewayReferenceCopied(true)
+                    window.setTimeout(() => setGatewayReferenceCopied(false), 1600)
+                  }}
+                  className="flex items-center justify-center rounded-xl border border-emerald-200 bg-white px-3 py-2.5 text-[12px] font-semibold text-emerald-700 transition-colors hover:bg-emerald-50"
                 >
-                  ArcScan
+                  {gatewayReferenceCopied ? 'Reference copied' : 'Copy reference'}
                 </button>
-              )}
+                {gatewayTxIsExplorerHash && (
+                  <button
+                    type="button"
+                    onClick={() => window.open(`https://testnet.arcscan.app/tx/${gatewayTx}`, '_blank', 'noopener,noreferrer')}
+                    className="flex items-center justify-center rounded-xl border border-emerald-200 bg-white px-3 py-2.5 text-[12px] font-semibold text-emerald-700 transition-colors hover:bg-emerald-50"
+                  >
+                    ArcScan
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         )}

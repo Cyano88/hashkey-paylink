@@ -257,7 +257,7 @@ export default function X402Receipt() {
           )}
         </section>
         {!data.receipt?.receiptId && (
-          <section className="mt-3 rounded-2xl border border-gray-100 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-[#1c1c20]">
+          <section className="mt-3 rounded-xl border border-gray-100 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-[#1c1c20]">
             {data.circle && (
               <div className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold ${
                 circleOk
@@ -282,20 +282,28 @@ export default function X402Receipt() {
                 <ExternalLink className="h-3 w-3" />
               </a>
             )}
-            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            <div className="mt-3 grid gap-2 sm:grid-cols-3">
               <button
                 type="button"
                 onClick={verifyWithCircle}
                 disabled={verifyingCircle}
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-gray-900 px-4 py-3 text-sm font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-60 dark:bg-white dark:text-gray-950"
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-gray-900 px-3 py-2.5 text-sm font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-60 dark:bg-white dark:text-gray-950"
               >
                 {verifyingCircle ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
-                {verifyingCircle ? 'Checking Circle' : 'Verify with Circle'}
+                {verifyingCircle ? 'Checking' : 'Verify'}
+              </button>
+              <button
+                type="button"
+                onClick={downloadReceipt}
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-semibold text-gray-800 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-100"
+              >
+                <Download className="h-4 w-4" />
+                Download
               </button>
               <button
                 type="button"
                 onClick={shareReceipt}
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-800 transition-all hover:bg-gray-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-100"
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-semibold text-gray-800 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-100"
               >
                 <Share2 className="h-4 w-4" />
                 {shared ? 'PDF downloaded' : 'Share'}
