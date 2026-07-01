@@ -150,7 +150,7 @@ const OFFICIAL_CREATOR_ADDRESS = (
   || import.meta.env.VITE_DEFAULT_AGENT_WALLET_ADDRESS
   || '0x823c31d5e373dd3fa7cad59af05fa45e3858556c'
 )
-const OFFICIAL_WORLD_CUP_SCORES_GATE = `/gate?app=streampay&id=worldcup-scores&cr=${OFFICIAL_CREATOR_ADDRESS}&r=1000&cap=100000&mode=unlock&t=Live%20Scores%20Pulse`
+const OFFICIAL_WORLD_CUP_SCORES_GATE = `/gate?app=streampay&id=worldcup-scores&cr=${OFFICIAL_CREATOR_ADDRESS}&r=1000&cap=100000&mode=unlock&pay=x402&t=Live%20Scores%20Pulse`
 
 const OFFICIAL_DISCOVER_CONTENT: PublishedContent[] = [
   {
@@ -191,6 +191,7 @@ function worldCupNewsCard(article: PolyWorldCupArticle, index: number): Publishe
     r: '1000',
     cap: '100000',
     mode: 'unlock',
+    pay: 'x402',
     t: article.title,
   })
   return {
@@ -222,6 +223,7 @@ function worldCupScoreCard(match: PolyStreamMatch, index: number): PublishedCont
     r: '1000',
     cap: '100000',
     mode: 'unlock',
+    pay: 'x402',
     t: `${home}${away ? ` vs ${away}` : ''} route`,
   })
   return {

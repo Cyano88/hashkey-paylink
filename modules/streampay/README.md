@@ -187,7 +187,7 @@ Creator                        Viewer                   Arc Network
   │                                                   USDC transferred
 ```
 
-Gate links look like: `/gate?id=abc123&cr=0xCreator&r=1000&cap=100000`
+Gate links look like: `/gate?id=abc123&cr=0xCreator&r=1000&cap=100000&pay=x402`
 
 The gate also supports Circle Gateway/x402 reader unlocks through `/api/get-content-x402` and `/api/creator-unlock-x402`. The PoA path remains available for session signatures and creator settlement.
 

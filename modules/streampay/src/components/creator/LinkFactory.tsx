@@ -92,6 +92,7 @@ function buildGateLink(params: {
   p.set('r',   params.rateRaw.toString())
   p.set('cap', params.capRaw.toString())
   p.set('mode', params.mode)
+  p.set('pay', 'x402')
   if (params.title.trim()) p.set('t', params.title.trim())
   return `${origin}/gate?${p.toString()}`
 }

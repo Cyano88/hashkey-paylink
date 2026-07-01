@@ -380,7 +380,7 @@ export function StreamGate() {
   const capRaw    = parseInt(params.get('cap') ?? '100000', 10)
   const title     = params.get('t')    ?? ''
   const gateMode: 'unlock' | 'stream' = params.get('mode') === 'stream' ? 'stream' : 'unlock'
-  const paymentMode: 'poa' = 'poa'
+  const paymentMode: 'x402' | 'poa' = params.get('pay') === 'poa' || params.get('payment') === 'poa' ? 'poa' : 'x402'
 
   const dripRate   = rateRaw  / 1_000_000
   const sessionCap = capRaw   / 1_000_000
