@@ -49,6 +49,7 @@ export function paymentReceiptFileName(receipt?: PaylinkReceipt) {
   const prefix = receipt?.source === 'streampay' ? 'streampay'
     : receipt?.source === 'ngpos' ? 'pos'
     : receipt?.source === 'polymarket-funding' ? 'polymarket-funding'
+    : receipt?.source === 'x402' ? 'x402'
     : 'paylink'
   return `hashpaylink-${prefix}-receipt-${receipt?.receiptId.slice(0, 10) || 'receipt'}.pdf`
 }
@@ -74,19 +75,22 @@ function receiptLabels(receipt: PaylinkReceipt) {
   const isStream = receipt.source === 'streampay' || receipt.settlementType === 'stream-created'
   const isPos = receipt.source === 'ngpos'
   const isPolymarket = receipt.source === 'polymarket-funding' || receipt.settlementType === 'polymarket_bridge'
-  const heading = isStream ? 'StreamPay receipt' : isPos ? 'Retail POS receipt' : isPolymarket ? 'Polymarket funding receipt' : 'Request payment receipt'
-  const title = isStream ? 'Stream created' : isPos ? 'Retail payment confirmed' : isPolymarket ? 'Polymarket funded' : 'Payment confirmed'
-  const amountLabel = isStream ? 'Stream amount' : isPolymarket ? 'Amount funded' : 'Amount paid'
-  const payer = isStream ? 'Sender' : isPos ? 'Customer wallet' : isPolymarket ? 'Funder' : 'Payer'
-  const context = isStream ? 'Stream memo' : isPos ? 'Customer' : isPolymarket ? 'For' : 'Memo'
+  const isX402 = receipt.source === 'x402' || receipt.settlementType === 'circle-gateway-x402'
+  const heading = isStream ? 'StreamPay receipt' : isPos ? 'Retail POS receipt' : isPolymarket ? 'Polymarket funding receipt' : isX402 ? 'Creator x402 receipt' : 'Request payment receipt'
+  const title = isStream ? 'Stream created' : isPos ? 'Retail payment confirmed' : isPolymarket ? 'Polymarket funded' : isX402 ? 'Creator content unlocked' : 'Payment confirmed'
+  const amountLabel = isStream ? 'Stream amount' : isPolymarket ? 'Amount funded' : isX402 ? 'Access price' : 'Amount paid'
+  const payer = isStream ? 'Sender' : isPos ? 'Customer wallet' : isPolymarket ? 'Funder' : isX402 ? 'Reader wallet' : 'Payer'
+  const context = isStream ? 'Stream memo' : isPos ? 'Customer' : isPolymarket ? 'For' : isX402 ? 'Content' : 'Memo'
   const contextValue = isStream
     ? (receipt.memo || receipt.merchantId || receipt.eventId || '-')
     : isPos
     ? (receipt.memo || receipt.eventId || '-')
     : isPolymarket
     ? 'Polymarket funding'
+    : isX402
+    ? (receipt.memo || receipt.eventId || 'Creator content')
     : (receipt.memo || receipt.merchantId || receipt.eventId || '-')
-  const merchantLabel = isStream ? 'Stream vault' : isPos ? 'Merchant' : isPolymarket ? 'Polymarket profile' : 'Recipient'
+  const merchantLabel = isStream ? 'Stream vault' : isPos ? 'Merchant' : isPolymarket ? 'Polymarket profile' : isX402 ? 'Creator' : 'Recipient'
   const merchantValue = receipt.merchantId || ''
   return { heading, title, amountLabel, payer, context, contextValue, merchantLabel, merchantValue }
 }
