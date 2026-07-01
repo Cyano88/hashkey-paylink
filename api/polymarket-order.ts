@@ -53,7 +53,7 @@ export default async function handler(req: Request, res: Response) {
   if (!marketUrl.startsWith('https://polymarket.com/')) {
     return res.status(400).json({ ok: false, ready: false, error: 'A verified Polymarket market URL is required.' })
   }
-  if (!marketTitle || !outcome || side !== 'buy' || !/^\d+(?:\.\d{1,6})?$/.test(amount) || Number(amount) <= 0 || !/^0x[a-fA-F0-9]{40}$/.test(signer)) {
+  if (!marketTitle || !outcome || (side !== 'buy' && side !== 'sell') || !/^\d+(?:\.\d{1,6})?$/.test(amount) || Number(amount) <= 0 || !/^0x[a-fA-F0-9]{40}$/.test(signer)) {
     return res.status(400).json({ ok: false, ready: false, error: 'Trade ticket is incomplete.' })
   }
   if (!/^\d+$/.test(tokenId)) {

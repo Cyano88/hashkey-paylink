@@ -78,6 +78,12 @@ function validUserHeaders(value: unknown, signer: string): Record<string, string
   return headers
 }
 
+function isAllowedSourceMarket(source: string, marketUrl: string) {
+  if (source === 'world-cup-moneyline') return marketUrl.startsWith('https://polymarket.com/sports/world-cup/')
+  if (source === 'portfolio-position-sell') return marketUrl.startsWith('https://polymarket.com/')
+  return false
+}
+
 function localBuilderConfig() {
   const key = envValue('POLYMARKET_BUILDER_API_KEY')
   const secret = envValue('POLYMARKET_BUILDER_SECRET')
@@ -113,11 +119,8 @@ export default async function handler(req: Request, res: Response) {
   const orderPayload = req.body?.orderPayload
   const userHeaders = validUserHeaders(req.body?.userHeaders, signer)
 
-  if (source !== 'world-cup-moneyline') {
-    return res.status(400).json({ ok: false, ready: false, error: 'Polymarket submit is currently limited to World Cup moneyline markets.' })
-  }
-  if (!marketUrl.startsWith('https://polymarket.com/sports/world-cup/')) {
-    return res.status(400).json({ ok: false, ready: false, error: 'A verified World Cup Polymarket URL is required.' })
+  if (!isAllowedSourceMarket(source, marketUrl)) {
+    return res.status(400).json({ ok: false, ready: false, error: 'This Polymarket order source is not allowed.' })
   }
   if (!marketTitle || !outcome || !/^\d+$/.test(tokenId) || !/^0x[a-fA-F0-9]{40}$/.test(signer)) {
     return res.status(400).json({ ok: false, ready: false, error: 'World Cup signed order metadata is incomplete.' })

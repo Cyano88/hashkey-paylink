@@ -4540,7 +4540,7 @@ function friendlyTradeError(err: unknown) {
     return 'Order approval was cancelled.'
   }
   if (/\b(insufficient|not enough|balance|funds|allowance|collateral)\b/.test(message)) {
-    return 'Not enough USDC available for this order. Add funds or lower the amount.'
+    return 'Not enough balance or allowance for this order. Refresh the wallet and try again.'
   }
   if (/\b(network|timeout|fetch|failed to fetch|503|502|504|unavailable)\b/.test(message)) {
     return 'Connection issue while sending the order. Please try again.'
@@ -6119,6 +6119,7 @@ type PolymarketPosition = {
   conditionId?: string
   market?: string
   asset?: string
+  tokenId?: string
   title?: string
   slug?: string
   eventSlug?: string
@@ -6215,6 +6216,18 @@ function isActiveOpenPosition(position: PolymarketPosition) {
   return true
 }
 
+function positionValueSum(positions: PolymarketPosition[]) {
+  return positions.reduce((sum, position) => {
+    const value = numberOrNull(position.currentValue)
+    return value === null ? sum : sum + value
+  }, 0)
+}
+
+function polymarketPositionTokenId(position: PolymarketPosition) {
+  const tokenId = String(position.tokenId ?? position.asset ?? '').trim()
+  return /^\d+$/.test(tokenId) ? tokenId : ''
+}
+
 type PolymarketPositionStatus = 'not-started' | 'live' | 'ended'
 
 function polymarketPositionStatus(position: PolymarketPosition): PolymarketPositionStatus {
@@ -6297,6 +6310,24 @@ export function PolyPortfolioPanel({
     payUrl: string
     marketUrl: string
   } | null>(null)
+  const [withdrawAmount, setWithdrawAmount] = useState('')
+  const [withdrawRecipient, setWithdrawRecipient] = useState('')
+  const [withdrawNetwork, setWithdrawNetwork] = useState<PolymarketBridgeNetwork>('base')
+  const [withdrawBusy, setWithdrawBusy] = useState(false)
+  const [withdrawError, setWithdrawError] = useState('')
+  const [withdrawResult, setWithdrawResult] = useState<{
+    bridgeAddress: string
+    recipientAddr: string
+    network: PolymarketBridgeNetwork
+    amount: string
+    transactionId?: string
+    transactionHash?: string
+    status?: string
+    note?: string
+  } | null>(null)
+  const [sellBusyKey, setSellBusyKey] = useState('')
+  const [sellNotice, setSellNotice] = useState('')
+  const [sellSuccess, setSellSuccess] = useState('')
 
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsDraft, setSettingsDraft] = useState<PolymarketAlertSettings | null>(null)
@@ -6335,7 +6366,7 @@ export function PolyPortfolioPanel({
   const tradingAddress = savedTradingAddress || signingWalletAddress || ''
   const tradingPortfolioAddress = polymarketDepositWallet || tradingAddress
   const liveDataAddress = unsignedPortfolioAction === 'trading' ? tradingPortfolioAddress : watchedAddress
-  const mainWalletCopy = 'View Polymarket cash, fund your account, and track positions.'
+  const mainWalletCopy = 'View pUSD trading cash, fund your account, withdraw as USDC, and track positions.'
 
   const claimablePositions = useMemo(
     () => livePositions.filter(isClaimablePosition),
@@ -6346,6 +6377,9 @@ export function PolyPortfolioPanel({
     () => livePositions.filter(isActiveOpenPosition),
     [livePositions],
   )
+
+  const activePositionValue = useMemo(() => positionValueSum(activeOpenPositions), [activeOpenPositions])
+  const claimableValue = useMemo(() => positionValueSum(claimablePositions), [claimablePositions])
 
   const positionsByStatus = useMemo(
     () => livePositions.filter(position => polymarketPositionStatus(position) === positionStatusTab),
@@ -6675,6 +6709,304 @@ export function PolyPortfolioPanel({
     }
   }
 
+  async function withdrawPolymarketPusd() {
+    if (!polymarketDepositWallet) {
+      setWithdrawError('Activate Polymarket Wallet before withdrawing.')
+      return
+    }
+    if (!savedTradingAddress) {
+      setWithdrawError('Open Main Wallet before withdrawing.')
+      return
+    }
+    const amount = withdrawAmount.trim()
+    if (!/^\d+(?:\.\d{1,6})?$/.test(amount) || Number(amount) <= 0) {
+      setWithdrawError('Enter the pUSD amount to withdraw as USDC.')
+      return
+    }
+    const signingWallet = privyWallets.find(wallet => wallet.address?.toLowerCase() === savedTradingAddress.toLowerCase())
+      ?? privyWallets.find(wallet => wallet.address?.toLowerCase() === signingWalletAddress.toLowerCase())
+    if (!signingWallet || typeof signingWallet.getEthereumProvider !== 'function') {
+      setWithdrawError('Connect the owner wallet that controls this Polymarket wallet.')
+      return
+    }
+    setWithdrawBusy(true)
+    setWithdrawError('')
+    setWithdrawResult(null)
+    try {
+      const res = await fetch('/api/polymarket-bridge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'withdraw',
+          polymarketWallet: polymarketDepositWallet,
+          network: withdrawNetwork,
+          recipientAddr: withdrawRecipient.trim(),
+        }),
+      })
+      const data = await readPolyDeskJson<{
+        ok?: boolean
+        bridgeAddress?: string
+        recipientAddr?: string
+        network?: PolymarketBridgeNetwork
+        relayerReady?: boolean
+        relayerUrl?: string | null
+        sourceTokenAddress?: string
+        sourceTokenDecimals?: number
+        balance?: { raw?: string; formatted?: string } | null
+        note?: string
+        error?: string
+      }>(res, 'Could not prepare withdrawal route.')
+      if (!res.ok || !data.ok || !data.bridgeAddress) {
+        throw new Error(data.error || 'Could not prepare withdrawal route.')
+      }
+      if (!data.relayerReady || !data.relayerUrl) {
+        throw new Error('Polymarket relayer is not configured for native withdrawals.')
+      }
+      if (!/^0x[a-fA-F0-9]{40}$/.test(data.bridgeAddress)) {
+        throw new Error('Polymarket bridge did not return a Polygon source address.')
+      }
+      const sourceToken = data.sourceTokenAddress || '0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB'
+      const decimals = data.sourceTokenDecimals ?? 6
+      const [{ RelayClient }, { encodeFunctionData, parseUnits, createWalletClient, custom }, { polygon }] = await Promise.all([
+        import('@polymarket/builder-relayer-client'),
+        import('viem'),
+        import('viem/chains'),
+      ])
+      const amountUnits = parseUnits(amount, decimals)
+      const balanceRaw = data.balance?.raw ? BigInt(data.balance.raw) : null
+      if (balanceRaw !== null && balanceRaw < amountUnits) {
+        throw new Error(`Available pUSD is ${data.balance?.formatted ?? 'below the requested amount'}.`)
+      }
+      if (typeof signingWallet.switchChain === 'function') {
+        await signingWallet.switchChain(137)
+      }
+      const provider = await signingWallet.getEthereumProvider()
+      const walletClient = createWalletClient({
+        account: savedTradingAddress as `0x${string}`,
+        chain: polygon,
+        transport: custom(provider),
+      })
+      const relayerClient = new RelayClient(data.relayerUrl, 137, walletClient, undefined, undefined, { chain: polygon })
+      const derivedWallet = await relayerClient.deriveDepositWalletAddress()
+      if (derivedWallet.toLowerCase() !== polymarketDepositWallet.toLowerCase()) {
+        throw new Error('Connected owner wallet does not control this Polymarket wallet.')
+      }
+      const deployed = await relayerClient.getDeployed(polymarketDepositWallet, 'WALLET')
+      if (!deployed) {
+        throw new Error('Polymarket wallet is not deployed yet. Activate it, wait for confirmation, then retry.')
+      }
+      const transferData = encodeFunctionData({
+        abi: [{
+          type: 'function',
+          name: 'transfer',
+          stateMutability: 'nonpayable',
+          inputs: [
+            { name: 'to', type: 'address' },
+            { name: 'amount', type: 'uint256' },
+          ],
+          outputs: [{ name: '', type: 'bool' }],
+        }] as const,
+        functionName: 'transfer',
+        args: [data.bridgeAddress as `0x${string}`, amountUnits],
+      })
+      const deadline = Math.floor(Date.now() / 1000 + 240).toString()
+      const response = await relayerClient.executeDepositWalletBatch([
+        {
+          target: sourceToken,
+          value: '0',
+          data: transferData,
+        },
+      ], polymarketDepositWallet, deadline)
+      const mined = await response.wait().catch(() => undefined)
+      setWithdrawResult({
+        bridgeAddress: data.bridgeAddress,
+        recipientAddr: data.recipientAddr || withdrawRecipient.trim(),
+        network: (data.network ?? withdrawNetwork) as PolymarketBridgeNetwork,
+        amount,
+        transactionId: response.transactionID,
+        transactionHash: mined?.transactionHash || response.transactionHash || response.hash,
+        status: mined?.state || response.state,
+        note: data.note,
+      })
+      void fetchLiveData(tradingPortfolioAddress)
+    } catch (err) {
+      setWithdrawError(err instanceof Error ? err.message : 'Could not withdraw from Polymarket.')
+    } finally {
+      setWithdrawBusy(false)
+    }
+  }
+
+  async function sellPosition(position: PolymarketPosition) {
+    setSellNotice('')
+    setSellSuccess('')
+    const tokenId = polymarketPositionTokenId(position)
+    const size = numberOrNull(position.size)
+    if (!tokenId || !size || size <= 0) {
+      setSellNotice('This position is missing a sellable token balance.')
+      return
+    }
+    if (!savedTradingAddress || !polymarketDepositWallet) {
+      setSellNotice('Open Main Wallet and activate the Polymarket wallet before selling.')
+      return
+    }
+    const signingWallet = privyWallets.find(wallet => wallet.address?.toLowerCase() === savedTradingAddress.toLowerCase())
+      ?? privyWallets.find(wallet => wallet.address?.toLowerCase() === signingWalletAddress.toLowerCase())
+    if (!signingWallet || typeof signingWallet.getEthereumProvider !== 'function') {
+      setSellNotice('Connect the owner wallet that controls this Polymarket wallet.')
+      return
+    }
+    const title = position.title ?? 'Polymarket position'
+    const marketUrl = polymarketEventUrl(position)
+    const confirmed = window.confirm(`Sell up to ${size.toLocaleString(undefined, { maximumFractionDigits: 6 })} shares of "${title}" at market?`)
+    if (!confirmed) return
+    const busyKey = polymarketPositionKey(position)
+    setSellBusyKey(busyKey)
+    try {
+      const prepareResponse = await fetch('/api/polymarket-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          marketTitle: title,
+          marketUrl,
+          tokenId,
+          outcome: position.outcome ?? 'Position',
+          action: 'prepare',
+          side: 'sell',
+          amount: String(size),
+          signer: savedTradingAddress,
+        }),
+      })
+      const prepareData = await readPolyDeskJson<{ ok?: boolean; builderCode?: string; error?: string }>(prepareResponse, 'Could not prepare sell order.')
+      if (!prepareResponse.ok || !prepareData.ok || !prepareData.builderCode || !/^0x[a-fA-F0-9]{64}$/.test(prepareData.builderCode)) {
+        throw new Error(prepareData.error || 'Selling is temporarily unavailable.')
+      }
+      if (typeof signingWallet.switchChain === 'function') {
+        await signingWallet.switchChain(137)
+      }
+      const provider = await signingWallet.getEthereumProvider()
+      const [{ ClobClient, Side, OrderType, AssetType, createL2Headers }, { orderToJson }, { createWalletClient, custom }, { polygon }] = await Promise.all([
+        import('@polymarket/clob-client'),
+        import('@polymarket/clob-client/dist/utilities.js'),
+        import('viem'),
+        import('viem/chains'),
+      ])
+      const walletClient = createWalletClient({
+        account: savedTradingAddress as `0x${string}`,
+        chain: polygon,
+        transport: custom(provider),
+      })
+      const signatureType = 3 as never
+      const baseClient = new ClobClient(
+        'https://clob.polymarket.com',
+        137,
+        walletClient,
+        undefined,
+        signatureType,
+        polymarketDepositWallet,
+      )
+      setSellNotice('Checking sell balance and market settings...')
+      const userCreds = await baseClient.createOrDeriveApiKey()
+      const clobClient = new ClobClient(
+        'https://clob.polymarket.com',
+        137,
+        walletClient,
+        userCreds,
+        signatureType,
+        polymarketDepositWallet,
+      )
+      const [rawTickSize, negRisk, balanceAllowance] = await Promise.all([
+        clobClient.getTickSize(tokenId),
+        clobClient.getNegRisk(tokenId),
+        clobClient.getBalanceAllowance({ asset_type: AssetType.CONDITIONAL, token_id: tokenId }).catch(() => null),
+      ])
+      const tickText = String(rawTickSize ?? '')
+      const tickSize = polymarketTickSize(Number(tickText)) || (tickText === '0.1' || tickText === '0.01' || tickText === '0.001' || tickText === '0.0001' ? tickText : '')
+      if (!tickSize) throw new Error('This market is missing CLOB tick size metadata.')
+      if (balanceAllowance) {
+        const rawBalance = Number(balanceAllowance.balance)
+        const normalizedBalance = Number.isFinite(rawBalance) && rawBalance > 100_000 ? rawBalance / 1_000_000 : rawBalance
+        if (Number.isFinite(normalizedBalance) && normalizedBalance <= 0) {
+          throw new Error('No sellable conditional token balance was found for this position.')
+        }
+      }
+      setSellNotice('Confirm the sell order in your wallet. Signing is free.')
+      const signedOrder = await clobClient.createMarketOrder(
+        {
+          tokenID: tokenId,
+          amount: size,
+          side: Side.SELL,
+          orderType: OrderType.FAK,
+        },
+        { tickSize, negRisk: negRisk === true },
+      )
+      setSellNotice('Approved. Sending sell order...')
+      const orderPayload = orderToJson(signedOrder, userCreds.key, OrderType.FAK, false)
+      const builderAttributedPayload = {
+        ...orderPayload,
+        order: {
+          ...orderPayload.order,
+          builderCode: prepareData.builderCode,
+        },
+      }
+      const handoffResponse = await fetch('/api/polymarket-builder-handoff', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          source: 'portfolio-position-sell',
+          marketTitle: title,
+          marketUrl,
+          outcome: position.outcome ?? 'Position',
+          tokenId,
+          signer: savedTradingAddress,
+          orderType: OrderType.FAK,
+          order: signedOrder,
+          orderPayload: builderAttributedPayload,
+        }),
+      })
+      const handoff = await readPolyDeskJson<{
+        ok?: boolean
+        error?: string
+        handoff?: { orderPayload?: typeof builderAttributedPayload }
+      }>(handoffResponse, 'Could not prepare sell submission.')
+      if (!handoffResponse.ok || !handoff.ok) throw new Error(handoff.error || 'Sell handoff failed.')
+      const finalOrderPayload = handoff.handoff?.orderPayload ?? builderAttributedPayload
+      const orderBody = JSON.stringify(finalOrderPayload)
+      const l2Headers = await createL2Headers(walletClient, userCreds, {
+        method: 'POST',
+        requestPath: '/order',
+        body: orderBody,
+      })
+      const submitResponse = await fetch('/api/polymarket-submit-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          source: 'portfolio-position-sell',
+          marketTitle: title,
+          marketUrl,
+          outcome: position.outcome ?? 'Position',
+          tokenId,
+          signer: savedTradingAddress,
+          orderType: OrderType.FAK,
+          order: signedOrder,
+          orderPayload: finalOrderPayload,
+          userHeaders: l2Headers,
+        }),
+      })
+      const submitResult = await submitResponse.json().catch(() => ({}))
+      if (!submitResponse.ok || (submitResult && typeof submitResult === 'object' && 'error' in submitResult)) {
+        const errorMessage = submitResult && typeof submitResult === 'object' && 'error' in submitResult ? String(submitResult.error) : 'Polymarket rejected the sell order.'
+        throw new Error(errorMessage)
+      }
+      setSellSuccess(`Sell order sent for ${position.outcome ?? 'position'}.`)
+      setSellNotice('')
+      if (tradingPortfolioAddress) void fetchLiveData(tradingPortfolioAddress)
+    } catch (err) {
+      setSellNotice(friendlyTradeError(err))
+    } finally {
+      setSellBusyKey('')
+    }
+  }
+
   async function prepareUnsignedExternalFunding() {
     setUnsignedExternalError('')
     setUnsignedExternalResult(null)
@@ -6890,7 +7222,7 @@ export function PolyPortfolioPanel({
   if (!sessionlessExternalMode && !authenticated) {
     const portfolioActions = [
       ['watch', 'Watch account', 'Track a public Polymarket profile.'],
-      ['trading', 'Main Wallet', 'Add USDC, withdraw, and view active positions.'],
+      ['trading', 'Main Wallet', 'Add USDC, withdraw pUSD as USDC, and view active positions.'],
       ['external', 'Fund external', 'Send funds to another Poly account.'],
     ] as const
     const selectedAction = portfolioActions.find(([key]) => key === unsignedPortfolioAction)
@@ -6951,7 +7283,7 @@ export function PolyPortfolioPanel({
                     Add USDC, send it out, or use it across PolyDesk.
                   </p>
                   <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#0f1014]">
-                    <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Polymarket cash</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">pUSD trading cash</p>
                     <p className="mt-1 text-2xl font-black tracking-tight text-gray-950 dark:text-white">$0</p>
                     <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Sign in to load your Polymarket account.</p>
                   </div>
@@ -7334,7 +7666,7 @@ export function PolyPortfolioPanel({
             {mainWalletCopy}
           </p>
           <div className="mt-3 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#0f1014]">
-            <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Polymarket cash</p>
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">pUSD trading cash</p>
             <p className="mt-1 text-2xl font-black tracking-tight text-gray-950 dark:text-white">$0</p>
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Connect to load live Polymarket balances.</p>
           </div>
@@ -7610,10 +7942,18 @@ export function PolyPortfolioPanel({
               <button
                 key={network.key}
                 type="button"
-                onClick={() => setTradingWalletNetwork(network.key as PolymarketBridgeNetwork)}
+                onClick={() => {
+                  if (tradingWalletTab === 'withdraw') {
+                    setWithdrawNetwork(network.key as PolymarketBridgeNetwork)
+                    setWithdrawResult(null)
+                  } else {
+                    setTradingWalletNetwork(network.key as PolymarketBridgeNetwork)
+                    setFundResult(null)
+                  }
+                }}
                 className={cn(
                   'rounded-lg border px-2 py-2 text-[11px] font-bold transition-all',
-                  tradingWalletNetwork === network.key
+                  (tradingWalletTab === 'withdraw' ? withdrawNetwork : tradingWalletNetwork) === network.key
                     ? 'border-gray-950 bg-gray-950 text-white dark:border-white dark:bg-white dark:text-gray-950'
                     : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:text-gray-900 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-400 dark:hover:border-white/20 dark:hover:text-gray-200',
                 )}
@@ -7625,13 +7965,13 @@ export function PolyPortfolioPanel({
         )}
 
         {tradingWalletTab === 'balance' && (
-          <div className="mt-3 grid grid-cols-2 gap-2.5">
+          <div className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-3">
             <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#111216]">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Polymarket cash</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">pUSD trading cash</p>
                   <p className="mt-1 text-2xl font-black tracking-tight text-gray-950 dark:text-white">--</p>
-                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Cash balance requires Polymarket account access.</p>
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">pUSD balance requires Polymarket account access.</p>
                 </div>
               </div>
             </div>
@@ -7642,6 +7982,7 @@ export function PolyPortfolioPanel({
                   <p className="mt-1 text-2xl font-black tracking-tight text-gray-950 dark:text-white">
                     {liveLoading ? <Loader2 className="inline h-5 w-5 animate-spin" /> : formatUsd(totalValue)}
                   </p>
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{formatUsd(activePositionValue)} active positions</p>
                   {tradingPortfolioAddress && <p className="mt-1 text-xs font-semibold text-gray-400">{shortHex(tradingPortfolioAddress)}</p>}
                 </div>
                 <button
@@ -7654,6 +7995,13 @@ export function PolyPortfolioPanel({
                   <RefreshCw className={cn('h-4 w-4', liveLoading && 'animate-spin')} />
                 </button>
               </div>
+            </div>
+            <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#111216]">
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Claimable</p>
+              <p className="mt-1 text-2xl font-black tracking-tight text-gray-950 dark:text-white">
+                {liveLoading ? <Loader2 className="inline h-5 w-5 animate-spin" /> : formatUsd(claimableValue)}
+              </p>
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{claimablePositions.length} redeemable position{claimablePositions.length === 1 ? '' : 's'}</p>
             </div>
           </div>
         )}
@@ -7714,18 +8062,65 @@ export function PolyPortfolioPanel({
 
         {tradingWalletTab === 'withdraw' && (
           <div className="mt-3 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#111216]">
-            <p className="text-sm font-semibold text-gray-900 dark:text-white">Withdraw from Polymarket</p>
+            <p className="text-sm font-semibold text-gray-900 dark:text-white">Withdraw pUSD as USDC</p>
             <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-              Withdrawals must be signed inside Polymarket for now. Open your Polymarket account, withdraw USDC, then return here to refresh portfolio value.
+              Polymarket trading cash is held as pUSD. PolyDesk sends pUSD from your Polymarket wallet to the official bridge route, and the destination wallet receives USDC.
             </p>
-            <a
-              href="https://polymarket.com"
-              target="_blank"
-              rel="noreferrer"
-              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-2.5 text-sm font-semibold text-white hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
-            >
-              <ExternalLink className="h-4 w-4" /> Open Polymarket
-            </a>
+            {!withdrawResult ? (
+              <div className="mt-3 space-y-3">
+                <InputBlock
+                  label="Amount pUSD"
+                  value={withdrawAmount}
+                  onChange={value => {
+                    setWithdrawAmount(value)
+                    setWithdrawResult(null)
+                  }}
+                  placeholder="0.00"
+                  inputMode="decimal"
+                />
+                <InputBlock
+                  label={`${requestNetworkLabels[withdrawNetwork]} recipient`}
+                  value={withdrawRecipient}
+                  onChange={value => {
+                    setWithdrawRecipient(value)
+                    setWithdrawResult(null)
+                  }}
+                  placeholder={withdrawNetwork === 'solana' ? 'Solana wallet address' : '0x... wallet address'}
+                />
+                {withdrawError && <p className="text-xs text-red-500 dark:text-red-300">{withdrawError}</p>}
+                <button
+                  type="button"
+                  onClick={() => void withdrawPolymarketPusd()}
+                  disabled={withdrawBusy || !polymarketWalletReady}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-2.5 text-sm font-semibold text-white hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+                >
+                  {withdrawBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
+                  Withdraw as USDC
+                </button>
+              </div>
+            ) : (
+              <div className="mt-3 space-y-3">
+                <p className="text-[11px] font-semibold uppercase tracking-widest text-emerald-600 dark:text-emerald-300">Withdrawal submitted</p>
+                <p className="text-sm text-gray-700 dark:text-gray-200">
+                  Withdrawing <span className="font-semibold tabular-nums">{withdrawResult.amount} pUSD</span> to {requestNetworkLabels[withdrawResult.network]}. The recipient receives USDC after the bridge completes.
+                </p>
+                <p className="truncate rounded-lg bg-gray-50 px-3 py-2 font-mono text-xs text-gray-800 dark:bg-white/[0.06] dark:text-gray-200">
+                  {withdrawResult.bridgeAddress}
+                </p>
+                {withdrawResult.status && <p className="text-xs text-gray-500 dark:text-gray-400">Relayer status: <span className="font-semibold">{withdrawResult.status}</span></p>}
+                {withdrawResult.transactionHash && <p className="break-all text-[11px] text-gray-400">Tx: {withdrawResult.transactionHash}</p>}
+                {withdrawResult.transactionId && !withdrawResult.transactionHash && <p className="break-all text-[11px] text-gray-400">Relayer ID: {withdrawResult.transactionId}</p>}
+                {withdrawResult.note && <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">{withdrawResult.note}</p>}
+                <a
+                  href="https://polymarket.com"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-2.5 text-sm font-semibold text-white hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+                >
+                  <ExternalLink className="h-4 w-4" /> View Polymarket
+                </a>
+              </div>
+            )}
           </div>
         )}
 
@@ -7775,13 +8170,19 @@ export function PolyPortfolioPanel({
               <p className="mt-3 text-xs leading-relaxed text-gray-500 dark:text-gray-400">No {positionStatusTab.replace('-', ' ')} positions in this wallet.</p>
             ) : (
               <div className="mt-3 max-h-[220px] space-y-2 overflow-y-auto pr-1 [scrollbar-width:thin] [scrollbar-color:rgba(156,163,175,0.35)_transparent]">
+                {sellNotice && <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 dark:bg-amber-400/10 dark:text-amber-200">{sellNotice}</p>}
+                {sellSuccess && <p className="rounded-xl bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-200">{sellSuccess}</p>}
                 {positionsByStatus.slice(0, 8).map(position => {
                   const pnl = position.percentPnl
+                  const claimable = isClaimablePosition(position)
+                  const active = isActiveOpenPosition(position)
+                  const positionKey = polymarketPositionKey(position)
+                  const sellBusy = sellBusyKey === positionKey
                   const tone = typeof pnl === 'number'
                     ? pnl >= 0 ? 'text-emerald-600 dark:text-emerald-300' : 'text-red-500 dark:text-red-300'
                     : 'text-gray-400'
                   return (
-                    <div key={polymarketPositionKey(position)} className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">
+                    <div key={positionKey} className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
                           <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">{position.title ?? 'Polymarket position'}</p>
@@ -7791,12 +8192,40 @@ export function PolyPortfolioPanel({
                         </div>
                         <p className={cn('text-sm font-semibold tabular-nums', tone)}>{formatPercent(pnl)}</p>
                       </div>
-                      <div className="mt-2 flex justify-end">
+                      <div className="mt-2 flex flex-wrap justify-end gap-1.5">
+                        {active && (
+                          <button
+                            type="button"
+                            onClick={() => void sellPosition(position)}
+                            disabled={Boolean(sellBusyKey) || !polymarketPositionTokenId(position)}
+                            className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-gray-600 hover:border-gray-300 hover:text-gray-900 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-300 dark:hover:border-white/20 dark:hover:text-white"
+                          >
+                            {sellBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                            Sell
+                          </button>
+                        )}
+                        {claimable && (
+                          <a
+                            href={polymarketEventUrl(position)}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-700 hover:border-emerald-300 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-200"
+                          >
+                            Claim <ExternalLink className="h-3 w-3" />
+                          </a>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setTradingWalletTab('withdraw')}
+                          className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-gray-600 hover:border-gray-300 hover:text-gray-900 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-300 dark:hover:border-white/20 dark:hover:text-white"
+                        >
+                          Withdraw <ArrowRight className="h-3 w-3" />
+                        </button>
                         <a
                           href={polymarketEventUrl(position)}
                           target="_blank"
                           rel="noreferrer"
-                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-500 hover:text-gray-800 dark:text-gray-300 dark:hover:text-white"
+                          className="inline-flex items-center gap-1 px-1.5 py-1.5 text-[11px] font-semibold text-gray-500 hover:text-gray-800 dark:text-gray-300 dark:hover:text-white"
                         >
                           Open <ExternalLink className="h-3 w-3" />
                         </a>
