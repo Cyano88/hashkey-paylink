@@ -2007,8 +2007,15 @@ export function CreateStreamForm() {
                     )}
                     <div className="flex justify-center">
                       <span className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1 text-[10px] font-semibold text-gray-400 dark:border-white/10 dark:bg-[#15151a] dark:text-gray-500">
-                        <img src="/brand/circle-logo.jpeg" alt="" className="h-3 w-3 rounded-full object-cover" />
-                        Powered by Circle
+                        <img
+                          src={isCreatorStream ? '/hash-logo-transparent.png' : '/brand/circle-logo.jpeg'}
+                          alt=""
+                          className={[
+                            'h-3 w-3 object-cover',
+                            isCreatorStream ? 'rounded-none' : 'rounded-full',
+                          ].join(' ')}
+                        />
+                        {isCreatorStream ? 'Powered by Hash PayLink Vault on Arc' : 'Powered by Circle'}
                       </span>
                     </div>
                   </div>
