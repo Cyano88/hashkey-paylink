@@ -61,9 +61,7 @@ export function createX402PaylinkReceipt(receipt: X402ReceiptLike, activityId: s
   const proof = receipt.proof ?? {}
   const txRef = String(proof.transaction ?? receipt.txHash ?? '')
   const proofHash = String(proof.proofHash ?? proof.receiptHash ?? receipt.receiptHash ?? receipt.activityId ?? activityId)
-  const amountText = String(proof.amount ?? receipt.amount ?? '0')
-  const amountMatch = amountText.match(/-?\d+(?:\.\d+)?/)
-  const amount = amountMatch?.[0] ?? '0'
+  const amount = normalizeX402ReceiptAmount(receipt.amount, proof.amount)
   const payer = String(proof.payer ?? proof.buyerAgent ?? receipt.payer ?? '')
   const creator = String(proof.seller ?? proof.sellerAgent ?? receipt.merchantId ?? '')
   return {
@@ -90,6 +88,31 @@ export function createX402PaylinkReceipt(receipt: X402ReceiptLike, activityId: s
       ogExplorer: receipt.og?.ogExplorer ? String(receipt.og.ogExplorer) : String(proof.ogExplorer ?? ''),
     },
   }
+}
+
+function normalizeX402ReceiptAmount(receiptAmount?: string, proofAmount?: unknown) {
+  const humanAmount = parseHumanUsdcAmount(receiptAmount)
+  if (humanAmount) return humanAmount
+  const proofText = String(proofAmount ?? '')
+  const proofMatch = proofText.match(/-?\d+(?:\.\d+)?/)
+  if (!proofMatch) return '0'
+  const numeric = Number(proofMatch[0])
+  if (!Number.isFinite(numeric)) return '0'
+  const absolute = Math.abs(numeric)
+  const normalized = !proofText.includes('.') && absolute >= 1_000
+    ? absolute / 1_000_000
+    : absolute
+  return normalized.toLocaleString('en-US', { useGrouping: false, maximumFractionDigits: 6 })
+}
+
+function parseHumanUsdcAmount(value?: string) {
+  const text = String(value ?? '').trim()
+  if (!text) return ''
+  const match = text.match(/-?\d+(?:\.\d+)?/)
+  if (!match) return ''
+  const numeric = Math.abs(Number(match[0]))
+  if (!Number.isFinite(numeric)) return ''
+  return numeric.toLocaleString('en-US', { useGrouping: false, maximumFractionDigits: 6 })
 }
 
 export function receiptChainKey(value?: string): ChainKey {
