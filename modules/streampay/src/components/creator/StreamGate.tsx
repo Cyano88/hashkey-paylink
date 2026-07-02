@@ -269,6 +269,10 @@ function formatBalanceLabel(value?: string) {
   return `${amount.toLocaleString(undefined, { maximumFractionDigits: 6 })} USDC`
 }
 
+function balancePreviewLabel(value?: string, checked?: boolean) {
+  return formatBalanceLabel(value) || (checked ? '0 USDC' : 'Checking...')
+}
+
 function mergeAgentOptions(existing: AgentOption[], next: AgentOption) {
   const slug = cleanAgentSlug(next.slug)
   if (!slug) return existing
@@ -1189,7 +1193,7 @@ export function StreamGate() {
                       <div className="space-y-1">
                         <p className="text-[13px] font-bold text-gray-900">Private creator content</p>
                         <p className="mx-auto max-w-[280px] text-[12px] leading-relaxed text-gray-500">
-                          Continue with your Hash PayLink payment wallet. If it needs a sign-in or USDC top-up, we will guide you.
+                          Use your Hash PayLink payment wallet to unlock this content.
                         </p>
                       </div>
                     </div>
@@ -1201,7 +1205,7 @@ export function StreamGate() {
                         <div className="min-w-0">
                           <p className="text-[13px] font-bold text-gray-900">Choose reader wallet</p>
                           <p className="mt-1 text-[12px] leading-relaxed text-gray-500">
-                            Select the reader wallet paying to unlock. Creator: {creator ? shortAddress(creator) : 'verified gate'}.
+                            Select a wallet to pay this creator: {creator ? shortAddress(creator) : 'verified gate'}.
                           </p>
                         </div>
                         <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-bold text-emerald-700 ring-1 ring-emerald-100">
@@ -1254,6 +1258,22 @@ export function StreamGate() {
                               <span className="mt-0.5 block truncate text-[10px] font-semibold uppercase tracking-[0.12em] text-gray-400">
                                 {paymentWalletSourceText(agent)}
                               </span>
+                              {agent.walletAddress && (
+                                <span className="mt-2 grid grid-cols-2 gap-1.5">
+                                  <span className="min-w-0 rounded-lg border border-white bg-white/80 px-2 py-1">
+                                    <span className="block text-[9px] font-bold uppercase tracking-[0.1em] text-gray-400">Arc</span>
+                                    <span className="block truncate text-[10px] font-bold text-gray-700">
+                                      {balancePreviewLabel(agent.balance, agent.balanceChecked)}
+                                    </span>
+                                  </span>
+                                  <span className="min-w-0 rounded-lg border border-white bg-white/80 px-2 py-1">
+                                    <span className="block text-[9px] font-bold uppercase tracking-[0.1em] text-gray-400">x402</span>
+                                    <span className="block truncate text-[10px] font-bold text-gray-700">
+                                      {balancePreviewLabel(agent.gatewayBalance, agent.gatewayBalanceChecked)}
+                                    </span>
+                                  </span>
+                                </span>
+                              )}
                             </span>
                             <span className={[
                               'shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold',
@@ -1273,7 +1293,7 @@ export function StreamGate() {
                         }}
                         className="w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-[12px] font-bold text-gray-700 transition-all hover:border-gray-300 hover:bg-gray-50"
                       >
-                        Use another email
+                        Add another email
                       </button>
                       {selectedAgent?.walletAddress && (
                         <button
@@ -1282,7 +1302,7 @@ export function StreamGate() {
                           disabled={walletBusy}
                           className="w-full rounded-xl border border-red-100 bg-red-50 px-3 py-3 text-[12px] font-bold text-red-700 transition-all hover:border-red-200 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                          {walletBusy ? 'Signing out...' : 'Sign out selected wallet'}
+                          {walletBusy ? 'Signing out...' : 'Sign out current wallet'}
                         </button>
                       )}
                       {agentOptionsError && (
@@ -1296,7 +1316,7 @@ export function StreamGate() {
                       <div className="border-b border-gray-100 pb-3">
                         <p className="text-[13px] font-bold text-gray-900">Open reader wallet</p>
                         <p className="mt-1 text-[12px] leading-relaxed text-gray-500">
-                          Enter the reader email that owns the wallet paying for this unlock. We will send a one-time code.
+                          Enter the wallet email. We will send a one-time code.
                         </p>
                       </div>
                       <label className="block space-y-1.5">
@@ -1387,7 +1407,7 @@ export function StreamGate() {
                           <div className="min-w-0">
                             <p className="text-[13px] font-bold text-gray-900">Activate Arc x402</p>
                             <p className="mt-1 text-[12px] leading-relaxed text-gray-500">
-                              Move Arc Testnet USDC from this reader wallet into x402 service balance, then unlock this content.
+                              Move Arc Testnet USDC into x402 balance, then unlock.
                             </p>
                           </div>
                           <button
@@ -1516,7 +1536,7 @@ export function StreamGate() {
                         Open wallet manager instead
                       </a>
                       <p className="text-center text-[11px] leading-relaxed text-gray-400">
-                        After activation, return here and tap Unlock content again.
+                        After activation, tap Unlock content.
                       </p>
                     </div>
                   )}
