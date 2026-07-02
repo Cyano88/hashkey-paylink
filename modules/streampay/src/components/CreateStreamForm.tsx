@@ -250,8 +250,23 @@ function buildReturnToContent(returnTo: string, vault: string) {
   return next.startsWith('/') && !next.startsWith('//') ? next : ''
 }
 
+function buildCreatorCheckoutBackHref(returnTo: string) {
+  if (!returnTo) return ''
+  try {
+    const url = new URL(returnTo.replaceAll('__STREAM_VAULT__', ''), window.location.origin)
+    url.searchParams.delete('streamVault')
+    url.searchParams.delete('vault')
+    url.searchParams.set('pay', 'choice')
+    const next = `${url.pathname}${url.search}${url.hash}`
+    return next.startsWith('/') && !next.startsWith('//') ? next : ''
+  } catch {
+    return ''
+  }
+}
+
 export function CreateStreamForm() {
   const [prefill] = useState(readPrefill)
+  const creatorCheckoutBackHref = buildCreatorCheckoutBackHref(prefill.returnTo)
   const { authenticated: privyAuthenticated, user: privyUser, login: loginPrivy, getAccessToken } = usePrivy()
   const privyEmail = cleanEmail(emailFromPrivyUser(privyUser))
   const { address: connectedAddr, isConnected } = useAccount()
@@ -1373,7 +1388,15 @@ export function CreateStreamForm() {
 
         {circleAvailable && (
           <div className="space-y-3">
-            {activeTab !== 'menu' && (
+            {isCreatorStream && creatorCheckoutBackHref ? (
+              <a
+                href={creatorCheckoutBackHref}
+                className="inline-flex items-center gap-1.5 px-1 text-[12px] font-bold text-gray-400 transition-colors hover:text-gray-800 dark:hover:text-gray-200"
+              >
+                <ChevronDown className="h-3.5 w-3.5 rotate-90" />
+                Back
+              </a>
+            ) : activeTab !== 'menu' && (
               <button
                 type="button"
                 onClick={() => setActiveTab('menu')}
