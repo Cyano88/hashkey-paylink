@@ -12,7 +12,11 @@ import { getAgentGovernanceProfile, getAgentLegalProfile } from './agent-legal.j
 
 const execFileAsync = promisify(execFile)
 const CIRCLE_BIN = process.platform === 'win32' ? 'circle.cmd' : 'circle'
-const STORE_PATH = process.env.AGENT_WALLET_PROVISION_STORE ?? './data/agent-wallet-provisioning.json'
+const DATA_PATH = process.env.DATA_PATH?.trim()
+const STORE_PATH = process.env.AGENT_WALLET_PROVISION_STORE
+  ?? (DATA_PATH ? `${DATA_PATH}/agent-wallet-provisioning.json` : './data/agent-wallet-provisioning.json')
+const CIRCLE_SESSION_ROOT = process.env.AGENT_WALLET_CIRCLE_SESSION_PATH
+  ?? (DATA_PATH ? `${DATA_PATH}/circle-web-sessions` : './data/circle-web-sessions')
 const CIRCLE_CLI_ENABLED = ['1', 'true', 'yes', 'on'].includes(String(process.env.CIRCLE_CLI_ENABLED ?? '').toLowerCase())
 const SERVICE_SECRET = process.env.AGENT_WALLET_SERVICE_SECRET
 const DEFAULT_AGENT_SLUG = normalizeSlug(process.env.DEFAULT_AGENT_SLUG || 'hashpaylink-agent')
@@ -606,7 +610,7 @@ async function walletChoicesWithBalances(wallets: string[], key: string, chain: 
 }
 
 async function runCircle(args: string[], key: string, timeoutMs = 60_000) {
-  const sessionHome = resolve(process.cwd(), 'data', 'circle-web-sessions', safeSessionKey(key))
+  const sessionHome = resolve(CIRCLE_SESSION_ROOT, safeSessionKey(key))
   await mkdir(sessionHome, { recursive: true })
   const { stdout, stderr } = await execFileAsync(CIRCLE_BIN, args, {
     timeout: timeoutMs,
@@ -636,6 +640,7 @@ export default async function handler(req: Request, res: Response) {
     let gatewayBalance: string | undefined
     let gatewayBalanceError: string | undefined
     let gatewayBalanceChecked = false
+    let sessionExpired = false
     if (record?.walletAddress && req.query.balance === '1') {
       balanceChecked = true
       try {
@@ -658,7 +663,12 @@ export default async function handler(req: Request, res: Response) {
           }
         }
       } catch (err) {
-        balanceError = err instanceof Error ? err.message.slice(0, 240) : 'Balance lookup failed.'
+        if (isCircleLoginExpired(err)) {
+          sessionExpired = true
+          balanceError = 'Circle Agent Wallet session expired. Reconnect this reader wallet to continue.'
+        } else {
+          balanceError = err instanceof Error ? err.message.slice(0, 240) : 'Balance lookup failed.'
+        }
       }
     }
     if (record?.walletAddress && req.query.x402 === '1' && !record.sessionId) {
@@ -680,7 +690,12 @@ export default async function handler(req: Request, res: Response) {
         gatewayBalance = parseBalance(output)
         if (gatewayBalance === undefined) gatewayBalanceError = 'Circle CLI returned no parseable x402 balance.'
       } catch (err) {
-        gatewayBalanceError = err instanceof Error ? err.message.slice(0, 240) : 'x402 balance lookup failed.'
+        if (isCircleLoginExpired(err)) {
+          sessionExpired = true
+          gatewayBalanceError = 'Circle Agent Wallet session expired. Reconnect this reader wallet to continue.'
+        } else {
+          gatewayBalanceError = err instanceof Error ? err.message.slice(0, 240) : 'x402 balance lookup failed.'
+        }
       }
     }
     return res.json({
@@ -688,7 +703,7 @@ export default async function handler(req: Request, res: Response) {
       found: !!record,
       agentSlug,
       walletAddress: record?.walletAddress,
-      connected: !!record?.sessionId,
+      connected: !!record?.sessionId && !sessionExpired,
       source: record?.source ?? (record ? 'store' : undefined),
       chain: balanceChain,
       storedChain: record?.chain,

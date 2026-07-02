@@ -631,6 +631,7 @@ export function StreamGate() {
   const [gatewayArchiveTimedOut, setGatewayArchiveTimedOut] = useState(false)
   const [gatewayReferenceCopied, setGatewayReferenceCopied] = useState(false)
   const [gatewayReceiptOpening, setGatewayReceiptOpening] = useState(false)
+  const [gatewayRestored, setGatewayRestored] = useState(false)
   const gatewayTxIsExplorerHash = /^0x[a-fA-F0-9]{64}$/.test(gatewayTx ?? '')
   const gatewayOgExplorer = gatewayReceipt?.og?.ogExplorer
   const gatewayOgProof = gatewayReceipt?.og?.ogTxHash || gatewayReceipt?.og?.rootHash || ''
@@ -729,6 +730,7 @@ export function StreamGate() {
     setGatewayReceipt(null)
     setGatewayReceiptPollAttempts(0)
     setGatewayArchiveTimedOut(false)
+    setGatewayRestored(false)
     setContentError(null)
     setContentState('loading')
     try {
@@ -744,6 +746,7 @@ export function StreamGate() {
         payment?: { transaction?: string } | null
         receiptActivityId?: string | null
         walletAddress?: string
+        restored?: boolean
         error?: string
         code?: string
       }
@@ -751,8 +754,13 @@ export function StreamGate() {
       setFetchedContent({ type: data.type as 'text' | 'url' | 'scores', content: data.content })
       setGatewayTx(data.payment?.transaction ?? null)
       setGatewayReceiptId(data.receiptActivityId ?? null)
+      setGatewayRestored(Boolean(data.restored))
       setContentState('ready')
-      setCircleNotice(data.walletAddress ? `Paid by ${shortAddress(data.walletAddress)}` : 'Payment complete')
+      setCircleNotice(
+        data.restored
+          ? 'Access restored'
+          : data.walletAddress ? `Paid by ${shortAddress(data.walletAddress)}` : 'Payment complete',
+      )
     } catch (err) {
       const rawMessage = err instanceof Error ? err.message : 'Payment failed.'
       const nextStep = unlockRecoveryStep(rawMessage)
@@ -1725,11 +1733,16 @@ export function StreamGate() {
               <span className="mt-0.5 text-emerald-600"><CheckIcon /></span>
               <div className="min-w-0 flex-1">
                 <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-700">
-                  Content unlocked
+                  {gatewayRestored ? 'Access restored' : 'Content unlocked'}
                 </p>
+                {gatewayRestored && (
+                  <p className="mt-0.5 text-[11px] font-medium leading-4 text-emerald-700/80">
+                    This reader wallet already unlocked this content.
+                  </p>
+                )}
                 <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
                   <p className="truncate font-mono text-[11px] font-semibold text-emerald-800">
-                    Circle Gateway paid - {gatewayTx.slice(0, 8)}...{gatewayTx.slice(-6)}
+                    Circle Gateway {gatewayRestored ? 'receipt' : 'paid'} - {gatewayTx.slice(0, 8)}...{gatewayTx.slice(-6)}
                   </p>
                   <button
                     type="button"
@@ -1754,9 +1767,9 @@ export function StreamGate() {
                   onClick={openGatewayReceiptPdf}
                   disabled={gatewayReceiptOpening || !gatewayOgReady}
                   className={[
-                    'flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-[12px] font-semibold transition-colors',
+                    'flex w-full items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-sm font-medium transition-all active:scale-[0.98]',
                     gatewayOgReady
-                      ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                      ? 'bg-gray-900 text-white hover:bg-gray-800'
                       : 'cursor-not-allowed bg-gray-100 text-gray-400',
                   ].join(' ')}
                 >
@@ -1799,6 +1812,17 @@ export function StreamGate() {
                   </button>
                 )}
               </div>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard?.writeText(gatewayTx).catch(() => {})
+                  setGatewayReferenceCopied(true)
+                  window.setTimeout(() => setGatewayReferenceCopied(false), 1600)
+                }}
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-white/55 px-5 py-2.5 text-sm font-medium text-emerald-800 transition-all hover:bg-white active:scale-[0.98]"
+              >
+                {gatewayReferenceCopied ? 'Reference copied' : 'Copy reference'}
+              </button>
             </div>
           </div>
         )}
