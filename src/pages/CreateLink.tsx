@@ -3363,7 +3363,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               className="flex min-w-0 items-center gap-1.5 py-1 text-xs text-gray-400 transition-colors hover:text-gray-900 dark:hover:text-gray-200"
             >
               <Mail className="h-3.5 w-3.5 shrink-0" />
-              support@hashpaylink.com
+              Support
             </a>
             <a
               href="https://x.com/Hash_PayLink"
@@ -3372,7 +3372,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               className="flex items-center gap-1.5 py-1 text-xs text-gray-400 transition-colors hover:text-gray-900 dark:hover:text-gray-200"
             >
               <X className="h-3.5 w-3.5 shrink-0" />
-              @Hash_PayLink
+              DM us
             </a>
             <Link
               to="/docs"

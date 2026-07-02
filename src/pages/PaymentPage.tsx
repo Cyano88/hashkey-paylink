@@ -4518,7 +4518,7 @@ export default function PaymentPage() {
             className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-900 transition-colors"
           >
             <Mail className="h-3.5 w-3.5" />
-            support@hashpaylink.com
+            Support
           </a>
           <a
             href="https://x.com/Hash_PayLink"
@@ -4527,7 +4527,7 @@ export default function PaymentPage() {
             className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-900 transition-colors"
           >
             <X className="h-3.5 w-3.5" />
-            @Hash_PayLink
+            DM us
           </a>
           <Link
             to="/docs"
