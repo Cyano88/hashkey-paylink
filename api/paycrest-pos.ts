@@ -51,6 +51,12 @@ export function isPaycrestConfigured() {
   return Boolean(paycrestApiKey())
 }
 
+export type PaycrestInstitution = {
+  code: string
+  name: string
+  type?: string
+}
+
 function unwrapData<T = any>(body: any): T {
   if (body && typeof body === 'object' && 'data' in body && body.data != null) return body.data as T
   return body as T
@@ -163,6 +169,27 @@ export async function verifyPaycrestAccount(input: { institution: string; accoun
     }),
   })
   return firstText(data?.accountName, data?.account_name, data?.name, data)
+}
+
+export async function listPaycrestInstitutions(currency = 'NGN'): Promise<PaycrestInstitution[]> {
+  const normalizedCurrency = currency.trim().toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3) || 'NGN'
+  const data = await paycrestFetch<any>(`/v2/institutions/${encodeURIComponent(normalizedCurrency)}`, { method: 'GET' })
+  const rows = Array.isArray(data)
+    ? data
+    : Array.isArray(data?.institutions)
+      ? data.institutions
+      : Array.isArray(data?.items)
+        ? data.items
+        : []
+
+  return rows
+    .map((row: any) => {
+      const code = firstText(row?.code, row?.institution, row?.id).toUpperCase()
+      const name = firstText(row?.name, row?.displayName, row?.display_name, row?.label)
+      const type = firstText(row?.type, row?.channel)
+      return code && name ? { code, name, type: type || undefined } : null
+    })
+    .filter(Boolean) as PaycrestInstitution[]
 }
 
 export async function createPaycrestOfframpOrder(input: {

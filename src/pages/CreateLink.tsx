@@ -143,13 +143,18 @@ type PosNetwork = 'base' | 'arbitrum' | 'arc' | 'solana'
 type CirclePocketView = 'chooser' | 'main' | 'x402'
 type CirclePocketTab = 'balance' | 'fund' | 'withdraw' | 'activity'
 type PosCountry = 'NG' | 'KE' | 'GH'
-type PosSettlementPath = 'USDC_WALLET' | 'SPENDA_NAIRA'
+type PosSettlementPath = 'USDC_WALLET' | 'SPENDA_NAIRA' | 'PAYCREST_NAIRA'
 type CreateProduct = 'payment' | 'agent' | 'circle-pocket' | 'pos' | 'streampay' | 'polymarket'
 type AccessView = 'overview' | 'wallet'
 type CirclePocketWallet = {
   address: string
   walletId?: string
   blockchain?: string
+}
+type PaycrestInstitutionOption = {
+  code: string
+  name: string
+  type?: string
 }
 type CirclePocketWallets = Partial<Record<PosNetwork, CirclePocketWallet>>
 type PosMerchant = {
@@ -199,6 +204,7 @@ const POS_NETWORK_OPTIONS: Array<{ key: PosNetwork; label: string; badge?: strin
 ]
 
 const SPENDA_POS_NETWORK_OPTIONS = POS_NETWORK_OPTIONS.filter((network) => network.key !== 'arc')
+const PAYCREST_POS_NETWORK_OPTIONS = POS_NETWORK_OPTIONS.filter((network) => network.key === 'base')
 
 const POS_COUNTRIES: Array<{ key: PosCountry; name: string; label: string; status: 'live' | 'soon'; copy: string }> = [
   { key: 'NG', name: 'Nigeria', label: 'Live', status: 'live', copy: 'USDC checkout with optional Spenda deposit wallet path.' },
@@ -218,6 +224,12 @@ const POS_SETTLEMENT_PATHS: Array<{ key: PosSettlementPath; title: string; label
     title: 'USDC to Naira via Spenda',
     label: 'Partner wallet',
     copy: 'Use a supported Spenda crypto deposit wallet. Spenda handles crypto-to-naira spending and KYC inside its app.',
+  },
+  {
+    key: 'PAYCREST_NAIRA',
+    title: 'USDC to Naira via Paycrest',
+    label: 'Bank payout',
+    copy: 'Customers pay Base USDC with Circle Smart Wallet. Paycrest routes NGN to the merchant bank account.',
   },
 ]
 
@@ -615,6 +627,15 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   const [posNetworks,    setPosNetworks]    = useState<PosNetwork[]>(['base'])
   const [posWallet,      setPosWallet]      = useState('')
   const [posSolanaWallet, setPosSolanaWallet] = useState('')
+  const [posBankProvider, setPosBankProvider] = useState('paycrest')
+  const [posBankInstitutions, setPosBankInstitutions] = useState<PaycrestInstitutionOption[]>([])
+  const [posBankInstitutionsBusy, setPosBankInstitutionsBusy] = useState(false)
+  const [posBankName, setPosBankName] = useState('')
+  const [posBankCode, setPosBankCode] = useState('')
+  const [posBankAccount, setPosBankAccount] = useState('')
+  const [posBankAccountName, setPosBankAccountName] = useState('')
+  const [posBankVerified, setPosBankVerified] = useState(false)
+  const [posBankVerifyBusy, setPosBankVerifyBusy] = useState(false)
   const [posMerchant,    setPosMerchant]    = useState<PosMerchant | null>(null)
   const [posBusy,        setPosBusy]        = useState(false)
   const [posError,       setPosError]       = useState('')
@@ -906,6 +927,16 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     setPosError('')
   }
 
+  function resetPosBankDetails() {
+    setPosBankProvider('paycrest')
+    setPosBankName('')
+    setPosBankCode('')
+    setPosBankAccount('')
+    setPosBankAccountName('')
+    setPosBankVerified(false)
+    setPosBankVerifyBusy(false)
+  }
+
   function closePosMode() {
     pushPaymentTabHistory('personal')
     setProductHubOpen(false)
@@ -914,6 +945,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     setPosSettlementPath(null)
     setPosMerchant(null)
     setPosCopied(false)
+    resetPosBankDetails()
     setPosError('')
   }
 
@@ -1297,11 +1329,13 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     }
     if (posSettlementPath) {
       setPosSettlementPath(null)
+      resetPosBankDetails()
       setPosError('')
       return
     }
     if (posCountry) {
       setPosCountry(null)
+      resetPosBankDetails()
       setPosError('')
       return
     }
@@ -1315,7 +1349,9 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   const posNeedsEvmWallet = posNetworks.some((network) => network !== 'solana')
   const posNeedsSolanaWallet = posNetworks.includes('solana')
   const posIsSpendaFlow = posSettlementPath === 'SPENDA_NAIRA'
-  const posNetworkOptions = posIsSpendaFlow ? SPENDA_POS_NETWORK_OPTIONS : POS_NETWORK_OPTIONS
+  const posIsPaycrestFlow = posSettlementPath === 'PAYCREST_NAIRA'
+  const posNetworkOptions = posIsPaycrestFlow ? PAYCREST_POS_NETWORK_OPTIONS : posIsSpendaFlow ? SPENDA_POS_NETWORK_OPTIONS : POS_NETWORK_OPTIONS
+  const posPaycrestReady = !posIsPaycrestFlow || (posBankProvider === 'paycrest' && posBankVerified && posBankCode && posBankAccountName)
   const posMerchantNetworks = posMerchant?.supported_networks?.length ? posMerchant.supported_networks : ['base']
   const posDashboardNetwork = posMerchantNetworks.find((network) => network !== 'solana') ?? 'solana'
   const posDashboardAddressParam = posDashboardNetwork === 'solana' ? 's' : 'e'
@@ -1325,6 +1361,11 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     : ''
 
   function togglePosNetwork(network: PosNetwork) {
+    if (posIsPaycrestFlow) {
+      setPosNetworks(['base'])
+      setPosError('')
+      return
+    }
     if (posIsSpendaFlow && network === 'arc') return
     setPosNetworks((current) => {
       if (current.includes(network)) {
@@ -1336,12 +1377,58 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   }
 
   useEffect(() => {
-    if (!posIsSpendaFlow) return
+    if (!posIsSpendaFlow && !posIsPaycrestFlow) return
     setPosNetworks((current) => {
-      const supported = current.filter((network) => network !== 'arc')
+      const supported = posIsPaycrestFlow ? current.filter((network) => network === 'base') : current.filter((network) => network !== 'arc')
       return supported.length ? supported : ['base']
     })
-  }, [posIsSpendaFlow])
+  }, [posIsSpendaFlow, posIsPaycrestFlow])
+
+  useEffect(() => {
+    if (!posIsPaycrestFlow) return
+    setPosBankInstitutionsBusy(true)
+    fetch('/api/ng-pos', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'institutions', currency: 'NGN' }),
+    })
+      .then((response) => response.json().then((data) => ({ response, data })))
+      .then(({ response, data }) => {
+        if (!response.ok || !data.ok) throw new Error(data.error ?? 'Could not load Paycrest banks.')
+        setPosBankInstitutions(Array.isArray(data.institutions) ? data.institutions : [])
+      })
+      .catch((error) => {
+        setPosBankInstitutions([])
+        setPosError(error instanceof Error ? error.message : 'Could not load Paycrest banks.')
+      })
+      .finally(() => setPosBankInstitutionsBusy(false))
+  }, [posIsPaycrestFlow])
+
+  async function verifyPosBankAccount() {
+    setPosBankVerifyBusy(true)
+    setPosError('')
+    setPosBankVerified(false)
+    setPosBankAccountName('')
+    try {
+      const response = await fetch('/api/ng-pos', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          action: 'verifyAccount',
+          bank_code: posBankCode,
+          account_number: posBankAccount,
+        }),
+      })
+      const data = await response.json()
+      if (!response.ok || !data.ok) throw new Error(data.error ?? 'Account verification failed')
+      setPosBankAccountName(String(data.account_name ?? '').trim())
+      setPosBankVerified(true)
+    } catch (error) {
+      setPosError(error instanceof Error ? error.message : 'Account verification failed')
+    } finally {
+      setPosBankVerifyBusy(false)
+    }
+  }
 
   async function createPosMerchant() {
     setPosBusy(true)
@@ -1352,11 +1439,15 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           action: 'createMerchant',
-          payout_preference: 'KEEP_CRYPTO',
+          payout_preference: posIsPaycrestFlow ? 'INSTANT_FIAT' : 'KEEP_CRYPTO',
           display_name: posMerchantName.trim(),
-          supported_networks: posNetworks,
+          supported_networks: posIsPaycrestFlow ? ['base'] : posNetworks,
           circle_smart_wallet_address: posWallet.trim(),
           solana_wallet_address: posSolanaWallet.trim(),
+          bank_name: posIsPaycrestFlow ? posBankName.trim() : undefined,
+          bank_code: posIsPaycrestFlow ? posBankCode.trim() : undefined,
+          account_number: posIsPaycrestFlow ? posBankAccount.trim() : undefined,
+          account_name: posIsPaycrestFlow ? posBankAccountName.trim() : undefined,
         }),
       })
       const data = await response.json()
@@ -2335,7 +2426,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                     <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Nigeria Retail Mode</p>
                     <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">Choose settlement path</h2>
                     <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-                      Keep Hash PayLink as the checkout layer. Local naira spending stays with the wallet partner.
+                      Keep Hash PayLink as the checkout layer. Choose direct USDC, partner wallet, or bank payout.
                     </p>
                   </div>
 
@@ -2346,6 +2437,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                         type="button"
                         onClick={() => {
                           setPosSettlementPath(path.key)
+                          if (path.key !== 'PAYCREST_NAIRA') resetPosBankDetails()
                           setPosError('')
                         }}
                         className="flex items-center justify-between gap-4 rounded-2xl border border-gray-200 bg-gray-50 p-4 text-left transition-all hover:-translate-y-0.5 hover:border-gray-300 hover:bg-white hover:shadow-sm dark:border-white/10 dark:bg-white/[0.04] dark:hover:border-white/20 dark:hover:bg-white/[0.07]"
@@ -2365,13 +2457,15 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                 <div className="space-y-4">
                   <div>
                     <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">
-                      {posIsSpendaFlow ? 'Nigeria Spenda Mode' : 'Nigerian Retail Mode'}
+                      {posIsPaycrestFlow ? 'Nigeria Paycrest Mode' : posIsSpendaFlow ? 'Nigeria Spenda Mode' : 'Nigerian Retail Mode'}
                     </p>
                     <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">
-                      {posIsSpendaFlow ? 'Create Spenda POS QR' : 'Create POS QR'}
+                      {posIsPaycrestFlow ? 'Create Naira POS QR' : posIsSpendaFlow ? 'Create Spenda POS QR' : 'Create POS QR'}
                     </h2>
                     <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-                      {posIsSpendaFlow
+                      {posIsPaycrestFlow
+                        ? 'One static QR. Customers pay Base USDC; Paycrest routes NGN to the verified bank account.'
+                        : posIsSpendaFlow
                         ? 'One static QR that sends USDC to your Spenda deposit wallet for naira spending inside Spenda.'
                         : 'One static QR for local in-person USDC payments.'}
                     </p>
@@ -2392,7 +2486,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                     </label>
                     <div>
                       <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">
-                        {posIsSpendaFlow ? 'Supported Spenda networks' : 'Supported networks'}
+                        {posIsPaycrestFlow ? 'Paycrest network' : posIsSpendaFlow ? 'Supported Spenda networks' : 'Supported networks'}
                       </span>
                       <div className="mt-1.5 grid grid-cols-2 gap-2">
                         {posNetworkOptions.map((network) => {
@@ -2416,7 +2510,9 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                         })}
                       </div>
                       <p className="mt-1.5 text-xs text-gray-400 dark:text-gray-500">
-                        {posIsSpendaFlow
+                        {posIsPaycrestFlow
+                          ? 'Paycrest naira payout is Base USDC only for this flow.'
+                          : posIsSpendaFlow
                           ? 'Arc is hidden here until Spenda supports Arc deposits.'
                           : 'Payers will only see selected networks.'}
                       </p>
@@ -2424,7 +2520,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                     {posNeedsEvmWallet && (
                       <label className="block">
                         <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">
-                          {posIsSpendaFlow ? 'Spenda EVM deposit wallet' : 'EVM Circle wallet'}
+                          {posIsPaycrestFlow ? 'EVM Circle wallet' : posIsSpendaFlow ? 'Spenda EVM deposit wallet' : 'EVM Circle wallet'}
                         </span>
                         <input
                           value={posWallet}
@@ -2453,25 +2549,120 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                         />
                       </label>
                     )}
+                    {posIsPaycrestFlow && (
+                      <div className="rounded-xl border border-gray-200 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-gray-900 dark:text-white">Nigerian bank account</p>
+                            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                              Paycrest provides the bank list and verifies the account name before this QR is created.
+                            </p>
+                          </div>
+                          <span className="shrink-0 rounded-full border border-gray-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-gray-600 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300">
+                            Paycrest
+                          </span>
+                        </div>
+                        <div className="mt-3 grid gap-3">
+                          <label className="block">
+                            <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">Bank provider</span>
+                            <select
+                              value={posBankProvider}
+                              onChange={(event) => setPosBankProvider(event.target.value)}
+                              className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-medium text-gray-950 outline-none focus:border-gray-400 dark:border-white/10 dark:bg-gray-950 dark:text-white dark:focus:border-white/25"
+                            >
+                              <option value="paycrest">Paycrest</option>
+                            </select>
+                          </label>
+                          <label className="block">
+                            <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">Bank</span>
+                            {posBankInstitutions.length ? (
+                              <select
+                                value={posBankCode}
+                                onChange={(event) => {
+                                  const selected = posBankInstitutions.find((institution) => institution.code === event.target.value)
+                                  setPosBankCode(event.target.value)
+                                  setPosBankName(selected?.name ?? '')
+                                  setPosBankVerified(false)
+                                  setPosBankAccountName('')
+                                  setPosError('')
+                                }}
+                                className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-medium text-gray-950 outline-none focus:border-gray-400 dark:border-white/10 dark:bg-gray-950 dark:text-white dark:focus:border-white/25"
+                              >
+                                <option value="">{posBankInstitutionsBusy ? 'Loading Paycrest banks...' : 'Select bank'}</option>
+                                {posBankInstitutions.map((institution) => (
+                                  <option key={institution.code} value={institution.code}>
+                                    {institution.name} ({institution.code})
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <input
+                                value={posBankCode}
+                                onChange={(event) => {
+                                  setPosBankCode(event.target.value.toUpperCase().trim())
+                                  setPosBankName('')
+                                  setPosBankVerified(false)
+                                  setPosBankAccountName('')
+                                  setPosError('')
+                                }}
+                                placeholder={posBankInstitutionsBusy ? 'Loading Paycrest banks...' : 'Paycrest bank code'}
+                                className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm font-medium text-gray-950 outline-none placeholder:text-gray-300 focus:border-gray-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-gray-600 dark:focus:border-white/25"
+                              />
+                            )}
+                          </label>
+                          <label className="block">
+                            <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">Account number</span>
+                            <input
+                              value={posBankAccount}
+                              onChange={(event) => {
+                                setPosBankAccount(event.target.value.replace(/\D/g, '').slice(0, 10))
+                                setPosBankVerified(false)
+                                setPosBankAccountName('')
+                                setPosError('')
+                              }}
+                              inputMode="numeric"
+                              placeholder="0123456789"
+                              className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm font-medium text-gray-950 outline-none placeholder:text-gray-300 focus:border-gray-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-gray-600 dark:focus:border-white/25"
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            onClick={verifyPosBankAccount}
+                            disabled={posBankVerifyBusy || !posBankCode || posBankAccount.length !== 10}
+                            className="flex min-h-[42px] items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 transition-all hover:border-gray-300 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:border-white/20"
+                          >
+                            {posBankVerifyBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                            {posBankVerified ? 'Account verified' : 'Verify account'}
+                          </button>
+                          {posBankAccountName && (
+                            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-300">
+                              {posBankAccountName}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className="rounded-xl border border-gray-200 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
                     <div className="flex items-center justify-between gap-3">
                       <div>
                         <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                          {posIsSpendaFlow ? 'Naira spending via Spenda' : 'Wallet settlement'}
+                          {posIsPaycrestFlow ? 'Naira payout via Paycrest' : posIsSpendaFlow ? 'Naira spending via Spenda' : 'Wallet settlement'}
                         </p>
                         <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                          {posIsSpendaFlow
+                          {posIsPaycrestFlow
+                            ? 'Hash PayLink verifies the Circle wallet payment. Paycrest handles crypto-to-naira routing to the verified bank account.'
+                            : posIsSpendaFlow
                             ? 'Hash PayLink verifies the USDC payment. Spenda handles KYC, conversion, and naira spending in its app.'
                             : 'Merchant receives USDC directly. Bank settlement stays off until a licensed payout partner is connected.'}
                         </p>
                       </div>
                       <span className={cn(
                         'shrink-0 rounded-full border border-gray-200 bg-white px-2.5 py-1 text-[11px] font-semibold dark:border-white/10 dark:bg-white/[0.06]',
-                        posIsSpendaFlow ? 'text-gray-700 dark:text-gray-200' : 'text-gray-400',
+                        posIsSpendaFlow || posIsPaycrestFlow ? 'text-gray-700 dark:text-gray-200' : 'text-gray-400',
                       )}>
-                        {posIsSpendaFlow ? 'Partner wallet' : 'No bank custody'}
+                        {posIsPaycrestFlow ? 'Bank payout' : posIsSpendaFlow ? 'Partner wallet' : 'No bank custody'}
                       </span>
                     </div>
                   </div>
@@ -2485,11 +2676,11 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                   <button
                     type="button"
                     onClick={createPosMerchant}
-                    disabled={posBusy || !posMerchantName.trim() || (posNeedsEvmWallet && !posWallet.trim()) || (posNeedsSolanaWallet && !posSolanaWallet.trim())}
+                    disabled={posBusy || !posMerchantName.trim() || (posNeedsEvmWallet && !posWallet.trim()) || (posNeedsSolanaWallet && !posSolanaWallet.trim()) || !posPaycrestReady}
                     className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
                   >
                     {posBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Store className="h-4 w-4" />}
-                    {posIsSpendaFlow ? 'Generate Spenda POS QR' : 'Generate POS QR'}
+                    {posIsPaycrestFlow ? 'Generate Naira POS QR' : posIsSpendaFlow ? 'Generate Spenda POS QR' : 'Generate POS QR'}
                   </button>
                 </div>
               ) : (

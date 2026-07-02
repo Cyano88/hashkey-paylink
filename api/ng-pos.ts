@@ -9,6 +9,7 @@ import {
   createPaycrestOfframpOrder,
   getPaycrestPosOrder,
   isPaycrestConfigured,
+  listPaycrestInstitutions,
   markPaycrestPosPayment,
   refreshPaycrestOrderStatus,
   verifyPaycrestAccount,
@@ -295,6 +296,15 @@ export default async function handler(req: Request, res: Response) {
 
     const body = req.body ?? {}
     const action = cleanText(body.action, '')
+
+    if (action === 'institutions') {
+      if (!isPaycrestConfigured()) {
+        return res.status(400).json({ ok: false, error: 'Paycrest is not configured. Add PAYCREST_API_KEY before loading banks.' })
+      }
+      const currency = cleanText(body.currency, 'NGN').toUpperCase()
+      const institutions = await listPaycrestInstitutions(currency)
+      return res.json({ ok: true, institutions })
+    }
 
     if (action === 'verifyAccount') {
       const bankCode = cleanText(body.bank_code, '')
