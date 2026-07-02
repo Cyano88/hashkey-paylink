@@ -192,6 +192,17 @@ export async function listPaycrestInstitutions(currency = 'NGN'): Promise<Paycre
     .filter(Boolean) as PaycrestInstitution[]
 }
 
+export async function getPaycrestOfframpRate(input: { network?: string; token?: string; fiat?: string; amount?: string } = {}) {
+  const network = (input.network ?? 'base').trim().toLowerCase()
+  const token = (input.token ?? 'USDC').trim().toUpperCase()
+  const fiat = (input.fiat ?? 'NGN').trim().toUpperCase()
+  const amount = decimalText(input.amount) || '1'
+  const data = await paycrestFetch<any>(`/v2/rates/${encodeURIComponent(network)}/${encodeURIComponent(token)}/${encodeURIComponent(amount)}/${encodeURIComponent(fiat)}?side=sell`, { method: 'GET' })
+  const rate = Number(firstText(data?.sell?.rate, data?.rate, data?.sellRate, data?.sell_rate))
+  if (!Number.isFinite(rate) || rate <= 0) throw new Error('Paycrest did not return a valid NGN rate.')
+  return rate
+}
+
 export async function createPaycrestOfframpOrder(input: {
   intentId: string
   merchantId: string

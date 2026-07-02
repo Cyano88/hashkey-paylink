@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
-import { ArrowLeft, ArrowRight, Banknote, CheckCircle2, Copy, LayoutDashboard, Loader2, QrCode, Wallet2 } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Banknote, CheckCircle2, Copy, LayoutDashboard, Loader2, QrCode } from 'lucide-react'
 import { cn } from '../lib/utils'
 
 type SettlementType = 'INSTANT_FIAT' | 'KEEP_CRYPTO'
@@ -145,8 +145,10 @@ export default function NigerianPos() {
         if (!ignore) {
           setMerchant(data.merchant)
           setSelectedNetwork(supportedMerchantNetworks(data.merchant.supported_networks)[0])
-          setSelectedSettlement(data.merchant.payout_preference ?? 'KEEP_CRYPTO')
-          setSettlementStep('select')
+          const bankConfigured = Boolean(data.merchant.bank_configured)
+          setSelectedSettlement(bankConfigured ? 'INSTANT_FIAT' : data.merchant.payout_preference ?? 'KEEP_CRYPTO')
+          setAmountCurrency(bankConfigured ? 'NGN' : 'USDC')
+          setSettlementStep(bankConfigured ? 'amount' : 'select')
         }
       })
       .catch((err) => {
@@ -257,7 +259,7 @@ export default function NigerianPos() {
           <div className="rounded-xl border border-gray-200 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
             <div className="mb-3 flex items-start justify-between gap-3">
               <div>
-                <p className="text-sm font-semibold text-gray-900 dark:text-white">Naira bank settlement</p>
+                <p className="text-sm font-semibold text-gray-900 dark:text-white">Naira bank payout</p>
                 <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Optional. Customers pay Base USDC from Circle Smart Wallet; Paycrest routes NGN to this account.</p>
               </div>
               <Banknote className="h-4 w-4 shrink-0 text-gray-400" />
@@ -364,12 +366,26 @@ export default function NigerianPos() {
     )
   }
 
+  if (!merchant.bank_configured) {
+    return (
+      <PosShell
+        eyebrow="Nigerian Retail Mode"
+        title={merchant.display_name}
+        body="This POS terminal needs a verified merchant bank account before it can accept Naira payments."
+      >
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+          Ask the merchant to recreate this POS QR with bank payout enabled.
+        </div>
+      </PosShell>
+    )
+  }
+
   return (
     <PosShell
       eyebrow="Nigerian Retail Mode"
       title={merchant.display_name}
-      body={settlementStep === 'select' ? 'Choose how this merchant receives settlement.' : selectedSettlement === 'KEEP_CRYPTO' ? 'Pay this merchant in USDC.' : 'Pay this merchant in naira.'}
-      beforeHeader={settlementStep === 'amount' ? (
+      body={merchant.bank_configured ? 'Pay in Naira. Checkout collects Base USDC and pays out to the merchant bank account.' : 'This POS terminal needs a verified merchant bank account.'}
+      beforeHeader={settlementStep === 'amount' && !merchant.bank_configured ? (
         <button
           type="button"
           onClick={() => {
@@ -385,39 +401,6 @@ export default function NigerianPos() {
       ) : null}
     >
       <div className="space-y-5">
-        {settlementStep === 'select' ? (
-        <div className="grid gap-3">
-          <SettlementCard
-            active={false}
-            icon={Wallet2}
-            title="Pay with USDC"
-            body="Merchant receives USDC directly."
-            onClick={() => {
-              setSelectedSettlement('KEEP_CRYPTO')
-              setAmountCurrency('USDC')
-              setQuote(null)
-              setQuoteError('')
-              setSettlementStep('amount')
-            }}
-          />
-          <SettlementCard
-            active={false}
-            disabled={!merchant.bank_configured}
-            icon={Banknote}
-            title="Pay in naira"
-            body={merchant.bank_configured ? `Settles to ${merchant.bank_name ?? 'bank'} ****${merchant.bank_last4}` : 'Bank settlement is not configured yet.'}
-            onClick={() => {
-              if (!merchant.bank_configured) return
-              setSelectedSettlement('INSTANT_FIAT')
-              setSelectedNetwork('base')
-              setAmountCurrency('NGN')
-              setQuote(null)
-              setQuoteError('')
-              setSettlementStep('amount')
-            }}
-          />
-        </div>
-        ) : (
         <>
         {selectedSettlement !== 'INSTANT_FIAT' && merchantNetworks.length > 1 && (
           <div className="rounded-xl border border-gray-200 bg-white p-3 dark:border-white/10 dark:bg-white/[0.05]">
@@ -449,29 +432,33 @@ export default function NigerianPos() {
           </div>
         )}
         <div className="rounded-xl border border-gray-200 bg-white p-3 dark:border-white/10 dark:bg-white/[0.05]">
-          <div className="mb-3 grid grid-cols-2 rounded-lg bg-gray-100 p-1 dark:bg-white/[0.06]">
-            {(['NGN', 'USDC'] as const).map((currency) => (
-              <button
-                key={currency}
-                type="button"
-                onClick={() => {
-                  setAmountCurrency(currency)
-                  setQuote(null)
-                }}
-                className={cn(
-                  'rounded-md px-3 py-2 text-xs font-semibold transition',
-                  amountCurrency === currency
-                    ? 'bg-white text-gray-950 shadow-sm dark:bg-gray-950 dark:text-white'
-                    : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200',
-                )}
-              >
-                {currency === 'NGN' ? 'Enter naira' : 'Enter USDC'}
-              </button>
-            ))}
-          </div>
-          <label className="text-xs font-semibold text-gray-500 dark:text-gray-400">Amount</label>
+          {selectedSettlement !== 'INSTANT_FIAT' && (
+            <div className="mb-3 grid grid-cols-2 rounded-lg bg-gray-100 p-1 dark:bg-white/[0.06]">
+              {(['NGN', 'USDC'] as const).map((currency) => (
+                <button
+                  key={currency}
+                  type="button"
+                  onClick={() => {
+                    setAmountCurrency(currency)
+                    setQuote(null)
+                  }}
+                  className={cn(
+                    'rounded-md px-3 py-2 text-xs font-semibold transition',
+                    amountCurrency === currency
+                      ? 'bg-white text-gray-950 shadow-sm dark:bg-gray-950 dark:text-white'
+                      : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200',
+                  )}
+                >
+                  {currency}
+                </button>
+              ))}
+            </div>
+          )}
+          <label className="text-xs font-semibold text-gray-500 dark:text-gray-400">
+            {selectedSettlement === 'INSTANT_FIAT' ? 'Amount in naira' : 'Amount'}
+          </label>
           <div className="mt-1 flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.04]">
-            <span className="text-sm font-semibold text-gray-400">{amountCurrency === 'NGN' ? '₦' : '$'}</span>
+            <span className="text-sm font-semibold text-gray-400">{amountCurrency === 'NGN' ? 'NGN' : '$'}</span>
             <input
               value={amount}
               onChange={(event) => {
@@ -486,7 +473,7 @@ export default function NigerianPos() {
           <div className="mt-2 flex items-center justify-between gap-3 text-[11px] font-medium text-gray-400 dark:text-gray-500">
             {convertedNgn !== null && convertedUsdc !== null ? (
               <>
-                <span>{amountCurrency === 'USDC' ? `≈ ${formatNgn(convertedNgn)}` : `≈ ${formatUsdc(convertedUsdc)}`}</span>
+                <span>{amountCurrency === 'USDC' ? `Approx ${formatNgn(convertedNgn)}` : `You will pay approx ${formatUsdc(convertedUsdc)}`}</span>
                 <span>1 USDC = {formatNgn(posRate)}</span>
               </>
             ) : (
@@ -500,15 +487,17 @@ export default function NigerianPos() {
           <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 dark:border-emerald-400/20 dark:bg-emerald-400/10">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">Payment ready</p>
+                <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">
+                  {quote!.settlement_type === 'INSTANT_FIAT' ? 'Naira payment ready' : 'Payment ready'}
+                </p>
                 <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-300">
-                  ₦{quote!.amount_ngn} · {quote!.amount_usdc} USDC
+                  NGN {quote!.amount_ngn} · {quote!.amount_usdc} USDC
                 </p>
                 {quote!.settlement_type === 'INSTANT_FIAT' && (
                   <div className="mt-3 rounded-xl border border-emerald-200/80 bg-white/70 p-3 text-[11px] text-emerald-900 dark:border-emerald-300/20 dark:bg-white/[0.06] dark:text-emerald-100">
                     <p className="font-semibold">{quote.bank_account_name ?? merchant.bank_account_name}</p>
                     <p className="mt-0.5">{quote.bank_name ?? merchant.bank_name} ****{quote.bank_last4 ?? merchant.bank_last4}</p>
-                    <p className="mt-2 text-emerald-700 dark:text-emerald-200">Checkout is Base USDC only. Paycrest settles NGN after payment.</p>
+                    <p className="mt-2 text-emerald-700 dark:text-emerald-200">Checkout collects Base USDC. Paycrest settles Naira to this bank account after payment.</p>
                   </div>
                 )}
               </div>
@@ -520,7 +509,7 @@ export default function NigerianPos() {
               rel="noopener noreferrer"
               className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-gray-950 px-4 py-3 text-sm font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
             >
-              Open Circle checkout <ArrowRight className="h-4 w-4" />
+              Continue to Circle checkout <ArrowRight className="h-4 w-4" />
             </a>
             <p className="mt-2 text-center text-[11px] font-medium text-emerald-700/70 dark:text-emerald-200/70">
               The bank account is shown again before payment.
@@ -538,7 +527,6 @@ export default function NigerianPos() {
           </button>
         )}
         </>
-        )}
 
       </div>
     </PosShell>
@@ -568,40 +556,6 @@ function PosShell({
         <div className="mt-5">{children}</div>
       </section>
     </main>
-  )
-}
-
-function SettlementCard({
-  active,
-  disabled,
-  icon: Icon,
-  title,
-  body,
-  onClick,
-}: {
-  active: boolean
-  disabled?: boolean
-  icon: typeof Wallet2
-  title: string
-  body: string
-  onClick: () => void
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={cn(
-        'min-h-[112px] rounded-2xl border p-3 text-left transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50',
-        active
-          ? 'border-gray-950 bg-gray-950 text-white dark:border-white dark:bg-white dark:text-gray-950'
-          : 'border-gray-200 bg-gray-50 text-gray-900 hover:bg-gray-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:hover:bg-white/[0.08]',
-      )}
-    >
-      <Icon className={cn('h-5 w-5', active ? 'text-current' : 'text-gray-400')} />
-      <p className="mt-3 text-sm font-semibold">{title}</p>
-      <p className={cn('mt-1 text-xs leading-relaxed', active ? 'text-white/70 dark:text-gray-600' : 'text-gray-500 dark:text-gray-400')}>{body}</p>
-    </button>
   )
 }
 

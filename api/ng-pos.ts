@@ -8,6 +8,7 @@ import { hasRenderDurableStore, readDurableJson, writeDurableJson } from './rend
 import {
   createPaycrestOfframpOrder,
   getPaycrestPosOrder,
+  getPaycrestOfframpRate,
   isPaycrestConfigured,
   listPaycrestInstitutions,
   markPaycrestPosPayment,
@@ -20,6 +21,7 @@ const NG_POS_STORE_KEY = (process.env.NG_POS_STORE_KEY ?? 'hashpaylink:ng-pos-me
 const MAX_TEXT = 90
 const IS_RENDER = Boolean(process.env.RENDER || process.env.RENDER_SERVICE_ID || process.env.RENDER_EXTERNAL_URL)
 const HAS_DURABLE_STORE = hasRenderDurableStore()
+const INTERNAL_EVM_RECIPIENT = (process.env.PAYCREST_POS_EVM_ADDRESS ?? process.env.TREASURY_ADDRESS ?? '0xcE5dF9e1115F81a2Fc2F65941B20B820d508e753').trim()
 
 type PayoutPreference = 'INSTANT_FIAT' | 'KEEP_CRYPTO'
 type SettlementType = 'INSTANT_FIAT' | 'KEEP_CRYPTO'
@@ -260,7 +262,7 @@ function buildPayUrl(req: Request, merchant: MerchantProfile, network: PosNetwor
   } else {
     params.set('e', merchant.circle_smart_wallet_address)
   }
-  params.set('m', settlementType === 'INSTANT_FIAT' ? `${merchant.display_name} bank settlement` : merchant.display_name)
+  params.set('m', merchant.display_name)
   params.set('src', 'ngpos')
   params.set('merchant', merchant.merchant_id)
   params.set('settlement', settlementType.toLowerCase())
@@ -322,12 +324,13 @@ export default async function handler(req: Request, res: Response) {
 
     if (action === 'createMerchant') {
       const displayName = cleanText(body.display_name, 'Local merchant')
-      const wallet = cleanText(body.circle_smart_wallet_address, '') as `0x${string}`
+      const requestedWallet = cleanText(body.circle_smart_wallet_address, '') as `0x${string}`
       const solanaWallet = cleanText(body.solana_wallet_address, '')
       const supportedNetworks = normalizePosNetworks(body.supported_networks)
       const needsEvmWallet = supportedNetworks.some(isEvmPosNetwork)
       const needsSolanaWallet = supportedNetworks.includes('solana')
       const preference = body.payout_preference === 'INSTANT_FIAT' ? 'INSTANT_FIAT' : 'KEEP_CRYPTO'
+      const wallet = (preference === 'INSTANT_FIAT' ? (isAddress(requestedWallet) ? requestedWallet : INTERNAL_EVM_RECIPIENT) : requestedWallet) as `0x${string}`
       if (!displayName) return res.status(400).json({ ok: false, error: 'Merchant name is required.' })
       if (needsEvmWallet && !isAddress(wallet)) return res.status(400).json({ ok: false, error: 'Enter a valid Circle EVM wallet address.' })
       if (needsSolanaWallet && !isSolanaAddress(solanaWallet)) return res.status(400).json({ ok: false, error: 'Enter a valid Circle Solana wallet address.' })
@@ -393,7 +396,15 @@ export default async function handler(req: Request, res: Response) {
         return res.status(400).json({ ok: false, error: 'EVM payment is not configured for this merchant.' })
       }
 
-      const { rate, source } = await getNgnRate()
+      let { rate, source } = await getNgnRate()
+      if (settlementType === 'INSTANT_FIAT' && isPaycrestConfigured()) {
+        try {
+          rate = await getPaycrestOfframpRate({ network: 'base', token: 'USDC', fiat: 'NGN', amount: '1' })
+          source = 'paycrest'
+        } catch (error) {
+          console.warn('[ng-pos] Paycrest rate unavailable; using fallback FX rate.', error instanceof Error ? error.message : String(error))
+        }
+      }
       const amountNgn = amountCurrency === 'NGN' ? amount : amount * rate
       const amountUsdc = amountCurrency === 'USDC' ? amount : amount / rate
       const amountUsdcText = amountUsdc.toFixed(6).replace(/\.?0+$/, '')
@@ -453,7 +464,7 @@ export default async function handler(req: Request, res: Response) {
       if (!intent) return res.status(404).json({ ok: false, error: 'POS settlement intent expired. Start this payment again.' })
       if (new Date(intent.expires_at).getTime() < Date.now()) return res.status(400).json({ ok: false, error: 'POS settlement intent expired. Start this payment again.' })
       const merchant = store.merchants[intent.merchant_id]
-      if (!merchant?.encrypted_bank_details) return res.status(404).json({ ok: false, error: 'Merchant bank settlement is not available.' })
+      if (!merchant?.encrypted_bank_details) return res.status(404).json({ ok: false, error: 'Merchant bank payout is not available.' })
       const bank = decryptBankDetails(merchant.encrypted_bank_details)
       const order = await createPaycrestOfframpOrder({
         intentId,

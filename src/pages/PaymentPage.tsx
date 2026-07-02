@@ -3752,11 +3752,11 @@ export default function PaymentPage() {
 
           {/* ── Attendee name (event mode) ───────────────────────────────── */}
           {isNgPosPaycrestOfframp && (
-            <div className="rounded-xl border border-gray-200 bg-gray-50/80 p-4 dark:border-white/10 dark:bg-white/[0.04]">
+            <div className="rounded-xl border border-gray-200 bg-white p-3.5 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-sm font-semibold text-gray-900 dark:text-white">Naira payout</p>
-                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300">
                     {paycrestOrder?.bank_account_name || ngPosBankAccountName || 'Verified merchant bank'}
                   </p>
                   <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
@@ -3765,10 +3765,10 @@ export default function PaymentPage() {
                 </div>
                 <Banknote className="h-4 w-4 shrink-0 text-gray-400" />
               </div>
-              <div className="mt-3 rounded-lg border border-white bg-white/80 px-3 py-2 text-[11px] font-medium text-gray-500 dark:border-white/10 dark:bg-white/[0.05] dark:text-gray-300">
+              <div className="mt-3 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-[11px] font-medium text-gray-500 dark:border-white/10 dark:bg-white/[0.05] dark:text-gray-300">
                 {paycrestOrder
-                  ? <>Paycrest order ready: {formatAmount(paycrestOrder.amount_usdc, meta.decimals)} USDC on Base.</>
-                  : <>Sign in with Circle Smart Wallet to prepare the Paycrest order and exact USDC amount.</>}
+                  ? <>Ready: pay {formatAmount(paycrestOrder.amount_usdc, meta.decimals)} Base USDC from your Circle wallet.</>
+                  : <>Sign in with email, enter your name, then pay from your Circle wallet.</>}
               </div>
               {paycrestStatusText && (
                 <p className="mt-2 text-[11px] font-medium text-emerald-700 dark:text-emerald-300">{paycrestStatusText}</p>
@@ -3781,7 +3781,7 @@ export default function PaymentPage() {
             return (
               <div className="space-y-1.5">
                 <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
-                  {isNgPosPayment ? 'Customer name' : 'Your name or handle'}
+                  {isNgPosPayment ? "Payer's name" : 'Your name or handle'}
                   {paid ? (
                     <span className="ml-auto text-[10px] font-semibold text-emerald-600">✓ Saved</span>
                   ) : attendeeName.trim() ? (
@@ -4113,7 +4113,7 @@ export default function PaymentPage() {
                 disabled={circlePasskeyPending || circleEvmPaymentProcessing || circleEvmAcceptedPending || privyCircleLinkLoading || paycrestPreparing || circleWalletNeedsFunds || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
                 className={cn(
                   'flex w-full items-center justify-center gap-2 rounded-xl px-6 py-3.5 text-sm font-semibold transition-all',
-                  circlePasskeyPending || circleEvmPaymentProcessing || circleEvmAcceptedPending || privyCircleLinkLoading || circleWalletNeedsFunds
+                  circlePasskeyPending || circleEvmPaymentProcessing || circleEvmAcceptedPending || privyCircleLinkLoading || paycrestPreparing || circleWalletNeedsFunds || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked
                     ? 'cursor-not-allowed bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400'
                     : 'bg-black text-white shadow-button hover:bg-gray-800 active:scale-[0.98] dark:bg-[#111113] dark:text-white dark:ring-1 dark:ring-white/10 dark:hover:bg-[#1c1c20]',
                 )}
@@ -4558,7 +4558,7 @@ export default function PaymentPage() {
 
           {showCirclePoweredAttribution && (
             <div className="flex items-center justify-center pt-1 text-[11px] font-semibold text-gray-400 dark:text-gray-500">
-              <span>Powered by Hash PayLink Payment Checkout</span>
+              <span>Hash PayLink Payment Checkout</span>
             </div>
           )}
 
@@ -4598,11 +4598,13 @@ export default function PaymentPage() {
       )}
 
       <div className="mt-10 animate-fade-in">
-        <p className="mb-4 text-center text-[11px] font-semibold uppercase tracking-widest text-gray-400">
-          How it works
-        </p>
-        <div className="grid grid-cols-3 gap-3">
-          {(isHelperAccess ? [
+        {!isNgPosPaycrestOfframp && (
+          <>
+          <p className="mb-4 text-center text-[11px] font-semibold uppercase tracking-widest text-gray-400">
+            How it works
+          </p>
+          <div className="grid grid-cols-3 gap-3">
+            {(isHelperAccess ? [
             { n: '1', title: 'Ask Hash', body: 'Open helper access from Telegram or the agent page' },
             { n: '2', title: 'Verify access', body: 'Hash PayLink confirms the payment receipt' },
             { n: '3', title: 'Open helper', body: 'Return to Telegram with access unlocked' },
@@ -4622,16 +4624,18 @@ export default function PaymentPage() {
             { n: '1', title: 'Check the request', body: "Confirm the amount and who it's for" },
             { n: '2', title: 'Choose how to pay', body: 'Use the gasless wallet, your wallet, or an exchange' },
             { n: '3', title: 'Get confirmation', body: "We'll confirm when the payment is complete" },
-          ]).map(({ n, title, body }) => (
-            <div key={n} className="rounded-xl border border-gray-100 bg-white p-4 text-center shadow-sm">
-              <div className="mx-auto mb-2.5 flex h-7 w-7 items-center justify-center rounded-full bg-gray-100 text-xs font-bold text-gray-600">
-                {n}
+            ]).map(({ n, title, body }) => (
+              <div key={n} className="rounded-xl border border-gray-100 bg-white p-4 text-center shadow-sm">
+                <div className="mx-auto mb-2.5 flex h-7 w-7 items-center justify-center rounded-full bg-gray-100 text-xs font-bold text-gray-600">
+                  {n}
+                </div>
+                <p className="text-xs font-semibold text-gray-800">{title}</p>
+                <p className="mt-0.5 text-xs text-gray-400 leading-relaxed">{body}</p>
               </div>
-              <p className="text-xs font-semibold text-gray-800">{title}</p>
-              <p className="mt-0.5 text-xs text-gray-400 leading-relaxed">{body}</p>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+          </>
+        )}
 
         <div className="mt-6 border-t border-gray-100 pt-5 flex items-center justify-center gap-8">
           <a
