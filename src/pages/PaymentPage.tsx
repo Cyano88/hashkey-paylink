@@ -4538,7 +4538,7 @@ export default function PaymentPage() {
           </Link>
         </div>
 
-        <div className="mt-6 flex h-[60px] items-center justify-center border-t border-gray-100 bg-white/50 text-center text-xs text-gray-400 dark:border-white/5 dark:bg-[#111113]/50">
+        <p className="mt-6 text-center text-xs text-gray-400">
           {isHelperAccess ? 'Helper access on ' : isPolymarketFunding ? 'Polymarket Funding on ' : isWalletManagerFunding ? 'x402 wallet funding on ' : isAgentFunding ? 'Agent payments on ' : (
             <span className="polydesk-powered-footer">
               <span>Powered by</span>
@@ -4571,7 +4571,7 @@ export default function PaymentPage() {
               {i < arr.length - 1 && ' · '}
             </span>
           ))}
-        </div>
+        </p>
       </div>
 
     </div>
