@@ -14,7 +14,8 @@ import {
   type Address, type Hex,
 } from 'viem'
 import type { NextFunction } from 'express'
-import { payAgentX402Service } from '../../../api/agent-wallet.js'
+import { getAgentWalletRecord, payAgentX402Service } from '../../../api/agent-wallet.js'
+import { listAgentActivity } from '../../../api/agent-activity.js'
 import { getPolyWorldcupNewsFeed, polyWorldcupArticleId } from '../../../api/poly-worldcup-news.js'
 
 const arcChain = defineChain({
@@ -57,7 +58,17 @@ type ContentEntry = {
   ts: number
 }
 
+type CreatorUnlockEntry = {
+  contentId: string
+  agentSlug: string
+  walletAddress: string
+  paymentTransaction: string
+  receiptActivityId: string
+  unlockedAt: number
+}
+
 const store = new Map<string, ContentEntry>()
+const unlockStore = new Map<string, CreatorUnlockEntry>()
 const MAX_CONTENT_ID_LENGTH = 128
 const MAX_CONTENT_LENGTH = 100_000
 const MAX_META_TEXT_LENGTH = 2_000
@@ -229,6 +240,19 @@ function ensureSchema() {
       alter table streampay_creator_content add column if not exists reviewed_at timestamptz;
       alter table streampay_creator_content add column if not exists review_note text not null default '';
       create index if not exists streampay_creator_content_review_idx on streampay_creator_content (review_status, updated_at desc);
+      create table if not exists streampay_creator_unlocks (
+        unlock_key text primary key,
+        content_id text not null,
+        agent_slug text not null,
+        wallet_address text not null default '',
+        payment_transaction text not null default '',
+        receipt_activity_id text not null default '',
+        unlocked_at timestamptz not null default now(),
+        updated_at timestamptz not null default now()
+      );
+      create index if not exists streampay_creator_unlocks_content_idx on streampay_creator_unlocks (content_id, updated_at desc);
+      create index if not exists streampay_creator_unlocks_agent_idx on streampay_creator_unlocks (agent_slug, updated_at desc);
+      create index if not exists streampay_creator_unlocks_wallet_idx on streampay_creator_unlocks (wallet_address, updated_at desc);
     `).then(() => undefined)
   }
   return schemaReady
@@ -324,6 +348,101 @@ async function writeContentEntry(contentId: string, entry: ContentEntry) {
     return
   }
   store.set(contentId, entry)
+}
+
+function unlockKey(contentId: string, agentSlug: string, walletAddress = '') {
+  const wallet = String(walletAddress || '').trim().toLowerCase()
+  return `${contentId}:${wallet || agentSlug}`
+}
+
+function rowToUnlockEntry(row: Record<string, unknown>): CreatorUnlockEntry {
+  return {
+    contentId: String(row.content_id ?? ''),
+    agentSlug: String(row.agent_slug ?? ''),
+    walletAddress: String(row.wallet_address ?? ''),
+    paymentTransaction: String(row.payment_transaction ?? ''),
+    receiptActivityId: String(row.receipt_activity_id ?? ''),
+    unlockedAt: row.unlocked_at instanceof Date ? row.unlocked_at.getTime() : Date.now(),
+  }
+}
+
+async function readCreatorUnlock(contentId: string, agentSlug: string, walletAddress = '') {
+  const wallet = String(walletAddress || '').trim().toLowerCase()
+  if (pool) {
+    await ensureSchema()
+    const result = wallet
+      ? await pool.query(
+          `select * from streampay_creator_unlocks
+           where content_id = $1 and (lower(wallet_address) = lower($2) or agent_slug = $3)
+           order by updated_at desc limit 1`,
+          [contentId, wallet, agentSlug],
+        )
+      : await pool.query(
+          `select * from streampay_creator_unlocks
+           where content_id = $1 and agent_slug = $2
+           order by updated_at desc limit 1`,
+          [contentId, agentSlug],
+        )
+    return result.rowCount ? rowToUnlockEntry(result.rows[0]) : null
+  }
+  if (wallet) return unlockStore.get(unlockKey(contentId, agentSlug, wallet)) ?? unlockStore.get(unlockKey(contentId, agentSlug)) ?? null
+  return unlockStore.get(unlockKey(contentId, agentSlug)) ?? null
+}
+
+async function writeCreatorUnlock(entry: CreatorUnlockEntry) {
+  const key = unlockKey(entry.contentId, entry.agentSlug, entry.walletAddress)
+  if (pool) {
+    await ensureSchema()
+    await pool.query(
+      `insert into streampay_creator_unlocks
+        (unlock_key, content_id, agent_slug, wallet_address, payment_transaction, receipt_activity_id, unlocked_at, updated_at)
+       values ($1, $2, $3, $4, $5, $6, to_timestamp($7 / 1000.0), now())
+       on conflict (unlock_key) do update set
+         agent_slug = excluded.agent_slug,
+         wallet_address = excluded.wallet_address,
+         payment_transaction = excluded.payment_transaction,
+         receipt_activity_id = excluded.receipt_activity_id,
+         updated_at = now()`,
+      [
+        key,
+        entry.contentId,
+        entry.agentSlug,
+        entry.walletAddress,
+        entry.paymentTransaction,
+        entry.receiptActivityId,
+        entry.unlockedAt,
+      ],
+    )
+    return
+  }
+  unlockStore.set(key, entry)
+}
+
+async function findLegacyCreatorUnlock(contentId: string, agentSlug: string, walletAddress = '') {
+  const activity = await listAgentActivity(agentSlug, 80)
+  const wallet = walletAddress.toLowerCase()
+  const found = activity.find(item => {
+    if (item.type !== 'scout_returned') return false
+    if (item.result?.contentId !== contentId) return false
+    if (wallet && item.wallet && item.wallet.toLowerCase() !== wallet) return false
+    return item.title === 'Creator content unlocked'
+  })
+  if (!found) return null
+  const paid = activity.find(item => (
+    item.type === 'x402_spent' &&
+    item.proof?.serviceUrl?.includes(`id=${encodeURIComponent(contentId)}`) &&
+    (!wallet || !item.wallet || item.wallet.toLowerCase() === wallet)
+  ))
+  const restored: CreatorUnlockEntry = {
+    contentId,
+    agentSlug,
+    walletAddress: walletAddress || found.wallet || paid?.wallet || '',
+    paymentTransaction: paid?.proof?.transaction || paid?.txHash || '',
+    receiptActivityId: paid?.id || '',
+    unlockedAt: found.createdAt,
+  }
+  await writeCreatorUnlock(restored)
+  return restored
 }
 
 function creatorPrice(entry: ContentEntry) {
@@ -840,6 +959,22 @@ export async function unlockContentX402WithAgent(req: Request, res: Response) {
   const serviceUrl = `${baseUrl()}/api/get-content-x402?id=${encodeURIComponent(contentId)}`
 
   try {
+    const walletRecord = await getAgentWalletRecord(safeAgentSlug)
+    const walletAddress = walletRecord?.walletAddress ?? ''
+    const existingUnlock = await readCreatorUnlock(contentId, safeAgentSlug, walletAddress)
+      ?? await findLegacyCreatorUnlock(contentId, safeAgentSlug, walletAddress)
+    if (existingUnlock) {
+      return res.status(200).json({
+        ok: true,
+        restored: true,
+        type: entry.type,
+        content: entry.content,
+        payment: existingUnlock.paymentTransaction ? { transaction: existingUnlock.paymentTransaction } : null,
+        receiptActivityId: existingUnlock.receiptActivityId || null,
+        walletAddress: existingUnlock.walletAddress || walletAddress,
+      })
+    }
+
     const paid = await payAgentX402Service({
       agentSlug: safeAgentSlug,
       sellerAgentSlug: '',
@@ -858,8 +993,18 @@ export async function unlockContentX402WithAgent(req: Request, res: Response) {
       return res.status(502).json({ ok: false, error: response.error ?? 'Creator content service rejected the payment.' })
     }
 
+    await writeCreatorUnlock({
+      contentId,
+      agentSlug: safeAgentSlug,
+      walletAddress: paid.walletAddress,
+      paymentTransaction: response?.payment?.transaction ?? paid.proof?.transaction ?? '',
+      receiptActivityId: paid.receiptActivityId ?? '',
+      unlockedAt: Date.now(),
+    })
+
     return res.status(200).json({
       ok: true,
+      restored: false,
       type: response?.type ?? entry.type,
       content: response?.content ?? entry.content,
       payment: response?.payment ?? null,

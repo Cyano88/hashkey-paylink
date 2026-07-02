@@ -239,6 +239,19 @@ export async function payAgentX402Service(params: {
   }
 }
 
+export async function getAgentWalletRecord(agentSlug: string) {
+  const store = await readStore()
+  const record = resolveAgentRecord(store, agentSlug)
+  if (!record?.walletAddress) return undefined
+  return {
+    walletAddress: record.walletAddress,
+    chain: record.chain,
+    sessionId: record.sessionId,
+    updatedAt: record.updatedAt,
+    source: record.source,
+  }
+}
+
 function withServiceParams(serviceUrl: string, params: Record<string, string | undefined>) {
   const base = process.env.HASH_PAYLINK_BASE_URL ?? 'https://hashpaylink.com'
   const url = new URL(serviceUrl, base)
