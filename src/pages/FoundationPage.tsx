@@ -1555,8 +1555,8 @@ export default function FoundationPage() {
             </span>
           </p>
           <div className="flex justify-center gap-4 sm:justify-end">
-            <a href="mailto:support@hashpaylink.com" className="hover:text-gray-900">Email</a>
-            <a href="https://x.com/Hash_PayLink" target="_blank" rel="noreferrer" className="hover:text-gray-900">X</a>
+            <a href="mailto:support@hashpaylink.com" className="hover:text-gray-900">Support</a>
+            <a href="https://x.com/Hash_PayLink" target="_blank" rel="noreferrer" className="hover:text-gray-900">DM us</a>
           </div>
         </div>
       </footer>

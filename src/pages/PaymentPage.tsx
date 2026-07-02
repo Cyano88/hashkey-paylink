@@ -4639,7 +4639,7 @@ export default function PaymentPage() {
             className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-900 transition-colors"
           >
             <Mail className="h-3.5 w-3.5" />
-            support@hashpaylink.com
+            Support
           </a>
           <a
             href="https://x.com/Hash_PayLink"
@@ -4648,7 +4648,7 @@ export default function PaymentPage() {
             className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-900 transition-colors"
           >
             <X className="h-3.5 w-3.5" />
-            @Hash_PayLink
+            DM us
           </a>
           <Link
             to="/docs"
@@ -4659,7 +4659,7 @@ export default function PaymentPage() {
           </Link>
         </div>
 
-        <div className="mt-6 flex h-[60px] items-center justify-center border-t border-gray-100 bg-white/50 text-center text-xs text-gray-400 dark:border-white/5 dark:bg-[#111113]/50">
+        <p className="mt-6 text-center text-xs text-gray-400">
           {isHelperAccess ? 'Helper access on ' : isPolymarketFunding ? 'Polymarket Funding on ' : isWalletManagerFunding ? 'x402 wallet funding on ' : isAgentFunding ? 'Agent payments on ' : (
             <span className="polydesk-powered-footer">
               <span>Powered by</span>
@@ -4692,7 +4692,7 @@ export default function PaymentPage() {
               {i < arr.length - 1 && ' · '}
             </span>
           ))}
-        </div>
+        </p>
       </div>
 
     </div>

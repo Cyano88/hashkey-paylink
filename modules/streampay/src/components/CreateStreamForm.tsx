@@ -250,8 +250,23 @@ function buildReturnToContent(returnTo: string, vault: string) {
   return next.startsWith('/') && !next.startsWith('//') ? next : ''
 }
 
+function buildCreatorCheckoutBackHref(returnTo: string) {
+  if (!returnTo) return ''
+  try {
+    const url = new URL(returnTo.replaceAll('__STREAM_VAULT__', ''), window.location.origin)
+    url.searchParams.delete('streamVault')
+    url.searchParams.delete('vault')
+    url.searchParams.set('pay', 'choice')
+    const next = `${url.pathname}${url.search}${url.hash}`
+    return next.startsWith('/') && !next.startsWith('//') ? next : ''
+  } catch {
+    return ''
+  }
+}
+
 export function CreateStreamForm() {
   const [prefill] = useState(readPrefill)
+  const creatorCheckoutBackHref = buildCreatorCheckoutBackHref(prefill.returnTo)
   const { authenticated: privyAuthenticated, user: privyUser, login: loginPrivy, getAccessToken } = usePrivy()
   const privyEmail = cleanEmail(emailFromPrivyUser(privyUser))
   const { address: connectedAddr, isConnected } = useAccount()
@@ -1373,7 +1388,15 @@ export function CreateStreamForm() {
 
         {circleAvailable && (
           <div className="space-y-3">
-            {activeTab !== 'menu' && (
+            {isCreatorStream && creatorCheckoutBackHref ? (
+              <a
+                href={creatorCheckoutBackHref}
+                className="inline-flex items-center gap-1.5 px-1 text-[12px] font-bold text-gray-400 transition-colors hover:text-gray-800 dark:hover:text-gray-200"
+              >
+                <ChevronDown className="h-3.5 w-3.5 rotate-90" />
+                Back
+              </a>
+            ) : activeTab !== 'menu' && (
               <button
                 type="button"
                 onClick={() => setActiveTab('menu')}
@@ -2002,6 +2025,14 @@ export function CreateStreamForm() {
                         ? <><Spinner /><span className="text-[13px] font-medium">{circleCtaLabel}</span></>
                         : <><img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert mix-blend-screen" /> {circleCtaLabel}</>}
                     </button>
+                    {isCreatorStream && creatorCheckoutBackHref && (
+                      <a
+                        href={creatorCheckoutBackHref}
+                        className="flex min-h-[46px] w-full items-center justify-center rounded-xl border border-gray-200 bg-white px-5 py-3 text-[13px] font-semibold text-gray-600 transition-colors hover:border-gray-300 hover:bg-gray-50 dark:border-white/10 dark:bg-[#15151a] dark:text-gray-300 dark:hover:bg-white/5"
+                      >
+                        Return to checkout
+                      </a>
+                    )}
                     {privyCircleLinkError && (
                       <p className="text-center text-[11px] font-semibold text-amber-600 dark:text-amber-300">{privyCircleLinkError}</p>
                     )}
