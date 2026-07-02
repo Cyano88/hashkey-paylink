@@ -265,11 +265,14 @@ export default async function handler(req: Request, res: Response) {
       }
 
       const total = BigInt(totalUnits)
-      const fee = total * PLATFORM_FEE_BPS / BPS_DENOMINATOR
+      const requestedFeeBps = params.feeBps === 0 || params.feeBps === '0'
+        ? 0n
+        : PLATFORM_FEE_BPS
+      const fee = total * requestedFeeBps / BPS_DENOMINATOR
       const grossFees = params.feeMode === 'gross'
       const recovery = grossFees
-        ? parseUsdcUnits(process.env[EVM_CHAINS[chain].gasRecoveryEnv], EVM_CHAINS[chain].defaultGasRecoveryUnits)
-        : gasRecoveryUnits(chain, total, fee)
+        ? (requestedFeeBps === 0n ? 0n : parseUsdcUnits(process.env[EVM_CHAINS[chain].gasRecoveryEnv], EVM_CHAINS[chain].defaultGasRecoveryUnits))
+        : (requestedFeeBps === 0n ? 0n : gasRecoveryUnits(chain, total, fee))
       const treasuryAmount = fee + recovery
       const recipientAmount = grossFees ? total : total - treasuryAmount
       if (total <= 0n || recipientAmount <= 0n) {
@@ -282,18 +285,21 @@ export default async function handler(req: Request, res: Response) {
         functionName: 'transfer',
         args: [recipient as `0x${string}`, recipientAmount],
       })
-      const treasuryCallData = encodeFunctionData({
-        abi: ERC20_TRANSFER_ABI,
-        functionName: 'transfer',
-        args: [EVM_TREASURY as `0x${string}`, treasuryAmount],
-      })
+      const batchCalls = [
+        { target: tokenAddress as `0x${string}`, value: 0n, data: recipientCallData },
+      ]
+      if (treasuryAmount > 0n) {
+        const treasuryCallData = encodeFunctionData({
+          abi: ERC20_TRANSFER_ABI,
+          functionName: 'transfer',
+          args: [EVM_TREASURY as `0x${string}`, treasuryAmount],
+        })
+        batchCalls.push({ target: tokenAddress as `0x${string}`, value: 0n, data: treasuryCallData })
+      }
       const batchCallData = encodeFunctionData({
         abi: SMART_WALLET_BATCH_ABI,
         functionName: 'executeBatch',
-        args: [[
-          { target: tokenAddress as `0x${string}`, value: 0n, data: recipientCallData },
-          { target: tokenAddress as `0x${string}`, value: 0n, data: treasuryCallData },
-        ]],
+        args: [batchCalls],
       })
 
       const data = await circleJson('/v1/w3s/user/transactions/contractExecution', {

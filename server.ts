@@ -53,6 +53,7 @@ import polymarketOrderHandler from './api/polymarket-order.js'
 import polymarketPortfolioHandler from './api/polymarket-portfolio.js'
 import polymarketSubmitOrderHandler from './api/polymarket-submit-order.js'
 import ngPosHandler from './api/ng-pos.js'
+import { paycrestWebhookHandler } from './api/paycrest-pos.js'
 import streamRecipientInviteHandler from './api/stream-recipient-invite.js'
 import streamHistoryHandler from './api/stream-history.js'
 import agenticStreamingSubscriptionHandler from './api/agentic-streaming-subscription.js'
@@ -130,6 +131,8 @@ app.use((_req, res, next) => {
   )
   next()
 })
+
+app.post('/api/paycrest-webhook', express.raw({ type: 'application/json', limit: '128kb' }), paycrestWebhookHandler)
 
 // Parse JSON bodies before any route handler sees req.body. Creator Studio
 // publish payloads can include sanitized article HTML plus a compressed cover.

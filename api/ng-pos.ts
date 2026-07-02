@@ -1,10 +1,18 @@
 import type { Request, Response } from 'express'
-import { randomBytes, createCipheriv, createHash } from 'crypto'
+import { randomBytes, createCipheriv, createDecipheriv, createHash } from 'crypto'
 import { mkdir, readFile, writeFile } from 'fs/promises'
 import { dirname, resolve } from 'path'
 import { isAddress } from 'viem'
 import { getFxRate } from './fx-rate'
 import { hasRenderDurableStore, readDurableJson, writeDurableJson } from './render-durable-store.js'
+import {
+  createPaycrestOfframpOrder,
+  getPaycrestPosOrder,
+  isPaycrestConfigured,
+  markPaycrestPosPayment,
+  refreshPaycrestOrderStatus,
+  verifyPaycrestAccount,
+} from './paycrest-pos.js'
 
 const STORE_PATH = process.env.NG_POS_STORE ?? './data/ng-pos-merchants.json'
 const NG_POS_STORE_KEY = (process.env.NG_POS_STORE_KEY ?? 'hashpaylink:ng-pos-merchants').trim()
@@ -34,6 +42,7 @@ type MerchantProfile = {
   bank_name?: string
   bank_code?: string
   bank_last4?: string
+  bank_account_name?: string
   circle_smart_wallet_address: string
   solana_wallet_address?: string
   supported_networks?: PosNetwork[]
@@ -45,6 +54,17 @@ type MerchantProfile = {
 
 type Store = {
   merchants: Record<string, MerchantProfile>
+  intents?: Record<string, OfframpIntent>
+}
+
+type OfframpIntent = {
+  intent_id: string
+  merchant_id: string
+  amount_ngn: string
+  estimated_amount_usdc: string
+  fx_rate_ngn_per_usdc: string
+  created_at: string
+  expires_at: string
 }
 
 function cleanText(value: unknown, fallback = '') {
@@ -117,7 +137,7 @@ async function readStore(): Promise<Store> {
   try {
     const remote = await readDurableJson<Partial<Store>>(NG_POS_STORE_KEY)
     if (remote) {
-      return { merchants: remote.merchants ?? {} }
+      return { merchants: remote.merchants ?? {}, intents: remote.intents ?? {} }
     }
   } catch (error) {
     console.warn('[ng-pos] durable load failed; using file fallback.', error instanceof Error ? error.message : String(error))
@@ -126,14 +146,14 @@ async function readStore(): Promise<Store> {
   try {
     const raw = await readFile(resolve(STORE_PATH), 'utf8')
     const parsed = JSON.parse(raw) as Partial<Store>
-    return { merchants: parsed.merchants ?? {} }
+    return { merchants: parsed.merchants ?? {}, intents: parsed.intents ?? {} }
   } catch {
-    return { merchants: {} }
+    return { merchants: {}, intents: {} }
   }
 }
 
 async function writeStore(store: Store) {
-  const normalized = { merchants: store.merchants ?? {} }
+  const normalized = { merchants: store.merchants ?? {}, intents: store.intents ?? {} }
   const path = resolve(STORE_PATH)
   await mkdir(dirname(path), { recursive: true })
   await writeFile(path, `${JSON.stringify(normalized, null, 2)}\n`, 'utf8')
@@ -167,6 +187,7 @@ async function publicMerchant(merchant: MerchantProfile) {
     bank_configured: Boolean(merchant.encrypted_bank_details),
     bank_name: merchant.bank_name,
     bank_last4: merchant.bank_last4,
+    bank_account_name: merchant.bank_account_name,
     fx_rate_ngn_per_usdc: rate.toFixed(2),
     fx_source: source,
   }
@@ -215,11 +236,25 @@ function encryptBankDetails(input: {
   }
 }
 
-function buildPayUrl(req: Request, merchant: MerchantProfile, network: PosNetwork, amountUsdc: string, amountNgn: string, settlementType: SettlementType, explicitOrigin?: unknown) {
+function decryptBankDetails(details: EncryptedBankDetails) {
+  const key = getBankEncryptionKey()
+  if (!key) throw new Error('NG_POS_BANK_ENCRYPTION_KEY is required before reading bank details.')
+  const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(details.iv, 'base64'))
+  decipher.setAuthTag(Buffer.from(details.tag, 'base64'))
+  const decrypted = Buffer.concat([
+    decipher.update(Buffer.from(details.ciphertext, 'base64')),
+    decipher.final(),
+  ]).toString('utf8')
+  return JSON.parse(decrypted) as { bank_code: string; account_number: string; account_name: string }
+}
+
+function buildPayUrl(req: Request, merchant: MerchantProfile, network: PosNetwork, amountUsdc: string, amountNgn: string, settlementType: SettlementType, explicitOrigin?: unknown, intentId?: string) {
   const params = new URLSearchParams()
   params.set('a', amountUsdc)
   params.set('n', network)
-  if (network === 'solana') {
+  if (settlementType === 'INSTANT_FIAT') {
+    params.set('e', '0x0000000000000000000000000000000000000001')
+  } else if (network === 'solana') {
     params.set('s', merchant.solana_wallet_address ?? '')
   } else {
     params.set('e', merchant.circle_smart_wallet_address)
@@ -229,6 +264,13 @@ function buildPayUrl(req: Request, merchant: MerchantProfile, network: PosNetwor
   params.set('merchant', merchant.merchant_id)
   params.set('settlement', settlementType.toLowerCase())
   params.set('ngn', amountNgn)
+  if (settlementType === 'INSTANT_FIAT') {
+    params.set('offramp', 'paycrest')
+    if (intentId) params.set('intent', intentId)
+    if (merchant.bank_name) params.set('bank', merchant.bank_name)
+    if (merchant.bank_last4) params.set('acct', `****${merchant.bank_last4}`)
+    if (merchant.bank_account_name) params.set('acctName', merchant.bank_account_name)
+  }
   return `${originFromRequest(req, explicitOrigin)}/pay?${params.toString()}`
 }
 
@@ -253,6 +295,20 @@ export default async function handler(req: Request, res: Response) {
 
     const body = req.body ?? {}
     const action = cleanText(body.action, '')
+
+    if (action === 'verifyAccount') {
+      const bankCode = cleanText(body.bank_code, '')
+      const accountNumber = cleanText(body.account_number, '').replace(/\D/g, '').slice(0, 10)
+      if (!bankCode || accountNumber.length !== 10) {
+        return res.status(400).json({ ok: false, error: 'Enter a valid bank and 10-digit account number.' })
+      }
+      if (!isPaycrestConfigured()) {
+        return res.status(400).json({ ok: false, error: 'Paycrest is not configured. Add PAYCREST_API_KEY before verifying bank accounts.' })
+      }
+      const accountName = await verifyPaycrestAccount({ institution: bankCode, accountIdentifier: accountNumber })
+      if (!accountName || accountName === 'OK') return res.status(400).json({ ok: false, error: 'Could not resolve this bank account name.' })
+      return res.json({ ok: true, account_name: accountName })
+    }
 
     if (action === 'createMerchant') {
       const displayName = cleanText(body.display_name, 'Local merchant')
@@ -294,6 +350,7 @@ export default async function handler(req: Request, res: Response) {
         merchant.bank_code = bankCode
         merchant.bank_name = cleanText(body.bank_name, 'Nigerian bank')
         merchant.bank_last4 = accountNumber.slice(-4)
+        merchant.bank_account_name = accountName
       }
 
       const store = await readStore()
@@ -316,6 +373,9 @@ export default async function handler(req: Request, res: Response) {
         return res.status(400).json({ ok: false, error: 'Bank settlement is not configured for this merchant.' })
       }
       const network = requestedNetwork(body.network, merchant)
+      if (settlementType === 'INSTANT_FIAT' && network !== 'base') {
+        return res.status(400).json({ ok: false, error: 'Naira settlement currently supports Base USDC only.' })
+      }
       if (network === 'solana' && !merchant.solana_wallet_address) {
         return res.status(400).json({ ok: false, error: 'Solana is not configured for this merchant.' })
       }
@@ -328,6 +388,23 @@ export default async function handler(req: Request, res: Response) {
       const amountUsdc = amountCurrency === 'USDC' ? amount : amount / rate
       const amountUsdcText = amountUsdc.toFixed(6).replace(/\.?0+$/, '')
       const quoteId = randomBytes(10).toString('base64url')
+      const intentId = settlementType === 'INSTANT_FIAT' ? randomBytes(12).toString('base64url') : ''
+      let fiatExecutionReady = true
+      if (settlementType === 'INSTANT_FIAT') {
+        if (!isPaycrestConfigured()) return res.status(400).json({ ok: false, error: 'Paycrest is not configured for naira settlement yet.' })
+        store.intents ??= {}
+        store.intents[intentId] = {
+          intent_id: intentId,
+          merchant_id: merchant.merchant_id,
+          amount_ngn: amountNgn.toFixed(2),
+          estimated_amount_usdc: amountUsdcText,
+          fx_rate_ngn_per_usdc: rate.toFixed(2),
+          created_at: new Date().toISOString(),
+          expires_at: new Date(Date.now() + 10 * 60_000).toISOString(),
+        }
+        await writeStore(store)
+        fiatExecutionReady = true
+      }
 
       return res.json({
         ok: true,
@@ -341,11 +418,70 @@ export default async function handler(req: Request, res: Response) {
           amount_usdc: amountUsdcText,
           fx_rate_ngn_per_usdc: rate.toFixed(2),
           fx_source: source,
-          expires_at: new Date(Date.now() + 60_000).toISOString(),
-          pay_url: buildPayUrl(req, merchant, network, amountUsdcText, amountNgn.toFixed(2), settlementType, body.client_origin),
-          fiat_execution_ready: settlementType === 'KEEP_CRYPTO' ? true : Boolean(process.env.NG_POS_VASP_ENABLED === 'true'),
+          expires_at: new Date(Date.now() + (settlementType === 'INSTANT_FIAT' ? 10 * 60_000 : 60_000)).toISOString(),
+          pay_url: buildPayUrl(req, merchant, network, amountUsdcText, amountNgn.toFixed(2), settlementType, body.client_origin, intentId),
+          fiat_execution_ready: fiatExecutionReady,
+          offramp_provider: settlementType === 'INSTANT_FIAT' ? 'paycrest' : undefined,
+          intent_id: intentId || undefined,
+          bank_name: settlementType === 'INSTANT_FIAT' ? merchant.bank_name : undefined,
+          bank_last4: settlementType === 'INSTANT_FIAT' ? merchant.bank_last4 : undefined,
+          bank_account_name: settlementType === 'INSTANT_FIAT' ? merchant.bank_account_name : undefined,
         },
       })
+    }
+
+    if (action === 'createOfframpOrder') {
+      const intentId = cleanText(body.intent_id, '').replace(/[^a-zA-Z0-9_-]/g, '')
+      const refundAddress = cleanText(body.refund_address, '') as `0x${string}`
+      const payerEmail = cleanText(body.payer_email, '')
+      const payerWallet = cleanText(body.payer_wallet, '') as `0x${string}`
+      if (!intentId || !isAddress(refundAddress)) return res.status(400).json({ ok: false, error: 'Circle wallet is required before creating naira settlement.' })
+      const existing = await getPaycrestPosOrder(intentId)
+      if (existing) return res.json({ ok: true, order: existing })
+      const store = await readStore()
+      const intent = store.intents?.[intentId]
+      if (!intent) return res.status(404).json({ ok: false, error: 'POS settlement intent expired. Start this payment again.' })
+      if (new Date(intent.expires_at).getTime() < Date.now()) return res.status(400).json({ ok: false, error: 'POS settlement intent expired. Start this payment again.' })
+      const merchant = store.merchants[intent.merchant_id]
+      if (!merchant?.encrypted_bank_details) return res.status(404).json({ ok: false, error: 'Merchant bank settlement is not available.' })
+      const bank = decryptBankDetails(merchant.encrypted_bank_details)
+      const order = await createPaycrestOfframpOrder({
+        intentId,
+        merchantId: merchant.merchant_id,
+        amountNgn: intent.amount_ngn,
+        estimatedAmountUsdc: intent.estimated_amount_usdc,
+        bankCode: bank.bank_code,
+        accountNumber: bank.account_number,
+        accountName: bank.account_name,
+        bankName: merchant.bank_name,
+        refundAddress,
+        payerEmail,
+        payerWallet: isAddress(payerWallet) ? payerWallet : refundAddress,
+        memo: `${merchant.display_name} POS payout`,
+      })
+      return res.json({ ok: true, order })
+    }
+
+    if (action === 'markOfframpPaid') {
+      const id = cleanText(body.intent_id || body.order_id, '').replace(/[^a-zA-Z0-9_-]/g, '')
+      const txHash = cleanText(body.tx_hash, '')
+      if (!id || !/^0x[a-fA-F0-9]{64}$/.test(txHash)) return res.status(400).json({ ok: false, error: 'Valid order and tx hash are required.' })
+      const order = await markPaycrestPosPayment({
+        id,
+        txHash,
+        payerEmail: cleanText(body.payer_email, ''),
+        payerWallet: cleanText(body.payer_wallet, ''),
+      })
+      if (!order) return res.status(404).json({ ok: false, error: 'Paycrest POS order not found.' })
+      return res.json({ ok: true, order })
+    }
+
+    if (action === 'offrampStatus') {
+      const id = cleanText(body.intent_id || body.order_id, '').replace(/[^a-zA-Z0-9_-]/g, '')
+      if (!id) return res.status(400).json({ ok: false, error: 'Missing order id.' })
+      const order = body.refresh ? await refreshPaycrestOrderStatus(id) : await getPaycrestPosOrder(id)
+      if (!order) return res.status(404).json({ ok: false, error: 'Paycrest POS order not found.' })
+      return res.json({ ok: true, order })
     }
 
     return res.status(400).json({ ok: false, error: 'Unknown action.' })

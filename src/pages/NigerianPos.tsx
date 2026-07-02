@@ -43,6 +43,7 @@ type PublicMerchant = {
   bank_configured: boolean
   bank_name?: string
   bank_last4?: string
+  bank_account_name?: string
   fx_rate_ngn_per_usdc?: string
   fx_source?: string
 }
@@ -60,11 +61,20 @@ type Quote = {
   expires_at: string
   pay_url: string
   fiat_execution_ready: boolean
+  offramp_provider?: 'paycrest'
+  intent_id?: string
+  bank_name?: string
+  bank_last4?: string
+  bank_account_name?: string
 }
 
 const emptySetup = {
   display_name: '',
   circle_smart_wallet_address: '',
+  bank_name: '',
+  bank_code: '',
+  account_number: '',
+  account_name: '',
 }
 
 export default function NigerianPos() {
@@ -76,6 +86,8 @@ export default function NigerianPos() {
   const [setup, setSetup] = useState(emptySetup)
   const [setupBusy, setSetupBusy] = useState(false)
   const [setupError, setSetupError] = useState('')
+  const [bankVerifyBusy, setBankVerifyBusy] = useState(false)
+  const [bankVerified, setBankVerified] = useState(false)
   const [showMerchantQr, setShowMerchantQr] = useState(initialManageMode)
   const [copied, setCopied] = useState(false)
   const [settlementStep, setSettlementStep] = useState<'select' | 'amount'>('select')
@@ -154,7 +166,7 @@ export default function NigerianPos() {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           action: 'createMerchant',
-          payout_preference: 'KEEP_CRYPTO',
+          payout_preference: bankVerified ? 'INSTANT_FIAT' : 'KEEP_CRYPTO',
           ...setup,
         }),
       })
@@ -168,6 +180,31 @@ export default function NigerianPos() {
       setSetupError(err instanceof Error ? err.message : 'POS setup failed')
     } finally {
       setSetupBusy(false)
+    }
+  }
+
+  async function verifyBankAccount() {
+    setBankVerifyBusy(true)
+    setSetupError('')
+    setBankVerified(false)
+    try {
+      const res = await fetch('/api/ng-pos', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          action: 'verifyAccount',
+          bank_code: setup.bank_code,
+          account_number: setup.account_number,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.ok) throw new Error(data.error ?? 'Bank verification failed')
+      setSetup({ ...setup, account_name: data.account_name })
+      setBankVerified(true)
+    } catch (err) {
+      setSetupError(err instanceof Error ? err.message : 'Bank verification failed')
+    } finally {
+      setBankVerifyBusy(false)
     }
   }
 
@@ -194,7 +231,6 @@ export default function NigerianPos() {
       if (!res.ok || !data.ok) throw new Error(data.error ?? 'Quote failed')
       const nextQuote = data.quote as Quote
       setQuote(nextQuote)
-      window.location.assign(nextQuote.pay_url)
     } catch (err) {
       setQuoteError(err instanceof Error ? err.message : 'Quote failed')
     } finally {
@@ -219,14 +255,31 @@ export default function NigerianPos() {
           </div>
 
           <div className="rounded-xl border border-gray-200 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
-            <div className="flex items-center justify-between gap-3">
+            <div className="mb-3 flex items-start justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold text-gray-900 dark:text-white">Naira bank settlement</p>
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Coming soon after licensed payout partner setup.</p>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Optional. Customers pay Base USDC from Circle Smart Wallet; Paycrest routes NGN to this account.</p>
               </div>
-              <span className="shrink-0 rounded-full border border-gray-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-gray-400 dark:border-white/10 dark:bg-white/[0.06]">
-                Soon
-              </span>
+              <Banknote className="h-4 w-4 shrink-0 text-gray-400" />
+            </div>
+            <div className="grid gap-3">
+              <TextField label="Bank name" value={setup.bank_name} onChange={(bank_name) => { setSetup({ ...setup, bank_name }); setBankVerified(false) }} placeholder="Guaranty Trust Bank" />
+              <TextField label="Paycrest bank code" value={setup.bank_code} onChange={(bank_code) => { setSetup({ ...setup, bank_code: bank_code.toUpperCase() }); setBankVerified(false) }} placeholder="GTBINGLA" />
+              <TextField label="Account number" value={setup.account_number} onChange={(account_number) => { setSetup({ ...setup, account_number: account_number.replace(/\D/g, '').slice(0, 10) }); setBankVerified(false) }} placeholder="0123456789" />
+              {setup.account_name && (
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-200">
+                  {setup.account_name}
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={verifyBankAccount}
+                disabled={bankVerifyBusy || !setup.bank_code || setup.account_number.length !== 10}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-xs font-semibold text-gray-800 transition-all hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-100 dark:hover:bg-white/[0.1]"
+              >
+                {bankVerifyBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : bankVerified ? <CheckCircle2 className="h-4 w-4 text-emerald-500" /> : <Banknote className="h-4 w-4" />}
+                {bankVerified ? 'Bank verified' : 'Verify bank account'}
+              </button>
             </div>
           </div>
 
@@ -234,7 +287,7 @@ export default function NigerianPos() {
           <button
             type="button"
             onClick={createMerchant}
-            disabled={setupBusy}
+            disabled={setupBusy || (!!setup.bank_code && !bankVerified)}
             className="flex w-full items-center justify-center gap-2 rounded-xl bg-gray-950 px-4 py-3 text-sm font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
           >
             {setupBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <QrCode className="h-4 w-4" />}
@@ -356,6 +409,7 @@ export default function NigerianPos() {
             onClick={() => {
               if (!merchant.bank_configured) return
               setSelectedSettlement('INSTANT_FIAT')
+              setSelectedNetwork('base')
               setAmountCurrency('NGN')
               setQuote(null)
               setQuoteError('')
@@ -365,7 +419,7 @@ export default function NigerianPos() {
         </div>
         ) : (
         <>
-        {merchantNetworks.length > 1 && (
+        {selectedSettlement !== 'INSTANT_FIAT' && merchantNetworks.length > 1 && (
           <div className="rounded-xl border border-gray-200 bg-white p-3 dark:border-white/10 dark:bg-white/[0.05]">
             <div className="mb-2 flex items-center justify-between gap-3">
               <p className="text-xs font-semibold text-gray-500 dark:text-gray-400">Pay on</p>
@@ -442,7 +496,7 @@ export default function NigerianPos() {
         </div>
 
         {quoteError && <ErrorNote message={quoteError} />}
-        {false && quote ? (
+        {quote ? (
           <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 dark:border-emerald-400/20 dark:bg-emerald-400/10">
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -450,8 +504,12 @@ export default function NigerianPos() {
                 <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-300">
                   ₦{quote!.amount_ngn} · {quote!.amount_usdc} USDC
                 </p>
-                {quote!.settlement_type === 'INSTANT_FIAT' && !quote!.fiat_execution_ready && (
-                  <p className="mt-2 text-[11px] text-amber-700 dark:text-amber-300">Fiat payout provider is not live yet. Use for controlled testing only.</p>
+                {quote!.settlement_type === 'INSTANT_FIAT' && (
+                  <div className="mt-3 rounded-xl border border-emerald-200/80 bg-white/70 p-3 text-[11px] text-emerald-900 dark:border-emerald-300/20 dark:bg-white/[0.06] dark:text-emerald-100">
+                    <p className="font-semibold">{quote.bank_account_name ?? merchant.bank_account_name}</p>
+                    <p className="mt-0.5">{quote.bank_name ?? merchant.bank_name} ****{quote.bank_last4 ?? merchant.bank_last4}</p>
+                    <p className="mt-2 text-emerald-700 dark:text-emerald-200">Checkout is Base USDC only. Paycrest settles NGN after payment.</p>
+                  </div>
                 )}
               </div>
               <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-300" />
@@ -462,10 +520,10 @@ export default function NigerianPos() {
               rel="noopener noreferrer"
               className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-gray-950 px-4 py-3 text-sm font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
             >
-              Open checkout <ArrowRight className="h-4 w-4" />
+              Open Circle checkout <ArrowRight className="h-4 w-4" />
             </a>
             <p className="mt-2 text-center text-[11px] font-medium text-emerald-700/70 dark:text-emerald-200/70">
-              Opens in a new tab. This POS page stays open.
+              The bank account is shown again before payment.
             </p>
           </div>
         ) : (
