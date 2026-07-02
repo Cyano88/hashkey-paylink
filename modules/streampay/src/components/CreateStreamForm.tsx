@@ -2025,6 +2025,14 @@ export function CreateStreamForm() {
                         ? <><Spinner /><span className="text-[13px] font-medium">{circleCtaLabel}</span></>
                         : <><img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert mix-blend-screen" /> {circleCtaLabel}</>}
                     </button>
+                    {isCreatorStream && creatorCheckoutBackHref && (
+                      <a
+                        href={creatorCheckoutBackHref}
+                        className="flex min-h-[46px] w-full items-center justify-center rounded-xl border border-gray-200 bg-white px-5 py-3 text-[13px] font-semibold text-gray-600 transition-colors hover:border-gray-300 hover:bg-gray-50 dark:border-white/10 dark:bg-[#15151a] dark:text-gray-300 dark:hover:bg-white/5"
+                      >
+                        Return to checkout
+                      </a>
+                    )}
                     {privyCircleLinkError && (
                       <p className="text-center text-[11px] font-semibold text-amber-600 dark:text-amber-300">{privyCircleLinkError}</p>
                     )}
