@@ -636,6 +636,7 @@ export function StreamGate() {
   const [gatewayReferenceCopied, setGatewayReferenceCopied] = useState(false)
   const [gatewayReceiptOpening, setGatewayReceiptOpening] = useState(false)
   const [gatewayRestored, setGatewayRestored] = useState(false)
+  const gatewayReference = gatewayTx || gatewayReceiptId || ''
   const gatewayTxIsExplorerHash = /^0x[a-fA-F0-9]{64}$/.test(gatewayTx ?? '')
   const gatewayOgExplorer = gatewayReceipt?.og?.ogExplorer
   const gatewayOgProof = gatewayReceipt?.og?.ogTxHash || gatewayReceipt?.og?.rootHash || ''
@@ -1235,11 +1236,7 @@ export function StreamGate() {
                               setContentError(null)
                               setCircleNotice(null)
                               if (contentState === 'error') setContentState('idle')
-                              if (ready) {
-                                await unlockWithAgentX402(agent.slug)
-                              } else {
-                                setUnlockStep('email')
-                              }
+                              setUnlockStep(ready ? 'choose' : 'email')
                             }}
                             className={[
                               'flex w-full items-center justify-between gap-3 rounded-xl border px-3 py-3 text-left transition-all',
@@ -1802,7 +1799,7 @@ export function StreamGate() {
           </div>
         )}
 
-        {paymentMode === 'x402' && fullyAuthorised && gatewayTx && (
+        {paymentMode === 'x402' && fullyAuthorised && gatewayReference && (
           <div className="border-t border-gray-100 bg-emerald-50/70 px-4 py-3 space-y-3">
             <div className="flex items-start gap-2">
               <span className="mt-0.5 text-emerald-600"><CheckIcon /></span>
@@ -1817,12 +1814,12 @@ export function StreamGate() {
                 )}
                 <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
                   <p className="truncate font-mono text-[11px] font-semibold text-emerald-800">
-                    Circle Gateway {gatewayRestored ? 'receipt' : 'paid'} - {gatewayTx.slice(0, 8)}...{gatewayTx.slice(-6)}
+                    Circle Gateway {gatewayRestored ? 'receipt' : 'paid'} - {gatewayReference.slice(0, 8)}...{gatewayReference.slice(-6)}
                   </p>
                   <button
                     type="button"
                     onClick={() => {
-                      navigator.clipboard?.writeText(gatewayTx).catch(() => {})
+                      navigator.clipboard?.writeText(gatewayReference).catch(() => {})
                       setGatewayReferenceCopied(true)
                       window.setTimeout(() => setGatewayReferenceCopied(false), 1600)
                     }}
@@ -1890,7 +1887,7 @@ export function StreamGate() {
               <button
                 type="button"
                 onClick={() => {
-                  navigator.clipboard?.writeText(gatewayTx).catch(() => {})
+                  navigator.clipboard?.writeText(gatewayReference).catch(() => {})
                   setGatewayReferenceCopied(true)
                   window.setTimeout(() => setGatewayReferenceCopied(false), 1600)
                 }}
