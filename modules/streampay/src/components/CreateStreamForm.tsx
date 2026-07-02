@@ -81,6 +81,7 @@ function readPrefill() {
   const isAgenticPath = path.startsWith('/agentic')
   const rawMode = (params.get('mode') ?? '').trim().toLowerCase()
   const isAgenticFlow = isAgenticPath || rawMode === 'agentic-streaming'
+  const isCreatorStream = rawMode === 'creator-stream'
   const rawDuration = (params.get('duration') ?? '').trim().toLowerCase()
   const amountPerDay = (params.get('amountPerDay') ?? '').trim()
   const amount = (isAgenticFlow ? amountPerDay || '0.01' : params.get('amount') ?? '').trim()
@@ -118,7 +119,7 @@ function readPrefill() {
     if (!durationPreset) customDays = (Number(seconds) / 86_400).toString()
   }
 
-  return { amount, recipient, recipientEmail, reportEmail, mode, service, agentSlug, amountPerDay, reason, duration: rawDuration, durationPreset, customDays, preferCircle, returnTo }
+  return { amount, recipient, recipientEmail, reportEmail, mode, service, agentSlug, amountPerDay, reason, duration: rawDuration, durationPreset, customDays, preferCircle, returnTo, isCreatorStream }
 }
 
 function parseUsdc(val: string): bigint {
@@ -270,7 +271,7 @@ export function CreateStreamForm() {
   const [salt] = useState<`0x${string}`>(genSalt)
 
   const [step,         setStep]         = useState<Step>('form')
-  const [activeTab,    setActiveTab]    = useState<StreamTab>('menu')
+  const [activeTab,    setActiveTab]    = useState<StreamTab>(() => prefill.isCreatorStream ? 'new' : 'menu')
   const [statusMsg,    setStatusMsg]    = useState('')
   const [error,        setError]        = useState<string | null>(null)
   const [streamLink,   setStreamLink]   = useState<string | null>(null)
@@ -324,6 +325,7 @@ export function CreateStreamForm() {
     ?? (customDays ? BigInt(Math.round(parseFloat(customDays) * 86400)) : 0n)
   const durationValid  = durationSecs > 0n
   const isAgenticStreaming = prefill.mode === 'agentic-streaming'
+  const isCreatorStream = prefill.isCreatorStream
   const agenticService = prefill.service || 'polymarket-lp'
   const agenticReportEmailValid = !isAgenticStreaming || isEmail(reportEmail)
   const isFormValid    = recipientValid && amountValid && durationValid && agenticReportEmailValid
@@ -363,7 +365,9 @@ export function CreateStreamForm() {
   const circlePanelCopy = !streamPayPrivyReady
     ? 'Use email to open your Arc wallet.'
     : circleStartReady
-      ? 'Start the stream from your Circle wallet.'
+      ? isCreatorStream
+        ? 'Start the prepaid viewing stream from your Circle wallet.'
+        : 'Start the stream from your Circle wallet.'
       : 'Finish the required fields below.'
   const circleCtaLabel = isWorking
     ? statusMsg
@@ -383,6 +387,8 @@ export function CreateStreamForm() {
                   ? 'Add USDC to wallet'
                   : isAgenticStreaming
                     ? 'Start service stream'
+                    : isCreatorStream
+                      ? 'Start pay-per-view stream'
                     : 'Start stream'
   const agenticLinkParams = isAgenticStreaming ? {
     mode: 'agentic-streaming',
@@ -1100,10 +1106,10 @@ export function CreateStreamForm() {
 
           <div className="px-1">
             <h1 className="text-[22px] font-black tracking-tight text-gray-950 dark:text-white">
-              {isAgenticStreaming ? 'x402 Services' : 'Payroll'}
+              {isAgenticStreaming ? 'x402 Services' : isCreatorStream ? 'Creator Stream Checkout' : 'Payroll'}
             </h1>
             <p className="mt-1 text-[13px] leading-5 text-gray-500 dark:text-gray-400">
-              {isAgenticStreaming ? 'Daily Polymarket LP research by stream.' : 'Stream USDC to anyone on Arc.'}
+              {isAgenticStreaming ? 'Daily Polymarket LP research by stream.' : isCreatorStream ? 'Prepay an Arc stream, then return to unlock the creator content.' : 'Stream USDC to anyone on Arc.'}
             </p>
           </div>
 
@@ -1358,10 +1364,10 @@ export function CreateStreamForm() {
         {/* ── Page title (Rule 4: aligned to same 480px) ── */}
         <div className="px-1">
           <h1 className="text-[22px] font-black tracking-tight text-gray-950 dark:text-white">
-            {isAgenticStreaming ? 'x402 Services' : 'Payroll'}
+            {isAgenticStreaming ? 'x402 Services' : isCreatorStream ? 'Creator Stream Checkout' : 'Payroll'}
           </h1>
           <p className="mt-1 text-[13px] leading-5 text-gray-500 dark:text-gray-400">
-            {isAgenticStreaming ? 'Stream USDC for daily Polymarket LP research.' : 'Stream USDC to anyone on Arc.'}
+            {isAgenticStreaming ? 'Stream USDC for daily Polymarket LP research.' : isCreatorStream ? 'Prepay an Arc stream, then continue back to the content.' : 'Stream USDC to anyone on Arc.'}
           </p>
         </div>
 
@@ -1561,8 +1567,49 @@ export function CreateStreamForm() {
                 </div>
               )}
 
-              {/* ── Recipient capsule ── */}
-              {isAgenticStreaming ? (
+              {/* ── Creator checkout summary / Recipient capsule ── */}
+              {isCreatorStream ? (
+                <div className="space-y-3 rounded-2xl border border-emerald-100 bg-emerald-50/50 p-4 dark:border-emerald-900/30 dark:bg-emerald-950/20">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-[13px] font-black text-gray-900 dark:text-gray-100">Pay-per-view stream</p>
+                      <p className="mt-1 text-[12px] leading-relaxed text-gray-500 dark:text-gray-400">
+                        These details are set by the creator content link.
+                      </p>
+                    </div>
+                    <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-[10px] font-bold text-emerald-700 ring-1 ring-emerald-100 dark:bg-white/10 dark:text-emerald-300 dark:ring-emerald-900/40">
+                      Locked
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 gap-2">
+                    <div className="rounded-xl border border-white bg-white/80 px-3 py-2.5 dark:border-white/10 dark:bg-[#15151a]">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Creator</p>
+                      <p className="mt-0.5 truncate font-mono text-[12px] font-bold text-gray-800 dark:text-gray-100">{shortAddress(recipient)}</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="rounded-xl border border-white bg-white/80 px-3 py-2.5 dark:border-white/10 dark:bg-[#15151a]">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Max spend</p>
+                        <p className="mt-0.5 text-[12px] font-bold text-gray-800 dark:text-gray-100">{amount || '0'} USDC</p>
+                      </div>
+                      <div className="rounded-xl border border-white bg-white/80 px-3 py-2.5 dark:border-white/10 dark:bg-[#15151a]">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Window</p>
+                        <p className="mt-0.5 text-[12px] font-bold text-gray-800 dark:text-gray-100">
+                          {durationSecs > 0n ? `${Number(durationSecs)} sec` : 'Ready'}
+                        </p>
+                      </div>
+                    </div>
+                    {reason && (
+                      <div className="rounded-xl border border-white bg-white/80 px-3 py-2.5 dark:border-white/10 dark:bg-[#15151a]">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Content</p>
+                        <p className="mt-0.5 truncate text-[12px] font-bold text-gray-800 dark:text-gray-100">{reason}</p>
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
+                    Start the stream, then tap Continue to content on the confirmation screen.
+                  </p>
+                </div>
+              ) : isAgenticStreaming ? (
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1.5">
@@ -1682,7 +1729,7 @@ export function CreateStreamForm() {
               )}
 
               {/* ── Amount capsule ── */}
-              <div className="space-y-1.5">
+              {!isCreatorStream && <div className="space-y-1.5">
                 <div className="flex items-center gap-1.5">
                   <ChainIcon />
                   <span className="text-[13px] font-semibold text-gray-700 dark:text-gray-200">Amount</span>
@@ -1720,10 +1767,10 @@ export function CreateStreamForm() {
                 ) : (
                   <p className="text-[11px] text-gray-400">USDC on Arc Network</p>
                 )}
-              </div>
+              </div>}
 
               {/* ── Duration capsule ── */}
-              <div className="space-y-1.5">
+              {!isCreatorStream && <div className="space-y-1.5">
                 <div className="flex items-center gap-1.5">
                   <ClockIcon />
                   <span className="text-[13px] font-semibold text-gray-700 dark:text-gray-200">Duration</span>
@@ -1761,10 +1808,10 @@ export function CreateStreamForm() {
                     <span className="text-[12px] font-bold text-gray-500 select-none">DAYS</span>
                   </div>
                 </div>
-              </div>
+              </div>}
 
               {/* ── Memo capsule ── */}
-              <div className="space-y-1.5">
+              {!isCreatorStream && <div className="space-y-1.5">
                 <div className="flex items-center gap-1.5">
                   <TagIcon />
                   <span className="text-[13px] font-semibold text-gray-700 dark:text-gray-200">Memo</span>
@@ -1779,7 +1826,7 @@ export function CreateStreamForm() {
                   maxLength={80}
                   className="min-h-[44px] w-full rounded-xl border border-gray-200 bg-white px-3.5 py-2.5 text-[13px] text-gray-900 placeholder:text-gray-300 transition-colors focus:border-gray-400 focus:outline-none disabled:opacity-50 dark:border-white/10 dark:bg-[#15151a] dark:text-gray-100 dark:placeholder:text-gray-600"
                 />
-              </div>
+              </div>}
 
               {/* ── CTA ── */}
               <div className="space-y-2.5 pt-1">

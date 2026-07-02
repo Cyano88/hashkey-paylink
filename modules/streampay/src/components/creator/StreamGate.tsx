@@ -1201,6 +1201,7 @@ export function StreamGate() {
     const returnTo = `${window.location.pathname}?${returnParams.toString()}`
     const p = new URLSearchParams()
     p.set('app', 'streampay')
+    p.set('mode', 'creator-stream')
     p.set('wallet', 'circle')
     p.set('recipient', creator)
     p.set('amount', sessionCap.toFixed(6).replace(/\.?0+$/, ''))
@@ -2227,11 +2228,11 @@ function OverlayShell({
     <div
       className={[
         'flex flex-col items-center justify-center space-y-4',
-        paymentMode === 'x402'
+        paymentMode === 'x402' || paymentMode === 'choice' || paymentMode === 'escrow'
           ? 'relative min-h-[520px] p-5 sm:p-7'
           : 'absolute inset-0 p-6',
       ].join(' ')}
-      style={paymentMode === 'x402'
+      style={paymentMode === 'x402' || paymentMode === 'choice' || paymentMode === 'escrow'
         ? { background: 'linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.92))' }
         : { background: 'rgba(255,255,255,0.75)', backdropFilter: 'blur(3px)' }}
     >
