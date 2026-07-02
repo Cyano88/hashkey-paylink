@@ -4436,11 +4436,8 @@ export default function PaymentPage() {
           ) : null /* direct mode — no CTA button, address panel above handles it */ }
 
           {showCirclePoweredAttribution && (
-            <div className="flex items-center justify-center gap-2 pt-1 text-[11px] font-semibold text-gray-400 dark:text-gray-500">
-              <span className="circle-premium-mark">
-                <img src="/brand/circle-logo.jpeg" alt="" className="h-4 w-4 rounded-full object-cover" />
-              </span>
-              <span>Powered by Circle</span>
+            <div className="flex items-center justify-center pt-1 text-[11px] font-semibold text-gray-400 dark:text-gray-500">
+              <span>Powered by Hash PayLink Payment Checkout</span>
             </div>
           )}
 
@@ -4541,9 +4538,14 @@ export default function PaymentPage() {
           </Link>
         </div>
 
-        <p className="mt-6 text-center text-xs text-gray-400">
-          {isHelperAccess ? 'Helper access on ' : isPolymarketFunding ? 'Polymarket Funding on ' : isWalletManagerFunding ? 'x402 wallet funding on ' : isAgentFunding ? 'Agent payments on ' : 'Powered by Circle USDC · '}
-          {(isPolymarketFunding ? [
+        <div className="mt-6 flex h-[60px] items-center justify-center border-t border-gray-100 bg-white/50 text-center text-xs text-gray-400 dark:border-white/5 dark:bg-[#111113]/50">
+          {isHelperAccess ? 'Helper access on ' : isPolymarketFunding ? 'Polymarket Funding on ' : isWalletManagerFunding ? 'x402 wallet funding on ' : isAgentFunding ? 'Agent payments on ' : (
+            <span className="polydesk-powered-footer">
+              <span>Powered by</span>
+              <strong>Circle USDC</strong>
+            </span>
+          )}
+          {(isHelperAccess || isPolymarketFunding || isWalletManagerFunding || isAgentFunding) && (isPolymarketFunding ? [
             { label: 'Base',      href: 'https://basescan.org' },
             { label: 'Solana',   href: 'https://solscan.io' },
             { label: 'Arbitrum', href: 'https://arbiscan.io' },
@@ -4569,7 +4571,7 @@ export default function PaymentPage() {
               {i < arr.length - 1 && ' · '}
             </span>
           ))}
-        </p>
+        </div>
       </div>
 
     </div>

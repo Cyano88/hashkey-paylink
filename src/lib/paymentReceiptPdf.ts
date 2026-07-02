@@ -33,6 +33,88 @@ export type ReceiptLookupResponse = {
   receipt?: PaylinkReceipt
 }
 
+export type X402ReceiptLike = {
+  activityId?: string
+  receiptId?: string
+  receiptHash?: string
+  agentSlug?: string
+  title?: string
+  amount?: string
+  asset?: string
+  chain?: string
+  txHash?: string
+  payer?: string
+  memo?: string
+  merchantId?: string
+  source?: string
+  detail?: string
+  createdAt?: number
+  proof?: Record<string, unknown>
+  og?: {
+    rootHash?: string
+    ogTxHash?: string
+    ogExplorer?: string
+  }
+}
+
+export function createX402PaylinkReceipt(receipt: X402ReceiptLike, activityId: string): PaylinkReceipt {
+  const proof = receipt.proof ?? {}
+  const txRef = String(proof.transaction ?? receipt.txHash ?? '')
+  const proofHash = String(proof.proofHash ?? proof.receiptHash ?? receipt.receiptHash ?? receipt.activityId ?? activityId)
+  const amount = normalizeX402ReceiptAmount(receipt.amount, proof.amount)
+  const payer = String(proof.payer ?? proof.buyerAgent ?? receipt.payer ?? '')
+  const creator = String(proof.seller ?? proof.sellerAgent ?? receipt.merchantId ?? '')
+  return {
+    type: 'circle_gateway_x402_receipt',
+    receiptId: receipt.activityId ?? activityId,
+    receiptHash: proofHash,
+    title: receipt.title || 'Creator content unlocked',
+    status: 'confirmed',
+    eventId: String(proof.service ?? receipt.agentSlug ?? 'creator-x402'),
+    txHash: txRef || proofHash,
+    chain: 'arc',
+    payer,
+    memo: receipt.detail || 'Creator content unlocked by Circle Gateway x402',
+    amount,
+    asset: 'USDC',
+    createdAt: receipt.createdAt ?? Date.now(),
+    source: 'x402',
+    merchantId: creator,
+    settlementType: 'circle-gateway-x402',
+    proof: {
+      receiptHash: proofHash,
+      ogRootHash: receipt.og?.rootHash ? String(receipt.og.rootHash) : String(proof.ogRootHash ?? ''),
+      ogTxHash: receipt.og?.ogTxHash ? String(receipt.og.ogTxHash) : String(proof.ogTxHash ?? ''),
+      ogExplorer: receipt.og?.ogExplorer ? String(receipt.og.ogExplorer) : String(proof.ogExplorer ?? ''),
+    },
+  }
+}
+
+function normalizeX402ReceiptAmount(receiptAmount?: string, proofAmount?: unknown) {
+  const humanAmount = parseHumanUsdcAmount(receiptAmount)
+  if (humanAmount) return humanAmount
+  const proofText = String(proofAmount ?? '')
+  const proofMatch = proofText.match(/-?\d+(?:\.\d+)?/)
+  if (!proofMatch) return '0'
+  const numeric = Number(proofMatch[0])
+  if (!Number.isFinite(numeric)) return '0'
+  const absolute = Math.abs(numeric)
+  const normalized = !proofText.includes('.') && absolute >= 1_000
+    ? absolute / 1_000_000
+    : absolute
+  return normalized.toLocaleString('en-US', { useGrouping: false, maximumFractionDigits: 6 })
+}
+
+function parseHumanUsdcAmount(value?: string) {
+  const text = String(value ?? '').trim()
+  if (!text) return ''
+  const match = text.match(/-?\d+(?:\.\d+)?/)
+  if (!match) return ''
+  const numeric = Math.abs(Number(match[0]))
+  if (!Number.isFinite(numeric)) return ''
+  return numeric.toLocaleString('en-US', { useGrouping: false, maximumFractionDigits: 6 })
+}
+
 export function receiptChainKey(value?: string): ChainKey {
   return value === 'solana' || value === 'arc' || value === 'arbitrum' || value === 'hashkey'
     ? value
@@ -49,6 +131,7 @@ export function paymentReceiptFileName(receipt?: PaylinkReceipt) {
   const prefix = receipt?.source === 'streampay' ? 'streampay'
     : receipt?.source === 'ngpos' ? 'pos'
     : receipt?.source === 'polymarket-funding' ? 'polymarket-funding'
+    : receipt?.source === 'x402' ? 'x402'
     : 'paylink'
   return `hashpaylink-${prefix}-receipt-${receipt?.receiptId.slice(0, 10) || 'receipt'}.pdf`
 }
@@ -74,19 +157,22 @@ function receiptLabels(receipt: PaylinkReceipt) {
   const isStream = receipt.source === 'streampay' || receipt.settlementType === 'stream-created'
   const isPos = receipt.source === 'ngpos'
   const isPolymarket = receipt.source === 'polymarket-funding' || receipt.settlementType === 'polymarket_bridge'
-  const heading = isStream ? 'StreamPay receipt' : isPos ? 'Retail POS receipt' : isPolymarket ? 'Polymarket funding receipt' : 'Request payment receipt'
-  const title = isStream ? 'Stream created' : isPos ? 'Retail payment confirmed' : isPolymarket ? 'Polymarket funded' : 'Payment confirmed'
-  const amountLabel = isStream ? 'Stream amount' : isPolymarket ? 'Amount funded' : 'Amount paid'
-  const payer = isStream ? 'Sender' : isPos ? 'Customer wallet' : isPolymarket ? 'Funder' : 'Payer'
-  const context = isStream ? 'Stream memo' : isPos ? 'Customer' : isPolymarket ? 'For' : 'Memo'
+  const isX402 = receipt.source === 'x402' || receipt.settlementType === 'circle-gateway-x402'
+  const heading = isStream ? 'StreamPay receipt' : isPos ? 'Retail POS receipt' : isPolymarket ? 'Polymarket funding receipt' : isX402 ? 'Creator x402 receipt' : 'Request payment receipt'
+  const title = isStream ? 'Stream created' : isPos ? 'Retail payment confirmed' : isPolymarket ? 'Polymarket funded' : isX402 ? 'Creator content unlocked' : 'Payment confirmed'
+  const amountLabel = isStream ? 'Stream amount' : isPolymarket ? 'Amount funded' : isX402 ? 'Access price' : 'Amount paid'
+  const payer = isStream ? 'Sender' : isPos ? 'Customer wallet' : isPolymarket ? 'Funder' : isX402 ? 'Reader wallet' : 'Payer'
+  const context = isStream ? 'Stream memo' : isPos ? 'Customer' : isPolymarket ? 'For' : isX402 ? 'Content' : 'Memo'
   const contextValue = isStream
     ? (receipt.memo || receipt.merchantId || receipt.eventId || '-')
     : isPos
     ? (receipt.memo || receipt.eventId || '-')
     : isPolymarket
     ? 'Polymarket funding'
+    : isX402
+    ? (receipt.memo || receipt.eventId || 'Creator content')
     : (receipt.memo || receipt.merchantId || receipt.eventId || '-')
-  const merchantLabel = isStream ? 'Stream vault' : isPos ? 'Merchant' : isPolymarket ? 'Polymarket profile' : 'Recipient'
+  const merchantLabel = isStream ? 'Stream vault' : isPos ? 'Merchant' : isPolymarket ? 'Polymarket profile' : isX402 ? 'Creator' : 'Recipient'
   const merchantValue = receipt.merchantId || ''
   return { heading, title, amountLabel, payer, context, contextValue, merchantLabel, merchantValue }
 }

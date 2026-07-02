@@ -25,6 +25,7 @@ import settlePoaHandler                from './modules/streampay/api/settle-poa.
 import {
   storeContent,
   getContent,
+  getContentStreamEscrow,
   getContentX402,
   listCreatorContent,
   listApprovedCreatorContent,
@@ -155,6 +156,7 @@ app.get('/api/creator-discover-content', readLimiter, listApprovedCreatorContent
 app.get('/api/admin/creator-content',  strictLimiter, listCreatorAdminContent)
 app.post('/api/admin/creator-content', strictLimiter, reviewCreatorContent)
 app.get('/api/get-content',            readLimiter, getContent)
+app.get('/api/get-content-stream',     readLimiter, getContentStreamEscrow)
 app.get('/api/get-content-x402',       readLimiter, getContentX402)
 app.post('/api/creator-unlock-x402',   strictLimiter, unlockContentX402WithAgent)
 app.post('/api/register-vault',        registerVault)

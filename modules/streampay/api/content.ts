@@ -13,7 +13,8 @@ import {
   type Address, type Hex,
 } from 'viem'
 import type { NextFunction } from 'express'
-import { payAgentX402Service } from '../../../api/agent-wallet.js'
+import { getAgentWalletRecord, payAgentX402Service } from '../../../api/agent-wallet.js'
+import { listAgentActivity } from '../../../api/agent-activity.js'
 import { getPolyWorldcupNewsFeed, polyWorldcupArticleId } from '../../../api/poly-worldcup-news.js'
 
 const arcChain = defineChain({
@@ -31,6 +32,10 @@ const arcClient = createPublicClient({
 const ARC_USDC = '0x3600000000000000000000000000000000000000' as const
 const ALLOW_ABI = parseAbi([
   'function allowance(address owner, address spender) view returns (uint256)',
+])
+const STREAM_VAULT_ABI = parseAbi([
+  'function streamInfo() view returns (address _sender, address _recipient, uint256 _totalAmount, uint64 _startTime, uint64 _endTime, uint256 _alreadyWithdrawn, bool _cancelled, uint256 _unlocked, uint256 _claimable)',
+  'function isFunded() view returns (bool)',
 ])
 const ERC1271_ABI = parseAbi([
   'function isValidSignature(bytes32 hash, bytes signature) view returns (bytes4)',
@@ -56,7 +61,17 @@ type ContentEntry = {
   ts: number
 }
 
+type CreatorUnlockEntry = {
+  contentId: string
+  agentSlug: string
+  walletAddress: string
+  paymentTransaction: string
+  receiptActivityId: string
+  unlockedAt: number
+}
+
 const store = new Map<string, ContentEntry>()
+const unlockStore = new Map<string, CreatorUnlockEntry>()
 const MAX_CONTENT_ID_LENGTH = 128
 const MAX_CONTENT_LENGTH = 100_000
 const MAX_META_TEXT_LENGTH = 2_000
@@ -228,6 +243,19 @@ function ensureSchema() {
       alter table streampay_creator_content add column if not exists reviewed_at timestamptz;
       alter table streampay_creator_content add column if not exists review_note text not null default '';
       create index if not exists streampay_creator_content_review_idx on streampay_creator_content (review_status, updated_at desc);
+      create table if not exists streampay_creator_unlocks (
+        unlock_key text primary key,
+        content_id text not null,
+        agent_slug text not null,
+        wallet_address text not null default '',
+        payment_transaction text not null default '',
+        receipt_activity_id text not null default '',
+        unlocked_at timestamptz not null default now(),
+        updated_at timestamptz not null default now()
+      );
+      create index if not exists streampay_creator_unlocks_content_idx on streampay_creator_unlocks (content_id, updated_at desc);
+      create index if not exists streampay_creator_unlocks_agent_idx on streampay_creator_unlocks (agent_slug, updated_at desc);
+      create index if not exists streampay_creator_unlocks_wallet_idx on streampay_creator_unlocks (wallet_address, updated_at desc);
     `).then(() => undefined)
   }
   return schemaReady
@@ -325,6 +353,101 @@ async function writeContentEntry(contentId: string, entry: ContentEntry) {
   store.set(contentId, entry)
 }
 
+function unlockKey(contentId: string, agentSlug: string, walletAddress = '') {
+  const wallet = String(walletAddress || '').trim().toLowerCase()
+  return `${contentId}:${wallet || agentSlug}`
+}
+
+function rowToUnlockEntry(row: Record<string, unknown>): CreatorUnlockEntry {
+  return {
+    contentId: String(row.content_id ?? ''),
+    agentSlug: String(row.agent_slug ?? ''),
+    walletAddress: String(row.wallet_address ?? ''),
+    paymentTransaction: String(row.payment_transaction ?? ''),
+    receiptActivityId: String(row.receipt_activity_id ?? ''),
+    unlockedAt: row.unlocked_at instanceof Date ? row.unlocked_at.getTime() : Date.now(),
+  }
+}
+
+async function readCreatorUnlock(contentId: string, agentSlug: string, walletAddress = '') {
+  const wallet = String(walletAddress || '').trim().toLowerCase()
+  if (pool) {
+    await ensureSchema()
+    const result = wallet
+      ? await pool.query(
+          `select * from streampay_creator_unlocks
+           where content_id = $1 and (lower(wallet_address) = lower($2) or agent_slug = $3)
+           order by updated_at desc limit 1`,
+          [contentId, wallet, agentSlug],
+        )
+      : await pool.query(
+          `select * from streampay_creator_unlocks
+           where content_id = $1 and agent_slug = $2
+           order by updated_at desc limit 1`,
+          [contentId, agentSlug],
+        )
+    return result.rowCount ? rowToUnlockEntry(result.rows[0]) : null
+  }
+  if (wallet) return unlockStore.get(unlockKey(contentId, agentSlug, wallet)) ?? unlockStore.get(unlockKey(contentId, agentSlug)) ?? null
+  return unlockStore.get(unlockKey(contentId, agentSlug)) ?? null
+}
+
+async function writeCreatorUnlock(entry: CreatorUnlockEntry) {
+  const key = unlockKey(entry.contentId, entry.agentSlug, entry.walletAddress)
+  if (pool) {
+    await ensureSchema()
+    await pool.query(
+      `insert into streampay_creator_unlocks
+        (unlock_key, content_id, agent_slug, wallet_address, payment_transaction, receipt_activity_id, unlocked_at, updated_at)
+       values ($1, $2, $3, $4, $5, $6, to_timestamp($7 / 1000.0), now())
+       on conflict (unlock_key) do update set
+         agent_slug = excluded.agent_slug,
+         wallet_address = excluded.wallet_address,
+         payment_transaction = excluded.payment_transaction,
+         receipt_activity_id = excluded.receipt_activity_id,
+         updated_at = now()`,
+      [
+        key,
+        entry.contentId,
+        entry.agentSlug,
+        entry.walletAddress,
+        entry.paymentTransaction,
+        entry.receiptActivityId,
+        entry.unlockedAt,
+      ],
+    )
+    return
+  }
+  unlockStore.set(key, entry)
+}
+
+async function findLegacyCreatorUnlock(contentId: string, agentSlug: string, walletAddress = '') {
+  const activity = await listAgentActivity(agentSlug, 80)
+  const wallet = walletAddress.toLowerCase()
+  const found = activity.find(item => {
+    if (item.type !== 'scout_returned') return false
+    if (item.result?.contentId !== contentId) return false
+    if (wallet && item.wallet && item.wallet.toLowerCase() !== wallet) return false
+    return item.title === 'Creator content unlocked'
+  })
+  if (!found) return null
+  const paid = activity.find(item => (
+    item.type === 'x402_spent' &&
+    item.proof?.serviceUrl?.includes(`id=${encodeURIComponent(contentId)}`) &&
+    (!wallet || !item.wallet || item.wallet.toLowerCase() === wallet)
+  ))
+  const restored: CreatorUnlockEntry = {
+    contentId,
+    agentSlug,
+    walletAddress: walletAddress || found.wallet || paid?.wallet || '',
+    paymentTransaction: paid?.proof?.transaction || paid?.txHash || '',
+    receiptActivityId: paid?.id || '',
+    unlockedAt: found.createdAt,
+  }
+  await writeCreatorUnlock(restored)
+  return restored
+}
+
 function creatorPrice(entry: ContentEntry) {
   const raw = Math.max(1, Math.round(Number(entry.capRaw) || 0))
   return `$${(raw / 1_000_000).toFixed(6).replace(/0+$/, '').replace(/\.$/, '')}`
@@ -365,6 +488,7 @@ function buildGateLink(params: {
   capRaw: number
   title: string
   mode: 'unlock' | 'stream'
+  type: ContentEntry['type']
 }) {
   const p = new URLSearchParams()
   p.set('app', 'streampay')
@@ -373,7 +497,8 @@ function buildGateLink(params: {
   p.set('r', String(params.rateRaw))
   p.set('cap', String(params.capRaw))
   p.set('mode', params.mode)
-  p.set('pay', params.mode === 'unlock' ? 'x402' : 'poa')
+  p.set('pay', 'choice')
+  p.set('ct', params.type)
   if (params.title.trim()) p.set('t', params.title.trim())
   return `${baseUrl()}/gate?${p.toString()}`
 }
@@ -404,6 +529,7 @@ function entryToPost(contentId: string, entry: ContentEntry) {
       capRaw: entry.capRaw,
       title: entry.title,
       mode: entry.mode,
+      type: entry.type,
     }),
   }
 }
@@ -585,7 +711,7 @@ export async function storeContent(req: Request, res: Response) {
     return res.status(400).json({ ok: false, error: 'creator signature is invalid' })
   }
   const safeRateRaw = Math.max(0, Number(rateRaw) || 0)
-  const safeMode = mode === 'stream' ? 'stream' : 'unlock'
+  const safeMode = mode === 'stream' && type !== 'url' ? 'stream' : 'unlock'
   const creatorVerified = await verifyCreatorProof({
     contentId,
     creator,
@@ -775,6 +901,62 @@ export async function getContent(req: Request, res: Response) {
   return res.status(200).json({ ok: true, type: entry.type, content: entry.content })
 }
 
+export async function getContentStreamEscrow(req: Request, res: Response) {
+  const { id, vault } = req.query as { id?: string; vault?: string }
+
+  if (!id) return res.status(400).json({ ok: false, error: 'id is required' })
+  if (!vault || !isAddress(vault)) {
+    return res.status(400).json({ ok: false, error: 'A valid prepaid stream vault is required.' })
+  }
+
+  const entry = await readContentEntry(id)
+  if (!entry) {
+    return res.status(404).json({
+      ok: false,
+      error: 'Content not found. Ask the creator to re-generate the link.',
+    })
+  }
+  if (entry.type === 'url') {
+    return res.status(400).json({ ok: false, error: 'External links use fixed unlock only.' })
+  }
+
+  try {
+    const [info, funded] = await Promise.all([
+      arcClient.readContract({
+        address: vault as `0x${string}`,
+        abi: STREAM_VAULT_ABI,
+        functionName: 'streamInfo',
+      }) as Promise<readonly [`0x${string}`, `0x${string}`, bigint, bigint, bigint, bigint, boolean, bigint, bigint]>,
+      arcClient.readContract({
+        address: vault as `0x${string}`,
+        abi: STREAM_VAULT_ABI,
+        functionName: 'isFunded',
+      }) as Promise<boolean>,
+    ])
+    const [, recipient, totalAmount, startTime, endTime,, cancelled] = info
+    const now = BigInt(Math.floor(Date.now() / 1000))
+    if (!funded) return res.status(402).json({ ok: false, error: 'Prepaid stream is not funded yet.' })
+    if (cancelled) return res.status(402).json({ ok: false, error: 'This prepaid stream was cancelled.' })
+    if (recipient.toLowerCase() !== entry.creator.toLowerCase()) {
+      return res.status(403).json({ ok: false, error: 'This stream does not pay the content creator.' })
+    }
+    if (totalAmount < BigInt(Math.max(1, entry.capRaw))) {
+      return res.status(402).json({ ok: false, error: 'Prepaid stream amount is below this content cap.' })
+    }
+    if (now < startTime) {
+      return res.status(425).json({ ok: false, error: 'Prepaid stream is confirmed and will open shortly.' })
+    }
+    if (now >= endTime) {
+      return res.status(402).json({ ok: false, error: 'This prepaid stream has ended.' })
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    return res.status(503).json({ ok: false, error: `Could not verify prepaid stream: ${message.slice(0, 160)}` })
+  }
+
+  return res.status(200).json({ ok: true, type: entry.type, content: entry.content })
+}
+
 export async function getContentX402(req: PaidRequest, res: Response) {
   const { id } = req.query as { id?: string }
   if (!id) return res.status(400).json({ ok: false, error: 'id is required' })
@@ -786,7 +968,6 @@ export async function getContentX402(req: PaidRequest, res: Response) {
       error: 'Content not found. Ask the creator to re-generate the link.',
     })
   }
-
   const middleware = await creatorGatewayMiddleware(entry)
   return middleware(req, res, () => {
     return res.status(200).json({
@@ -817,11 +998,26 @@ export async function unlockContentX402WithAgent(req: Request, res: Response) {
       error: 'Content not found. Ask the creator to re-generate the link.',
     })
   }
-
   const maxAmount = Math.max(0.000001, Math.ceil(Math.max(1, Number(entry.capRaw) || 0)) / 1_000_000)
   const serviceUrl = `${baseUrl()}/api/get-content-x402?id=${encodeURIComponent(contentId)}`
 
   try {
+    const walletRecord = await getAgentWalletRecord(safeAgentSlug)
+    const walletAddress = walletRecord?.walletAddress ?? ''
+    const existingUnlock = await readCreatorUnlock(contentId, safeAgentSlug, walletAddress)
+      ?? await findLegacyCreatorUnlock(contentId, safeAgentSlug, walletAddress)
+    if (existingUnlock) {
+      return res.status(200).json({
+        ok: true,
+        restored: true,
+        type: entry.type,
+        content: entry.content,
+        payment: existingUnlock.paymentTransaction ? { transaction: existingUnlock.paymentTransaction } : null,
+        receiptActivityId: existingUnlock.receiptActivityId || null,
+        walletAddress: existingUnlock.walletAddress || walletAddress,
+      })
+    }
+
     const paid = await payAgentX402Service({
       agentSlug: safeAgentSlug,
       sellerAgentSlug: '',
@@ -840,8 +1036,18 @@ export async function unlockContentX402WithAgent(req: Request, res: Response) {
       return res.status(502).json({ ok: false, error: response.error ?? 'Creator content service rejected the payment.' })
     }
 
+    await writeCreatorUnlock({
+      contentId,
+      agentSlug: safeAgentSlug,
+      walletAddress: paid.walletAddress,
+      paymentTransaction: response?.payment?.transaction ?? paid.proof?.transaction ?? '',
+      receiptActivityId: paid.receiptActivityId ?? '',
+      unlockedAt: Date.now(),
+    })
+
     return res.status(200).json({
       ok: true,
+      restored: false,
       type: response?.type ?? entry.type,
       content: response?.content ?? entry.content,
       payment: response?.payment ?? null,

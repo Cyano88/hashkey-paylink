@@ -207,7 +207,8 @@ function worldCupNewsCard(article: PolyWorldCupArticle, index: number): Publishe
     r: '1000',
     cap: '100000',
     mode: 'unlock',
-    pay: 'x402',
+    pay: 'choice',
+    ct: 'url',
     t: article.title,
   })
   return {
@@ -239,7 +240,8 @@ function worldCupScoreCard(match: PolyStreamMatch, index: number): PublishedCont
     r: '1000',
     cap: '100000',
     mode: 'unlock',
-    pay: 'x402',
+    pay: 'choice',
+    ct: 'scores',
     t: `${home}${away ? ` vs ${away}` : ''} route`,
   })
   return {

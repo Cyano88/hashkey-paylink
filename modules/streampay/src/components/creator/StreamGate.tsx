@@ -8,6 +8,12 @@ import { usePoAStream }       from '../../hooks/usePoAStream'
 import { usePasskey }         from '../../hooks/usePasskey'
 import { PRIVY_AUTH_ENABLED } from '../../../../../src/lib/authMode'
 import { resolvePrivyCircleLink } from '../../../../../src/lib/privyCircleLink'
+import {
+  createPaymentReceiptPdf,
+  createX402PaylinkReceipt,
+  paymentReceiptFileName,
+  type X402ReceiptLike,
+} from '../../../../../src/lib/paymentReceiptPdf'
 
 // ── Arc standalone client ─────────────────────────────────────────────────────
 const arcClient = createPublicClient({
@@ -272,6 +278,10 @@ function formatBalanceLabel(value?: string) {
   return `${amount.toLocaleString(undefined, { maximumFractionDigits: 6 })} USDC`
 }
 
+function balancePreviewLabel(value?: string, checked?: boolean) {
+  return formatBalanceLabel(value) || (checked ? '0 USDC' : 'Checking...')
+}
+
 function mergeAgentOptions(existing: AgentOption[], next: AgentOption) {
   const slug = cleanAgentSlug(next.slug)
   if (!slug) return existing
@@ -379,11 +389,22 @@ export function StreamGate() {
   const rateRaw   = parseInt(params.get('r')   ?? '1000',   10)
   const capRaw    = parseInt(params.get('cap') ?? '100000', 10)
   const title     = params.get('t')    ?? ''
-  const gateMode: 'unlock' | 'stream' = params.get('mode') === 'stream' ? 'stream' : 'unlock'
-  const requestedPaymentMode = params.get('pay')
-  const paymentMode: 'x402' | 'poa' = gateMode === 'unlock' && requestedPaymentMode !== 'poa'
-    ? 'x402'
-    : 'poa'
+  const requestedGateMode: 'unlock' | 'stream' = params.get('mode') === 'stream' ? 'stream' : 'unlock'
+  const contentKind: 'text' | 'url' | 'scores' | 'unknown' =
+    params.get('ct') === 'url' ? 'url' :
+    params.get('ct') === 'scores' ? 'scores' :
+    params.get('ct') === 'text' ? 'text' :
+    'unknown'
+  const streamContentAvailable = contentKind !== 'url'
+  const shouldChoosePayment = params.get('pay') === 'choice' || params.get('choose') === '1'
+  const [selectedPaymentMode, setSelectedPaymentMode] = useState<'x402' | 'escrow' | null>(() => {
+    if (shouldChoosePayment) return null
+    if (requestedGateMode === 'stream' && streamContentAvailable) return 'escrow'
+    return 'x402'
+  })
+  const paymentMode: 'choice' | 'x402' | 'poa' | 'escrow' = selectedPaymentMode ?? 'choice'
+  const gateMode: 'unlock' | 'stream' = paymentMode === 'escrow' ? 'stream' : requestedGateMode
+  const streamVault = (params.get('streamVault') ?? params.get('vault') ?? '').trim()
 
   const dripRate   = rateRaw  / 1_000_000
   const sessionCap = capRaw   / 1_000_000
@@ -634,10 +655,95 @@ export function StreamGate() {
   const [gatewayPaying, setGatewayPaying] = useState(false)
   const [gatewayTx, setGatewayTx] = useState<string | null>(null)
   const [gatewayReceiptId, setGatewayReceiptId] = useState<string | null>(null)
+  const [gatewayReceipt, setGatewayReceipt] = useState<X402ReceiptLike | null>(null)
+  const [gatewayReceiptPollAttempts, setGatewayReceiptPollAttempts] = useState(0)
+  const [gatewayArchiveTimedOut, setGatewayArchiveTimedOut] = useState(false)
+  const [gatewayReferenceCopied, setGatewayReferenceCopied] = useState(false)
+  const [gatewayReceiptOpening, setGatewayReceiptOpening] = useState(false)
+  const [gatewayRestored, setGatewayRestored] = useState(false)
+  const gatewayReference = gatewayTx || gatewayReceiptId || ''
   const gatewayTxIsExplorerHash = /^0x[a-fA-F0-9]{64}$/.test(gatewayTx ?? '')
+  const gatewayOgExplorer = gatewayReceipt?.og?.ogExplorer
+  const gatewayOgProof = gatewayReceipt?.og?.ogTxHash || gatewayReceipt?.og?.rootHash || ''
+  const gatewayOgReady = Boolean(gatewayOgProof || gatewayOgExplorer)
+  const gatewayArchiveLabel = gatewayArchiveTimedOut
+    ? 'Archive pending'
+    : gatewayReceiptPollAttempts >= 9
+      ? 'Still archiving...'
+      : 'Archiving...'
 
   const legacyFullyAuthorised = isConnected && isOnArc && passkey.registered && isApproved
-  const fullyAuthorised = paymentMode === 'x402' ? contentState === 'ready' : legacyFullyAuthorised
+  const fullyAuthorised = paymentMode === 'x402' || paymentMode === 'escrow' ? contentState === 'ready' : paymentMode === 'choice' ? false : legacyFullyAuthorised
+
+  useEffect(() => {
+    if (!gatewayReceiptId) return
+    const receiptId = gatewayReceiptId
+    let cancelled = false
+    let timer: number | undefined
+    let attempts = 0
+
+    setGatewayReceiptPollAttempts(0)
+    setGatewayArchiveTimedOut(false)
+
+    async function loadReceipt() {
+      attempts += 1
+      if (!cancelled) setGatewayReceiptPollAttempts(attempts)
+      try {
+        const res = await fetch(`/api/x402/receipt?id=${encodeURIComponent(receiptId)}`)
+        const data = await res.json().catch(() => ({})) as { ok?: boolean; receipt?: X402ReceiptLike }
+        if (!cancelled && res.ok && data.ok && data.receipt) {
+          setGatewayReceipt(data.receipt)
+          if (data.receipt.og?.ogTxHash || data.receipt.og?.rootHash || data.receipt.og?.ogExplorer) {
+            setGatewayArchiveTimedOut(false)
+            return
+          }
+        }
+      } catch {
+        // Receipt polling should not affect already-unlocked creator content.
+      }
+      if (!cancelled && attempts < 40) timer = window.setTimeout(loadReceipt, 5_000)
+      if (!cancelled && attempts >= 40) setGatewayArchiveTimedOut(true)
+    }
+
+    void loadReceipt()
+    return () => {
+      cancelled = true
+      if (timer) window.clearTimeout(timer)
+    }
+  }, [gatewayReceiptId])
+
+  async function openGatewayReceiptPdf() {
+    if (!gatewayReceiptId || gatewayReceiptOpening || !gatewayOgReady) return
+    setGatewayReceiptOpening(true)
+    try {
+      let sourceReceipt = gatewayReceipt
+      if (!sourceReceipt) {
+        const res = await fetch(`/api/x402/receipt?id=${encodeURIComponent(gatewayReceiptId)}`)
+        const data = await res.json().catch(() => ({})) as { ok?: boolean; receipt?: X402ReceiptLike }
+        if (!res.ok || !data.ok || !data.receipt) throw new Error('Receipt unavailable')
+        sourceReceipt = data.receipt
+      }
+      const receipt = sourceReceipt.receiptId
+        ? sourceReceipt as unknown as Parameters<typeof createPaymentReceiptPdf>[0]
+        : createX402PaylinkReceipt(sourceReceipt, gatewayReceiptId)
+      const blob = await createPaymentReceiptPdf(receipt)
+      const url = URL.createObjectURL(blob)
+      const win = window.open(url, '_blank', 'noopener,noreferrer')
+      if (!win) {
+        const link = document.createElement('a')
+        link.href = url
+        link.download = paymentReceiptFileName(receipt)
+        document.body.appendChild(link)
+        link.click()
+        link.remove()
+      }
+      window.setTimeout(() => URL.revokeObjectURL(url), 30_000)
+    } catch {
+      window.open(`/receipt/${gatewayReceiptId}`, '_blank', 'noopener,noreferrer')
+    } finally {
+      setGatewayReceiptOpening(false)
+    }
+  }
 
   async function unlockWithAgentX402(agentSlugOverride?: string) {
     if (gatewayPaying) return
@@ -649,6 +755,12 @@ export function StreamGate() {
       return
     }
     setGatewayPaying(true)
+    setGatewayReferenceCopied(false)
+    setGatewayReceiptOpening(false)
+    setGatewayReceipt(null)
+    setGatewayReceiptPollAttempts(0)
+    setGatewayArchiveTimedOut(false)
+    setGatewayRestored(false)
     setContentError(null)
     setContentState('loading')
     try {
@@ -664,6 +776,7 @@ export function StreamGate() {
         payment?: { transaction?: string } | null
         receiptActivityId?: string | null
         walletAddress?: string
+        restored?: boolean
         error?: string
         code?: string
       }
@@ -671,8 +784,13 @@ export function StreamGate() {
       setFetchedContent({ type: data.type as 'text' | 'url' | 'scores', content: data.content })
       setGatewayTx(data.payment?.transaction ?? null)
       setGatewayReceiptId(data.receiptActivityId ?? null)
+      setGatewayRestored(Boolean(data.restored))
       setContentState('ready')
-      setCircleNotice(data.walletAddress ? `Paid by ${shortAddress(data.walletAddress)}` : 'Payment complete')
+      setCircleNotice(
+        data.restored
+          ? 'Access restored'
+          : data.walletAddress ? `Paid by ${shortAddress(data.walletAddress)}` : 'Payment complete',
+      )
     } catch (err) {
       const rawMessage = err instanceof Error ? err.message : 'Payment failed.'
       const nextStep = unlockRecoveryStep(rawMessage)
@@ -818,6 +936,43 @@ export function StreamGate() {
     const slug = walletOtpContext?.slug || readerWalletSlug(cleanEmail(walletEmail || privyEmail))
     setWalletOtp('')
     await startPaymentWalletLogin(slug)
+  }
+
+  async function disconnectPaymentWallet(slugOverride?: string) {
+    const slug = cleanAgentSlug(slugOverride || safeAgentSlug || selectedAgent?.slug)
+    if (!slug) {
+      setUnlockStep('email')
+      return
+    }
+    setWalletBusy(true)
+    setWalletError(null)
+    setContentError(null)
+    setCircleNotice(null)
+    try {
+      const res = await fetch('/api/agent-wallet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'disconnect', agentSlug: slug }),
+      })
+      const data = await res.json().catch(() => ({})) as { ok?: boolean; error?: string }
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Could not sign out this reader wallet.')
+      setAgentOptions(current => normalizePaymentWalletOptions(current.filter(agent => agent.slug !== slug)))
+      setAgentSlug('')
+      setWalletOtp('')
+      setWalletOtpContext(null)
+      setGatewayRestored(false)
+      setGatewayTx(null)
+      setGatewayReceiptId(null)
+      setGatewayReceipt(null)
+      setGatewayArchiveTimedOut(false)
+      setContentState('idle')
+      setCircleNotice('Reader wallet signed out. Open another wallet to continue.')
+      setUnlockStep('email')
+    } catch (err) {
+      setWalletError(err instanceof Error ? err.message.slice(0, 180) : 'Could not sign out this reader wallet.')
+    } finally {
+      setWalletBusy(false)
+    }
   }
 
   async function copyPaymentWalletAddress() {
@@ -983,7 +1138,7 @@ export function StreamGate() {
   }
 
   useEffect(() => {
-    if (paymentMode === 'x402' || !legacyFullyAuthorised || !address || !contentId || contentState !== 'idle') return
+    if (paymentMode !== 'poa' || !legacyFullyAuthorised || !address || !contentId || contentState !== 'idle') return
     setContentState('loading')
     fetch(`/api/get-content?id=${encodeURIComponent(contentId)}&viewer=${address}`)
       .then(r => r.json())
@@ -999,13 +1154,30 @@ export function StreamGate() {
       .catch(() => { setContentError('Server error — please try again'); setContentState('error') })
   }, [paymentMode, legacyFullyAuthorised, address, contentId, contentState])
 
+  useEffect(() => {
+    if (paymentMode !== 'escrow' || !streamVault || !contentId || contentState !== 'idle') return
+    setContentState('loading')
+    fetch(`/api/get-content-stream?id=${encodeURIComponent(contentId)}&vault=${encodeURIComponent(streamVault)}`)
+      .then(r => r.json())
+      .then((data: { ok: boolean; type?: string; content?: string; error?: string }) => {
+        if (data.ok && data.type && data.content) {
+          setFetchedContent({ type: data.type as 'text' | 'url' | 'scores', content: data.content })
+          setContentState('ready')
+        } else {
+          setContentError(data.error ?? 'Could not verify prepaid stream')
+          setContentState('error')
+        }
+      })
+      .catch(() => { setContentError('Server error - please try again'); setContentState('error') })
+  }, [paymentMode, streamVault, contentId, contentState])
+
   // ── IntersectionObserver: drip only when content is visible + ready ───────
   // Drip starts AFTER content is fetched and visible — not on auth alone.
   const contentRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     const el = contentRef.current
-    if (paymentMode === 'x402' || !el || !fullyAuthorised || contentState !== 'ready') return
+    if (paymentMode !== 'poa' || !el || !fullyAuthorised || contentState !== 'ready') return
 
     const observer = new IntersectionObserver(
       ([entry]) => {
@@ -1029,6 +1201,25 @@ export function StreamGate() {
     : (!isConnected ? 0 : !isOnArc ? 1 : !passkey.registered ? 2 : 3)
 
   const progressPct = Math.min((poa.accrued / sessionCap) * 100, 100)
+  const streamDurationSec = dripRate > 0 ? Math.max(1, Math.ceil(sessionCap / dripRate)) : 0
+
+  function streamEscrowHref() {
+    const returnParams = new URLSearchParams(window.location.search)
+    returnParams.set('mode', 'stream')
+    returnParams.set('pay', 'escrow')
+    returnParams.set('streamVault', '__STREAM_VAULT__')
+    const returnTo = `${window.location.pathname}?${returnParams.toString()}`
+    const p = new URLSearchParams()
+    p.set('app', 'streampay')
+    p.set('mode', 'creator-stream')
+    p.set('wallet', 'circle')
+    p.set('recipient', creator)
+    p.set('amount', sessionCap.toFixed(6).replace(/\.?0+$/, ''))
+    p.set('duration', `${streamDurationSec}s`)
+    p.set('reason', title ? `Creator stream: ${title}` : `Creator stream: ${shortAddress(creator)}`)
+    p.set('returnTo', returnTo)
+    return `/stream?${p.toString()}`
+  }
 
   if (!contentId || !creator) {
     return (
@@ -1051,7 +1242,70 @@ export function StreamGate() {
         {!fullyAuthorised && (
           <OverlayShell dripRate={dripRate} sessionCap={sessionCap} paymentMode={paymentMode} gateMode={gateMode}>
 
-            {paymentMode === 'x402' ? (
+            {paymentMode === 'choice' ? (
+              <div className="w-full max-w-[340px] space-y-3 text-left">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setContentError(null)
+                    setContentState('idle')
+                    setSelectedPaymentMode('x402')
+                  }}
+                  className="w-full rounded-2xl border border-gray-200 bg-white p-4 text-left shadow-sm transition-colors hover:border-gray-300"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-[13px] font-black text-gray-900">Fixed unlock</p>
+                      <p className="mt-1 text-[12px] leading-relaxed text-gray-500">
+                        Pay {formatUsdc(sessionCap)} USDC once with x402 and unlock this content.
+                      </p>
+                    </div>
+                    <span className="rounded-full bg-gray-950 px-2 py-1 text-[9px] font-black uppercase tracking-[0.12em] text-white">
+                      x402
+                    </span>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!streamContentAvailable) return
+                    setContentError(null)
+                    setContentState('idle')
+                    setSelectedPaymentMode('escrow')
+                  }}
+                  disabled={!streamContentAvailable}
+                  className={[
+                    'w-full rounded-2xl border p-4 text-left shadow-sm transition-colors',
+                    streamContentAvailable
+                      ? 'border-gray-200 bg-white hover:border-gray-300'
+                      : 'cursor-not-allowed border-gray-100 bg-gray-50 opacity-70',
+                  ].join(' ')}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className={['text-[13px] font-black', streamContentAvailable ? 'text-gray-900' : 'text-gray-400'].join(' ')}>
+                        Pay per view stream
+                      </p>
+                      <p className="mt-1 text-[12px] leading-relaxed text-gray-500">
+                        {streamContentAvailable
+                          ? `Prepay up to ${formatUsdc(sessionCap)} USDC in an Arc stream while this page renders content.`
+                          : 'Streaming is only available for content Hash PayLink can render in-page.'}
+                      </p>
+                    </div>
+                    <span className={['rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-[0.12em]', streamContentAvailable ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-400'].join(' ')}>
+                      Stream
+                    </span>
+                  </div>
+                </button>
+
+                {!streamContentAvailable && (
+                  <p className="text-center text-[11px] font-medium text-gray-400">
+                    External access unavailable for pay per view stream.
+                  </p>
+                )}
+              </div>
+            ) : paymentMode === 'x402' ? (
               <div className="w-full space-y-4">
                 <div className="rounded-2xl border border-gray-100 bg-white p-4 text-left shadow-sm">
                   {unlockStep === 'intro' && (
@@ -1062,7 +1316,7 @@ export function StreamGate() {
                       <div className="space-y-1">
                         <p className="text-[13px] font-bold text-gray-900">Private creator content</p>
                         <p className="mx-auto max-w-[280px] text-[12px] leading-relaxed text-gray-500">
-                          Pay {formatUsdc(sessionCap)} USDC with your reader wallet to unlock this post.
+                          Use your Hash PayLink payment wallet to unlock this content.
                         </p>
                       </div>
                     </div>
@@ -1074,7 +1328,7 @@ export function StreamGate() {
                         <div className="min-w-0">
                           <p className="text-[13px] font-bold text-gray-900">Choose reader wallet</p>
                           <p className="mt-1 text-[12px] leading-relaxed text-gray-500">
-                            Select the wallet paying {formatUsdc(sessionCap)} USDC to creator {creator ? shortAddress(creator) : 'verified gate'}.
+                            Select a wallet to pay this creator: {creator ? shortAddress(creator) : 'verified gate'}.
                           </p>
                         </div>
                         <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-bold text-emerald-700 ring-1 ring-emerald-100">
@@ -1104,11 +1358,7 @@ export function StreamGate() {
                               setContentError(null)
                               setCircleNotice(null)
                               if (contentState === 'error') setContentState('idle')
-                              if (ready) {
-                                await unlockWithAgentX402(agent.slug)
-                              } else {
-                                setUnlockStep('email')
-                              }
+                              setUnlockStep(ready ? 'choose' : 'email')
                             }}
                             className={[
                               'flex w-full items-center justify-between gap-3 rounded-xl border px-3 py-3 text-left transition-all',
@@ -1127,6 +1377,22 @@ export function StreamGate() {
                               <span className="mt-0.5 block truncate text-[10px] font-semibold uppercase tracking-[0.12em] text-gray-400">
                                 {paymentWalletSourceText(agent)}
                               </span>
+                              {agent.walletAddress && (
+                                <span className="mt-2 grid grid-cols-2 gap-1.5">
+                                  <span className="min-w-0 rounded-lg border border-white bg-white/80 px-2 py-1">
+                                    <span className="block text-[9px] font-bold uppercase tracking-[0.1em] text-gray-400">Arc</span>
+                                    <span className="block truncate text-[10px] font-bold text-gray-700">
+                                      {balancePreviewLabel(agent.balance, agent.balanceChecked)}
+                                    </span>
+                                  </span>
+                                  <span className="min-w-0 rounded-lg border border-white bg-white/80 px-2 py-1">
+                                    <span className="block text-[9px] font-bold uppercase tracking-[0.1em] text-gray-400">x402</span>
+                                    <span className="block truncate text-[10px] font-bold text-gray-700">
+                                      {balancePreviewLabel(agent.gatewayBalance, agent.gatewayBalanceChecked)}
+                                    </span>
+                                  </span>
+                                </span>
+                              )}
                             </span>
                             <span className={[
                               'shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold',
@@ -1146,8 +1412,18 @@ export function StreamGate() {
                         }}
                         className="w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-[12px] font-bold text-gray-700 transition-all hover:border-gray-300 hover:bg-gray-50"
                       >
-                        Use another email
+                        Add another email
                       </button>
+                      {selectedAgent?.walletAddress && (
+                        <button
+                          type="button"
+                          onClick={() => void disconnectPaymentWallet(selectedAgent.slug)}
+                          disabled={walletBusy}
+                          className="w-full rounded-xl border border-red-100 bg-red-50 px-3 py-3 text-[12px] font-bold text-red-700 transition-all hover:border-red-200 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {walletBusy ? 'Signing out...' : 'Sign out current wallet'}
+                        </button>
+                      )}
                       {agentOptionsError && (
                         <p className="text-center text-[11px] text-amber-600">{agentOptionsError}</p>
                       )}
@@ -1159,7 +1435,7 @@ export function StreamGate() {
                       <div className="border-b border-gray-100 pb-3">
                         <p className="text-[13px] font-bold text-gray-900">Open reader wallet</p>
                         <p className="mt-1 text-[12px] leading-relaxed text-gray-500">
-                          Enter the email for the wallet paying for this unlock. We will send a one-time code.
+                          Enter the wallet email. We will send a one-time code.
                         </p>
                       </div>
                       <label className="block space-y-1.5">
@@ -1250,7 +1526,7 @@ export function StreamGate() {
                           <div className="min-w-0">
                             <p className="text-[13px] font-bold text-gray-900">Prepare reader payment</p>
                             <p className="mt-1 text-[12px] leading-relaxed text-gray-500">
-                              This wallet needs USDC available for creator unlocks before the payment can complete.
+                              Move Arc Testnet USDC into x402 balance, then unlock.
                             </p>
                           </div>
                           <button
@@ -1279,6 +1555,14 @@ export function StreamGate() {
                               Reader wallet
                             </span>
                           </div>
+                          <button
+                            type="button"
+                            onClick={() => void disconnectPaymentWallet(selectedAgent.slug)}
+                            disabled={walletBusy}
+                            className="mt-2 w-full rounded-lg border border-blue-100 bg-white/80 px-3 py-2 text-[11px] font-bold text-blue-700 transition-all hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {walletBusy ? 'Signing out...' : 'Sign out and use another wallet'}
+                          </button>
                         </div>
                       )}
                       {selectedAgent?.walletAddress && (
@@ -1401,7 +1685,7 @@ export function StreamGate() {
                         Open wallet manager
                       </a>
                       <p className="text-center text-[11px] leading-relaxed text-gray-400">
-                        After funding or activation, return here and tap Unlock content again.
+                        After activation, tap Unlock content.
                       </p>
                     </div>
                   )}
@@ -1441,6 +1725,42 @@ export function StreamGate() {
                   <div className="rounded-xl border border-red-100 bg-red-50 px-3 py-2.5 text-center text-[12px] font-medium text-red-600">
                     {walletError || contentError}
                   </div>
+                )}
+              </div>
+            ) : paymentMode === 'escrow' ? (
+              <div className="w-full max-w-[320px] space-y-3 text-center">
+                <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full border border-emerald-100 bg-emerald-50 text-emerald-600">
+                    <LockIcon />
+                  </div>
+                  <p className="mt-3 text-[13px] font-bold text-gray-900">Prepaid viewing stream</p>
+                  <p className="mt-1 text-[12px] leading-relaxed text-gray-500">
+                    Lock up to {formatUsdc(sessionCap)} USDC in an Arc stream. Unused time can be cancelled from the stream page.
+                  </p>
+                  {streamVault && contentState === 'error' && contentError && (
+                    <p className="mt-3 rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-[11px] font-medium leading-relaxed text-amber-700">
+                      {contentError}
+                    </p>
+                  )}
+                </div>
+                {streamVault ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setContentError(null)
+                      setContentState('idle')
+                    }}
+                    className="flex min-h-[48px] w-full items-center justify-center rounded-xl bg-gray-950 px-5 py-3 text-[13px] font-semibold text-white"
+                  >
+                    Check prepaid stream
+                  </button>
+                ) : (
+                  <a
+                    href={streamEscrowHref()}
+                    className="flex min-h-[48px] w-full items-center justify-center rounded-xl bg-gray-950 px-5 py-3 text-[13px] font-semibold text-white"
+                  >
+                    Start prepaid stream
+                  </a>
                 )}
               </div>
             ) : (
@@ -1528,7 +1848,7 @@ export function StreamGate() {
               </>
             )}
 
-            <StepDots current={currentStep} />
+            {(paymentMode === 'x402' || paymentMode === 'poa') && <StepDots current={currentStep} />}
           </OverlayShell>
         )}
 
@@ -1662,37 +1982,102 @@ export function StreamGate() {
           </div>
         )}
 
-        {paymentMode === 'x402' && fullyAuthorised && gatewayTx && (
-          <div className="border-t border-gray-100 bg-emerald-50/60 px-4 py-3 space-y-2">
-            <div className="flex items-center justify-center gap-1.5 text-[11px] font-semibold text-emerald-700">
-              <CheckIcon />Creator payment sent - {gatewayTx.slice(0, 8)}...{gatewayTx.slice(-6)}
+        {paymentMode === 'x402' && fullyAuthorised && gatewayReference && (
+          <div className="border-t border-gray-100 bg-emerald-50/70 px-4 py-3 space-y-3">
+            <div className="flex items-start gap-2">
+              <span className="mt-0.5 text-emerald-600"><CheckIcon /></span>
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-700">
+                  {gatewayRestored ? 'Access restored' : 'Content unlocked'}
+                </p>
+                {gatewayRestored && (
+                  <p className="mt-0.5 text-[11px] font-medium leading-4 text-emerald-700/80">
+                    This reader wallet already unlocked this content.
+                  </p>
+                )}
+                <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
+                  <p className="truncate font-mono text-[11px] font-semibold text-emerald-800">
+                    Circle Gateway {gatewayRestored ? 'receipt' : 'paid'} - {gatewayReference.slice(0, 8)}...{gatewayReference.slice(-6)}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard?.writeText(gatewayReference).catch(() => {})
+                      setGatewayReferenceCopied(true)
+                      window.setTimeout(() => setGatewayReferenceCopied(false), 1600)
+                    }}
+                    className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-emerald-200 bg-white text-[9px] font-black text-emerald-700 transition-colors hover:bg-emerald-50"
+                    aria-label="Copy Circle Gateway reference"
+                    title="Copy reference"
+                  >
+                    {gatewayReferenceCopied ? 'OK' : 'CP'}
+                  </button>
+                </div>
+              </div>
             </div>
-            <div className="flex flex-wrap items-center justify-center gap-2">
+            <div className="grid gap-2">
               {gatewayReceiptId && (
                 <button
                   type="button"
-                  onClick={() => window.open(`/receipt/${gatewayReceiptId}`, '_blank', 'noopener,noreferrer')}
-                  className="rounded-lg border border-emerald-200 bg-white px-2.5 py-1.5 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-50 transition-colors"
+                  onClick={openGatewayReceiptPdf}
+                  disabled={gatewayReceiptOpening || !gatewayOgReady}
+                  className={[
+                    'flex w-full items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-sm font-medium transition-all active:scale-[0.98]',
+                    gatewayOgReady
+                      ? 'bg-gray-900 text-white hover:bg-gray-800'
+                      : 'cursor-not-allowed bg-gray-100 text-gray-400',
+                  ].join(' ')}
                 >
-                  View receipt
+                  <ReceiptIcon />
+                  {gatewayReceiptOpening ? 'Opening receipt...' : gatewayOgReady ? 'View receipt' : 'Receipt archiving'}
                 </button>
               )}
+              <div className={gatewayTxIsExplorerHash ? 'grid grid-cols-2 gap-2' : 'grid gap-2'}>
+                {gatewayOgReady ? (
+                  <a
+                    href={gatewayOgExplorer || undefined}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(event) => {
+                      if (!gatewayOgExplorer) event.preventDefault()
+                    }}
+                    className="flex items-center justify-center gap-1.5 rounded-xl border border-purple-100 bg-purple-50 px-3 py-2.5 text-[12px] font-bold text-purple-700 transition-colors hover:bg-purple-100"
+                  >
+                    <img src="/brand/0g-logo.jpeg" alt="0G" className="h-3.5 w-3.5 rounded-full object-contain" />
+                    0G archived
+                    {gatewayOgProof && <span className="font-mono text-[10px] text-purple-500">{gatewayOgProof.slice(0, 6)}...{gatewayOgProof.slice(-4)}</span>}
+                  </a>
+                ) : (
+                  <div className="flex items-center justify-center gap-1.5 rounded-xl border border-gray-100 bg-white px-3 py-2.5 text-[12px] font-semibold text-gray-400">
+                    {gatewayArchiveTimedOut ? (
+                      <span className="h-3.5 w-3.5 rounded-full border border-gray-300" />
+                    ) : (
+                      <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-gray-200 border-t-gray-400" />
+                    )}
+                    {gatewayArchiveLabel}
+                  </div>
+                )}
+                {gatewayTxIsExplorerHash && (
+                  <button
+                    type="button"
+                    onClick={() => window.open(`https://testnet.arcscan.app/tx/${gatewayTx}`, '_blank', 'noopener,noreferrer')}
+                    className="flex items-center justify-center rounded-xl border border-emerald-200 bg-white px-3 py-2.5 text-[12px] font-semibold text-emerald-700 transition-colors hover:bg-emerald-50"
+                  >
+                    ArcScan
+                  </button>
+                )}
+              </div>
               <button
                 type="button"
-                onClick={() => navigator.clipboard?.writeText(gatewayTx).catch(() => {})}
-                className="rounded-lg border border-emerald-200 bg-white px-2.5 py-1.5 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-50 transition-colors"
+                onClick={() => {
+                  navigator.clipboard?.writeText(gatewayReference).catch(() => {})
+                  setGatewayReferenceCopied(true)
+                  window.setTimeout(() => setGatewayReferenceCopied(false), 1600)
+                }}
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-white/55 px-5 py-2.5 text-sm font-medium text-emerald-800 transition-all hover:bg-white active:scale-[0.98]"
               >
-                Copy reference
+                {gatewayReferenceCopied ? 'Reference copied' : 'Copy reference'}
               </button>
-              {gatewayTxIsExplorerHash && (
-                <button
-                  type="button"
-                  onClick={() => window.open(`https://testnet.arcscan.app/tx/${gatewayTx}`, '_blank', 'noopener,noreferrer')}
-                  className="rounded-lg border border-emerald-200 bg-white px-2.5 py-1.5 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-50 transition-colors"
-                >
-                  ArcScan
-                </button>
-              )}
             </div>
           </div>
         )}
@@ -1870,7 +2255,7 @@ function OverlayShell({
 }: {
   dripRate: number
   sessionCap: number
-  paymentMode: 'x402' | 'poa'
+  paymentMode: 'choice' | 'x402' | 'poa' | 'escrow'
   gateMode: 'unlock' | 'stream'
   children: React.ReactNode
 }) {
@@ -1878,22 +2263,27 @@ function OverlayShell({
     <div
       className={[
         'flex flex-col items-center justify-center space-y-4',
-        paymentMode === 'x402'
+        paymentMode === 'x402' || paymentMode === 'choice' || paymentMode === 'escrow'
           ? 'relative min-h-[520px] p-5 sm:p-7'
           : 'absolute inset-0 p-6',
       ].join(' ')}
-      style={paymentMode === 'x402'
+      style={paymentMode === 'x402' || paymentMode === 'choice' || paymentMode === 'escrow'
         ? { background: 'linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.92))' }
         : { background: 'rgba(255,255,255,0.75)', backdropFilter: 'blur(3px)' }}
     >
       <div className="text-center space-y-1.5">
         <p className="text-[17px] font-bold text-gray-900">Content Locked</p>
+        {paymentMode === 'choice' && (
+          <p className="text-[13px] text-gray-500 max-w-[320px]">
+            Choose how you want to access this creator content.
+          </p>
+        )}
         {paymentMode === 'x402' && (
           <p className="text-[13px] text-gray-500 max-w-[320px]">
             Pay <span className="font-semibold">{formatUsdc(sessionCap)} USDC</span> to unlock this creator content.
           </p>
         )}
-        <p className={paymentMode === 'x402' ? 'hidden' : 'text-[12px] text-gray-500 max-w-[280px]'}>
+        <p className={paymentMode === 'x402' || paymentMode === 'choice' ? 'hidden' : 'text-[12px] text-gray-500 max-w-[280px]'}>
           {gateMode === 'unlock' ? (
             <>
               Pay <span className="font-semibold">${sessionCap.toFixed(2)} USDC</span> to unlock this creator content.
@@ -1907,7 +2297,7 @@ function OverlayShell({
       </div>
       {children}
       <div className="flex items-center gap-1.5 text-[10px] text-gray-400">
-        {paymentMode === 'x402' ? 'Paid with USDC via Hash PayLink' : 'Powered by Arc Network'}
+        {paymentMode === 'x402' ? 'Powered by Circle Gateway on Arc' : paymentMode === 'escrow' ? 'Powered by StreamVault escrow on Arc' : paymentMode === 'choice' ? 'Powered by Hash PayLink Creator Checkout' : 'Powered by Arc Network'}
       </div>
     </div>
   )
@@ -1970,6 +2360,15 @@ function CheckIcon() {
   return (
     <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+    </svg>
+  )
+}
+
+function ReceiptIcon() {
+  return (
+    <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M7 3.75h10A1.25 1.25 0 0118.25 5v15.25l-2.5-1.25-2.5 1.25-2.5-1.25-2.5 1.25V5A1.25 1.25 0 017 3.75z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 8h6M9 11.5h6M9 15h3.5" />
     </svg>
   )
 }
