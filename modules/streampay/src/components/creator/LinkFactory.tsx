@@ -83,6 +83,7 @@ function buildGateLink(params: {
   capRaw:    number
   title:     string
   mode:      'unlock' | 'stream'
+  contentType: 'text' | 'url'
 }): string {
   const { origin, hostname } = window.location
   const p = new URLSearchParams()
@@ -92,7 +93,8 @@ function buildGateLink(params: {
   p.set('r',   params.rateRaw.toString())
   p.set('cap', params.capRaw.toString())
   p.set('mode', params.mode)
-  p.set('pay', params.mode === 'stream' ? 'escrow' : 'x402')
+  p.set('pay', 'choice')
+  p.set('ct', params.contentType)
   if (params.title.trim()) p.set('t', params.title.trim())
   return `${origin}/gate?${p.toString()}`
 }
@@ -337,9 +339,10 @@ export function LinkFactory({
   const hasListingDetails = title.trim().length >= 3 && description.trim().length >= 10 && authorName.trim().length >= 2
 
   const streamReady = rateNum > 0 && capNum > rateNum
+  const streamContentAvailable = contentType === 'text'
   const creatorAddress = circleSession?.wallet.address || (hasExternalPrivyEvmWallet ? address : '') || ''
   const hasCreatorAddress = /^0x[a-fA-F0-9]{40}$/.test(creatorAddress)
-  const canBuild = hasCreatorAddress && capNum > 0 && hasContent && hasListingDetails && (mode === 'unlock' || streamReady)
+  const canBuild = hasCreatorAddress && capNum > 0 && hasContent && hasListingDetails && (mode === 'unlock' || (streamReady && streamContentAvailable))
   const creatorAuthLabel = !privyAuthenticated && PRIVY_AUTH_ENABLED
     ? 'Sign in to publish'
     : hasExternalPrivyEvmWallet
@@ -359,6 +362,13 @@ export function LinkFactory({
     : streamDurationSec >= 60
     ? `${Math.round(streamDurationSec / 60)} min max`
     : `${streamDurationSec} sec max`
+
+  useEffect(() => {
+    if (contentType === 'url' && mode === 'stream') {
+      setMode('unlock')
+      setGateLink(null)
+    }
+  }, [contentType, mode])
 
   async function handleBuild() {
     if (!canBuild || !creatorAddress) return
@@ -442,6 +452,7 @@ export function LinkFactory({
         capRaw:  Math.round(capNum  * 1_000_000),
         title,
         mode,
+        contentType,
       })
       setGateLink(nextGateLink)
       onGateCreated?.(nextGateLink, {
@@ -663,12 +674,18 @@ export function LinkFactory({
                 { id: 'stream', label: 'Stream', desc: 'Pay while viewing' },
               ] as const).map(option => {
                 const selected = mode === option.id
+                const disabled = option.id === 'stream' && !streamContentAvailable
                 return (
                   <button
                     key={option.id}
                     type="button"
-                    onClick={() => { setMode(option.id); setGateLink(null) }}
-                    className="rounded-lg px-3 py-2.5 text-left transition-all"
+                    onClick={() => {
+                      if (disabled) return
+                      setMode(option.id)
+                      setGateLink(null)
+                    }}
+                    disabled={disabled}
+                    className="rounded-lg px-3 py-2.5 text-left transition-all disabled:cursor-not-allowed disabled:opacity-45"
                     style={selected
                       ? { background: '#111827', color: '#ffffff' }
                       : { background: 'transparent', color: '#6b7280' }}
@@ -837,8 +854,13 @@ export function LinkFactory({
                     : 'Paste content viewers can read while nano-payments accrue.'
                   : mode === 'unlock'
                   ? 'Store a private URL server-side and reveal it only after payment.'
-                  : 'Stream access to a private URL while the viewing session is active.'}
+                  : 'External links use fixed unlock because viewing happens outside Hash PayLink.'}
               </p>
+              {contentType === 'url' && (
+                <p className="text-[11px] font-medium text-gray-400 dark:text-gray-500">
+                  Pay per view stream is unavailable for external access.
+                </p>
+              )}
             </div>
 
             {/* Native content */}

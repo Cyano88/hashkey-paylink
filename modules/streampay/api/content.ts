@@ -498,6 +498,7 @@ function buildGateLink(params: {
   capRaw: number
   title: string
   mode: 'unlock' | 'stream'
+  type: ContentEntry['type']
 }) {
   const p = new URLSearchParams()
   p.set('app', 'streampay')
@@ -506,7 +507,8 @@ function buildGateLink(params: {
   p.set('r', String(params.rateRaw))
   p.set('cap', String(params.capRaw))
   p.set('mode', params.mode)
-  p.set('pay', params.mode === 'stream' ? 'escrow' : 'x402')
+  p.set('pay', 'choice')
+  p.set('ct', params.type)
   if (params.title.trim()) p.set('t', params.title.trim())
   return `${baseUrl()}/gate?${p.toString()}`
 }
@@ -537,6 +539,7 @@ function entryToPost(contentId: string, entry: ContentEntry) {
       capRaw: entry.capRaw,
       title: entry.title,
       mode: entry.mode,
+      type: entry.type,
     }),
   }
 }
@@ -726,7 +729,7 @@ export async function storeContent(req: Request, res: Response) {
     return res.status(400).json({ ok: false, error: 'creator signature is invalid' })
   }
   const safeRateRaw = Math.max(0, Number(rateRaw) || 0)
-  const safeMode = mode === 'stream' ? 'stream' : 'unlock'
+  const safeMode = mode === 'stream' && type !== 'url' ? 'stream' : 'unlock'
   const creatorVerified = await verifyCreatorProof({
     contentId,
     creator,
@@ -931,8 +934,8 @@ export async function getContentStreamEscrow(req: Request, res: Response) {
       error: 'Content not found. Ask the creator to re-generate the link.',
     })
   }
-  if (entry.mode !== 'stream') {
-    return res.status(400).json({ ok: false, error: 'This creator post is not a prepaid stream.' })
+  if (entry.type === 'url') {
+    return res.status(400).json({ ok: false, error: 'External links use fixed unlock only.' })
   }
 
   try {
@@ -983,13 +986,6 @@ export async function getContentX402(req: PaidRequest, res: Response) {
       error: 'Content not found. Ask the creator to re-generate the link.',
     })
   }
-  if (entry.mode === 'stream') {
-    return res.status(400).json({
-      ok: false,
-      error: 'This creator post uses prepaid streaming escrow, not fixed x402 unlock.',
-    })
-  }
-
   const middleware = await creatorGatewayMiddleware(entry)
   return middleware(req, res, () => {
     return res.status(200).json({
@@ -1020,13 +1016,6 @@ export async function unlockContentX402WithAgent(req: Request, res: Response) {
       error: 'Content not found. Ask the creator to re-generate the link.',
     })
   }
-  if (entry.mode === 'stream') {
-    return res.status(400).json({
-      ok: false,
-      error: 'This creator post uses prepaid streaming escrow, not fixed x402 unlock.',
-    })
-  }
-
   const maxAmount = Math.max(0.000001, Math.ceil(Math.max(1, Number(entry.capRaw) || 0)) / 1_000_000)
   const serviceUrl = `${baseUrl()}/api/get-content-x402?id=${encodeURIComponent(contentId)}`
 

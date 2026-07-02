@@ -380,8 +380,21 @@ export function StreamGate() {
   const rateRaw   = parseInt(params.get('r')   ?? '1000',   10)
   const capRaw    = parseInt(params.get('cap') ?? '100000', 10)
   const title     = params.get('t')    ?? ''
-  const gateMode: 'unlock' | 'stream' = params.get('mode') === 'stream' ? 'stream' : 'unlock'
-  const paymentMode: 'x402' | 'poa' | 'escrow' = gateMode === 'stream' ? 'escrow' : 'x402'
+  const requestedGateMode: 'unlock' | 'stream' = params.get('mode') === 'stream' ? 'stream' : 'unlock'
+  const contentKind: 'text' | 'url' | 'scores' | 'unknown' =
+    params.get('ct') === 'url' ? 'url' :
+    params.get('ct') === 'scores' ? 'scores' :
+    params.get('ct') === 'text' ? 'text' :
+    'unknown'
+  const streamContentAvailable = contentKind !== 'url'
+  const shouldChoosePayment = params.get('pay') === 'choice' || params.get('choose') === '1'
+  const [selectedPaymentMode, setSelectedPaymentMode] = useState<'x402' | 'escrow' | null>(() => {
+    if (shouldChoosePayment) return null
+    if (requestedGateMode === 'stream' && streamContentAvailable) return 'escrow'
+    return 'x402'
+  })
+  const paymentMode: 'choice' | 'x402' | 'poa' | 'escrow' = selectedPaymentMode ?? 'choice'
+  const gateMode: 'unlock' | 'stream' = paymentMode === 'escrow' ? 'stream' : requestedGateMode
   const streamVault = (params.get('streamVault') ?? params.get('vault') ?? '').trim()
 
   const dripRate   = rateRaw  / 1_000_000
@@ -648,7 +661,7 @@ export function StreamGate() {
       : 'Archiving...'
 
   const legacyFullyAuthorised = isConnected && isOnArc && passkey.registered && isApproved
-  const fullyAuthorised = paymentMode === 'x402' || paymentMode === 'escrow' ? contentState === 'ready' : legacyFullyAuthorised
+  const fullyAuthorised = paymentMode === 'x402' || paymentMode === 'escrow' ? contentState === 'ready' : paymentMode === 'choice' ? false : legacyFullyAuthorised
 
   useEffect(() => {
     if (!gatewayReceiptId) return
@@ -1115,7 +1128,7 @@ export function StreamGate() {
   }
 
   useEffect(() => {
-    if (paymentMode === 'x402' || !legacyFullyAuthorised || !address || !contentId || contentState !== 'idle') return
+    if (paymentMode !== 'poa' || !legacyFullyAuthorised || !address || !contentId || contentState !== 'idle') return
     setContentState('loading')
     fetch(`/api/get-content?id=${encodeURIComponent(contentId)}&viewer=${address}`)
       .then(r => r.json())
@@ -1218,7 +1231,70 @@ export function StreamGate() {
         {!fullyAuthorised && (
           <OverlayShell dripRate={dripRate} sessionCap={sessionCap} paymentMode={paymentMode} gateMode={gateMode}>
 
-            {paymentMode === 'x402' ? (
+            {paymentMode === 'choice' ? (
+              <div className="w-full max-w-[340px] space-y-3 text-left">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setContentError(null)
+                    setContentState('idle')
+                    setSelectedPaymentMode('x402')
+                  }}
+                  className="w-full rounded-2xl border border-gray-200 bg-white p-4 text-left shadow-sm transition-colors hover:border-gray-300"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-[13px] font-black text-gray-900">Fixed unlock</p>
+                      <p className="mt-1 text-[12px] leading-relaxed text-gray-500">
+                        Pay {formatUsdc(sessionCap)} USDC once with x402 and unlock this content.
+                      </p>
+                    </div>
+                    <span className="rounded-full bg-gray-950 px-2 py-1 text-[9px] font-black uppercase tracking-[0.12em] text-white">
+                      x402
+                    </span>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!streamContentAvailable) return
+                    setContentError(null)
+                    setContentState('idle')
+                    setSelectedPaymentMode('escrow')
+                  }}
+                  disabled={!streamContentAvailable}
+                  className={[
+                    'w-full rounded-2xl border p-4 text-left shadow-sm transition-colors',
+                    streamContentAvailable
+                      ? 'border-gray-200 bg-white hover:border-gray-300'
+                      : 'cursor-not-allowed border-gray-100 bg-gray-50 opacity-70',
+                  ].join(' ')}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className={['text-[13px] font-black', streamContentAvailable ? 'text-gray-900' : 'text-gray-400'].join(' ')}>
+                        Pay per view stream
+                      </p>
+                      <p className="mt-1 text-[12px] leading-relaxed text-gray-500">
+                        {streamContentAvailable
+                          ? `Prepay up to ${formatUsdc(sessionCap)} USDC in an Arc stream while this page renders content.`
+                          : 'Streaming is only available for content Hash PayLink can render in-page.'}
+                      </p>
+                    </div>
+                    <span className={['rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-[0.12em]', streamContentAvailable ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-400'].join(' ')}>
+                      Stream
+                    </span>
+                  </div>
+                </button>
+
+                {!streamContentAvailable && (
+                  <p className="text-center text-[11px] font-medium text-gray-400">
+                    External access unavailable for pay per view stream.
+                  </p>
+                )}
+              </div>
+            ) : paymentMode === 'x402' ? (
               <div className="w-full space-y-4">
                 <div className="rounded-2xl border border-gray-100 bg-white p-4 text-left shadow-sm">
                   {unlockStep === 'intro' && (
@@ -1736,7 +1812,7 @@ export function StreamGate() {
               </>
             )}
 
-            {paymentMode !== 'escrow' && <StepDots current={currentStep} />}
+            {(paymentMode === 'x402' || paymentMode === 'poa') && <StepDots current={currentStep} />}
           </OverlayShell>
         )}
 
@@ -2143,7 +2219,7 @@ function OverlayShell({
 }: {
   dripRate: number
   sessionCap: number
-  paymentMode: 'x402' | 'poa' | 'escrow'
+  paymentMode: 'choice' | 'x402' | 'poa' | 'escrow'
   gateMode: 'unlock' | 'stream'
   children: React.ReactNode
 }) {
@@ -2161,12 +2237,17 @@ function OverlayShell({
     >
       <div className="text-center space-y-1.5">
         <p className="text-[17px] font-bold text-gray-900">Content Locked</p>
+        {paymentMode === 'choice' && (
+          <p className="text-[13px] text-gray-500 max-w-[320px]">
+            Choose how you want to access this creator content.
+          </p>
+        )}
         {paymentMode === 'x402' && (
           <p className="text-[13px] text-gray-500 max-w-[320px]">
             Pay <span className="font-semibold">{formatUsdc(sessionCap)} USDC</span> to unlock this creator content.
           </p>
         )}
-        <p className={paymentMode === 'x402' ? 'hidden' : 'text-[12px] text-gray-500 max-w-[280px]'}>
+        <p className={paymentMode === 'x402' || paymentMode === 'choice' ? 'hidden' : 'text-[12px] text-gray-500 max-w-[280px]'}>
           {gateMode === 'unlock' ? (
             <>
               Pay <span className="font-semibold">${sessionCap.toFixed(2)} USDC</span> to unlock this creator content.
@@ -2180,7 +2261,7 @@ function OverlayShell({
       </div>
       {children}
       <div className="flex items-center gap-1.5 text-[10px] text-gray-400">
-        {paymentMode === 'x402' ? 'Powered by Circle Gateway on Arc' : paymentMode === 'escrow' ? 'Powered by StreamVault escrow on Arc' : 'Powered by Arc Network'}
+        {paymentMode === 'x402' ? 'Powered by Circle Gateway on Arc' : paymentMode === 'escrow' ? 'Powered by StreamVault escrow on Arc' : paymentMode === 'choice' ? 'Powered by Hash PayLink Creator Checkout' : 'Powered by Arc Network'}
       </div>
     </div>
   )
