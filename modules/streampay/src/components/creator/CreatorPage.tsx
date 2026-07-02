@@ -122,6 +122,22 @@ type PolyStreamFeed = {
   matches?: PolyStreamMatch[]
 }
 
+async function readCreatorAdminJson<T extends { error?: string }>(res: Response): Promise<T> {
+  const body = await res.text()
+  if (!body.trim()) {
+    throw new Error(res.ok
+      ? 'Creator approval API returned an empty response.'
+      : `Creator approval API is unavailable. Start the local backend on port 3000 or retry on the deployed app. (${res.status})`)
+  }
+  try {
+    return JSON.parse(body) as T
+  } catch {
+    throw new Error(res.ok
+      ? 'Creator approval API returned invalid JSON.'
+      : `Creator approval API returned a non-JSON error. Start the local backend on port 3000 or retry on the deployed app. (${res.status})`)
+  }
+}
+
 const FALLBACK_CREATOR_COVERS = [
   '/brand/africa-business-bg.jpeg',
   '/brand/abuja-business-bg.jpeg',
@@ -504,7 +520,7 @@ function contentFromGate(link: string, meta: GateCreatedMeta, index: number): Pu
     xHandle,
     gateLink: link,
     editable: true,
-    reviewStatus: 'pending',
+    reviewStatus: meta.reviewStatus ?? 'pending',
     draft: {
       title: meta.title,
       description: meta.description,
@@ -1439,7 +1455,7 @@ export function CreatorAdminPage() {
       const res = await fetch(`/api/admin/creator-content?status=${encodeURIComponent(status)}`, {
         headers: { 'x-creator-admin-key': adminKey.trim() },
       })
-      const data = await res.json() as { ok?: boolean; posts?: ServerCreatorPost[]; error?: string }
+      const data = await readCreatorAdminJson<{ ok?: boolean; posts?: ServerCreatorPost[]; error?: string }>(res)
       if (!res.ok || !data.ok) throw new Error(data.error || 'Could not load creator approvals.')
       setPosts((data.posts || []).map(contentFromServerPost))
       try { window.sessionStorage.setItem('streampay_creator_admin_key', adminKey.trim()) } catch {}
@@ -1464,7 +1480,7 @@ export function CreatorAdminPage() {
         },
         body: JSON.stringify({ contentId: post.contentId, action }),
       })
-      const data = await res.json() as { ok?: boolean; error?: string }
+      const data = await readCreatorAdminJson<{ ok?: boolean; error?: string }>(res)
       if (!res.ok || !data.ok) throw new Error(data.error || 'Review failed.')
       setPosts(current => current.filter(item => item.contentId !== post.contentId))
     } catch (err) {
@@ -1529,8 +1545,8 @@ export function CreatorAdminPage() {
           <div className="max-h-[680px] space-y-3 overflow-y-auto [scrollbar-width:none]">
             {posts.map(post => (
               <div key={post.id} className="rounded-2xl border border-gray-100 bg-gray-50/70 p-3">
-                <div className="flex gap-3">
-                  <div className="h-24 w-24 shrink-0 overflow-hidden rounded-xl bg-gray-100">
+                <div className="grid gap-3 sm:grid-cols-[96px_1fr]">
+                  <div className="aspect-video w-full overflow-hidden rounded-xl bg-gray-100 sm:h-24 sm:w-24">
                     <img src={post.image} alt="" className="h-full w-full object-cover" />
                   </div>
                   <div className="min-w-0 flex-1">
@@ -1545,7 +1561,7 @@ export function CreatorAdminPage() {
                     <h2 className="mt-2 text-[15px] font-black leading-tight text-gray-950">{post.title}</h2>
                     <p className="mt-1 line-clamp-2 text-[12px] leading-5 text-gray-500">{post.description}</p>
                     <p className="mt-2 truncate text-[11px] font-semibold text-gray-400">
-                      {post.author || post.source} · {post.creator ? `${post.creator.slice(0, 8)}...${post.creator.slice(-6)}` : 'Creator'}
+                      {post.author || post.source} - {post.creator ? `${post.creator.slice(0, 8)}...${post.creator.slice(-6)}` : 'Creator'}
                     </p>
                   </div>
                 </div>

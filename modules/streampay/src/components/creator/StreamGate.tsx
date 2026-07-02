@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { usePrivy } from '@privy-io/react-auth'
 import { useSearchParams }    from 'react-router-dom'
-import { useAccount, useChainId, useConnect, useSwitchChain, useWriteContract } from 'wagmi'
+import { useAccount, useChainId, useSwitchChain, useWriteContract } from 'wagmi'
 import { useQuery }           from '@tanstack/react-query'
 import { createPublicClient, http, defineChain, parseAbi } from 'viem'
 import { usePoAStream }       from '../../hooks/usePoAStream'
@@ -73,6 +73,11 @@ type AgentWalletStatus = {
   gatewayBalanceError?: string
   gatewayBalanceChecked?: boolean
 }
+type EvmBalanceResponse = {
+  ok?: boolean
+  balance?: string
+  error?: string
+}
 type AgentOption = AgentProfile & {
   connected?: boolean
   balance?: string
@@ -87,8 +92,12 @@ type AgentOption = AgentProfile & {
   source?: 'platform' | 'saved' | 'linked' | 'env' | 'store'
 }
 type UnlockStep = 'intro' | 'choose' | 'email' | 'otp' | 'fund'
-const CREATOR_X402_GATEWAY_CHAIN = 'arc'
-const CREATOR_X402_GATEWAY_LABEL = 'Arc Testnet'
+type FundingChain = 'BASE' | 'ARBITRUM'
+
+const GATEWAY_FUNDING_CHAINS: Array<{ key: FundingChain; label: string; apiChain: 'base' | 'arbitrum' }> = [
+  { key: 'BASE', label: 'Base', apiChain: 'base' },
+  { key: 'ARBITRUM', label: 'Arbitrum', apiChain: 'arbitrum' },
+]
 
 function hasWorldCupScore(match: WorldCupScoreMatch) {
   const home = String(match.homeScore ?? '').trim().toLowerCase()
@@ -316,11 +325,11 @@ function paymentWalletStatusText(agent?: AgentOption | null) {
 
 function paymentWalletSourceText(agent?: AgentOption | null) {
   if (!agent) return 'No wallet selected'
-  if (agent.source === 'env') return 'Pinned platform wallet'
+  if (agent.source === 'env') return 'Platform wallet'
   if (agent.source === 'saved') return 'Saved wallet'
-  if (agent.source === 'store') return 'Email payment wallet'
+  if (agent.source === 'store') return 'Email reader wallet'
   if (agent.source === 'platform') return 'Platform wallet'
-  return 'x402 unlock wallet'
+  return 'Creator unlock wallet'
 }
 
 function numericBalance(value?: string) {
@@ -345,7 +354,7 @@ function unlockRecoveryStep(message: string): UnlockStep | null {
 
 function readableUnlockError(message: string) {
   if (/pinned by Hash PayLink/i.test(message)) {
-    return 'This email needs its own payment wallet. Resend the code and use the newest email code.'
+    return 'This email needs its own reader wallet. Resend the code and use the newest email code.'
   }
   if (/OTP expired|Resend OTP/i.test(message)) {
     return 'That code expired. Resend the code and use the newest email code.'
@@ -354,7 +363,7 @@ function readableUnlockError(message: string) {
     return 'Sign in to this reader wallet again to continue.'
   }
   if (/balance|fund|insufficient|gateway|deposit|activation/i.test(message)) {
-    return 'Arc USDC is funded, but x402 activation did not complete. Reconnect the reader wallet, then try again.'
+    return 'USDC is funded, but the reader payment balance is not ready yet. Reconnect the reader wallet, then try again.'
   }
   return message.slice(0, 180)
 }
@@ -371,14 +380,16 @@ export function StreamGate() {
   const capRaw    = parseInt(params.get('cap') ?? '100000', 10)
   const title     = params.get('t')    ?? ''
   const gateMode: 'unlock' | 'stream' = params.get('mode') === 'stream' ? 'stream' : 'unlock'
-  const paymentMode: 'x402' | 'poa' = params.get('pay') === 'poa' || params.get('payment') === 'poa' ? 'poa' : 'x402'
+  const requestedPaymentMode = params.get('pay')
+  const paymentMode: 'x402' | 'poa' = gateMode === 'unlock' && requestedPaymentMode !== 'poa'
+    ? 'x402'
+    : 'poa'
 
   const dripRate   = rateRaw  / 1_000_000
   const sessionCap = capRaw   / 1_000_000
 
   const { address, isConnected }  = useAccount()
   const chainId                   = useChainId()
-  const { connect, connectors, isPending: walletConnectPending } = useConnect()
   const { switchChain }           = useSwitchChain()
   const { writeContractAsync }    = useWriteContract()
   const isOnArc = chainId === ARC_CHAIN_ID
@@ -407,6 +418,7 @@ export function StreamGate() {
   const [walletBusy, setWalletBusy] = useState(false)
   const [walletError, setWalletError] = useState<string | null>(null)
   const [fundAmount, setFundAmount] = useState('0.5')
+  const [fundChain, setFundChain] = useState<FundingChain>('BASE')
   const [fundBusy, setFundBusy] = useState(false)
   const [fundMessage, setFundMessage] = useState<string | null>(null)
   const gatewayActivationPending = isGatewayPendingMessage(fundMessage)
@@ -450,9 +462,10 @@ export function StreamGate() {
   const selectedWalletNeedsReconnect = Boolean(selectedAgent?.walletAddress && !selectedAgent.connected)
   const readerWalletSessionError = /reconnect|sign in|session|wallet session|activation did not complete/i.test(walletError || '')
   const fundingNeedsReconnect = selectedWalletNeedsReconnect || readerWalletSessionError
+  const fundingChainMeta = GATEWAY_FUNDING_CHAINS.find(chain => chain.key === fundChain) || GATEWAY_FUNDING_CHAINS[0]
   const fundAmountNumber = Number(fundAmount)
-  const fundingBalanceNumber = selectedAgent?.balance !== undefined ? Number(selectedAgent.balance) : null
-  const fundingBalanceKnown = Boolean(selectedAgent?.balanceChecked && fundingBalanceNumber !== null && Number.isFinite(fundingBalanceNumber))
+  const fundingBalanceNumber = selectedAgent?.fundingBalance !== undefined ? Number(selectedAgent.fundingBalance) : null
+  const fundingBalanceKnown = Boolean(selectedAgent?.fundingBalanceChecked && fundingBalanceNumber !== null && Number.isFinite(fundingBalanceNumber))
   const fundingAmountInvalid = !Number.isFinite(fundAmountNumber) || fundAmountNumber <= 0
   const fundingAmountExceedsBalance = Boolean(fundingBalanceKnown && Number.isFinite(fundAmountNumber) && fundAmountNumber > Number(fundingBalanceNumber))
   const gatewayActivationBlocked = fundingNeedsReconnect || fundingAmountInvalid || fundingAmountExceedsBalance
@@ -490,9 +503,10 @@ export function StreamGate() {
           // Status lookup below still gives enough information to let the user reconnect.
         }
         try {
-          const statusRes = await fetch(`/api/agent-wallet?agent=${encodeURIComponent(cleanSlug)}&balance=1&chain=arc&x402=1&gatewayChain=${encodeURIComponent(CREATOR_X402_GATEWAY_CHAIN)}`)
+          const statusRes = await fetch(`/api/agent-wallet?agent=${encodeURIComponent(cleanSlug)}&balance=1&chain=arc&x402=1&gatewayChain=${encodeURIComponent(fundChain)}`)
           const status = await statusRes.json().catch(() => ({})) as AgentWalletStatus
           if (statusRes.ok && status.ok !== false) {
+            const fundingStatus = await lookupGatewayFundingUsdcBalance(status.walletAddress || option.walletAddress)
             option = {
               ...option,
               walletAddress: status.walletAddress || option.walletAddress,
@@ -501,6 +515,7 @@ export function StreamGate() {
               balance: status.balance,
               balanceError: status.balanceError,
               balanceChecked: status.balanceChecked,
+              ...(fundingStatus || {}),
               gatewayBalance: status.gatewayBalance,
               gatewayBalanceError: status.gatewayBalanceError,
               gatewayBalanceChecked: status.gatewayBalanceChecked,
@@ -541,7 +556,7 @@ export function StreamGate() {
           if (privyEmail) {
             await addBySlug(walletSlugFromEmail(privyEmail), {
               name: 'Reader wallet',
-              purpose: 'Email payment wallet',
+              purpose: 'Email reader wallet',
               source: 'store',
             })
             try {
@@ -628,7 +643,7 @@ export function StreamGate() {
     if (gatewayPaying) return
     const paymentSlug = cleanAgentSlug(agentSlugOverride || safeAgentSlug)
     if (!paymentSlug) {
-      setContentError('Choose a payment wallet to continue.')
+      setContentError('Choose a reader wallet to continue.')
       setContentState('error')
       setUnlockStep('choose')
       return
@@ -695,19 +710,10 @@ export function StreamGate() {
     }
     if (!hasActivatedGatewayBalance(selectedAgent, sessionCap)) {
       setUnlockStep('fund')
-      setFundMessage('Activate Gateway balance for this reader wallet before unlocking.')
+      setFundMessage('Activate the reader payment balance before unlocking.')
       return
     }
     await unlockWithAgentX402(selectedAgent.slug)
-  }
-
-  function handleConnectWallet() {
-    if (PRIVY_AUTH_ENABLED) {
-      loginPrivy()
-      return
-    }
-    const connector = connectors.find(item => item.id === 'injected') ?? connectors[0]
-    if (connector) connect({ connector })
   }
 
   async function startPaymentWalletLogin(slugOverride?: string) {
@@ -718,7 +724,7 @@ export function StreamGate() {
     setContentError(null)
     setCircleNotice(null)
     if (!email) {
-      setWalletError('Enter your email to open your payment wallet.')
+      setWalletError('Enter your email to open your reader wallet.')
       return
     }
     const savedWallet = agentOptions.find(agent => agent.slug === slug && agent.connected && agent.walletAddress)
@@ -822,28 +828,34 @@ export function StreamGate() {
     window.setTimeout(() => setCopiedWallet(false), 1500)
   }
 
-  function x402WalletManagerHref() {
-    const p = new URLSearchParams()
-    p.set('product', 'agent')
-    p.set('profile', 'agent')
-    p.set('n', 'arc')
-    p.set('src', 'creator-checkout')
-    p.set('returnTo', `${window.location.pathname}${window.location.search}${window.location.hash}`)
-    const paymentSlug = selectedAgent?.slug || safeAgentSlug
-    if (paymentSlug) p.set('agent', paymentSlug)
-    if (selectedAgent?.walletAddress) p.set('expectedWallet', selectedAgent.walletAddress)
-    return `/app?${p.toString()}`
+  async function lookupGatewayFundingUsdcBalance(walletAddress?: string) {
+    if (!walletAddress) return null
+    try {
+      const res = await fetch('/api/evm-balance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chain: fundingChainMeta.apiChain, address: walletAddress }),
+      })
+      const data = await res.json().catch(() => ({})) as EvmBalanceResponse
+      if (!res.ok || !data.ok) {
+        return { fundingBalanceChecked: true, fundingBalanceError: data.error || `${fundingChainMeta.label} balance unavailable.` }
+      }
+      return { fundingBalance: data.balance, fundingBalanceChecked: true, fundingBalanceError: undefined }
+    } catch {
+      return { fundingBalanceChecked: true, fundingBalanceError: `${fundingChainMeta.label} balance unavailable.` }
+    }
   }
 
   async function refreshPaymentWalletStatus(slug: string) {
     const cleanSlug = cleanAgentSlug(slug)
     if (!cleanSlug) return
     try {
-      const res = await fetch(`/api/agent-wallet?agent=${encodeURIComponent(cleanSlug)}&balance=1&chain=arc&x402=1&gatewayChain=${encodeURIComponent(CREATOR_X402_GATEWAY_CHAIN)}`)
+      const res = await fetch(`/api/agent-wallet?agent=${encodeURIComponent(cleanSlug)}&balance=1&chain=arc&x402=1&gatewayChain=${encodeURIComponent(fundChain)}`)
       const data = await res.json().catch(() => ({})) as AgentWalletStatus
       if (!res.ok || data.ok === false) return
       const walletAddress = data.walletAddress
-      const status = { ...data }
+      const fundingStatus = await lookupGatewayFundingUsdcBalance(walletAddress)
+      const status = { ...data, ...(fundingStatus || {}) }
       setAgentOptions(current => current.map(agent => (
         agent.slug === cleanSlug
           ? {
@@ -853,6 +865,7 @@ export function StreamGate() {
               balance: data.balance,
               balanceError: data.balanceError,
               balanceChecked: data.balanceChecked,
+              ...(fundingStatus || {}),
               gatewayBalance: data.gatewayBalance,
               gatewayBalanceError: data.gatewayBalanceError,
               gatewayBalanceChecked: data.gatewayBalanceChecked,
@@ -868,19 +881,19 @@ export function StreamGate() {
   useEffect(() => {
     if (paymentMode !== 'x402' || !safeAgentSlug || !selectedAgent?.walletAddress) return
     void refreshPaymentWalletStatus(safeAgentSlug)
-  }, [selectedAgent?.walletAddress]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [fundChain]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function activatePaymentBalance() {
     const paymentSlug = selectedAgent?.slug || safeAgentSlug
     setFundMessage(null)
     setWalletError(null)
     if (!paymentSlug) {
-      setWalletError('Choose a payment wallet first.')
+      setWalletError('Choose a reader wallet first.')
       setUnlockStep('choose')
       return
     }
     if (fundingNeedsReconnect) {
-      setWalletError('Reconnect this reader wallet before activating Gateway balance.')
+      setWalletError('Reconnect this reader wallet before activating the payment balance.')
       return
     }
     if (fundingAmountInvalid) {
@@ -888,7 +901,7 @@ export function StreamGate() {
       return
     }
     if (fundingAmountExceedsBalance) {
-      setWalletError(`Fund this wallet with more USDC on ${CREATOR_X402_GATEWAY_LABEL}, then activate x402.`)
+      setWalletError(`Fund this wallet with more USDC on ${fundingChainMeta.label}, then activate the payment balance.`)
       return
     }
     setFundBusy(true)
@@ -896,7 +909,7 @@ export function StreamGate() {
       const res = await fetch('/api/agent-wallet', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'gateway-deposit-arc', agentSlug: paymentSlug, amount: fundAmount }),
+        body: JSON.stringify({ action: 'gateway-deposit', agentSlug: paymentSlug, amount: fundAmount, chain: fundChain }),
       })
       const data = await res.json().catch(() => ({})) as {
         ok?: boolean
@@ -907,7 +920,7 @@ export function StreamGate() {
       }
       if (res.status === 202 && data.code === 'gateway_deposit_pending') {
         await refreshPaymentWalletStatus(paymentSlug)
-        setFundMessage(data.error || 'Gateway deposit is pending. Wait a moment, then check activation again.')
+        setFundMessage(data.error || 'Payment activation is pending. Wait a moment, then check again.')
         setWalletError(null)
         setContentError(null)
         return
@@ -945,12 +958,12 @@ export function StreamGate() {
   async function checkPaymentActivation() {
     const paymentSlug = selectedAgent?.slug || safeAgentSlug
     if (!paymentSlug) {
-      setWalletError('Choose a payment wallet first.')
+      setWalletError('Choose a reader wallet first.')
       setUnlockStep('choose')
       return
     }
     if (fundingNeedsReconnect) {
-      setWalletError('Reconnect this reader wallet before checking Gateway balance.')
+      setWalletError('Reconnect this reader wallet before checking the payment balance.')
       return
     }
     setFundBusy(true)
@@ -962,7 +975,7 @@ export function StreamGate() {
         setFundMessage('Payment balance activated. You can unlock now.')
         setUnlockStep('choose')
       } else {
-        setFundMessage('Gateway activation is still pending. Wait a moment, then check again. Do not activate again yet.')
+        setFundMessage('Payment activation is still pending. Wait a moment, then check again. Do not activate again yet.')
       }
     } finally {
       setFundBusy(false)
@@ -1049,7 +1062,7 @@ export function StreamGate() {
                       <div className="space-y-1">
                         <p className="text-[13px] font-bold text-gray-900">Private creator content</p>
                         <p className="mx-auto max-w-[280px] text-[12px] leading-relaxed text-gray-500">
-                          Continue with your Hash PayLink payment wallet. If it needs a sign-in or USDC top-up, we will guide you.
+                          Pay {formatUsdc(sessionCap)} USDC with your reader wallet to unlock this post.
                         </p>
                       </div>
                     </div>
@@ -1061,7 +1074,7 @@ export function StreamGate() {
                         <div className="min-w-0">
                           <p className="text-[13px] font-bold text-gray-900">Choose reader wallet</p>
                           <p className="mt-1 text-[12px] leading-relaxed text-gray-500">
-                            Select the reader wallet paying to unlock. Creator: {creator ? shortAddress(creator) : 'verified gate'}.
+                            Select the wallet paying {formatUsdc(sessionCap)} USDC to creator {creator ? shortAddress(creator) : 'verified gate'}.
                           </p>
                         </div>
                         <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-bold text-emerald-700 ring-1 ring-emerald-100">
@@ -1070,12 +1083,12 @@ export function StreamGate() {
                       </div>
                       {agentOptionsLoading && (
                         <p className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-3 text-center text-[12px] text-gray-500">
-                          Loading payment wallets...
+                          Loading reader wallets...
                         </p>
                       )}
                       {!agentOptionsLoading && agentOptions.length === 0 && (
                         <p className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-3 text-center text-[12px] font-medium text-blue-700">
-                          Add a payment wallet to unlock this content.
+                          Add a reader wallet to unlock this content.
                         </p>
                       )}
                       {agentOptions.map(agent => {
@@ -1146,7 +1159,7 @@ export function StreamGate() {
                       <div className="border-b border-gray-100 pb-3">
                         <p className="text-[13px] font-bold text-gray-900">Open reader wallet</p>
                         <p className="mt-1 text-[12px] leading-relaxed text-gray-500">
-                          Enter the reader email that owns the wallet paying for this unlock. We will send a one-time code.
+                          Enter the email for the wallet paying for this unlock. We will send a one-time code.
                         </p>
                       </div>
                       <label className="block space-y-1.5">
@@ -1235,9 +1248,9 @@ export function StreamGate() {
                       <div className="border-b border-gray-100 pb-3">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <p className="text-[13px] font-bold text-gray-900">Activate Arc x402</p>
+                            <p className="text-[13px] font-bold text-gray-900">Prepare reader payment</p>
                             <p className="mt-1 text-[12px] leading-relaxed text-gray-500">
-                              Move Arc Testnet USDC from this reader wallet into x402 service balance, then unlock this content.
+                              This wallet needs USDC available for creator unlocks before the payment can complete.
                             </p>
                           </div>
                           <button
@@ -1263,7 +1276,7 @@ export function StreamGate() {
                               </p>
                             </div>
                             <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-[10px] font-bold text-blue-700 ring-1 ring-blue-100">
-                              x402 wallet
+                              Reader wallet
                             </span>
                           </div>
                         </div>
@@ -1281,9 +1294,9 @@ export function StreamGate() {
                               {copiedWallet ? 'Copied' : 'Copy'}
                             </button>
                           </div>
-                          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
                             <div className="rounded-lg border border-white bg-white px-3 py-2">
-                              <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400">{CREATOR_X402_GATEWAY_LABEL} wallet</p>
+                              <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400">Arc wallet</p>
                               <p className="mt-0.5 truncate text-[12px] font-bold text-gray-900">
                                 {formatBalanceLabel(selectedAgent.balance) || (selectedAgent.balanceChecked ? '0 USDC' : 'Checking...')}
                               </p>
@@ -1292,7 +1305,16 @@ export function StreamGate() {
                               )}
                             </div>
                             <div className="rounded-lg border border-white bg-white px-3 py-2">
-                              <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400">Activated Arc x402</p>
+                              <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400">{fundingChainMeta.label}</p>
+                              <p className="mt-0.5 truncate text-[12px] font-bold text-gray-900">
+                                {formatBalanceLabel(selectedAgent.fundingBalance) || (selectedAgent.fundingBalanceChecked ? '0 USDC' : 'Checking...')}
+                              </p>
+                              {selectedAgent.fundingBalanceError && (
+                                <p className="mt-1 text-[10px] font-medium text-amber-600">{selectedAgent.fundingBalanceError}</p>
+                              )}
+                            </div>
+                            <div className="rounded-lg border border-white bg-white px-3 py-2">
+                              <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400">Payment balance</p>
                               <p className="mt-0.5 truncate text-[12px] font-bold text-gray-900">
                                 {formatBalanceLabel(selectedAgent.gatewayBalance) || (selectedAgent.gatewayBalanceChecked ? '0 USDC' : 'Checking...')}
                               </p>
@@ -1301,64 +1323,85 @@ export function StreamGate() {
                               )}
                             </div>
                           </div>
-                          {selectedAgent.balanceChecked && numericBalance(selectedAgent.balance) <= 0 && (
+                          {selectedAgent.fundingBalanceChecked && numericBalance(selectedAgent.fundingBalance) <= 0 && (
                             <p className="mt-2 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-[11px] font-medium leading-relaxed text-amber-700">
-                              Arc creator unlocks activate x402 from this reader wallet's Arc Testnet USDC balance.
+                              Add USDC on {fundingChainMeta.label}, then activate the reader payment balance.
                             </p>
                           )}
                           {fundingAmountExceedsBalance && (
                             <p className="mt-2 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-[11px] font-medium leading-relaxed text-amber-700">
-                              Amount is higher than the current {CREATOR_X402_GATEWAY_LABEL} wallet balance.
+                              Amount is higher than the current {fundingChainMeta.label} balance.
                             </p>
                           )}
                         </div>
                       )}
-                      <div className="rounded-xl border border-gray-100 bg-white px-3 py-3">
-                        <label className="block space-y-1.5">
-                          <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-gray-400">Activation amount</span>
-                          <div className="flex min-h-[46px] items-center rounded-xl border border-gray-200 bg-gray-50 px-3 focus-within:border-blue-300">
+                      <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-3">
+                        <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-start">
+                          <div className="min-w-0">
+                            <p className="text-[12px] font-black text-gray-900">Activate payment balance</p>
+                            <p className="mt-1 text-[11px] leading-relaxed text-gray-500">
+                              Move USDC from Base or Arbitrum into the reader payment balance, then check status before unlocking.
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={checkPaymentActivation}
+                            disabled={fundBusy || fundingNeedsReconnect}
+                            className="min-h-10 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[11px] font-bold text-gray-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+                          >
+                            Check status
+                          </button>
+                        </div>
+                        <div className="mt-3 grid grid-cols-2 gap-1 rounded-lg border border-gray-200 bg-white p-1">
+                          {GATEWAY_FUNDING_CHAINS.map(chain => (
+                            <button
+                              key={chain.key}
+                              type="button"
+                              onClick={() => setFundChain(chain.key)}
+                              className={[
+                                'rounded-md px-3 py-2 text-[11px] font-black transition-colors',
+                                fundChain === chain.key ? 'bg-gray-950 text-white' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900',
+                              ].join(' ')}
+                            >
+                              {chain.label}
+                            </button>
+                          ))}
+                        </div>
+                        <label className="mt-3 block space-y-1.5">
+                          <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400">Amount to activate</span>
+                          <div className="flex overflow-hidden rounded-xl border border-gray-200 bg-white">
                             <input
                               type="number"
-                              min="0.5"
-                              step="0.1"
+                              min="0.01"
+                              step="0.01"
                               value={fundAmount}
                               onChange={event => {
                                 setFundAmount(event.target.value)
                                 setWalletError(null)
                                 setFundMessage(null)
                               }}
-                              className="min-w-0 flex-1 bg-transparent text-[15px] font-bold text-gray-900 outline-none"
+                              className="min-w-0 flex-1 bg-transparent px-3 py-3 text-[13px] font-bold text-gray-900 outline-none"
                             />
-                            <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-gray-400">USDC</span>
+                            <span className="flex items-center border-l border-gray-200 px-3 text-[10px] font-black text-gray-400">USDC</span>
                           </div>
                         </label>
-                        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                          <button
-                            type="button"
-                            onClick={() => void activatePaymentBalance()}
-                            disabled={fundBusy || gatewayActivationBlocked}
-                            className="flex min-h-[46px] items-center justify-center rounded-xl bg-gray-950 px-3 py-3 text-[12px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
-                          >
-                            {fundBusy ? <><Spinner />Activating...</> : 'Activate x402'}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void checkPaymentActivation()}
-                            disabled={fundBusy || fundingNeedsReconnect}
-                            className="min-h-[46px] rounded-xl border border-gray-200 bg-white px-3 py-3 text-[12px] font-bold text-gray-700 disabled:cursor-not-allowed disabled:opacity-60"
-                          >
-                            Check activation
-                          </button>
-                        </div>
+                        <button
+                          type="button"
+                          onClick={activatePaymentBalance}
+                          disabled={fundBusy || gatewayActivationBlocked}
+                          className="mt-3 flex min-h-[46px] w-full items-center justify-center gap-2 rounded-xl bg-gray-950 px-3 py-3 text-[12px] font-black text-white disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
+                        >
+                          {fundBusy ? <><Spinner />Activating...</> : 'Activate reader payment'}
+                        </button>
                       </div>
                       <a
-                        href={x402WalletManagerHref()}
-                        className="flex min-h-[44px] w-full items-center justify-center rounded-xl border border-gray-200 bg-white px-3 py-3 text-[12px] font-bold text-gray-700"
+                        href="/app?product=agent"
+                        className="flex min-h-[48px] w-full items-center justify-center rounded-xl bg-gray-950 px-3 py-3 text-[12px] font-bold text-white"
                       >
-                        Open wallet manager instead
+                        Open wallet manager
                       </a>
                       <p className="text-center text-[11px] leading-relaxed text-gray-400">
-                        After activation, return here and tap Unlock content again.
+                        After funding or activation, return here and tap Unlock content again.
                       </p>
                     </div>
                   )}
@@ -1403,14 +1446,9 @@ export function StreamGate() {
             ) : (
               <>
                 {!isConnected && (
-                  <button
-                    onClick={handleConnectWallet}
-                    disabled={!PRIVY_AUTH_ENABLED && (walletConnectPending || connectors.length === 0)}
-                    className="flex min-h-[48px] items-center justify-center gap-2 rounded-xl px-5 py-3 text-[13px] font-semibold text-white transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
-                    style={{ background: '#111827' }}
-                  >
-                    {walletConnectPending ? <><Spinner />Connecting...</> : connectors.length === 0 && !PRIVY_AUTH_ENABLED ? 'No browser wallet found' : 'Connect wallet'}
-                  </button>
+                  <div className="rounded-xl border border-gray-100 bg-gray-50 px-5 py-3 text-center text-[12px] text-gray-500">
+                    Connect your wallet in the header above
+                  </div>
                 )}
 
                 {isConnected && !isOnArc && (
@@ -1627,7 +1665,7 @@ export function StreamGate() {
         {paymentMode === 'x402' && fullyAuthorised && gatewayTx && (
           <div className="border-t border-gray-100 bg-emerald-50/60 px-4 py-3 space-y-2">
             <div className="flex items-center justify-center gap-1.5 text-[11px] font-semibold text-emerald-700">
-              <CheckIcon />Circle Gateway paid - {gatewayTx.slice(0, 8)}...{gatewayTx.slice(-6)}
+              <CheckIcon />Creator payment sent - {gatewayTx.slice(0, 8)}...{gatewayTx.slice(-6)}
             </div>
             <div className="flex flex-wrap items-center justify-center gap-2">
               {gatewayReceiptId && (
@@ -1869,7 +1907,7 @@ function OverlayShell({
       </div>
       {children}
       <div className="flex items-center gap-1.5 text-[10px] text-gray-400">
-        {paymentMode === 'x402' ? 'Powered by Circle Gateway on Arc' : 'Powered by Arc Network'}
+        {paymentMode === 'x402' ? 'Paid with USDC via Hash PayLink' : 'Powered by Arc Network'}
       </div>
     </div>
   )

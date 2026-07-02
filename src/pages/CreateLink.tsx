@@ -62,14 +62,10 @@ import { queryBalances, type UnifiedBalanceBreakdown } from '../lib/unifiedBalan
 import AgentWorkspace from './AgentWorkspace'
 import PayLinkShareSheet from '../components/PayLinkShareSheet'
 
-// ─── Starknet address: 0x followed by exactly 64 hex chars ──────────────────
-const isValidStarkAddr = (v: string) => /^0x[0-9a-fA-F]{64}$/.test(v)
-
 // ─── Solana address: base58, 32–44 characters ────────────────────────────────
 const isValidSolanaAddr = isValidSolanaAddress
 
 const VISIBLE_CREATE_CHAINS: ChainKey[] = ['base', 'arc', 'solana', 'arbitrum']
-const SHOW_STARKNET_CREATE_UI = false
 const TELEGRAM_AGENT_URL = import.meta.env.VITE_TELEGRAM_AGENT_URL || 'https://t.me/HashPayLinkBot'
 
 function PolymarketMark({ className }: { className?: string }) {
@@ -571,7 +567,6 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   const { authenticated: privyAuthenticated, user: privyUser, logout: logoutPrivy, getAccessToken } = usePrivy()
   const privyEmail = emailFromPrivyUser(privyUser).trim().toLowerCase()
   const [evmAddr,       setEvmAddr]       = useState('')
-  const [starkAddr,     setStarkAddr]     = useState('')
   const [solanaAddr,    setSolanaAddr]    = useState('')
   const [amt,           setAmt]           = useState('')
   const [memo,          setMemo]          = useState('')
@@ -645,7 +640,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   // selectedNet is owned by Layout and shared via outlet context for bidirectional sync with the header toolkit
   const { selectedNet, onNetworkSelect } = useOutletContext<LayoutOutletContext>()
   // Derived early so useEffect hooks below can reference it without TDZ error
-  const isEvmNet = selectedNet !== 'starknet' && selectedNet !== 'solana'
+  const isEvmNet = selectedNet !== 'solana'
   const [vaultStep,     setVaultStep]     = useState<VaultStep>('idle')
 
   useEffect(() => {
@@ -660,7 +655,6 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   // ── Wallet hooks ──────────────────────────────────────────────────────────
   const { address: connectedEvm } = useAccount()
   const { disconnect: disconnectEvm } = useDisconnect()
-  const connectedStark = ''
   const { address: connectedSolana, disconnect: disconnectSolana } = useSolana()
 
   function disconnectConnectedEvmRecipient() {
@@ -681,10 +675,6 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   }, [connectedEvm, isEvmNet, multiChainMode])  // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (SHOW_STARKNET_CREATE_UI && connectedStark && starkAddr === '' && (selectedNet === 'starknet' || multiChainMode)) setStarkAddr(connectedStark)
-  }, [connectedStark, selectedNet, multiChainMode])  // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
     if (connectedSolana && solanaAddr === '' && (selectedNet === 'solana' || multiChainMode)) setSolanaAddr(connectedSolana)
   }, [connectedSolana, selectedNet, multiChainMode])  // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -701,7 +691,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   useEffect(() => {
     if (!chainSwitchMounted.current) { chainSwitchMounted.current = true; return }
     if (multiChainMode) return
-    setEvmAddr(''); setStarkAddr(''); setSolanaAddr('')
+    setEvmAddr(''); setSolanaAddr('')
     setGeneratedLink(''); setVaultStep('idle')
   }, [selectedNet])  // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -731,12 +721,10 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
 
   // ── Validation ─────────────────────────────────────────────────────────
   const evmDirty    = evmAddr.length > 0
-  const starkDirty  = starkAddr.length > 0
   const solanaDirty = solanaAddr.length > 0
   const amtDirty    = amt.length > 0
 
   const evmValid    = isAddress(evmAddr)
-  const starkValid  = isValidStarkAddr(starkAddr)
   const solanaValid = isValidSolanaAddr(solanaAddr)
   const isValidAmt  = amtDirty && /^(?:\d+|\d*\.\d+)$/.test(amt) && Number(amt) > 0
   const paymentMode: PaymentMode = eventMode ? 'business' : 'personal'
@@ -745,8 +733,8 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   const effectiveEventMode = accessMode || eventMode
 
   const hasAddress = multiChainMode
-    ? (evmValid || solanaValid || (SHOW_STARKNET_CREATE_UI && starkValid))
-    : (selectedNet === 'solana' ? solanaValid : isEvmNet ? evmValid : (SHOW_STARKNET_CREATE_UI && starkValid))
+    ? (evmValid || solanaValid)
+    : (selectedNet === 'solana' ? solanaValid : evmValid)
 
   const canGenerate = (flexAmount || isValidAmt) && hasAddress && (!accessMode || agentUrlStatus === 'ok')
 
@@ -1434,7 +1422,6 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
       const params = new URLSearchParams({ x: '1' })
       if (!flexAmount) params.set('a', amt); else params.set('f', '1')
       if (evmValid)    setPaylinkParam(params, 'e', evmAddr)
-      if (SHOW_STARKNET_CREATE_UI && starkValid) setPaylinkParam(params, 'k', starkAddr)
       if (solanaValid) setPaylinkParam(params, 's', solanaAddr)
       setPaylinkParam(params, 'm', memo)
       if (effectiveEventMode && eventId) {
@@ -1459,7 +1446,6 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     if (!flexAmount) params.set('a', amt); else params.set('f', '1')
     if (selectedNet === 'solana')  setPaylinkParam(params, 's', solanaAddr)
     else if (isEvmNet)             setPaylinkParam(params, 'e', evmAddr)
-    else if (SHOW_STARKNET_CREATE_UI) setPaylinkParam(params, 'k', starkAddr)
     setPaylinkParam(params, 'm', memo)
     if (effectiveEventMode && eventId) {
       params.set('v', '1'); params.set('id', eventId)
@@ -1487,7 +1473,6 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     if (multiChainMode) {
       params.set('x', '1')
       if (evmValid)    setPaylinkParam(params, 'e', evmAddr)
-      if (SHOW_STARKNET_CREATE_UI && starkValid) setPaylinkParam(params, 'k', starkAddr)
       if (solanaValid) setPaylinkParam(params, 's', solanaAddr)
     } else {
       params.set('n', selectedNet)
@@ -1509,7 +1494,6 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     if (multiChainMode) {
       params.set('x', '1')
       if (evmValid) setPaylinkParam(params, 'e', evmAddr)
-      if (SHOW_STARKNET_CREATE_UI && starkValid) setPaylinkParam(params, 'k', starkAddr)
       if (solanaValid) setPaylinkParam(params, 's', solanaAddr)
     } else {
       params.set('n', selectedNet)
@@ -1573,7 +1557,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   const shareMessage = memo.trim() ? `Pay ${formatAmount(amt, 6)} USDC for ${memo.trim()}` : `Pay ${formatAmount(amt, 6)} USDC with Hash PayLink`
 
   function handleReset() {
-    setEvmAddr(''); setStarkAddr(''); setSolanaAddr(''); setAmt(''); setMemo('')
+    setEvmAddr(''); setSolanaAddr(''); setAmt(''); setMemo('')
     setGeneratedLink(''); setCopied(false); setMultiChainMode(false); setFlexAmount(false)
     setEventMode(false)
     setVaultStep('idle')
@@ -2692,53 +2676,6 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               {multiChainMode ? 'EVM address for Base, Arc, or Arbitrum.' : 'Paste EVM address.'}
             </p>
           </fieldset>}
-
-          {/* ── Starknet Address — Starknet only ─────────────────────── */}
-          {SHOW_STARKNET_CREATE_UI && (selectedNet === 'starknet' || multiChainMode) && <fieldset className="space-y-1.5">
-            <label className="flex items-center justify-between">
-              <span className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
-                Starknet Address
-              </span>
-              <span className="text-[11px] font-medium text-gray-400">Starknet Mainnet · WalletConnect</span>
-            </label>
-            <div className="relative">
-              <input
-                type="text"
-                placeholder="0x… (exactly 64 hex chars)"
-                value={starkAddr}
-                onChange={(e) => { setStarkAddr(e.target.value.trim()); setGeneratedLink('') }}
-                spellCheck={false}
-                autoComplete="off"
-                className={cn(
-                  'w-full rounded-xl border bg-gray-50/60 px-3.5 py-2.5 font-mono text-sm',
-                  'placeholder:text-gray-400 transition-all focus:bg-white focus:outline-none focus:ring-2 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-100 dark:placeholder:text-gray-600 dark:focus:bg-white/[0.06]',
-                  starkDirty && !starkValid
-                    ? 'border-red-300 pr-10 text-red-600 focus:ring-red-100 dark:border-red-400/40 dark:text-red-300 dark:focus:ring-red-400/10'
-                    : starkValid
-                    ? 'border-purple-300 text-gray-900 focus:ring-purple-100 dark:border-purple-400/40 dark:text-gray-100 dark:focus:ring-purple-400/10'
-                    : 'border-gray-200 text-gray-900 focus:border-[#8B5CF6]/40 focus:ring-[#8B5CF6]/15 dark:border-white/10 dark:text-gray-100 dark:focus:border-purple-400/40 dark:focus:ring-purple-400/10',
-                )}
-              />
-              {starkDirty && !starkValid && (
-                <XCircle className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-red-400" />
-              )}
-            </div>
-            {starkDirty && !starkValid && (
-              <p className="flex items-center gap-1 text-xs text-red-500">
-                <Info className="h-3 w-3" /> Must be a valid 64-character Starknet address.
-              </p>
-            )}
-            {starkValid && (
-              <p className="flex items-center gap-1 text-xs text-purple-600">
-                <CheckCheck className="h-3 w-3" />
-                {connectedStark && starkAddr.toLowerCase() === connectedStark.toLowerCase()
-                  ? `Connected wallet · ${truncateAddress(starkAddr, 8)}`
-                  : truncateAddress(starkAddr, 8)}
-              </p>
-            )}
-          </fieldset>}
-
-          {/* ── Solana Address — Solana only ──────────────────────────── */}
           {(selectedNet === 'solana' || multiChainMode) && (multiChainMode || receiveMode === 'paste') && <fieldset className="space-y-1.5">
             <label className="flex items-center justify-between">
               <span className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
@@ -3171,8 +3108,8 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
 
           {!canGenerate && vaultStep === 'idle' && (
             multiChainMode
-              ? (!evmDirty && !solanaDirty && !(SHOW_STARKNET_CREATE_UI && starkDirty))
-              : (selectedNet === 'solana' ? !solanaDirty : isEvmNet ? !evmDirty : !starkDirty)
+              ? (!evmDirty && !solanaDirty)
+              : (selectedNet === 'solana' ? !solanaDirty : !evmDirty)
           ) && (
             <p className="px-2 text-center text-xs leading-snug text-gray-400 dark:text-gray-500">
               {multiChainMode
@@ -3217,12 +3154,6 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                       <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
                         <span>{multiChainMode ? 'Base · Arc Testnet · Arbitrum' : CHAIN_META[selectedNet].label}:</span>
                         <span className="font-mono text-gray-700 dark:text-gray-200">{truncateAddress(evmAddr, 8)}</span>
-                      </div>
-                    )}
-                    {SHOW_STARKNET_CREATE_UI && starkValid && (
-                      <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-                        <span>Starknet:</span>
-                        <span className="font-mono text-gray-700 dark:text-gray-200">{truncateAddress(starkAddr, 8)}</span>
                       </div>
                     )}
                     {solanaValid && (

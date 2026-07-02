@@ -75,10 +75,6 @@ export function memoToHex(memo: string): `0x${string}` {
 /** Validate a recipient address for a given chain */
 export function isValidRecipient(addr: string, chain: ChainKey): boolean {
   if (!addr) return false
-  if (chain === 'starknet') {
-    // Starknet felt252: 0x followed by exactly 64 hex chars
-    return /^0x[0-9a-fA-F]{64}$/.test(addr)
-  }
   return isAddress(addr)
 }
 

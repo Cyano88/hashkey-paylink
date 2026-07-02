@@ -4,14 +4,13 @@ import { mkdir, readFile, writeFile } from 'fs/promises'
 import { dirname, resolve } from 'path'
 import { isAddress } from 'viem'
 import { getFxRate } from './fx-rate'
+import { hasRenderDurableStore, readDurableJson, writeDurableJson } from './render-durable-store.js'
 
 const STORE_PATH = process.env.NG_POS_STORE ?? './data/ng-pos-merchants.json'
-const UPSTASH_REST_URL = (process.env.UPSTASH_REDIS_REST_URL ?? '').trim().replace(/\/+$/, '')
-const UPSTASH_REST_TOKEN = (process.env.UPSTASH_REDIS_REST_TOKEN ?? '').trim()
-const UPSTASH_STORE_KEY = (process.env.NG_POS_STORE_KEY ?? 'hashpaylink:ng-pos-merchants').trim()
+const NG_POS_STORE_KEY = (process.env.NG_POS_STORE_KEY ?? 'hashpaylink:ng-pos-merchants').trim()
 const MAX_TEXT = 90
 const IS_RENDER = Boolean(process.env.RENDER || process.env.RENDER_SERVICE_ID || process.env.RENDER_EXTERNAL_URL)
-const HAS_DURABLE_STORE = Boolean(UPSTASH_REST_URL && UPSTASH_REST_TOKEN)
+const HAS_DURABLE_STORE = hasRenderDurableStore()
 
 type PayoutPreference = 'INSTANT_FIAT' | 'KEEP_CRYPTO'
 type SettlementType = 'INSTANT_FIAT' | 'KEEP_CRYPTO'
@@ -46,21 +45,6 @@ type MerchantProfile = {
 
 type Store = {
   merchants: Record<string, MerchantProfile>
-}
-
-async function upstashCommand<T>(command: unknown[]): Promise<T | undefined> {
-  if (!UPSTASH_REST_URL || !UPSTASH_REST_TOKEN) return undefined
-  const response = await fetch(UPSTASH_REST_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${UPSTASH_REST_TOKEN}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(command),
-  })
-  if (!response.ok) throw new Error(`Upstash request failed: ${response.status}`)
-  const data = await response.json() as { result?: T }
-  return data.result
 }
 
 function cleanText(value: unknown, fallback = '') {
@@ -131,13 +115,12 @@ function originFromRequest(req: Request, explicitOrigin?: unknown) {
 
 async function readStore(): Promise<Store> {
   try {
-    const remote = await upstashCommand<string>(['GET', UPSTASH_STORE_KEY])
+    const remote = await readDurableJson<Partial<Store>>(NG_POS_STORE_KEY)
     if (remote) {
-      const parsed = JSON.parse(remote) as Partial<Store>
-      return { merchants: parsed.merchants ?? {} }
+      return { merchants: remote.merchants ?? {} }
     }
   } catch (error) {
-    console.warn('[ng-pos] Upstash load failed; using file fallback.', error instanceof Error ? error.message : String(error))
+    console.warn('[ng-pos] durable load failed; using file fallback.', error instanceof Error ? error.message : String(error))
   }
 
   try {
@@ -156,16 +139,16 @@ async function writeStore(store: Store) {
   await writeFile(path, `${JSON.stringify(normalized, null, 2)}\n`, 'utf8')
 
   if (IS_RENDER && !HAS_DURABLE_STORE) {
-    throw new Error('Durable POS storage is not configured. Add UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN on Render before creating POS QR links.')
+    throw new Error('Durable POS storage is not configured. Add DATABASE_URL on Render before creating POS QR links.')
   }
 
   try {
-    await upstashCommand(['SET', UPSTASH_STORE_KEY, JSON.stringify(normalized)])
+    await writeDurableJson(NG_POS_STORE_KEY, normalized)
   } catch (error) {
     if (IS_RENDER) {
-      throw new Error('Durable POS storage failed. Check the Upstash Redis REST envs on Render before creating POS QR links.')
+      throw new Error('Durable POS storage failed. Check DATABASE_URL on Render before creating POS QR links.')
     }
-    console.warn('[ng-pos] Upstash save failed; file fallback was saved.', error instanceof Error ? error.message : String(error))
+    console.warn('[ng-pos] durable save failed; file fallback was saved.', error instanceof Error ? error.message : String(error))
   }
 }
 

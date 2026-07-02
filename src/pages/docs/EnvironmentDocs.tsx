@@ -14,7 +14,7 @@ export default function EnvironmentDocs() {
         <Table
           headers={['Variable', 'Required', 'Description']}
           rows={[
-            ['DATABASE_URL', 'Yes', 'Render Postgres URL for Telegram state, PolyDesk profiles, Privy/Circle mappings, and Arena rooms.'],
+            ['DATABASE_URL', 'Yes', 'Render Postgres URL for receipts, agent/helper state, POS profiles, PolyDesk profiles, Privy/Circle mappings, and Arena rooms.'],
             ['ADMIN_SECRET', 'Yes', 'Long random secret for protected maintenance endpoints.'],
             ['CRON_SECRET', 'Optional', 'Secret for authenticated cron or background jobs.'],
             ['TREASURY_ADDRESS', 'Optional', 'EVM treasury wallet for platform fees.'],

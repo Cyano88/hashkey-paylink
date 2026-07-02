@@ -60,7 +60,7 @@ Agent flows use selected paying agents, Circle wallet sessions, x402-style servi
 | Arbitrum | USDC payment rail |
 | Solana | USDC payment rail |
 | 0G Storage | Durable proof/archive layer |
-| Render Postgres | Durable app state for Telegram, PolyDesk, Arena, and Privy/Circle mappings |
+| Render Postgres | Durable app state for receipts, agent/helper profiles, POS profiles, PolyDesk, Arena, and Privy/Circle mappings |
 | Resend | Email delivery for alerts and reports |
 
 Use "built with" or "powered by" language for infrastructure providers unless there is a formal partnership agreement.

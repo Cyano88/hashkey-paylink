@@ -69,8 +69,6 @@ import {
 
 type CircleSolanaSession = Awaited<ReturnType<typeof connectCircleSolanaEmailWallet>>
 type CircleEvmEmailSession = Awaited<ReturnType<typeof connectCircleEvmEmailWallet>>
-type ArgentStarknetSession = { address?: string; account?: { execute?: (calls: unknown[]) => Promise<{ transaction_hash: string }> } }
-
 const CHAINS: ChainKey[] = ['base', 'solana', 'arbitrum']
 const POLYMARKET_SIGNUP_URL = 'https://polymarket.com'
 const POLYMARKET_LOGO = '/brand/polymarket-logo.png'
@@ -188,22 +186,6 @@ const ERC20_PERMIT_DOMAIN_ABI = [
   { name: 'version', type: 'function' as const, stateMutability: 'view' as const, inputs: [], outputs: [{ name: '', type: 'string' }] },
 ] as const
 
-// ─── Starknet helpers ─────────────────────────────────────────────────────────
-async function pollStarknetReceipt(txHash: string, signal: AbortSignal): Promise<void> {
-  void txHash
-  void signal
-  throw new Error('Starknet payments are no longer supported.')
-}
-
-/**
- * Queries USDC balance via our own backend proxy (/api/starknet-balance).
- * Direct browser→Starknet RPC calls are blocked by CORS; the backend proxy has no such restriction.
- */
-async function starkUsdcBalance(tokenAddress: string, accountAddress: string): Promise<bigint> {
-  void tokenAddress
-  void accountAddress
-  throw new Error('Starknet balances are no longer supported.')
-}
 
 // ─── Error message normaliser ─────────────────────────────────────────────────
 async function readApiJson<T>(res: Response, label: string): Promise<T> {
@@ -295,7 +277,6 @@ export default function PaymentPage() {
   const { onPayChainChange, onPayWalletStateChange, onPaySuccessVisibleChange } = useOutletContext<LayoutOutletContext>()
 
   const evmParam    = getPaylinkParam(searchParams, 'evm', 'e') || searchParams.get('to') || ''
-  const starkParam  = getPaylinkParam(searchParams, 'stark', 'k')
   const amt         = getPaylinkParam(searchParams, 'amt', 'a')
   const memo        = getPaylinkParam(searchParams, 'memo', 'm')
   const legacyChain = searchParams.get('chain')  as ChainKey | null
@@ -334,8 +315,7 @@ export default function PaymentPage() {
     return `/telegram/payment-links?${params.toString()}`
   })()
 
-  const resolvedStark  = starkParam || (legacyChain === 'starknet' ? evmParam : '')
-  const resolvedEvm    = legacyChain === 'starknet' ? '' : evmParam
+  const resolvedEvm    = evmParam
   const resolvedSolana = getPaylinkParam(searchParams, 'sol', 's').trim()
   const isMultiChain   = hasPaylinkFlag(searchParams, 'multi', 'x')
   const isFlex         = hasPaylinkFlag(searchParams, 'flex', 'f')
@@ -380,7 +360,7 @@ export default function PaymentPage() {
   const [chain, setChain] = useState<ChainKey>(() => {
     if (netParam === 'base' || netParam === 'arc' || netParam === 'solana' || netParam === 'arbitrum') return netParam
     if (legacyChain === 'base' || legacyChain === 'arc' || legacyChain === 'arbitrum' || legacyChain === 'solana') return legacyChain
-    if (resolvedSolana && !resolvedEvm && !resolvedStark) return 'solana'
+    if (resolvedSolana && !resolvedEvm) return 'solana'
     return 'base'
   })
 
@@ -509,13 +489,11 @@ export default function PaymentPage() {
   )
   const paymentAmountBlocked = flexPayDisabled
 
-  // ── Direct Send state (shared across Base, Arc, Starknet) ────────────────
-  const [payMode,          setPayMode]          = useState<'wallet' | 'direct'>(modeParam === 'direct' && chain !== 'starknet' && isMainHashPaylinkPayment ? 'direct' : 'wallet')
+  // ── Direct Send state (shared across Base, Arc, and Arbitrum) ─────────────
+  const [payMode,          setPayMode]          = useState<'wallet' | 'direct'>(modeParam === 'direct' && isMainHashPaylinkPayment ? 'direct' : 'wallet')
   const [directLinkId,     setDirectLinkId]     = useState<string | null>(null)
   // EVM chains (Base / Arc): the CREATE2 ghost vault address
   const [directVault,      setDirectVault]      = useState<`0x${string}` | null>(null)
-  // Starknet: the counterfactual OZ account address
-  const [starkDirectAddr,  setStarkDirectAddr]  = useState<string | null>(null)
   const [directStatus,     setDirectStatus]     = useState<'idle' | 'waiting' | 'relaying' | 'success' | 'error'>('idle')
   const [directTxHash,     setDirectTxHash]     = useState<string | null>(null)
   const [directError,      setDirectError]      = useState<string | null>(null)
@@ -637,13 +615,13 @@ export default function PaymentPage() {
   }, [])
 
   // ── Arbitrum USDC relay state — relayer submits tx on payer's behalf ──────
-  const [ghoRelayHash,    setGhoRelayHash]    = useState<`0x${string}` | undefined>(undefined)
-  const [ghoRelayPending, setGhoRelayPending] = useState(false)
-  const [ghoRelayError,   setGhoRelayError]   = useState<string | null>(null)
-  const [ghoGasEstimate,  setGhoGasEstimate]  = useState<bigint>(0n)
+  const [arbitrumRelayHash,    setArbitrumRelayHash]    = useState<`0x${string}` | undefined>(undefined)
+  const [arbitrumRelayPending, setArbitrumRelayPending] = useState(false)
+  const [arbitrumRelayError,   setArbitrumRelayError]   = useState<string | null>(null)
+  const [arbitrumGasEstimate,  setArbitrumGasEstimate]  = useState<bigint>(0n)
 
-  const { isLoading: isGhoConfirming, isSuccess: isGhoConfirmed } =
-    useWaitForTransactionReceipt({ hash: ghoRelayHash, chainId: 42161 })
+  const { isLoading: isArbitrumRelayConfirming, isSuccess: isArbitrumRelayConfirmed } =
+    useWaitForTransactionReceipt({ hash: arbitrumRelayHash, chainId: 42161 })
 
   const { signTypedDataAsync, isPending: isSignPending, reset: resetPermitSign } = useSignTypedData()
 
@@ -703,22 +681,6 @@ export default function PaymentPage() {
     },
   })
 
-  // ── Starknet ──────────────────────────────────────────────────────────────
-  const starkAccount = ''
-  const isStarkConnecting = false
-  const connectStarknet = () => setStarkError('Starknet payments are no longer supported.')
-  const [starkTxHash,       setStarkTxHash]      = useState<string | null>(null)
-  const [isStarkPending,    setIsStarkPending]    = useState(false)
-  const [isStarkConfirming, setIsStarkConfirming] = useState(false)
-  const [isStarkConfirmed,  setIsStarkConfirmed]  = useState(false)
-  const [starkError,        setStarkError]        = useState<string | null>(null)
-  const [argentStarkSession, setArgentStarkSession] = useState<ArgentStarknetSession | null>(null)
-  const [argentStarkPending, setArgentStarkPending] = useState(false)
-  const [argentStarkBalance, setArgentStarkBalance] = useState<bigint | null>(null)
-  const [argentStarkFetching, setArgentStarkFetching] = useState(false)
-  const [argentStarkCopied, setArgentStarkCopied] = useState(false)
-  const [argentStarkError, setArgentStarkError] = useState<string | null>(null)
-  const starkPollAbort = useRef<AbortController | null>(null)
 
   // ── Solana ────────────────────────────────────────────────────────────────
   const {
@@ -775,7 +737,7 @@ export default function PaymentPage() {
   ])
 
   // ── Derived ───────────────────────────────────────────────────────────────
-  const isEvmChain    = chain !== 'starknet' && chain !== 'solana'
+  const isEvmChain    = chain !== 'solana'
   const isHskOnly     = legacyChain === 'hashkey'
   const meta          = CHAIN_META[chain]
   const targetChainId =
@@ -786,15 +748,13 @@ export default function PaymentPage() {
   const isCorrectNetwork = isEvmChain ? chainId === targetChainId : true
   const feeAmount        = (parseFloat(effectiveAmt) || 0) * (PLATFORM_FEE_BPS / 10_000)
 
-  const activeRecipient = chain === 'starknet' ? resolvedStark
-    : chain === 'solana' ? resolvedSolana
+  const activeRecipient = chain === 'solana' ? resolvedSolana
     : resolvedEvm
   const displayAddress  = activeRecipient
   const consumerNetworkName =
     chain === 'base' ? 'Base' :
     chain === 'arbitrum' ? 'Arbitrum' :
     chain === 'solana' ? 'Solana' :
-    chain === 'starknet' ? 'Starknet' :
     chain === 'arc' ? 'Arc' :
     meta.label
   const circlePaymasterConfig = getCirclePaymasterConfig(chain)
@@ -854,7 +814,6 @@ export default function PaymentPage() {
     payMode === 'wallet' &&
     !showCircleEmailBridgePay &&
     !showCirclePaymasterButton
-  const showArgentStarknetEmailPay = false
   const walletConnectBlocked = smartWalletOnlyFunding && !PRIVY_AUTH_ENABLED
   const canStartPolymarketCircleFunding =
     showCircleEvmEmailPay ||
@@ -866,7 +825,6 @@ export default function PaymentPage() {
     isPolymarketFunding &&
     payMode === 'wallet' &&
     canStartPolymarketCircleFunding &&
-    chain !== 'starknet' &&
     !manualPayDetected &&
     !circleSmartAccount &&
     !circleSolanaSession &&
@@ -911,20 +869,11 @@ export default function PaymentPage() {
     try {
       const totalUnits = parseUnits(effectiveAmt || '0', meta.decimals)
       if (grossUpSolanaPlatformCharges) return solanaPaymentRequiredUnits(totalUnits)
-      if (chain === 'starknet' && grossUpPlatformCharges) {
-        const feeUnits = totalUnits * BigInt(PLATFORM_FEE_BPS) / 10_000n
-        return totalUnits + feeUnits
-      }
       return grossUpEvmPlatformCharges ? evmPaymentBreakdown(totalUnits).requiredUnits : totalUnits
     } catch {
       return 0n
     }
   })()
-  const starkSmartWalletHasEnough =
-    argentStarkBalance !== null &&
-    circleRequiredUnits > 0n &&
-    argentStarkBalance >= circleRequiredUnits
-  const starkSmartWalletNeedsFunds = !!argentStarkSession && argentStarkBalance != null && circleRequiredUnits > 0n && argentStarkBalance < circleRequiredUnits
   const circleWalletHasEnough =
     typeof circleWalletBalance === 'bigint' &&
     circleRequiredUnits > 0n &&
@@ -958,13 +907,12 @@ export default function PaymentPage() {
     return grossUpEvmPlatformCharges ? totalUnits : (sponsoredRecipientUnits > 0n ? sponsoredRecipientUnits : totalUnits - feeUnits)
   }
 
-  const missingStark   = chain === 'starknet' && !resolvedStark
   const missingSolana  = chain === 'solana'   && !resolvedSolana
   const effectiveMemo  = requiresAttendeeName ? attendeeName : (isFlex ? (flexMemo || memo) : memo)
 
   const isValidParams =
     (isFlex || (!isNaN(parseFloat(amt)) && parseFloat(amt) > 0)) &&
-    (isAddress(resolvedEvm) || !!resolvedStark || !!resolvedSolana)
+    (isAddress(resolvedEvm) || !!resolvedSolana)
 
   // Whether the secondary direct-pay option should be shown for normal Hash PayLink payments.
   const canDirectSend =
@@ -1389,7 +1337,7 @@ export default function PaymentPage() {
   // ── Manual claim fallback ─────────────────────────────────────────────────
   // ── "Check Status" button ─────────────────────────────────────────────────
   useEffect(() => {
-    if (manualPayDetected || chain === 'starknet' || chain === 'solana' || !resolvedEvm || payMode !== 'wallet') {
+    if (manualPayDetected || chain === 'solana' || !resolvedEvm || payMode !== 'wallet') {
       setShowCheckButton(false)
       return
     }
@@ -1451,7 +1399,7 @@ export default function PaymentPage() {
   }, [circlePasskeyPending, circleEvmPaymentProcessing, manualPayDetected, circlePaymasterTxHash])
 
   async function handleManualCheck() {
-    if (!resolvedEvm || chain === 'starknet') return
+    if (!resolvedEvm) return
     if (isManualChecking) return
     setIsManualChecking(true)
     try {
@@ -1531,7 +1479,7 @@ export default function PaymentPage() {
   }
 
   async function lookupPaymentTxHash() {
-    if (!resolvedEvm || manualTxHash || chain === 'starknet' || chain === 'solana' || chain === 'hashkey') return
+    if (!resolvedEvm || manualTxHash || chain === 'solana' || chain === 'hashkey') return
     const amountUnits = receivedAmount != null && receivedAmount > 0n
       ? receivedAmount
       : expectedEvmRecipientUnits()
@@ -1569,7 +1517,7 @@ export default function PaymentPage() {
   }
 
   useEffect(() => {
-    if (!circleEvmAcceptedPending || manualPayDetected || chain === 'starknet' || chain === 'solana' || payMode !== 'wallet') return
+    if (!circleEvmAcceptedPending || manualPayDetected || chain === 'solana' || payMode !== 'wallet') return
     const timer = setInterval(() => {
       if (!isManualChecking) void handleManualCheck()
     }, 5_000)
@@ -1578,7 +1526,7 @@ export default function PaymentPage() {
   }, [circleEvmAcceptedPending, manualPayDetected, chain, payMode, isManualChecking])
 
   useEffect(() => {
-    if (!manualPayDetected || manualTxHash || chain === 'starknet' || chain === 'solana' || chain === 'hashkey' || !resolvedEvm) return
+    if (!manualPayDetected || manualTxHash || chain === 'solana' || chain === 'hashkey' || !resolvedEvm) return
     const first = setTimeout(() => {
       void lookupPaymentTxHash()
     }, 2_000)
@@ -1593,7 +1541,7 @@ export default function PaymentPage() {
   }, [manualPayDetected, manualTxHash, chain, resolvedEvm, effectiveAmt, receivedAmount?.toString()])
 
   useEffect(() => {
-    if (manualTxHash || !manualPayDetected || chain === 'starknet' || chain === 'solana') return
+    if (manualTxHash || !manualPayDetected || chain === 'solana') return
     const timer = setInterval(() => setTxSyncTick(tick => tick + 1), 1_000)
     return () => clearInterval(timer)
   }, [manualTxHash, manualPayDetected, chain])
@@ -1609,7 +1557,6 @@ export default function PaymentPage() {
     if (isHskOnly && c !== 'hashkey') return
     if (c === chain) return
     // Chains that don't support Send via Address — fall back to wallet connect
-    if (c === 'starknet') setPayMode('wallet')
     // Auto-disconnect: switching TO Solana drops EVM; switching AWAY from Solana drops Solana
     if (c === 'solana' && isConnected) disconnectEvm()
     if (c !== 'solana' && solanaWalletAddr) disconnectSolana()
@@ -1617,9 +1564,6 @@ export default function PaymentPage() {
     setChain(c)
     resetEvmSend()
     resetPermitSign()
-    setStarkTxHash(null); setIsStarkPending(false); setIsStarkConfirming(false)
-    setIsStarkConfirmed(false); setStarkError(null)
-    starkPollAbort.current?.abort()
     setIsSolanaPending(false); setIsSolanaConfirming(false); setIsSolanaConfirmed(false)
     setSolanaError(null); setSolanaTxHash(null)
     setSolanaLinkId(null); setSolanaVaultAddr(null)
@@ -1633,7 +1577,7 @@ export default function PaymentPage() {
     setCirclePasskeyPending(false); setCirclePasskeyError(null); setCircleSmartAccount(null); setCircleEvmEmailSession(null); setCircleEvmPaymentProcessing(false); setCircleEvmAcceptedPending(false); setCircleWalletCopied(false)
     setShowCheckButton(false)
     // Reset direct send state
-    setDirectLinkId(null); setDirectVault(null); setStarkDirectAddr(null)
+    setDirectLinkId(null); setDirectVault(null)
     setDirectStatus('idle'); setDirectTxHash(null); setDirectError(null)
     directRelayedRef.current = false
     if (directPollRef.current) { clearInterval(directPollRef.current); directPollRef.current = null }
@@ -1881,34 +1825,32 @@ export default function PaymentPage() {
   // ── Fetch Arbitrum USDC gas estimate when Arbitrum chain is active ───────
   useEffect(() => {
     if (chain !== 'arbitrum') return
-    fetch('/api/relay-gho')
+    fetch('/api/relay-arbitrum-usdc')
       .then(r => r.json())
-      .then((d: { ok: boolean; gasReimbUsdc?: string; gasReimbGho?: string }) => {
-        const reimb = d.gasReimbUsdc ?? d.gasReimbGho
-        if (reimb) setGhoGasEstimate(BigInt(reimb))
+      .then((d: { ok: boolean; gasReimbUsdc?: string }) => {
+        if (d.gasReimbUsdc) setArbitrumGasEstimate(BigInt(d.gasReimbUsdc))
       })
       .catch(() => {})
   }, [chain])
 
   // ── Arbitrum USDC relay pay — relayer submits tx, payer only signs ───────
-  async function handleGhoRelayPay() {
+  async function handleArbitrumRelayPay() {
     if (!address || !activeRecipient) return
-    setGhoRelayError(null)
-    setGhoRelayPending(true)
+    setArbitrumRelayError(null)
+    setArbitrumRelayPending(true)
 
     const tokenAddress = CHAIN_META.arbitrum.tokenAddress
     const totalUnits   = parseUnits(effectiveAmt || '0', CHAIN_META.arbitrum.decimals)
     const deadline     = BigInt(Math.floor(Date.now() / 1000) + 3600)
     const nonce        = permitNonce ?? 0n
-    let gasReimbUnitsForPermit = ghoGasEstimate ?? 0n
+    let gasReimbUnitsForPermit = arbitrumGasEstimate ?? 0n
 
     // Refresh gas estimate just before signing so it's accurate
     try {
-      const est = await fetch('/api/relay-gho').then(r => r.json()) as { ok: boolean; gasReimbUsdc?: string; gasReimbGho?: string }
-      const reimb = est.gasReimbUsdc ?? est.gasReimbGho
-      if (reimb) {
-        gasReimbUnitsForPermit = BigInt(reimb)
-        setGhoGasEstimate(gasReimbUnitsForPermit)
+      const est = await fetch('/api/relay-arbitrum-usdc').then(r => r.json()) as { ok: boolean; gasReimbUsdc?: string }
+      if (est.gasReimbUsdc) {
+        gasReimbUnitsForPermit = BigInt(est.gasReimbUsdc)
+        setArbitrumGasEstimate(gasReimbUnitsForPermit)
       }
     } catch { /* use cached */ }
     const feeUnitsForPermit = totalUnits * BigInt(PLATFORM_FEE_BPS) / 10_000n
@@ -1934,7 +1876,7 @@ export default function PaymentPage() {
 
       const { v, r, s } = parseSignature(sig)
 
-      const relayRes = await fetch('/api/relay-gho', {
+      const relayRes = await fetch('/api/relay-arbitrum-usdc', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1950,11 +1892,11 @@ export default function PaymentPage() {
       })
       const data = await relayRes.json() as { ok: boolean; txHash?: `0x${string}`; error?: string }
       if (!data.ok || !data.txHash) throw new Error(data.error ?? 'Relay failed')
-      setGhoRelayHash(data.txHash)
+      setArbitrumRelayHash(data.txHash)
     } catch (err) {
-      setGhoRelayError(err instanceof Error ? friendlyErrorMsg(err.message) : 'Relay failed')
+      setArbitrumRelayError(err instanceof Error ? friendlyErrorMsg(err.message) : 'Relay failed')
     } finally {
-      setGhoRelayPending(false)
+      setArbitrumRelayPending(false)
     }
   }
 
@@ -1967,70 +1909,8 @@ export default function PaymentPage() {
     if (!activeRecipient) return
     if (chain === 'arbitrum') await handleArbitrumPay()
     else if (chain === 'base' || chain === 'arc') await handleEvmPermitPay()
-    else if (chain === 'starknet') handleStarknetPay()
     else if (chain === 'solana') await handleSolanaPay()
     else handleHashKeyPay()
-  }
-
-  async function refreshArgentStarkBalance(walletAddress = argentStarkSession?.address) {
-    if (!walletAddress) return
-    setArgentStarkFetching(true)
-    try {
-      const balance = await starkUsdcBalance('', walletAddress)
-      setArgentStarkBalance(balance)
-    } catch {
-      // Balance polling is advisory; payment submit still validates on-chain.
-    } finally {
-      setArgentStarkFetching(false)
-    }
-  }
-
-  useEffect(() => {
-    if (!argentStarkSession?.address || chain !== 'starknet') return
-    void refreshArgentStarkBalance(argentStarkSession.address)
-    const timer = setInterval(() => {
-      void refreshArgentStarkBalance(argentStarkSession.address)
-    }, 4_000)
-    return () => clearInterval(timer)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [argentStarkSession?.address, chain])
-
-  async function handleCopyArgentStarkWallet() {
-    if (!argentStarkSession?.address) return
-    await copyToClipboard(argentStarkSession.address)
-    setArgentStarkCopied(true)
-    setTimeout(() => setArgentStarkCopied(false), 2500)
-  }
-
-  async function handleArgentStarknetEmailPay() {
-    if (!resolvedStark || !showArgentStarknetEmailPay) return
-    if (paymentAmountBlocked || !effectiveAmt || parseFloat(effectiveAmt) <= 0) {
-      setArgentStarkError(blockedAmountError())
-      return
-    }
-
-    setArgentStarkPending(true)
-    setArgentStarkError(null)
-    try {
-      let session = argentStarkSession
-      if (!session) {
-        throw new Error('Starknet payments are no longer supported.')
-        setArgentStarkSession(session)
-        await refreshArgentStarkBalance(session.address)
-        return
-      }
-
-      if (argentStarkBalance !== null && !starkSmartWalletHasEnough) {
-        setArgentStarkError(SMART_WALLET_FUNDING_ERROR)
-        return
-      }
-
-      await handleStarknetPay(session)
-    } catch (err) {
-      setArgentStarkError(err instanceof Error ? err.message.slice(0, 140) : 'Smart wallet payment failed.')
-    } finally {
-      setArgentStarkPending(false)
-    }
   }
 
   async function refreshCircleSolanaBalance(walletAddress = circleSolanaSession?.wallet.address || circleSolanaAddress) {
@@ -2335,7 +2215,7 @@ export default function PaymentPage() {
   }
 
   async function handleArbitrumPay() {
-    await handleGhoRelayPay()
+    await handleArbitrumRelayPay()
   }
 
   async function handleCirclePaymasterPay() {
@@ -2742,29 +2622,23 @@ export default function PaymentPage() {
     setBasePaymasterError('HashKey payments are no longer supported. Use Base, Arc, Arbitrum, or Solana.')
   }
 
-  async function handleStarknetPay(sessionAccount?: ArgentStarknetSession) {
-    void sessionAccount
-    setStarkError('Starknet payments are no longer supported. Use Base, Arc, Arbitrum, or Solana.')
-  }
 
   // ── Unified aliases ───────────────────────────────────────────────────────
   // directStatus === 'success' is included so EVM Send-via-Address relay
   // immediately transitions to the full-screen success card (same as Solana).
   const isBasePaymasterConfirmed = !!basePaymasterTxHash && basePaymasterStatus?.status === 'success'
   const isBasePaymasterFailed = basePaymasterStatus?.status === 'failure'
-  const isConfirmed     = (chain === 'starknet' ? isStarkConfirmed : chain === 'solana' ? isSolanaConfirmed : chain === 'arbitrum' ? (isGhoConfirmed || isCirclePaymasterConfirmed) : (isEvmConfirmed || isBasePaymasterConfirmed || isCirclePaymasterConfirmed)) || manualPayDetected || directStatus === 'success'
+  const isConfirmed     = (chain === 'solana' ? isSolanaConfirmed : chain === 'arbitrum' ? (isArbitrumRelayConfirmed || isCirclePaymasterConfirmed) : (isEvmConfirmed || isBasePaymasterConfirmed || isCirclePaymasterConfirmed)) || manualPayDetected || directStatus === 'success'
   const txHash          = directStatus === 'success'   ? (directTxHash as `0x${string}` | null)
                         : manualPayDetected            ? manualTxHash
-                        : chain === 'starknet'         ? starkTxHash
                         : chain === 'solana'           ? solanaTxHash
-                        : chain === 'arbitrum'         ? (circlePaymasterTxHash ?? ghoRelayHash ?? null)
+                        : chain === 'arbitrum'         ? (circlePaymasterTxHash ?? arbitrumRelayHash ?? null)
                         : (circlePaymasterTxHash ?? basePaymasterTxHash ?? evmTxHash)
-  const isWalletPending = chain === 'starknet' ? isStarkPending   : chain === 'solana' ? (isSolanaPending || circleSolanaPending)   : chain === 'arbitrum' ? (ghoRelayPending || circlePaymasterPending || circlePasskeyPending || circleEvmPaymentProcessing || isSignPending) : isEvmWalletPending || circlePaymasterPending || circlePasskeyPending || circleEvmPaymentProcessing || isSignPending || isBasePaymasterPending
-  const isConfirming    = chain === 'starknet' ? isStarkConfirming : chain === 'solana' ? isSolanaConfirming : chain === 'arbitrum' ? (isGhoConfirming || isCirclePaymasterConfirming) : (isEvmConfirming || isBasePaymasterConfirming || isCirclePaymasterConfirming)
-  const isSendError     = chain === 'starknet' ? !!starkError : chain === 'solana' ? !!solanaError : chain === 'arbitrum' ? (!!ghoRelayError || !!circlePaymasterError) : (isEvmSendError || isEvmReverted || isBasePaymasterStatusError || isBasePaymasterFailed || !!basePaymasterError || !!circlePaymasterError)
-  const sendErrorMsg    = chain === 'starknet' ? starkError
-                        : chain === 'solana'   ? solanaError
-                        : chain === 'arbitrum' ? (circlePaymasterError ?? ghoRelayError)
+  const isWalletPending = chain === 'solana' ? (isSolanaPending || circleSolanaPending)   : chain === 'arbitrum' ? (arbitrumRelayPending || circlePaymasterPending || circlePasskeyPending || circleEvmPaymentProcessing || isSignPending) : isEvmWalletPending || circlePaymasterPending || circlePasskeyPending || circleEvmPaymentProcessing || isSignPending || isBasePaymasterPending
+  const isConfirming    = chain === 'solana' ? isSolanaConfirming : chain === 'arbitrum' ? (isArbitrumRelayConfirming || isCirclePaymasterConfirming) : (isEvmConfirming || isBasePaymasterConfirming || isCirclePaymasterConfirming)
+  const isSendError     = chain === 'solana' ? !!solanaError : chain === 'arbitrum' ? (!!arbitrumRelayError || !!circlePaymasterError) : (isEvmSendError || isEvmReverted || isBasePaymasterStatusError || isBasePaymasterFailed || !!basePaymasterError || !!circlePaymasterError)
+  const sendErrorMsg    = chain === 'solana'   ? solanaError
+                        : chain === 'arbitrum' ? (circlePaymasterError ?? arbitrumRelayError)
                         : isBasePaymasterStatusError
                           ? (basePaymasterStatusError?.message ?? basePaymasterError ?? 'Sponsored transaction failed').slice(0, 140)
                         : isBasePaymasterFailed
@@ -2790,19 +2664,17 @@ export default function PaymentPage() {
   }, [isConfirmed, isPolymarketBridge, refreshPolymarketBridgeStatus])
 
   // ── Direct Send display address ───────────────────────────────────────────
-  const directDisplayAddr = chain === 'starknet' ? starkDirectAddr : directVault
+  const directDisplayAddr = directVault
 
   // ── Event mode: register payment after confirmation ───────────────────────
   async function doRegister(name: string) {
     // In Send-via-Address mode the payer never connects a wallet so address is
     // undefined. Fall back to the vault address as the payer identifier.
-    const payer  = chain === 'starknet' ? (argentStarkSession?.address ?? starkAccount ?? '')
-      : chain === 'solana' ? (circleSolanaSession?.wallet.address ?? solanaWalletAddr ?? solanaVaultAddr ?? '')
+    const payer  = chain === 'solana' ? (circleSolanaSession?.wallet.address ?? solanaWalletAddr ?? solanaVaultAddr ?? '')
       : (address ?? circleEvmEmailSession?.wallet.address ?? circleSmartAccount ?? directVault ?? '')
     const txH    = manualPayDetected ? manualTxHash
-                 : chain === 'starknet' ? starkTxHash
                  : chain === 'solana'   ? (solanaTxHash ?? solanaDirectTxHash)
-                 : chain === 'arbitrum' ? (circlePaymasterTxHash ?? ghoRelayHash ?? directTxHash ?? null)
+                 : chain === 'arbitrum' ? (circlePaymasterTxHash ?? arbitrumRelayHash ?? directTxHash ?? null)
                  : (circlePaymasterTxHash ?? basePaymasterTxHash ?? evmTxHash ?? directTxHash ?? null)
     const txHash = txH ?? `manual_${Date.now()}`
     const actualAmt = receivedAmount != null
@@ -2864,13 +2736,11 @@ export default function PaymentPage() {
     if (!ngPosEventId || !ngPosMerchantId) return
     const customerName = attendeeName.trim()
     if (!customerName) return
-    const payer  = chain === 'starknet' ? (argentStarkSession?.address ?? starkAccount ?? '')
-      : chain === 'solana' ? (circleSolanaSession?.wallet.address ?? solanaWalletAddr ?? solanaVaultAddr ?? '')
+    const payer  = chain === 'solana' ? (circleSolanaSession?.wallet.address ?? solanaWalletAddr ?? solanaVaultAddr ?? '')
       : (address ?? circleEvmEmailSession?.wallet.address ?? circleSmartAccount ?? directVault ?? '')
     const txH    = manualPayDetected ? manualTxHash
-                 : chain === 'starknet' ? starkTxHash
                  : chain === 'solana'   ? (solanaTxHash ?? solanaDirectTxHash)
-                 : chain === 'arbitrum' ? (circlePaymasterTxHash ?? ghoRelayHash ?? directTxHash ?? null)
+                 : chain === 'arbitrum' ? (circlePaymasterTxHash ?? arbitrumRelayHash ?? directTxHash ?? null)
                  : (circlePaymasterTxHash ?? basePaymasterTxHash ?? evmTxHash ?? directTxHash ?? null)
     const actualAmt = receivedAmount != null
       ? (Number(receivedAmount) / Math.pow(10, meta.decimals)).toFixed(meta.decimals <= 6 ? 6 : 8)
@@ -2909,8 +2779,7 @@ export default function PaymentPage() {
 
   async function registerOrdinaryReceipt() {
     if (!txHash || txHash.startsWith('manual_')) return
-    const payer = chain === 'starknet' ? (argentStarkSession?.address ?? starkAccount ?? '')
-      : chain === 'solana' ? (circleSolanaSession?.wallet.address ?? solanaWalletAddr ?? solanaVaultAddr ?? '')
+    const payer = chain === 'solana' ? (circleSolanaSession?.wallet.address ?? solanaWalletAddr ?? solanaVaultAddr ?? '')
       : (address ?? circleEvmEmailSession?.wallet.address ?? circleSmartAccount ?? directVault ?? '')
     const actualAmt = receivedAmount != null
       ? (Number(receivedAmount) / Math.pow(10, meta.decimals)).toFixed(meta.decimals <= 6 ? 6 : 8)
@@ -2942,8 +2811,7 @@ export default function PaymentPage() {
 
   async function registerPolymarketFundingReceipt() {
     if (!txHash || txHash.startsWith('manual_')) return
-    const payer = chain === 'starknet' ? (argentStarkSession?.address ?? starkAccount ?? '')
-      : chain === 'solana' ? (circleSolanaSession?.wallet.address ?? solanaWalletAddr ?? solanaVaultAddr ?? '')
+    const payer = chain === 'solana' ? (circleSolanaSession?.wallet.address ?? solanaWalletAddr ?? solanaVaultAddr ?? '')
       : (address ?? circleEvmEmailSession?.wallet.address ?? circleSmartAccount ?? directVault ?? '')
     const actualAmt = receivedAmount != null
       ? (Number(receivedAmount) / Math.pow(10, meta.decimals)).toFixed(meta.decimals <= 6 ? 6 : 8)
@@ -3335,7 +3203,7 @@ export default function PaymentPage() {
                   </div>
                 </div>
               )}
-              {!txHash && manualPayDetected && chain !== 'starknet' && chain !== 'solana' && (
+              {!txHash && manualPayDetected && chain !== 'solana' && (
                 <div className="flex items-center justify-between px-4 py-3">
                   <span className="text-sm text-gray-500">Tx</span>
                   <span className="text-xs font-medium text-gray-400">
@@ -3518,13 +3386,9 @@ export default function PaymentPage() {
               const isActive   = chain === c
               const hskLocked  = isHskOnly && c !== 'hashkey'
               const unavailable = isMultiChain
-                ? (c === 'starknet' && !resolvedStark) ||
-                  (c === 'solana'   && !resolvedSolana) ||
-                  (c !== 'starknet' && c !== 'solana' && !resolvedEvm)
+                ? (c === 'solana' ? !resolvedSolana : !resolvedEvm)
                 : hskLocked ||
-                  (c === 'starknet' && !resolvedStark) ||
-                  (c === 'solana'   && !resolvedSolana) ||
-                  (c !== 'starknet' && c !== 'solana' && !resolvedEvm)
+                  (c === 'solana' ? !resolvedSolana : !resolvedEvm)
               return (
                 <div key={c} className="relative">
                   <button
@@ -3548,7 +3412,7 @@ export default function PaymentPage() {
           </div>
         </div>
 
-        {/* ── Pay mode toggle (Base, Arc USDC, Starknet) ───────────────── */}
+        {/* ── Pay mode toggle (Base, Arc, and Arbitrum USDC) ────────────── */}
         {canDirectSend && (
           <div className="flex justify-center px-4 pt-3">
             <div className="flex rounded-xl border border-gray-200 bg-gray-100/80 p-0.5 text-xs font-semibold">
@@ -3784,8 +3648,8 @@ export default function PaymentPage() {
               <div className="flex items-center justify-between bg-gray-50/60 px-4 py-2 border-t border-dashed border-gray-100">
                 <span className="text-[11px] font-normal text-slate-400 tracking-wide">Gas reimb (relayer pays ETH)</span>
                 <span className="font-mono text-[11px] text-slate-400">
-                  {ghoGasEstimate > 0n
-                    ? `~${(Number(ghoGasEstimate) / 1e6).toFixed(4)} USDC`
+                  {arbitrumGasEstimate > 0n
+                    ? `~${(Number(arbitrumGasEstimate) / 1e6).toFixed(4)} USDC`
                     : '…'}
                 </span>
               </div>
@@ -3998,7 +3862,7 @@ export default function PaymentPage() {
           )}
 
           {/* Tx finalizing indicator — wallet mode only, after tx submitted */}
-          {payMode === 'wallet' && evmTxHash && !isEvmConfirmed && chain !== 'starknet' && (
+          {payMode === 'wallet' && evmTxHash && !isEvmConfirmed && (
             <div className="flex items-center gap-2.5 rounded-xl border border-emerald-100 bg-emerald-50/60 px-3 py-2.5">
               <div className="relative flex h-2.5 w-2.5 shrink-0">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
@@ -4006,22 +3870,6 @@ export default function PaymentPage() {
               </div>
               <p className="text-[11px] font-medium text-emerald-700">Transaction Found! Finalizing…</p>
               <Radio className="ml-auto h-3 w-3 text-emerald-400" />
-            </div>
-          )}
-
-          {/* Missing Starknet address */}
-          {missingStark && (
-            <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
-              <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-500" />
-              <div>
-                <p className="text-sm font-semibold text-amber-800">Receiver has not set a Starknet address</p>
-                <p className="mt-0.5 text-xs text-amber-700">
-                  Pay via{' '}
-                  <button onClick={() => handleChainSwitch('base')} className="font-semibold underline underline-offset-2">Base</button>
-                  {' '}or{' '}
-                  <button onClick={() => handleChainSwitch('hashkey')} className="font-semibold underline underline-offset-2">HashKey</button>.
-                </p>
-              </div>
             </div>
           )}
 
@@ -4041,7 +3889,7 @@ export default function PaymentPage() {
           )}
 
           {/* Wrong network */}
-          {isEvmChain && isConnected && !isCorrectNetwork && !missingStark && payMode === 'wallet' && (() => {
+          {isEvmChain && isConnected && !isCorrectNetwork && payMode === 'wallet' && (() => {
             const currentName = CHAIN_DISPLAY_NAMES[chainId] ?? `Chain ${chainId}`
             return (
               <div className="overflow-hidden rounded-2xl border border-gray-200/80 bg-white dark:border-white/10 dark:bg-white/[0.03]">
@@ -4099,7 +3947,7 @@ export default function PaymentPage() {
                 <p className="mt-0.5 text-xs text-red-600">
                   {friendlyErrorMsg(sendErrorMsg ?? 'An unknown error occurred')}
                 </p>
-                <button onClick={() => { resetEvmSend(); setStarkError(null); setBasePaymasterError(null); setCirclePaymasterError(null) }}
+                <button onClick={() => { resetEvmSend(); setBasePaymasterError(null); setCirclePaymasterError(null) }}
                   className="mt-2 text-xs font-bold text-red-700 hover:text-red-900">Try again</button>
               </div>
             </div>
@@ -4127,7 +3975,7 @@ export default function PaymentPage() {
             </div>
           )}
 
-          {payMode === 'wallet' && showCircleEmailBridgePay && chain !== 'starknet' && chain !== 'solana' && !manualPayDetected && (!isPolymarketFunding || polymarketFundingStep === 'fund' || !!circleSmartAccount) && (
+          {payMode === 'wallet' && showCircleEmailBridgePay && chain !== 'solana' && !manualPayDetected && (!isPolymarketFunding || polymarketFundingStep === 'fund' || !!circleSmartAccount) && (
             <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
               {!circleSmartAccount && !showPrivyCircleEmailPay && (
                 <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.06]">
@@ -4304,12 +4152,7 @@ export default function PaymentPage() {
           )}
 
           {/* ── Primary CTA (wallet mode only) ────────────────────────── */}
-          {payMode === 'wallet' && missingStark ? (
-            <button disabled className="flex w-full cursor-not-allowed items-center justify-center gap-2 rounded-xl bg-gray-100 px-6 py-4 text-sm font-semibold text-gray-400">
-              <AlertTriangle className="h-4 w-4" />
-              No Starknet Address Available
-            </button>
-          ) : payMode === 'wallet' && missingSolana ? (
+          {payMode === 'wallet' && missingSolana ? (
             <button disabled className="flex w-full cursor-not-allowed items-center justify-center gap-2 rounded-xl bg-gray-100 px-6 py-4 text-sm font-semibold text-gray-400">
               <AlertTriangle className="h-4 w-4" />
               No Solana Address Available
@@ -4536,101 +4379,6 @@ export default function PaymentPage() {
               </button>
                 ) : null}
               </div>
-          ) : payMode === 'wallet' && chain === 'starknet' ? (
-            !starkAccount ? (
-              <div className="space-y-2">
-                {showArgentStarknetEmailPay && !manualPayDetected && (
-                  <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50/70 p-3">
-                    <button
-                      onClick={handleArgentStarknetEmailPay}
-                      disabled={argentStarkPending || isStarkPending || isStarkConfirming || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
-                      className={cn(
-                        'flex w-full items-center justify-center gap-2 rounded-xl px-6 py-3.5 text-sm font-semibold transition-all',
-                        argentStarkPending || isStarkPending || isStarkConfirming
-                          ? 'cursor-not-allowed bg-gray-100 text-gray-500'
-                          : 'bg-black text-white shadow-button hover:bg-gray-800 active:scale-[0.98]',
-                      )}
-                    >
-                      {isStarkConfirming
-                        ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirming on Chain</>
-                        : isStarkPending
-                        ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirming payment</>
-                        : argentStarkPending
-                        ? <><Loader2 className="h-4 w-4 animate-spin" /> {argentStarkSession ? 'Preparing payment' : 'Opening Smart wallet'}</>
-                        : argentStarkSession
-                          ? <><Zap className="h-4 w-4" /> Pay {formatAmount(effectiveAmt, 6)} USDC</>
-                          : <><Mail className="h-4 w-4" /> Continue with email</>}
-                    </button>
-                    {argentStarkSession && (
-                      <div className="rounded-lg border border-gray-200 bg-white/70 px-3 py-2">
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Smart wallet</p>
-                            <p className="truncate text-[11px] text-gray-500">
-                              {starkSmartWalletNeedsFunds ? 'Fund with Starknet USDC' : 'Starknet USDC ready'}
-                            </p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={handleCopyArgentStarkWallet}
-                            className="shrink-0 rounded-md border border-gray-200 bg-white px-2 py-1 text-[10px] font-semibold text-gray-600 transition-all hover:bg-gray-50 active:scale-95"
-                          >
-                            {argentStarkCopied ? 'Copied' : 'Copy to fund'}
-                          </button>
-                        </div>
-                        <div className="mt-2 flex items-center justify-between border-t border-gray-100 pt-2 text-[11px]">
-                          <span className="text-gray-400">Starknet balance</span>
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono font-semibold text-gray-700">
-                              {argentStarkBalance == null
-                                ? 'Checking...'
-                                : `${formatAmount((Number(argentStarkBalance) / 1_000_000).toString(), 6)} USDC`}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => refreshArgentStarkBalance()}
-                              className="rounded-md p-1 text-gray-400 transition-all hover:bg-gray-100 hover:text-gray-700 active:scale-95"
-                              aria-label="Refresh smart wallet balance"
-                              title="Refresh balance"
-                            >
-                              <RefreshCw className={cn('h-3 w-3', argentStarkFetching && 'animate-spin')} />
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                    {argentStarkError && (
-                      <p className="text-center text-[11px] font-medium text-red-600">
-                        {isSmartWalletBalanceError(argentStarkError) ? argentStarkError : `Transaction failed: ${argentStarkError}`}
-                      </p>
-                    )}
-                    {!smartWalletOnlyFunding && !isTelegramSource && (
-                      <div className="flex items-center gap-3">
-                        <div className="h-px flex-1 bg-gray-200" />
-                        <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">or</span>
-                        <div className="h-px flex-1 bg-gray-200" />
-                      </div>
-                    )}
-                  </div>
-                )}
-                <button onClick={connectStarknet} disabled={isStarkConnecting || !window.starknet || (requiresAttendeeName && !attendeeName.trim())}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#6236FF] px-6 py-4 text-sm font-semibold text-white transition-all hover:bg-[#5025EE] active:scale-[0.98] disabled:opacity-60">
-                  {isStarkConnecting ? <><Loader2 className="h-4 w-4 animate-spin" /> Connecting…</> : <><Wallet className="h-4 w-4" /> {showArgentStarknetEmailPay ? 'Use ArgentX / Braavos' : 'Connect Starknet Wallet'}</>}
-                </button>
-                <p className="text-center text-xs text-gray-400">{showArgentStarknetEmailPay ? 'Browser wallet fallback' : 'ArgentX, Braavos & other Starknet wallets'}</p>
-              </div>
-            ) : (
-              <button onClick={handlePay} disabled={isStarkPending || isStarkConfirming || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
-                className={cn(
-                  'flex w-full items-center justify-center gap-2 rounded-xl px-6 py-4 text-sm font-semibold transition-all',
-                  isStarkPending || isStarkConfirming ? 'cursor-not-allowed bg-gray-100 text-gray-500'
-                    : 'bg-[#6236FF] text-white hover:bg-[#5025EE] shadow-button active:scale-[0.98]',
-                )}>
-                {isStarkPending     ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirm in Wallet…</>
-                : isStarkConfirming ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirming on Chain…</>
-                : <><Zap className="h-4 w-4" /> Pay {formatAmount(effectiveAmt, 6)} USDC on Starknet</>}
-              </button>
-            )
           ) : payMode === 'wallet' && (usePrivyCircleCheckout || usePrivyCircleSolanaCheckout) && !privyAuthenticated && !manualPayDetected && !showPolymarketFundingChoice ? (
             <div className={cn(
               'flex flex-col items-center gap-1.5',
@@ -4674,7 +4422,7 @@ export default function PaymentPage() {
                   : 'bg-black text-white shadow-button hover:bg-gray-800 hover:shadow-md active:scale-[0.98]',
               )}>
               {isSignPending        ? <><Loader2 className="h-4 w-4 animate-spin" /> Sign Permit in Wallet…</>
-              : ghoRelayPending     ? <><Loader2 className="h-4 w-4 animate-spin" /> Relaying via HashPayLink…</>
+              : arbitrumRelayPending     ? <><Loader2 className="h-4 w-4 animate-spin" /> Relaying via HashPayLink…</>
               : isBasePaymasterPending ? <><Loader2 className="h-4 w-4 animate-spin" /> Requesting sponsored gas…</>
               : isEvmWalletPending  ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirm in Wallet…</>
               : isConfirming        ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirming on Chain…</>
@@ -4718,7 +4466,7 @@ export default function PaymentPage() {
       )}
 
       {/* Manual check button */}
-      {showCheckButton && !manualPayDetected && chain !== 'starknet' && chain !== 'solana' && payMode === 'wallet' && (
+      {showCheckButton && !manualPayDetected && chain !== 'solana' && payMode === 'wallet' && (
         <div className="mt-4 flex justify-center">
           <button
             onClick={handleManualCheck}

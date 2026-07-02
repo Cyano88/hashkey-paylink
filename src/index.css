@@ -216,13 +216,6 @@ html.dark .from-blue-50 {
 }
 html.dark .to-sky-50   { --tw-gradient-to: #0a1a28; }
 
-/* Starknet (purple) */
-html.dark .from-purple-50 {
-  --tw-gradient-from: #100a22;
-  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(16,10,34,0));
-}
-html.dark .to-violet-50 { --tw-gradient-to: #120a24; }
-
 /* HashKey (amber/gold) */
 html.dark .from-amber-50 {
   --tw-gradient-from: #1a1505;

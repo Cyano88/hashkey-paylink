@@ -46,10 +46,16 @@ services:
         sync: false                   # Circle User-Controlled Wallet Web SDK app id
       - key: VITE_CIRCLE_USER_WALLET_APP_ID_ARC_TESTNET
         sync: false                   # Circle test app id for Arc testnet StreamPay
+      - key: VITE_RPC_URL_ARC
+        value: "https://rpc.testnet.arc.network"
       - key: STREAM_FACTORY_ADDRESS
         value: "0xBAecf54084A0cB65b77a88cbDEf2b663Be71c61b"
       - key: VITE_STREAM_FACTORY_ADDRESS
         value: "0xBAecf54084A0cB65b77a88cbDEf2b663Be71c61b"
+      - key: ARC_POA_CONTRACT
+        value: "0x91DbDb49c8C68e5775554D42A1B5ce15C89C814B"
+      - key: VITE_POA_CONTRACT
+        value: "0x91DbDb49c8C68e5775554D42A1B5ce15C89C814B"
       - key: ARENA_ESCROW_FACTORY_ADDRESS
         sync: false                   # Server-side Arena escrow factory after multiplayer contract deploy
       - key: VITE_ARENA_ESCROW_FACTORY_ADDRESS
@@ -68,12 +74,44 @@ services:
         sync: false                   # Circle TEST_API key for Arc testnet StreamPay
       - key: CIRCLE_BASE_URL
         value: "https://api.circle.com"
-      - key: UPSTASH_REDIS_REST_URL
-        sync: false                   # durable Circle recipient email-hash -> wallet mapping
-      - key: UPSTASH_REDIS_REST_TOKEN
-        sync: false                   # Upstash Redis REST token
+      - key: CIRCLE_CLI_ENABLED
+        value: "true"                 # required for reader wallet login, x402 balance checks, Gateway activation, and x402 pay
       - key: DATABASE_URL
-        sync: false                   # Postgres connection string for durable StreamPay Arena rooms
+        sync: false                   # Render Postgres for durable platform storage
+      - key: HASH_PAYLINK_BASE_URL
+        value: "https://hashpaylink.com"
+      - key: PUBLIC_APP_URL
+        value: "https://hashpaylink.com"
+      - key: CREATOR_ADMIN_KEY
+        sync: false                   # admin review key for /creator-admin approvals
+      - key: CREATOR_OFFICIAL_WALLET
+        sync: false                   # official StreamPay creator wallet used for official cards
+      - key: CREATOR_WORLD_CUP_NEWS_URL
+        value: "https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026"
+      - key: CREATOR_WORLD_CUP_NEWS_PRICE_RAW
+        value: "100000"
+      - key: CREATOR_WORLD_CUP_SCORES_PRICE_RAW
+        value: "100000"
+      - key: X402_CREATOR_ACCEPT_NETWORKS
+        value: "eip155:5042002"
+      - key: X402_CREATOR_FACILITATOR_URL
+        value: "https://gateway-api-testnet.circle.com"
+      - key: CREATOR_AGENT_X402_PAY_CHAIN
+        value: "ARC-TESTNET"
+      - key: AGENT_WALLET_SERVICE_SECRET
+        sync: false                   # server secret for agent wallet service operations
+      - key: DEFAULT_AGENT_SLUG
+        value: "hashpaylink-agent"
+      - key: DEFAULT_AGENT_WALLET_ADDRESS
+        sync: false                   # optional pinned platform reader/agent wallet address
+      - key: DEFAULT_AGENT_WALLET_CHAIN
+        value: "BASE"
+      - key: AGENT_WALLET_GATEWAY_BALANCE_CHAIN
+        value: "MATIC"
+      - key: AGENT_WALLET_GATEWAY_DEPOSIT_CHAIN
+        value: "BASE"
+      - key: AGENT_WALLET_MAX_GATEWAY_DEPOSIT_AMOUNT
+        value: "5"
       - key: PRIVY_APP_ID
         sync: false                   # server-side Privy app id; can match VITE_PRIVY_APP_ID
       - key: PRIVY_APP_SECRET
@@ -110,8 +148,12 @@ services:
         sync: false                   # 0x-prefixed — ROTATE before adding here
       - key: PRIVATE_RPC_URL
         sync: false                   # Alchemy backend RPC key (high rate limit)
+      - key: RELAYER_PRIVATE_KEY_ARC
+        sync: false                   # server-side Arc relayer key; never expose with VITE_
+      - key: PRIVATE_RPC_URL_ARC
+        value: "https://rpc.testnet.arc.network"
 
-      # ── Arbitrum + native USDC relayer (api/relay-gho.ts + api/relay-v2.ts) ─
+      # ── Arbitrum + native USDC relayer (api/relay-arbitrum-usdc.ts + api/relay-v2.ts) ─
       - key: RELAYER_PRIVATE_KEY_ARB
         sync: false                   # Arbitrum relayer key — wallet needs ETH on Arbitrum
       - key: PRIVATE_RPC_URL_ARB

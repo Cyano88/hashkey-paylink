@@ -13,10 +13,11 @@ import { PRIVY_AUTH_ENABLED } from '../../../../../src/lib/authMode'
 
 const ARC_CHAIN_ID = 5042002
 type CreatorCategory = 'worldcup-news' | 'live-scores' | 'ebooks' | 'crypto'
+type CreatorReviewStatus = 'pending' | 'approved' | 'rejected'
 
 const CREATOR_CATEGORIES: Array<{ id: CreatorCategory; label: string; disabled?: boolean }> = [
   { id: 'worldcup-news', label: 'World Cup News' },
-  { id: 'live-scores', label: 'Live Scores' },
+  { id: 'live-scores', label: 'Live Scores', disabled: true },
   { id: 'crypto', label: 'Crypto' },
   { id: 'ebooks', label: 'Ebooks', disabled: true },
 ]
@@ -92,7 +93,7 @@ function buildGateLink(params: {
   p.set('r',   params.rateRaw.toString())
   p.set('cap', params.capRaw.toString())
   p.set('mode', params.mode)
-  p.set('pay', 'x402')
+  p.set('pay', params.mode === 'unlock' ? 'x402' : 'poa')
   if (params.title.trim()) p.set('t', params.title.trim())
   return `${origin}/gate?${p.toString()}`
 }
@@ -246,6 +247,7 @@ export function LinkFactory({
     mode: 'unlock' | 'stream'
     contentType: 'text' | 'url'
     capRaw: number
+    reviewStatus: CreatorReviewStatus
   }) => void
   onTrackEarnings?: () => void
   initialDraft?: {
@@ -297,6 +299,7 @@ export function LinkFactory({
   const [copied,      setCopied]      = useState(false)
   const [storing,     setStoring]     = useState(false)
   const [storeError,  setStoreError]  = useState<string | null>(null)
+  const [publishStatus, setPublishStatus] = useState<CreatorReviewStatus | null>(null)
   const [circleSession, setCircleSession] = useState<CircleEvmEmailSession | null>(null)
   const [authBusy, setAuthBusy] = useState(false)
   const [pendingCircleOpen, setPendingCircleOpen] = useState(false)
@@ -321,6 +324,7 @@ export function LinkFactory({
     setRateStr(initialDraft.rateStr)
     setCapStr(initialDraft.capStr)
     setGateLink(null)
+    setPublishStatus(null)
     setStoreError(null)
   }, [draftKey, initialDraft])
 
@@ -359,6 +363,21 @@ export function LinkFactory({
     : streamDurationSec >= 60
     ? `${Math.round(streamDurationSec / 60)} min max`
     : `${streamDurationSec} sec max`
+  const publishStatusLabel = publishStatus === 'approved'
+    ? 'Approved for Discover'
+    : publishStatus === 'rejected'
+    ? 'Needs changes'
+    : 'Pending Discover review'
+  const publishStatusCopy = publishStatus === 'approved'
+    ? 'Private link works now and this post can appear in Discover.'
+    : publishStatus === 'rejected'
+    ? 'Private link still works. Update the post before Discover approval.'
+    : 'Private link works now. Discover listing appears after approval.'
+  const publishStatusClass = publishStatus === 'approved'
+    ? 'border-emerald-100 bg-emerald-50 text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-500/10 dark:text-emerald-200'
+    : publishStatus === 'rejected'
+    ? 'border-red-100 bg-red-50 text-red-600 dark:border-red-400/20 dark:bg-red-500/10 dark:text-red-200'
+    : 'border-amber-100 bg-amber-50 text-amber-700 dark:border-amber-400/20 dark:bg-amber-500/10 dark:text-amber-200'
 
   async function handleBuild() {
     if (!canBuild || !creatorAddress) return
@@ -432,8 +451,9 @@ export function LinkFactory({
           proofType,
         }),
       })
-      const data = await res.json() as { ok: boolean; error?: string }
+      const data = await res.json() as { ok: boolean; error?: string; reviewStatus?: CreatorReviewStatus }
       if (!data.ok) throw new Error(data.error ?? 'Failed to store content')
+      const reviewStatus = data.reviewStatus ?? 'pending'
 
       const nextGateLink = buildGateLink({
         contentId,
@@ -444,6 +464,7 @@ export function LinkFactory({
         mode,
       })
       setGateLink(nextGateLink)
+      setPublishStatus(reviewStatus)
       onGateCreated?.(nextGateLink, {
         creator: creatorAddress,
         title,
@@ -459,6 +480,7 @@ export function LinkFactory({
         mode,
         contentType,
         capRaw,
+        reviewStatus,
       })
       setCopied(false)
     } catch (e: unknown) {
@@ -1087,6 +1109,13 @@ export function LinkFactory({
                       {mode === 'unlock' ? 'Content published' : 'Stream published'}
                     </p>
                   </div>
+                  <div className={[
+                    'rounded-lg border px-3 py-2',
+                    publishStatusClass,
+                  ].join(' ')}>
+                    <p className="text-[10px] font-black uppercase tracking-[0.12em]">{publishStatusLabel}</p>
+                    <p className="mt-1 text-[11px] font-medium leading-relaxed">{publishStatusCopy}</p>
+                  </div>
                   <div className="grid grid-cols-2 gap-2 rounded-lg border border-gray-100 bg-white p-2 dark:border-white/10 dark:bg-[#111216]">
                     <div className="min-w-0">
                       <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-gray-400 dark:text-gray-500">Content</p>
@@ -1101,7 +1130,7 @@ export function LinkFactory({
                   </div>
                   <p className="break-all font-mono text-[10px] leading-relaxed text-gray-500 dark:text-gray-400">{gateLink}</p>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid gap-2 sm:grid-cols-2">
                   <button
                     onClick={handleCopy}
                     className="flex items-center justify-center gap-1.5 rounded-xl py-3 text-[13px] font-semibold transition-all min-h-[48px]"
@@ -1118,11 +1147,11 @@ export function LinkFactory({
                     className="flex items-center justify-center gap-1.5 rounded-xl py-3 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 transition-colors min-h-[48px] dark:text-gray-200 dark:hover:bg-white/[0.06]"
                     style={{ border: '2px solid #e5e7eb' }}
                   >
-                    Test Gate
+                    {mode === 'unlock' ? 'Test paid gate' : 'Test Gate'}
                   </a>
                 </div>
                 <button
-                  onClick={() => { setGateLink(null); setStoreError(null) }}
+                  onClick={() => { setGateLink(null); setPublishStatus(null); setStoreError(null) }}
                   className="w-full text-[11px] text-gray-400 hover:text-gray-600 transition-colors py-1 dark:text-gray-500 dark:hover:text-gray-200"
                 >
                   Edit post

@@ -2,12 +2,11 @@ import type { Request, Response } from 'express'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import crypto from 'node:crypto'
+import { readDurableJson, writeDurableJson } from './render-durable-store.js'
 
 const STORE_PATH = process.env.AGENT_PROFILE_STORE
   ?? (process.env.DATA_PATH ? `${process.env.DATA_PATH}/agent-profiles.json` : './data/agent-profiles.json')
-const UPSTASH_REST_URL = (process.env.UPSTASH_REDIS_REST_URL ?? '').trim().replace(/\/+$/, '')
-const UPSTASH_REST_TOKEN = (process.env.UPSTASH_REDIS_REST_TOKEN ?? '').trim()
-const UPSTASH_STORE_KEY = (process.env.AGENT_PROFILE_STORE_KEY ?? 'hashpaylink:agent-profiles').trim()
+const AGENT_PROFILE_STORE_KEY = (process.env.AGENT_PROFILE_STORE_KEY ?? 'hashpaylink:agent-profiles').trim()
 const PLATFORM_AGENT_SLUG = (process.env.DEFAULT_AGENT_SLUG ?? '').trim().toLowerCase() || 'hashpaylink-agent'
 const PLATFORM_AGENT_WALLET_ADDRESS = (process.env.DEFAULT_AGENT_WALLET_ADDRESS ?? '').trim()
 const MAX_OWNER_AGENTS = 3
@@ -99,27 +98,12 @@ function ownerKey(value: unknown) {
   return crypto.createHash('sha256').update(raw).digest('hex').slice(0, 32)
 }
 
-async function upstashCommand<T>(command: unknown[]): Promise<T | undefined> {
-  if (!UPSTASH_REST_URL || !UPSTASH_REST_TOKEN) return undefined
-  const response = await fetch(UPSTASH_REST_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${UPSTASH_REST_TOKEN}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(command),
-  })
-  if (!response.ok) throw new Error(`Upstash request failed: ${response.status}`)
-  const data = await response.json() as { result?: T }
-  return data.result
-}
-
 async function readStore(): Promise<Store> {
   try {
-    const remote = await upstashCommand<string>(['GET', UPSTASH_STORE_KEY])
-    if (remote) return JSON.parse(remote) as Store
+    const remote = await readDurableJson<Partial<Store>>(AGENT_PROFILE_STORE_KEY)
+    if (remote) return { agents: remote.agents ?? {} }
   } catch (err) {
-    console.warn('[agent-profile] Upstash load failed; using file fallback.', err instanceof Error ? err.message : String(err))
+    console.warn('[agent-profile] durable load failed; using file fallback.', err instanceof Error ? err.message : String(err))
   }
 
   try {
@@ -134,9 +118,9 @@ async function writeStore(store: Store) {
   const serialized = JSON.stringify(store, null, 2)
   await writeFile(STORE_PATH, serialized, 'utf8')
   try {
-    await upstashCommand(['SET', UPSTASH_STORE_KEY, JSON.stringify(store)])
+    await writeDurableJson(AGENT_PROFILE_STORE_KEY, store)
   } catch (err) {
-    console.warn('[agent-profile] Upstash save failed; file fallback saved.', err instanceof Error ? err.message : String(err))
+    console.warn('[agent-profile] durable save failed; file fallback saved.', err instanceof Error ? err.message : String(err))
   }
 }
 

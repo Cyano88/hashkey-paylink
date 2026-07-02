@@ -4,6 +4,7 @@ import { appendAgentActivity, normalizeActivitySlug } from './agent-activity.js'
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs'
 import { dirname }                 from 'path'
 import crypto from 'crypto'
+import { readDurableJson, writeDurableJson } from './render-durable-store.js'
 
 type PaymentEntry = {
   eventId:     string
@@ -51,24 +52,7 @@ function cleanOptionalString(value: unknown, maxLength: number): string {
 const DATA_FILE = process.env.DATA_PATH
   ? `${process.env.DATA_PATH}/event-registry.json`
   : null
-const UPSTASH_REST_URL = (process.env.UPSTASH_REDIS_REST_URL ?? '').trim().replace(/\/+$/, '')
-const UPSTASH_REST_TOKEN = (process.env.UPSTASH_REDIS_REST_TOKEN ?? '').trim()
-const UPSTASH_STORE_KEY = (process.env.EVENT_REGISTRY_STORE_KEY ?? 'hashpaylink:event-registry').trim()
-
-async function upstashCommand<T>(command: unknown[]): Promise<T | undefined> {
-  if (!UPSTASH_REST_URL || !UPSTASH_REST_TOKEN) return undefined
-  const response = await fetch(UPSTASH_REST_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${UPSTASH_REST_TOKEN}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(command),
-  })
-  if (!response.ok) throw new Error(`Upstash request failed: ${response.status}`)
-  const data = await response.json() as { result?: T }
-  return data.result
-}
+const EVENT_REGISTRY_STORE_KEY = (process.env.EVENT_REGISTRY_STORE_KEY ?? 'hashpaylink:event-registry').trim()
 
 function loadRegistry(): Map<string, PaymentEntry[]> {
   if (!DATA_FILE || !existsSync(DATA_FILE)) return new Map()
@@ -84,13 +68,12 @@ function loadRegistry(): Map<string, PaymentEntry[]> {
 
 async function hydrateRegistry(): Promise<void> {
   try {
-    const remote = await upstashCommand<string>(['GET', UPSTASH_STORE_KEY])
+    const remote = await readDurableJson<Record<string, PaymentEntry[]>>(EVENT_REGISTRY_STORE_KEY)
     if (!remote) return
-    const raw = JSON.parse(remote) as Record<string, PaymentEntry[]>
     registry.clear()
-    for (const [eventId, entries] of Object.entries(raw)) registry.set(eventId, entries)
+    for (const [eventId, entries] of Object.entries(remote)) registry.set(eventId, entries)
   } catch (e) {
-    console.warn('[registry] Upstash load failed; using local registry.', e instanceof Error ? e.message : String(e))
+    console.warn('[registry] durable load failed; using local registry.', e instanceof Error ? e.message : String(e))
   }
 }
 
@@ -102,7 +85,7 @@ async function persistRegistry(): Promise<void> {
       if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
       writeFileSync(DATA_FILE, serialized, 'utf8')
     }
-    await upstashCommand(['SET', UPSTASH_STORE_KEY, serialized])
+    await writeDurableJson(EVENT_REGISTRY_STORE_KEY, Object.fromEntries(registry))
   } catch (e) {
     console.warn('[registry] failed to persist:', e)
   }

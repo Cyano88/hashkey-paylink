@@ -10,7 +10,7 @@ const MAX_GAS_REIMB        = 1_000_000n                  // 1 USDC (6-dec) / con
 const MAX_NATIVE_GAS_REIMB = ethers.parseEther('0.01')   // 0.01 HSK/ETH (18-dec)
 
 function usdc(n: number): bigint { return BigInt(Math.round(n * 1e6)) }
-function gho(n: number):  bigint { return ethers.parseUnits(String(n), 18) }
+function erc18(n: number): bigint { return ethers.parseUnits(String(n), 18) }
 function hsk(n: number):  bigint { return ethers.parseEther(String(n)) }
 
 function split(total: bigint, gasReimb: bigint) {
@@ -30,7 +30,7 @@ describe('PayLinkFactoryV2', () => {
 
   let token1: MockERC20   // "Base USDC"  — 6 decimals
   let token2: MockERC20   // "Arc USDC"   — 6 decimals
-  let ghoToken: MockERC20 // "GHO Token"  — 18 decimals (Arbitrum)
+  let erc18Token: MockERC20 // "ERC18 Token"  — 18 decimals (Arbitrum)
   let factory: PayLinkFactoryV2
 
   const linkId = ethers.randomBytes(32)
@@ -41,7 +41,7 @@ describe('PayLinkFactoryV2', () => {
     const ERC20   = await ethers.getContractFactory('MockERC20')
     token1   = await ERC20.deploy('USD Coin (Base)', 'USDC', 6)  as MockERC20
     token2   = await ERC20.deploy('USD Coin (Arc)',  'USDC', 6)  as MockERC20
-    ghoToken = await ERC20.deploy('GHO Token',       'GHO',  18) as MockERC20
+    erc18Token = await ERC20.deploy('ERC18 Token',       'ERC18',  18) as MockERC20
 
     const Factory = await ethers.getContractFactory('PayLinkFactoryV2')
     factory = await Factory.deploy(treasury.address, relayer.address, owner.address) as PayLinkFactoryV2
@@ -479,87 +479,87 @@ describe('PayLinkFactoryV2', () => {
     })
   })
 
-  // ── 8. GHO — 18-decimal ERC-20 relay (Arbitrum One) ─────────────────────────
+  // ── 8. 18-decimal token — 18-decimal ERC-20 relay (Arbitrum One) ─────────────────────────
 
-  describe('GHO relay — 18-decimal token (Arbitrum scenario)', () => {
-    let ghoFactory: PayLinkFactoryV2
-    const ghoLinkId = ethers.keccak256(ethers.toUtf8Bytes('arbitrum-gho-link'))
+  describe('18-decimal ERC20 relay — 18-decimal token (Arbitrum scenario)', () => {
+    let erc18Factory: PayLinkFactoryV2
+    const erc18LinkId = ethers.keccak256(ethers.toUtf8Bytes('arbitrum-erc18-link'))
 
     beforeEach(async () => {
       const F  = await ethers.getContractFactory('PayLinkFactoryV2')
-      ghoFactory = await F.deploy(treasury.address, relayer.address, owner.address) as PayLinkFactoryV2
-      await ghoFactory.connect(owner).setUSDC(await ghoToken.getAddress())
+      erc18Factory = await F.deploy(treasury.address, relayer.address, owner.address) as PayLinkFactoryV2
+      await erc18Factory.connect(owner).setUSDC(await erc18Token.getAddress())
     })
 
-    it('relay with zero gasReimb splits correctly for 18-dec GHO', async () => {
-      const total = gho(10)
-      const vault = await ghoFactory.getVaultAddress(ghoLinkId, recipient.address)
-      await ghoToken.mint(vault, total)
+    it('relay with zero gasReimb splits correctly for 18-decimal token', async () => {
+      const total = erc18(10)
+      const vault = await erc18Factory.getVaultAddress(erc18LinkId, recipient.address)
+      await erc18Token.mint(vault, total)
 
       const { fee, payout } = split(total, 0n)
-      const rBefore = await ghoToken.balanceOf(recipient.address)
-      const tBefore = await ghoToken.balanceOf(treasury.address)
+      const rBefore = await erc18Token.balanceOf(recipient.address)
+      const tBefore = await erc18Token.balanceOf(treasury.address)
 
-      await ghoFactory.connect(relayer).relay(ghoLinkId, recipient.address, 0n)
+      await erc18Factory.connect(relayer).relay(erc18LinkId, recipient.address, 0n)
 
-      expect(await ghoToken.balanceOf(recipient.address) - rBefore).to.equal(payout)
-      expect(await ghoToken.balanceOf(treasury.address)  - tBefore).to.equal(fee)
-      expect(await ghoToken.balanceOf(await ghoFactory.getAddress())).to.equal(0n)
+      expect(await erc18Token.balanceOf(recipient.address) - rBefore).to.equal(payout)
+      expect(await erc18Token.balanceOf(treasury.address)  - tBefore).to.equal(fee)
+      expect(await erc18Token.balanceOf(await erc18Factory.getAddress())).to.equal(0n)
     })
 
-    it('MAX_GAS_REIMB constant (1_000_000) is negligible in GHO wei — relayer should pass 0', async () => {
-      // MAX_GAS_REIMB = 1_000_000 = 0.000000000001 GHO — effectively zero
+    it('MAX_GAS_REIMB constant (1_000_000) is negligible in 18-decimal token units — relayer should pass 0', async () => {
+      // MAX_GAS_REIMB = 1_000_000 = 0.000000000001 18-decimal token — effectively zero
       // Arbitrum relay costs ~$0.02 which is absorbed by treasury platform fee
-      const total      = gho(100)
+      const total      = erc18(100)
       const capReimb   = MAX_GAS_REIMB   // contract caps at this even if relayer asks more
       const { fee, gasReimb, payout } = split(total, capReimb)
 
-      const vault    = await ghoFactory.getVaultAddress(ghoLinkId, recipient.address)
-      await ghoToken.mint(vault, total)
+      const vault    = await erc18Factory.getVaultAddress(erc18LinkId, recipient.address)
+      await erc18Token.mint(vault, total)
 
-      const rBefore = await ghoToken.balanceOf(recipient.address)
-      await ghoFactory.connect(relayer).relay(ghoLinkId, recipient.address, capReimb)
+      const rBefore = await erc18Token.balanceOf(recipient.address)
+      await erc18Factory.connect(relayer).relay(erc18LinkId, recipient.address, capReimb)
 
-      // gasReimb is effectively dust — 1_000_000 wei GHO out of 100e18
+      // gasReimb is effectively dust — 1_000_000 wei 18-decimal token out of 100e18
       expect(gasReimb).to.equal(1_000_000n)
-      expect(await ghoToken.balanceOf(recipient.address) - rBefore).to.equal(payout)
+      expect(await erc18Token.balanceOf(recipient.address) - rBefore).to.equal(payout)
     })
 
-    it('large GHO amount relay — correct split at 0.2% fee', async () => {
-      const total = gho(1000)
+    it('large 18-decimal token amount relay — correct split at 0.2% fee', async () => {
+      const total = erc18(1000)
       const { fee, payout } = split(total, 0n)
 
-      const vault = await ghoFactory.getVaultAddress(ghoLinkId, recipient.address)
-      await ghoToken.mint(vault, total)
+      const vault = await erc18Factory.getVaultAddress(erc18LinkId, recipient.address)
+      await erc18Token.mint(vault, total)
 
-      const rBefore = await ghoToken.balanceOf(recipient.address)
-      await ghoFactory.connect(relayer).relay(ghoLinkId, recipient.address, 0n)
+      const rBefore = await erc18Token.balanceOf(recipient.address)
+      await erc18Factory.connect(relayer).relay(erc18LinkId, recipient.address, 0n)
 
-      expect(await ghoToken.balanceOf(recipient.address) - rBefore).to.equal(payout)
-      expect(fee).to.equal(gho(2)) // 0.2% of 1000 GHO = 2 GHO
+      expect(await erc18Token.balanceOf(recipient.address) - rBefore).to.equal(payout)
+      expect(fee).to.equal(erc18(2)) // 0.2% of 1000 18-decimal token = 2 18-decimal token
     })
 
     it('emits PaymentRelayed with correct 18-dec amounts', async () => {
-      const total = gho(50)
-      const vault = await ghoFactory.getVaultAddress(ghoLinkId, recipient.address)
-      await ghoToken.mint(vault, total)
+      const total = erc18(50)
+      const vault = await erc18Factory.getVaultAddress(erc18LinkId, recipient.address)
+      await erc18Token.mint(vault, total)
       const { fee, payout } = split(total, 0n)
 
       await expect(
-        ghoFactory.connect(relayer).relay(ghoLinkId, recipient.address, 0n)
+        erc18Factory.connect(relayer).relay(erc18LinkId, recipient.address, 0n)
       )
-        .to.emit(ghoFactory, 'PaymentRelayed')
-        .withArgs(ghoLinkId, recipient.address, payout, fee, 0n)
+        .to.emit(erc18Factory, 'PaymentRelayed')
+        .withArgs(erc18LinkId, recipient.address, payout, fee, 0n)
     })
 
-    it('double-relay reverts for GHO vault', async () => {
-      const vault = await ghoFactory.getVaultAddress(ghoLinkId, recipient.address)
-      await ghoToken.mint(vault, gho(10))
-      await ghoFactory.connect(relayer).relay(ghoLinkId, recipient.address, 0n)
+    it('double-relay reverts for 18-decimal token vault', async () => {
+      const vault = await erc18Factory.getVaultAddress(erc18LinkId, recipient.address)
+      await erc18Token.mint(vault, erc18(10))
+      await erc18Factory.connect(relayer).relay(erc18LinkId, recipient.address, 0n)
 
-      await ghoToken.mint(vault, gho(10))
+      await erc18Token.mint(vault, erc18(10))
       await expect(
-        ghoFactory.connect(relayer).relay(ghoLinkId, recipient.address, 0n)
+        erc18Factory.connect(relayer).relay(erc18LinkId, recipient.address, 0n)
       ).to.be.reverted
     })
 
@@ -567,37 +567,37 @@ describe('PayLinkFactoryV2', () => {
 
     it('vault initCode does NOT contain the token address — only factory address', async () => {
       const Ghost      = await ethers.getContractFactory('GhostVaultV2')
-      const factAddr   = await ghoFactory.getAddress()
+      const factAddr   = await erc18Factory.getAddress()
       const initCode   = ethers.concat([
         Ghost.bytecode,
         ethers.AbiCoder.defaultAbiCoder().encode(['address'], [factAddr]),
       ])
       const initHex  = ethers.hexlify(initCode).toLowerCase()
-      const ghoAddr  = (await ghoToken.getAddress()).toLowerCase().slice(2) // strip 0x
+      const erc18Addr = (await erc18Token.getAddress()).toLowerCase().slice(2) // strip 0x
 
       // Token address must NOT be in vault initCode — this is what makes the
       // address cross-chain portable when the factory is at the same address.
-      expect(initHex).to.not.include(ghoAddr)
+      expect(initHex).to.not.include(erc18Addr)
 
       // But the factory address IS present (it's the only constructor arg)
       const factHex = factAddr.toLowerCase().slice(2)
       expect(initHex).to.include(factHex)
     })
 
-    it('same factory address → identical vault address for USDC and GHO configs', async () => {
+    it('same factory address → identical vault address for USDC and 18-decimal token configs', async () => {
       // Deploy a fresh factory at a specific address, configure twice — once with
-      // USDC, once with GHO. Since initCode only encodes factory address, the
+      // USDC, once with an 18-decimal token. Since initCode only encodes factory address, the
       // vault address computed by getVaultAddress() is identical in both configs.
       const F      = await ethers.getContractFactory('PayLinkFactoryV2')
       const fresh  = await F.deploy(treasury.address, relayer.address, owner.address) as PayLinkFactoryV2
       const freshAddr = await fresh.getAddress()
 
       // getVaultAddress is a pure view — does NOT depend on which token is set
-      const vaultBeforeToken = await fresh.getVaultAddress(ghoLinkId, recipient.address)
-      await fresh.connect(owner).setUSDC(await ghoToken.getAddress())
-      const vaultAfterGho    = await fresh.getVaultAddress(ghoLinkId, recipient.address)
+      const vaultBeforeToken = await fresh.getVaultAddress(erc18LinkId, recipient.address)
+      await fresh.connect(owner).setUSDC(await erc18Token.getAddress())
+      const vaultAfterErc18    = await fresh.getVaultAddress(erc18LinkId, recipient.address)
 
-      expect(vaultBeforeToken).to.equal(vaultAfterGho)
+      expect(vaultBeforeToken).to.equal(vaultAfterErc18)
 
       // Verify against manual CREATE2 formula
       const Ghost    = await ethers.getContractFactory('GhostVaultV2')
@@ -605,9 +605,9 @@ describe('PayLinkFactoryV2', () => {
         Ghost.bytecode,
         ethers.AbiCoder.defaultAbiCoder().encode(['address'], [freshAddr]),
       ])
-      const salt   = ethers.solidityPackedKeccak256(['bytes32','address'], [ghoLinkId, recipient.address])
+      const salt   = ethers.solidityPackedKeccak256(['bytes32','address'], [erc18LinkId, recipient.address])
       const manual = ethers.getCreate2Address(freshAddr, salt, ethers.keccak256(initCode))
-      expect(vaultAfterGho).to.equal(manual)
+      expect(vaultAfterErc18).to.equal(manual)
     })
 
     it("Nick's Method guarantee: two factories with identical initcode land at same address", async () => {
@@ -621,10 +621,10 @@ describe('PayLinkFactoryV2', () => {
       const addrA    = await factA.getAddress()
       await factA.connect(owner).setUSDC(await token1.getAddress())  // USDC
 
-      // Factory B (GHO) — different deployment address, different token
+      // Factory B (18-decimal token) — different deployment address, different token
       const factB    = await F.deploy(treasury.address, relayer.address, owner.address) as PayLinkFactoryV2
       const addrB    = await factB.getAddress()
-      await factB.connect(owner).setUSDC(await ghoToken.getAddress()) // GHO
+      await factB.connect(owner).setUSDC(await erc18Token.getAddress()) // 18-decimal token
 
       // Each factory's vault initcode only encodes its own address
       const initCodeA = ethers.concat([Ghost.bytecode, ethers.AbiCoder.defaultAbiCoder().encode(['address'], [addrA])])
@@ -638,7 +638,7 @@ describe('PayLinkFactoryV2', () => {
       // We prove this by constructing a hypothetical shared address:
       const sharedAddr = addrA // imagine both deployed here via Nick's Method
       const sharedInit = ethers.concat([Ghost.bytecode, ethers.AbiCoder.defaultAbiCoder().encode(['address'], [sharedAddr])])
-      const salt       = ethers.solidityPackedKeccak256(['bytes32','address'], [ghoLinkId, recipient.address])
+      const salt       = ethers.solidityPackedKeccak256(['bytes32','address'], [erc18LinkId, recipient.address])
 
       const vaultOnBase     = ethers.getCreate2Address(sharedAddr, salt, ethers.keccak256(sharedInit))
       const vaultOnArbitrum = ethers.getCreate2Address(sharedAddr, salt, ethers.keccak256(sharedInit))

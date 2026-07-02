@@ -45,7 +45,7 @@ export default function SecurityDocs() {
 
       <Section title="Operational controls">
         <SubSection title="Postgres durability">
-          <p>Telegram, PolyDesk, Privy/Circle mappings, and Arena room state use Render Postgres instead of ephemeral local files.</p>
+          <p>Receipts, agent/helper state, POS profiles, PolyDesk, Privy/Circle mappings, and Arena room state use Render Postgres instead of ephemeral local files.</p>
         </SubSection>
         <SubSection title="Email alerts">
           <p>Portfolio and report emails use Resend. Delivery secrets remain server-side.</p>

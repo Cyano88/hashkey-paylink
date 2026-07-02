@@ -217,10 +217,6 @@ function keywordReply(input: string): ChatMsg | null {
   if (has('arc', 'arcscan', 'arc testnet', 'arc chain', 'testnet'))
     return { from: 'bot', text: 'Arc is an EVM chain using USDC as its native gas token. Hash PayLink is live on Arc Testnet (Chain ID 5042002) — great for testing without real funds. Explorer: testnet.arcscan.app' }
 
-  // ── Chains — Starknet ────────────────────────────────────────────────────────
-  if (has('starknet', 'argent', 'argentx', 'braavos', 'starkscan', 'l2 stark'))
-    return { from: 'bot', text: 'Starknet payments are no longer part of the active Hash PayLink checkout surface. Use Base, Arc, Arbitrum, or Solana for Circle-focused USDC payments.' }
-
   // ── Chains — Solana ──────────────────────────────────────────────────────────
   if (has('solana', 'phantom', 'solflare', 'solscan'))
     return { from: 'bot', text: 'Solana payments use native USDC. Wallets: Phantom and Solflare. Gas is relayer-sponsored — payers only sign the USDC transfer. "Send via Address" also works on Solana. Confirms in under 1 second. Explorer: solscan.io' }

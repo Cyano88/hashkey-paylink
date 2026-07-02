@@ -36,7 +36,7 @@ Hash PayLink is non-custodial. Payment links encode the checkout state, funds se
 | Arc Network | StreamPay payroll, agentic streams, and Arena escrow settlement |
 | 0G Storage | Durable payment and agent activity proof records |
 | Polymarket public APIs | PolyDesk portfolio, market, score, and LP context |
-| Postgres | Durable app state on Render for Arena rooms, Privy/Circle mapping, and PolyDesk settings |
+| Postgres | Durable app state on Render for payment receipts, agent/helper state, POS profiles, Arena rooms, Privy/Circle mappings, and PolyDesk settings |
 
 Use “built with” or “infrastructure stack” language unless a formal partnership is explicitly approved.
 
@@ -104,7 +104,7 @@ Archive contract: `0x79a804C49e1E5EBC279A228Ab73a7570A0D0819a` on 0G Mainnet.
 
 ## StreamPay Arena
 
-Arena rooms use Postgres for durable room settings and Arc escrow contracts for money movement. Postgres does not custody funds.
+Render Postgres is the durable app-state layer for receipts, agent/helper profiles, POS profiles, Privy/Circle mappings, PolyDesk settings, and Arena room settings. Arc escrow contracts handle Arena money movement; Postgres does not custody funds.
 
 - Room state: entry, player count, rounds, risk curve, timer, invite URL, status, escrow address.
 - Escrow state: deposits, recoverable refunds, winner settlement, and 0.5% platform fee.

@@ -1,10 +1,9 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
+import { readDurableJson, writeDurableJson } from './render-durable-store.js'
 
 const STORE_PATH = process.env.AGENTIC_STREAMING_STORE ?? './data/agentic-streaming-subscriptions.json'
-const UPSTASH_REST_URL = (process.env.UPSTASH_REDIS_REST_URL ?? '').trim().replace(/\/+$/, '')
-const UPSTASH_REST_TOKEN = (process.env.UPSTASH_REDIS_REST_TOKEN ?? '').trim()
-const UPSTASH_STORE_KEY = (process.env.AGENTIC_STREAMING_STORE_KEY ?? 'hashpaylink:agentic-streaming').trim()
+const AGENTIC_STREAMING_STORE_KEY = (process.env.AGENTIC_STREAMING_STORE_KEY ?? 'hashpaylink:agentic-streaming').trim()
 
 export type AgenticStreamingDelivery = {
   id: string
@@ -45,27 +44,12 @@ export type AgenticStreamingStore = {
   deliveries?: AgenticStreamingDelivery[]
 }
 
-async function upstashCommand<T>(command: unknown[]): Promise<T | undefined> {
-  if (!UPSTASH_REST_URL || !UPSTASH_REST_TOKEN) return undefined
-  const response = await fetch(UPSTASH_REST_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${UPSTASH_REST_TOKEN}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(command),
-  })
-  if (!response.ok) throw new Error(`Upstash request failed: ${response.status}`)
-  const data = await response.json() as { result?: T }
-  return data.result
-}
-
 export async function readAgenticStreamingStore(): Promise<AgenticStreamingStore> {
   try {
-    const remote = await upstashCommand<string>(['GET', UPSTASH_STORE_KEY])
-    if (remote) return JSON.parse(remote) as AgenticStreamingStore
+    const remote = await readDurableJson<Partial<AgenticStreamingStore>>(AGENTIC_STREAMING_STORE_KEY)
+    if (remote) return { subscriptions: remote.subscriptions ?? {}, deliveries: remote.deliveries ?? [] }
   } catch (error) {
-    console.warn('[agentic-streaming] Upstash load failed; using file fallback.', error instanceof Error ? error.message : String(error))
+    console.warn('[agentic-streaming] durable load failed; using file fallback.', error instanceof Error ? error.message : String(error))
   }
 
   try {
@@ -80,9 +64,9 @@ export async function writeAgenticStreamingStore(store: AgenticStreamingStore) {
   await mkdir(dirname(STORE_PATH), { recursive: true })
   await writeFile(STORE_PATH, JSON.stringify(normalized, null, 2))
   try {
-    await upstashCommand(['SET', UPSTASH_STORE_KEY, JSON.stringify(normalized)])
+    await writeDurableJson(AGENTIC_STREAMING_STORE_KEY, normalized)
   } catch (error) {
-    console.warn('[agentic-streaming] Upstash save failed; file fallback was saved.', error instanceof Error ? error.message : String(error))
+    console.warn('[agentic-streaming] durable save failed; file fallback was saved.', error instanceof Error ? error.message : String(error))
   }
 }
 

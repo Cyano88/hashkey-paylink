@@ -27,6 +27,7 @@ import {
   type ZeroScoutHelperGuidance,
   type ZeroScoutSponsoredAction,
 } from './zeroscout-sponsored-action.js'
+import { readDurableJson, writeDurableJson } from './render-durable-store.js'
 
 // ─── 0G Mainnet config ────────────────────────────────────────────────────────
 const OG_RPC       = (process.env.OG_RPC_URL ?? process.env.OG_EVM_RPC_URL ?? process.env.ZG_RPC_URL ?? 'https://evmrpc.0g.ai').trim()
@@ -50,9 +51,7 @@ const HELPER_USAGE_STORE = process.env.HELPER_USAGE_STORE
   ?? (process.env.DATA_PATH ? `${process.env.DATA_PATH}/helper-usage.json` : './data/helper-usage.json')
 const HELPER_VERIFY_TIMEOUT_MS = Math.max(5_000, parseInt(process.env.HELPER_VERIFY_TIMEOUT_MS ?? '15000', 10) || 15_000)
 const AGENT_HASH_PRO_TREASURY = (process.env.AGENT_HASH_PRO_TREASURY ?? process.env.TREASURY_ADDRESS ?? '0xcE5dF9e1115F81a2Fc2F65941B20B820d508e753').trim()
-const UPSTASH_REST_URL = (process.env.UPSTASH_REDIS_REST_URL ?? '').trim().replace(/\/+$/, '')
-const UPSTASH_REST_TOKEN = (process.env.UPSTASH_REDIS_REST_TOKEN ?? '').trim()
-const UPSTASH_USAGE_KEY = (process.env.HELPER_USAGE_STORE_KEY ?? 'hashpaylink:helper-usage').trim()
+const HELPER_USAGE_STORE_KEY = (process.env.HELPER_USAGE_STORE_KEY ?? 'hashpaylink:helper-usage').trim()
 const GENERIC_STRATEGY_PHRASE = 'Build around agentic USDC commerce'
 const GENERIC_STRATEGY_PATTERNS = [
   /Hash PayLink Strategy Agent guidance/i,
@@ -81,27 +80,12 @@ function normalizeBoundedString(value: unknown, field: string, maxLength: number
   return normalized
 }
 
-async function upstashCommand<T>(command: unknown[]): Promise<T | undefined> {
-  if (!UPSTASH_REST_URL || !UPSTASH_REST_TOKEN) return undefined
-  const response = await fetch(UPSTASH_REST_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${UPSTASH_REST_TOKEN}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(command),
-  })
-  if (!response.ok) throw new Error(`Upstash request failed: ${response.status}`)
-  const data = await response.json() as { result?: T }
-  return data.result
-}
-
 async function readUsageStore(): Promise<UsageStore> {
   try {
-    const remote = await upstashCommand<string>(['GET', UPSTASH_USAGE_KEY])
-    if (remote) return JSON.parse(remote) as UsageStore
+    const remote = await readDurableJson<Partial<UsageStore>>(HELPER_USAGE_STORE_KEY)
+    if (remote) return { usage: remote.usage ?? {} }
   } catch (err) {
-    console.warn('[agent-ask] Upstash usage load failed; using file fallback.', err instanceof Error ? err.message : String(err))
+    console.warn('[agent-ask] durable usage load failed; using file fallback.', err instanceof Error ? err.message : String(err))
   }
 
   try {
@@ -115,9 +99,9 @@ async function writeUsageStore(store: UsageStore) {
   await mkdir(dirname(HELPER_USAGE_STORE), { recursive: true })
   await writeFile(HELPER_USAGE_STORE, JSON.stringify(store, null, 2), 'utf8')
   try {
-    await upstashCommand(['SET', UPSTASH_USAGE_KEY, JSON.stringify(store)])
+    await writeDurableJson(HELPER_USAGE_STORE_KEY, store)
   } catch (err) {
-    console.warn('[agent-ask] Upstash usage save failed; file fallback saved.', err instanceof Error ? err.message : String(err))
+    console.warn('[agent-ask] durable usage save failed; file fallback saved.', err instanceof Error ? err.message : String(err))
   }
 }
 

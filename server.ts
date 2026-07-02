@@ -15,13 +15,9 @@ import { readFileSync } from 'fs'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import relayV2Handler         from './api/relay-v2.js'
-import relayStarknetHandler   from './api/relay-starknet.js'
 import txStatusHandler        from './api/tx-status.js'
-import recoverStarknetHandler from './api/recover-starknet.js'
-import starkBalanceHandler    from './api/starknet-balance.js'
 import solanaBalanceHandler   from './api/solana-balance.js'
 import evmBalanceHandler      from './api/evm-balance.js'
-import setupRelayerHandler    from './api/setup-relayer.js'
 // ── Streampay module ──────────────────────────────────────────────────────────
 import relayStreamHandler               from './modules/streampay/api/relay-stream.js'
 import streamOgHandler                 from './modules/streampay/api/stream-og.js'
@@ -43,7 +39,7 @@ import {
   getSolanaVaultAddress, sweepSolanaVault,
 } from './api/relay-solana.js'
 import fxRateHandler from './api/fx-rate.js'
-import relayGhoHandler from './api/relay-gho.js'
+import relayArbitrumUsdcHandler from './api/relay-arbitrum-usdc.js'
 import basePaymasterHandler from './api/base-paymaster.js'
 import circleSolanaEmailHandler from './api/circle-solana-email.js'
 import privyCircleLinkHandler from './api/privy-circle-link.js'
@@ -147,13 +143,9 @@ const arenaLimiter = rateLimit({ name: 'arena', windowMs: 60_000, max: 240 })
 
 // ── API routes ────────────────────────────────────────────────────────────────
 app.post('/api/relay-v2',              relayLimiter, relayV2Handler)
-app.post('/api/relay-starknet',        relayStarknetHandler)
 app.post('/api/tx-status',             txStatusHandler)
-app.post('/api/starknet-balance',      starkBalanceHandler)
 app.post('/api/solana-balance',        solanaBalanceHandler)
 app.post('/api/evm-balance',           readLimiter, evmBalanceHandler)
-app.get('/api/setup-starknet-relayer', setupRelayerHandler)
-app.post('/api/recover-starknet',      recoverStarknetHandler)
 // ── Streampay routes ──────────────────────────────────────────────────────────
 app.post('/api/relay-stream',          relayLimiter, relayStreamHandler)
 app.post('/api/settle-poa',            relayLimiter, settlePoaHandler)
@@ -176,7 +168,7 @@ app.post('/api/solana-relay',          relayLimiter, relaySolanaTx)
 app.get('/api/solana-vault',           readLimiter, getSolanaVaultAddress)
 app.post('/api/solana-sweep',          relayLimiter, sweepSolanaVault)
 app.get('/api/fx-rate',                fxRateHandler)
-app.all('/api/relay-gho',              relayGhoHandler)
+app.all('/api/relay-arbitrum-usdc',    relayArbitrumUsdcHandler)
 app.all('/api/base-paymaster',         basePaymasterHandler)
 app.post('/api/circle-solana-email',   circleSolanaEmailHandler)
 app.post('/api/privy-circle-link',     strictLimiter, privyCircleLinkHandler)

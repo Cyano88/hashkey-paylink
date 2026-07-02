@@ -40,7 +40,9 @@ const IS_POLYDESK_HOST = hostname.includes('polydesk') || searchParams.get('app'
 const isStreamPayRoute =
   pathname === '/stream' ||
   pathname.startsWith('/stream/') ||
-  pathname === '/recipient'
+  pathname === '/recipient' ||
+  pathname === '/creator' ||
+  pathname === '/creator-admin'
 const IS_STREAMPAY =
   hostname === 'streampay.xyz'                           ||  // production domain
   hostname.endsWith('.streampay.xyz')                    ||  // subdomains

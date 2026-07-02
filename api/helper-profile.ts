@@ -4,6 +4,7 @@ import { dirname } from 'node:path'
 import crypto from 'node:crypto'
 import pg from 'pg'
 import { archivePayment, type ArchiveResult } from './og-storage.js'
+import { readDurableJson, writeDurableJson } from './render-durable-store.js'
 
 const { Pool } = pg
 const DATABASE_URL = (process.env.DATABASE_URL ?? process.env.POSTGRES_URL ?? '').trim()
@@ -18,9 +19,7 @@ const pool = DATABASE_URL
 
 const STORE_PATH = process.env.HELPER_PROFILE_STORE
   ?? (process.env.DATA_PATH ? `${process.env.DATA_PATH}/helper-profiles.json` : './data/helper-profiles.json')
-const UPSTASH_REST_URL = (process.env.UPSTASH_REDIS_REST_URL ?? '').trim().replace(/\/+$/, '')
-const UPSTASH_REST_TOKEN = (process.env.UPSTASH_REDIS_REST_TOKEN ?? '').trim()
-const UPSTASH_STORE_KEY = (process.env.HELPER_PROFILE_STORE_KEY ?? 'hashpaylink:helper-profiles').trim()
+const HELPER_PROFILE_STORE_KEY = (process.env.HELPER_PROFILE_STORE_KEY ?? 'hashpaylink:helper-profiles').trim()
 
 type HelperMemoryProof = ArchiveResult & {
   ogExplorer: string
@@ -199,27 +198,12 @@ function deriveMemorySummary(input: {
   return uniqueLines.slice(-8).join('\n').slice(-1600)
 }
 
-async function upstashCommand<T>(command: unknown[]): Promise<T | undefined> {
-  if (!UPSTASH_REST_URL || !UPSTASH_REST_TOKEN) return undefined
-  const response = await fetch(UPSTASH_REST_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${UPSTASH_REST_TOKEN}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(command),
-  })
-  if (!response.ok) throw new Error(`Upstash request failed: ${response.status}`)
-  const data = await response.json() as { result?: T }
-  return data.result
-}
-
 async function readStore(): Promise<Store> {
   try {
-    const remote = await upstashCommand<string>(['GET', UPSTASH_STORE_KEY])
-    if (remote) return JSON.parse(remote) as Store
+    const remote = await readDurableJson<Partial<Store>>(HELPER_PROFILE_STORE_KEY)
+    if (remote) return { profiles: remote.profiles ?? {} }
   } catch (err) {
-    console.warn('[helper-profile] Upstash load failed; using file fallback.', err instanceof Error ? err.message : String(err))
+    console.warn('[helper-profile] durable load failed; using file fallback.', err instanceof Error ? err.message : String(err))
   }
 
   try {
@@ -364,9 +348,9 @@ async function writeStore(store: Store) {
   const serialized = JSON.stringify(store, null, 2)
   await writeFile(STORE_PATH, serialized, 'utf8')
   try {
-    await upstashCommand(['SET', UPSTASH_STORE_KEY, JSON.stringify(store)])
+    await writeDurableJson(HELPER_PROFILE_STORE_KEY, store)
   } catch (err) {
-    console.warn('[helper-profile] Upstash save failed; file fallback saved.', err instanceof Error ? err.message : String(err))
+    console.warn('[helper-profile] durable save failed; file fallback saved.', err instanceof Error ? err.message : String(err))
   }
 }
 

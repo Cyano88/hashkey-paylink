@@ -34,7 +34,7 @@ export type ReceiptLookupResponse = {
 }
 
 export function receiptChainKey(value?: string): ChainKey {
-  return value === 'solana' || value === 'starknet' || value === 'arc' || value === 'arbitrum' || value === 'hashkey'
+  return value === 'solana' || value === 'arc' || value === 'arbitrum' || value === 'hashkey'
     ? value
     : 'base'
 }
