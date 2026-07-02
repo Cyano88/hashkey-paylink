@@ -625,23 +625,75 @@ export function StreamGate() {
   const [gatewayPaying, setGatewayPaying] = useState(false)
   const [gatewayTx, setGatewayTx] = useState<string | null>(null)
   const [gatewayReceiptId, setGatewayReceiptId] = useState<string | null>(null)
+  const [gatewayReceipt, setGatewayReceipt] = useState<X402ReceiptLike | null>(null)
+  const [gatewayReceiptPollAttempts, setGatewayReceiptPollAttempts] = useState(0)
+  const [gatewayArchiveTimedOut, setGatewayArchiveTimedOut] = useState(false)
   const [gatewayReferenceCopied, setGatewayReferenceCopied] = useState(false)
   const [gatewayReceiptOpening, setGatewayReceiptOpening] = useState(false)
   const gatewayTxIsExplorerHash = /^0x[a-fA-F0-9]{64}$/.test(gatewayTx ?? '')
+  const gatewayOgExplorer = gatewayReceipt?.og?.ogExplorer
+  const gatewayOgProof = gatewayReceipt?.og?.ogTxHash || gatewayReceipt?.og?.rootHash || ''
+  const gatewayOgReady = Boolean(gatewayOgProof || gatewayOgExplorer)
+  const gatewayArchiveLabel = gatewayArchiveTimedOut
+    ? 'Archive pending'
+    : gatewayReceiptPollAttempts >= 9
+      ? 'Still archiving...'
+      : 'Archiving...'
 
   const legacyFullyAuthorised = isConnected && isOnArc && passkey.registered && isApproved
   const fullyAuthorised = paymentMode === 'x402' ? contentState === 'ready' : legacyFullyAuthorised
 
+  useEffect(() => {
+    if (!gatewayReceiptId) return
+    const receiptId = gatewayReceiptId
+    let cancelled = false
+    let timer: number | undefined
+    let attempts = 0
+
+    setGatewayReceiptPollAttempts(0)
+    setGatewayArchiveTimedOut(false)
+
+    async function loadReceipt() {
+      attempts += 1
+      if (!cancelled) setGatewayReceiptPollAttempts(attempts)
+      try {
+        const res = await fetch(`/api/x402/receipt?id=${encodeURIComponent(receiptId)}`)
+        const data = await res.json().catch(() => ({})) as { ok?: boolean; receipt?: X402ReceiptLike }
+        if (!cancelled && res.ok && data.ok && data.receipt) {
+          setGatewayReceipt(data.receipt)
+          if (data.receipt.og?.ogTxHash || data.receipt.og?.rootHash || data.receipt.og?.ogExplorer) {
+            setGatewayArchiveTimedOut(false)
+            return
+          }
+        }
+      } catch {
+        // Receipt polling should not affect already-unlocked creator content.
+      }
+      if (!cancelled && attempts < 40) timer = window.setTimeout(loadReceipt, 5_000)
+      if (!cancelled && attempts >= 40) setGatewayArchiveTimedOut(true)
+    }
+
+    void loadReceipt()
+    return () => {
+      cancelled = true
+      if (timer) window.clearTimeout(timer)
+    }
+  }, [gatewayReceiptId])
+
   async function openGatewayReceiptPdf() {
-    if (!gatewayReceiptId || gatewayReceiptOpening) return
+    if (!gatewayReceiptId || gatewayReceiptOpening || !gatewayOgReady) return
     setGatewayReceiptOpening(true)
     try {
-      const res = await fetch(`/api/x402/receipt?id=${encodeURIComponent(gatewayReceiptId)}`)
-      const data = await res.json().catch(() => ({})) as { ok?: boolean; receipt?: X402ReceiptLike }
-      if (!res.ok || !data.ok || !data.receipt) throw new Error('Receipt unavailable')
-      const receipt = data.receipt.receiptId
-        ? data.receipt as unknown as Parameters<typeof createPaymentReceiptPdf>[0]
-        : createX402PaylinkReceipt(data.receipt, gatewayReceiptId)
+      let sourceReceipt = gatewayReceipt
+      if (!sourceReceipt) {
+        const res = await fetch(`/api/x402/receipt?id=${encodeURIComponent(gatewayReceiptId)}`)
+        const data = await res.json().catch(() => ({})) as { ok?: boolean; receipt?: X402ReceiptLike }
+        if (!res.ok || !data.ok || !data.receipt) throw new Error('Receipt unavailable')
+        sourceReceipt = data.receipt
+      }
+      const receipt = sourceReceipt.receiptId
+        ? sourceReceipt as unknown as Parameters<typeof createPaymentReceiptPdf>[0]
+        : createX402PaylinkReceipt(sourceReceipt, gatewayReceiptId)
       const blob = await createPaymentReceiptPdf(receipt)
       const url = URL.createObjectURL(blob)
       const win = window.open(url, '_blank', 'noopener,noreferrer')
@@ -673,6 +725,9 @@ export function StreamGate() {
     setGatewayPaying(true)
     setGatewayReferenceCopied(false)
     setGatewayReceiptOpening(false)
+    setGatewayReceipt(null)
+    setGatewayReceiptPollAttempts(0)
+    setGatewayArchiveTimedOut(false)
     setContentError(null)
     setContentState('loading')
     try {
@@ -1671,9 +1726,24 @@ export function StreamGate() {
                 <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-700">
                   Content unlocked
                 </p>
-                <p className="mt-0.5 truncate font-mono text-[11px] font-semibold text-emerald-800">
-                  Circle Gateway paid - {gatewayTx.slice(0, 8)}...{gatewayTx.slice(-6)}
-                </p>
+                <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
+                  <p className="truncate font-mono text-[11px] font-semibold text-emerald-800">
+                    Circle Gateway paid - {gatewayTx.slice(0, 8)}...{gatewayTx.slice(-6)}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard?.writeText(gatewayTx).catch(() => {})
+                      setGatewayReferenceCopied(true)
+                      window.setTimeout(() => setGatewayReferenceCopied(false), 1600)
+                    }}
+                    className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-emerald-200 bg-white text-[9px] font-black text-emerald-700 transition-colors hover:bg-emerald-50"
+                    aria-label="Copy Circle Gateway reference"
+                    title="Copy reference"
+                  >
+                    {gatewayReferenceCopied ? 'OK' : 'CP'}
+                  </button>
+                </div>
               </div>
             </div>
             <div className="grid gap-2">
@@ -1681,24 +1751,43 @@ export function StreamGate() {
                 <button
                   type="button"
                   onClick={openGatewayReceiptPdf}
-                  disabled={gatewayReceiptOpening}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-[12px] font-semibold text-white transition-colors hover:bg-emerald-700"
+                  disabled={gatewayReceiptOpening || !gatewayOgReady}
+                  className={[
+                    'flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-[12px] font-semibold transition-colors',
+                    gatewayOgReady
+                      ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                      : 'cursor-not-allowed bg-gray-100 text-gray-400',
+                  ].join(' ')}
                 >
-                  {gatewayReceiptOpening ? 'Opening receipt...' : 'View receipt'}
+                  <ReceiptIcon />
+                  {gatewayReceiptOpening ? 'Opening receipt...' : gatewayOgReady ? 'View receipt' : 'Receipt archiving'}
                 </button>
               )}
               <div className={gatewayTxIsExplorerHash ? 'grid grid-cols-2 gap-2' : 'grid gap-2'}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    navigator.clipboard?.writeText(gatewayTx).catch(() => {})
-                    setGatewayReferenceCopied(true)
-                    window.setTimeout(() => setGatewayReferenceCopied(false), 1600)
-                  }}
-                  className="flex items-center justify-center rounded-xl border border-emerald-200 bg-white px-3 py-2.5 text-[12px] font-semibold text-emerald-700 transition-colors hover:bg-emerald-50"
-                >
-                  {gatewayReferenceCopied ? 'Reference copied' : 'Copy reference'}
-                </button>
+                {gatewayOgReady ? (
+                  <a
+                    href={gatewayOgExplorer || undefined}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(event) => {
+                      if (!gatewayOgExplorer) event.preventDefault()
+                    }}
+                    className="flex items-center justify-center gap-1.5 rounded-xl border border-purple-100 bg-purple-50 px-3 py-2.5 text-[12px] font-bold text-purple-700 transition-colors hover:bg-purple-100"
+                  >
+                    <img src="/brand/0g-logo.jpeg" alt="0G" className="h-3.5 w-3.5 rounded-full object-contain" />
+                    0G archived
+                    {gatewayOgProof && <span className="font-mono text-[10px] text-purple-500">{gatewayOgProof.slice(0, 6)}...{gatewayOgProof.slice(-4)}</span>}
+                  </a>
+                ) : (
+                  <div className="flex items-center justify-center gap-1.5 rounded-xl border border-gray-100 bg-white px-3 py-2.5 text-[12px] font-semibold text-gray-400">
+                    {gatewayArchiveTimedOut ? (
+                      <span className="h-3.5 w-3.5 rounded-full border border-gray-300" />
+                    ) : (
+                      <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-gray-200 border-t-gray-400" />
+                    )}
+                    {gatewayArchiveLabel}
+                  </div>
+                )}
                 {gatewayTxIsExplorerHash && (
                   <button
                     type="button"
@@ -1986,6 +2075,15 @@ function CheckIcon() {
   return (
     <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+    </svg>
+  )
+}
+
+function ReceiptIcon() {
+  return (
+    <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M7 3.75h10A1.25 1.25 0 0118.25 5v15.25l-2.5-1.25-2.5 1.25-2.5-1.25-2.5 1.25V5A1.25 1.25 0 017 3.75z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 8h6M9 11.5h6M9 15h3.5" />
     </svg>
   )
 }
