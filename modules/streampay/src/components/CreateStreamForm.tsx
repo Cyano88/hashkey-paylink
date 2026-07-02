@@ -89,6 +89,8 @@ function readPrefill() {
   const recipientEmail = isEmail(rawRecipientEmail) ? cleanEmail(rawRecipientEmail) : ''
   const rawReportEmail = (params.get('reportEmail') ?? '').trim()
   const reportEmail = isEmail(rawReportEmail) ? cleanEmail(rawReportEmail) : ''
+  const rawReturnTo = (params.get('returnTo') ?? '').trim()
+  const returnTo = rawReturnTo.startsWith('/') && !rawReturnTo.startsWith('//') ? rawReturnTo.slice(0, 800) : ''
   const mode = rawMode || (isAgenticPath ? 'agentic-streaming' : '')
   const service = (params.get('service') ?? (isAgenticFlow ? 'polymarket-lp' : '')).trim().toLowerCase()
   const agentSlug = (params.get('agent') ?? params.get('agentSlug') ?? 'hashpaylink-agent').trim().toLowerCase()
@@ -99,11 +101,15 @@ function readPrefill() {
   let durationPreset: bigint | null = isAgenticFlow && !rawDuration ? 3_600n : null
   let customDays = ''
 
-  const match = rawDuration.match(/^(\d+)([dhw])$/)
+  const match = rawDuration.match(/^(\d+)([smhdw])$/)
   if (match) {
     const value = BigInt(match[1])
     const unit = match[2]
-    const seconds = unit === 'h'
+    const seconds = unit === 's'
+      ? value
+      : unit === 'm'
+      ? value * 60n
+      : unit === 'h'
       ? value * 3_600n
       : unit === 'w'
         ? value * 7n * 86_400n
@@ -112,7 +118,7 @@ function readPrefill() {
     if (!durationPreset) customDays = (Number(seconds) / 86_400).toString()
   }
 
-  return { amount, recipient, recipientEmail, reportEmail, mode, service, agentSlug, amountPerDay, reason, duration: rawDuration, durationPreset, customDays, preferCircle }
+  return { amount, recipient, recipientEmail, reportEmail, mode, service, agentSlug, amountPerDay, reason, duration: rawDuration, durationPreset, customDays, preferCircle, returnTo }
 }
 
 function parseUsdc(val: string): bigint {
@@ -229,6 +235,18 @@ function buildStreamLink(
   if (reason.trim())    p.set('reason', reason.trim())
   const qs = p.toString()
   return `${origin}/stream/${vault}${qs ? `?${qs}` : ''}`
+}
+
+function buildReturnToContent(returnTo: string, vault: string) {
+  if (!returnTo || !/^0x[a-fA-F0-9]{40}$/.test(vault)) return ''
+  const next = returnTo.includes('__STREAM_VAULT__')
+    ? returnTo.replaceAll('__STREAM_VAULT__', vault)
+    : (() => {
+        const url = new URL(returnTo, window.location.origin)
+        url.searchParams.set('streamVault', vault)
+        return `${url.pathname}${url.search}${url.hash}`
+      })()
+  return next.startsWith('/') && !next.startsWith('//') ? next : ''
 }
 
 export function CreateStreamForm() {
@@ -627,7 +645,7 @@ export function CreateStreamForm() {
   async function handleDeploy() {
     if (!deployReady || !connectedAddr || !publicClient) return
     setError(null)
-    const startTime = BigInt(Math.floor(Date.now() / 1000) + 120)
+    const startTime = BigInt(Math.floor(Date.now() / 1000) + (prefill.returnTo ? 5 : 120))
     const endTime   = startTime + durationSecs
     try {
       const predicted = await publicClient.readContract({
@@ -710,7 +728,7 @@ export function CreateStreamForm() {
     }
 
     setError(null)
-    const startTime = BigInt(Math.floor(Date.now() / 1000) + 120)
+    const startTime = BigInt(Math.floor(Date.now() / 1000) + (prefill.returnTo ? 5 : 120))
     const endTime   = startTime + durationSecs
     try {
       setStep('funding')
@@ -1074,6 +1092,8 @@ export function CreateStreamForm() {
 
   // ── Success screen ────────────────────────────────────────────────────────
   if (step === 'success' && streamLink) {
+    const deployedVault = streamLink.match(/\/stream\/(0x[a-fA-F0-9]{40})/)?.[1] ?? ''
+    const returnToContent = buildReturnToContent(prefill.returnTo, deployedVault)
     return (
       <div className="w-full max-w-[480px] mx-auto mt-12">
         <div className="space-y-6">
@@ -1129,6 +1149,15 @@ export function CreateStreamForm() {
                     ? <><CheckIcon />LINK COPIED</>
                     : 'Copy Link'}
                 </button>
+                {returnToContent && (
+                  <a
+                    href={returnToContent}
+                    className="w-full flex items-center justify-center rounded-xl py-3 text-[13px] font-semibold text-white transition-all min-h-[48px]"
+                    style={{ background: '#111827' }}
+                  >
+                    Continue to content
+                  </a>
+                )}
                 <a
                   href={streamLink}
                   className="w-full flex items-center justify-center rounded-xl border-2 border-gray-200 dark:border-white/10 py-3 text-[13px] font-semibold text-gray-700 dark:text-gray-200 transition-colors hover:bg-gray-50 dark:hover:bg-white/5 min-h-[48px]"

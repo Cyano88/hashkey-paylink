@@ -381,8 +381,8 @@ export function StreamGate() {
   const capRaw    = parseInt(params.get('cap') ?? '100000', 10)
   const title     = params.get('t')    ?? ''
   const gateMode: 'unlock' | 'stream' = params.get('mode') === 'stream' ? 'stream' : 'unlock'
-  const requestedPaymentMode = params.get('pay') === 'poa' || params.get('payment') === 'poa' ? 'poa' : 'x402'
-  const paymentMode: 'x402' | 'poa' = gateMode === 'unlock' ? 'x402' : requestedPaymentMode
+  const paymentMode: 'x402' | 'poa' | 'escrow' = gateMode === 'stream' ? 'escrow' : 'x402'
+  const streamVault = (params.get('streamVault') ?? params.get('vault') ?? '').trim()
 
   const dripRate   = rateRaw  / 1_000_000
   const sessionCap = capRaw   / 1_000_000
@@ -648,7 +648,7 @@ export function StreamGate() {
       : 'Archiving...'
 
   const legacyFullyAuthorised = isConnected && isOnArc && passkey.registered && isApproved
-  const fullyAuthorised = paymentMode === 'x402' ? contentState === 'ready' : legacyFullyAuthorised
+  const fullyAuthorised = paymentMode === 'x402' || paymentMode === 'escrow' ? contentState === 'ready' : legacyFullyAuthorised
 
   useEffect(() => {
     if (!gatewayReceiptId) return
@@ -1131,13 +1131,30 @@ export function StreamGate() {
       .catch(() => { setContentError('Server error — please try again'); setContentState('error') })
   }, [paymentMode, legacyFullyAuthorised, address, contentId, contentState])
 
+  useEffect(() => {
+    if (paymentMode !== 'escrow' || !streamVault || !contentId || contentState !== 'idle') return
+    setContentState('loading')
+    fetch(`/api/get-content-stream?id=${encodeURIComponent(contentId)}&vault=${encodeURIComponent(streamVault)}`)
+      .then(r => r.json())
+      .then((data: { ok: boolean; type?: string; content?: string; error?: string }) => {
+        if (data.ok && data.type && data.content) {
+          setFetchedContent({ type: data.type as 'text' | 'url' | 'scores', content: data.content })
+          setContentState('ready')
+        } else {
+          setContentError(data.error ?? 'Could not verify prepaid stream')
+          setContentState('error')
+        }
+      })
+      .catch(() => { setContentError('Server error - please try again'); setContentState('error') })
+  }, [paymentMode, streamVault, contentId, contentState])
+
   // ── IntersectionObserver: drip only when content is visible + ready ───────
   // Drip starts AFTER content is fetched and visible — not on auth alone.
   const contentRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     const el = contentRef.current
-    if (paymentMode === 'x402' || !el || !fullyAuthorised || contentState !== 'ready') return
+    if (paymentMode !== 'poa' || !el || !fullyAuthorised || contentState !== 'ready') return
 
     const observer = new IntersectionObserver(
       ([entry]) => {
@@ -1161,6 +1178,24 @@ export function StreamGate() {
     : (!isConnected ? 0 : !isOnArc ? 1 : !passkey.registered ? 2 : 3)
 
   const progressPct = Math.min((poa.accrued / sessionCap) * 100, 100)
+  const streamDurationSec = dripRate > 0 ? Math.max(1, Math.ceil(sessionCap / dripRate)) : 0
+
+  function streamEscrowHref() {
+    const returnParams = new URLSearchParams(window.location.search)
+    returnParams.set('mode', 'stream')
+    returnParams.set('pay', 'escrow')
+    returnParams.set('streamVault', '__STREAM_VAULT__')
+    const returnTo = `${window.location.pathname}?${returnParams.toString()}`
+    const p = new URLSearchParams()
+    p.set('app', 'streampay')
+    p.set('wallet', 'circle')
+    p.set('recipient', creator)
+    p.set('amount', sessionCap.toFixed(6).replace(/\.?0+$/, ''))
+    p.set('duration', `${streamDurationSec}s`)
+    p.set('reason', title ? `Creator stream: ${title}` : `Creator stream: ${shortAddress(creator)}`)
+    p.set('returnTo', returnTo)
+    return `/stream?${p.toString()}`
+  }
 
   if (!contentId || !creator) {
     return (
@@ -1575,6 +1610,42 @@ export function StreamGate() {
                   </div>
                 )}
               </div>
+            ) : paymentMode === 'escrow' ? (
+              <div className="w-full max-w-[320px] space-y-3 text-center">
+                <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full border border-emerald-100 bg-emerald-50 text-emerald-600">
+                    <LockIcon />
+                  </div>
+                  <p className="mt-3 text-[13px] font-bold text-gray-900">Prepaid viewing stream</p>
+                  <p className="mt-1 text-[12px] leading-relaxed text-gray-500">
+                    Lock up to {formatUsdc(sessionCap)} USDC in an Arc stream. Unused time can be cancelled from the stream page.
+                  </p>
+                  {streamVault && contentState === 'error' && contentError && (
+                    <p className="mt-3 rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-[11px] font-medium leading-relaxed text-amber-700">
+                      {contentError}
+                    </p>
+                  )}
+                </div>
+                {streamVault ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setContentError(null)
+                      setContentState('idle')
+                    }}
+                    className="flex min-h-[48px] w-full items-center justify-center rounded-xl bg-gray-950 px-5 py-3 text-[13px] font-semibold text-white"
+                  >
+                    Check prepaid stream
+                  </button>
+                ) : (
+                  <a
+                    href={streamEscrowHref()}
+                    className="flex min-h-[48px] w-full items-center justify-center rounded-xl bg-gray-950 px-5 py-3 text-[13px] font-semibold text-white"
+                  >
+                    Start prepaid stream
+                  </a>
+                )}
+              </div>
             ) : (
               <>
                 {!isConnected && (
@@ -1665,7 +1736,7 @@ export function StreamGate() {
               </>
             )}
 
-            <StepDots current={currentStep} />
+            {paymentMode !== 'escrow' && <StepDots current={currentStep} />}
           </OverlayShell>
         )}
 
@@ -2072,7 +2143,7 @@ function OverlayShell({
 }: {
   dripRate: number
   sessionCap: number
-  paymentMode: 'x402' | 'poa'
+  paymentMode: 'x402' | 'poa' | 'escrow'
   gateMode: 'unlock' | 'stream'
   children: React.ReactNode
 }) {
@@ -2109,7 +2180,7 @@ function OverlayShell({
       </div>
       {children}
       <div className="flex items-center gap-1.5 text-[10px] text-gray-400">
-        {paymentMode === 'x402' ? 'Powered by Circle Gateway on Arc' : 'Powered by Arc Network'}
+        {paymentMode === 'x402' ? 'Powered by Circle Gateway on Arc' : paymentMode === 'escrow' ? 'Powered by StreamVault escrow on Arc' : 'Powered by Arc Network'}
       </div>
     </div>
   )
