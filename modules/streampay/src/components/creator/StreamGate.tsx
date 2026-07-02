@@ -917,6 +917,43 @@ export function StreamGate() {
     await startPaymentWalletLogin(slug)
   }
 
+  async function disconnectPaymentWallet(slugOverride?: string) {
+    const slug = cleanAgentSlug(slugOverride || safeAgentSlug || selectedAgent?.slug)
+    if (!slug) {
+      setUnlockStep('email')
+      return
+    }
+    setWalletBusy(true)
+    setWalletError(null)
+    setContentError(null)
+    setCircleNotice(null)
+    try {
+      const res = await fetch('/api/agent-wallet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'disconnect', agentSlug: slug }),
+      })
+      const data = await res.json().catch(() => ({})) as { ok?: boolean; error?: string }
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Could not sign out this reader wallet.')
+      setAgentOptions(current => normalizePaymentWalletOptions(current.filter(agent => agent.slug !== slug)))
+      setAgentSlug('')
+      setWalletOtp('')
+      setWalletOtpContext(null)
+      setGatewayRestored(false)
+      setGatewayTx(null)
+      setGatewayReceiptId(null)
+      setGatewayReceipt(null)
+      setGatewayArchiveTimedOut(false)
+      setContentState('idle')
+      setCircleNotice('Reader wallet signed out. Open another wallet to continue.')
+      setUnlockStep('email')
+    } catch (err) {
+      setWalletError(err instanceof Error ? err.message.slice(0, 180) : 'Could not sign out this reader wallet.')
+    } finally {
+      setWalletBusy(false)
+    }
+  }
+
   async function copyPaymentWalletAddress() {
     const wallet = selectedAgent?.walletAddress
     if (!wallet) return
@@ -1238,6 +1275,16 @@ export function StreamGate() {
                       >
                         Use another email
                       </button>
+                      {selectedAgent?.walletAddress && (
+                        <button
+                          type="button"
+                          onClick={() => void disconnectPaymentWallet(selectedAgent.slug)}
+                          disabled={walletBusy}
+                          className="w-full rounded-xl border border-red-100 bg-red-50 px-3 py-3 text-[12px] font-bold text-red-700 transition-all hover:border-red-200 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {walletBusy ? 'Signing out...' : 'Sign out selected wallet'}
+                        </button>
+                      )}
                       {agentOptionsError && (
                         <p className="text-center text-[11px] text-amber-600">{agentOptionsError}</p>
                       )}
@@ -1369,6 +1416,14 @@ export function StreamGate() {
                               x402 wallet
                             </span>
                           </div>
+                          <button
+                            type="button"
+                            onClick={() => void disconnectPaymentWallet(selectedAgent.slug)}
+                            disabled={walletBusy}
+                            className="mt-2 w-full rounded-lg border border-blue-100 bg-white/80 px-3 py-2 text-[11px] font-bold text-blue-700 transition-all hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {walletBusy ? 'Signing out...' : 'Sign out and use another wallet'}
+                          </button>
                         </div>
                       )}
                       {selectedAgent?.walletAddress && (
