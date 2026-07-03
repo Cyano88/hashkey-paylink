@@ -416,7 +416,7 @@ export default function EventDashboard() {
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">Unified Global Balance</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">Balance</p>
               <span className={cn(
                 'inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold',
                 balanceError ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700',

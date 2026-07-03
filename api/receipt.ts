@@ -3,6 +3,7 @@ import { findRegisteredPaymentReceipt } from './event-registry.js'
 
 function receiptType(source?: string) {
   if (source === 'ngpos') return 'hashpaylink_pos_receipt'
+  if (source === 'bank-receive') return 'hashpaylink_bank_receive_receipt'
   if (source === 'streampay') return 'hashpaylink_streampay_receipt'
   if (source === 'polymarket-funding') return 'hashpaylink_polymarket_funding_receipt'
   return 'hashpaylink_payment_receipt'
@@ -10,6 +11,7 @@ function receiptType(source?: string) {
 
 function receiptTitle(source?: string) {
   if (source === 'ngpos') return 'Retail POS receipt'
+  if (source === 'bank-receive') return 'Bank receive receipt'
   if (source === 'streampay') return 'StreamPay receipt'
   if (source === 'polymarket-funding') return 'Polymarket funding receipt'
   return 'Hash PayLink receipt'

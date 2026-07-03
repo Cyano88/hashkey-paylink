@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Outlet, Link, useLocation, useSearchParams } from 'react-router-dom'
+import { Outlet, Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAccount, useDisconnect, useSwitchChain } from 'wagmi'
 import { usePrivy } from '@privy-io/react-auth'
-import { ChevronDown, LogOut, X, Send, ExternalLink, Sun, Moon } from 'lucide-react'
+import { ChevronDown, LogOut, X, Send, ExternalLink, Sun, Moon, History } from 'lucide-react'
 import { useSolana }   from './lib/SolanaContext'
 import { useTheme }    from './lib/ThemeContext'
 import { CHAIN_META } from './lib/chains'
@@ -386,7 +386,7 @@ export default function Layout() {
   const { pathname } = useLocation()
   const [searchParams] = useSearchParams()
   const isPolyDeskSurface = pathname === '/polydesk' || window.location.hostname.toLowerCase().includes('polydesk') || searchParams.get('app') === 'polydesk'
-  const isCreatePage = pathname === '/' || pathname === '/app' || pathname === '/polymarket'
+  const isCreatePage = pathname === '/' || pathname === '/app' || pathname === '/create' || pathname === '/polymarket'
   const isPayPage  = pathname === '/pay'
   const isNgPosPage = pathname === '/pos/ng'
   const isTelegramPaymentLinksPage = pathname === '/telegram/payment-links'
@@ -534,6 +534,10 @@ export default function Layout() {
   }
 
   const { theme, toggle: toggleTheme } = useTheme()
+  const navigate = useNavigate()
+  const openPaymentHistory = useCallback(() => {
+    navigate('/dashboard?src=ngpos')
+  }, [navigate])
 
   const [agentHashSurfaceMode, setAgentHashSurfaceMode] = useState<AgentHashMode>('support')
   const agentHashMode: AgentHashMode = isPayPage || (isCreatePage && searchParams.get('product') === 'payment') ? 'payments' : agentHashSurfaceMode
@@ -844,6 +848,18 @@ export default function Layout() {
                   )
                 )}
               </>
+            )}
+
+            {!isDashPage && (
+              <button
+                type="button"
+                onClick={openPaymentHistory}
+                aria-label="Open payment history"
+                title="History"
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 shadow-sm transition-colors hover:bg-gray-50 hover:text-gray-900 dark:border-white/10 dark:bg-[#1c1c20] dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-gray-100"
+              >
+                <History className="h-4 w-4" />
+              </button>
             )}
 
             {/* Theme toggle — always visible */}

@@ -129,6 +129,7 @@ export function compactReceiptAmount(value?: string) {
 
 export function paymentReceiptFileName(receipt?: PaylinkReceipt) {
   const prefix = receipt?.source === 'streampay' ? 'streampay'
+    : receipt?.source === 'bank-receive' ? 'bank-receive'
     : receipt?.source === 'ngpos' ? 'pos'
     : receipt?.source === 'polymarket-funding' ? 'polymarket-funding'
     : receipt?.source === 'x402' ? 'x402'
@@ -156,15 +157,18 @@ function formatNgn(value?: string) {
 function receiptLabels(receipt: PaylinkReceipt) {
   const isStream = receipt.source === 'streampay' || receipt.settlementType === 'stream-created'
   const isPos = receipt.source === 'ngpos'
+  const isBank = receipt.source === 'bank-receive'
   const isPolymarket = receipt.source === 'polymarket-funding' || receipt.settlementType === 'polymarket_bridge'
   const isX402 = receipt.source === 'x402' || receipt.settlementType === 'circle-gateway-x402'
-  const heading = isStream ? 'StreamPay receipt' : isPos ? 'Retail POS receipt' : isPolymarket ? 'Polymarket funding receipt' : isX402 ? 'Creator x402 receipt' : 'Request payment receipt'
-  const title = isStream ? 'Stream created' : isPos ? 'Retail payment confirmed' : isPolymarket ? 'Polymarket funded' : isX402 ? 'Creator content unlocked' : 'Payment confirmed'
-  const amountLabel = isStream ? 'Stream amount' : isPolymarket ? 'Amount funded' : isX402 ? 'Access price' : 'Amount paid'
-  const payer = isStream ? 'Sender' : isPos ? 'Customer wallet' : isPolymarket ? 'Funder' : isX402 ? 'Reader wallet' : 'Payer'
-  const context = isStream ? 'Stream memo' : isPos ? 'Customer' : isPolymarket ? 'For' : isX402 ? 'Content' : 'Memo'
+  const heading = isStream ? 'StreamPay receipt' : isBank ? 'Bank receive receipt' : isPos ? 'Retail POS receipt' : isPolymarket ? 'Polymarket funding receipt' : isX402 ? 'Creator x402 receipt' : 'Request payment receipt'
+  const title = isStream ? 'Stream created' : isBank ? 'Bank payout confirmed' : isPos ? 'Retail payment confirmed' : isPolymarket ? 'Polymarket funded' : isX402 ? 'Creator content unlocked' : 'Payment confirmed'
+  const amountLabel = isStream ? 'Stream amount' : isBank ? 'Amount paid' : isPolymarket ? 'Amount funded' : isX402 ? 'Access price' : 'Amount paid'
+  const payer = isStream ? 'Sender' : isBank ? 'Payer wallet' : isPos ? 'Payer wallet' : isPolymarket ? 'Funder' : isX402 ? 'Reader wallet' : 'Payer'
+  const context = isStream ? 'Stream memo' : isBank ? 'Payer' : isPos ? 'Payer' : isPolymarket ? 'For' : isX402 ? 'Content' : 'Memo'
   const contextValue = isStream
     ? (receipt.memo || receipt.merchantId || receipt.eventId || '-')
+    : isBank
+    ? (receipt.memo || receipt.eventId || '-')
     : isPos
     ? (receipt.memo || receipt.eventId || '-')
     : isPolymarket
@@ -172,7 +176,7 @@ function receiptLabels(receipt: PaylinkReceipt) {
     : isX402
     ? (receipt.memo || receipt.eventId || 'Creator content')
     : (receipt.memo || receipt.merchantId || receipt.eventId || '-')
-  const merchantLabel = isStream ? 'Stream vault' : isPos ? 'Merchant' : isPolymarket ? 'Polymarket profile' : isX402 ? 'Creator' : 'Recipient'
+  const merchantLabel = isStream ? 'Stream vault' : isBank ? 'Bank receive link' : isPos ? 'Merchant' : isPolymarket ? 'Polymarket profile' : isX402 ? 'Creator' : 'Recipient'
   const merchantValue = receipt.merchantId || ''
   return { heading, title, amountLabel, payer, context, contextValue, merchantLabel, merchantValue }
 }
@@ -275,12 +279,15 @@ function drawReceiptCanvas(
     ctx.fillText(amountNgn, 84, 294)
   }
 
+  const typeLabel = isPos && receipt.settlementType === 'instant_fiat'
+    ? 'Base USDC to Naira'
+    : receipt.settlementType?.replace(/[-_]/g, ' ') || receipt.source || 'payment'
   const rows: Array<[string, string]> = [
     ['Network', meta.label],
     [labels.payer, receipt.payer],
     [labels.context, labels.contextValue],
     ...(labels.merchantValue ? [[labels.merchantLabel, labels.merchantValue] as [string, string]] : []),
-    ['Type', receipt.settlementType?.replace(/-/g, ' ') || receipt.source || 'payment'],
+    ['Type', typeLabel],
     ['Time', fmtTime(receipt.createdAt)],
     ['Tx hash', receipt.txHash],
     ['Receipt hash', receipt.receiptHash],
@@ -297,7 +304,7 @@ function drawReceiptCanvas(
     y += 39
   }
 
-  const proofLabel = archived ? '0G achieved' : '0G archive pending'
+  const proofLabel = archived ? '0G archived' : '0G pending'
   roundRect(ctx, 64, 660, width - 128, 50, 16, archived ? '#faf5ff' : '#f8fafc')
   if (ogLogo && archived) {
     ctx.save()

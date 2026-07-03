@@ -21,6 +21,7 @@ type SendCirclePasskeyPaymentParams = {
   recipient: Address
   amount: string
   feeMode?: 'net' | 'gross'
+  feeBps?: number
 }
 
 type CirclePasskeyPaymentResult =
@@ -230,6 +231,7 @@ export async function sendCirclePasskeyPayment({
   recipient,
   amount,
   feeMode,
+  feeBps = PLATFORM_FEE_BPS,
 }: SendCirclePasskeyPaymentParams): Promise<CirclePasskeyPaymentResult> {
   const config = getCircleClientConfig(chain)
   if (!config) return { status: 'failed', reason: 'Smart wallet is not configured for this chain.' }
@@ -237,8 +239,8 @@ export async function sendCirclePasskeyPayment({
   try {
     const meta = CHAIN_META[config.chain]
     const totalUnits = parseUnits(amount || '0', meta.decimals)
-    const feeUnits = totalUnits * BigInt(PLATFORM_FEE_BPS) / 10_000n
-    const gasRecoveryUnits = getSponsoredGasRecoveryUnits(config.chain, totalUnits, feeUnits, meta.decimals)
+    const feeUnits = totalUnits * BigInt(feeBps) / 10_000n
+    const gasRecoveryUnits = feeBps === 0 ? 0n : getSponsoredGasRecoveryUnits(config.chain, totalUnits, feeUnits, meta.decimals)
     const treasuryUnits = feeUnits + gasRecoveryUnits
     const grossFees = feeMode === 'gross'
     const recipientUnits = grossFees ? totalUnits : totalUnits - treasuryUnits

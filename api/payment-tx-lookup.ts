@@ -9,8 +9,9 @@ const TOKENS = {
   arbitrum: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',
 } as const
 
-const DEFAULT_LOOKBACK_BLOCKS = 120n
-const DEFAULT_CHUNK_SIZE = 10n
+const DEFAULT_LOOKBACK_BLOCKS = 600n
+const RECOVERY_LOOKBACK_BLOCKS = 10_000n
+const DEFAULT_CHUNK_SIZE = 300n
 
 type ChainKey = keyof typeof TOKENS
 
@@ -102,7 +103,9 @@ export default async function handler(req: Request, res: Response) {
   const chain = readChain(body.chain)
   const recipient = typeof body.recipient === 'string' ? body.recipient.trim() : ''
   const amountUnits = readPositiveBigInt(body.amountUnits, 0n)
-  const minUnits = amountUnits > 0n ? amountUnits * 98n / 100n : 1n
+  const strict = body.strict === true
+  const minUnits = amountUnits > 0n ? (strict ? amountUnits : amountUnits * 98n / 100n) : 1n
+  const recovery = body.recovery === true || body.deep === true
 
   if (!isAddress(recipient)) {
     return res.status(400).json({ ok: false, error: 'Invalid recipient address' })
@@ -119,7 +122,10 @@ export default async function handler(req: Request, res: Response) {
   try {
     const latestBlockHex = await rpcCall<`0x${string}`>(rpcUrl, 'eth_blockNumber', [])
     const latestBlock = BigInt(latestBlockHex)
-    const lookback = readPositiveBigInt(process.env.PAYMENT_TX_LOOKUP_BLOCKS, DEFAULT_LOOKBACK_BLOCKS)
+    const envDefault = recovery
+      ? process.env.PAYMENT_TX_LOOKUP_RECOVERY_BLOCKS
+      : process.env.PAYMENT_TX_LOOKUP_BLOCKS
+    const lookback = readPositiveBigInt(envDefault, recovery ? RECOVERY_LOOKBACK_BLOCKS : DEFAULT_LOOKBACK_BLOCKS)
     const fromBlock = latestBlock > lookback ? latestBlock - lookback : 0n
     const logs = await getLogsChunked(
       rpcUrl,

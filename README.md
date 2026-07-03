@@ -33,6 +33,7 @@ Hash PayLink is non-custodial. Payment links encode the checkout state, funds se
 |---|---|
 | Circle USDC / wallets | USDC settlement and wallet sessions where supported |
 | Privy | Email sign-in and user session layer |
+| Paycrest | Base USDC to NGN POS payout routing through verified Paycrest senders/providers |
 | Arc Network | StreamPay payroll, agentic streams, and Arena escrow settlement |
 | 0G Storage | Durable payment and agent activity proof records |
 | Polymarket public APIs | PolyDesk portfolio, market, score, and LP context |
@@ -109,6 +110,32 @@ Render Postgres is the durable app-state layer for receipts, agent/helper profil
 - Room state: entry, player count, rounds, risk curve, timer, invite URL, status, escrow address.
 - Escrow state: deposits, recoverable refunds, winner settlement, and 0.5% platform fee.
 - Future proof layer: final room results can be archived to 0G.
+
+## Nigerian POS Off-Ramp
+
+The first POS off-ramp is deliberately narrow: Nigerian merchants can add a verified bank account, customers pay Base USDC from Circle Smart Wallet, and Paycrest routes NGN to the merchant bank account. Hash PayLink does not custody the funds; it stores the POS intent, payer email/wallet, Paycrest order id, tx hash, and status for support and reconciliation.
+
+Required server env:
+
+```env
+PAYCREST_API_KEY=
+PAYCREST_API_SECRET=
+NG_POS_BANK_ENCRYPTION_KEY=
+DATABASE_URL=
+```
+
+Optional server env:
+
+```env
+PAYCREST_API_BASE=https://api.paycrest.io
+PAYCREST_WEBHOOK_SECRET=
+PAYCREST_SENDER_FEE_PERCENT=
+PAYCREST_POS_STORE_KEY=hashpaylink:paycrest-pos-orders
+NG_POS_STORE_KEY=hashpaylink:ng-pos-merchants
+NG_POS_BANK_KEY_VERSION=local-v1
+```
+
+Webhook URL: `/api/paycrest-webhook`. Do not expose Paycrest keys with a `VITE_` prefix.
 
 ## Development
 
