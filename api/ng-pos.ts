@@ -805,11 +805,13 @@ export default async function handler(req: Request, res: Response) {
       if (!id) return res.status(400).json({ ok: false, error: 'Missing order id.' })
       let order = body.refresh ? await refreshPaycrestOrderStatus(id) : await getPaycrestPosOrder(id)
       if (!order) return res.status(404).json({ ok: false, error: 'Paycrest POS order not found.' })
+      let receipt: unknown
       if (!order.tx_hash && body.refresh) {
         const reconciled = await reconcilePaycrestOrderPayment(id).catch(() => null)
         order = reconciled?.order ?? order
+        receipt = reconciled?.receipt
       }
-      return res.json({ ok: true, order })
+      return res.json({ ok: true, order, receipt })
     }
 
     return res.status(400).json({ ok: false, error: 'Unknown action.' })

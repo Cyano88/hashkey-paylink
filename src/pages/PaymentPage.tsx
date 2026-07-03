@@ -1607,9 +1607,17 @@ export default function PaymentPage() {
             refresh: true,
           }),
         })
-        const data = await res.json().catch(() => undefined) as { ok?: boolean; order?: PaycrestCheckoutOrder } | undefined
+        const data = await res.json().catch(() => undefined) as {
+          ok?: boolean
+          order?: PaycrestCheckoutOrder
+          receipt?: { receiptId?: string; receiptUrl?: string }
+        } | undefined
         if (cancelled || !data?.ok || !data.order) return
         setPaycrestOrder(data.order)
+        if (data.receipt?.receiptId) {
+          setPaymentReceiptId(data.receipt.receiptId)
+          setEventRegStatus('ok')
+        }
         const nextHash = data.order.tx_hash
         if (nextHash && /^0x[a-fA-F0-9]{64}$/.test(nextHash)) {
           setManualTxHash(nextHash as `0x${string}`)
@@ -1623,7 +1631,7 @@ export default function PaymentPage() {
         // Keep the local tx scanner running; Paycrest status polling is a second recovery path.
       }
       if (!cancelled && attempts < 60 && !manualTxHash) {
-        window.setTimeout(syncPaycrestOrderTx, attempts < 6 ? 3_000 : 8_000)
+        window.setTimeout(syncPaycrestOrderTx, attempts < 20 ? 2_000 : 5_000)
       }
     }
 
@@ -3431,7 +3439,7 @@ export default function PaymentPage() {
                 <div className="flex items-center justify-between px-4 py-3">
                   <span className="text-sm text-gray-500">Tx</span>
                   <span className="text-xs font-medium text-gray-400">
-                    {txSyncTick >= 90 ? 'Confirmed' : `Syncing${'.'.repeat((txSyncTick % 3) + 1)}`}
+                    {txSyncTick >= 90 ? 'Confirmed' : `Please wait${'.'.repeat((txSyncTick % 3) + 1)}`}
                   </span>
                 </div>
               )}
@@ -3440,7 +3448,7 @@ export default function PaymentPage() {
                   <span className="text-sm text-gray-500">Tx</span>
                   <span className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-400">
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    {txSyncTick >= 90 ? 'Still syncing' : `Syncing${'.'.repeat((txSyncTick % 3) + 1)}`}
+                    {txSyncTick >= 90 ? 'Still checking' : `Please wait${'.'.repeat((txSyncTick % 3) + 1)}`}
                   </span>
                 </div>
               )}

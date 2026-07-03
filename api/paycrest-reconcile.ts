@@ -19,8 +19,8 @@ function maxAttempts() {
 }
 
 function delayMs(attempt: number) {
-  if (attempt <= 2) return 5_000
-  if (attempt <= 8) return 15_000
+  if (attempt <= 12) return 2_000
+  if (attempt <= 30) return 5_000
   return 30_000
 }
 
