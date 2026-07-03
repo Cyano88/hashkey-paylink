@@ -476,6 +476,10 @@ export default function PaymentPage() {
   const [paycrestStatusText, setPaycrestStatusText] = useState('')
   const requiresAttendeeName = (isEventMode || isNgPosPayment) && !isPolymarketFunding && !isAgentOrWalletFunding && !isHelperAccess
 
+  useEffect(() => {
+    if (isFlex && isBankReceivePayment && isNgPosPaycrestOfframp) setFxInputMode('local')
+  }, [isFlex, isBankReceivePayment, isNgPosPaycrestOfframp])
+
   // ── FX display (event mode only — reads params baked into the URL at link creation) ──
   const fxCurrency  = isEventMode ? getPaylinkParam(initParams, 'fx', 'fx') : ''
   const fxShow      = isEventMode && hasPaylinkFlag(initParams, 'fxshow', 'fs') && !!fxCurrency
@@ -507,10 +511,13 @@ export default function PaymentPage() {
   const effectiveAmt = isFlex ? flexAmtInUsdc : amt
   const payableAmt = isNgPosPaycrestOfframp && paycrestOrder?.amount_usdc ? paycrestOrder.amount_usdc : effectiveAmt
   const effectiveAmtNumber = parseFloat(effectiveAmt || '0') || 0
+  const flexLocalCurrencyLabel = isNgPosPaycrestOfframp && isBankReceivePayment ? 'NGN' : (getFxMeta(fxCurrency)?.symbol ?? fxCurrency)
 
   // flexPayDisabled: accounts for USDC and local-currency input modes
   const flexPayDisabled = isFlex && (
-    fxInputMode === 'local'
+    isNgPosPaycrestOfframp && isBankReceivePayment
+      ? (!localAmt || parseFloat(localAmt) <= 0)
+      : fxInputMode === 'local'
       ? (!localAmt || parseFloat(localAmt) <= 0 || !fxRate)
       : (!flexAmt  || parseFloat(flexAmt)  <= 0)
   )
@@ -2265,19 +2272,44 @@ export default function PaymentPage() {
   async function prepareNgPosPaycrestOrder(session: CircleEvmEmailSession) {
     if (!isNgPosPaycrestOfframp) return true
     if (paycrestOrder?.receive_address && paycrestOrder.amount_usdc) return true
-    if (!ngPosPaycrestIntentId) {
-      setCirclePasskeyError('This POS checkout is missing its settlement intent. Start the payment again from the POS QR.')
-      return false
-    }
+    let settlementIntentId = ngPosPaycrestIntentId
     setPaycrestPreparing(true)
     setPaycrestStatusText('Preparing Naira payout...')
     try {
+      if (!settlementIntentId) {
+        const amountNgn = localAmt.trim()
+        if (!isFlex || !ngPosMerchantId || !amountNgn || Number.parseFloat(amountNgn) <= 0) {
+          throw new Error('Enter the Naira amount before preparing payout.')
+        }
+        const quoteResponse = await fetch('/api/ng-pos', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            action: 'quote',
+            merchant_id: ngPosMerchantId,
+            settlement_type: 'INSTANT_FIAT',
+            amount_currency: 'NGN',
+            amount: amountNgn,
+            network: 'base',
+            client_origin: window.location.origin,
+          }),
+        })
+        const quoteData = await quoteResponse.json().catch(() => ({})) as {
+          ok?: boolean
+          quote?: { intent_id?: string; amount_usdc?: string; amount_ngn?: string }
+          error?: string
+        }
+        if (!quoteResponse.ok || !quoteData.ok || !quoteData.quote?.intent_id) {
+          throw new Error(quoteData.error || 'Could not prepare Naira quote.')
+        }
+        settlementIntentId = quoteData.quote.intent_id
+      }
       const response = await fetch('/api/ng-pos', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           action: 'createOfframpOrder',
-          intent_id: ngPosPaycrestIntentId,
+          intent_id: settlementIntentId,
           refund_address: session.wallet.address,
           payer_wallet: session.wallet.address,
           payer_email: (showPrivyCircleEmailPay ? privyEmail : circleEmail).trim(),
@@ -3602,7 +3634,7 @@ export default function PaymentPage() {
                   className="w-40 text-center text-[2.75rem] font-bold leading-none tracking-tight text-gray-900 dark:text-white bg-transparent border-b-2 border-gray-300 dark:border-white/30 focus:border-gray-500 dark:focus:border-white/60 outline-none"
                 />
                 <span className="absolute left-full top-1/2 -translate-y-1/2 pl-2 text-xl font-semibold text-gray-400 dark:text-gray-300 whitespace-nowrap">
-                  {fxInputMode === 'local' ? (getFxMeta(fxCurrency)?.symbol ?? fxCurrency) : meta.asset}
+                  {fxInputMode === 'local' ? flexLocalCurrencyLabel : meta.asset}
                 </span>
               </div>
 

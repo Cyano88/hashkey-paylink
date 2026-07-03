@@ -301,7 +301,8 @@ function decryptBankDetails(details: EncryptedBankDetails) {
 
 function buildPayUrl(req: Request, merchant: MerchantProfile, network: PosNetwork, amountUsdc: string, amountNgn: string, settlementType: SettlementType, explicitOrigin?: unknown, intentId?: string, source: 'pos' | 'bank-receive' = 'pos') {
   const params = new URLSearchParams()
-  params.set('a', amountUsdc)
+  if (amountUsdc) params.set('a', amountUsdc)
+  else params.set('f', '1')
   params.set('n', network)
   if (settlementType === 'INSTANT_FIAT') {
     // Paycrest supplies the receive address during checkout preparation.
@@ -314,9 +315,13 @@ function buildPayUrl(req: Request, merchant: MerchantProfile, network: PosNetwor
   params.set('src', source === 'bank-receive' ? 'bank-receive' : 'ngpos')
   params.set('merchant', merchant.merchant_id)
   params.set('settlement', settlementType.toLowerCase())
-  params.set('ngn', amountNgn)
+  if (amountNgn) params.set('ngn', amountNgn)
   if (settlementType === 'INSTANT_FIAT') {
     params.set('offramp', 'paycrest')
+    if (!amountUsdc) {
+      params.set('fx', 'NGN')
+      params.set('fs', '1')
+    }
     if (intentId) params.set('intent', intentId)
     if (merchant.bank_name) params.set('bank', merchant.bank_name)
     if (merchant.bank_last4) params.set('acct', `****${merchant.bank_last4}`)
@@ -474,28 +479,19 @@ export default async function handler(req: Request, res: Response) {
       const ownerFirstName = cleanText(body.owner_first_name, '')
       const ownerLastName = cleanText(body.owner_last_name, '')
       const displayName = cleanText(body.display_name || body.memo, 'Bank receive')
+      const flexibleAmount = body.flexible_amount === true || body.flexible_amount === 'true'
       const amount = cleanAmount(body.amount)
       const bankCode = cleanText(body.bank_code, '')
       const bankName = cleanText(body.bank_name, 'Nigerian bank')
       const accountNumber = cleanText(body.account_number, '').replace(/\D/g, '').slice(0, 10)
       const accountName = cleanText(body.account_name, '')
       if (!ownerEmail) return res.status(401).json({ ok: false, error: 'Sign in to create bank receive links.' })
-      if (!amount) return res.status(400).json({ ok: false, error: 'Enter a valid Naira amount.' })
+      if (!flexibleAmount && !amount) return res.status(400).json({ ok: false, error: 'Enter a valid Naira amount.' })
       if (!bankCode || accountNumber.length !== 10 || !accountName) {
         return res.status(400).json({ ok: false, error: 'Verify a Nigerian bank account first.' })
       }
       if (!isPaycrestConfigured()) return res.status(400).json({ ok: false, error: 'Paycrest is not configured for bank receive yet.' })
 
-      let { rate, source } = await getNgnRate()
-      try {
-        rate = await getPaycrestOfframpRate({ network: 'base', token: 'USDC', fiat: 'NGN', amount: '1' })
-        source = 'paycrest'
-      } catch (error) {
-        console.warn('[ng-pos] Paycrest rate unavailable for bank receive; using fallback FX rate.', error instanceof Error ? error.message : String(error))
-      }
-      const amountNgn = amount
-      const amountUsdc = amountNgn / rate
-      const amountUsdcText = amountUsdc.toFixed(6).replace(/\.?0+$/, '')
       const now = new Date().toISOString()
       const merchant: MerchantProfile = {
         merchant_id: randomBytes(12).toString('base64url'),
@@ -519,32 +515,52 @@ export default async function handler(req: Request, res: Response) {
         created_at: now,
         updated_at: now,
       }
-      const intentId = randomBytes(12).toString('base64url')
       const store = await readStore()
       store.merchants[merchant.merchant_id] = merchant
-      store.intents ??= {}
-      store.intents[intentId] = {
-        intent_id: intentId,
-        merchant_id: merchant.merchant_id,
-        amount_ngn: amountNgn.toFixed(2),
-        estimated_amount_usdc: amountUsdcText,
-        fx_rate_ngn_per_usdc: rate.toFixed(2),
-        source: 'bank-receive',
-        created_at: now,
-        expires_at: new Date(Date.now() + 10 * 60_000).toISOString(),
+      let intentId = ''
+      let amountNgnText = ''
+      let amountUsdcText = ''
+      let rateText = ''
+      let source = 'paycrest'
+      if (!flexibleAmount) {
+        let rate: number
+        ;({ rate, source } = await getNgnRate())
+        try {
+          rate = await getPaycrestOfframpRate({ network: 'base', token: 'USDC', fiat: 'NGN', amount: '1' })
+          source = 'paycrest'
+        } catch (error) {
+          console.warn('[ng-pos] Paycrest rate unavailable for bank receive; using fallback FX rate.', error instanceof Error ? error.message : String(error))
+        }
+        const amountNgn = amount
+        const amountUsdc = amountNgn / rate
+        amountNgnText = amountNgn.toFixed(2)
+        amountUsdcText = amountUsdc.toFixed(6).replace(/\.?0+$/, '')
+        rateText = rate.toFixed(2)
+        intentId = randomBytes(12).toString('base64url')
+        store.intents ??= {}
+        store.intents[intentId] = {
+          intent_id: intentId,
+          merchant_id: merchant.merchant_id,
+          amount_ngn: amountNgnText,
+          estimated_amount_usdc: amountUsdcText,
+          fx_rate_ngn_per_usdc: rateText,
+          source: 'bank-receive',
+          created_at: now,
+          expires_at: new Date(Date.now() + 10 * 60_000).toISOString(),
+        }
       }
       await writeStore(store)
-      const pay_url = buildPayUrl(req, merchant, 'base', amountUsdcText, amountNgn.toFixed(2), 'INSTANT_FIAT', body.client_origin, intentId, 'bank-receive')
+      const pay_url = buildPayUrl(req, merchant, 'base', amountUsdcText, amountNgnText, 'INSTANT_FIAT', body.client_origin, intentId || undefined, 'bank-receive')
       return res.json({
         ok: true,
         link: {
           payment_url: pay_url,
           dashboard_url: buildDashboardUrl(req, merchant, body.client_origin),
           merchant_id: merchant.merchant_id,
-          intent_id: intentId,
-          amount_ngn: amountNgn.toFixed(2),
+          intent_id: intentId || undefined,
+          amount_ngn: amountNgnText || undefined,
           estimated_amount_usdc: amountUsdcText,
-          fx_rate_ngn_per_usdc: rate.toFixed(2),
+          fx_rate_ngn_per_usdc: rateText || undefined,
           fx_source: source,
           bank_name: merchant.bank_name,
           bank_last4: merchant.bank_last4,
@@ -594,6 +610,7 @@ export default async function handler(req: Request, res: Response) {
       let fiatExecutionReady = true
       if (settlementType === 'INSTANT_FIAT') {
         if (!isPaycrestConfigured()) return res.status(400).json({ ok: false, error: 'Paycrest is not configured for naira settlement yet.' })
+        const intentSource = merchant.source === 'bank-receive' ? 'bank-receive' : 'pos'
         store.intents ??= {}
         store.intents[intentId] = {
           intent_id: intentId,
@@ -601,7 +618,7 @@ export default async function handler(req: Request, res: Response) {
           amount_ngn: amountNgn.toFixed(2),
           estimated_amount_usdc: amountUsdcText,
           fx_rate_ngn_per_usdc: rate.toFixed(2),
-          source: 'pos',
+          source: intentSource,
           created_at: new Date().toISOString(),
           expires_at: new Date(Date.now() + 10 * 60_000).toISOString(),
         }
@@ -622,7 +639,7 @@ export default async function handler(req: Request, res: Response) {
           fx_rate_ngn_per_usdc: rate.toFixed(2),
           fx_source: source,
           expires_at: new Date(Date.now() + (settlementType === 'INSTANT_FIAT' ? 10 * 60_000 : 60_000)).toISOString(),
-          pay_url: buildPayUrl(req, merchant, network, amountUsdcText, amountNgn.toFixed(2), settlementType, body.client_origin, intentId, 'pos'),
+          pay_url: buildPayUrl(req, merchant, network, amountUsdcText, amountNgn.toFixed(2), settlementType, body.client_origin, intentId, merchant.source === 'bank-receive' ? 'bank-receive' : 'pos'),
           fiat_execution_ready: fiatExecutionReady,
           offramp_provider: settlementType === 'INSTANT_FIAT' ? 'paycrest' : undefined,
           intent_id: intentId || undefined,

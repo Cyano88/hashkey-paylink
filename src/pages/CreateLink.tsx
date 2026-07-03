@@ -1083,7 +1083,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     ? (evmValid || solanaValid)
     : (selectedNet === 'solana' ? solanaValid : evmValid)
 
-  const canGenerateBankReceive = isBankReceive && !flexAmount && isValidAmt && hasAddress && privyAuthenticated && localCurrencyProfileReady
+  const canGenerateBankReceive = isBankReceive && (flexAmount || isValidAmt) && hasAddress && privyAuthenticated && localCurrencyProfileReady
   const canGenerate = isBankReceive
     ? canGenerateBankReceive
     : (flexAmount || isValidAmt) && hasAddress && (!accessMode || agentUrlStatus === 'ok')
@@ -2108,7 +2108,8 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
           owner_first_name: localCurrencyProfile?.firstName || localCurrencyProfileDraft.firstName,
           owner_last_name: localCurrencyProfile?.lastName || localCurrencyProfileDraft.lastName,
           display_name: memo.trim() || 'Bank receive',
-          amount: amt,
+          amount: flexAmount ? '' : amt,
+          flexible_amount: flexAmount,
           bank_name: posBankName,
           bank_code: posBankCode,
           account_number: posBankAccount,
