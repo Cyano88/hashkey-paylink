@@ -77,6 +77,7 @@ type PaycrestCheckoutOrder = {
   receive_address: string
   refund_address: string
   status: string
+  tx_hash?: string
   valid_until?: string
   bank_name?: string
   bank_last4?: string
@@ -471,6 +472,7 @@ export default function PaymentPage() {
   const ngPosRegistered  = useRef(false)
   const ngPosRegisteredTx = useRef('')
   const ngPosOfframpMarkedRef = useRef(false)
+  const lastCirclePaymentUnitsRef = useRef<bigint | null>(null)
   const [paycrestOrder, setPaycrestOrder] = useState<PaycrestCheckoutOrder | null>(null)
   const [paycrestPreparing, setPaycrestPreparing] = useState(false)
   const [paycrestStatusText, setPaycrestStatusText] = useState('')
@@ -1441,7 +1443,8 @@ export default function PaymentPage() {
   }, [circlePasskeyPending, circleEvmPaymentProcessing, manualPayDetected, circlePaymasterTxHash])
 
   async function handleManualCheck() {
-    if (!resolvedEvm) return
+    const evmRecipient = isAddress(activeRecipient) ? activeRecipient as `0x${string}` : null
+    if (!evmRecipient) return
     if (isManualChecking) return
     setIsManualChecking(true)
     try {
@@ -1585,6 +1588,59 @@ export default function PaymentPage() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [manualPayDetected, manualTxHash, chain, activeRecipient, effectiveAmt, receivedAmount?.toString()])
+
+  useEffect(() => {
+    if (!isNgPosPaycrestOfframp || !paycrestOrder || manualTxHash || !manualPayDetected) return
+    let cancelled = false
+    let attempts = 0
+
+    async function syncPaycrestOrderTx() {
+      attempts += 1
+      try {
+        const res = await fetch('/api/ng-pos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'offrampStatus',
+            intent_id: paycrestOrder?.intent_id,
+            order_id: paycrestOrder?.paycrest_order_id,
+            refresh: true,
+          }),
+        })
+        const data = await res.json().catch(() => undefined) as {
+          ok?: boolean
+          order?: PaycrestCheckoutOrder
+          receipt?: { receiptId?: string; receiptUrl?: string }
+        } | undefined
+        if (cancelled || !data?.ok || !data.order) return
+        setPaycrestOrder(data.order)
+        if (data.receipt?.receiptId) {
+          setPaymentReceiptId(data.receipt.receiptId)
+          setEventRegStatus('ok')
+        }
+        const nextHash = data.order.tx_hash
+        if (nextHash && /^0x[a-fA-F0-9]{64}$/.test(nextHash)) {
+          setManualTxHash(nextHash as `0x${string}`)
+          try {
+            setReceivedAmount(parseUnits(data.order.amount_usdc || payableAmt || '0', meta.decimals))
+          } catch { /* keep existing detected amount */ }
+          setPaycrestStatusText('Payment detected. Preparing receipt.')
+          return
+        }
+      } catch {
+        // Keep the local tx scanner running; Paycrest status polling is a second recovery path.
+      }
+      if (!cancelled && attempts < 60 && !manualTxHash) {
+        window.setTimeout(syncPaycrestOrderTx, attempts < 20 ? 2_000 : 5_000)
+      }
+    }
+
+    void syncPaycrestOrderTx()
+    return () => {
+      cancelled = true
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isNgPosPaycrestOfframp, manualPayDetected, manualTxHash, paycrestOrder?.intent_id, paycrestOrder?.paycrest_order_id])
 
   useEffect(() => {
     if (manualTxHash || !manualPayDetected || chain === 'solana') return
@@ -2273,8 +2329,8 @@ export default function PaymentPage() {
   }
 
   async function prepareNgPosPaycrestOrder(session: CircleEvmEmailSession) {
-    if (!isNgPosPaycrestOfframp) return true
-    if (paycrestOrder?.receive_address && paycrestOrder.amount_usdc) return true
+    if (!isNgPosPaycrestOfframp) return null
+    if (paycrestOrder?.receive_address && paycrestOrder.amount_usdc) return paycrestOrder
     let settlementIntentId = ngPosPaycrestIntentId
     setPaycrestPreparing(true)
     setPaycrestStatusText('Preparing Naira payout...')
@@ -2324,11 +2380,11 @@ export default function PaymentPage() {
       setPaycrestOrder(data.order)
       setPaycrestStatusText('Naira payout ready. Review the bank account, then pay.')
       await refetchCircleWalletBalance()
-      return false
+      return data.order
     } catch (err) {
       setPaycrestStatusText('')
       setCirclePasskeyError(readableErrorMsg(err, 'Could not prepare Naira payout.'))
-      return false
+      return null
     } finally {
       setPaycrestPreparing(false)
     }
@@ -2386,17 +2442,23 @@ export default function PaymentPage() {
           return
         }
 
+        let preparedPaycrestOrder: PaycrestCheckoutOrder | null = null
         if (isNgPosPaycrestOfframp) {
-          const ready = await prepareNgPosPaycrestOrder(session)
-          if (!ready) return
+          preparedPaycrestOrder = await prepareNgPosPaycrestOrder(session)
+          if (!preparedPaycrestOrder) return
         }
 
-        if (!activeRecipient || !isAddress(activeRecipient) || !payableAmt || parseFloat(payableAmt) <= 0) {
+        const paymentRecipient = preparedPaycrestOrder?.receive_address ?? activeRecipient
+        const paymentAmount = preparedPaycrestOrder?.amount_usdc ?? payableAmt
+        const paymentRequiredUnits = parseUnits(paymentAmount || '0', meta.decimals)
+        lastCirclePaymentUnitsRef.current = paymentRequiredUnits
+
+        if (!paymentRecipient || !isAddress(paymentRecipient) || !paymentAmount || parseFloat(paymentAmount) <= 0) {
           setCirclePasskeyError('Naira payout is not ready yet. Prepare the payout, then try again.')
           return
         }
 
-        if (circleWalletBalance !== undefined && circleWalletBalance !== null && !circleWalletHasEnough) {
+        if (circleWalletBalance !== undefined && circleWalletBalance !== null && circleWalletBalance < paymentRequiredUnits) {
           resetCircleSmartWalletPending()
           setCirclePasskeyError(SMART_WALLET_FUNDING_ERROR)
           return
@@ -2406,8 +2468,8 @@ export default function PaymentPage() {
         setCircleEvmAcceptedPending(false)
         const txHash = await sendCircleEvmEmailPayment({
           session,
-          recipient: activeRecipient as `0x${string}`,
-          amount: payableAmt,
+          recipient: paymentRecipient as `0x${string}`,
+          amount: paymentAmount,
           feeMode: grossUpEvmPlatformCharges ? 'gross' : 'net',
           feeBps: hashPaylinkFeeBps,
         })
@@ -2465,7 +2527,7 @@ export default function PaymentPage() {
         setCirclePasskeyError(null)
         setCircleEvmAcceptedPending(false)
         setCircleEvmPaymentProcessing(false)
-        setReceivedAmount(expectedEvmRecipientUnits())
+        setReceivedAmount(lastCirclePaymentUnitsRef.current ?? expectedEvmRecipientUnits())
         setManualTxHash(null)
         setManualPayDetected(true)
         setShowCheckButton(false)
@@ -2868,7 +2930,8 @@ export default function PaymentPage() {
     const payer  = chain === 'solana' ? (circleSolanaSession?.wallet.address ?? solanaWalletAddr ?? solanaVaultAddr ?? '')
       : (address ?? circleEvmEmailSession?.wallet.address ?? circleSmartAccount ?? directVault ?? '')
     const txH = currentNgPosTxHash()
-    const txHash = txH ?? `manual_${Date.now()}`
+    if (!txH) return
+    const txHash = txH
     const actualAmt = receivedAmount != null
       ? (Number(receivedAmount) / Math.pow(10, meta.decimals)).toFixed(meta.decimals <= 6 ? 6 : 8)
       : payableAmt
@@ -3220,7 +3283,12 @@ export default function PaymentPage() {
     const explorerTxUrl    = txHash      ? `${meta.explorerUrl}/tx/${txHash}`      : null
     void explorerTxUrl
 
-    const recipientAmt = receivedAmount != null
+    const paycrestConfirmedAmount = isNgPosPaycrestOfframp && paycrestOrder?.amount_usdc
+      ? Number.parseFloat(paycrestOrder.amount_usdc)
+      : null
+    const recipientAmt = paycrestConfirmedAmount != null && Number.isFinite(paycrestConfirmedAmount) && paycrestConfirmedAmount > 0
+      ? paycrestConfirmedAmount
+      : receivedAmount != null
       ? Number(receivedAmount) / Math.pow(10, meta.decimals)
       : null
     const requested = parseFloat(payableAmt)
@@ -3242,7 +3310,7 @@ export default function PaymentPage() {
       : (txHash ? `${meta.explorerUrl}/tx/${txHash}` : null)
     const ogExplorerUrl = paymentReceipt?.proof?.ogExplorer || (paymentReceipt?.proof?.ogTxHash ? `https://chainscan.0g.ai/tx/${paymentReceipt.proof.ogTxHash}` : '')
     const ogProofValue = paymentReceipt?.proof?.ogTxHash || paymentReceipt?.proof?.ogRootHash || ''
-    const receiptReady = Boolean(paymentReceipt && txHash)
+    const receiptReady = Boolean(paymentReceipt)
     const payoutAmountNgn = Number.parseFloat(paycrestOrder?.amount_ngn || ngPosAmountNgn || '0')
     const payoutLabel = Number.isFinite(payoutAmountNgn) && payoutAmountNgn > 0
       ? `NGN ${payoutAmountNgn.toLocaleString('en-NG', { maximumFractionDigits: 2 })}`
@@ -3292,7 +3360,7 @@ export default function PaymentPage() {
                   {!isPolymarketFunding && (
                     <>
                       {' '}
-                      {isUnder ? 'received - ' : 'received by recipient'}
+                      {isUnder ? 'received - ' : isNgPosPaycrestOfframp ? 'sent for Naira payout' : 'received by recipient'}
                     </>
                   )}
                   {isUnder && (
@@ -3367,11 +3435,20 @@ export default function PaymentPage() {
                   </div>
                 </div>
               )}
-              {!txHash && manualPayDetected && chain !== 'solana' && (
+              {!txHash && manualPayDetected && chain !== 'solana' && !isNgPosPaycrestOfframp && (
                 <div className="flex items-center justify-between px-4 py-3">
                   <span className="text-sm text-gray-500">Tx</span>
                   <span className="text-xs font-medium text-gray-400">
-                    {txSyncTick >= 90 ? 'Confirmed' : `Syncing${'.'.repeat((txSyncTick % 3) + 1)}`}
+                    {txSyncTick >= 90 ? 'Confirmed' : `Please wait${'.'.repeat((txSyncTick % 3) + 1)}`}
+                  </span>
+                </div>
+              )}
+              {!txHash && manualPayDetected && chain !== 'solana' && isNgPosPaycrestOfframp && (
+                <div className="flex items-center justify-between px-4 py-3">
+                  <span className="text-sm text-gray-500">Tx</span>
+                  <span className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-400">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    {txSyncTick >= 90 ? 'Still checking' : `Please wait${'.'.repeat((txSyncTick % 3) + 1)}`}
                   </span>
                 </div>
               )}
@@ -3438,6 +3515,11 @@ export default function PaymentPage() {
                   </a>
                 )}
               </div>
+            )}
+            {paymentReceiptId && !paymentReceipt && (
+              <p className="text-center text-[11px] font-medium text-gray-400">
+                Preparing receipt...
+              </p>
             )}
 
             {/* Only surface registration errors — success/pending/idle are silent */}

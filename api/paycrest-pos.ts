@@ -20,6 +20,8 @@ export type PaycrestOrderRecord = {
   refund_address: string
   payer_email?: string
   payer_wallet?: string
+  payer_name?: string
+  source?: 'ngpos' | 'bank-receive'
   tx_hash?: string
   status: string
   valid_until?: string
@@ -119,7 +121,10 @@ async function paycrestFetch<T>(path: string, init: RequestInit = {}): Promise<T
   })
   const body = await response.json().catch(() => ({}))
   if (!response.ok) {
-    const message = firstText((body as any).error, (body as any).message, 'Paycrest request failed.')
+    const validation = Array.isArray((body as any).errors)
+      ? (body as any).errors.map((item: any) => firstText(item?.message, item?.msg, item)).filter(Boolean).join('; ')
+      : firstText((body as any).details, (body as any).detail)
+    const message = firstText(validation, (body as any).error, (body as any).message, 'Paycrest request failed.')
     throw new Error(message)
   }
   return unwrapData<T>(body)
@@ -215,6 +220,8 @@ export async function createPaycrestOfframpOrder(input: {
   refundAddress: string
   payerEmail?: string
   payerWallet?: string
+  payerName?: string
+  source?: 'ngpos' | 'bank-receive'
   memo?: string
 }) {
   if (!isAddress(input.refundAddress)) throw new Error('A valid Circle refund wallet is required.')
@@ -236,7 +243,7 @@ export async function createPaycrestOfframpOrder(input: {
         institution: input.bankCode,
         accountIdentifier: input.accountNumber,
         accountName: input.accountName,
-        memo: input.memo || `Hash PayLink POS ${input.intentId}`,
+        memo: input.memo || 'Hash PayLink',
       },
     },
     reference,
@@ -267,6 +274,8 @@ export async function createPaycrestOfframpOrder(input: {
     refund_address: input.refundAddress,
     payer_email: input.payerEmail,
     payer_wallet: input.payerWallet || input.refundAddress,
+    payer_name: input.payerName || input.memo,
+    source: input.source,
     status: firstText(data?.status, 'initiated'),
     valid_until: firstText(providerAccount.validUntil, providerAccount.valid_until),
     bank_name: input.bankName,
@@ -288,6 +297,22 @@ export async function createPaycrestOfframpOrder(input: {
 export async function getPaycrestPosOrder(id: string) {
   const store = await readStore()
   return store.orders[id] ?? null
+}
+
+export async function listPaycrestPosOrdersForMerchants(merchantIds: string[]) {
+  const wanted = new Set(merchantIds.map(id => id.trim()).filter(Boolean))
+  if (!wanted.size) return []
+  const store = await readStore()
+  const seen = new Set<string>()
+  return Object.values(store.orders)
+    .filter(order => wanted.has(order.merchant_id))
+    .filter(order => {
+      const key = order.intent_id || order.paycrest_order_id
+      if (!key || seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+    .sort((a, b) => new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime())
 }
 
 export async function markPaycrestPosPayment(input: { id: string; txHash: string; payerEmail?: string; payerWallet?: string }) {
@@ -312,8 +337,21 @@ export async function refreshPaycrestOrderStatus(id: string) {
   if (!record) return null
   const data = await paycrestFetch<any>(`/v2/sender/orders/${encodeURIComponent(record.paycrest_order_id)}`, { method: 'GET' })
   const status = firstText(data?.status, record.status)
+  const txHash = firstText(
+    data?.txHash,
+    data?.tx_hash,
+    data?.transactionHash,
+    data?.transaction_hash,
+    data?.depositTxHash,
+    data?.deposit_tx_hash,
+    data?.source?.txHash,
+    data?.source?.tx_hash,
+    data?.payment?.txHash,
+    data?.payment?.tx_hash,
+    record.tx_hash,
+  )
   const store = await readStore()
-  const updated = { ...record, status, raw: data, updated_at: new Date().toISOString() }
+  const updated = { ...record, status, tx_hash: txHash, raw: data, updated_at: new Date().toISOString() }
   store.orders[updated.intent_id] = updated
   store.orders[updated.paycrest_order_id] = updated
   await writeStore(store)
@@ -351,7 +389,19 @@ export async function paycrestWebhookHandler(req: Request, res: Response) {
   const updated = {
     ...record,
     status: firstText(data.status, record.status),
-    tx_hash: firstText(data.txHash, data.tx_hash, record.tx_hash),
+    tx_hash: firstText(
+      data.txHash,
+      data.tx_hash,
+      data.transactionHash,
+      data.transaction_hash,
+      data.depositTxHash,
+      data.deposit_tx_hash,
+      data.source?.txHash,
+      data.source?.tx_hash,
+      data.payment?.txHash,
+      data.payment?.tx_hash,
+      record.tx_hash,
+    ),
     raw: payload,
     updated_at: new Date().toISOString(),
   }

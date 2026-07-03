@@ -1896,11 +1896,13 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
         body: JSON.stringify({
           action: 'verifyAccount',
           bank_code: posBankCode,
+          bank_name: posBankName,
           account_number: posBankAccount,
         }),
       })
       const data = await response.json()
       if (!response.ok || !data.ok) throw new Error(data.error ?? 'Account verification failed')
+      if (data.bank_code) setPosBankCode(String(data.bank_code).trim())
       setPosBankAccountName(String(data.account_name ?? '').trim())
       setPosBankVerified(true)
     } catch (error) {

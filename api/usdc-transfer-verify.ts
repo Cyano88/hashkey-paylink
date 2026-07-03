@@ -21,6 +21,13 @@ type TxReceipt = {
   logs?: TxReceiptLog[]
 }
 
+type TransferLog = {
+  transactionHash?: `0x${string}`
+  blockNumber?: `0x${string}`
+  logIndex?: `0x${string}`
+  data?: `0x${string}`
+}
+
 function rpcFor(chain: EvmUsdcChain) {
   if (chain === 'arc') return process.env.PRIVATE_RPC_URL_ARC
   if (chain === 'arbitrum') return process.env.PRIVATE_RPC_URL_ARB
@@ -52,6 +59,79 @@ export function usdcAmountUnits(amount: string) {
   const units = parseUnits(normalized, 6)
   if (units <= 0n) throw new Error('Invalid USDC amount.')
   return units
+}
+
+function readPositiveBigInt(value: unknown, fallback: bigint) {
+  try {
+    const raw = typeof value === 'string' ? value.trim() : ''
+    if (!raw) return fallback
+    const parsed = BigInt(raw)
+    return parsed > 0n ? parsed : fallback
+  } catch {
+    return fallback
+  }
+}
+
+async function getTransferLogs(input: {
+  rpcUrl: string
+  chain: EvmUsdcChain
+  recipient: string
+  fromBlock: bigint
+  toBlock: bigint
+  chunkSize: bigint
+}) {
+  const logs: TransferLog[] = []
+  const recipientTopic = pad(input.recipient as Address, { size: 32 })
+  for (let from = input.fromBlock; from <= input.toBlock; from += input.chunkSize) {
+    const end = from + input.chunkSize - 1n > input.toBlock ? input.toBlock : from + input.chunkSize - 1n
+    logs.push(...await rpcCall<TransferLog[]>(input.rpcUrl, 'eth_getLogs', [{
+      address: USDC_TOKENS[input.chain],
+      fromBlock: `0x${from.toString(16)}`,
+      toBlock: `0x${end.toString(16)}`,
+      topics: [TRANSFER_TOPIC, null, recipientTopic],
+    }]))
+  }
+  return logs
+}
+
+export async function findEvmUsdcTransfer(input: {
+  chain: EvmUsdcChain
+  recipient: string
+  minAmount: string
+  lookbackBlocks?: bigint
+  chunkSize?: bigint
+}) {
+  if (!isAddress(input.recipient)) throw new Error('Invalid USDC recipient.')
+  const rpcUrl = rpcFor(input.chain)
+  if (!rpcUrl) throw new Error(`PRIVATE_RPC_URL is not configured for ${input.chain}.`)
+
+  const minUnits = usdcAmountUnits(input.minAmount)
+  const latestBlockHex = await rpcCall<`0x${string}`>(rpcUrl, 'eth_blockNumber', [])
+  const latestBlock = BigInt(latestBlockHex)
+  const lookback = input.lookbackBlocks ?? readPositiveBigInt(process.env.PAYCREST_RECONCILE_LOOKBACK_BLOCKS, 900n)
+  const chunkSize = input.chunkSize ?? readPositiveBigInt(process.env.PAYCREST_RECONCILE_CHUNK_SIZE, 120n)
+  const fromBlock = latestBlock > lookback ? latestBlock - lookback : 0n
+  const logs = await getTransferLogs({
+    rpcUrl,
+    chain: input.chain,
+    recipient: input.recipient,
+    fromBlock,
+    toBlock: latestBlock,
+    chunkSize,
+  })
+  const match = [...logs].reverse().find(log => {
+    const value = log.data ? BigInt(log.data) : 0n
+    return !!log.transactionHash && value >= minUnits
+  })
+  if (!match?.transactionHash) return null
+  const amountUnits = match.data ? BigInt(match.data) : 0n
+  return {
+    txHash: match.transactionHash,
+    amountUnits: amountUnits.toString(),
+    amount: (Number(amountUnits) / 1_000_000).toFixed(6).replace(/\.?0+$/, ''),
+    blockNumber: match.blockNumber ? BigInt(match.blockNumber).toString() : null,
+    logIndex: match.logIndex ? Number(BigInt(match.logIndex)) : null,
+  }
 }
 
 export async function verifyEvmUsdcTransfer(input: {

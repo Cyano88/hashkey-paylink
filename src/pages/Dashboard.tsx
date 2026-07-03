@@ -84,6 +84,9 @@ interface EventPaymentRow {
   amountNgn?: string
   ogRootHash?: string
   ogTxHash?: string
+  paycrestStatus?: string
+  bankName?: string
+  bankLast4?: string
 }
 
 type LocalCurrencyProfile = {
@@ -130,11 +133,11 @@ function eventPaymentToRow(row: EventPaymentRow, index: number): PaymentRow {
     label: row.memo || row.payer || 'Payment',
     source: row.source,
     merchantId: row.merchantId,
-    contextLabel: row.contextLabel,
     settlementType: row.settlementType,
     amountNgn: row.amountNgn,
     ogRootHash: row.ogRootHash,
     ogTxHash: row.ogTxHash,
+    contextLabel: row.contextLabel || (row.bankName ? `${row.bankName} ****${row.bankLast4 || ''}`.trim() : undefined),
   }
 }
 
@@ -156,7 +159,7 @@ const POS_NETWORK_LABELS: Record<PosNetwork, string> = {
   arc: 'Arc Testnet',
   solana: 'Solana',
 }
-const POS_RECEIPT_PAGE_SIZE = 5
+const POS_RECEIPT_PAGE_SIZE = 20
 const RECEIPT_FILTERS: Array<{ key: ReceiptFilter; label: string }> = [
   { key: 'all', label: 'All' },
   { key: 'paylink', label: 'PayLink' },
@@ -223,7 +226,7 @@ function OgArchiveNotice({
   totalCount: number
   className?: string
 }) {
-  const archiveLabel = totalCount > 0 ? `${archivedCount}/${totalCount} archived` : 'No receipts archived yet'
+  const archiveLabel = totalCount > 0 ? `${archivedCount}/${totalCount} archived` : 'No archives yet'
 
   return (
     <div className={cn(
@@ -234,14 +237,13 @@ function OgArchiveNotice({
         0G
       </span>
       <p className="text-[10px] text-gray-400 dark:text-gray-500">
-        Payment records archived on{' '}
         <a
           href={OG_GLOBAL_ARCHIVE_URL}
           target="_blank"
           rel="noopener noreferrer"
           className="font-medium text-gray-500 underline-offset-2 transition-colors hover:text-purple-600 hover:underline dark:text-gray-400 dark:hover:text-purple-300"
         >
-          0G decentralized storage
+          0G archive
         </a>
         {' '}— {archiveLabel}
       </p>
@@ -253,7 +255,7 @@ function OgArchiveNotice({
 
 export default function Dashboard() {
   const [searchParams] = useSearchParams()
-  const { authenticated: privyAuthenticated, getAccessToken } = usePrivy()
+  const { ready: privyReady, authenticated: privyAuthenticated, getAccessToken } = usePrivy()
   const evmAddr = getPaylinkParam(searchParams, 'evm', 'e').trim()
   const solanaAddr = getPaylinkParam(searchParams, 'sol', 's').trim()
   const eventId = (searchParams.get('id') ?? '').trim()
@@ -379,7 +381,7 @@ export default function Dashboard() {
       }
     })()
     return () => { cancelled = true }
-  }, [getAccessToken, isNgPosDashboard, privyAuthenticated])
+  }, [getAccessToken, isNgPosDashboard, privyAuthenticated, privyReady])
 
   // Load unified balances for selected dashboard chains.
   useEffect(() => {
@@ -447,6 +449,10 @@ export default function Dashboard() {
     }
 
     if (isNgPosDashboard) {
+      if (!privyReady) {
+        setRouterChecked(false)
+        return
+      }
       if (!privyAuthenticated) {
         setRouterChecked(true)
         setPayments([])
@@ -522,7 +528,7 @@ export default function Dashboard() {
     } finally {
       if (!opts?.silent) setIsLoading(false)
     }
-  }, [eventId, evmAddr, evmValid, getAccessToken, isNgPosDashboard, privyAuthenticated])
+  }, [eventId, evmAddr, evmValid, getAccessToken, isNgPosDashboard, privyAuthenticated, privyReady])
 
   useEffect(() => {
     setRouterChecked(false)
@@ -562,11 +568,19 @@ export default function Dashboard() {
   function receivedUsdc(row: PaymentRow) {
     return Math.max(0, Number(row.recipientAmount) / 1e6)
   }
+  function receivedNgn(row: PaymentRow) {
+    const n = Number.parseFloat(row.amountNgn || '')
+    return Number.isFinite(n) && n > 0 ? n : 0
+  }
+  function normalizedSettlement(row?: PaymentRow | null) {
+    return String(row?.settlementType || '').toLowerCase()
+  }
   function localHistoryKind(row: PaymentRow): Exclude<LocalHistoryFilter, 'all'> {
-    if (row.source === 'bills' || row.settlementType === 'bill_payment') return 'bills'
+    const settlement = normalizedSettlement(row)
+    if (row.source === 'bills' || settlement === 'bill_payment') return 'bills'
     if (row.source === 'bank-receive' || row.source === 'bank_receive') return 'bank'
     if (row.source === 'ngpos') return 'pos'
-    if (row.settlementType === 'instant_fiat') return 'bank'
+    if (settlement === 'instant_fiat') return 'bank'
     return 'pos'
   }
   function localHistoryLabel(row?: PaymentRow | null) {
@@ -575,6 +589,7 @@ export default function Dashboard() {
     return kind === 'bills' ? 'Bill payment' : kind === 'bank' ? 'Bank receive' : 'POS'
   }
   const totalReceived = payments.reduce((s, p) => s + receivedUsdc(p), 0)
+  const totalNgnReceived = payments.reduce((s, p) => s + receivedNgn(p), 0)
   const dayStart = useCallback((date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime(), [])
   const dateFilteredPayments = useMemo(() => {
     if (!isNgPosDashboard || dateFilter === 'all') return payments
@@ -602,6 +617,15 @@ export default function Dashboard() {
     for (const row of dateFilteredPayments) counts[localHistoryKind(row)] += 1
     return counts
   }, [dateFilteredPayments])
+  const localCategoryTotals = useMemo(() => {
+    const totals: Record<LocalHistoryFilter, number> = { all: 0, pos: 0, bank: 0, bills: 0 }
+    for (const row of dateFilteredPayments) {
+      const amount = receivedNgn(row)
+      totals.all += amount
+      totals[localHistoryKind(row)] += amount
+    }
+    return totals
+  }, [dateFilteredPayments])
   const selectedPayments = useMemo(() => {
     if (!isNgPosDashboard || localHistoryFilter === 'all') return dateFilteredPayments
     return dateFilteredPayments.filter(row => localHistoryKind(row) === localHistoryFilter)
@@ -619,6 +643,9 @@ export default function Dashboard() {
   const todayReceived = payments
     .filter(row => row.timestamp != null && row.timestamp >= todayStart && row.timestamp < todayStart + 86_400_000)
     .reduce((s, p) => s + receivedUsdc(p), 0)
+  const todayNgnReceived = payments
+    .filter(row => row.timestamp != null && row.timestamp >= todayStart && row.timestamp < todayStart + 86_400_000)
+    .reduce((s, p) => s + receivedNgn(p), 0)
   const lastPayment = payments[0] ?? null
   const archivedCount = payments.filter(row => Boolean(row.ogTxHash)).length
   const archiveStatus = payments.length === 0
@@ -649,10 +676,14 @@ export default function Dashboard() {
     })
   }
   function fmtUsdc(n: number) { return `${fmt(n)} USDC` }
+  function fmtNgnAmount(n: number) {
+    if (!Number.isFinite(n) || Math.abs(n) < 0.005) return 'NGN 0'
+    return `NGN ${n.toLocaleString('en-NG', { maximumFractionDigits: 2 })}`
+  }
   function fmtNgn(value?: string) {
     const n = Number.parseFloat(value || '')
     if (!Number.isFinite(n)) return 'NGN not captured'
-    return `₦${n.toLocaleString('en-NG', { maximumFractionDigits: 2 })}`
+    return fmtNgnAmount(n)
   }
   function fmtTs(ts: number | null) {
     if (!ts) return '-'
@@ -662,7 +693,16 @@ export default function Dashboard() {
   function fmtNgnSafe(value?: string) {
     const n = Number.parseFloat(value || '')
     if (!Number.isFinite(n)) return 'NGN not captured'
-    return `NGN ${n.toLocaleString('en-NG', { maximumFractionDigits: 2 })}`
+    return fmtNgnAmount(n)
+  }
+  function localPrimaryAmount(row?: PaymentRow | null) {
+    if (!row) return 'NGN 0'
+    const ngn = receivedNgn(row)
+    return ngn > 0 ? fmtNgnAmount(ngn) : fmtUsdc(receivedUsdc(row))
+  }
+  function localSecondaryAmount(row?: PaymentRow | null) {
+    if (!row) return ''
+    return `${fmtUsdc(receivedUsdc(row))} paid on ${rowMeta(row).label}`
   }
   function fmtTime(ts: number | null) {
     if (!ts) return '-'
@@ -670,7 +710,10 @@ export default function Dashboard() {
   }
   function settlementCopy(row?: PaymentRow | null) {
     if (!row) return 'USDC wallet'
-    return row.settlementType === 'instant_fiat' ? 'Naira payout' : 'USDC wallet'
+    const settlement = normalizedSettlement(row)
+    if (row.source === 'bills' || settlement === 'bill_payment') return 'Bill payment'
+    if (row.source === 'bank-receive' || row.source === 'bank_receive' || settlement === 'instant_fiat') return 'Naira payout'
+    return 'USDC wallet'
   }
   function receiptKind(row: PaymentRow) {
     if (row.source === 'ngpos') {
@@ -726,14 +769,14 @@ export default function Dashboard() {
       : 'Payer'
   }
   function txExplorerHref(row: PaymentRow) {
-    if (!row.txHash || row.txHash.startsWith('manual_')) return ''
+    if (!row.txHash || row.txHash.startsWith('manual_') || row.txHash.startsWith('paycrest_')) return ''
     return `${rowMeta(row).explorerUrl}/tx/${row.txHash}`
   }
   function ogExplorerHref(row: PaymentRow) {
     return row.ogTxHash ? `https://chainscan.0g.ai/tx/${row.ogTxHash}` : ''
   }
   function rowReceiptId(row: PaymentRow) {
-    return row.flow === 'registry' && row.merchantId && row.txHash && !row.txHash.startsWith('manual_')
+    return row.flow === 'registry' && row.merchantId && row.txHash && !row.txHash.startsWith('manual_') && !row.txHash.startsWith('paycrest_')
       ? paymentReceiptId(`ngpos-${row.merchantId}`, row.txHash)
       : ''
   }
@@ -871,7 +914,7 @@ export default function Dashboard() {
     <div class="row"><span class="label">Status</span><span class="value">Confirmed</span></div>
     <div class="row"><span class="label">Payer</span><span class="value">${escapeHtml(short(receipt.payer))}</span></div>
     <div class="row"><span class="label">Network</span><span class="value">${escapeHtml(chainLabel)}</span></div>
-    <div class="row"><span class="label">Payout</span><span class="value">${escapeHtml(receipt.settlementType === 'instant_fiat' ? 'Naira payout' : 'USDC wallet')}</span></div>
+    <div class="row"><span class="label">Payout</span><span class="value">${escapeHtml(String(receipt.settlementType || '').toLowerCase() === 'instant_fiat' || receipt.source === 'bank-receive' ? 'Naira payout' : receipt.source === 'bills' ? 'Bill payment' : 'USDC wallet')}</span></div>
     <div class="row"><span class="label">Time</span><span class="value">${escapeHtml(new Date(receipt.createdAt).toLocaleString())}</span></div>
     <div class="row"><span class="label">Tx</span><span class="value">${escapeHtml(short(receipt.txHash))}</span></div>
     <div class="row"><span class="label">Receipt</span><span class="value">${escapeHtml(short(receipt.receiptHash))}</span></div>
@@ -1021,15 +1064,17 @@ export default function Dashboard() {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
               <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                {privyAuthenticated ? 'Local currency history connected' : 'Public receipt dashboard'}
+                {!privyReady ? 'Loading your history' : privyAuthenticated ? 'Local currency history is ready' : 'Sign in to view your history'}
               </p>
               <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                {privyAuthenticated
-                  ? 'These receipts are loaded from server records. Bank payouts and bills can use this same account history.'
-                  : 'Receipts are viewable from this link. Sign in to manage stores, bank payouts, bills, and support records.'}
+                {!privyReady
+                  ? 'Checking your saved Hash PayLink profile.'
+                  : privyAuthenticated
+                    ? 'Your bank payouts, POS payments, and bill receipts appear here as they settle.'
+                    : 'Use the same email you used for bank receive, POS, or bills.'}
               </p>
             </div>
-            {!privyAuthenticated && (
+            {privyReady && !privyAuthenticated && (
               <PrivyConnectButton
                 loginOptions={{ loginMethods: ['email'] }}
                 logoutOnAuthenticated={false}
@@ -1063,6 +1108,12 @@ export default function Dashboard() {
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold">{tab.label}</p>
                     <p className={cn(
+                      'mt-1 font-mono text-base font-bold',
+                      active ? 'text-white dark:text-gray-950' : 'text-gray-900 dark:text-gray-50',
+                    )}>
+                      {fmtNgnAmount(localCategoryTotals[tab.key])}
+                    </p>
+                    <p className={cn(
                       'mt-1 text-[11px] leading-snug',
                       active ? 'text-white/65 dark:text-gray-600' : 'text-gray-400 dark:text-gray-500',
                     )}>
@@ -1073,7 +1124,7 @@ export default function Dashboard() {
                     'shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold',
                     active ? 'bg-white/12 text-white dark:bg-gray-950/10 dark:text-gray-700' : 'bg-gray-100 text-gray-500 dark:bg-white/[0.06] dark:text-gray-400',
                   )}>
-                    {localCategoryCounts[tab.key]}
+                    {localCategoryCounts[tab.key]} {localCategoryCounts[tab.key] === 1 ? 'receipt' : 'receipts'}
                   </span>
                 </div>
               </button>
@@ -1091,21 +1142,36 @@ export default function Dashboard() {
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500">Balance</p>
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500">
+                {isNgPosDashboard ? 'Local total' : 'Balance'}
+              </p>
               <span className={cn(
                 'inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold',
                 balanceError ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300' : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
               )}>
-                {balanceError ? <><AlertCircle className="h-3 w-3" /> Partial</> : <><Info className="h-3 w-3" /> Read-only</>}
-                <span className="text-emerald-300/80 dark:text-emerald-500/50">-</span>
-                <img src="/brand/circle-logo.jpeg" alt="" className="h-3 w-3 rounded-full object-cover" />
-                <span>Powered by Circle</span>
+                {isNgPosDashboard
+                  ? <><Info className="h-3 w-3" /> Naira receipts</>
+                  : balanceError
+                    ? <><AlertCircle className="h-3 w-3" /> Partial</>
+                    : <><Info className="h-3 w-3" /> Read-only</>}
+                {!isNgPosDashboard && (
+                  <>
+                    <span className="text-emerald-300/80 dark:text-emerald-500/50">-</span>
+                    <img src="/brand/circle-logo.jpeg" alt="" className="h-3 w-3 rounded-full object-cover" />
+                    <span>Powered by Circle</span>
+                  </>
+                )}
               </span>
             </div>
             <p className="mt-2 font-mono text-3xl font-bold tracking-tight text-gray-900 dark:text-gray-50">
-              {balanceLoading ? '--' : fmt(globalBalance)}
-              <span className="ml-2 text-sm font-semibold text-gray-400 dark:text-gray-500">USDC</span>
+              {isNgPosDashboard ? fmtNgnAmount(totalNgnReceived) : balanceLoading ? '--' : fmt(globalBalance)}
+              {!isNgPosDashboard && <span className="ml-2 text-sm font-semibold text-gray-400 dark:text-gray-500">USDC</span>}
             </p>
+            {isNgPosDashboard && (
+              <p className="mt-1 text-xs font-medium text-gray-400 dark:text-gray-500">
+                USDC rail balance: {balanceLoading ? '--' : fmtUsdc(globalBalance)}
+              </p>
+            )}
           </div>
           <button
             type="button"
@@ -1141,29 +1207,28 @@ export default function Dashboard() {
 
       {isNgPosDashboard && (
         <div className={cn(
-          'overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm transition-all duration-500 dark:border-white/10 dark:bg-[#17181c]',
+          'overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm transition-all duration-500 dark:border-white/10 dark:bg-[#17181c]',
           receiptFlash && 'border-emerald-200 bg-emerald-50/50 shadow-emerald-100/70 dark:border-emerald-400/30 dark:bg-emerald-950/15 dark:shadow-none',
         )}>
-          <div className="grid divide-y divide-gray-100 dark:divide-white/10 sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-5">
+          <div className="grid divide-y divide-gray-100 dark:divide-white/10 sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-4">
           {[
-            { label: 'Today', value: fmtUsdc(todayReceived), tone: 'emerald' },
-            { label: 'Total', value: fmtUsdc(totalReceived), tone: 'gray' },
-            { label: 'Last payment', value: lastPayment ? fmtTime(lastPayment.timestamp) : 'None yet', tone: 'gray' },
+            { label: 'Today', value: fmtNgnAmount(todayNgnReceived), tone: 'emerald' },
+            { label: 'Total', value: fmtNgnAmount(totalNgnReceived), tone: 'gray' },
+            { label: 'Last payment', value: lastPayment ? localPrimaryAmount(lastPayment) : 'None yet', tone: 'gray' },
             { label: 'Payout', value: settlementCopy(lastPayment), tone: 'blue' },
-            { label: '0G proof', value: archiveStatus, tone: 'purple' },
           ].map(item => (
             <div
               key={item.label}
-              className="min-w-0 px-4 py-3"
+              className="min-w-0 px-3.5 py-2.5"
             >
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
                 <span className={cn(
                   'h-1.5 w-1.5 shrink-0 rounded-full',
-                  item.tone === 'emerald' ? 'bg-emerald-500' : item.tone === 'blue' ? 'bg-blue-500' : item.tone === 'purple' ? 'bg-purple-500' : 'bg-gray-300 dark:bg-gray-600',
+                  item.tone === 'emerald' ? 'bg-emerald-500' : item.tone === 'blue' ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600',
                 )} />
-                <p className="truncate text-xs font-medium text-gray-400 dark:text-gray-500">{item.label}</p>
+                <p className="truncate text-[11px] font-medium text-gray-400 dark:text-gray-500">{item.label}</p>
               </div>
-              <p className="mt-1.5 truncate text-[15px] font-semibold leading-tight text-gray-900 dark:text-gray-50">{item.value}</p>
+              <p className="mt-1 truncate text-sm font-semibold leading-tight text-gray-900 dark:text-gray-50">{item.value}</p>
             </div>
           ))}
           </div>
@@ -1278,9 +1343,11 @@ export default function Dashboard() {
         ) : payments.length === 0 ? (
           <div className="py-16 text-center">
             <TrendingUp className="mx-auto mb-4 h-10 w-10 text-gray-200 dark:text-gray-700" />
-            <p className="text-sm font-medium text-gray-500 dark:text-gray-300">No payments received yet</p>
+            <p className="text-sm font-medium text-gray-500 dark:text-gray-300">
+              {isNgPosDashboard ? 'No local currency payments yet' : 'No payments received yet'}
+            </p>
             <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
-              {isNgPosDashboard ? 'Payer payments from this POS QR will appear here.' : 'Share your PayLink to get started'}
+              {isNgPosDashboard ? 'Bank receive, POS, and bill receipts will appear here after settlement.' : 'Share your PayLink to get started'}
             </p>
             {isNgPosDashboard ? null : telegramUrl ? (
               <OgArchiveLink className="mt-6" />
@@ -1302,8 +1369,8 @@ export default function Dashboard() {
               <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">{localEmptyCopy.body}</p>
             </div>
           ) : (
-            <div className="space-y-2 p-3">
-              <div className="hidden grid-cols-[1.15fr_1fr_1fr_auto] gap-3 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 sm:grid">
+            <div className="max-h-[56vh] space-y-2 overflow-y-auto p-3 [scrollbar-gutter:stable]">
+              <div className="hidden grid-cols-[1.15fr_1fr_1fr_auto] gap-2.5 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 sm:grid">
                 <span>Payer</span>
                 <span>Amount</span>
                 <span>Type</span>
@@ -1334,29 +1401,29 @@ export default function Dashboard() {
                       }
                     }}
                     className={cn(
-                      'grid gap-3 rounded-xl border border-gray-100 bg-white px-4 py-3 shadow-sm transition-all hover:border-gray-200 hover:bg-gray-50/50 dark:border-white/10 dark:bg-white/[0.03] dark:hover:border-white/15 dark:hover:bg-white/[0.05] sm:grid-cols-[1.15fr_1fr_1fr_auto] sm:items-center',
+                      'grid gap-2 rounded-xl border border-gray-100 bg-white px-3 py-2.5 shadow-sm transition-all hover:border-gray-200 hover:bg-gray-50/50 dark:border-white/10 dark:bg-white/[0.03] dark:hover:border-white/15 dark:hover:bg-white/[0.05] sm:grid-cols-[1.15fr_1fr_1fr_auto] sm:items-center',
                       isNgPosDashboard && 'cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-950',
                     )}
                   >
                     <div className="min-w-0">
-                      <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400 sm:hidden">Payer</p>
+                      <p className="mb-0.5 text-[9px] font-semibold uppercase tracking-wider text-gray-400 sm:hidden">Payer</p>
                       <div className="flex min-w-0 items-center gap-2">
                         <span className="w-6 shrink-0 text-[11px] font-semibold text-gray-400 dark:text-gray-500">#{index + 1}</span>
-                        <p className="truncate text-sm font-semibold text-gray-900 dark:text-gray-50">{customer}</p>
+                        <p className="truncate text-[13px] font-semibold text-gray-900 dark:text-gray-50">{customer}</p>
                       </div>
-                      <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">{fmtTs(row.timestamp)}</p>
+                      <p className="mt-0.5 text-[11px] text-gray-400 dark:text-gray-500">{fmtTs(row.timestamp)}</p>
                     </div>
 
                     <div className="min-w-0">
-                      <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400 sm:hidden">Amount</p>
-                      <p className="font-mono text-sm font-bold text-emerald-700 dark:text-emerald-300">{fmtUsdc(receivedUsdc(row))}</p>
-                      <p className="mt-1 truncate text-xs font-medium text-gray-500 dark:text-gray-400">{fmtNgnSafe(row.amountNgn)}</p>
+                      <p className="mb-0.5 text-[9px] font-semibold uppercase tracking-wider text-gray-400 sm:hidden">Amount</p>
+                      <p className="font-mono text-[13px] font-bold text-emerald-700 dark:text-emerald-300">{localPrimaryAmount(row)}</p>
+                      <p className="mt-0.5 truncate text-[11px] font-medium text-gray-500 dark:text-gray-400">{localSecondaryAmount(row)}</p>
                     </div>
 
                     <div className="min-w-0">
-                      <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400 sm:hidden">Type</p>
+                      <p className="mb-0.5 text-[9px] font-semibold uppercase tracking-wider text-gray-400 sm:hidden">Type</p>
                       <p className="truncate text-xs font-semibold text-gray-700 dark:text-gray-200">{localHistoryLabel(row)}</p>
-                      <p className="mt-1 inline-flex items-center rounded-full border border-gray-100 bg-gray-50 px-2 py-0.5 text-[10px] font-semibold text-gray-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-400">
+                      <p className="mt-0.5 inline-flex items-center rounded-full border border-gray-100 bg-gray-50 px-1.5 py-0.5 text-[9px] font-semibold text-gray-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-400">
                         {settlementCopy(row)} - {chainMeta.label}
                       </p>
                     </div>
@@ -1582,11 +1649,11 @@ export default function Dashboard() {
                 <div>
                   <p className="text-[11px] font-medium text-gray-400 dark:text-gray-500">Amount received</p>
                   <p className="mt-1 font-mono text-lg font-bold text-emerald-700 dark:text-emerald-300">
-                    {fmtUsdc(receivedUsdc(activeReceipt))}
+                    {localPrimaryAmount(activeReceipt)}
                   </p>
                 </div>
                 <p className="text-right text-xs font-semibold text-gray-500 dark:text-gray-400">
-                  {fmtNgnSafe(activeReceipt.amountNgn)}
+                  {localSecondaryAmount(activeReceipt)}
                 </p>
               </div>
             </div>

@@ -13,10 +13,12 @@ import {
   getPaycrestOfframpRate,
   isPaycrestConfigured,
   listPaycrestInstitutions,
+  listPaycrestPosOrdersForMerchants,
   markPaycrestPosPayment,
   refreshPaycrestOrderStatus,
   verifyPaycrestAccount,
 } from './paycrest-pos.js'
+import { reconcilePaycrestOrderPayment, schedulePaycrestOrderReconciliation } from './paycrest-reconcile.js'
 import { verifyEvmUsdcTransfer } from './usdc-transfer-verify.js'
 
 const STORE_PATH = process.env.NG_POS_STORE ?? './data/ng-pos-merchants.json'
@@ -25,6 +27,7 @@ const MAX_TEXT = 90
 const IS_RENDER = Boolean(process.env.RENDER || process.env.RENDER_SERVICE_ID || process.env.RENDER_EXTERNAL_URL)
 const HAS_DURABLE_STORE = hasRenderDurableStore()
 const INTERNAL_EVM_RECIPIENT = (process.env.PAYCREST_POS_EVM_ADDRESS ?? process.env.TREASURY_ADDRESS ?? '0xcE5dF9e1115F81a2Fc2F65941B20B820d508e753').trim()
+const PAYCREST_MIN_USDC = 0.5
 
 type PayoutPreference = 'INSTANT_FIAT' | 'KEEP_CRYPTO'
 type SettlementType = 'INSTANT_FIAT' | 'KEEP_CRYPTO'
@@ -299,6 +302,36 @@ function decryptBankDetails(details: EncryptedBankDetails) {
   return JSON.parse(decrypted) as { bank_code: string; account_number: string; account_name: string }
 }
 
+function normalizeBankLookup(value: string) {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]/g, '')
+}
+
+function looksLikePaycrestInstitutionCode(value: string) {
+  return /^[A-Z0-9]{8}$/.test(value.trim())
+}
+
+async function resolvePaycrestInstitutionCode(input: { bankCode?: string; bankName?: string; currency?: string }) {
+  const rawCode = cleanText(input.bankCode, '').trim()
+  const rawName = cleanText(input.bankName, '').trim()
+  if (looksLikePaycrestInstitutionCode(rawCode)) return rawCode.toUpperCase()
+
+  const lookup = normalizeBankLookup(rawName || rawCode)
+  if (!lookup) return rawCode
+
+  const institutions = await listPaycrestInstitutions(input.currency ?? 'NGN')
+  const exact = institutions.find(institution =>
+    normalizeBankLookup(institution.code) === lookup ||
+    normalizeBankLookup(institution.name) === lookup
+  )
+  if (exact) return exact.code
+
+  const fuzzy = institutions.find(institution => {
+    const name = normalizeBankLookup(institution.name)
+    return name.includes(lookup) || lookup.includes(name)
+  })
+  return fuzzy?.code ?? rawCode
+}
+
 function buildPayUrl(req: Request, merchant: MerchantProfile, network: PosNetwork, amountUsdc: string, amountNgn: string, settlementType: SettlementType, explicitOrigin?: unknown, intentId?: string, source: 'pos' | 'bank-receive' = 'pos') {
   const params = new URLSearchParams()
   if (amountUsdc) params.set('a', amountUsdc)
@@ -343,6 +376,11 @@ function parseSettlementType(value: unknown): SettlementType {
   return value === 'INSTANT_FIAT' ? 'INSTANT_FIAT' : 'KEEP_CRYPTO'
 }
 
+function isVisiblePaycrestHistoryStatus(status: string) {
+  const normalized = status.trim().toLowerCase()
+  return ['deposited', 'pending', 'validated', 'settling', 'settled', 'refunding', 'refunded'].includes(normalized)
+}
+
 export default async function handler(req: Request, res: Response) {
   try {
     if (req.method === 'GET') {
@@ -376,7 +414,35 @@ export default async function handler(req: Request, res: Response) {
       const merchants = Object.values(store.merchants ?? {})
         .filter(merchant => merchant.owner_id === privyUserId)
         .filter(merchant => merchant.source === 'bank-receive' || merchant.payout_preference === 'INSTANT_FIAT')
+      const merchantIds = merchants.map(merchant => merchant.merchant_id)
       const payments = await listRegisteredPaymentsForEventIds(merchants.map(merchant => `ngpos-${merchant.merchant_id}`))
+      const existingTxHashes = new Set(payments.map(payment => payment.txHash.toLowerCase()).filter(Boolean))
+      const paycrestOrders = await listPaycrestPosOrdersForMerchants(merchantIds)
+      for (const order of paycrestOrders) {
+        if (!order.tx_hash && isVisiblePaycrestHistoryStatus(order.status)) {
+          schedulePaycrestOrderReconciliation(order.intent_id)
+        }
+      }
+      const paycrestRows = paycrestOrders
+        .filter(order => order.tx_hash || isVisiblePaycrestHistoryStatus(order.status))
+        .filter(order => !order.tx_hash || !existingTxHashes.has(order.tx_hash.toLowerCase()))
+        .map(order => ({
+          eventId: `ngpos-${order.merchant_id}`,
+          txHash: order.tx_hash || `paycrest_${order.intent_id}`,
+          chain: 'base',
+          payer: order.payer_wallet || order.payer_email || 'Circle wallet payer',
+          memo: 'Bank payout',
+          amount: order.amount_usdc,
+          ts: new Date(order.updated_at || order.created_at).getTime(),
+          source: 'bank-receive',
+          merchantId: order.merchant_id,
+          contextLabel: order.bank_name ? `${order.bank_name} ****${order.bank_last4 || ''}`.trim() : 'Bank receive',
+          settlementType: 'INSTANT_FIAT',
+          amountNgn: order.amount_ngn,
+          paycrestStatus: order.status,
+          bankName: order.bank_name,
+          bankLast4: order.bank_last4,
+        }))
       return res.json({
         ok: true,
         merchants: merchants.map(merchant => ({
@@ -386,12 +452,13 @@ export default async function handler(req: Request, res: Response) {
           bank_name: merchant.bank_name,
           bank_last4: merchant.bank_last4,
         })),
-        payments,
+        payments: [...payments, ...paycrestRows].sort((a, b) => Number((b.ts || 0) - (a.ts || 0))),
       })
     }
 
     if (action === 'verifyAccount') {
       const bankCode = cleanText(body.bank_code, '')
+      const bankName = cleanText(body.bank_name, '')
       const accountNumber = cleanText(body.account_number, '').replace(/\D/g, '').slice(0, 10)
       if (!bankCode || accountNumber.length !== 10) {
         return res.status(400).json({ ok: false, error: 'Enter a valid bank and 10-digit account number.' })
@@ -399,9 +466,10 @@ export default async function handler(req: Request, res: Response) {
       if (!isPaycrestConfigured()) {
         return res.status(400).json({ ok: false, error: 'Paycrest is not configured. Add PAYCREST_API_KEY before verifying bank accounts.' })
       }
-      const accountName = await verifyPaycrestAccount({ institution: bankCode, accountIdentifier: accountNumber })
+      const resolvedBankCode = await resolvePaycrestInstitutionCode({ bankCode, bankName })
+      const accountName = await verifyPaycrestAccount({ institution: resolvedBankCode, accountIdentifier: accountNumber })
       if (!accountName || accountName === 'OK') return res.status(400).json({ ok: false, error: 'Could not resolve this bank account name.' })
-      return res.json({ ok: true, account_name: accountName })
+      return res.json({ ok: true, account_name: accountName, bank_code: resolvedBankCode })
     }
 
     if (action === 'createMerchant') {
@@ -426,7 +494,9 @@ export default async function handler(req: Request, res: Response) {
       if (needsEvmWallet && !isAddress(wallet)) return res.status(400).json({ ok: false, error: 'Enter a valid Circle EVM wallet address.' })
       if (needsSolanaWallet && !isSolanaAddress(solanaWallet)) return res.status(400).json({ ok: false, error: 'Enter a valid Circle Solana wallet address.' })
 
-      const bankCode = cleanText(body.bank_code, '')
+      const bankName = cleanText(body.bank_name, 'Nigerian bank')
+      const rawBankCode = cleanText(body.bank_code, '')
+      const bankCode = rawBankCode ? await resolvePaycrestInstitutionCode({ bankCode: rawBankCode, bankName }) : ''
       const accountNumber = cleanText(body.account_number, '').replace(/\D/g, '').slice(0, 10)
       const accountName = cleanText(body.account_name, '')
       const hasBank = bankCode && accountNumber.length === 10 && accountName
@@ -457,7 +527,7 @@ export default async function handler(req: Request, res: Response) {
           account_name: accountName,
         })
         merchant.bank_code = bankCode
-        merchant.bank_name = cleanText(body.bank_name, 'Nigerian bank')
+        merchant.bank_name = bankName
         merchant.bank_last4 = accountNumber.slice(-4)
         merchant.bank_account_name = accountName
       }
@@ -481,8 +551,8 @@ export default async function handler(req: Request, res: Response) {
       const displayName = cleanText(body.display_name || body.memo, 'Bank receive')
       const flexibleAmount = body.flexible_amount === true || body.flexible_amount === 'true'
       const amount = cleanAmount(body.amount)
-      const bankCode = cleanText(body.bank_code, '')
       const bankName = cleanText(body.bank_name, 'Nigerian bank')
+      const bankCode = await resolvePaycrestInstitutionCode({ bankCode: cleanText(body.bank_code, ''), bankName })
       const accountNumber = cleanText(body.account_number, '').replace(/\D/g, '').slice(0, 10)
       const accountName = cleanText(body.account_name, '')
       if (!ownerEmail) return res.status(401).json({ ok: false, error: 'Sign in to create bank receive links.' })
@@ -533,6 +603,13 @@ export default async function handler(req: Request, res: Response) {
         }
         const amountNgn = amount
         const amountUsdc = amountNgn / rate
+        if (amountUsdc < PAYCREST_MIN_USDC) {
+          const minimumNgn = Math.ceil(rate * PAYCREST_MIN_USDC)
+          return res.status(400).json({
+            ok: false,
+            error: `Minimum Naira payout is about NGN ${minimumNgn.toLocaleString('en-NG')}.`,
+          })
+        }
         amountNgnText = amountNgn.toFixed(2)
         amountUsdcText = amountUsdc.toFixed(6).replace(/\.?0+$/, '')
         rateText = rate.toFixed(2)
@@ -604,6 +681,13 @@ export default async function handler(req: Request, res: Response) {
       }
       const amountNgn = amountCurrency === 'NGN' ? amount : amount * rate
       const amountUsdc = amountCurrency === 'USDC' ? amount : amount / rate
+      if (settlementType === 'INSTANT_FIAT' && amountUsdc < PAYCREST_MIN_USDC) {
+        const minimumNgn = Math.ceil(rate * PAYCREST_MIN_USDC)
+        return res.status(400).json({
+          ok: false,
+          error: `Minimum Naira payout is about NGN ${minimumNgn.toLocaleString('en-NG')}.`,
+        })
+      }
       const amountUsdcText = amountUsdc.toFixed(6).replace(/\.?0+$/, '')
       const quoteId = randomBytes(10).toString('base64url')
       const intentId = settlementType === 'INSTANT_FIAT' ? randomBytes(12).toString('base64url') : ''
@@ -664,23 +748,30 @@ export default async function handler(req: Request, res: Response) {
       const intent = store.intents?.[intentId]
       if (!intent) return res.status(404).json({ ok: false, error: 'POS settlement intent expired. Start this payment again.' })
       if (new Date(intent.expires_at).getTime() < Date.now()) return res.status(400).json({ ok: false, error: 'POS settlement intent expired. Start this payment again.' })
+      if (Number(intent.estimated_amount_usdc) < PAYCREST_MIN_USDC) {
+        return res.status(400).json({ ok: false, error: 'Minimum Paycrest payout is 0.50 USDC. Enter a higher Naira amount.' })
+      }
       const merchant = store.merchants[intent.merchant_id]
       if (!merchant?.encrypted_bank_details) return res.status(404).json({ ok: false, error: 'Merchant bank payout is not available.' })
       const bank = decryptBankDetails(merchant.encrypted_bank_details)
+      const bankCode = await resolvePaycrestInstitutionCode({ bankCode: bank.bank_code, bankName: merchant.bank_name })
       const order = await createPaycrestOfframpOrder({
         intentId,
         merchantId: merchant.merchant_id,
         amountNgn: intent.amount_ngn,
         estimatedAmountUsdc: intent.estimated_amount_usdc,
-        bankCode: bank.bank_code,
+        bankCode,
         accountNumber: bank.account_number,
         accountName: bank.account_name,
         bankName: merchant.bank_name,
         refundAddress,
         payerEmail,
         payerWallet: isAddress(payerWallet) ? payerWallet : refundAddress,
-        memo: `Hash PayLink payment from ${payerName}`,
+        payerName,
+        source: intent.source === 'bank-receive' ? 'bank-receive' : 'ngpos',
+        memo: payerName.slice(0, 40) || 'Hash PayLink',
       })
+      schedulePaycrestOrderReconciliation(order.intent_id)
       return res.json({ ok: true, order })
     }
 
@@ -712,9 +803,15 @@ export default async function handler(req: Request, res: Response) {
     if (action === 'offrampStatus') {
       const id = cleanText(body.intent_id || body.order_id, '').replace(/[^a-zA-Z0-9_-]/g, '')
       if (!id) return res.status(400).json({ ok: false, error: 'Missing order id.' })
-      const order = body.refresh ? await refreshPaycrestOrderStatus(id) : await getPaycrestPosOrder(id)
+      let order = body.refresh ? await refreshPaycrestOrderStatus(id) : await getPaycrestPosOrder(id)
       if (!order) return res.status(404).json({ ok: false, error: 'Paycrest POS order not found.' })
-      return res.json({ ok: true, order })
+      let receipt: unknown
+      if (body.refresh) {
+        const reconciled = await reconcilePaycrestOrderPayment(id).catch(() => null)
+        order = reconciled?.order ?? order
+        receipt = reconciled?.receipt
+      }
+      return res.json({ ok: true, order, receipt })
     }
 
     return res.status(400).json({ ok: false, error: 'Unknown action.' })

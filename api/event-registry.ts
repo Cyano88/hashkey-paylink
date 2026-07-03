@@ -31,6 +31,24 @@ export type RegisteredPaymentReceipt = PaymentEntry & {
   receiptHash: string
 }
 
+export type RegisterPaymentInput = {
+  eventId?: unknown
+  txHash?: unknown
+  payer?: unknown
+  memo?: unknown
+  chain?: unknown
+  amount?: unknown
+  requestedAmount?: unknown
+  agentSlug?: unknown
+  source?: unknown
+  merchantId?: unknown
+  contextLabel?: unknown
+  settlementType?: unknown
+  amountNgn?: unknown
+  intentId?: unknown
+  intent_id?: unknown
+}
+
 const MAX_EVENT_ID_LENGTH = 128
 const MAX_TEXT_LENGTH = 256
 const MAX_AMOUNT_LENGTH = 64
@@ -334,7 +352,13 @@ export async function listRegisteredPaymentsForEventIds(eventIds: string[]): Pro
     .sort((a, b) => b.ts - a.ts)
 }
 
-export async function registerEventPayment(req: Request, res: Response): Promise<void> {
+function paymentError(message: string, status = 400) {
+  const error = new Error(message) as Error & { status?: number }
+  error.status = status
+  return error
+}
+
+export async function registerVerifiedPayment(input: RegisterPaymentInput) {
   let eventId: string
   let txHash: string
   let payer: string
@@ -351,44 +375,39 @@ export async function registerEventPayment(req: Request, res: Response): Promise
   let intentId = ''
 
   try {
-    eventId = cleanString(req.body?.eventId, 'eventId', MAX_EVENT_ID_LENGTH)
-    txHash = cleanString(req.body?.txHash, 'txHash', MAX_TEXT_LENGTH)
-    payer = cleanString(req.body?.payer, 'payer', MAX_TEXT_LENGTH)
-    memo = cleanString(req.body?.memo, 'memo', MAX_TEXT_LENGTH)
-    chain = cleanOptionalString(req.body?.chain, MAX_TEXT_LENGTH)
-    amount = cleanOptionalString(req.body?.amount, MAX_AMOUNT_LENGTH)
-    requestedAmount = cleanOptionalString(req.body?.requestedAmount, MAX_AMOUNT_LENGTH)
-    agentSlug = normalizeActivitySlug(req.body?.agentSlug)
-    source = cleanOptionalString(req.body?.source, MAX_TEXT_LENGTH)
-    merchantId = cleanOptionalString(req.body?.merchantId, MAX_TEXT_LENGTH)
-    contextLabel = cleanOptionalString(req.body?.contextLabel, MAX_TEXT_LENGTH)
-    settlementType = cleanOptionalString(req.body?.settlementType, MAX_TEXT_LENGTH)
-    amountNgn = cleanOptionalString(req.body?.amountNgn, MAX_AMOUNT_LENGTH)
-    intentId = cleanOptionalString(req.body?.intentId ?? req.body?.intent_id, MAX_TEXT_LENGTH).replace(/[^a-zA-Z0-9_-]/g, '')
+    eventId = cleanString(input?.eventId, 'eventId', MAX_EVENT_ID_LENGTH)
+    txHash = cleanString(input?.txHash, 'txHash', MAX_TEXT_LENGTH)
+    payer = cleanString(input?.payer, 'payer', MAX_TEXT_LENGTH)
+    memo = cleanString(input?.memo, 'memo', MAX_TEXT_LENGTH)
+    chain = cleanOptionalString(input?.chain, MAX_TEXT_LENGTH)
+    amount = cleanOptionalString(input?.amount, MAX_AMOUNT_LENGTH)
+    requestedAmount = cleanOptionalString(input?.requestedAmount, MAX_AMOUNT_LENGTH)
+    agentSlug = normalizeActivitySlug(input?.agentSlug)
+    source = cleanOptionalString(input?.source, MAX_TEXT_LENGTH)
+    merchantId = cleanOptionalString(input?.merchantId, MAX_TEXT_LENGTH)
+    contextLabel = cleanOptionalString(input?.contextLabel, MAX_TEXT_LENGTH)
+    settlementType = cleanOptionalString(input?.settlementType, MAX_TEXT_LENGTH)
+    amountNgn = cleanOptionalString(input?.amountNgn, MAX_AMOUNT_LENGTH)
+    intentId = cleanOptionalString(input?.intentId ?? input?.intent_id, MAX_TEXT_LENGTH).replace(/[^a-zA-Z0-9_-]/g, '')
   } catch (err) {
-    res.status(400).json({ ok: false, error: err instanceof Error ? err.message : 'Invalid request' })
-    return
+    throw paymentError(err instanceof Error ? err.message : 'Invalid request', 400)
   }
 
   if (source === 'ngpos' || source === 'bank-receive') {
     if (txHash.startsWith('manual_')) {
-      res.status(400).json({ ok: false, error: 'Verified on-chain transaction is required for this receipt.' })
-      return
+      throw paymentError('Verified on-chain transaction is required for this receipt.', 400)
     }
     const evmChain = normalizeEvmUsdcChain(chain)
     if (!evmChain) {
-      res.status(400).json({ ok: false, error: 'Verified EVM USDC transaction is required for this receipt.' })
-      return
+      throw paymentError('Verified EVM USDC transaction is required for this receipt.', 400)
     }
     const amountNum = Number.parseFloat(amount)
     const requestedNum = Number.parseFloat(requestedAmount)
     if (!Number.isFinite(amountNum) || amountNum <= 0) {
-      res.status(400).json({ ok: false, error: 'Invalid payment amount.' })
-      return
+      throw paymentError('Invalid payment amount.', 400)
     }
     if (Number.isFinite(requestedNum) && requestedNum > 0 && amountNum + 0.0000005 < requestedNum) {
-      res.status(409).json({ ok: false, error: 'Payment is below requested amount.' })
-      return
+      throw paymentError('Payment is below requested amount.', 409)
     }
     try {
       const expected = await expectedNgPosRecipient({ source, merchantId, settlementType, intentId })
@@ -399,8 +418,7 @@ export async function registerEventPayment(req: Request, res: Response): Promise
         minAmount: expected.minAmount || preferredAmount(amount, requestedAmount),
       })
     } catch (error) {
-      res.status(409).json({ ok: false, error: error instanceof Error ? error.message : 'Payment could not be verified on-chain.' })
-      return
+      throw paymentError(error instanceof Error ? error.message : 'Payment could not be verified on-chain.', 409)
     }
   }
 
@@ -430,14 +448,14 @@ export async function registerEventPayment(req: Request, res: Response): Promise
       }
       registry.set(eventId, entries)
       await persistRegistry()
-      res.json({
+      const result = {
         ok: true,
         upgraded: true,
         receiptId: paymentReceiptId(eventId, txHash),
         receiptUrl: `/r/${paymentReceiptId(eventId, txHash)}`,
-      })
+      }
       scheduleArchivePayment(entries[manualIndex], payer)
-      return
+      return result
     }
   }
   // Deduplicate by txHash (for real on-chain txs) OR by payer+eventId for manual detections
@@ -448,14 +466,14 @@ export async function registerEventPayment(req: Request, res: Response): Promise
     const duplicate = txHash.startsWith('manual_')
       ? entries.find(e => e.payer.toLowerCase() === payer.toLowerCase())
       : entries.find(e => e.txHash.toLowerCase() === txHash.toLowerCase())
-    res.json({
+    const result = {
       ok: true,
       duplicate: true,
       receiptId: paymentReceiptId(eventId, txHash),
       receiptUrl: `/r/${paymentReceiptId(eventId, txHash)}`,
-    })
+    }
     if (duplicate) scheduleArchivePayment(duplicate, payer)
-    return
+    return result
   }
   const entry: PaymentEntry = { eventId, txHash, chain, payer, memo, amount, ts: Date.now() }
   if (requestedAmount) entry.requestedAmount = requestedAmount
@@ -467,11 +485,11 @@ export async function registerEventPayment(req: Request, res: Response): Promise
   entries.push(entry)
   registry.set(eventId, entries)
   await persistRegistry()
-  res.json({
+  const result = {
     ok: true,
     receiptId: paymentReceiptId(eventId, txHash),
     receiptUrl: `/r/${paymentReceiptId(eventId, txHash)}`,
-  })
+  }
   if (agentSlug) {
     void appendAgentActivity({
       agentSlug,
@@ -493,6 +511,16 @@ export async function registerEventPayment(req: Request, res: Response): Promise
   // Use the human-readable name (memo) as payer in the 0G archive so
   // agent-verify can match by name, not wallet address.
   scheduleArchivePayment(entry, payer)
+  return result
+}
+
+export async function registerEventPayment(req: Request, res: Response): Promise<void> {
+  try {
+    res.json(await registerVerifiedPayment(req.body ?? {}))
+  } catch (err) {
+    const error = err as Error & { status?: number }
+    res.status(error.status ?? 500).json({ ok: false, error: error.message || 'Invalid request' })
+  }
 }
 
 export async function listEventPayments(req: Request, res: Response): Promise<void> {

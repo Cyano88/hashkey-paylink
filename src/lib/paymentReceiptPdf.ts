@@ -234,7 +234,9 @@ function drawReceiptCanvas(
   const archived = Boolean(receipt.proof?.ogExplorer || receipt.proof?.ogTxHash)
   const amount = compactReceiptAmount(receipt.amount)
   const isPos = receipt.source === 'ngpos'
-  const amountNgn = isPos ? formatNgn(receipt.amountNgn) : ''
+  const settlement = String(receipt.settlementType || '').toLowerCase()
+  const isLocalCurrency = isPos || receipt.source === 'bank-receive' || receipt.source === 'bills' || settlement === 'instant_fiat' || settlement === 'bill_payment'
+  const amountNgn = isLocalCurrency ? formatNgn(receipt.amountNgn) : ''
 
   ctx.fillStyle = '#f4f7fb'
   ctx.fillRect(0, 0, width, height)
@@ -279,8 +281,10 @@ function drawReceiptCanvas(
     ctx.fillText(amountNgn, 84, 294)
   }
 
-  const typeLabel = isPos && receipt.settlementType === 'instant_fiat'
+  const typeLabel = settlement === 'instant_fiat'
     ? 'Base USDC to Naira'
+    : receipt.source === 'bills' || settlement === 'bill_payment'
+    ? 'Local bill payment'
     : receipt.settlementType?.replace(/[-_]/g, ' ') || receipt.source || 'payment'
   const rows: Array<[string, string]> = [
     ['Network', meta.label],
@@ -304,7 +308,10 @@ function drawReceiptCanvas(
     y += 39
   }
 
-  const proofLabel = archived ? '0G archived' : '0G pending'
+  const proofLabel = '0G proof'
+  const proofValue = archived
+    ? `Archived for support - ${shortPdfValue(receipt.proof?.ogTxHash || receipt.proof?.ogRootHash || '')}`
+    : 'Archiving after payment'
   roundRect(ctx, 64, 660, width - 128, 50, 16, archived ? '#faf5ff' : '#f8fafc')
   if (ogLogo && archived) {
     ctx.save()
@@ -322,8 +329,8 @@ function drawReceiptCanvas(
   ctx.fillStyle = archived ? '#7e22ce' : '#667085'
   ctx.font = '800 13px Arial'
   ctx.fillText(proofLabel, 112, 681)
-  ctx.font = '700 10px Courier New'
-  ctx.fillText(shortPdfValue(receipt.proof?.ogTxHash || receipt.proof?.ogRootHash || 'Archiving...'), 112, 696)
+  ctx.font = archived ? '700 10px Courier New' : '700 10px Arial'
+  ctx.fillText(proofValue, 112, 696)
 
   ctx.fillStyle = '#667085'
   ctx.font = '600 11px Arial'
