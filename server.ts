@@ -30,6 +30,7 @@ import {
   listCreatorContent,
   listApprovedCreatorContent,
   listCreatorAdminContent,
+  listCreatorEarnings,
   reviewCreatorContent,
   unlockContentX402WithAgent,
 } from './modules/streampay/api/content.js'
@@ -156,6 +157,7 @@ app.post('/api/relay-stream',          relayLimiter, relayStreamHandler)
 app.post('/api/settle-poa',            relayLimiter, settlePoaHandler)
 app.post('/api/store-content',         strictLimiter, storeContent)
 app.get('/api/list-creator-content',   readLimiter, listCreatorContent)
+app.get('/api/creator-earnings',       readLimiter, listCreatorEarnings)
 app.get('/api/creator-discover-content', readLimiter, listApprovedCreatorContent)
 app.get('/api/admin/creator-content',  strictLimiter, listCreatorAdminContent)
 app.post('/api/admin/creator-content', strictLimiter, reviewCreatorContent)

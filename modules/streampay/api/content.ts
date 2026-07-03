@@ -378,6 +378,21 @@ function rowToUnlockEntry(row: Record<string, unknown>): CreatorUnlockEntry {
   }
 }
 
+function unlockRowToEarning(row: Record<string, unknown>) {
+  const capRaw = Number(row.cap_raw ?? 0)
+  return {
+    kind: 'fixed' as const,
+    contentId: String(row.content_id ?? ''),
+    title: String(row.title ?? 'Creator content'),
+    amount: Math.max(0.000001, Math.ceil(Math.max(1, capRaw || 0)) / 1_000_000),
+    asset: 'USDC',
+    payer: String(row.wallet_address ?? ''),
+    receiptActivityId: String(row.receipt_activity_id ?? ''),
+    transaction: String(row.payment_transaction ?? ''),
+    unlockedAt: row.unlocked_at instanceof Date ? row.unlocked_at.getTime() : Date.now(),
+  }
+}
+
 async function readCreatorUnlock(contentId: string, agentSlug: string, walletAddress = '') {
   const wallet = String(walletAddress || '').trim().toLowerCase()
   if (pool) {
@@ -1072,4 +1087,50 @@ export async function unlockContentX402WithAgent(req: Request, res: Response) {
       error: error.message || 'Circle Gateway payment failed.',
     })
   }
+}
+
+export async function listCreatorEarnings(req: Request, res: Response) {
+  const creator = String(req.query.creator ?? '').trim()
+  if (!isAddress(creator)) return res.status(400).json({ ok: false, error: 'Valid creator wallet is required.' })
+
+  if (pool) {
+    await ensureSchema()
+    const result = await pool.query(
+      `select
+         u.content_id,
+         u.wallet_address,
+         u.payment_transaction,
+         u.receipt_activity_id,
+         u.unlocked_at,
+         c.title,
+         c.cap_raw
+       from streampay_creator_unlocks u
+       join streampay_creator_content c on c.content_id = u.content_id
+       where lower(c.creator) = lower($1)
+       order by u.unlocked_at desc
+       limit 80`,
+      [creator],
+    )
+    return res.json({ ok: true, fixedUnlocks: result.rows.map(unlockRowToEarning) })
+  }
+
+  const rows = Array.from(unlockStore.values())
+    .map(unlock => {
+      const entry = store.get(unlock.contentId) ?? OFFICIAL_CONTENT[unlock.contentId]
+      if (!entry || entry.creator.toLowerCase() !== creator.toLowerCase()) return null
+      return {
+        kind: 'fixed' as const,
+        contentId: unlock.contentId,
+        title: entry.title || 'Creator content',
+        amount: Math.max(0.000001, Math.ceil(Math.max(1, Number(entry.capRaw) || 0)) / 1_000_000),
+        asset: 'USDC',
+        payer: unlock.walletAddress,
+        receiptActivityId: unlock.receiptActivityId,
+        transaction: unlock.paymentTransaction,
+        unlockedAt: unlock.unlockedAt,
+      }
+    })
+    .filter(Boolean)
+    .sort((a, b) => (b?.unlockedAt ?? 0) - (a?.unlockedAt ?? 0))
+  return res.json({ ok: true, fixedUnlocks: rows })
 }

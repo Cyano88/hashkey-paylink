@@ -1,10 +1,44 @@
 import { useCallback, useEffect, useState } from 'react'
+import { usePrivy } from '@privy-io/react-auth'
 import { Loader2, LockKeyhole, Mail, Plus, TrendingUp, X as XIcon } from 'lucide-react'
 import { LinkFactory }            from './LinkFactory'
 import { readGhostVault }         from '../../hooks/usePoAStream'
 import type { GhostVaultEntry }   from '../../hooks/usePoAStream'
+import {
+  canUseCircleEvmEmailWallet,
+  connectCircleEvmEmailWallet,
+  deployCircleEvmEmailWallet,
+  type CircleEvmEmailSession,
+} from '../../../../../src/lib/circleEvmEmailWallet'
+import { PRIVY_AUTH_ENABLED } from '../../../../../src/lib/authMode'
+import { resolvePrivyCircleLink, savePrivyCircleLink } from '../../../../../src/lib/privyCircleLink'
 
 type ViewerRow = { viewer: string; amountRaw: string; ts: number }
+type CreatorFixedUnlockRow = {
+  kind: 'fixed'
+  contentId: string
+  title: string
+  amount: number
+  asset: string
+  payer: string
+  receiptActivityId: string
+  transaction: string
+  unlockedAt: number
+}
+type CreatorStreamRow = {
+  vault: string
+  txHash?: string | null
+  sender: string
+  recipient: string
+  totalAmount: string
+  startTime: string
+  endTime: string
+  alreadyWithdrawn: string
+  unlocked: string
+  claimable: string
+  cancelled: boolean
+  active: boolean
+}
 type CreatorTab = 'discover' | 'create' | 'earnings'
 type CreatorCategory = 'worldcup-news' | 'live-scores' | 'crypto' | 'ebooks'
 type PublishedContent = {
@@ -270,6 +304,56 @@ function parseContentId(input: string): string {
     const url = new URL(input.includes('://') ? input : `https://x.com${input}`)
     return url.searchParams.get('id') ?? input.trim()
   } catch { return input.trim() }
+}
+
+function cleanEmail(value: unknown) {
+  return String(value ?? '').trim().toLowerCase()
+}
+
+function emailFromPrivyUser(user: unknown) {
+  if (!user || typeof user !== 'object') return ''
+  const record = user as Record<string, unknown>
+  const directEmail = record.email
+  if (typeof directEmail === 'string') return directEmail
+  if (directEmail && typeof directEmail === 'object') {
+    const address = (directEmail as Record<string, unknown>).address
+    if (typeof address === 'string') return address
+  }
+  const linkedAccounts = record.linkedAccounts
+  if (Array.isArray(linkedAccounts)) {
+    for (const account of linkedAccounts) {
+      if (!account || typeof account !== 'object') continue
+      const provider = account as Record<string, unknown>
+      const email = provider.email ?? provider.address
+      if (typeof email === 'string' && email.includes('@')) return email
+    }
+  }
+  return ''
+}
+
+function shortWallet(value: string) {
+  return value.length > 12 ? `${value.slice(0, 6)}...${value.slice(-4)}` : value
+}
+
+function toCreatorBigInt(value: string | bigint | number | undefined) {
+  try {
+    if (typeof value === 'bigint') return value
+    if (typeof value === 'number') return BigInt(Math.max(0, Math.round(value)))
+    return BigInt(value || '0')
+  } catch {
+    return 0n
+  }
+}
+
+function formatCreatorUsdc(raw: string | bigint) {
+  try {
+    const value = toCreatorBigInt(raw)
+    const whole = value / 1_000_000n
+    const frac = (value % 1_000_000n).toString().padStart(6, '0')
+    return `${Number(whole).toLocaleString('en-US')}.${frac.slice(0, 2)}`
+  } catch {
+    return '0.00'
+  }
 }
 
 function articleTimeValue(article: PolyWorldCupArticle) {
@@ -1138,14 +1222,387 @@ function DiscoverContent({
   )
 }
 
+function CreatorAccountEarnings({
+  creatorWallet,
+  email,
+  authenticated,
+  authBusy,
+  walletLoading,
+  authError,
+  onSignIn,
+  onOpenWallet,
+  onSignOut,
+}: {
+  creatorWallet?: string
+  email?: string
+  authenticated: boolean
+  authBusy: boolean
+  walletLoading: boolean
+  authError?: string
+  onSignIn: () => void
+  onOpenWallet: () => void
+  onSignOut: () => void
+}) {
+  const wallet = creatorWallet || ''
+  const [streams, setStreams] = useState<CreatorStreamRow[]>([])
+  const [fixedUnlocks, setFixedUnlocks] = useState<CreatorFixedUnlockRow[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  const validWallet = /^0x[a-fA-F0-9]{40}$/.test(wallet.trim())
+  const claimableTotal = streams.reduce((sum, stream) => sum + toCreatorBigInt(stream.claimable), 0n)
+  const streamedTotal = streams.reduce((sum, stream) => sum + toCreatorBigInt(stream.unlocked), 0n)
+  const fixedTotal = fixedUnlocks.reduce((sum, item) => sum + item.amount, 0)
+  const liveCount = streams.filter(stream => stream.active && !stream.cancelled).length
+
+  const fetchEarnings = useCallback(async () => {
+    const recipient = wallet.trim()
+    if (!/^0x[a-fA-F0-9]{40}$/.test(recipient)) {
+      setStreams([])
+      setFixedUnlocks([])
+      setError('')
+      return
+    }
+    setLoading(true)
+    setError('')
+    try {
+      const [streamRes, fixedRes] = await Promise.all([
+        fetch(`/api/stream-history?recipient=${encodeURIComponent(recipient)}`),
+        fetch(`/api/creator-earnings?creator=${encodeURIComponent(recipient)}`),
+      ])
+      const streamData = await streamRes.json() as { ok?: boolean; streams?: CreatorStreamRow[]; error?: string }
+      const fixedData = await fixedRes.json() as { ok?: boolean; fixedUnlocks?: CreatorFixedUnlockRow[]; error?: string }
+      if (!streamRes.ok || !streamData.ok) throw new Error(streamData.error || 'Could not load creator streams.')
+      if (!fixedRes.ok || !fixedData.ok) throw new Error(fixedData.error || 'Could not load fixed unlocks.')
+      setStreams(Array.isArray(streamData.streams) ? streamData.streams : [])
+      setFixedUnlocks(Array.isArray(fixedData.fixedUnlocks) ? fixedData.fixedUnlocks : [])
+    } catch (err) {
+      setStreams([])
+      setFixedUnlocks([])
+      setError(err instanceof Error ? err.message : 'Could not load creator earnings.')
+    } finally {
+      setLoading(false)
+    }
+  }, [wallet])
+
+  useEffect(() => {
+    if (!validWallet) return
+    const t = setTimeout(() => { fetchEarnings() }, 350)
+    return () => clearTimeout(t)
+  }, [validWallet, fetchEarnings])
+
+  const combined = [
+    ...fixedUnlocks.map(item => ({ rail: 'fixed' as const, sort: item.unlockedAt, item })),
+    ...streams.map(item => ({ rail: 'stream' as const, sort: Number(item.startTime || 0) * 1000, item })),
+  ].sort((a, b) => b.sort - a.sort)
+
+  return (
+    <div className="rounded-2xl border border-gray-100 bg-gray-50/70 p-4 dark:border-white/10 dark:bg-white/[0.04]">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[13px] font-black text-gray-950 dark:text-white">Creator earnings</p>
+          <p className="mt-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400">
+            Sign in with your creator email to see fixed unlocks and streamed USDC.
+          </p>
+        </div>
+        <div className="shrink-0 rounded-xl bg-white px-3 py-2 text-right shadow-sm dark:bg-[#111216]">
+          <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400">Claimable</p>
+          <p className="mt-0.5 text-[13px] font-black text-emerald-600 dark:text-emerald-300">{formatCreatorUsdc(claimableTotal)} USDC</p>
+        </div>
+      </div>
+
+      <div className="mt-3 rounded-2xl border border-gray-100 bg-white p-3 dark:border-white/10 dark:bg-[#111216]">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400">Signed in creator</p>
+            <p className="mt-0.5 truncate text-[12px] font-black text-gray-900 dark:text-gray-100">
+              {validWallet ? shortWallet(wallet) : authenticated ? (email || 'Email signed in') : 'Not signed in'}
+            </p>
+            {email && <p className="mt-0.5 truncate text-[10px] text-gray-400">{email}</p>}
+          </div>
+          <button
+            type="button"
+            onClick={validWallet ? fetchEarnings : authenticated ? onOpenWallet : onSignIn}
+            disabled={authBusy || walletLoading || loading}
+            className="shrink-0 rounded-xl bg-gray-950 px-3 py-2 text-[11px] font-black text-white transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-gray-950"
+          >
+            {authBusy || walletLoading ? 'Connecting' : validWallet ? (loading ? 'Checking' : 'Refresh') : authenticated ? 'Open wallet' : 'Sign in'}
+          </button>
+        </div>
+        {validWallet && (
+          <button type="button" onClick={onSignOut} className="mt-2 text-[11px] font-bold text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
+            Sign out
+          </button>
+        )}
+      </div>
+
+      {authError && <p className="mt-3 rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-center text-[11px] font-semibold text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-300">{authError}</p>}
+      {error && <p className="mt-3 rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-center text-[11px] font-semibold text-red-500 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-300">{error}</p>}
+
+      {validWallet && (
+        <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+          <StreamMiniStat label="Fixed" value={`${fixedTotal.toFixed(2)} USDC`} />
+          <StreamMiniStat label="Streamed" value={`${formatCreatorUsdc(streamedTotal)} USDC`} />
+          <StreamMiniStat label="Live" value={`${liveCount}`} green />
+        </div>
+      )}
+
+      {loading && (
+        <div className="mt-3 flex items-center justify-center gap-2 rounded-xl border border-gray-100 bg-white px-4 py-4 text-[12px] font-semibold text-gray-400 dark:border-white/10 dark:bg-[#111216]">
+          <VaultSpinner /> Checking earnings...
+        </div>
+      )}
+
+      {!loading && !validWallet && !authError && (
+        <div className="mt-3 rounded-xl border border-dashed border-gray-200 bg-white px-4 py-4 text-center dark:border-white/10 dark:bg-[#111216]">
+          <p className="text-[12px] font-bold text-gray-600 dark:text-gray-300">Sign in to view earnings</p>
+          <p className="mt-1 text-[11px] leading-5 text-gray-400 dark:text-gray-500">Your creator email resolves the Arc wallet used on your content links.</p>
+        </div>
+      )}
+
+      {!loading && validWallet && !error && combined.length === 0 && (
+        <div className="mt-3 rounded-xl border border-gray-100 bg-white px-4 py-4 text-center dark:border-white/10 dark:bg-[#111216]">
+          <p className="text-[12px] font-bold text-gray-600 dark:text-gray-300">No earnings yet</p>
+          <p className="mt-1 text-[11px] leading-5 text-gray-400 dark:text-gray-500">Fixed unlocks and pay-per-view streams appear here after readers pay.</p>
+        </div>
+      )}
+
+      {!loading && combined.length > 0 && (
+        <div className="mt-3 max-h-[260px] space-y-2 overflow-y-auto [scrollbar-width:none]">
+          {combined.map(row => {
+            if (row.rail === 'fixed') {
+              const fixed = row.item
+              return (
+                <div key={`fixed-${fixed.receiptActivityId || fixed.contentId}-${fixed.unlockedAt}`} className="rounded-xl border border-gray-100 bg-white px-3 py-3 dark:border-white/10 dark:bg-[#111216]">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-[12px] font-black text-gray-800 dark:text-gray-100">{fixed.title}</p>
+                      <p className="mt-0.5 text-[10px] text-gray-400 dark:text-gray-500">From {shortWallet(fixed.payer || 'reader')}</p>
+                    </div>
+                    <span className="rounded-full bg-blue-50 px-2 py-1 text-[9px] font-black uppercase tracking-[0.12em] text-blue-600 dark:bg-blue-500/10 dark:text-blue-300">Fixed unlock</span>
+                  </div>
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                    <StreamMiniStat label="Paid" value={`${fixed.amount.toFixed(2)} USDC`} green />
+                    <StreamMiniStat label="Rail" value="x402" />
+                    <StreamMiniStat label="Status" value="Paid" />
+                  </div>
+                  {fixed.receiptActivityId && (
+                    <a href={`/receipt/${fixed.receiptActivityId}`} className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white py-2 text-[12px] font-bold text-gray-600 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-[#111216] dark:text-gray-300 dark:hover:bg-white/[0.06]">
+                      View receipt
+                    </a>
+                  )}
+                </div>
+              )
+            }
+            const stream = row.item
+            const claimable = toCreatorBigInt(stream.claimable)
+            const status = stream.cancelled ? 'Ended' : stream.active ? 'Live' : 'Complete'
+            return (
+              <div key={stream.vault} className="rounded-xl border border-gray-100 bg-white px-3 py-3 dark:border-white/10 dark:bg-[#111216]">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-mono text-[12px] font-bold text-gray-800 dark:text-gray-100">{shortWallet(stream.vault)}</p>
+                    <p className="mt-0.5 text-[10px] text-gray-400 dark:text-gray-500">From {shortWallet(stream.sender)}</p>
+                  </div>
+                  <span className={['rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-[0.12em]', stream.active ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-300' : 'bg-gray-100 text-gray-500 dark:bg-white/[0.08] dark:text-gray-300'].join(' ')}>
+                    Stream {status}
+                  </span>
+                </div>
+                <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                  <StreamMiniStat label="Streamed" value={`${formatCreatorUsdc(stream.unlocked)} USDC`} />
+                  <StreamMiniStat label="Claimable" value={`${formatCreatorUsdc(stream.claimable)} USDC`} green />
+                  <StreamMiniStat label="Claimed" value={`${formatCreatorUsdc(stream.alreadyWithdrawn)} USDC`} />
+                </div>
+                <a
+                  href={`/stream/${stream.vault}?app=streampay&wallet=circle`}
+                  className={[
+                    'mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg py-2 text-[12px] font-bold transition-all active:scale-[0.98]',
+                    claimable > 0n ? 'bg-gray-950 text-white hover:bg-gray-800' : 'border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 dark:border-white/10 dark:bg-[#111216] dark:text-gray-300 dark:hover:bg-white/[0.06]',
+                  ].join(' ')}
+                >
+                  {claimable > 0n ? 'Open claim' : 'View stream'}
+                </a>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function CreatorStreamClaims({ initialCreatorWallet }: { initialCreatorWallet?: string }) {
+  const [wallet, setWallet] = useState(() => initialCreatorWallet || '')
+  const [streams, setStreams] = useState<CreatorStreamRow[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (initialCreatorWallet && !wallet) setWallet(initialCreatorWallet)
+  }, [initialCreatorWallet, wallet])
+
+  const validWallet = /^0x[a-fA-F0-9]{40}$/.test(wallet.trim())
+  const claimableTotal = streams.reduce((sum, stream) => {
+    try { return sum + BigInt(stream.claimable || '0') } catch { return sum }
+  }, 0n)
+  const liveCount = streams.filter(stream => stream.active && !stream.cancelled).length
+
+  const fetchStreams = useCallback(async () => {
+    const recipient = wallet.trim()
+    if (!/^0x[a-fA-F0-9]{40}$/.test(recipient)) {
+      setStreams([])
+      setError(recipient ? 'Enter a valid creator wallet address.' : '')
+      return
+    }
+    setLoading(true)
+    setError('')
+    try {
+      const res = await fetch(`/api/stream-history?recipient=${encodeURIComponent(recipient)}`)
+      const data = await res.json() as { ok?: boolean; streams?: CreatorStreamRow[]; error?: string }
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Could not load creator streams.')
+      setStreams(Array.isArray(data.streams) ? data.streams : [])
+    } catch (err) {
+      setStreams([])
+      setError(err instanceof Error ? err.message : 'Could not load creator streams.')
+    } finally {
+      setLoading(false)
+    }
+  }, [wallet])
+
+  useEffect(() => {
+    if (!validWallet) return
+    const t = setTimeout(() => { fetchStreams() }, 350)
+    return () => clearTimeout(t)
+  }, [validWallet, fetchStreams])
+
+  return (
+    <div className="rounded-2xl border border-gray-100 bg-gray-50/70 p-4 dark:border-white/10 dark:bg-white/[0.04]">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[13px] font-black text-gray-950 dark:text-white">Pay-per-view streams</p>
+          <p className="mt-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400">
+            Claim streamed USDC sent to your creator wallet.
+          </p>
+        </div>
+        <div className="shrink-0 rounded-xl bg-white px-3 py-2 text-right shadow-sm dark:bg-[#111216]">
+          <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400">Claimable</p>
+          <p className="mt-0.5 text-[13px] font-black text-emerald-600 dark:text-emerald-300">{formatCreatorUsdc(claimableTotal)} USDC</p>
+        </div>
+      </div>
+
+      <div className="mt-3 space-y-2">
+        <input
+          type="text"
+          inputMode="text"
+          value={wallet}
+          onChange={event => setWallet(event.target.value)}
+          placeholder="Creator wallet address"
+          className="w-full rounded-xl border-2 border-gray-200 bg-white px-4 py-3 font-mono text-[12px] text-gray-800 placeholder:font-sans placeholder:text-gray-300 transition-colors focus:border-gray-400 focus:outline-none dark:border-white/10 dark:bg-[#111216] dark:text-gray-100 dark:placeholder:text-gray-600 dark:focus:border-white/30"
+        />
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-[11px] text-gray-400 dark:text-gray-500">
+            {validWallet ? `${liveCount} live · ${streams.length} total` : 'Paste the creator wallet used on your content link.'}
+          </p>
+          <button
+            type="button"
+            onClick={fetchStreams}
+            disabled={!validWallet || loading}
+            className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-[11px] font-bold text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-[#111216] dark:text-gray-300 dark:hover:bg-white/[0.06]"
+          >
+            {loading ? 'Checking' : 'Refresh'}
+          </button>
+        </div>
+      </div>
+
+      {error && <p className="mt-3 rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-center text-[11px] font-semibold text-red-500 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-300">{error}</p>}
+
+      {loading && (
+        <div className="mt-3 flex items-center justify-center gap-2 rounded-xl border border-gray-100 bg-white px-4 py-4 text-[12px] font-semibold text-gray-400 dark:border-white/10 dark:bg-[#111216]">
+          <VaultSpinner /> Checking Arc streams...
+        </div>
+      )}
+
+      {!loading && validWallet && !error && streams.length === 0 && (
+        <div className="mt-3 rounded-xl border border-gray-100 bg-white px-4 py-4 text-center dark:border-white/10 dark:bg-[#111216]">
+          <p className="text-[12px] font-bold text-gray-600 dark:text-gray-300">No pay-per-view streams yet</p>
+          <p className="mt-1 text-[11px] leading-5 text-gray-400 dark:text-gray-500">When readers start prepaid streams to this creator wallet, they appear here for claiming.</p>
+        </div>
+      )}
+
+      {!loading && streams.length > 0 && (
+        <div className="mt-3 max-h-[260px] space-y-2 overflow-y-auto [scrollbar-width:none]">
+          {streams.map(stream => {
+            const claimable = BigInt(stream.claimable || '0')
+            const status = stream.cancelled ? 'Ended' : stream.active ? 'Live' : 'Complete'
+            return (
+              <div key={stream.vault} className="rounded-xl border border-gray-100 bg-white px-3 py-3 dark:border-white/10 dark:bg-[#111216]">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-mono text-[12px] font-bold text-gray-800 dark:text-gray-100">{shortWallet(stream.vault)}</p>
+                    <p className="mt-0.5 text-[10px] text-gray-400 dark:text-gray-500">From {shortWallet(stream.sender)}</p>
+                  </div>
+                  <span className={['rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-[0.12em]', stream.active ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-300' : 'bg-gray-100 text-gray-500 dark:bg-white/[0.08] dark:text-gray-300'].join(' ')}>
+                    {status}
+                  </span>
+                </div>
+                <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                  <StreamMiniStat label="Streamed" value={`${formatCreatorUsdc(stream.unlocked)} USDC`} />
+                  <StreamMiniStat label="Claimable" value={`${formatCreatorUsdc(stream.claimable)} USDC`} green />
+                  <StreamMiniStat label="Claimed" value={`${formatCreatorUsdc(stream.alreadyWithdrawn)} USDC`} />
+                </div>
+                <a
+                  href={`/stream/${stream.vault}?app=streampay&wallet=circle`}
+                  className={[
+                    'mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg py-2 text-[12px] font-bold transition-all active:scale-[0.98]',
+                    claimable > 0n ? 'bg-gray-950 text-white hover:bg-gray-800' : 'border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 dark:border-white/10 dark:bg-[#111216] dark:text-gray-300 dark:hover:bg-white/[0.06]',
+                  ].join(' ')}
+                >
+                  {claimable > 0n ? 'Open claim' : 'View stream'}
+                </a>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function StreamMiniStat({ label, value, green }: { label: string; value: string; green?: boolean }) {
+  return (
+    <div className="rounded-lg bg-gray-50 px-2 py-2 dark:bg-white/[0.04]">
+      <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-gray-400">{label}</p>
+      <p className={['mt-0.5 truncate text-[10px] font-black', green ? 'text-emerald-600 dark:text-emerald-300' : 'text-gray-700 dark:text-gray-200'].join(' ')}>{value}</p>
+    </div>
+  )
+}
+
 // Creator earnings panel.
 
 function SettlementDashboard({
   initialGateLink,
   published,
+  creatorWallet,
+  creatorEmail,
+  creatorAuthenticated,
+  creatorAuthBusy,
+  creatorWalletLoading,
+  creatorAuthError,
+  onCreatorSignIn,
+  onCreatorOpenWallet,
+  onCreatorSignOut,
 }: {
   initialGateLink?: string
   published: PublishedContent[]
+  creatorWallet?: string
+  creatorEmail?: string
+  creatorAuthenticated: boolean
+  creatorAuthBusy: boolean
+  creatorWalletLoading: boolean
+  creatorAuthError?: string
+  onCreatorSignIn: () => void
+  onCreatorOpenWallet: () => void
+  onCreatorSignOut: () => void
 }) {
   const [gateInput,   setGateInput]   = useState('')
   const [contentId,   setContentId]   = useState('')
@@ -1245,6 +1702,19 @@ function SettlementDashboard({
               Creator earnings
             </span>
           </div>
+
+          <CreatorAccountEarnings
+            creatorWallet={creatorWallet}
+            email={creatorEmail}
+            authenticated={creatorAuthenticated}
+            authBusy={creatorAuthBusy}
+            walletLoading={creatorWalletLoading}
+            authError={creatorAuthError}
+            onSignIn={onCreatorSignIn}
+            onOpenWallet={onCreatorOpenWallet}
+            onSignOut={onCreatorSignOut}
+          />
+
           <div className="rounded-2xl border border-blue-100 bg-blue-50/60 px-4 py-3 dark:border-blue-400/20 dark:bg-blue-500/10">
             <p className="text-[13px] font-bold text-gray-900 dark:text-blue-100">My posts and earnings</p>
             <p className="mt-1 text-[12px] leading-5 text-gray-500 dark:text-blue-200/70">
@@ -1609,19 +2079,117 @@ export function CreatorAdminPage() {
 
 // Creator page.
 export function CreatorPage() {
+  const { authenticated: privyAuthenticated, user: privyUser, login: loginPrivy, logout: logoutPrivy, getAccessToken } = usePrivy()
+  const privyEmail = cleanEmail(emailFromPrivyUser(privyUser))
   const [activeTab, setActiveTab] = useState<CreatorTab>('discover')
   const [latestGateLink, setLatestGateLink] = useState('')
   const [publishedContent, setPublishedContent] = useState<PublishedContent[]>([])
   const [latestCreator, setLatestCreator] = useState(() => {
     try { return window.localStorage.getItem('streampay_creator_latest_wallet') ?? '' } catch { return '' }
   })
+  const [creatorCircleSession, setCreatorCircleSession] = useState<CircleEvmEmailSession | null>(null)
+  const [creatorWalletLoading, setCreatorWalletLoading] = useState(false)
+  const [creatorAuthError, setCreatorAuthError] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingDraft, setEditingDraft] = useState<CreatorDraft | null>(null)
+  const creatorWalletAddress = creatorCircleSession?.wallet.address || latestCreator
 
   useEffect(() => {
-    if (!/^0x[a-fA-F0-9]{40}$/.test(latestCreator)) return
+    if (!PRIVY_AUTH_ENABLED || !privyAuthenticated) return
     let cancelled = false
-    fetch(`/api/list-creator-content?creator=${encodeURIComponent(latestCreator)}`)
+    async function restoreCreatorWallet() {
+      setCreatorWalletLoading(true)
+      setCreatorAuthError('')
+      try {
+        const token = await getAccessToken()
+        if (!token) throw new Error('Email session is not ready yet.')
+        const data = await resolvePrivyCircleLink({ accessToken: token, chain: 'arc', purpose: 'payment' })
+        if (cancelled) return
+        const wallet = data.link?.circleWalletAddress || ''
+        if (/^0x[a-fA-F0-9]{40}$/.test(wallet)) {
+          setLatestCreator(wallet)
+          try { window.localStorage.setItem('streampay_creator_latest_wallet', wallet) } catch {}
+        }
+      } catch {
+        if (!cancelled) setCreatorAuthError('')
+      } finally {
+        if (!cancelled) setCreatorWalletLoading(false)
+      }
+    }
+    void restoreCreatorWallet()
+    return () => { cancelled = true }
+  }, [privyAuthenticated, getAccessToken])
+
+  async function handleCreatorSignIn() {
+    setCreatorAuthError('')
+    if (!PRIVY_AUTH_ENABLED) {
+      setCreatorAuthError('Email sign-in is not configured.')
+      return
+    }
+    try {
+      await loginPrivy({ loginMethods: ['email'] })
+    } catch (err) {
+      setCreatorAuthError(err instanceof Error ? err.message.slice(0, 160) : 'Could not open email sign-in.')
+    }
+  }
+
+  async function handleCreatorOpenWallet() {
+    setCreatorAuthError('')
+    if (!canUseCircleEvmEmailWallet('arc')) {
+      setCreatorAuthError('Arc Circle wallet access is not configured.')
+      return
+    }
+    if (PRIVY_AUTH_ENABLED && !privyAuthenticated) {
+      await handleCreatorSignIn()
+      return
+    }
+    const email = privyEmail
+    if (!email) {
+      setCreatorAuthError('Sign in with your creator email first.')
+      return
+    }
+    setCreatorWalletLoading(true)
+    try {
+      const session = await connectCircleEvmEmailWallet(email, 'arc')
+      setCreatorCircleSession(session)
+      setLatestCreator(session.wallet.address)
+      try { window.localStorage.setItem('streampay_creator_latest_wallet', session.wallet.address) } catch {}
+      await deployCircleEvmEmailWallet({ session })
+      if (PRIVY_AUTH_ENABLED && privyAuthenticated) {
+        const token = await getAccessToken()
+        if (token) {
+          await savePrivyCircleLink({
+            accessToken: token,
+            chain: 'arc',
+            purpose: 'payment',
+            email,
+            wallet: {
+              id: session.wallet.id,
+              address: session.wallet.address,
+              blockchain: session.wallet.blockchain,
+            },
+          })
+        }
+      }
+    } catch (err) {
+      setCreatorAuthError(err instanceof Error ? err.message.slice(0, 180) : 'Creator wallet did not open.')
+    } finally {
+      setCreatorWalletLoading(false)
+    }
+  }
+
+  async function handleCreatorSignOut() {
+    setCreatorCircleSession(null)
+    setLatestCreator('')
+    setCreatorAuthError('')
+    try { window.localStorage.removeItem('streampay_creator_latest_wallet') } catch {}
+    if (PRIVY_AUTH_ENABLED && privyAuthenticated) await logoutPrivy()
+  }
+
+  useEffect(() => {
+    if (!/^0x[a-fA-F0-9]{40}$/.test(creatorWalletAddress)) return
+    let cancelled = false
+    fetch(`/api/list-creator-content?creator=${encodeURIComponent(creatorWalletAddress)}`)
       .then(res => res.json())
       .then((data: { ok?: boolean; posts?: ServerCreatorPost[] }) => {
         if (cancelled || !data.ok || !Array.isArray(data.posts)) return
@@ -1635,7 +2203,7 @@ export function CreatorPage() {
       })
       .catch(() => {})
     return () => { cancelled = true }
-  }, [latestCreator])
+  }, [creatorWalletAddress])
 
   return (
     <div className="w-full max-w-[480px] mx-auto mt-12 mb-12">
@@ -1708,7 +2276,19 @@ export function CreatorPage() {
           draftKey={editingId || 'new'}
         />
       ) : (
-        <SettlementDashboard initialGateLink={latestGateLink} published={publishedContent} />
+        <SettlementDashboard
+          initialGateLink={latestGateLink}
+          published={publishedContent}
+          creatorWallet={creatorWalletAddress}
+          creatorEmail={privyEmail}
+          creatorAuthenticated={PRIVY_AUTH_ENABLED ? privyAuthenticated : Boolean(creatorWalletAddress)}
+          creatorAuthBusy={false}
+          creatorWalletLoading={creatorWalletLoading}
+          creatorAuthError={creatorAuthError}
+          onCreatorSignIn={handleCreatorSignIn}
+          onCreatorOpenWallet={handleCreatorOpenWallet}
+          onCreatorSignOut={handleCreatorSignOut}
+        />
       )}
     </div>
   )
