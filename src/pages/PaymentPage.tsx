@@ -2341,7 +2341,7 @@ export default function PaymentPage() {
       setCirclePasskeyError(blockedAmountError())
       return
     }
-    if (circleWalletNeedsFunds || (circleSmartAccount && typeof circleWalletBalance === 'bigint' && !circleWalletHasEnough)) {
+    if (!paycrestNeedsPreparation && (circleWalletNeedsFunds || (circleSmartAccount && typeof circleWalletBalance === 'bigint' && !circleWalletHasEnough))) {
       resetCircleSmartWalletPending()
       setCirclePasskeyError(SMART_WALLET_FUNDING_ERROR)
       return
