@@ -2210,7 +2210,6 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     }
     if (tab === 'bank') {
       pushPaymentTabHistory('bank')
-      activateBankReceive()
       return
     }
     if (tab === 'pos') {
