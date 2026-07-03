@@ -39,7 +39,7 @@ type CreatorStreamRow = {
   cancelled: boolean
   active: boolean
 }
-type CreatorTab = 'discover' | 'create' | 'earnings'
+type CreatorTab = 'discover' | 'create' | 'earnings' | 'streams'
 type CreatorCategory = 'worldcup-news' | 'live-scores' | 'crypto' | 'ebooks'
 type PublishedContent = {
   id: string
@@ -1577,6 +1577,178 @@ function StreamMiniStat({ label, value, green }: { label: string; value: string;
   )
 }
 
+function ReaderStreamVaults({
+  wallet,
+  email,
+  authenticated,
+  busy,
+  error,
+  onSignIn,
+  onOpenWallet,
+  onSignOut,
+}: {
+  wallet?: string
+  email?: string
+  authenticated: boolean
+  busy: boolean
+  error?: string
+  onSignIn: () => void
+  onOpenWallet: () => void
+  onSignOut: () => void
+}) {
+  const [streams, setStreams] = useState<CreatorStreamRow[]>([])
+  const [loading, setLoading] = useState(false)
+  const [streamError, setStreamError] = useState('')
+  const readerWallet = wallet || ''
+  const validWallet = /^0x[a-fA-F0-9]{40}$/.test(readerWallet)
+  const refundableTotal = streams.reduce((sum, stream) => {
+    const total = toCreatorBigInt(stream.totalAmount)
+    const unlocked = toCreatorBigInt(stream.unlocked)
+    return sum + (total > unlocked ? total - unlocked : 0n)
+  }, 0n)
+  const activeCount = streams.filter(stream => stream.active && !stream.cancelled).length
+
+  const fetchReaderStreams = useCallback(async () => {
+    if (!validWallet) {
+      setStreams([])
+      setStreamError('')
+      return
+    }
+    setLoading(true)
+    setStreamError('')
+    try {
+      const res = await fetch(`/api/stream-history?sender=${encodeURIComponent(readerWallet)}`)
+      const data = await res.json() as { ok?: boolean; streams?: CreatorStreamRow[]; error?: string }
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Could not load reader streams.')
+      setStreams(Array.isArray(data.streams) ? data.streams : [])
+    } catch (err) {
+      setStreams([])
+      setStreamError(err instanceof Error ? err.message : 'Could not load reader streams.')
+    } finally {
+      setLoading(false)
+    }
+  }, [readerWallet, validWallet])
+
+  useEffect(() => {
+    if (!validWallet) return
+    const t = setTimeout(() => { fetchReaderStreams() }, 350)
+    return () => clearTimeout(t)
+  }, [validWallet, fetchReaderStreams])
+
+  return (
+    <div className="w-full">
+      <div className="rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-[#111216]">
+        <div className="space-y-4 px-5 py-5 sm:px-7 sm:py-6">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-500 dark:text-gray-400">My streams</p>
+              <h2 className="mt-1 text-[18px] font-black tracking-tight text-gray-950 dark:text-white">Reader stream vaults</h2>
+              <p className="mt-1 text-[12px] leading-5 text-gray-500 dark:text-gray-400">
+                Recover active pay-per-view streams and refund unstreamed USDC even if the content link is gone.
+              </p>
+            </div>
+            <div className="shrink-0 rounded-xl bg-gray-50 px-3 py-2 text-right dark:bg-white/[0.04]">
+              <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400">Refundable</p>
+              <p className="mt-0.5 text-[13px] font-black text-emerald-600 dark:text-emerald-300">{formatCreatorUsdc(refundableTotal)} USDC</p>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-gray-100 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400">Reader wallet</p>
+                <p className="mt-0.5 truncate text-[12px] font-black text-gray-900 dark:text-gray-100">
+                  {validWallet ? shortWallet(readerWallet) : authenticated ? (email || 'Email signed in') : 'Not signed in'}
+                </p>
+                {email && <p className="mt-0.5 truncate text-[10px] text-gray-400">{email}</p>}
+              </div>
+              <button
+                type="button"
+                onClick={validWallet ? fetchReaderStreams : authenticated ? onOpenWallet : onSignIn}
+                disabled={busy || loading}
+                className="shrink-0 rounded-xl bg-gray-950 px-3 py-2 text-[11px] font-black text-white transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-gray-950"
+              >
+                {busy ? 'Connecting' : validWallet ? (loading ? 'Checking' : 'Refresh') : authenticated ? 'Open wallet' : 'Sign in'}
+              </button>
+            </div>
+            {validWallet && (
+              <button type="button" onClick={onSignOut} className="mt-2 text-[11px] font-bold text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
+                Sign out
+              </button>
+            )}
+          </div>
+
+          {error && <p className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-center text-[11px] font-semibold text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-300">{error}</p>}
+          {streamError && <p className="rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-center text-[11px] font-semibold text-red-500 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-300">{streamError}</p>}
+
+          {validWallet && (
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <StreamMiniStat label="Active" value={`${activeCount}`} green />
+              <StreamMiniStat label="Total" value={`${streams.length}`} />
+              <StreamMiniStat label="Refund" value={`${formatCreatorUsdc(refundableTotal)} USDC`} />
+            </div>
+          )}
+
+          {loading && (
+            <div className="flex items-center justify-center gap-2 rounded-xl border border-gray-100 bg-gray-50 px-4 py-5 text-[12px] font-semibold text-gray-400 dark:border-white/10 dark:bg-white/[0.04]">
+              <VaultSpinner /> Checking streams...
+            </div>
+          )}
+
+          {!loading && !validWallet && !error && (
+            <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-4 py-6 text-center dark:border-white/10 dark:bg-white/[0.04]">
+              <p className="text-[12px] font-bold text-gray-600 dark:text-gray-300">Sign in to recover streams</p>
+              <p className="mt-1 text-[11px] leading-5 text-gray-400 dark:text-gray-500">Use the same email wallet that started the pay-per-view stream.</p>
+            </div>
+          )}
+
+          {!loading && validWallet && !streamError && streams.length === 0 && (
+            <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-4 py-6 text-center dark:border-white/10 dark:bg-white/[0.04]">
+              <p className="text-[12px] font-bold text-gray-600 dark:text-gray-300">No stream vaults found</p>
+              <p className="mt-1 text-[11px] leading-5 text-gray-400 dark:text-gray-500">Reader streams funded by this wallet will appear here.</p>
+            </div>
+          )}
+
+          {!loading && streams.length > 0 && (
+            <div className="max-h-[360px] space-y-2 overflow-y-auto [scrollbar-width:none]">
+              {streams.map(stream => {
+                const total = toCreatorBigInt(stream.totalAmount)
+                const unlocked = toCreatorBigInt(stream.unlocked)
+                const refundable = total > unlocked ? total - unlocked : 0n
+                const status = stream.cancelled ? 'Ended' : stream.active ? 'Active' : 'Complete'
+                return (
+                  <div key={stream.vault} className="rounded-2xl border border-gray-100 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="font-mono text-[12px] font-black text-gray-900 dark:text-gray-100">{shortWallet(stream.vault)}</p>
+                        <p className="mt-0.5 text-[10px] text-gray-400 dark:text-gray-500">Creator {shortWallet(stream.recipient)}</p>
+                      </div>
+                      <span className={['rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-[0.12em]', stream.active && !stream.cancelled ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-300' : 'bg-gray-100 text-gray-500 dark:bg-white/[0.08] dark:text-gray-300'].join(' ')}>
+                        {status}
+                      </span>
+                    </div>
+                    <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                      <StreamMiniStat label="Streamed" value={`${formatCreatorUsdc(stream.unlocked)} USDC`} />
+                      <StreamMiniStat label="Refundable" value={`${formatCreatorUsdc(refundable)} USDC`} green={refundable > 0n} />
+                      <StreamMiniStat label="Budget" value={`${formatCreatorUsdc(stream.totalAmount)} USDC`} />
+                    </div>
+                    <a
+                      href={`/stream/${stream.vault}?app=streampay&wallet=circle`}
+                      className="mt-3 flex w-full items-center justify-center rounded-xl bg-gray-950 py-2.5 text-[12px] font-black text-white transition-all active:scale-[0.98] dark:bg-white dark:text-gray-950"
+                    >
+                      Open stream vault
+                    </a>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // Creator earnings panel.
 
 function SettlementDashboard({
@@ -2212,11 +2384,12 @@ export function CreatorPage() {
         <p className="mt-1 text-[13px] leading-5 text-gray-500 dark:text-gray-400">Discover, publish, and earn with USDC.</p>
       </div>
       <div className="mb-5 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-[#111216]">
-        <div className="grid grid-cols-3">
+        <div className="grid grid-cols-4">
           {([
             { id: 'discover', label: 'Discover', helper: 'Paid posts' },
             { id: 'create', label: 'Publish', helper: 'Content' },
             { id: 'earnings', label: 'Earnings', helper: 'Track and claim' },
+            { id: 'streams', label: 'Streams', helper: 'Refunds' },
           ] as const).map(tab => {
             const selected = activeTab === tab.id
             return (
@@ -2275,7 +2448,7 @@ export function CreatorPage() {
           initialDraft={editingDraft}
           draftKey={editingId || 'new'}
         />
-      ) : (
+      ) : activeTab === 'earnings' ? (
         <SettlementDashboard
           initialGateLink={latestGateLink}
           published={publishedContent}
@@ -2288,6 +2461,17 @@ export function CreatorPage() {
           onCreatorSignIn={handleCreatorSignIn}
           onCreatorOpenWallet={handleCreatorOpenWallet}
           onCreatorSignOut={handleCreatorSignOut}
+        />
+      ) : (
+        <ReaderStreamVaults
+          wallet={creatorWalletAddress}
+          email={privyEmail}
+          authenticated={PRIVY_AUTH_ENABLED ? privyAuthenticated : Boolean(creatorWalletAddress)}
+          busy={creatorWalletLoading}
+          error={creatorAuthError}
+          onSignIn={handleCreatorSignIn}
+          onOpenWallet={handleCreatorOpenWallet}
+          onSignOut={handleCreatorSignOut}
         />
       )}
     </div>
