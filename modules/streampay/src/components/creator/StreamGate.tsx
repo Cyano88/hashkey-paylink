@@ -1202,6 +1202,9 @@ export function StreamGate() {
 
   const progressPct = Math.min((poa.accrued / sessionCap) * 100, 100)
   const streamDurationSec = dripRate > 0 ? Math.max(1, Math.ceil(sessionCap / dripRate)) : 0
+  const prepaidStreamEnded = paymentMode === 'escrow'
+    && contentState === 'error'
+    && Boolean(contentError && /prepaid stream (has ended|was cancelled)/i.test(contentError))
 
   function streamEscrowHref() {
     const returnParams = new URLSearchParams(window.location.search)
@@ -1743,7 +1746,7 @@ export function StreamGate() {
                     </p>
                   )}
                 </div>
-                {streamVault ? (
+                {streamVault && !prepaidStreamEnded ? (
                   <button
                     type="button"
                     onClick={() => {
@@ -1759,7 +1762,7 @@ export function StreamGate() {
                     href={streamEscrowHref()}
                     className="flex min-h-[48px] w-full items-center justify-center rounded-xl bg-gray-950 px-5 py-3 text-[13px] font-semibold text-white"
                   >
-                    Start prepaid stream
+                    {prepaidStreamEnded ? 'Start new prepaid stream' : 'Start prepaid stream'}
                   </a>
                 )}
               </div>
@@ -2297,7 +2300,7 @@ function OverlayShell({
       </div>
       {children}
       <div className="flex items-center gap-1.5 text-[10px] text-gray-400">
-        {paymentMode === 'x402' ? 'Powered by Circle Gateway on Arc' : paymentMode === 'escrow' ? 'Powered by StreamVault escrow on Arc' : paymentMode === 'choice' ? 'Powered by Hash PayLink Creator Checkout' : 'Powered by Arc Network'}
+        {paymentMode === 'x402' ? 'Powered by Circle Gateway on Arc' : paymentMode === 'escrow' || paymentMode === 'choice' ? 'Powered by Hash PayLink Creator Checkout' : 'Powered by Arc Network'}
       </div>
     </div>
   )

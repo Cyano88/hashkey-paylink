@@ -1246,7 +1246,7 @@ export function CreateStreamForm() {
               </a>
             )}
 
-            <HashPayLinkBadge />
+            <HashPayLinkBadge label={isCreatorStream ? 'Powered by Hash PayLink Vault on Arc' : undefined} />
           </div>
         </div>
       </div>
@@ -2025,14 +2025,6 @@ export function CreateStreamForm() {
                         ? <><Spinner /><span className="text-[13px] font-medium">{circleCtaLabel}</span></>
                         : <><img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert mix-blend-screen" /> {circleCtaLabel}</>}
                     </button>
-                    {isCreatorStream && creatorCheckoutBackHref && (
-                      <a
-                        href={creatorCheckoutBackHref}
-                        className="flex min-h-[46px] w-full items-center justify-center rounded-xl border border-gray-200 bg-white px-5 py-3 text-[13px] font-semibold text-gray-600 transition-colors hover:border-gray-300 hover:bg-gray-50 dark:border-white/10 dark:bg-[#15151a] dark:text-gray-300 dark:hover:bg-white/5"
-                      >
-                        Return to checkout
-                      </a>
-                    )}
                     {privyCircleLinkError && (
                       <p className="text-center text-[11px] font-semibold text-amber-600 dark:text-amber-300">{privyCircleLinkError}</p>
                     )}
@@ -2046,7 +2038,7 @@ export function CreateStreamForm() {
                             isCreatorStream ? 'rounded-none' : 'rounded-full',
                           ].join(' ')}
                         />
-                        {isCreatorStream ? 'Powered by Hash PayLink Vault on Arc' : 'Powered by Circle'}
+                        {isCreatorStream ? 'Powered by Hash PayLink Creator Checkout' : 'Powered by Circle'}
                       </span>
                     </div>
                   </div>
@@ -2150,12 +2142,12 @@ export function CreateStreamForm() {
 }
 
 // ── Shared badge ──────────────────────────────────────────────────────────────
-export function HashPayLinkBadge() {
+export function HashPayLinkBadge({ label = 'Powered by Hash PayLink' }: { label?: string }) {
   return (
     <div className="flex justify-center">
       <span className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5 px-3 py-1">
         <img src="/hash-logo.png" alt="#" className="h-3 w-3 opacity-50" />
-        <span className="text-[10px] font-semibold text-gray-400">Powered by Hash PayLink</span>
+        <span className="text-[10px] font-semibold text-gray-400">{label}</span>
       </span>
     </div>
   )
