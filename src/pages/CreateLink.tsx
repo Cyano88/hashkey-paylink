@@ -43,6 +43,7 @@ import {
   UserRound,
   Briefcase,
   Landmark,
+  Pencil,
 } from 'lucide-react'
 import { QRCodeCanvas } from 'qrcode.react'
 import { FX_CURRENCIES, getFxMeta, formatLocalAmt, fetchFxRate } from '../lib/fx'
@@ -735,18 +736,24 @@ function LocalCurrencyProfileCard({
   email,
   busy,
   error,
+  editing,
   bankAccountName,
   onDraftChange,
   onSave,
+  onEdit,
+  onCancel,
 }: {
   profile: LocalCurrencyProfile | null
   draft: LocalCurrencyProfile
   email: string
   busy: boolean
   error: string
+  editing: boolean
   bankAccountName?: string
   onDraftChange: (next: LocalCurrencyProfile) => void
   onSave: () => void
+  onEdit: () => void
+  onCancel: () => void
 }) {
   const complete = Boolean(profile?.firstName && profile?.lastName && profile?.email)
   const dirty = Boolean(profile && (
@@ -756,6 +763,34 @@ function LocalCurrencyProfileCard({
   ))
   const fullName = `${draft.firstName} ${draft.lastName}`.trim()
   const bankMismatch = Boolean(bankAccountName && fullName && !bankAccountName.toLowerCase().includes(draft.lastName.trim().toLowerCase()))
+
+  if (complete && !editing) {
+    const savedName = `${profile?.firstName ?? ''} ${profile?.lastName ?? ''}`.trim()
+    return (
+      <div className="rounded-2xl border border-gray-100 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <p className="truncate text-sm font-bold text-gray-950 dark:text-white">{savedName || 'Payout profile'}</p>
+              <span className="shrink-0 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-300">
+                Saved
+              </span>
+            </div>
+            <p className="mt-0.5 truncate text-xs font-medium text-gray-500 dark:text-gray-400">{profile?.email}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onEdit}
+            aria-label="Edit payout profile"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-gray-600 transition-all hover:bg-gray-100 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300 dark:hover:bg-white/[0.1]"
+          >
+            <Pencil className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
       <div className="flex items-start justify-between gap-3">
@@ -765,10 +800,14 @@ function LocalCurrencyProfileCard({
             Used for receipts, payout support, and matching bank payment records.
           </p>
         </div>
-        {complete && (
-          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-bold text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-300">
-            Saved
-          </span>
+        {complete && editing && (
+          <button
+            type="button"
+            onClick={onCancel}
+            className="rounded-full border border-gray-200 bg-gray-50 px-2 py-1 text-[10px] font-bold text-gray-600 transition-all hover:bg-gray-100 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300 dark:hover:bg-white/[0.1]"
+          >
+            Cancel
+          </button>
         )}
       </div>
 
@@ -846,6 +885,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   const privyEmail = emailFromPrivyUser(privyUser).trim().toLowerCase()
   const [localCurrencyProfile, setLocalCurrencyProfile] = useState<LocalCurrencyProfile | null>(null)
   const [localCurrencyProfileDraft, setLocalCurrencyProfileDraft] = useState<LocalCurrencyProfile>({ firstName: '', lastName: '', email: '' })
+  const [localCurrencyProfileEditing, setLocalCurrencyProfileEditing] = useState(false)
   const [localCurrencyProfileBusy, setLocalCurrencyProfileBusy] = useState(false)
   const [localCurrencyProfileError, setLocalCurrencyProfileError] = useState('')
   const [evmAddr,       setEvmAddr]       = useState('')
@@ -1757,6 +1797,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     if (!privyAuthenticated) {
       setLocalCurrencyProfile(null)
       setLocalCurrencyProfileDraft({ firstName: '', lastName: '', email: '' })
+      setLocalCurrencyProfileEditing(false)
       setLocalCurrencyProfileError('')
       return
     }
@@ -1771,9 +1812,11 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
         lastName: profile?.lastName ?? '',
         email: profile?.email ?? data.email ?? privyEmail,
       })
+      setLocalCurrencyProfileEditing(!profile)
     } catch (error) {
       setLocalCurrencyProfileError(error instanceof Error ? error.message : 'Could not load payout profile.')
       setLocalCurrencyProfileDraft(current => ({ ...current, email: privyEmail || current.email }))
+      setLocalCurrencyProfileEditing(true)
     } finally {
       setLocalCurrencyProfileBusy(false)
     }
@@ -1787,11 +1830,26 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
       if (!data.profile) throw new Error('Profile was not saved.')
       setLocalCurrencyProfile(data.profile)
       setLocalCurrencyProfileDraft(data.profile)
+      setLocalCurrencyProfileEditing(false)
     } catch (error) {
       setLocalCurrencyProfileError(error instanceof Error ? error.message : 'Could not save payout profile.')
     } finally {
       setLocalCurrencyProfileBusy(false)
     }
+  }
+
+  function editLocalCurrencyProfile() {
+    if (localCurrencyProfile) setLocalCurrencyProfileDraft(localCurrencyProfile)
+    else setLocalCurrencyProfileDraft(current => ({ ...current, email: privyEmail || current.email }))
+    setLocalCurrencyProfileError('')
+    setLocalCurrencyProfileEditing(true)
+  }
+
+  function cancelLocalCurrencyProfileEdit() {
+    if (!localCurrencyProfile) return
+    setLocalCurrencyProfileDraft(localCurrencyProfile)
+    setLocalCurrencyProfileError('')
+    setLocalCurrencyProfileEditing(false)
   }
 
   useEffect(() => {
@@ -2887,9 +2945,12 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                   email={privyEmail}
                   busy={localCurrencyProfileBusy}
                   error={localCurrencyProfileError}
+                  editing={localCurrencyProfileEditing}
                   bankAccountName={posBankAccountName}
                   onDraftChange={setLocalCurrencyProfileDraft}
                   onSave={saveLocalCurrencyProfile}
+                  onEdit={editLocalCurrencyProfile}
+                  onCancel={cancelLocalCurrencyProfileEdit}
                 />
               )}
 
@@ -3191,8 +3252,11 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                   email={privyEmail}
                   busy={localCurrencyProfileBusy}
                   error={localCurrencyProfileError}
+                  editing={localCurrencyProfileEditing}
                   onDraftChange={setLocalCurrencyProfileDraft}
                   onSave={saveLocalCurrencyProfile}
+                  onEdit={editLocalCurrencyProfile}
+                  onCancel={cancelLocalCurrencyProfileEdit}
                 />
               )}
               <div className="rounded-2xl border border-gray-100 bg-gray-50 p-5 text-center dark:border-white/10 dark:bg-white/[0.04]">
@@ -3277,9 +3341,12 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               email={privyEmail}
               busy={localCurrencyProfileBusy}
               error={localCurrencyProfileError}
+              editing={localCurrencyProfileEditing}
               bankAccountName={posBankAccountName}
               onDraftChange={setLocalCurrencyProfileDraft}
               onSave={saveLocalCurrencyProfile}
+              onEdit={editLocalCurrencyProfile}
+              onCancel={cancelLocalCurrencyProfileEdit}
             />
           )}
 
