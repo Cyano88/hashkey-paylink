@@ -77,6 +77,7 @@ type PaycrestCheckoutOrder = {
   receive_address: string
   refund_address: string
   status: string
+  tx_hash?: string
   valid_until?: string
   bank_name?: string
   bank_last4?: string
@@ -1587,6 +1588,51 @@ export default function PaymentPage() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [manualPayDetected, manualTxHash, chain, activeRecipient, effectiveAmt, receivedAmount?.toString()])
+
+  useEffect(() => {
+    if (!isNgPosPaycrestOfframp || !paycrestOrder || manualTxHash || !manualPayDetected) return
+    let cancelled = false
+    let attempts = 0
+
+    async function syncPaycrestOrderTx() {
+      attempts += 1
+      try {
+        const res = await fetch('/api/ng-pos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'offrampStatus',
+            intent_id: paycrestOrder?.intent_id,
+            order_id: paycrestOrder?.paycrest_order_id,
+            refresh: true,
+          }),
+        })
+        const data = await res.json().catch(() => undefined) as { ok?: boolean; order?: PaycrestCheckoutOrder } | undefined
+        if (cancelled || !data?.ok || !data.order) return
+        setPaycrestOrder(data.order)
+        const nextHash = data.order.tx_hash
+        if (nextHash && /^0x[a-fA-F0-9]{64}$/.test(nextHash)) {
+          setManualTxHash(nextHash as `0x${string}`)
+          try {
+            setReceivedAmount(parseUnits(data.order.amount_usdc || payableAmt || '0', meta.decimals))
+          } catch { /* keep existing detected amount */ }
+          setPaycrestStatusText('Payment detected. Preparing receipt.')
+          return
+        }
+      } catch {
+        // Keep the local tx scanner running; Paycrest status polling is a second recovery path.
+      }
+      if (!cancelled && attempts < 60 && !manualTxHash) {
+        window.setTimeout(syncPaycrestOrderTx, attempts < 6 ? 3_000 : 8_000)
+      }
+    }
+
+    void syncPaycrestOrderTx()
+    return () => {
+      cancelled = true
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isNgPosPaycrestOfframp, manualPayDetected, manualTxHash, paycrestOrder?.intent_id, paycrestOrder?.paycrest_order_id])
 
   useEffect(() => {
     if (manualTxHash || !manualPayDetected || chain === 'solana') return

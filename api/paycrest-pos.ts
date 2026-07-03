@@ -331,8 +331,21 @@ export async function refreshPaycrestOrderStatus(id: string) {
   if (!record) return null
   const data = await paycrestFetch<any>(`/v2/sender/orders/${encodeURIComponent(record.paycrest_order_id)}`, { method: 'GET' })
   const status = firstText(data?.status, record.status)
+  const txHash = firstText(
+    data?.txHash,
+    data?.tx_hash,
+    data?.transactionHash,
+    data?.transaction_hash,
+    data?.depositTxHash,
+    data?.deposit_tx_hash,
+    data?.source?.txHash,
+    data?.source?.tx_hash,
+    data?.payment?.txHash,
+    data?.payment?.tx_hash,
+    record.tx_hash,
+  )
   const store = await readStore()
-  const updated = { ...record, status, raw: data, updated_at: new Date().toISOString() }
+  const updated = { ...record, status, tx_hash: txHash, raw: data, updated_at: new Date().toISOString() }
   store.orders[updated.intent_id] = updated
   store.orders[updated.paycrest_order_id] = updated
   await writeStore(store)
@@ -370,7 +383,19 @@ export async function paycrestWebhookHandler(req: Request, res: Response) {
   const updated = {
     ...record,
     status: firstText(data.status, record.status),
-    tx_hash: firstText(data.txHash, data.tx_hash, record.tx_hash),
+    tx_hash: firstText(
+      data.txHash,
+      data.tx_hash,
+      data.transactionHash,
+      data.transaction_hash,
+      data.depositTxHash,
+      data.deposit_tx_hash,
+      data.source?.txHash,
+      data.source?.tx_hash,
+      data.payment?.txHash,
+      data.payment?.tx_hash,
+      record.tx_hash,
+    ),
     raw: payload,
     updated_at: new Date().toISOString(),
   }
