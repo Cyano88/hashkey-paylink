@@ -83,7 +83,12 @@ export default async function handler(req: Request, res: Response) {
 
     const pendingId = crypto.randomBytes(8).toString('hex')
     const setup = new URL('/recipient', baseUrl(req))
-    const dedicatedStreamPay = setup.hostname === 'streampay.xyz' || setup.hostname.endsWith('.streampay.xyz') || setup.hostname.includes('streampay')
+    const dedicatedStreamPay =
+      setup.hostname === 'streampay.xyz' ||
+      setup.hostname.endsWith('.streampay.xyz') ||
+      setup.hostname === 'hashpaystream.app' ||
+      setup.hostname === 'www.hashpaystream.app' ||
+      setup.hostname.includes('streampay')
     if (!dedicatedStreamPay) setup.searchParams.set('app', 'streampay')
     setup.searchParams.set('email', email)
     setup.searchParams.set('pending', pendingId)
