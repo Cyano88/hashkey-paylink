@@ -13,6 +13,7 @@ import {
   getPaycrestOfframpRate,
   isPaycrestConfigured,
   listPaycrestInstitutions,
+  listPaycrestPosOrdersForMerchants,
   markPaycrestPosPayment,
   refreshPaycrestOrderStatus,
   verifyPaycrestAccount,
@@ -374,6 +375,11 @@ function parseSettlementType(value: unknown): SettlementType {
   return value === 'INSTANT_FIAT' ? 'INSTANT_FIAT' : 'KEEP_CRYPTO'
 }
 
+function isVisiblePaycrestHistoryStatus(status: string) {
+  const normalized = status.trim().toLowerCase()
+  return ['deposited', 'pending', 'validated', 'settling', 'settled', 'refunding', 'refunded'].includes(normalized)
+}
+
 export default async function handler(req: Request, res: Response) {
   try {
     if (req.method === 'GET') {
@@ -407,7 +413,29 @@ export default async function handler(req: Request, res: Response) {
       const merchants = Object.values(store.merchants ?? {})
         .filter(merchant => merchant.owner_id === privyUserId)
         .filter(merchant => merchant.source === 'bank-receive' || merchant.payout_preference === 'INSTANT_FIAT')
+      const merchantIds = merchants.map(merchant => merchant.merchant_id)
       const payments = await listRegisteredPaymentsForEventIds(merchants.map(merchant => `ngpos-${merchant.merchant_id}`))
+      const existingTxHashes = new Set(payments.map(payment => payment.txHash.toLowerCase()).filter(Boolean))
+      const paycrestRows = (await listPaycrestPosOrdersForMerchants(merchantIds))
+        .filter(order => order.tx_hash || isVisiblePaycrestHistoryStatus(order.status))
+        .filter(order => !order.tx_hash || !existingTxHashes.has(order.tx_hash.toLowerCase()))
+        .map(order => ({
+          eventId: `ngpos-${order.merchant_id}`,
+          txHash: order.tx_hash || `paycrest_${order.intent_id}`,
+          chain: 'base',
+          payer: order.payer_wallet || order.payer_email || 'Circle wallet payer',
+          memo: 'Bank payout',
+          amount: order.amount_usdc,
+          ts: new Date(order.updated_at || order.created_at).getTime(),
+          source: 'bank-receive',
+          merchantId: order.merchant_id,
+          contextLabel: order.bank_name ? `${order.bank_name} ****${order.bank_last4 || ''}`.trim() : 'Bank receive',
+          settlementType: 'INSTANT_FIAT',
+          amountNgn: order.amount_ngn,
+          paycrestStatus: order.status,
+          bankName: order.bank_name,
+          bankLast4: order.bank_last4,
+        }))
       return res.json({
         ok: true,
         merchants: merchants.map(merchant => ({
@@ -417,7 +445,7 @@ export default async function handler(req: Request, res: Response) {
           bank_name: merchant.bank_name,
           bank_last4: merchant.bank_last4,
         })),
-        payments,
+        payments: [...payments, ...paycrestRows].sort((a, b) => Number((b.ts || 0) - (a.ts || 0))),
       })
     }
 

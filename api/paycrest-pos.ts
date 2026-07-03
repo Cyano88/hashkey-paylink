@@ -293,6 +293,22 @@ export async function getPaycrestPosOrder(id: string) {
   return store.orders[id] ?? null
 }
 
+export async function listPaycrestPosOrdersForMerchants(merchantIds: string[]) {
+  const wanted = new Set(merchantIds.map(id => id.trim()).filter(Boolean))
+  if (!wanted.size) return []
+  const store = await readStore()
+  const seen = new Set<string>()
+  return Object.values(store.orders)
+    .filter(order => wanted.has(order.merchant_id))
+    .filter(order => {
+      const key = order.intent_id || order.paycrest_order_id
+      if (!key || seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+    .sort((a, b) => new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime())
+}
+
 export async function markPaycrestPosPayment(input: { id: string; txHash: string; payerEmail?: string; payerWallet?: string }) {
   const store = await readStore()
   const record = store.orders[input.id]

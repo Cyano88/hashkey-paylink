@@ -84,6 +84,9 @@ interface EventPaymentRow {
   amountNgn?: string
   ogRootHash?: string
   ogTxHash?: string
+  paycrestStatus?: string
+  bankName?: string
+  bankLast4?: string
 }
 
 type LocalCurrencyProfile = {
@@ -130,11 +133,11 @@ function eventPaymentToRow(row: EventPaymentRow, index: number): PaymentRow {
     label: row.memo || row.payer || 'Payment',
     source: row.source,
     merchantId: row.merchantId,
-    contextLabel: row.contextLabel,
     settlementType: row.settlementType,
     amountNgn: row.amountNgn,
     ogRootHash: row.ogRootHash,
     ogTxHash: row.ogTxHash,
+    contextLabel: row.contextLabel || (row.bankName ? `${row.bankName} ****${row.bankLast4 || ''}`.trim() : undefined),
   }
 }
 
@@ -253,7 +256,7 @@ function OgArchiveNotice({
 
 export default function Dashboard() {
   const [searchParams] = useSearchParams()
-  const { authenticated: privyAuthenticated, getAccessToken } = usePrivy()
+  const { ready: privyReady, authenticated: privyAuthenticated, getAccessToken } = usePrivy()
   const evmAddr = getPaylinkParam(searchParams, 'evm', 'e').trim()
   const solanaAddr = getPaylinkParam(searchParams, 'sol', 's').trim()
   const eventId = (searchParams.get('id') ?? '').trim()
@@ -379,7 +382,7 @@ export default function Dashboard() {
       }
     })()
     return () => { cancelled = true }
-  }, [getAccessToken, isNgPosDashboard, privyAuthenticated])
+  }, [getAccessToken, isNgPosDashboard, privyAuthenticated, privyReady])
 
   // Load unified balances for selected dashboard chains.
   useEffect(() => {
@@ -447,6 +450,10 @@ export default function Dashboard() {
     }
 
     if (isNgPosDashboard) {
+      if (!privyReady) {
+        setRouterChecked(false)
+        return
+      }
       if (!privyAuthenticated) {
         setRouterChecked(true)
         setPayments([])
@@ -522,7 +529,7 @@ export default function Dashboard() {
     } finally {
       if (!opts?.silent) setIsLoading(false)
     }
-  }, [eventId, evmAddr, evmValid, getAccessToken, isNgPosDashboard, privyAuthenticated])
+  }, [eventId, evmAddr, evmValid, getAccessToken, isNgPosDashboard, privyAuthenticated, privyReady])
 
   useEffect(() => {
     setRouterChecked(false)
@@ -726,14 +733,14 @@ export default function Dashboard() {
       : 'Payer'
   }
   function txExplorerHref(row: PaymentRow) {
-    if (!row.txHash || row.txHash.startsWith('manual_')) return ''
+    if (!row.txHash || row.txHash.startsWith('manual_') || row.txHash.startsWith('paycrest_')) return ''
     return `${rowMeta(row).explorerUrl}/tx/${row.txHash}`
   }
   function ogExplorerHref(row: PaymentRow) {
     return row.ogTxHash ? `https://chainscan.0g.ai/tx/${row.ogTxHash}` : ''
   }
   function rowReceiptId(row: PaymentRow) {
-    return row.flow === 'registry' && row.merchantId && row.txHash && !row.txHash.startsWith('manual_')
+    return row.flow === 'registry' && row.merchantId && row.txHash && !row.txHash.startsWith('manual_') && !row.txHash.startsWith('paycrest_')
       ? paymentReceiptId(`ngpos-${row.merchantId}`, row.txHash)
       : ''
   }
@@ -1021,15 +1028,17 @@ export default function Dashboard() {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
               <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                {privyAuthenticated ? 'Local currency history connected' : 'Public receipt dashboard'}
+                {!privyReady ? 'Loading your history' : privyAuthenticated ? 'Local currency history is ready' : 'Sign in to view your history'}
               </p>
               <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                {privyAuthenticated
-                  ? 'These receipts are loaded from server records. Bank payouts and bills can use this same account history.'
-                  : 'Receipts are viewable from this link. Sign in to manage stores, bank payouts, bills, and support records.'}
+                {!privyReady
+                  ? 'Checking your saved Hash PayLink profile.'
+                  : privyAuthenticated
+                    ? 'Your bank payouts, POS payments, and bill receipts appear here as they settle.'
+                    : 'Use the same email you used for bank receive, POS, or bills.'}
               </p>
             </div>
-            {!privyAuthenticated && (
+            {privyReady && !privyAuthenticated && (
               <PrivyConnectButton
                 loginOptions={{ loginMethods: ['email'] }}
                 logoutOnAuthenticated={false}
@@ -1278,9 +1287,11 @@ export default function Dashboard() {
         ) : payments.length === 0 ? (
           <div className="py-16 text-center">
             <TrendingUp className="mx-auto mb-4 h-10 w-10 text-gray-200 dark:text-gray-700" />
-            <p className="text-sm font-medium text-gray-500 dark:text-gray-300">No payments received yet</p>
+            <p className="text-sm font-medium text-gray-500 dark:text-gray-300">
+              {isNgPosDashboard ? 'No local currency payments yet' : 'No payments received yet'}
+            </p>
             <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
-              {isNgPosDashboard ? 'Payer payments from this POS QR will appear here.' : 'Share your PayLink to get started'}
+              {isNgPosDashboard ? 'Bank receive, POS, and bill receipts will appear here after settlement.' : 'Share your PayLink to get started'}
             </p>
             {isNgPosDashboard ? null : telegramUrl ? (
               <OgArchiveLink className="mt-6" />
