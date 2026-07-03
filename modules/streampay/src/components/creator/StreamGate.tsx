@@ -1236,7 +1236,7 @@ export function StreamGate() {
     <div className="w-full max-w-[560px] mx-auto mt-6 px-3 sm:mt-8 sm:px-0 space-y-4">
 
       {/* ── Content card ── */}
-      <div ref={contentRef} className="relative overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+      <div ref={contentRef} className="relative overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-[#111216]">
 
         {/* Blurred placeholder shown behind the auth overlay */}
         {!fullyAuthorised && paymentMode !== 'x402' && <ContentPlaceholder title={title} />}
@@ -1254,16 +1254,16 @@ export function StreamGate() {
                     setContentState('idle')
                     setSelectedPaymentMode('x402')
                   }}
-                  className="w-full rounded-2xl border border-gray-200 bg-white p-4 text-left shadow-sm transition-colors hover:border-gray-300"
+                  className="w-full rounded-2xl border border-gray-200 bg-white p-4 text-left shadow-sm transition-colors hover:border-gray-300 dark:border-white/10 dark:bg-[#111216] dark:hover:border-white/25"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="text-[13px] font-black text-gray-900">Fixed unlock</p>
-                      <p className="mt-1 text-[12px] leading-relaxed text-gray-500">
+                      <p className="text-[13px] font-black text-gray-900 dark:text-gray-100">Fixed unlock</p>
+                      <p className="mt-1 text-[12px] leading-relaxed text-gray-500 dark:text-gray-400">
                         Pay {formatUsdc(sessionCap)} USDC once with x402 and unlock this content.
                       </p>
                     </div>
-                    <span className="rounded-full bg-gray-950 px-2 py-1 text-[9px] font-black uppercase tracking-[0.12em] text-white">
+                    <span className="rounded-full bg-gray-950 px-2 py-1 text-[9px] font-black uppercase tracking-[0.12em] text-white dark:bg-white dark:text-gray-950">
                       x402
                     </span>
                   </div>
@@ -1281,36 +1281,36 @@ export function StreamGate() {
                   className={[
                     'w-full rounded-2xl border p-4 text-left shadow-sm transition-colors',
                     streamContentAvailable
-                      ? 'border-gray-200 bg-white hover:border-gray-300'
-                      : 'cursor-not-allowed border-gray-100 bg-gray-50 opacity-70',
+                      ? 'border-gray-200 bg-white hover:border-gray-300 dark:border-white/10 dark:bg-[#111216] dark:hover:border-white/25'
+                      : 'cursor-not-allowed border-gray-100 bg-gray-50 opacity-70 dark:border-white/10 dark:bg-white/[0.04]',
                   ].join(' ')}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className={['text-[13px] font-black', streamContentAvailable ? 'text-gray-900' : 'text-gray-400'].join(' ')}>
+                      <p className={['text-[13px] font-black', streamContentAvailable ? 'text-gray-900 dark:text-gray-100' : 'text-gray-400 dark:text-gray-600'].join(' ')}>
                         Pay per view stream
                       </p>
-                      <p className="mt-1 text-[12px] leading-relaxed text-gray-500">
+                      <p className="mt-1 text-[12px] leading-relaxed text-gray-500 dark:text-gray-400">
                         {streamContentAvailable
                           ? `Prepay up to ${formatUsdc(sessionCap)} USDC in an Arc stream while this page renders content.`
                           : 'Streaming is only available for content Hash PayLink can render in-page.'}
                       </p>
                     </div>
-                    <span className={['rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-[0.12em]', streamContentAvailable ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-400'].join(' ')}>
+                    <span className={['rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-[0.12em]', streamContentAvailable ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300' : 'bg-gray-100 text-gray-400 dark:bg-white/[0.06] dark:text-gray-500'].join(' ')}>
                       Stream
                     </span>
                   </div>
                 </button>
 
                 {!streamContentAvailable && (
-                  <p className="text-center text-[11px] font-medium text-gray-400">
+                  <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
                     External access unavailable for pay per view stream.
                   </p>
                 )}
               </div>
             ) : paymentMode === 'x402' ? (
               <div className="w-full space-y-4">
-                <div className="rounded-2xl border border-gray-100 bg-white p-4 text-left shadow-sm">
+                <div className="rounded-2xl border border-gray-100 bg-white p-4 text-left shadow-sm dark:border-white/10 dark:bg-[#111216]">
                   {unlockStep === 'intro' && (
                     <div className="space-y-4 text-center">
                       <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full border border-blue-100 bg-blue-50 text-blue-600">
@@ -1769,8 +1769,8 @@ export function StreamGate() {
             ) : (
               <>
                 {!isConnected && (
-                  <div className="rounded-xl border border-gray-100 bg-gray-50 px-5 py-3 text-center text-[12px] text-gray-500">
-                    Connect your wallet in the header above
+                  <div className="rounded-xl border border-gray-100 bg-gray-50 px-5 py-3 text-center text-[12px] text-gray-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-400">
+                    Browser wallet required for signed-viewer gates.
                   </div>
                 )}
 
@@ -2267,26 +2267,23 @@ function OverlayShell({
       className={[
         'flex flex-col items-center justify-center space-y-4',
         paymentMode === 'x402' || paymentMode === 'choice' || paymentMode === 'escrow'
-          ? 'relative min-h-[520px] p-5 sm:p-7'
-          : 'absolute inset-0 p-6',
+          ? 'relative min-h-[520px] bg-gradient-to-b from-white/95 to-gray-50/95 p-5 dark:from-[#111216]/95 dark:to-[#0b0c0f]/95 sm:p-7'
+          : 'absolute inset-0 bg-white/75 p-6 backdrop-blur-[3px] dark:bg-[#0b0c0f]/75',
       ].join(' ')}
-      style={paymentMode === 'x402' || paymentMode === 'choice' || paymentMode === 'escrow'
-        ? { background: 'linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.92))' }
-        : { background: 'rgba(255,255,255,0.75)', backdropFilter: 'blur(3px)' }}
     >
       <div className="text-center space-y-1.5">
-        <p className="text-[17px] font-bold text-gray-900">Content Locked</p>
+        <p className="text-[17px] font-bold text-gray-900 dark:text-gray-100">Content Locked</p>
         {paymentMode === 'choice' && (
-          <p className="text-[13px] text-gray-500 max-w-[320px]">
+          <p className="text-[13px] text-gray-500 max-w-[320px] dark:text-gray-400">
             Choose how you want to access this creator content.
           </p>
         )}
         {paymentMode === 'x402' && (
-          <p className="text-[13px] text-gray-500 max-w-[320px]">
+          <p className="text-[13px] text-gray-500 max-w-[320px] dark:text-gray-400">
             Pay <span className="font-semibold">{formatUsdc(sessionCap)} USDC</span> to unlock this creator content.
           </p>
         )}
-        <p className={paymentMode === 'x402' || paymentMode === 'choice' ? 'hidden' : 'text-[12px] text-gray-500 max-w-[280px]'}>
+        <p className={paymentMode === 'x402' || paymentMode === 'choice' ? 'hidden' : 'text-[12px] text-gray-500 max-w-[280px] dark:text-gray-400'}>
           {gateMode === 'unlock' ? (
             <>
               Pay <span className="font-semibold">${sessionCap.toFixed(2)} USDC</span> to unlock this creator content.
@@ -2299,7 +2296,7 @@ function OverlayShell({
         </p>
       </div>
       {children}
-      <div className="flex items-center gap-1.5 text-[10px] text-gray-400">
+      <div className="flex items-center gap-1.5 text-[10px] text-gray-400 dark:text-gray-500">
         {paymentMode === 'x402' ? 'Powered by Circle Gateway on Arc' : paymentMode === 'escrow' || paymentMode === 'choice' ? 'Powered by Hashpaylink Creator Checkout' : 'Powered by Arc Network'}
       </div>
     </div>

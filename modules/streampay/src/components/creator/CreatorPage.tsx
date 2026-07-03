@@ -1888,9 +1888,9 @@ function SettlementDashboard({
           />
 
           <div className="rounded-2xl border border-blue-100 bg-blue-50/60 px-4 py-3 dark:border-blue-400/20 dark:bg-blue-500/10">
-            <p className="text-[13px] font-bold text-gray-900 dark:text-blue-100">My posts and earnings</p>
+            <p className="text-[13px] font-bold text-gray-900 dark:text-blue-100">Signed-viewer settlement</p>
             <p className="mt-1 text-[12px] leading-5 text-gray-500 dark:text-blue-200/70">
-              Select a post to review viewers and claim to the creator wallet on Arc.
+              Advanced settlement for older signed-viewer gates.
             </p>
           </div>
 
@@ -1946,7 +1946,7 @@ function SettlementDashboard({
               <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-4 py-4 text-center dark:border-white/10 dark:bg-white/[0.04]">
                 <p className="text-[12px] font-semibold text-gray-600 dark:text-gray-300">No published posts in this session yet.</p>
                 <p className="mt-1 text-[11px] leading-5 text-gray-400 dark:text-gray-500">
-                  Publish a post first, or paste a gate link below.
+                  Publish a post first.
                 </p>
               </div>
             )}
@@ -1955,12 +1955,12 @@ function SettlementDashboard({
           {/* Gate link input */}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <span className="text-[13px] font-semibold text-gray-700 dark:text-gray-200">Published gate</span>
+              <span className="text-[13px] font-semibold text-gray-700 dark:text-gray-200">Gate lookup</span>
               <span className="text-[11px] text-gray-400 dark:text-gray-500">Auto-detects ID</span>
             </div>
             <input
               type="text"
-              placeholder="Paste gate link or content ID"
+              placeholder="Gate link or content ID"
               value={gateInput}
               onChange={e => handleGateInput(e.target.value)}
               className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-[13px] text-gray-800 placeholder:text-gray-300 focus:outline-none focus:border-gray-400 transition-colors min-h-[48px] dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-100 dark:placeholder:text-gray-600 dark:focus:border-white/30"
@@ -2136,11 +2136,11 @@ export function CreatorAdminPage() {
 
   return (
     <div className="mx-auto mb-12 mt-12 w-full max-w-[760px] px-4">
-      <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
-        <div className="border-b border-gray-100 px-5 py-5 sm:px-7">
+      <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-[#111216]">
+        <div className="border-b border-gray-100 px-5 py-5 sm:px-7 dark:border-white/10">
           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-blue-500">Hidden admin</p>
-          <h1 className="mt-1 text-[24px] font-black tracking-tight text-gray-950">Creator approvals</h1>
-          <p className="mt-1 text-[13px] leading-5 text-gray-400">
+          <h1 className="mt-1 text-[24px] font-black tracking-tight text-gray-950 dark:text-white">Creator approvals</h1>
+          <p className="mt-1 text-[13px] leading-5 text-gray-400 dark:text-gray-500">
             Review paid posts before they appear in public Discover.
           </p>
         </div>
@@ -2152,19 +2152,19 @@ export function CreatorAdminPage() {
               value={adminKey}
               onChange={event => setAdminKey(event.target.value)}
               placeholder="Creator admin key"
-              className="min-h-[48px] rounded-xl border-2 border-gray-200 px-4 text-[13px] font-semibold text-gray-800 outline-none transition-colors placeholder:text-gray-300 focus:border-gray-400"
+              className="min-h-[48px] rounded-xl border-2 border-gray-200 bg-white px-4 text-[13px] font-semibold text-gray-800 outline-none transition-colors placeholder:text-gray-300 focus:border-gray-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-100 dark:placeholder:text-gray-600 dark:focus:border-white/30"
             />
             <button
               type="button"
               onClick={() => loadPosts()}
               disabled={loading || !adminKey.trim()}
-              className="min-h-[48px] rounded-xl bg-gray-950 px-5 text-[12px] font-black text-white disabled:bg-gray-100 disabled:text-gray-400"
+              className="min-h-[48px] rounded-xl bg-gray-950 px-5 text-[12px] font-black text-white disabled:bg-gray-100 disabled:text-gray-400 dark:bg-white dark:text-gray-950 dark:disabled:bg-white/[0.08] dark:disabled:text-gray-500"
             >
               {loading ? 'Loading...' : 'Load reviews'}
             </button>
           </div>
 
-          <div className="flex gap-1 overflow-hidden rounded-xl border border-gray-100 bg-gray-50 p-1">
+          <div className="flex gap-1 overflow-hidden rounded-xl border border-gray-100 bg-gray-50 p-1 dark:border-white/10 dark:bg-white/[0.04]">
             {(['pending', 'approved', 'rejected'] as const).map(item => (
               <button
                 key={item}
@@ -2172,7 +2172,7 @@ export function CreatorAdminPage() {
                 onClick={() => setStatus(item)}
                 className={[
                   'min-h-10 flex-1 rounded-lg px-3 text-[11px] font-black capitalize transition-colors',
-                  status === item ? 'bg-gray-950 text-white' : 'text-gray-500 hover:bg-white hover:text-gray-900',
+                  status === item ? 'bg-gray-950 text-white dark:bg-white dark:text-gray-950' : 'text-gray-500 hover:bg-white hover:text-gray-900 dark:text-gray-400 dark:hover:bg-white/[0.08] dark:hover:text-gray-100',
                 ].join(' ')}
               >
                 {item}
@@ -2181,30 +2181,30 @@ export function CreatorAdminPage() {
           </div>
 
           {error && (
-            <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-[12px] font-semibold text-red-600">
+            <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-[12px] font-semibold text-red-600 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-300">
               {error}
             </div>
           )}
 
           <div className="max-h-[680px] space-y-3 overflow-y-auto [scrollbar-width:none]">
             {posts.map(post => (
-              <div key={post.id} className="rounded-2xl border border-gray-100 bg-gray-50/70 p-3">
+              <div key={post.id} className="rounded-2xl border border-gray-100 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
                 <div className="grid gap-3 sm:grid-cols-[96px_1fr]">
-                  <div className="aspect-video w-full overflow-hidden rounded-xl bg-gray-100 sm:h-24 sm:w-24">
+                  <div className="aspect-video w-full overflow-hidden rounded-xl bg-gray-100 sm:h-24 sm:w-24 dark:bg-white/[0.06]">
                     <img src={post.image} alt="" className="h-full w-full object-cover" />
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="rounded-full bg-white px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-gray-500">
+                      <span className="rounded-full bg-white px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-gray-500 dark:bg-[#111216] dark:text-gray-300">
                         {post.tag}
                       </span>
-                      <span className="rounded-full bg-gray-950 px-2 py-1 text-[9px] font-bold text-white">
+                      <span className="rounded-full bg-gray-950 px-2 py-1 text-[9px] font-bold text-white dark:bg-white dark:text-gray-950">
                         {post.price} USDC
                       </span>
                     </div>
-                    <h2 className="mt-2 text-[15px] font-black leading-tight text-gray-950">{post.title}</h2>
-                    <p className="mt-1 line-clamp-2 text-[12px] leading-5 text-gray-500">{post.description}</p>
-                    <p className="mt-2 truncate text-[11px] font-semibold text-gray-400">
+                    <h2 className="mt-2 text-[15px] font-black leading-tight text-gray-950 dark:text-gray-100">{post.title}</h2>
+                    <p className="mt-1 line-clamp-2 text-[12px] leading-5 text-gray-500 dark:text-gray-400">{post.description}</p>
+                    <p className="mt-2 truncate text-[11px] font-semibold text-gray-400 dark:text-gray-500">
                       {post.author || post.source} - {post.creator ? `${post.creator.slice(0, 8)}...${post.creator.slice(-6)}` : 'Creator'}
                     </p>
                   </div>
@@ -2213,7 +2213,7 @@ export function CreatorAdminPage() {
                   <button
                     type="button"
                     onClick={() => post.gateLink && window.open(post.gateLink, '_blank', 'noopener,noreferrer')}
-                    className="min-h-10 rounded-xl border border-gray-200 bg-white text-[12px] font-black text-gray-700"
+                    className="min-h-10 rounded-xl border border-gray-200 bg-white text-[12px] font-black text-gray-700 dark:border-white/10 dark:bg-[#111216] dark:text-gray-200"
                   >
                     Preview
                   </button>
@@ -2221,7 +2221,7 @@ export function CreatorAdminPage() {
                     type="button"
                     onClick={() => reviewPost(post, 'reject')}
                     disabled={busyId === post.contentId}
-                    className="min-h-10 rounded-xl border border-red-100 bg-red-50 text-[12px] font-black text-red-600 disabled:opacity-50"
+                    className="min-h-10 rounded-xl border border-red-100 bg-red-50 text-[12px] font-black text-red-600 disabled:opacity-50 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-300"
                   >
                     Reject
                   </button>
@@ -2229,7 +2229,7 @@ export function CreatorAdminPage() {
                     type="button"
                     onClick={() => reviewPost(post, 'approve')}
                     disabled={busyId === post.contentId}
-                    className="min-h-10 rounded-xl bg-gray-950 text-[12px] font-black text-white disabled:opacity-50"
+                    className="min-h-10 rounded-xl bg-gray-950 text-[12px] font-black text-white disabled:opacity-50 dark:bg-white dark:text-gray-950"
                   >
                     Approve
                   </button>
@@ -2237,9 +2237,9 @@ export function CreatorAdminPage() {
               </div>
             ))}
             {!loading && adminKey.trim() && posts.length === 0 && (
-              <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-4 py-8 text-center">
-                <p className="text-[13px] font-bold text-gray-700">No {status} posts.</p>
-                <p className="mt-1 text-[12px] text-gray-400">New creator submissions will appear here after publishing.</p>
+              <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-4 py-8 text-center dark:border-white/10 dark:bg-white/[0.04]">
+                <p className="text-[13px] font-bold text-gray-700 dark:text-gray-300">No {status} posts.</p>
+                <p className="mt-1 text-[12px] text-gray-400 dark:text-gray-500">New creator submissions will appear here after publishing.</p>
               </div>
             )}
           </div>
@@ -2381,7 +2381,7 @@ export function CreatorPage() {
     <div className="w-full max-w-[480px] mx-auto mt-12 mb-12">
       <div className="mb-3 px-1">
         <h1 className="text-[22px] font-black tracking-tight text-gray-950 dark:text-white">Creator Hub</h1>
-        <p className="mt-1 text-[13px] leading-5 text-gray-500 dark:text-gray-400">Discover, publish, and earn with USDC.</p>
+        <p className="mt-1 text-[13px] leading-5 text-gray-500 dark:text-gray-400">Publish content, track earnings, and recover streams.</p>
       </div>
       <div className="mb-5 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-[#111216]">
         <div className="grid grid-cols-4">
@@ -2398,7 +2398,7 @@ export function CreatorPage() {
                 type="button"
                 onClick={() => setActiveTab(tab.id)}
                 className={[
-                  'min-h-[58px] px-3 py-3 text-left transition-colors',
+                  'min-h-[58px] px-2 py-3 text-left transition-colors sm:px-3',
                   selected
                     ? 'bg-gray-950 text-white dark:bg-white dark:text-gray-950'
                     : 'bg-white text-gray-500 hover:bg-gray-50 dark:bg-[#111216] dark:text-gray-400 dark:hover:bg-white/[0.06]',
