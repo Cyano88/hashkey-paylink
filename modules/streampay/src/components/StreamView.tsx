@@ -703,7 +703,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
           {/* ── Actions ─────────────────────────────────────────────────── */}
           {!isCancelled && (
             <div className="space-y-2.5">
-              {telegramMode && (() => {
+              {(() => {
                 const claimable = stream?.claimable ?? 0n
                 const hasBalance = claimable > 0n
                 const circleConfigured = canUseCircleEvmEmailWallet('arc')
@@ -713,7 +713,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
                 const claimTitle = agenticMode ? 'Agent claim wallet' : 'Claim with Circle Smart Wallet'
                 const claimSubtitle = agenticMode
                   ? `Only ${agentSlug} recipient wallet can claim this stream.`
-                  : 'Telegram HashpayStream claims stay inside Circle on Arc'
+                  : 'Creators claim streamed USDC with the recipient Circle wallet on Arc'
                 const claimPlaceholder = agenticMode ? 'Recipient wallet email' : 'email@example.com'
 
                 if (actionKind === 'claim' && actionState === 'confirmed' && txHash) {
@@ -864,26 +864,130 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
                 )
               })()}
 
-              {/* Legacy browser-wallet stream interaction */}
-              {!telegramMode && !isConnected && (
-                <div className="rounded-xl border border-gray-100 bg-gray-50 py-3.5 text-center text-[12px] text-gray-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-500">
-                  Connect a browser wallet to use this legacy stream action.
-                </div>
-              )}
+              {(() => {
+                const circleConfigured = canUseCircleEvmEmailWallet('arc')
+                const senderWalletMatches = !!senderCircleSession && senderCircleSession.wallet.address.toLowerCase() === info._sender.toLowerCase()
 
-              {/* Wrong network */}
-              {!telegramMode && isConnected && !isOnArc && (
-                <button
-                  onClick={() => switchChain({ chainId: ARC_CHAIN_ID })}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-[13px] font-semibold transition-colors active:scale-[0.98] min-h-[52px]"
-                  style={{ background: '#111827', color: '#ffffff' }}
-                >
-                  Switch to Arc Network
-                </button>
-              )}
+                if (isComplete) return null
+
+                if (actionKind === 'cancel' && actionState === 'confirmed' && txHash) {
+                  return (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-center gap-2 rounded-xl border border-emerald-200 dark:border-emerald-900/40 bg-emerald-50 dark:bg-emerald-950/20 py-3">
+                        <svg className="h-4 w-4 text-emerald-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                        </svg>
+                        <span className="text-[13px] font-semibold text-emerald-700 dark:text-emerald-300">Stream ended</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => window.open(`${ARC_EXPLORER}/tx/${txHash}`, '_blank', 'noopener,noreferrer')}
+                        className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-gray-200 dark:border-white/10 py-3 text-[13px] font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors cursor-pointer"
+                      >
+                        <ExtLinkIcon />
+                        View on Arcscan
+                      </button>
+                    </div>
+                  )
+                }
+
+                return (
+                  <div className="rounded-2xl border border-gray-100 dark:border-white/10 bg-gray-50/70 dark:bg-white/[0.04] p-3.5 space-y-3">
+                    <div className="min-w-0">
+                      <p className="text-[12px] font-bold text-gray-800 dark:text-gray-100">Reader refund wallet</p>
+                      <p className="text-[11px] text-gray-500 dark:text-gray-400">End the stream from the sender Circle wallet to recover unstreamed USDC.</p>
+                    </div>
+
+                    {!senderCircleSession && (
+                      <input
+                        type="email"
+                        name="streampay-sender-email"
+                        autoComplete="email"
+                        placeholder="email@example.com"
+                        value={senderCircleEmail}
+                        onChange={e => setSenderCircleEmail(e.target.value)}
+                        disabled={actionState === 'signing' || actionState === 'relaying' || actionState === 'pending'}
+                        className="w-full rounded-xl border-2 border-gray-100 dark:border-white/10 bg-white dark:bg-[#15151a] px-4 py-3 text-[13px] text-gray-800 dark:text-gray-100 placeholder:text-gray-300 dark:placeholder:text-gray-600 focus:outline-none focus:border-blue-300 transition-colors disabled:opacity-50 min-h-[46px]"
+                      />
+                    )}
+
+                    {senderCircleSession && (
+                      <div className="rounded-xl border border-gray-100 dark:border-white/10 bg-white dark:bg-[#15151a] px-3 py-2.5 space-y-2">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500">Circle wallet</p>
+                            <p className="truncate font-mono text-[11px] text-gray-600 dark:text-gray-300">
+                              {senderCircleSession.wallet.address}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => copyCircleAddress('sender', senderCircleSession.wallet.address)}
+                            className="shrink-0 rounded-lg border border-gray-200 dark:border-white/10 px-2.5 py-1.5 text-[11px] font-semibold text-gray-600 dark:text-gray-300"
+                          >
+                            {circleCopied === 'sender' ? 'Copied' : 'Copy'}
+                          </button>
+                        </div>
+                        {!senderWalletMatches && (
+                          <div className="rounded-lg border border-red-100 dark:border-red-900/40 bg-red-50 dark:bg-red-950/20 px-2.5 py-2">
+                            <p className="text-[11px] font-semibold text-red-500 dark:text-red-300">
+                              This wallet did not start the stream.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {actionKind === 'cancel' && actionState === 'pending' && txHash ? (
+                      <button disabled
+                        className="flex w-full items-center justify-center gap-2.5 rounded-xl py-3.5 text-[13px] font-semibold"
+                        style={{ background: '#f3f4f6', color: '#6b7280', cursor: 'default' }}
+                      >
+                        Refund submitted on Arc
+                      </button>
+                    ) : actionKind === 'cancel' && (actionState === 'signing' || actionState === 'relaying') ? (
+                      <button disabled
+                        className="flex w-full items-center justify-center gap-2.5 rounded-xl py-3.5 text-[13px] font-semibold"
+                        style={{ background: '#111827', color: '#ffffff', opacity: 0.75, cursor: 'wait' }}
+                      >
+                        <svg className="h-4 w-4 animate-spin shrink-0" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                        {actionState === 'signing' ? 'Confirm in Circle Smart Wallet' : 'Broadcasting refund to Arc'}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={circleConfigured ? handleCircleCancel : undefined}
+                        disabled={!circleConfigured || (!!senderCircleSession && !senderWalletMatches) || (actionKind === 'claim' && actionState !== 'idle' && actionState !== 'error')}
+                        className="flex w-full items-center justify-center gap-2.5 rounded-xl py-3.5 text-[13px] font-semibold transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+                        style={{ background: '#111827', color: '#ffffff' }}
+                      >
+                        {!senderCircleSession
+                          ? 'Connect sender wallet'
+                          : !senderWalletMatches
+                            ? 'Wrong sender wallet'
+                            : 'End stream and refund unstreamed USDC'}
+                      </button>
+                    )}
+
+                    {actionKind === 'cancel' && actionState === 'error' && actionError && (
+                      <div className="rounded-xl border border-red-100 dark:border-red-900/40 bg-red-50 dark:bg-red-950/20 px-4 py-3 text-center space-y-1">
+                        <p className="text-[12px] font-semibold text-red-600 dark:text-red-300">{actionError}</p>
+                        <button
+                          onClick={() => { setActionState('idle'); setActionError(null) }}
+                          className="text-[11px] font-semibold text-red-500 dark:text-red-300 underline underline-offset-2"
+                        >
+                          Try again
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
 
               {/* ── Recipient withdraw flow ── */}
-              {!telegramMode && isRecipient && isOnArc && (() => {
+              {false && !telegramMode && isRecipient && isOnArc && (() => {
                 const claimable = stream?.claimable ?? 0n
                 const hasBalance = claimable > 0n
 
@@ -1031,7 +1135,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
               {/* Recipient complete — already handled inside the IIFE above */}
 
               {/* Sender cancel */}
-              {!telegramMode && isSender && !isComplete && isOnArc && (
+              {false && !telegramMode && isSender && !isComplete && isOnArc && (
                 <button
                   onClick={handleCancel}
                   disabled={actionState !== 'idle' && actionState !== 'error'}
@@ -1045,7 +1149,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
               )}
 
               {/* Observer */}
-              {!telegramMode && !isRecipient && !isSender && isConnected && (
+              {false && !telegramMode && !isRecipient && !isSender && isConnected && (
                 <a href="/"
                   className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 py-2.5 text-[13px] font-medium text-gray-500 hover:bg-gray-50 transition-colors"
                 >
