@@ -1194,6 +1194,9 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     setGeneratedLink('')
     setCopied(false)
     setVaultStep('idle')
+    setPaymentFlow('usdc')
+    setReceiveMode('paste')
+    setMultiChainMode(false)
   }
 
   function openPaymentMode(push = true) {
@@ -3156,6 +3159,14 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
           ) : billsMode ? (
             <>
             <div className="space-y-5 p-4 sm:p-5">
+              <button
+                type="button"
+                onClick={() => openPaymentMenu()}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/[0.1]"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" />
+                Back
+              </button>
               {!privyAuthenticated && (
                 <LocalCurrencySignInGate
                   title="Sign in for bills history"
@@ -3207,8 +3218,16 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
             <>
           <div className="overflow-hidden bg-gray-50/60 dark:bg-white/[0.035]">
             <div className="space-y-3.5 px-3.5 py-3 sm:p-4">
+              <button
+                type="button"
+                onClick={() => openPaymentMenu()}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/[0.1]"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" />
+                Back
+              </button>
 
-          {!accessMode && !multiChainMode && PRIVY_AUTH_ENABLED && (
+          {!accessMode && !multiChainMode && (PRIVY_AUTH_ENABLED || isBankReceive) && (
             <CircleReceiveSelector
               selectedNet={selectedNet}
               isEvmNet={isEvmNet}
