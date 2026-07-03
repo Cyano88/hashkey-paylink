@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react'
-import { useOutletContext, Link, useSearchParams } from 'react-router-dom'
+import { useOutletContext, Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { usePrivy } from '@privy-io/react-auth'
 import type { LayoutOutletContext } from '../Layout'
 import {
@@ -832,6 +832,7 @@ function LocalCurrencyProfileCard({
 
 export default function CreateLink({ initialProduct = 'payment' }: { initialProduct?: 'payment' | 'polymarket' } = {}) {
   const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
   const productParam = searchParams.get('product')
   const paymentTabParam = searchParams.get('tab')
   const initialProductTarget = (productParam ?? '').toLowerCase()
@@ -1101,7 +1102,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     const url = new URL(window.location.href)
     if (product === 'hub') url.searchParams.delete('product')
     else url.searchParams.set('product', product)
-    window.history.pushState({ hpCreateProduct: product }, '', `${url.pathname}${url.search}${url.hash}`)
+    navigate(`${url.pathname}${url.search}${url.hash}`)
   }
 
   function pushPaymentTabHistory(tab: PaymentTab) {
@@ -1110,7 +1111,27 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     url.searchParams.set('product', 'payment')
     if (tab === 'personal' || tab === 'usdc') url.searchParams.delete('tab')
     else url.searchParams.set('tab', tab)
-    window.history.pushState({ hpCreateProduct: 'payment', hpPaymentTab: tab }, '', `${url.pathname}${url.search}${url.hash}`)
+    navigate(`${url.pathname}${url.search}${url.hash}`)
+  }
+
+  function activateBankReceive() {
+    setPaymentFlow('bank')
+    setReceiveMode('bank')
+    setPaymentMode('personal')
+    setSelectedNet('base')
+    setMultiChainMode(false)
+    setAccessMode(false)
+    setPaymentMenuOpen(false)
+    setCirclePocketMode(false)
+    setPosMode(false)
+    setBillsMode(false)
+    setStreamMode(false)
+    setPolymarketMode(false)
+    setProductHubOpen(false)
+    setGeneratedLink('')
+    setCopied(false)
+    setVaultStep('idle')
+    if (!posCountry) setPosCountry('NG')
   }
 
   function openHubMode(push = true) {
@@ -1351,12 +1372,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
         return
       }
       if (tab === 'bank') {
-        setPaymentFlow('bank')
-        setReceiveMode('bank')
-        setPaymentMode('personal')
-        setSelectedNet('base')
-        setMultiChainMode(false)
-        if (!posCountry) setPosCountry('NG')
+        activateBankReceive()
       } else {
         setPaymentFlow('usdc')
         setReceiveMode('paste')
@@ -1407,12 +1423,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
           else {
             openPaymentMode(false)
             if (tab === 'bank') {
-              setPaymentFlow('bank')
-              setReceiveMode('bank')
-              setPaymentMode('personal')
-              setSelectedNet('base')
-              setMultiChainMode(false)
-              if (!posCountry) setPosCountry('NG')
+              activateBankReceive()
             } else {
               setPaymentFlow('usdc')
               setReceiveMode('paste')
@@ -2199,13 +2210,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     }
     if (tab === 'bank') {
       pushPaymentTabHistory('bank')
-      setPaymentFlow('bank')
-      setReceiveMode('bank')
-      setPaymentMode('personal')
-      setSelectedNet('base')
-      setMultiChainMode(false)
-      if (!posCountry) setPosCountry('NG')
-      openPaymentMode(false)
+      activateBankReceive()
       return
     }
     if (tab === 'pos') {
