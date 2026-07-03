@@ -947,9 +947,10 @@ export default function PaymentPage() {
   const missingSolana  = chain === 'solana'   && !resolvedSolana
   const effectiveMemo  = requiresAttendeeName ? attendeeName : (isFlex ? (flexMemo || memo) : memo)
 
+  const hasPaycrestMerchantRecipient = isNgPosPaycrestOfframp && !!ngPosMerchantId
   const isValidParams =
     (isFlex || (!isNaN(parseFloat(amt)) && parseFloat(amt) > 0)) &&
-    (isAddress(resolvedEvm) || !!resolvedSolana)
+    (isAddress(resolvedEvm) || !!resolvedSolana || hasPaycrestMerchantRecipient)
 
   // Whether the secondary direct-pay option should be shown for normal Hash PayLink payments.
   const canDirectSend =
@@ -2332,8 +2333,10 @@ export default function PaymentPage() {
   }
 
   async function handleCirclePasskeyPay() {
-    if (!activeRecipient || !showCircleEmailPay || !isAddress(activeRecipient)) return
-    if (paymentAmountBlocked || !payableAmt || parseFloat(payableAmt) <= 0) {
+    if (!showCircleEmailPay) return
+    const paycrestNeedsPreparation = isNgPosPaycrestOfframp && !paycrestOrder
+    if (!paycrestNeedsPreparation && (!activeRecipient || !isAddress(activeRecipient))) return
+    if (paymentAmountBlocked || (!paycrestNeedsPreparation && (!payableAmt || parseFloat(payableAmt) <= 0))) {
       setCirclePasskeyError(blockedAmountError())
       return
     }
@@ -2385,6 +2388,11 @@ export default function PaymentPage() {
         if (isNgPosPaycrestOfframp) {
           const ready = await prepareNgPosPaycrestOrder(session)
           if (!ready) return
+        }
+
+        if (!activeRecipient || !isAddress(activeRecipient) || !payableAmt || parseFloat(payableAmt) <= 0) {
+          setCirclePasskeyError('Naira payout is not ready yet. Prepare the payout, then try again.')
+          return
         }
 
         if (circleWalletBalance !== undefined && circleWalletBalance !== null && !circleWalletHasEnough) {
