@@ -53,6 +53,7 @@ import polymarketOrderHandler from './api/polymarket-order.js'
 import polymarketPortfolioHandler from './api/polymarket-portfolio.js'
 import polymarketSubmitOrderHandler from './api/polymarket-submit-order.js'
 import ngPosHandler from './api/ng-pos.js'
+import localCurrencyProfileHandler from './api/local-currency-profile.js'
 import { paycrestWebhookHandler } from './api/paycrest-pos.js'
 import streamRecipientInviteHandler from './api/stream-recipient-invite.js'
 import streamHistoryHandler from './api/stream-history.js'
@@ -186,6 +187,7 @@ app.post('/api/polymarket-order',       strictLimiter, polymarketOrderHandler)
 app.all('/api/polymarket-portfolio',    readLimiter,   polymarketPortfolioHandler)
 app.post('/api/polymarket-submit-order', strictLimiter, polymarketSubmitOrderHandler)
 app.all('/api/ng-pos',                  strictLimiter, ngPosHandler)
+app.all('/api/local-currency-profile',  strictLimiter, localCurrencyProfileHandler)
 app.post('/api/stream-recipient-invite', strictLimiter, streamRecipientInviteHandler)
 app.get('/api/stream-history',         readLimiter, streamHistoryHandler)
 app.all('/api/agentic-streaming-subscription', strictLimiter, agenticStreamingSubscriptionHandler)

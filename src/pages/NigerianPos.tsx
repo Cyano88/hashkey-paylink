@@ -260,7 +260,7 @@ export default function NigerianPos() {
             <div className="mb-3 flex items-start justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold text-gray-900 dark:text-white">Naira bank payout</p>
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Optional. Customers pay Base USDC from Circle Smart Wallet; Paycrest routes NGN to this account.</p>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Payers pay Base USDC. Naira goes to this bank account.</p>
               </div>
               <Banknote className="h-4 w-4 shrink-0 text-gray-400" />
             </div>
@@ -302,7 +302,7 @@ export default function NigerianPos() {
 
   if (!merchant) {
     return (
-      <PosShell eyebrow="Nigerian Retail Mode" title="Loading POS" body="Fetching merchant settlement options.">
+      <PosShell eyebrow="Nigerian Retail Mode" title="Loading POS" body="Fetching payout options.">
         {setupError ? <ErrorNote message={setupError} /> : <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-gray-400" /></div>}
       </PosShell>
     )
@@ -324,18 +324,18 @@ export default function NigerianPos() {
                   Static POS QR
                 </span>
                 <p className="text-sm font-semibold text-gray-900 dark:text-white">{merchant.display_name}</p>
-                <p className="mt-1 truncate text-xs text-gray-500 dark:text-gray-400">Customers scan once and enter their amount.</p>
+                <p className="mt-1 truncate text-xs text-gray-500 dark:text-gray-400">Payers scan once and enter their amount.</p>
                 <button
                   type="button"
                   onClick={copyQrLink}
                   className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/[0.1]"
                 >
                   <Copy className="h-3.5 w-3.5" />
-                  {copied ? 'Copied' : 'Copy customer link'}
+                  {copied ? 'Copied' : 'Copy payer link'}
                 </button>
               </div>
             </div>
-            <p className="mt-3 text-[11px] font-medium text-gray-400 dark:text-gray-500">Customer link ready</p>
+            <p className="mt-3 text-[11px] font-medium text-gray-400 dark:text-gray-500">Payer link ready</p>
           </div>
 
           <div className="grid gap-2">
@@ -358,7 +358,7 @@ export default function NigerianPos() {
               }}
               className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-800 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-100 dark:hover:bg-white/[0.1]"
             >
-              Preview customer payment
+              Preview payer checkout
             </button>
           </div>
         </div>
@@ -384,7 +384,7 @@ export default function NigerianPos() {
     <PosShell
       eyebrow="Nigerian Retail Mode"
       title={merchant.display_name}
-      body={merchant.bank_configured ? 'Pay in Naira. Checkout collects Base USDC and pays out to the merchant bank account.' : 'This POS terminal needs a verified merchant bank account.'}
+      body={merchant.bank_configured ? 'Enter the Naira amount. Checkout collects Base USDC and pays out to the merchant bank account.' : 'This POS terminal needs a verified merchant bank account.'}
       beforeHeader={settlementStep === 'amount' && !merchant.bank_configured ? (
         <button
           type="button"
@@ -497,7 +497,7 @@ export default function NigerianPos() {
                   <div className="mt-3 rounded-xl border border-emerald-200/80 bg-white/70 p-3 text-[11px] text-emerald-900 dark:border-emerald-300/20 dark:bg-white/[0.06] dark:text-emerald-100">
                     <p className="font-semibold">{quote.bank_account_name ?? merchant.bank_account_name}</p>
                     <p className="mt-0.5">{quote.bank_name ?? merchant.bank_name} ****{quote.bank_last4 ?? merchant.bank_last4}</p>
-                    <p className="mt-2 text-emerald-700 dark:text-emerald-200">Checkout collects Base USDC. Paycrest settles Naira to this bank account after payment.</p>
+                    <p className="mt-2 text-emerald-700 dark:text-emerald-200">Base USDC is converted to Naira for this bank account.</p>
                   </div>
                 )}
               </div>

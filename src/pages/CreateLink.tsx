@@ -136,9 +136,10 @@ function PaymentHubMark({ className }: { className?: string }) {
 }
 
 type VaultStep = 'idle' | 'ready'
-type ReceiveMode = 'email' | 'paste'
+type ReceiveMode = 'email' | 'paste' | 'bank'
 type PaymentMode = 'personal' | 'business'
-type PaymentTab = PaymentMode | 'pos' | 'bills'
+type PaymentFlow = 'usdc' | 'bank'
+type PaymentTab = PaymentMode | PaymentFlow | 'pos' | 'bills'
 type PosNetwork = 'base' | 'arbitrum' | 'arc' | 'solana'
 type CirclePocketView = 'chooser' | 'main' | 'x402'
 type CirclePocketTab = 'balance' | 'fund' | 'withdraw' | 'activity'
@@ -146,6 +147,11 @@ type PosCountry = 'NG' | 'KE' | 'GH'
 type PosSettlementPath = 'PAYCREST_NAIRA'
 type CreateProduct = 'payment' | 'agent' | 'circle-pocket' | 'pos' | 'streampay' | 'polymarket'
 type AccessView = 'overview' | 'wallet'
+type LocalCurrencyProfile = {
+  firstName: string
+  lastName: string
+  email: string
+}
 type CirclePocketWallet = {
   address: string
   walletId?: string
@@ -206,7 +212,7 @@ const POS_NETWORK_OPTIONS: Array<{ key: PosNetwork; label: string; badge?: strin
 const PAYCREST_POS_NETWORK_OPTIONS = POS_NETWORK_OPTIONS.filter((network) => network.key === 'base')
 
 const POS_COUNTRIES: Array<{ key: PosCountry; name: string; label: string; status: 'live' | 'soon'; copy: string }> = [
-  { key: 'NG', name: 'Nigeria', label: 'Live', status: 'live', copy: 'Customers pay Base USDC. Merchants receive Naira to a verified bank account.' },
+  { key: 'NG', name: 'Nigeria', label: 'Live', status: 'live', copy: 'Payers use Base USDC. You receive Naira to a verified bank account.' },
   { key: 'KE', name: 'Kenya', label: 'Coming soon', status: 'soon', copy: 'Pending a verified local wallet or payout partner.' },
   { key: 'GH', name: 'Ghana', label: 'Coming soon', status: 'soon', copy: 'Pending a verified local wallet or payout partner.' },
 ]
@@ -244,6 +250,21 @@ function CircleReceiveSelector({
   setEvmAddr,
   setSolanaAddr,
   setGeneratedLink,
+  bankCountry,
+  setBankCountry,
+  bankInstitutions,
+  bankInstitutionsBusy,
+  bankCode,
+  setBankCode,
+  bankName,
+  setBankName,
+  bankAccount,
+  setBankAccount,
+  bankAccountName,
+  bankVerified,
+  bankVerifyBusy,
+  bankError,
+  verifyBankAccount,
 }: {
   selectedNet: ChainKey
   isEvmNet: boolean
@@ -257,6 +278,21 @@ function CircleReceiveSelector({
   setEvmAddr: Dispatch<SetStateAction<string>>
   setSolanaAddr: Dispatch<SetStateAction<string>>
   setGeneratedLink: Dispatch<SetStateAction<string>>
+  bankCountry: PosCountry | null
+  setBankCountry: Dispatch<SetStateAction<PosCountry | null>>
+  bankInstitutions: PaycrestInstitutionOption[]
+  bankInstitutionsBusy: boolean
+  bankCode: string
+  setBankCode: Dispatch<SetStateAction<string>>
+  bankName: string
+  setBankName: Dispatch<SetStateAction<string>>
+  bankAccount: string
+  setBankAccount: Dispatch<SetStateAction<string>>
+  bankAccountName: string
+  bankVerified: boolean
+  bankVerifyBusy: boolean
+  bankError: string
+  verifyBankAccount: () => void
 }) {
   const circleEmailReceiveIntentKey = 'hashpaylink-circle-email-receive-intent'
   const { authenticated: privyAuthenticated, user: privyUser, logout: logoutPrivy, getAccessToken } = usePrivy()
@@ -375,10 +411,11 @@ function CircleReceiveSelector({
   }, [receiveMode, privyAuthenticated, privyEmail, selectedNet]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    if (receiveMode === 'bank') return
     if (canReceiveWithEmail) return
     setReceiveMode('paste')
     setCircleRecipientError(null)
-  }, [canReceiveWithEmail, setReceiveMode])
+  }, [canReceiveWithEmail, receiveMode, setReceiveMode])
 
   useEffect(() => {
     const hasCircleWallet = selectedNet === 'solana' ? solanaValid : isEvmNet && evmValid
@@ -429,9 +466,23 @@ function CircleReceiveSelector({
   return (
     <div className="space-y-1.5">
       <label className="text-sm font-medium text-gray-700 dark:text-gray-200">
-        Receive to
+        {receiveMode === 'bank' ? 'Bank payout' : 'Receive to'}
       </label>
-      <div className={cn('grid gap-2', canReceiveWithEmail ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1')}>
+      {receiveMode === 'bank' && !privyAuthenticated && (
+        <PrivyConnectButton
+          debugLabel="create-receive-bank"
+          loginOptions={{ loginMethods: ['email'] }}
+          logoutOnAuthenticated={false}
+          className="flex w-full items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-left text-gray-700 transition-all hover:border-gray-300 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-70 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:border-white/20 dark:hover:bg-white/[0.07]"
+        >
+          <span>
+            <span className="block text-sm font-semibold">Sign in to save bank payouts</span>
+            <span className="mt-0.5 block text-[11px] text-gray-400">Required for settlement history and support.</span>
+          </span>
+          <Mail className="h-4 w-4 text-blue-500" />
+        </PrivyConnectButton>
+      )}
+      {receiveMode !== 'bank' && <div className="grid gap-2">
         <button
           type="button"
           onClick={() => {
@@ -492,7 +543,104 @@ function CircleReceiveSelector({
             </span>
           </button>
         )}
-      </div>
+      </div>}
+
+      {receiveMode === 'bank' && (
+        <div className="space-y-2.5 rounded-xl border border-gray-100 bg-gray-50/70 p-2.5 dark:border-white/10 dark:bg-white/[0.04]">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Country</p>
+            <div className="relative mt-1">
+              <select
+                value={bankCountry ?? 'NG'}
+                onChange={(event) => {
+                  setBankCountry(event.target.value as PosCountry)
+                  setGeneratedLink('')
+                }}
+                className="w-full appearance-none rounded-lg border border-gray-200 bg-white px-3 py-2 pr-9 text-sm font-semibold text-gray-950 outline-none transition-all focus:border-gray-400 dark:border-white/10 dark:bg-gray-950 dark:text-white dark:focus:border-white/25"
+              >
+                <option value="NG">Nigeria</option>
+                <option value="GH" disabled>Ghana - coming soon</option>
+                <option value="KE" disabled>Kenya - coming soon</option>
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+            </div>
+          </div>
+
+          {bankCountry === 'NG' && (
+            <div className="space-y-2.5 border-t border-gray-100 pt-2.5 dark:border-white/10">
+              <label className="block">
+                <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Bank</span>
+                {bankInstitutions.length ? (
+                  <select
+                    value={bankCode}
+                    onChange={(event) => {
+                      const selected = bankInstitutions.find((institution) => institution.code === event.target.value)
+                      setBankCode(event.target.value)
+                      setBankName(selected?.name ?? '')
+                      setBankAccount('')
+                      setGeneratedLink('')
+                    }}
+                    className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-950 outline-none focus:border-gray-400 dark:border-white/10 dark:bg-gray-950 dark:text-white dark:focus:border-white/25"
+                  >
+                    <option value="">{bankInstitutionsBusy ? 'Loading banks...' : 'Select bank'}</option>
+                    {bankInstitutions.map((institution) => (
+                      <option key={institution.code} value={institution.code}>
+                        {institution.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    value={bankName || bankCode}
+                    onChange={(event) => {
+                      const value = event.target.value
+                      setBankName(value)
+                      setBankCode(value.trim())
+                      setGeneratedLink('')
+                    }}
+                    placeholder={bankInstitutionsBusy ? 'Loading banks...' : 'Zenith Bank'}
+                    className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-950 outline-none placeholder:text-gray-300 focus:border-gray-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-gray-600"
+                  />
+                )}
+              </label>
+              <label className="block">
+                <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Account number</span>
+                <div className="mt-1 flex gap-2">
+                  <input
+                    value={bankAccount}
+                    onChange={(event) => {
+                      setBankAccount(event.target.value.replace(/\D/g, '').slice(0, 10))
+                      setGeneratedLink('')
+                    }}
+                    inputMode="numeric"
+                    placeholder="0123456789"
+                    className="min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-950 outline-none placeholder:text-gray-300 focus:border-gray-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-gray-600"
+                  />
+                  <button
+                    type="button"
+                    onClick={verifyBankAccount}
+                    disabled={bankVerifyBusy || !bankCode || bankAccount.length !== 10}
+                    className="inline-flex min-w-[78px] items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-bold text-gray-700 transition-all hover:border-gray-300 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200"
+                  >
+                    {bankVerifyBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                    Verify
+                  </button>
+                </div>
+              </label>
+              {bankVerified && bankAccountName && (
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-300">
+                  {bankAccountName}
+                </div>
+              )}
+              {bankError && (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-300">
+                  {bankError}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {canReceiveWithEmail && receiveMode === 'email' && (
         <div className="rounded-xl border border-gray-100 bg-gray-50/70 px-3.5 py-3 dark:border-white/10 dark:bg-white/[0.04]">
@@ -548,14 +696,153 @@ function CircleReceiveSelector({
   )
 }
 
+function LocalCurrencySignInGate({
+  title,
+  body,
+}: {
+  title: string
+  body: string
+}) {
+  return (
+    <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
+      <div className="flex items-start gap-3">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-gray-700 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200">
+          <Mail className="h-4 w-4" />
+        </span>
+        <div className="min-w-0">
+          <p className="text-sm font-bold text-gray-950 dark:text-white">{title}</p>
+          <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">{body}</p>
+        </div>
+      </div>
+      <PrivyConnectButton
+        loginOptions={{ loginMethods: ['email'] }}
+        logoutOnAuthenticated={false}
+        className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-gray-950 px-4 py-3 text-sm font-bold text-white shadow-sm transition-all hover:bg-black active:scale-[0.98] disabled:opacity-60 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-100"
+      >
+        <Mail className="h-4 w-4" />
+        Sign in to continue
+      </PrivyConnectButton>
+      <p className="mt-3 text-center text-[11px] font-medium leading-relaxed text-gray-400 dark:text-gray-500">
+        Sign-in saves local currency history, receipts, payout context, and support records.
+      </p>
+    </div>
+  )
+}
+
+function LocalCurrencyProfileCard({
+  profile,
+  draft,
+  email,
+  busy,
+  error,
+  bankAccountName,
+  onDraftChange,
+  onSave,
+}: {
+  profile: LocalCurrencyProfile | null
+  draft: LocalCurrencyProfile
+  email: string
+  busy: boolean
+  error: string
+  bankAccountName?: string
+  onDraftChange: (next: LocalCurrencyProfile) => void
+  onSave: () => void
+}) {
+  const complete = Boolean(profile?.firstName && profile?.lastName && profile?.email)
+  const dirty = Boolean(profile && (
+    profile.firstName !== draft.firstName ||
+    profile.lastName !== draft.lastName ||
+    profile.email !== (email || draft.email)
+  ))
+  const fullName = `${draft.firstName} ${draft.lastName}`.trim()
+  const bankMismatch = Boolean(bankAccountName && fullName && !bankAccountName.toLowerCase().includes(draft.lastName.trim().toLowerCase()))
+  return (
+    <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-bold text-gray-950 dark:text-white">Your payout profile</p>
+          <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+            Used for receipts, payout support, and matching bank payment records.
+          </p>
+        </div>
+        {complete && (
+          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-bold text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-300">
+            Saved
+          </span>
+        )}
+      </div>
+
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        <label className="block">
+          <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">First name</span>
+          <input
+            value={draft.firstName}
+            onChange={(event) => onDraftChange({ ...draft, firstName: event.target.value })}
+            placeholder="First name"
+            className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-medium text-gray-950 outline-none placeholder:text-gray-300 focus:border-gray-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-gray-600 dark:focus:border-white/25"
+          />
+        </label>
+        <label className="block">
+          <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Last name</span>
+          <input
+            value={draft.lastName}
+            onChange={(event) => onDraftChange({ ...draft, lastName: event.target.value })}
+            placeholder="Last name"
+            className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-medium text-gray-950 outline-none placeholder:text-gray-300 focus:border-gray-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-gray-600 dark:focus:border-white/25"
+          />
+        </label>
+      </div>
+
+      <label className="mt-2 block">
+        <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Email</span>
+        <input
+          value={email || draft.email}
+          readOnly
+          placeholder="Signed-in email"
+          className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-100 px-3 py-2 text-sm font-medium text-gray-500 outline-none dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-400"
+        />
+      </label>
+
+      {bankMismatch && (
+        <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium leading-relaxed text-amber-700 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-200">
+          Bank account name is {bankAccountName}. Make sure this payout account belongs to you or your business.
+        </p>
+      )}
+
+      {error && (
+        <p className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-300">
+          {error}
+        </p>
+      )}
+
+      {(!complete || dirty) && (
+        <button
+          type="button"
+          onClick={onSave}
+          disabled={busy || !draft.firstName.trim() || !draft.lastName.trim() || !(email || draft.email)}
+          className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-gray-950 px-4 py-3 text-sm font-bold text-white transition-all hover:bg-black active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-100"
+        >
+          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCheck className="h-4 w-4" />}
+          {dirty ? 'Save changes' : 'Save payout profile'}
+        </button>
+      )}
+    </div>
+  )
+}
+
 export default function CreateLink({ initialProduct = 'payment' }: { initialProduct?: 'payment' | 'polymarket' } = {}) {
   const [searchParams] = useSearchParams()
   const productParam = searchParams.get('product')
   const paymentTabParam = searchParams.get('tab')
   const initialProductTarget = (productParam ?? '').toLowerCase()
   const startsInProduct = Boolean(initialProductTarget) || initialProduct === 'polymarket' || window.location.pathname === '/polymarket'
+  const startsInPaymentMenu = initialProductTarget === 'payment' && !paymentTabParam
   const { authenticated: privyAuthenticated, user: privyUser, logout: logoutPrivy, getAccessToken } = usePrivy()
   const privyEmail = emailFromPrivyUser(privyUser).trim().toLowerCase()
+  const [localCurrencyProfile, setLocalCurrencyProfile] = useState<LocalCurrencyProfile | null>(null)
+  const [localCurrencyProfileDraft, setLocalCurrencyProfileDraft] = useState<LocalCurrencyProfile>({ firstName: '', lastName: '', email: '' })
+  const [localCurrencyProfileBusy, setLocalCurrencyProfileBusy] = useState(false)
+  const [localCurrencyProfileError, setLocalCurrencyProfileError] = useState('')
   const [evmAddr,       setEvmAddr]       = useState('')
   const [solanaAddr,    setSolanaAddr]    = useState('')
   const [amt,           setAmt]           = useState('')
@@ -572,6 +859,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   const [accessView,     setAccessView]     = useState<AccessView>('overview')
   const [agentUrl,       setAgentUrl]       = useState('')
   const [agentUrlStatus, setAgentUrlStatus] = useState<'idle' | 'checking' | 'ok' | 'incompatible'>('idle')
+  const [paymentFlow,    setPaymentFlow]    = useState<PaymentFlow>('usdc')
   const [receiveMode,    setReceiveMode]    = useState<ReceiveMode>('paste')
   const [circlePocketMode, setCirclePocketMode] = useState(false)
   const [circlePocketView, setCirclePocketView] = useState<CirclePocketView>('chooser')
@@ -599,6 +887,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   const [polymarketMode, setPolymarketMode] = useState(initialProduct === 'polymarket' || window.location.pathname === '/polymarket')
   const [polymarketSpotlightIndex, setPolymarketSpotlightIndex] = useState(0)
   const [productHubOpen, setProductHubOpen] = useState(!startsInProduct)
+  const [paymentMenuOpen, setPaymentMenuOpen] = useState(startsInPaymentMenu)
   const [posCountry,     setPosCountry]     = useState<PosCountry | null>(null)
   const [posSettlementPath, setPosSettlementPath] = useState<PosSettlementPath | null>(null)
   const [posMerchantName, setPosMerchantName] = useState('')
@@ -646,8 +935,19 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   }, [selectedNet, onNetworkSelect])
 
   useEffect(() => {
-    if (multiChainMode) setReceiveMode('paste')
-  }, [multiChainMode])
+    if (receiveMode === 'bank' && selectedNet !== 'base') onNetworkSelect('base')
+  }, [receiveMode, selectedNet, onNetworkSelect])
+
+  useEffect(() => {
+    if (receiveMode === 'bank' && !posCountry) setPosCountry('NG')
+  }, [receiveMode, posCountry])
+
+  useEffect(() => {
+    if (receiveMode !== 'bank') return
+    setPosBankVerified(false)
+    setPosBankAccountName('')
+    setPosError('')
+  }, [receiveMode, posBankCode, posBankAccount])
   // Background check — null=checking, true=deployed, false=not deployed
 
   // ── Wallet hooks ──────────────────────────────────────────────────────────
@@ -726,15 +1026,22 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   const solanaValid = isValidSolanaAddr(solanaAddr)
   const isValidAmt  = amtDirty && /^(?:\d+|\d*\.\d+)$/.test(amt) && Number(amt) > 0
   const paymentMode: PaymentMode = eventMode ? 'business' : 'personal'
+  const localCurrencyProfileReady = Boolean(localCurrencyProfile?.firstName && localCurrencyProfile?.lastName && (localCurrencyProfile.email || privyEmail))
 
   // In access mode event collection is always on
   const effectiveEventMode = accessMode || eventMode
 
-  const hasAddress = multiChainMode
+  const isBankReceive = paymentFlow === 'bank' || receiveMode === 'bank'
+  const hasAddress = isBankReceive
+    ? Boolean(posBankVerified && posBankCode && posBankAccountName)
+    : multiChainMode
     ? (evmValid || solanaValid)
     : (selectedNet === 'solana' ? solanaValid : evmValid)
 
-  const canGenerate = (flexAmount || isValidAmt) && hasAddress && (!accessMode || agentUrlStatus === 'ok')
+  const canGenerateBankReceive = isBankReceive && !flexAmount && isValidAmt && hasAddress && privyAuthenticated && localCurrencyProfileReady
+  const canGenerate = isBankReceive
+    ? canGenerateBankReceive
+    : (flexAmount || isValidAmt) && hasAddress && (!accessMode || agentUrlStatus === 'ok')
 
   const canReceiveWithEmail =
     !multiChainMode &&
@@ -797,7 +1104,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     if (typeof window === 'undefined') return
     const url = new URL(window.location.href)
     url.searchParams.set('product', 'payment')
-    if (tab === 'personal') url.searchParams.delete('tab')
+    if (tab === 'personal' || tab === 'usdc') url.searchParams.delete('tab')
     else url.searchParams.set('tab', tab)
     window.history.pushState({ hpCreateProduct: 'payment', hpPaymentTab: tab }, '', `${url.pathname}${url.search}${url.hash}`)
   }
@@ -806,6 +1113,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     if (push) pushProductHistory('hub')
     window.dispatchEvent(new CustomEvent('agent-hash-mode', { detail: { mode: 'support' } }))
     setProductHubOpen(true)
+    setPaymentMenuOpen(false)
     setAccessMode(false)
     setCirclePocketMode(false)
     setPosMode(false)
@@ -820,6 +1128,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   function toggleAccessMode(on: boolean, push = true) {
     if (on && push) pushProductHistory('agent')
     setProductHubOpen(false)
+    setPaymentMenuOpen(false)
     setCirclePocketMode(false)
     setPosMode(false)
     setBillsMode(false)
@@ -845,6 +1154,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     if (push) pushProductHistory('circle-pocket')
     window.dispatchEvent(new CustomEvent('agent-hash-mode', { detail: { mode: 'payments' } }))
     setProductHubOpen(false)
+    setPaymentMenuOpen(false)
     setCirclePocketMode(true)
     setCirclePocketView(view)
     setAccessMode(false)
@@ -869,10 +1179,28 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     openHubMode()
   }
 
-  function openPaymentMode(push = true) {
+  function openPaymentMenu(push = true) {
     if (push) pushProductHistory('payment')
     window.dispatchEvent(new CustomEvent('agent-hash-mode', { detail: { mode: 'payments' } }))
     setProductHubOpen(false)
+    setPaymentMenuOpen(true)
+    setAccessMode(false)
+    setCirclePocketMode(false)
+    setPosMode(false)
+    setBillsMode(false)
+    setStreamMode(false)
+    setPolymarketMode(false)
+    setAccessView('overview')
+    setGeneratedLink('')
+    setCopied(false)
+    setVaultStep('idle')
+  }
+
+  function openPaymentMode(push = true) {
+    if (push) pushPaymentTabHistory(paymentFlow)
+    window.dispatchEvent(new CustomEvent('agent-hash-mode', { detail: { mode: 'payments' } }))
+    setProductHubOpen(false)
+    setPaymentMenuOpen(false)
     setAccessMode(false)
     setCirclePocketMode(false)
     setPosMode(false)
@@ -891,6 +1219,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
       else pushProductHistory('pos')
     }
     setProductHubOpen(false)
+    setPaymentMenuOpen(false)
     setPosMode(true)
     setCirclePocketMode(false)
     setBillsMode(false)
@@ -917,6 +1246,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   function closePosMode() {
     pushPaymentTabHistory('personal')
     setProductHubOpen(false)
+    setPaymentMenuOpen(true)
     setPosMode(false)
     setPosCountry(null)
     setPosSettlementPath(null)
@@ -930,6 +1260,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     if (push) pushPaymentTabHistory('bills')
     window.dispatchEvent(new CustomEvent('agent-hash-mode', { detail: { mode: 'payments' } }))
     setProductHubOpen(false)
+    setPaymentMenuOpen(false)
     setBillsMode(true)
     setCirclePocketMode(false)
     setPosMode(false)
@@ -945,6 +1276,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   function openStreamMode(push = true) {
     if (push) pushProductHistory('streampay')
     setProductHubOpen(false)
+    setPaymentMenuOpen(false)
     setStreamMode(true)
     setCirclePocketMode(false)
     setPosMode(false)
@@ -965,6 +1297,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   function openPolymarketMode(push = true) {
     if (push) pushProductHistory('polymarket')
     setProductHubOpen(false)
+    setPaymentMenuOpen(false)
     setPolymarketMode(true)
     setStreamMode(false)
     setCirclePocketMode(false)
@@ -988,7 +1321,12 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
 
     if (product === 'payment') {
       const tab = (paymentTabParam ?? '').toLowerCase()
+      if (!tab) {
+        openPaymentMenu(false)
+        return
+      }
       setAccessMode(false)
+      setPaymentMenuOpen(false)
       setCirclePocketMode(false)
       setPosMode(false)
       setBillsMode(false)
@@ -1005,7 +1343,18 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
         openBillsMode(false)
         return
       }
-      setPaymentMode(tab === 'business' ? 'business' : 'personal')
+      if (tab === 'bank') {
+        setPaymentFlow('bank')
+        setReceiveMode('bank')
+        setPaymentMode('personal')
+        setSelectedNet('base')
+        setMultiChainMode(false)
+        if (!posCountry) setPosCountry('NG')
+      } else {
+        setPaymentFlow('usdc')
+        setReceiveMode('paste')
+        setPaymentMode(tab === 'business' ? 'business' : 'personal')
+      }
       return
     }
 
@@ -1047,8 +1396,22 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
         if (tab === 'pos') openPosMode(false, true)
         else if (tab === 'bills') openBillsMode(false)
         else {
-          openPaymentMode(false)
-          setPaymentMode(tab === 'business' ? 'business' : 'personal')
+          if (!tab) openPaymentMenu(false)
+          else {
+            openPaymentMode(false)
+            if (tab === 'bank') {
+              setPaymentFlow('bank')
+              setReceiveMode('bank')
+              setPaymentMode('personal')
+              setSelectedNet('base')
+              setMultiChainMode(false)
+              if (!posCountry) setPosCountry('NG')
+            } else {
+              setPaymentFlow('usdc')
+              setReceiveMode('paste')
+              setPaymentMode(tab === 'business' ? 'business' : 'personal')
+            }
+          }
         }
       }
       if (product === 'agent') toggleAccessMode(true, false)
@@ -1322,7 +1685,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   const posNeedsEvmWallet = !posIsPaycrestFlow && posNetworks.some((network) => network !== 'solana')
   const posNeedsSolanaWallet = !posIsPaycrestFlow && posNetworks.includes('solana')
   const posNetworkOptions = posIsPaycrestFlow ? PAYCREST_POS_NETWORK_OPTIONS : POS_NETWORK_OPTIONS
-  const posPaycrestReady = !posIsPaycrestFlow || (posBankVerified && posBankCode && posBankAccountName)
+  const posPaycrestReady = !posIsPaycrestFlow || (posBankVerified && posBankCode && posBankAccountName && localCurrencyProfileReady)
   const posMerchantNetworks = posMerchant?.supported_networks?.length ? posMerchant.supported_networks : ['base']
   const posDashboardNetwork = posMerchantNetworks.find((network) => network !== 'solana') ?? 'solana'
   const posDashboardAddressParam = posDashboardNetwork === 'solana' ? 's' : 'e'
@@ -1346,16 +1709,87 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     setPosError('')
   }
 
+  async function requestLocalCurrencyProfile(action: 'get' | 'save') {
+    const token = await getAccessToken()
+    if (!token) throw new Error('Sign in again to save local currency profile.')
+    const response = await fetch('/api/local-currency-profile', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        action,
+        first_name: localCurrencyProfileDraft.firstName,
+        last_name: localCurrencyProfileDraft.lastName,
+        email: privyEmail || localCurrencyProfileDraft.email,
+      }),
+    })
+    const data = await response.json().catch(() => undefined) as {
+      ok?: boolean
+      error?: string
+      email?: string
+      profile?: LocalCurrencyProfile | null
+    } | undefined
+    if (!response.ok || !data?.ok) throw new Error(data?.error ?? 'Profile request failed.')
+    return data
+  }
+
+  async function loadLocalCurrencyProfile() {
+    if (!privyAuthenticated) {
+      setLocalCurrencyProfile(null)
+      setLocalCurrencyProfileDraft({ firstName: '', lastName: '', email: '' })
+      setLocalCurrencyProfileError('')
+      return
+    }
+    setLocalCurrencyProfileBusy(true)
+    setLocalCurrencyProfileError('')
+    try {
+      const data = await requestLocalCurrencyProfile('get')
+      const profile = data.profile ?? null
+      setLocalCurrencyProfile(profile)
+      setLocalCurrencyProfileDraft({
+        firstName: profile?.firstName ?? '',
+        lastName: profile?.lastName ?? '',
+        email: profile?.email ?? data.email ?? privyEmail,
+      })
+    } catch (error) {
+      setLocalCurrencyProfileError(error instanceof Error ? error.message : 'Could not load payout profile.')
+      setLocalCurrencyProfileDraft(current => ({ ...current, email: privyEmail || current.email }))
+    } finally {
+      setLocalCurrencyProfileBusy(false)
+    }
+  }
+
+  async function saveLocalCurrencyProfile() {
+    setLocalCurrencyProfileBusy(true)
+    setLocalCurrencyProfileError('')
+    try {
+      const data = await requestLocalCurrencyProfile('save')
+      if (!data.profile) throw new Error('Profile was not saved.')
+      setLocalCurrencyProfile(data.profile)
+      setLocalCurrencyProfileDraft(data.profile)
+    } catch (error) {
+      setLocalCurrencyProfileError(error instanceof Error ? error.message : 'Could not save payout profile.')
+    } finally {
+      setLocalCurrencyProfileBusy(false)
+    }
+  }
+
   useEffect(() => {
-    if (!posIsPaycrestFlow) return
+    void loadLocalCurrencyProfile()
+  }, [privyAuthenticated, privyEmail]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!posIsPaycrestFlow && receiveMode !== 'bank') return
     setPosNetworks((current) => {
       const supported = current.filter((network) => network === 'base')
       return supported.length ? supported : ['base']
     })
-  }, [posIsPaycrestFlow])
+  }, [posIsPaycrestFlow, receiveMode])
 
   useEffect(() => {
-    if (!posIsPaycrestFlow) return
+    if (!posIsPaycrestFlow && receiveMode !== 'bank') return
     setPosBankInstitutionsBusy(true)
     fetch('/api/ng-pos', {
       method: 'POST',
@@ -1372,7 +1806,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
         setPosError(error instanceof Error ? error.message : 'Could not load Paycrest banks.')
       })
       .finally(() => setPosBankInstitutionsBusy(false))
-  }, [posIsPaycrestFlow])
+  }, [posIsPaycrestFlow, receiveMode])
 
   async function verifyPosBankAccount() {
     setPosBankVerifyBusy(true)
@@ -1401,14 +1835,27 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   }
 
   async function createPosMerchant() {
+    if (!privyAuthenticated) {
+      setPosError('Sign in to create POS and save local currency receipts.')
+      return
+    }
     setPosBusy(true)
     setPosError('')
     try {
+      const token = await getAccessToken()
+      if (!token) throw new Error('Sign in again to create POS.')
       const response = await fetch('/api/ng-pos', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: {
+          'content-type': 'application/json',
+          authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({
           action: 'createMerchant',
+          owner_id: String(privyUser?.id ?? ''),
+          owner_email: privyEmail,
+          owner_first_name: localCurrencyProfile?.firstName,
+          owner_last_name: localCurrencyProfile?.lastName,
           payout_preference: posIsPaycrestFlow ? 'INSTANT_FIAT' : 'KEEP_CRYPTO',
           display_name: posMerchantName.trim(),
           supported_networks: posIsPaycrestFlow ? ['base'] : posNetworks,
@@ -1565,8 +2012,67 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   }
 
   // ── Generate handler ───────────────────────────────────────────────────
+  async function createBankReceiveLink() {
+    if (!canGenerateBankReceive) return
+    setPosBusy(true)
+    setPosError('')
+    try {
+      const token = await getAccessToken()
+      if (!token) throw new Error('Sign in again to create bank receive links.')
+      const response = await fetch('/api/ng-pos', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          action: 'createBankReceive',
+          owner_id: String(privyUser?.id ?? ''),
+          owner_email: privyEmail,
+          owner_first_name: localCurrencyProfile?.firstName || localCurrencyProfileDraft.firstName,
+          owner_last_name: localCurrencyProfile?.lastName || localCurrencyProfileDraft.lastName,
+          display_name: memo.trim() || 'Bank receive',
+          amount: amt,
+          bank_name: posBankName,
+          bank_code: posBankCode,
+          account_number: posBankAccount,
+          account_name: posBankAccountName,
+          client_origin: window.location.origin,
+        }),
+      })
+      const data = await response.json().catch(() => undefined) as {
+        ok?: boolean
+        error?: string
+        link?: {
+          payment_url?: string
+          dashboard_url?: string
+        }
+      } | undefined
+      if (!response.ok || !data?.ok || !data.link?.payment_url) throw new Error(data?.error || 'Could not create bank receive link.')
+      const link = data.link.payment_url
+      setGeneratedLink(link)
+      setVaultStep('ready')
+      const entry: SavedEvent = {
+        dashboardUrl: data.link.dashboard_url || buildGlobalDashboardLink(),
+        paymentUrl: link,
+        eventName: memo.trim() || 'Bank receive',
+        ts: Date.now(),
+      }
+      localStorage.setItem('hp_last_event', JSON.stringify(entry))
+      setSavedEvent(entry)
+    } catch (error) {
+      setPosError(error instanceof Error ? error.message : 'Could not create bank receive link.')
+    } finally {
+      setPosBusy(false)
+    }
+  }
+
   function handleGenerate() {
     if (!canGenerate) return
+    if (isBankReceive) {
+      void createBankReceiveLink()
+      return
+    }
     const link = buildLink()
     setGeneratedLink(link)
     setVaultStep('ready')
@@ -1622,22 +2128,22 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     setGeneratedLink(''); setCopied(false); setMultiChainMode(false); setFlexAmount(false)
     setEventMode(false)
     setVaultStep('idle')
-    setAccessMode(false); setCirclePocketMode(false); setPosMode(false); setBillsMode(false); setPolymarketMode(false); setAgentUrl(''); setAgentUrlStatus('idle')
+    setAccessMode(false); setPaymentMenuOpen(false); setCirclePocketMode(false); setPosMode(false); setBillsMode(false); setPolymarketMode(false); setAgentUrl(''); setAgentUrlStatus('idle')
   }
 
   const linkReady = generatedLink !== ''
-  const chatCta = productHubOpen || posMode || billsMode || streamMode || accessMode || circlePocketMode
+  const chatCta = productHubOpen || paymentMenuOpen || posMode || billsMode || streamMode || accessMode || circlePocketMode
     ? null
     : polymarketMode
       ? { label: 'Open PolyDesk', url: telegramStartUrl('polymarket') }
       : { label: 'Open payments in Telegram', url: telegramStartUrl('payment_links') }
-  const isPaymentView = !productHubOpen && !accessMode && !circlePocketMode && !posMode && !billsMode && !streamMode && !polymarketMode
-  const activePaymentTab: PaymentTab = posMode ? 'pos' : billsMode ? 'bills' : paymentMode
-  const paymentTabs = [
-    { key: 'personal', title: 'Personal', icon: UserRound },
-    { key: 'business', title: 'Business', icon: Briefcase },
-    { key: 'pos', title: 'POS', icon: Store },
-    { key: 'bills', title: 'Bills', icon: Landmark },
+  const isPaymentView = !productHubOpen && !paymentMenuOpen && !accessMode && !circlePocketMode && !posMode && !billsMode && !streamMode && !polymarketMode
+  const showHowItWorks = productHubOpen || posMode || streamMode || accessMode || polymarketMode
+  const paymentTabs: Array<{ key: PaymentTab; title: string; body: string; icon: typeof UserRound; badge?: string }> = [
+    { key: 'usdc', title: 'Receive USDC', body: 'Anyone pays USDC. You receive USDC in your wallet.', icon: Wallet, badge: 'No account' },
+    { key: 'bank', title: 'Receive to Bank', body: 'Anyone pays Base USDC. You receive Naira in your bank account.', icon: Landmark, badge: 'Sign-in required' },
+    { key: 'pos', title: 'POS', body: 'Create a static checkout QR for in-store payments.', icon: Store, badge: 'Sign-in required' },
+    { key: 'bills', title: 'Bills', body: 'Pay bills and keep receipts in local currency history.', icon: Landmark, badge: 'Sign-in required' },
   ] as const
   const howItWorksSteps = productHubOpen
     ? [
@@ -1655,7 +2161,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     ? [
         { n: '1', title: 'Choose country', body: 'Pick the local POS flow' },
         { n: '2', title: 'Add wallet', body: 'Select supported networks' },
-        { n: '3', title: 'Show QR', body: 'Customers scan and pay USDC' },
+        { n: '3', title: 'Show QR', body: 'Payers scan and pay USDC' },
       ]
     : streamMode
     ? [
@@ -1676,10 +2182,23 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
       ]
 
   function setPaymentTab(tab: PaymentTab) {
-    if (tab === 'personal' || tab === 'business') {
+    if (tab === 'usdc' || tab === 'personal' || tab === 'business') {
       pushPaymentTabHistory(tab)
+      setPaymentFlow('usdc')
+      setReceiveMode('paste')
       openPaymentMode(false)
-      setPaymentMode(tab)
+      setPaymentMode(tab === 'business' ? 'business' : 'personal')
+      return
+    }
+    if (tab === 'bank') {
+      pushPaymentTabHistory('bank')
+      setPaymentFlow('bank')
+      setReceiveMode('bank')
+      setPaymentMode('personal')
+      setSelectedNet('base')
+      setMultiChainMode(false)
+      if (!posCountry) setPosCountry('NG')
+      openPaymentMode(false)
       return
     }
     if (tab === 'pos') {
@@ -1689,25 +2208,36 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     openBillsMode(true)
   }
 
-  function PaymentTabs() {
+  function PaymentFlowCards() {
     return (
-      <div className="grid min-w-0 grid-cols-4 border-b border-gray-100 bg-white p-1.5 dark:border-white/10 dark:bg-white/[0.04]">
-        {paymentTabs.map(({ key, title, icon: Icon }) => {
-          const active = activePaymentTab === key
+      <div className="space-y-2">
+        {paymentTabs.map(({ key, title, body, icon: Icon, badge }) => {
           return (
             <button
               key={key}
               type="button"
               onClick={() => setPaymentTab(key)}
-              className={cn(
-                'flex h-[52px] min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl text-[11px] font-semibold transition-all',
-                active
-                  ? 'bg-gray-950 text-white shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:text-white dark:ring-white/10'
-                  : 'text-gray-500 hover:bg-gray-50 hover:text-gray-800 dark:hover:bg-white/[0.06] dark:hover:text-gray-200',
-              )}
+              className="group flex min-h-[92px] w-full items-center justify-between gap-3 rounded-2xl border border-gray-100 bg-white p-3.5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-gray-200 hover:shadow-md active:scale-[0.99] dark:border-white/10 dark:bg-[#111216] dark:hover:border-white/20"
             >
-              <Icon className="h-5 w-5" />
-              {title}
+              <span className="flex min-w-0 items-center gap-3">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-gray-600 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300">
+                  <Icon className="h-[18px] w-[18px]" />
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-[14px] font-black text-gray-950 dark:text-white">{title}</span>
+                  <span className="mt-1 block text-[12px] leading-5 text-gray-500 dark:text-gray-400">{body}</span>
+                </span>
+              </span>
+              <span className="flex shrink-0 items-center gap-2">
+                {badge && (
+                  <span className="hidden rounded-full border border-gray-200 bg-gray-50 px-2 py-1 text-[10px] font-bold text-gray-500 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-400 sm:inline-flex">
+                    {badge}
+                  </span>
+                )}
+                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gray-950 text-white transition-transform group-hover:translate-x-0.5 dark:bg-white dark:text-gray-950">
+                  <ChevronDown className="-rotate-90 h-4 w-4" />
+                </span>
+              </span>
             </button>
           )
         })}
@@ -1720,7 +2250,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
       {/* ── Hero ──────────────────────────────────────────────────────── */}
       <div className={cn(
         'mb-6 flex flex-col',
-        isPaymentView ? 'items-center text-center' : 'items-start text-left',
+        paymentMenuOpen ? 'items-center text-center' : 'items-start text-left',
       )}>
         {productHubOpen && (
           <span className="mb-4 inline-flex items-center justify-center gap-2 text-sm font-bold leading-none text-[#0071E3] dark:text-blue-200">
@@ -1729,11 +2259,13 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
           </span>
         )}
         <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-[2.25rem]">
-          {productHubOpen ? 'What do you want to do?' : circlePocketMode ? 'Circle Pocket' : polymarketMode ? 'PolyDesk' : posMode ? 'Retail POS' : billsMode ? 'Bills' : streamMode ? 'StreamPay' : accessMode ? accessView === 'wallet' ? 'x402 Wallet Manager' : 'x402 Wallet Manager' : 'Request a payment'}
+          {productHubOpen ? 'What do you want to do?' : paymentMenuOpen ? 'Choose payment flow' : circlePocketMode ? 'Circle Pocket' : polymarketMode ? 'PolyDesk' : posMode ? 'Retail POS' : billsMode ? 'Bills' : streamMode ? 'StreamPay' : accessMode ? accessView === 'wallet' ? 'x402 Wallet Manager' : 'x402 Wallet Manager' : paymentFlow === 'bank' ? 'Receive to Bank' : 'Receive USDC'}
         </h1>
         <p className="mt-2 text-[15px] text-gray-500 text-balance dark:text-gray-400">
           {productHubOpen
             ? 'Receive payments, manage x402, run StreamPay, or PolyDesk.'
+            : paymentMenuOpen
+            ? 'Select the payment experience you want to create.'
             : circlePocketMode
             ? 'Choose the wallet area to manage.'
             : polymarketMode
@@ -1748,11 +2280,13 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                 ? accessView === 'wallet'
                   ? 'Check Circle wallet balance, activate x402 service balance, and view paid service access.'
                   : 'Fund your Circle wallet, activate x402 service balance, then use paid services.'
-                : 'Create a secure USDC PayLink in seconds.'}
+                : paymentFlow === 'bank'
+                  ? 'Create a Naira payout link. Payer pays Base USDC.'
+                  : 'Create a secure USDC PayLink in seconds.'}
         </p>
 
         {/* ── Chain preview toggle — hidden in multi-chain mode (all chains active) */}
-        {!productHubOpen && !multiChainMode && !accessMode && !circlePocketMode && !posMode && !billsMode && !streamMode && !polymarketMode && <div className="mt-5 flex w-full flex-col items-center gap-2.5">
+        {false && !productHubOpen && !paymentMenuOpen && !isBankReceive && !multiChainMode && !accessMode && !circlePocketMode && !posMode && !billsMode && !streamMode && !polymarketMode && <div className="mt-5 flex w-full flex-col items-center gap-2.5">
           <div className="mx-auto flex w-[17.5rem] max-w-full items-center justify-start gap-0.5 overflow-x-auto rounded-xl border border-gray-200 bg-gray-100/80 p-1 [scrollbar-width:none] dark:border-white/10 dark:bg-white/[0.05] [&::-webkit-scrollbar]:hidden sm:inline-flex sm:w-auto sm:justify-center sm:gap-1">
             {VISIBLE_CREATE_CHAINS.map((c) => {
               const m = CHAIN_META[c]
@@ -1798,7 +2332,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
         </div>}
 
         {/* Multi-chain mode active badge */}
-        {!productHubOpen && multiChainMode && !accessMode && !circlePocketMode && !posMode && !billsMode && !streamMode && !polymarketMode && (
+        {false && !productHubOpen && !paymentMenuOpen && !isBankReceive && multiChainMode && !accessMode && !circlePocketMode && !posMode && !billsMode && !streamMode && !polymarketMode && (
           <div className="mt-5 flex w-full justify-center">
             <span className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-gray-700 shadow-sm dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200">
               <Globe className="h-3 w-3" />
@@ -1811,7 +2345,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
       <div
         className={cn(
           'w-full min-w-0',
-          productHubOpen
+          productHubOpen || paymentMenuOpen
             ? 'space-y-2'
             : 'overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-card dark:border-white/10 dark:bg-[#111114]',
         )}
@@ -1821,7 +2355,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
           <div className="space-y-2">
             {[
               { icon: Wallet, title: 'Circle Pocket Wallet', body: 'Fund services, pay bills, and send money from one Circle balance.', action: () => openCirclePocketMode() },
-              { icon: Coins, title: 'Payment', body: 'Create personal or business PayLinks.', action: () => openPaymentMode() },
+              { icon: Coins, title: 'Payment', body: 'Create personal, business, POS, or bills flows.', action: () => openPaymentMenu() },
               { icon: Radio, title: 'Stream', body: 'Creator, payroll, and Arena on Arc.', action: () => { window.location.href = '/stream' } },
               { icon: PolymarketMark, title: 'Poly', body: 'Funding, positions, and LP Scout.', action: () => openPolymarketMode() },
             ].map(({ icon: Icon, title, body, action }) => (
@@ -1846,6 +2380,8 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               </button>
             ))}
           </div>
+        ) : paymentMenuOpen ? (
+          <PaymentFlowCards />
         ) : (
           <>
         <div className="space-y-0 p-0">
@@ -2323,8 +2859,26 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
             </div>
           ) : posMode ? (
             <>
-            <PaymentTabs />
             <div className="space-y-5 p-4 sm:p-5">
+              {!privyAuthenticated && (
+                <LocalCurrencySignInGate
+                  title="Sign in for POS history"
+                  body="POS creates local currency receipts and payout records, so it needs an account before setup."
+                />
+              )}
+              {privyAuthenticated && (
+                <LocalCurrencyProfileCard
+                  profile={localCurrencyProfile}
+                  draft={localCurrencyProfileDraft}
+                  email={privyEmail}
+                  busy={localCurrencyProfileBusy}
+                  error={localCurrencyProfileError}
+                  bankAccountName={posBankAccountName}
+                  onDraftChange={setLocalCurrencyProfileDraft}
+                  onSave={saveLocalCurrencyProfile}
+                />
+              )}
+
               {(posCountry || posSettlementPath || posMerchant) && (
                 <button
                   type="button"
@@ -2355,13 +2909,17 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                           type="button"
                           disabled={!live}
                           onClick={() => {
+                            if (!privyAuthenticated || !localCurrencyProfileReady) {
+                              setPosError('Sign in and save your payout profile before creating POS.')
+                              return
+                            }
                             setPosCountry(country.key)
                             setPosSettlementPath('PAYCREST_NAIRA')
                             setPosError('')
                           }}
                           className={cn(
                             'group flex items-center justify-between gap-4 rounded-2xl border p-4 text-left transition-all',
-                            live
+                            live && privyAuthenticated && localCurrencyProfileReady
                               ? 'border-gray-200 bg-gray-50 hover:-translate-y-0.5 hover:border-gray-300 hover:bg-white hover:shadow-sm dark:border-white/10 dark:bg-white/[0.04] dark:hover:border-white/20 dark:hover:bg-white/[0.07]'
                               : 'cursor-not-allowed border-dashed border-gray-200 bg-gray-50/70 opacity-70 dark:border-white/10 dark:bg-white/[0.03]',
                           )}
@@ -2400,7 +2958,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                       Create Naira POS QR
                     </h2>
                     <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-                      Customers enter Naira, pay with Base USDC, and the merchant receives a bank payout.
+                      Payers enter Naira, pay with Base USDC, and you receive a bank payout.
                     </p>
                   </div>
 
@@ -2534,7 +3092,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                   <button
                     type="button"
                     onClick={createPosMerchant}
-                    disabled={posBusy || !posMerchantName.trim() || (posNeedsEvmWallet && !posWallet.trim()) || (posNeedsSolanaWallet && !posSolanaWallet.trim()) || !posPaycrestReady}
+                    disabled={!privyAuthenticated || posBusy || !posMerchantName.trim() || (posNeedsEvmWallet && !posWallet.trim()) || (posNeedsSolanaWallet && !posSolanaWallet.trim()) || !posPaycrestReady}
                     className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
                   >
                     {posBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Store className="h-4 w-4" />}
@@ -2547,7 +3105,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                     <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Nigerian Retail Mode</p>
                     <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">POS QR ready</h2>
                     <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-                      Customers scan once and enter their amount.
+                      Payers scan once and enter their amount.
                     </p>
                   </div>
 
@@ -2570,11 +3128,11 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                           className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/[0.1]"
                         >
                           <Copy className="h-3.5 w-3.5" />
-                          {posCopied ? 'Copied' : 'Copy customer link'}
+                          {posCopied ? 'Copied' : 'Copy payer link'}
                         </button>
                       </div>
                     </div>
-                    <p className="mt-3 text-[11px] font-medium text-gray-400 dark:text-gray-500">Customer link ready</p>
+                    <p className="mt-3 text-[11px] font-medium text-gray-400 dark:text-gray-500">Payer link ready</p>
                   </div>
 
                   <div className="grid gap-2">
@@ -2585,10 +3143,10 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                       className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
                     >
                       <LayoutDashboard className="h-4 w-4" />
-                      Open receipts
+                      View payments
                     </a>
                     <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
-                      Customers open payment by scanning the QR or using the copied link.
+                      Payers open payment by scanning the QR or using the copied link.
                     </p>
                   </div>
                 </div>
@@ -2597,16 +3155,32 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
             </>
           ) : billsMode ? (
             <>
-            <PaymentTabs />
             <div className="space-y-5 p-4 sm:p-5">
+              {!privyAuthenticated && (
+                <LocalCurrencySignInGate
+                  title="Sign in for bills history"
+                  body="Bills need an account so receipts, reversals, and support records stay attached to you."
+                />
+              )}
+              {privyAuthenticated && (
+                <LocalCurrencyProfileCard
+                  profile={localCurrencyProfile}
+                  draft={localCurrencyProfileDraft}
+                  email={privyEmail}
+                  busy={localCurrencyProfileBusy}
+                  error={localCurrencyProfileError}
+                  onDraftChange={setLocalCurrencyProfileDraft}
+                  onSave={saveLocalCurrencyProfile}
+                />
+              )}
               <div className="rounded-2xl border border-gray-100 bg-gray-50 p-5 text-center dark:border-white/10 dark:bg-white/[0.04]">
                 <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl border border-gray-200 bg-white text-gray-700 shadow-sm dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200">
                   <Landmark className="h-5 w-5" />
                 </span>
-                <p className="mt-4 text-[11px] font-semibold uppercase tracking-widest text-gray-400">Bills</p>
-                <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">Utility bill payment coming soon</h2>
+                <p className="mt-4 text-[11px] font-semibold uppercase tracking-widest text-gray-400">Local Currency</p>
+                <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">Bills history is coming here</h2>
                 <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-                  Bills will support utility payments from the same payment networks used here.
+                  Bill payments will share the same signed-in local currency dashboard as bank payouts and POS receipts.
                 </p>
               </div>
             </div>
@@ -2632,10 +3206,6 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
           ) : (
             <>
           <div className="overflow-hidden bg-gray-50/60 dark:bg-white/[0.035]">
-            {!accessMode && (
-              <PaymentTabs />
-            )}
-
             <div className="space-y-3.5 px-3.5 py-3 sm:p-4">
 
           {!accessMode && !multiChainMode && PRIVY_AUTH_ENABLED && (
@@ -2652,18 +3222,112 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               setEvmAddr={setEvmAddr}
               setSolanaAddr={setSolanaAddr}
               setGeneratedLink={setGeneratedLink}
+              bankCountry={posCountry}
+              setBankCountry={setPosCountry}
+              bankInstitutions={posBankInstitutions}
+              bankInstitutionsBusy={posBankInstitutionsBusy}
+              bankCode={posBankCode}
+              setBankCode={setPosBankCode}
+              bankName={posBankName}
+              setBankName={setPosBankName}
+              bankAccount={posBankAccount}
+              setBankAccount={setPosBankAccount}
+              bankAccountName={posBankAccountName}
+              bankVerified={posBankVerified}
+              bankVerifyBusy={posBankVerifyBusy}
+              bankError={posError}
+              verifyBankAccount={verifyPosBankAccount}
+            />
+          )}
+
+          {isBankReceive && privyAuthenticated && (
+            <LocalCurrencyProfileCard
+              profile={localCurrencyProfile}
+              draft={localCurrencyProfileDraft}
+              email={privyEmail}
+              busy={localCurrencyProfileBusy}
+              error={localCurrencyProfileError}
+              bankAccountName={posBankAccountName}
+              onDraftChange={setLocalCurrencyProfileDraft}
+              onSave={saveLocalCurrencyProfile}
             />
           )}
 
           {/* ── EVM Address — Base / HashKey / Arc ───────────────────── */}
-          {!accessMode && multiChainMode && (
-            <div className="rounded-xl border border-gray-100 bg-gray-50/70 px-3.5 py-3 dark:border-white/10 dark:bg-white/[0.04]">
-              <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">Paste wallet addresses</p>
-              <p className="mt-0.5 text-xs text-gray-400 dark:text-gray-500">One address per network. Email receive is for single-network links.</p>
+          {!accessMode && !isBankReceive && (
+            <div className="space-y-2.5 rounded-xl border border-gray-100 bg-white p-2.5 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-bold uppercase tracking-widest text-gray-400">Payer network</p>
+                  <p className="mt-0.5 text-xs font-medium text-gray-700 dark:text-gray-200">
+                    {multiChainMode ? 'Payer chooses at checkout' : CHAIN_META[selectedNet].label}
+                  </p>
+                </div>
+                <div className="relative shrink-0">
+                  <select
+                    value={multiChainMode ? 'multi' : selectedNet}
+                    disabled={multiChainMode}
+                    onChange={(event) => onNetworkSelect(event.target.value as ChainKey)}
+                    className={cn(
+                      'min-w-[128px] appearance-none rounded-lg border px-3 py-2 pr-8 text-xs font-bold outline-none transition-all',
+                      multiChainMode
+                        ? 'cursor-default border-gray-200 bg-gray-100 text-gray-500 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-400'
+                        : 'border-gray-900 bg-gray-950 text-white dark:border-white dark:bg-white dark:text-gray-950',
+                    )}
+                  >
+                    {multiChainMode ? (
+                      <option value="multi">Any supported</option>
+                    ) : (
+                      VISIBLE_CREATE_CHAINS.map((network) => (
+                        <option key={network} value={network}>
+                          {CHAIN_META[network].label}{network === 'arc' ? ' Testnet' : ''}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                  {!multiChainMode && <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/70 dark:text-gray-500" />}
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (receiveMode !== 'email') toggleMultiChainMode(!multiChainMode)
+                }}
+                disabled={receiveMode === 'email'}
+                className="flex w-full items-center justify-between gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-left transition-all hover:border-gray-300 hover:bg-white disabled:cursor-not-allowed disabled:opacity-70 dark:border-white/10 dark:bg-white/[0.035] dark:hover:border-white/20"
+              >
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold text-gray-800 dark:text-gray-100">Let payer choose network</span>
+                  <span className="block text-[11px] font-medium text-gray-400 dark:text-gray-500">
+                    {receiveMode === 'email'
+                      ? 'Email receive uses the selected network.'
+                      : multiChainMode
+                      ? 'Add addresses per network.'
+                      : 'Use one selected network.'}
+                  </span>
+                </span>
+                <span className={cn(
+                  'relative h-6 w-10 shrink-0 rounded-full p-0.5 transition-all',
+                  multiChainMode ? 'bg-gray-950 shadow-inner dark:bg-white' : 'bg-gray-200 dark:bg-white/10',
+                )}>
+                  <span className={cn(
+                    'block h-5 w-5 rounded-full bg-white shadow-sm transition-transform dark:bg-gray-950',
+                    multiChainMode ? 'translate-x-4' : 'translate-x-0',
+                  )} />
+                </span>
+              </button>
             </div>
           )}
 
-          {(isEvmNet || multiChainMode) && (multiChainMode || receiveMode === 'paste') && <fieldset className="space-y-1.5">
+          {!accessMode && multiChainMode && (
+            <div className="rounded-xl border border-gray-100 bg-gray-50/70 px-3.5 py-3 dark:border-white/10 dark:bg-white/[0.04]">
+              <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">Add receiving addresses</p>
+              <p className="mt-0.5 text-xs text-gray-400 dark:text-gray-500">Enter one address for each network payers can choose.</p>
+            </div>
+          )}
+
+          {(isEvmNet || multiChainMode) && !isBankReceive && (multiChainMode || receiveMode === 'paste') && <fieldset className="space-y-1.5">
             <label className="flex items-center justify-between">
               <span className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
                 {multiChainMode ? 'EVM wallet address' : 'Wallet address'}
@@ -2725,7 +3389,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               {multiChainMode ? 'EVM address for Base, Arc, or Arbitrum.' : 'Paste EVM address.'}
             </p>
           </fieldset>}
-          {(selectedNet === 'solana' || multiChainMode) && (multiChainMode || receiveMode === 'paste') && <fieldset className="space-y-1.5">
+          {(selectedNet === 'solana' || multiChainMode) && !isBankReceive && (multiChainMode || receiveMode === 'paste') && <fieldset className="space-y-1.5">
             <label className="flex items-center justify-between">
               <span className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
                 Solana wallet address
@@ -2798,14 +3462,16 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               </span>
               <div className="min-w-0">
                 <p className="text-xs font-semibold leading-tight text-gray-800 dark:text-gray-100">Flexible amount enabled</p>
-                <p className="mt-0.5 text-[11px] font-medium leading-snug text-gray-400 dark:text-gray-500">Payer enters the amount.</p>
+                <p className="mt-0.5 text-[11px] font-medium leading-snug text-gray-400 dark:text-gray-500">
+                  {isBankReceive ? 'Payer enters the Naira amount.' : 'Payer enters the amount.'}
+                </p>
               </div>
             </div>
           )}
           {!flexAmount && <fieldset className="space-y-1.5">
             <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
-              <Coins className="h-3.5 w-3.5 text-gray-400" />
-              Amount
+              {isBankReceive ? <Landmark className="h-3.5 w-3.5 text-gray-400" /> : <Coins className="h-3.5 w-3.5 text-gray-400" />}
+              {isBankReceive ? 'Naira amount' : 'Amount'}
             </label>
             <div className="relative">
               <input
@@ -2824,7 +3490,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                 )}
               />
               <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-semibold text-gray-400 whitespace-nowrap">
-                USDC
+                {isBankReceive ? 'NGN' : 'USDC'}
               </span>
             </div>
             {amtDirty && !isValidAmt && (
@@ -2834,7 +3500,9 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
             )}
             {!amtDirty && (
               <p className="text-[11px] text-gray-400 dark:text-gray-500">
-                {multiChainMode
+                {isBankReceive
+                  ? 'Enter the Naira amount the payer should pay.'
+                  : multiChainMode
                   ? 'USDC on Base, Arc Testnet, Solana, or Arbitrum — payer chooses the chain'
                   : `USDC on ${selectedNet === 'arc' ? 'Arc Testnet' : CHAIN_META[selectedNet].label}`}
               </p>
@@ -2842,6 +3510,24 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
           </fieldset>}
 
           {/* ── Payment note ──────────────────────────────────────────── */}
+          {isBankReceive && (
+            <div className="rounded-xl border border-gray-200 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.04]">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">Payer network</p>
+                  <p className="mt-0.5 text-[11px] text-gray-400 dark:text-gray-500">Bank receive supports Base USDC only for now.</p>
+                </div>
+                <button
+                  type="button"
+                  className="inline-flex shrink-0 cursor-default items-center gap-1.5 rounded-xl border border-gray-900 bg-gray-950 px-3 py-2 text-xs font-bold text-white dark:border-white dark:bg-white dark:text-gray-950"
+                  aria-label="Selected payer network"
+                >
+                  Base
+                </button>
+              </div>
+            </div>
+          )}
+
           <fieldset className="space-y-1.5">
             <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
               <Tag className="h-3.5 w-3.5 text-gray-400" />
@@ -2922,7 +3608,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
           )}
 
           {/* ── FX Display Settings (event or access mode) ────────────── */}
-          {(effectiveEventMode || !accessMode) && (
+          {false && (
             <div className={cn(
               'rounded-xl border p-3 space-y-3 transition-all',
               fxShow
@@ -3056,7 +3742,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
           )}
 
           {/* ── Payer network toggle ──────────────────────────────────── */}
-          <button
+          {false && false && <button
             type="button"
             onClick={() => toggleMultiChainMode(!multiChainMode)}
             className={cn(
@@ -3094,7 +3780,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                 )} />
               </span>
             </div>
-          </button>
+          </button>}
 
           {/* ── Flexible amount toggle ────────────────────────────────── */}
           <button
@@ -3119,7 +3805,9 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                 </span>
                 <span className="min-w-0">
                   <span className="block text-sm font-semibold leading-tight text-gray-800 dark:text-gray-100">Let payer enter amount</span>
-                  <span className="block text-[11px] font-medium leading-snug text-gray-400 dark:text-gray-500">Payer enters the amount.</span>
+                  <span className="block text-[11px] font-medium leading-snug text-gray-400 dark:text-gray-500">
+                    {isBankReceive ? 'Payer enters the Naira amount.' : 'Payer enters the amount.'}
+                  </span>
                 </span>
               </div>
               <span className={cn(
@@ -3141,21 +3829,32 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
           {vaultStep === 'idle' && (
             <button
               onClick={handleGenerate}
-              disabled={!canGenerate}
+              disabled={!canGenerate || (isBankReceive && posBusy)}
               className={cn(
                 'flex w-full items-center justify-center gap-1.5 rounded-xl px-4 py-3 text-center text-sm font-semibold leading-tight transition-all duration-200',
-                canGenerate
+                canGenerate && !(isBankReceive && posBusy)
                   ? 'bg-black text-white shadow-button hover:bg-gray-800 hover:shadow-md active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200'
                   : 'cursor-not-allowed bg-gray-100 text-gray-400 dark:bg-white/[0.06] dark:text-gray-500',
               )}
             >
-              <Link2 className="h-4 w-4 shrink-0" />
-              <span>Generate Payment Link</span>
-              {canGenerate && <ArrowRight className="h-4 w-4 shrink-0" />}
+              {isBankReceive && posBusy ? <Loader2 className="h-4 w-4 shrink-0 animate-spin" /> : <Link2 className="h-4 w-4 shrink-0" />}
+              <span>{isBankReceive ? 'Create Bank PayLink' : 'Generate Payment Link'}</span>
+              {canGenerate && !(isBankReceive && posBusy) && <ArrowRight className="h-4 w-4 shrink-0" />}
             </button>
           )}
 
-          {!canGenerate && vaultStep === 'idle' && (
+          {isBankReceive && vaultStep === 'idle' && (
+            <div className="space-y-1 px-2 text-center text-xs leading-snug">
+              {posError && <p className="font-medium text-red-500">{posError}</p>}
+              {!canGenerateBankReceive && !posError && (
+                <p className="text-gray-400 dark:text-gray-500">
+                  Sign in, save your profile, verify bank account, and enter a Naira amount.
+                </p>
+              )}
+            </div>
+          )}
+
+          {!isBankReceive && !canGenerate && vaultStep === 'idle' && (
             multiChainMode
               ? (!evmDirty && !solanaDirty)
               : (selectedNet === 'solana' ? !solanaDirty : !evmDirty)
@@ -3273,7 +3972,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                   className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition-all hover:border-gray-300 hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:border-white/20 dark:hover:bg-white/[0.07]"
                 >
                   <LayoutDashboard className="h-4 w-4" />
-                  Open Personal Dashboard
+                  View payments
                 </a>
               )}
 
@@ -3286,7 +3985,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                     className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition-all hover:border-gray-300 hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:border-white/20 dark:hover:bg-white/[0.07]"
                   >
                     <LayoutDashboard className="h-4 w-4" />
-                    Open Business Dashboard
+                    View payments
                   </a>
                 </div>
               )}
@@ -3387,7 +4086,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
 
 
       {/* ── How it works ─────────────────────────────────────────────── */}
-      {!generatedLink && (
+      {!generatedLink && showHowItWorks && (
         <div className="mt-10 animate-fade-in">
           <p className="mb-4 text-center text-[11px] font-semibold uppercase tracking-widest text-gray-400">
             {productHubOpen ? 'What Hash PayLink powers' : 'How it works'}

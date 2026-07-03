@@ -299,7 +299,6 @@ export async function markPaycrestPosPayment(input: { id: string; txHash: string
     tx_hash: input.txHash,
     payer_email: input.payerEmail || record.payer_email,
     payer_wallet: input.payerWallet || record.payer_wallet,
-    status: record.status === 'initiated' ? 'payment_submitted' : record.status,
     updated_at: new Date().toISOString(),
   }
   store.orders[updated.intent_id] = updated

@@ -49,3 +49,27 @@ export async function writeDurableJson(key: string, value: unknown): Promise<voi
     [key, JSON.stringify(value)],
   )
 }
+
+export async function mutateDurableJson<T>(key: string, mutate: (current: T | undefined) => T | Promise<T>): Promise<T> {
+  await ensureSchema()
+  const client = await requirePool().connect()
+  try {
+    await client.query('begin')
+    const result = await client.query('select value from render_durable_kv where store_key = $1 for update', [key])
+    const current = result.rows[0]?.value as T | undefined
+    const next = await mutate(current)
+    await client.query(
+      `insert into render_durable_kv (store_key, value, updated_at)
+        values ($1, $2::jsonb, now())
+        on conflict (store_key) do update set value = excluded.value, updated_at = now()`,
+      [key, JSON.stringify(next)],
+    )
+    await client.query('commit')
+    return next
+  } catch (error) {
+    await client.query('rollback').catch(() => undefined)
+    throw error
+  } finally {
+    client.release()
+  }
+}

@@ -2,9 +2,11 @@ import type { Request, Response } from 'express'
 import { archivePayment }          from './og-storage.js'
 import { appendAgentActivity, normalizeActivitySlug } from './agent-activity.js'
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs'
-import { dirname }                 from 'path'
+import { dirname, resolve }        from 'path'
 import crypto from 'crypto'
-import { readDurableJson, writeDurableJson } from './render-durable-store.js'
+import { hasRenderDurableStore, mutateDurableJson, readDurableJson, writeDurableJson } from './render-durable-store.js'
+import { getPaycrestPosOrder } from './paycrest-pos.js'
+import { normalizeEvmUsdcChain, verifyEvmUsdcTransfer } from './usdc-transfer-verify.js'
 
 type PaymentEntry = {
   eventId:     string
@@ -53,6 +55,19 @@ const DATA_FILE = process.env.DATA_PATH
   ? `${process.env.DATA_PATH}/event-registry.json`
   : null
 const EVENT_REGISTRY_STORE_KEY = (process.env.EVENT_REGISTRY_STORE_KEY ?? 'hashpaylink:event-registry').trim()
+const NG_POS_STORE_PATH = process.env.NG_POS_STORE ?? './data/ng-pos-merchants.json'
+const NG_POS_STORE_KEY = (process.env.NG_POS_STORE_KEY ?? 'hashpaylink:ng-pos-merchants').trim()
+const IS_RENDER = Boolean(process.env.RENDER || process.env.RENDER_SERVICE_ID || process.env.RENDER_EXTERNAL_URL)
+const HAS_DURABLE_STORE = hasRenderDurableStore()
+
+type NgPosMerchantRecord = {
+  merchant_id: string
+  circle_smart_wallet_address?: string
+}
+
+type NgPosStore = {
+  merchants?: Record<string, NgPosMerchantRecord>
+}
 
 function loadRegistry(): Map<string, PaymentEntry[]> {
   if (!DATA_FILE || !existsSync(DATA_FILE)) return new Map()
@@ -78,17 +93,48 @@ async function hydrateRegistry(): Promise<void> {
 }
 
 async function persistRegistry(): Promise<void> {
+  const serialized = JSON.stringify(Object.fromEntries(registry))
+  if (DATA_FILE) {
+    const dir = dirname(DATA_FILE)
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+    writeFileSync(DATA_FILE, serialized, 'utf8')
+  }
+
+  if (IS_RENDER && !HAS_DURABLE_STORE) {
+    throw new Error('Durable event registry storage is not configured. Add DATABASE_URL on Render before recording receipts.')
+  }
+
   try {
-    const serialized = JSON.stringify(Object.fromEntries(registry))
-    if (DATA_FILE) {
-      const dir = dirname(DATA_FILE)
-      if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
-      writeFileSync(DATA_FILE, serialized, 'utf8')
-    }
-    await writeDurableJson(EVENT_REGISTRY_STORE_KEY, Object.fromEntries(registry))
+    const local = Object.fromEntries(registry)
+    const merged = HAS_DURABLE_STORE
+      ? await mutateDurableJson<Record<string, PaymentEntry[]>>(EVENT_REGISTRY_STORE_KEY, current => mergeRegistryRecords(current ?? {}, local))
+      : (await writeDurableJson(EVENT_REGISTRY_STORE_KEY, local), local)
+    registry.clear()
+    for (const [eventId, entries] of Object.entries(merged)) registry.set(eventId, entries)
   } catch (e) {
+    if (IS_RENDER) {
+      throw new Error('Durable event registry storage failed. Check DATABASE_URL on Render before recording receipts.')
+    }
     console.warn('[registry] failed to persist:', e)
   }
+}
+
+function mergeRegistryRecords(...records: Record<string, PaymentEntry[]>[]) {
+  const merged: Record<string, PaymentEntry[]> = {}
+  for (const record of records) {
+    for (const [eventId, entries] of Object.entries(record ?? {})) {
+      const existing = merged[eventId] ?? []
+      const byTx = new Map(existing.map(entry => [entry.txHash.toLowerCase(), entry]))
+      for (const entry of entries ?? []) {
+        byTx.set(entry.txHash.toLowerCase(), {
+          ...(byTx.get(entry.txHash.toLowerCase()) ?? {}),
+          ...entry,
+        })
+      }
+      merged[eventId] = Array.from(byTx.values()).sort((a, b) => b.ts - a.ts)
+    }
+  }
+  return merged
 }
 
 const registry = loadRegistry()
@@ -135,6 +181,49 @@ function receiptHash(entry: PaymentEntry) {
   })).digest('hex')
 }
 
+async function readNgPosStore(): Promise<NgPosStore> {
+  try {
+    const remote = await readDurableJson<NgPosStore>(NG_POS_STORE_KEY)
+    if (remote) return remote
+  } catch {
+    // Fall through to local file for development.
+  }
+
+  try {
+    const raw = readFileSync(resolve(NG_POS_STORE_PATH), 'utf8')
+    return JSON.parse(raw) as NgPosStore
+  } catch {
+    return { merchants: {} }
+  }
+}
+
+function preferredAmount(amount: string, requestedAmount: string) {
+  const requestedNum = Number.parseFloat(requestedAmount)
+  if (Number.isFinite(requestedNum) && requestedNum > 0) return requestedAmount
+  return amount
+}
+
+async function expectedNgPosRecipient(input: {
+  source: string
+  merchantId: string
+  settlementType: string
+  intentId: string
+}) {
+  if (input.source !== 'ngpos' && input.source !== 'bank-receive') throw new Error('Unsupported receipt source.')
+  if (input.settlementType === 'INSTANT_FIAT') {
+    if (!input.intentId) throw new Error('Naira payout receipt requires an offramp intent.')
+    const order = await getPaycrestPosOrder(input.intentId)
+    if (!order?.receive_address) throw new Error('Paycrest order is not ready for receipt verification.')
+    return { recipient: order.receive_address, minAmount: order.amount_usdc }
+  }
+
+  if (!input.merchantId) throw new Error('Merchant id is required for receipt verification.')
+  const store = await readNgPosStore()
+  const merchant = store.merchants?.[input.merchantId]
+  if (!merchant?.circle_smart_wallet_address) throw new Error('Merchant USDC wallet is not available for receipt verification.')
+  return { recipient: merchant.circle_smart_wallet_address, minAmount: '' }
+}
+
 export function paymentReceiptId(eventId: string, txHash: string) {
   return encodeReceiptId(eventId, txHash)
 }
@@ -144,15 +233,34 @@ function archiveKey(entry: PaymentEntry) {
 }
 
 function archiveMetadata(entry: PaymentEntry, customerWallet: string) {
-  if (entry.source !== 'ngpos') return undefined
+  if (entry.source !== 'ngpos' && entry.source !== 'bank-receive') return undefined
   return {
-    type: 'nigerian_retail_pos_payment',
+    type: entry.source === 'bank-receive' ? 'nigerian_bank_receive_payment' : 'nigerian_retail_pos_payment',
     merchantId: entry.merchantId,
-    contextLabel: entry.contextLabel,
     amountNgn: entry.amountNgn,
     amountUsdc: entry.amount,
     settlementType: entry.settlementType,
     customerWallet,
+  }
+}
+
+function archiveRecordFor(entry: PaymentEntry, payerWallet: string): PaymentEntry {
+  if (entry.source !== 'ngpos' && entry.source !== 'bank-receive') return entry
+  return {
+    eventId: entry.eventId,
+    txHash: entry.txHash,
+    chain: entry.chain,
+    payer: payerWallet || entry.payer,
+    memo: entry.source === 'bank-receive' ? 'Bank receive payment' : 'Retail POS payment',
+    amount: entry.amount,
+    requestedAmount: entry.requestedAmount,
+    ts: entry.ts,
+    source: entry.source,
+    merchantId: entry.merchantId,
+    settlementType: entry.settlementType,
+    amountNgn: entry.amountNgn,
+    ogRootHash: entry.ogRootHash,
+    ogTxHash: entry.ogTxHash,
   }
 }
 
@@ -168,19 +276,20 @@ function scheduleArchivePayment(entry: PaymentEntry, payerWallet = entry.payer) 
       const list = registry.get(entry.eventId)
       const current = list?.find(item => item.txHash === entry.txHash) ?? entry
       if (current.ogTxHash) return
+      const archiveEntry = archiveRecordFor(current, payerWallet)
 
       const result = await archivePayment({
-        eventId: current.eventId,
-        txHash: current.txHash,
-        chain: current.chain,
-        payer: current.memo || payerWallet || current.payer,
-        amount: current.amount,
-        ts: current.ts,
-        source: current.source,
-        merchantId: current.merchantId,
-        contextLabel: current.contextLabel,
-        settlementType: current.settlementType,
-        amountNgn: current.amountNgn,
+        eventId: archiveEntry.eventId,
+        txHash: archiveEntry.txHash,
+        chain: archiveEntry.chain,
+        payer: archiveEntry.payer,
+        amount: archiveEntry.amount,
+        ts: archiveEntry.ts,
+        source: archiveEntry.source,
+        merchantId: archiveEntry.merchantId,
+        contextLabel: archiveEntry.contextLabel,
+        settlementType: archiveEntry.settlementType,
+        amountNgn: archiveEntry.amountNgn,
         metadata: archiveMetadata(current, payerWallet),
       })
 
@@ -215,6 +324,16 @@ export async function findRegisteredPaymentReceipt(receiptId: string): Promise<R
   }
 }
 
+export async function listRegisteredPaymentsForEventIds(eventIds: string[]): Promise<PaymentEntry[]> {
+  const ids = Array.from(new Set(eventIds.map(id => String(id ?? '').trim()).filter(Boolean)))
+    .filter(id => id.length <= MAX_EVENT_ID_LENGTH)
+  if (!ids.length) return []
+  await hydrateRegistry()
+  return ids
+    .flatMap(id => registry.get(id) ?? [])
+    .sort((a, b) => b.ts - a.ts)
+}
+
 export async function registerEventPayment(req: Request, res: Response): Promise<void> {
   let eventId: string
   let txHash: string
@@ -229,6 +348,7 @@ export async function registerEventPayment(req: Request, res: Response): Promise
   let contextLabel = ''
   let settlementType = ''
   let amountNgn = ''
+  let intentId = ''
 
   try {
     eventId = cleanString(req.body?.eventId, 'eventId', MAX_EVENT_ID_LENGTH)
@@ -244,20 +364,42 @@ export async function registerEventPayment(req: Request, res: Response): Promise
     contextLabel = cleanOptionalString(req.body?.contextLabel, MAX_TEXT_LENGTH)
     settlementType = cleanOptionalString(req.body?.settlementType, MAX_TEXT_LENGTH)
     amountNgn = cleanOptionalString(req.body?.amountNgn, MAX_AMOUNT_LENGTH)
+    intentId = cleanOptionalString(req.body?.intentId ?? req.body?.intent_id, MAX_TEXT_LENGTH).replace(/[^a-zA-Z0-9_-]/g, '')
   } catch (err) {
     res.status(400).json({ ok: false, error: err instanceof Error ? err.message : 'Invalid request' })
     return
   }
 
-  if (source === 'ngpos') {
+  if (source === 'ngpos' || source === 'bank-receive') {
+    if (txHash.startsWith('manual_')) {
+      res.status(400).json({ ok: false, error: 'Verified on-chain transaction is required for this receipt.' })
+      return
+    }
+    const evmChain = normalizeEvmUsdcChain(chain)
+    if (!evmChain) {
+      res.status(400).json({ ok: false, error: 'Verified EVM USDC transaction is required for this receipt.' })
+      return
+    }
     const amountNum = Number.parseFloat(amount)
     const requestedNum = Number.parseFloat(requestedAmount)
     if (!Number.isFinite(amountNum) || amountNum <= 0) {
-      res.status(400).json({ ok: false, error: 'Invalid POS amount.' })
+      res.status(400).json({ ok: false, error: 'Invalid payment amount.' })
       return
     }
     if (Number.isFinite(requestedNum) && requestedNum > 0 && amountNum + 0.0000005 < requestedNum) {
-      res.status(409).json({ ok: false, error: 'POS payment is below requested amount.' })
+      res.status(409).json({ ok: false, error: 'Payment is below requested amount.' })
+      return
+    }
+    try {
+      const expected = await expectedNgPosRecipient({ source, merchantId, settlementType, intentId })
+      await verifyEvmUsdcTransfer({
+        chain: evmChain,
+        txHash,
+        recipient: expected.recipient,
+        minAmount: expected.minAmount || preferredAmount(amount, requestedAmount),
+      })
+    } catch (error) {
+      res.status(409).json({ ok: false, error: error instanceof Error ? error.message : 'Payment could not be verified on-chain.' })
       return
     }
   }

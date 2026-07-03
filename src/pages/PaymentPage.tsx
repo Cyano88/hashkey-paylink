@@ -296,7 +296,7 @@ export default function PaymentPage() {
   const netParam    = (getPaylinkParam(searchParams, 'net', 'n') || null) as ChainKey | null
   const modeParam   = searchParams.get('mode')
   const isTelegramSource = isTelegramSourceParam(searchParams)
-  const isNgPosSource = searchParams.get('src') === 'ngpos'
+  const isNgPosSource = searchParams.get('src') === 'ngpos' || searchParams.get('src') === 'bank-receive'
   const ngPosBackMerchantId = searchParams.get('merchant') ?? ''
   const ngPosBackUrl = ngPosBackMerchantId ? `/pos/ng?merchant_id=${encodeURIComponent(ngPosBackMerchantId)}` : '/'
   const isPolymarketFunding = searchParams.get('brand') === 'polymarket' || searchParams.get('pm') === '1'
@@ -444,7 +444,9 @@ export default function PaymentPage() {
   })()
   const agentFundingName = isWalletManagerFunding ? 'x402 wallet manager' : isAgentFunding ? agentDisplayNameFromMemo(memo, agentFundingSlug) : ''
   const agentFundingHue = agentAvatarHue(`${agentFundingSlug}:${agentFundingName}`)
-  const isNgPosPayment   = getPaylinkParam(initParams, 'src', 'src') === 'ngpos'
+  const paySource        = getPaylinkParam(initParams, 'src', 'src')
+  const isNgPosPayment   = paySource === 'ngpos' || paySource === 'bank-receive'
+  const isBankReceivePayment = paySource === 'bank-receive'
   const ngPosMerchantId  = (initParams.get('merchant') ?? '').trim().replace(/[^a-zA-Z0-9_-]/g, '')
   const ngPosEventId     = ngPosMerchantId ? `ngpos-${ngPosMerchantId}` : ''
   const ngPosSettlement  = (initParams.get('settlement') ?? '').trim()
@@ -467,6 +469,7 @@ export default function PaymentPage() {
   const polymarketFundingMarkRef = useRef('')
   const polymarketFundingMarkInFlightRef = useRef('')
   const ngPosRegistered  = useRef(false)
+  const ngPosRegisteredTx = useRef('')
   const ngPosOfframpMarkedRef = useRef(false)
   const [paycrestOrder, setPaycrestOrder] = useState<PaycrestCheckoutOrder | null>(null)
   const [paycrestPreparing, setPaycrestPreparing] = useState(false)
@@ -1093,7 +1096,8 @@ export default function PaymentPage() {
   // ── Step 1: Predict router address + check deployment ────────────────────
   // ── Step 2: Real-time payment listener ───────────────────────────────────
   useEffect(() => {
-    if (manualPayDetected || !isSupportedEvmPayChain(chain) || !resolvedEvm) return
+    const evmRecipient = isAddress(activeRecipient) ? activeRecipient as `0x${string}` : null
+    if (manualPayDetected || !isSupportedEvmPayChain(chain) || !evmRecipient) return
 
     const evmChain = chain
     const client   = EVM_CLIENTS[evmChain]
@@ -1108,7 +1112,7 @@ export default function PaymentPage() {
       hskTimer = setInterval(async () => {
         if (detectedRef.current) { clearInterval(hskTimer); return }
         try {
-          const bal = await client.getBalance({ address: resolvedEvm as `0x${string}` })
+          const bal = await client.getBalance({ address: evmRecipient })
           if (initialBalance === null) { initialBalance = bal; return }
           if (bal > initialBalance && bal >= initialBalance + requestedWei * 99n / 100n) {
             const received = bal - initialBalance
@@ -1128,7 +1132,7 @@ export default function PaymentPage() {
         !!circleEvmEmailSession &&
         circleEvmEmailMerchantUnits != null &&
         (chain === 'base' || chain === 'arbitrum')
-      const watchTarget = resolvedEvm as `0x${string}`
+      const watchTarget = evmRecipient
       const requestedUnits =
         isCircleEmailEvmWatch && circleEvmEmailMerchantUnits
           ? circleEvmEmailMerchantUnits
@@ -1169,7 +1173,7 @@ export default function PaymentPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     chain,
-    resolvedEvm,
+    activeRecipient,
     manualPayDetected,
     amt,
     effectiveAmt,
@@ -1195,7 +1199,8 @@ export default function PaymentPage() {
       setDirectStatus('error')
       return
     }
-    if (!resolvedEvm) return
+    const evmRecipient = isAddress(activeRecipient) ? activeRecipient as `0x${string}` : null
+    if (!evmRecipient) return
 
     const params  = new URLSearchParams(window.location.search)
     const idParam = params.get('id')
@@ -1451,14 +1456,14 @@ export default function PaymentPage() {
         } catch { /* receipt may not be indexed yet; fall through to transfer scan */ }
       }
       if (chain === 'hashkey') {
-        const bal          = await client.getBalance({ address: resolvedEvm as `0x${string}` })
+        const bal          = await client.getBalance({ address: evmRecipient })
         const requestedWei = parseEther(effectiveAmt || '0')
         if (bal >= requestedWei * 99n / 100n) {
           setReceivedAmount(bal); setManualTxHash(null); setCircleEvmAcceptedPending(false); setManualPayDetected(true); setShowCheckButton(false)
         }
       } else {
         const tokenAddress = CHAIN_META[evmChain as 'base' | 'arc' | 'arbitrum'].tokenAddress
-        const target = resolvedEvm as `0x${string}`
+        const target = evmRecipient
         const expectedUnits = expectedEvmRecipientUnits()
         const scanUnits = receivedAmount != null && receivedAmount > 0n ? receivedAmount : expectedUnits
         const latestBlock = await client.getBlockNumber()
@@ -1506,7 +1511,9 @@ export default function PaymentPage() {
   }
 
   async function lookupPaymentTxHash() {
-    if (!resolvedEvm || manualTxHash || chain === 'solana' || chain === 'hashkey') return
+    const evmRecipient = isAddress(activeRecipient) ? activeRecipient as `0x${string}` : null
+    if (!evmRecipient || manualTxHash || chain === 'solana' || chain === 'hashkey') return
+    const recoveryLookup = txSyncTick >= 30
     const amountUnits = receivedAmount != null && receivedAmount > 0n
       ? receivedAmount
       : expectedEvmRecipientUnits()
@@ -1517,8 +1524,10 @@ export default function PaymentPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           chain,
-          recipient: resolvedEvm,
+          recipient: evmRecipient,
           amountUnits: amountUnits.toString(),
+          recovery: recoveryLookup,
+          strict: isNgPosPayment,
         }),
       })
       const data = await res.json() as {
@@ -1553,7 +1562,7 @@ export default function PaymentPage() {
   }, [circleEvmAcceptedPending, manualPayDetected, chain, payMode, isManualChecking])
 
   useEffect(() => {
-    if (!manualPayDetected || manualTxHash || chain === 'solana' || chain === 'hashkey' || !resolvedEvm) return
+    if (!manualPayDetected || manualTxHash || chain === 'solana' || chain === 'hashkey' || !isAddress(activeRecipient)) return
     const first = setTimeout(() => {
       void lookupPaymentTxHash()
     }, 2_000)
@@ -1565,7 +1574,7 @@ export default function PaymentPage() {
       clearInterval(timer)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [manualPayDetected, manualTxHash, chain, resolvedEvm, effectiveAmt, receivedAmount?.toString()])
+  }, [manualPayDetected, manualTxHash, chain, activeRecipient, effectiveAmt, receivedAmount?.toString()])
 
   useEffect(() => {
     if (manualTxHash || !manualPayDetected || chain === 'solana') return
@@ -2261,7 +2270,7 @@ export default function PaymentPage() {
       return false
     }
     setPaycrestPreparing(true)
-    setPaycrestStatusText('Preparing naira settlement...')
+    setPaycrestStatusText('Preparing Naira payout...')
     try {
       const response = await fetch('/api/ng-pos', {
         method: 'POST',
@@ -2272,17 +2281,18 @@ export default function PaymentPage() {
           refund_address: session.wallet.address,
           payer_wallet: session.wallet.address,
           payer_email: (showPrivyCircleEmailPay ? privyEmail : circleEmail).trim(),
+          payer_name: attendeeName.trim(),
         }),
       })
       const data = await response.json().catch(() => ({})) as { ok?: boolean; order?: PaycrestCheckoutOrder; error?: string }
-      if (!response.ok || !data.ok || !data.order) throw new Error(data.error || 'Could not prepare naira settlement.')
+      if (!response.ok || !data.ok || !data.order) throw new Error(data.error || 'Could not prepare Naira payout.')
       setPaycrestOrder(data.order)
-      setPaycrestStatusText('Naira settlement ready. Review the bank account, then pay.')
+      setPaycrestStatusText('Naira payout ready. Review the bank account, then pay.')
       await refetchCircleWalletBalance()
       return false
     } catch (err) {
       setPaycrestStatusText('')
-      setCirclePasskeyError(readableErrorMsg(err, 'Could not prepare naira settlement.'))
+      setCirclePasskeyError(readableErrorMsg(err, 'Could not prepare Naira payout.'))
       return false
     } finally {
       setPaycrestPreparing(false)
@@ -2700,7 +2710,7 @@ export default function PaymentPage() {
   const isBasePaymasterFailed = basePaymasterStatus?.status === 'failure'
   const isConfirmed     = (chain === 'solana' ? isSolanaConfirmed : chain === 'arbitrum' ? (isArbitrumRelayConfirmed || isCirclePaymasterConfirmed) : (isEvmConfirmed || isBasePaymasterConfirmed || isCirclePaymasterConfirmed)) || manualPayDetected || directStatus === 'success'
   const txHash          = directStatus === 'success'   ? (directTxHash as `0x${string}` | null)
-                        : manualPayDetected            ? manualTxHash
+                        : manualPayDetected            ? (manualTxHash ?? circlePaymasterTxHash ?? basePaymasterTxHash ?? evmTxHash ?? directTxHash ?? null)
                         : chain === 'solana'           ? solanaTxHash
                         : chain === 'arbitrum'         ? (circlePaymasterTxHash ?? arbitrumRelayHash ?? null)
                         : (circlePaymasterTxHash ?? basePaymasterTxHash ?? evmTxHash)
@@ -2803,16 +2813,21 @@ export default function PaymentPage() {
     return value.toFixed(decimals <= 6 ? 4 : 6)
   }
 
+  function currentNgPosTxHash() {
+    if (manualPayDetected) return manualTxHash ?? circlePaymasterTxHash ?? basePaymasterTxHash ?? evmTxHash ?? directTxHash ?? null
+    if (chain === 'solana') return solanaTxHash ?? solanaDirectTxHash
+    if (chain === 'arbitrum') return circlePaymasterTxHash ?? arbitrumRelayHash ?? directTxHash ?? null
+    return circlePaymasterTxHash ?? basePaymasterTxHash ?? evmTxHash ?? directTxHash ?? null
+  }
+
   async function doRegisterNgPos() {
     if (!ngPosEventId || !ngPosMerchantId) return
-    const customerName = attendeeName.trim()
-    if (!customerName) return
+    const payerName = attendeeName.trim()
+    if (!payerName) return
     const payer  = chain === 'solana' ? (circleSolanaSession?.wallet.address ?? solanaWalletAddr ?? solanaVaultAddr ?? '')
       : (address ?? circleEvmEmailSession?.wallet.address ?? circleSmartAccount ?? directVault ?? '')
-    const txH    = manualPayDetected ? manualTxHash
-                 : chain === 'solana'   ? (solanaTxHash ?? solanaDirectTxHash)
-                 : chain === 'arbitrum' ? (circlePaymasterTxHash ?? arbitrumRelayHash ?? directTxHash ?? null)
-                 : (circlePaymasterTxHash ?? basePaymasterTxHash ?? evmTxHash ?? directTxHash ?? null)
+    const txH = currentNgPosTxHash()
+    const txHash = txH ?? `manual_${Date.now()}`
     const actualAmt = receivedAmount != null
       ? (Number(receivedAmount) / Math.pow(10, meta.decimals)).toFixed(meta.decimals <= 6 ? 6 : 8)
       : payableAmt
@@ -2823,17 +2838,18 @@ export default function PaymentPage() {
     }
     const payload = {
       eventId: ngPosEventId,
-      txHash: txH ?? `manual_${Date.now()}`,
+      txHash,
       chain,
       payer: payer || 'POS payer',
-      memo: customerName,
+      memo: payerName,
       amount: actualAmt,
-      source: 'ngpos',
+      source: isBankReceivePayment ? 'bank-receive' : 'ngpos',
       merchantId: ngPosMerchantId,
-      contextLabel: memo || ngPosMerchantId,
+      contextLabel: memo || (isBankReceivePayment ? 'Bank receive' : ngPosMerchantId),
       settlementType: ngPosSettlement,
       amountNgn: ngPosAmountNgn,
       requestedAmount: expectedSettlementAmt,
+      intentId: paycrestOrder?.intent_id ?? ngPosPaycrestIntentId,
     }
     try {
       if (isNgPosPaycrestOfframp && paycrestOrder && txH && !String(txH).startsWith('manual_') && !ngPosOfframpMarkedRef.current) {
@@ -2853,7 +2869,7 @@ export default function PaymentPage() {
         const markData = await markResponse.json().catch(() => undefined) as { ok?: boolean; order?: PaycrestCheckoutOrder } | undefined
         if (markData?.order) {
           setPaycrestOrder(markData.order)
-          setPaycrestStatusText('Payment submitted. Paycrest is confirming the NGN payout.')
+          setPaycrestStatusText('Payment detected. Paycrest is confirming the Naira payout.')
         }
       }
       const res = await fetch('/api/event-register', {
@@ -2862,7 +2878,11 @@ export default function PaymentPage() {
         body: JSON.stringify(payload),
       })
       const data = await res.json().catch(() => undefined) as { ok?: boolean; receiptId?: string } | undefined
-      if (data?.ok && data.receiptId) setPaymentReceiptId(data.receiptId)
+      if (data?.ok) {
+        ngPosRegistered.current = true
+        ngPosRegisteredTx.current = txHash
+        if (data.receiptId) setPaymentReceiptId(data.receiptId)
+      }
     } catch (err) {
       console.error('[NgPosReg] fetch failed:', err)
     }
@@ -2965,13 +2985,14 @@ export default function PaymentPage() {
   }, [isConfirmed, attendeeName, isAgentOrWalletFunding, isWalletManagerFunding, memo])
 
   useEffect(() => {
-    if (!isConfirmed || !isNgPosPayment || !ngPosEventId || ngPosRegistered.current) return
+    if (!isConfirmed || !isNgPosPayment || !ngPosEventId) return
     if (!attendeeName.trim()) return
-    if (manualPayDetected && isEvmChain && !manualTxHash) return
-    ngPosRegistered.current = true
+    const nextTx = currentNgPosTxHash()
+    const canUpgradeManualReceipt = Boolean(nextTx) && ngPosRegistered.current && ngPosRegisteredTx.current.startsWith('manual_')
+    if (ngPosRegistered.current && !canUpgradeManualReceipt) return
     void doRegisterNgPos()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isConfirmed, attendeeName, manualPayDetected, manualTxHash, chain])
+  }, [isConfirmed, attendeeName, manualPayDetected, manualTxHash, chain, circlePaymasterTxHash, basePaymasterTxHash, evmTxHash, directTxHash])
 
   // Fallback: also register when Send-via-Address relay succeeds (directStatus='success')
   // in case the Transfer event watcher hasn't set manualPayDetected yet.
@@ -3181,11 +3202,19 @@ export default function PaymentPage() {
     const ogExplorerUrl = paymentReceipt?.proof?.ogExplorer || (paymentReceipt?.proof?.ogTxHash ? `https://chainscan.0g.ai/tx/${paymentReceipt.proof.ogTxHash}` : '')
     const ogProofValue = paymentReceipt?.proof?.ogTxHash || paymentReceipt?.proof?.ogRootHash || ''
     const receiptReady = Boolean(paymentReceipt && txHash)
+    const payoutAmountNgn = Number.parseFloat(paycrestOrder?.amount_ngn || ngPosAmountNgn || '0')
+    const payoutLabel = Number.isFinite(payoutAmountNgn) && payoutAmountNgn > 0
+      ? `NGN ${payoutAmountNgn.toLocaleString('en-NG', { maximumFractionDigits: 2 })}`
+      : 'Naira payout'
+    const payoutBankLabel = [
+      paycrestOrder?.bank_name || ngPosBankName,
+      paycrestOrder?.bank_last4 ? `****${paycrestOrder.bank_last4}` : '',
+    ].filter(Boolean).join(' ')
     const archivePendingLabel = receiptArchiveTimedOut
-      ? 'Archive pending'
-      : receiptPollAttempts >= 9
-      ? 'Still archiving...'
-      : 'Archiving...'
+      ? 'Pending'
+      : paymentReceipt
+      ? 'Pending'
+      : 'Preparing'
 
     return (
       <div className="mx-auto max-w-md animate-scale-in">
@@ -3263,7 +3292,7 @@ export default function PaymentPage() {
             <div className="divide-y divide-gray-100 rounded-xl border border-gray-100 bg-gray-50/60 overflow-hidden">
               <Row label="Amount"    value={`${formatAmount(payableAmt, meta.decimals)} ${meta.asset}`} mono={false} />
               {isNgPosPaycrestOfframp && (
-                <Row label="Settlement" value={paycrestStatusText || `NGN payout to ${paycrestOrder?.bank_name || ngPosBankName || 'merchant bank'}`} mono={false} />
+                <Row label="Payout" value={payoutBankLabel ? `${payoutLabel} - ${payoutBankLabel}` : payoutLabel} mono={false} />
               )}
               <Row label="Network"   value={meta.label} mono={false} />
               {isPolymarketBridge && (
@@ -3275,7 +3304,7 @@ export default function PaymentPage() {
                   </span>
                 </div>
               )}
-              {!isPolymarketBridge && <Row label="Recipient" value={truncateAddress(activeRecipient, 4)} mono />}
+              {!isPolymarketBridge && !isNgPosPaycrestOfframp && <Row label="Recipient" value={truncateAddress(activeRecipient, 4)} mono />}
               {!isPolymarketBridge && memo && <Row label={isPolymarketFunding ? 'Funding' : 'For'} value={isPolymarketFunding ? polymarketFundingLabel : memo} mono={false} />}
               {txHash && (
                 <div className="flex items-center justify-between px-4 py-3">
@@ -3301,7 +3330,7 @@ export default function PaymentPage() {
                 <div className="flex items-center justify-between px-4 py-3">
                   <span className="text-sm text-gray-500">Tx</span>
                   <span className="text-xs font-medium text-gray-400">
-                    Syncing{'.'.repeat((txSyncTick % 3) + 1)}
+                    {txSyncTick >= 90 ? 'Confirmed' : `Syncing${'.'.repeat((txSyncTick % 3) + 1)}`}
                   </span>
                 </div>
               )}
@@ -3323,7 +3352,7 @@ export default function PaymentPage() {
                     </a>
                   ) : (
                     <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-400">
-                      {receiptArchiveTimedOut ? (
+                      {receiptArchiveTimedOut || paymentReceipt ? (
                         <AlertCircle className="h-3.5 w-3.5" />
                       ) : (
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -3355,7 +3384,7 @@ export default function PaymentPage() {
                 </button>
                 {!ogProofValue && (
                   <p className="text-center text-[11px] font-medium text-gray-400">
-                    Receipt is ready. 0G archive proof will update automatically when finalized.
+                    Receipt is ready. 0G proof can finalize later.
                   </p>
                 )}
                 {isPolymarketBridge && (
