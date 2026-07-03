@@ -2209,7 +2209,10 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
       return
     }
     if (tab === 'bank') {
-      pushPaymentTabHistory('bank')
+      const url = new URL(window.location.href)
+      url.searchParams.set('product', 'payment')
+      url.searchParams.set('tab', 'bank')
+      window.location.assign(`${url.pathname}${url.search}${url.hash}`)
       return
     }
     if (tab === 'pos') {
