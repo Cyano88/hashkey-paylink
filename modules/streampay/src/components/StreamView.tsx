@@ -149,6 +149,10 @@ export function StreamView({ vaultAddress }: { vaultAddress?: `0x${string}` }) {
 function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; reason?: string }) {
   const [params] = useSearchParams()
   const telegramMode = isTelegramStreamPay(params)
+  const streamRole = (() => {
+    const role = (params.get('role') ?? '').toLowerCase()
+    return role === 'creator' || role === 'reader' ? role : 'auto'
+  })()
   const { address: connectedAddr, isConnected } = useAccount()
   const chainId = useChainId()
   const { switchChain } = useSwitchChain()
@@ -640,7 +644,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
           <div>
             <div className="flex items-center gap-2 mb-1">
               <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">
-                {isRecipient ? 'Claimable streamed USDC' : isSender ? 'Stream progress' : 'Stream progress'}
+                {streamRole === 'creator' || isRecipient ? 'Claimable streamed USDC' : 'Stream progress'}
               </p>
               {reason && (
                 <span className="max-w-[140px] truncate rounded-full border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5 px-2.5 py-0.5 text-[10px] font-semibold text-gray-500 dark:text-gray-300">
@@ -691,9 +695,9 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
                 <StreamMetric label="Refundable" value={formatUsdc(stream.remainingInStream)} />
               </div>
               <p className="text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
-                {isRecipient
+                {streamRole === 'creator' || isRecipient
                   ? 'Creator can claim the unlocked balance anytime. New USDC keeps accruing until the stream ends or the reader stops it.'
-                  : isSender
+                  : streamRole === 'reader' || isSender
                     ? 'Reader controls the unstreamed balance. Ending the stream sends the unlocked share to the creator and returns the remaining USDC to the reader wallet.'
                     : 'Progress shows how much USDC has streamed, what is claimable, and what remains locked in the vault.'}
               </p>
@@ -703,7 +707,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
           {/* ── Actions ─────────────────────────────────────────────────── */}
           {!isCancelled && (
             <div className="space-y-2.5">
-              {(() => {
+              {streamRole !== 'reader' && (() => {
                 const claimable = stream?.claimable ?? 0n
                 const hasBalance = claimable > 0n
                 const circleConfigured = canUseCircleEvmEmailWallet('arc')
@@ -864,7 +868,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
                 )
               })()}
 
-              {(() => {
+              {streamRole !== 'creator' && (() => {
                 const circleConfigured = canUseCircleEvmEmailWallet('arc')
                 const senderWalletMatches = !!senderCircleSession && senderCircleSession.wallet.address.toLowerCase() === info._sender.toLowerCase()
 

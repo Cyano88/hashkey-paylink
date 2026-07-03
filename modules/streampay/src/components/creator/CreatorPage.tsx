@@ -1414,7 +1414,7 @@ function CreatorAccountEarnings({
                   <StreamMiniStat label="Claimed" value={`${formatCreatorUsdc(stream.alreadyWithdrawn)} USDC`} />
                 </div>
                 <a
-                  href={`/stream/${stream.vault}?app=streampay&wallet=circle`}
+                  href={`/stream/${stream.vault}?app=streampay&wallet=circle&role=creator`}
                   className={[
                     'mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg py-2 text-[12px] font-bold transition-all active:scale-[0.98]',
                     claimable > 0n ? 'bg-gray-950 text-white hover:bg-gray-800' : 'border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 dark:border-white/10 dark:bg-[#111216] dark:text-gray-300 dark:hover:bg-white/[0.06]',
@@ -1551,7 +1551,7 @@ function CreatorStreamClaims({ initialCreatorWallet }: { initialCreatorWallet?: 
                   <StreamMiniStat label="Claimed" value={`${formatCreatorUsdc(stream.alreadyWithdrawn)} USDC`} />
                 </div>
                 <a
-                  href={`/stream/${stream.vault}?app=streampay&wallet=circle`}
+                  href={`/stream/${stream.vault}?app=streampay&wallet=circle&role=creator`}
                   className={[
                     'mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg py-2 text-[12px] font-bold transition-all active:scale-[0.98]',
                     claimable > 0n ? 'bg-gray-950 text-white hover:bg-gray-800' : 'border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 dark:border-white/10 dark:bg-[#111216] dark:text-gray-300 dark:hover:bg-white/[0.06]',
@@ -1733,7 +1733,7 @@ function ReaderStreamVaults({
                       <StreamMiniStat label="Budget" value={`${formatCreatorUsdc(stream.totalAmount)} USDC`} />
                     </div>
                     <a
-                      href={`/stream/${stream.vault}?app=streampay&wallet=circle`}
+                      href={`/stream/${stream.vault}?app=streampay&wallet=circle&role=reader`}
                       className="mt-3 flex w-full items-center justify-center rounded-xl bg-gray-950 py-2.5 text-[12px] font-black text-white transition-all active:scale-[0.98] dark:bg-white dark:text-gray-950"
                     >
                       Open stream vault

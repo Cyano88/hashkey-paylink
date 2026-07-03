@@ -403,7 +403,7 @@ export function StreamGate() {
     return 'x402'
   })
   const paymentMode: 'choice' | 'x402' | 'poa' | 'escrow' = selectedPaymentMode ?? 'choice'
-  const gateMode: 'unlock' | 'stream' = paymentMode === 'escrow' ? 'stream' : requestedGateMode
+  const gateMode: 'unlock' | 'stream' = paymentMode === 'escrow' && streamContentAvailable ? 'stream' : 'unlock'
   const streamVault = (params.get('streamVault') ?? params.get('vault') ?? '').trim()
 
   const dripRate   = rateRaw  / 1_000_000
@@ -1770,7 +1770,7 @@ export function StreamGate() {
               <>
                 {!isConnected && (
                   <div className="rounded-xl border border-gray-100 bg-gray-50 px-5 py-3 text-center text-[12px] text-gray-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-400">
-                    Browser wallet required for signed-viewer gates.
+                    Legacy signed-viewer access is not available for public testing. Use fixed unlock or pay-per-view stream.
                   </div>
                 )}
 

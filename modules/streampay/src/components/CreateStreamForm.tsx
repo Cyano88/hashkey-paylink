@@ -219,11 +219,12 @@ function buildStreamLink(
   const isDedicatedHost =
     hostname === 'streampay.xyz' ||
     hostname.endsWith('.streampay.xyz') ||
+    hostname === 'hashpaystream.app' ||
+    hostname.endsWith('.hashpaystream.app') ||
     hostname.includes('streampay')
   const p = new URLSearchParams()
   if (!isDedicatedHost) p.set('app', 'streampay')
   if (circleMode) {
-    p.set('src', 'telegram')
     p.set('wallet', 'circle')
   }
   if (isEmail(recipientEmail)) p.set('recipientEmail', cleanEmail(recipientEmail))
@@ -232,7 +233,10 @@ function buildStreamLink(
   if (agentic?.reportEmail && isEmail(agentic.reportEmail)) p.set('reportEmail', cleanEmail(agentic.reportEmail))
   if (agentic?.agentSlug) p.set('agent', agentic.agentSlug)
   if (agentic?.amountPerDay) p.set('amountPerDay', agentic.amountPerDay)
-  if (senderManage) p.set('manage', 'sender')
+  if (senderManage) {
+    p.set('manage', 'sender')
+    p.set('role', 'reader')
+  }
   if (reason.trim())    p.set('reason', reason.trim())
   const qs = p.toString()
   return `${origin}/stream/${vault}${qs ? `?${qs}` : ''}`
