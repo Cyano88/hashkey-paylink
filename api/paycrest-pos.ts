@@ -119,7 +119,10 @@ async function paycrestFetch<T>(path: string, init: RequestInit = {}): Promise<T
   })
   const body = await response.json().catch(() => ({}))
   if (!response.ok) {
-    const message = firstText((body as any).error, (body as any).message, 'Paycrest request failed.')
+    const validation = Array.isArray((body as any).errors)
+      ? (body as any).errors.map((item: any) => firstText(item?.message, item?.msg, item)).filter(Boolean).join('; ')
+      : firstText((body as any).details, (body as any).detail)
+    const message = firstText(validation, (body as any).error, (body as any).message, 'Paycrest request failed.')
     throw new Error(message)
   }
   return unwrapData<T>(body)

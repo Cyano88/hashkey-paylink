@@ -2273,8 +2273,8 @@ export default function PaymentPage() {
   }
 
   async function prepareNgPosPaycrestOrder(session: CircleEvmEmailSession) {
-    if (!isNgPosPaycrestOfframp) return true
-    if (paycrestOrder?.receive_address && paycrestOrder.amount_usdc) return true
+    if (!isNgPosPaycrestOfframp) return null
+    if (paycrestOrder?.receive_address && paycrestOrder.amount_usdc) return paycrestOrder
     let settlementIntentId = ngPosPaycrestIntentId
     setPaycrestPreparing(true)
     setPaycrestStatusText('Preparing Naira payout...')
@@ -2324,11 +2324,11 @@ export default function PaymentPage() {
       setPaycrestOrder(data.order)
       setPaycrestStatusText('Naira payout ready. Review the bank account, then pay.')
       await refetchCircleWalletBalance()
-      return false
+      return data.order
     } catch (err) {
       setPaycrestStatusText('')
       setCirclePasskeyError(readableErrorMsg(err, 'Could not prepare Naira payout.'))
-      return false
+      return null
     } finally {
       setPaycrestPreparing(false)
     }
@@ -2386,17 +2386,22 @@ export default function PaymentPage() {
           return
         }
 
+        let preparedPaycrestOrder: PaycrestCheckoutOrder | null = null
         if (isNgPosPaycrestOfframp) {
-          const ready = await prepareNgPosPaycrestOrder(session)
-          if (!ready) return
+          preparedPaycrestOrder = await prepareNgPosPaycrestOrder(session)
+          if (!preparedPaycrestOrder) return
         }
 
-        if (!activeRecipient || !isAddress(activeRecipient) || !payableAmt || parseFloat(payableAmt) <= 0) {
+        const paymentRecipient = preparedPaycrestOrder?.receive_address ?? activeRecipient
+        const paymentAmount = preparedPaycrestOrder?.amount_usdc ?? payableAmt
+        const paymentRequiredUnits = parseUnits(paymentAmount || '0', meta.decimals)
+
+        if (!paymentRecipient || !isAddress(paymentRecipient) || !paymentAmount || parseFloat(paymentAmount) <= 0) {
           setCirclePasskeyError('Naira payout is not ready yet. Prepare the payout, then try again.')
           return
         }
 
-        if (circleWalletBalance !== undefined && circleWalletBalance !== null && !circleWalletHasEnough) {
+        if (circleWalletBalance !== undefined && circleWalletBalance !== null && circleWalletBalance < paymentRequiredUnits) {
           resetCircleSmartWalletPending()
           setCirclePasskeyError(SMART_WALLET_FUNDING_ERROR)
           return
@@ -2406,8 +2411,8 @@ export default function PaymentPage() {
         setCircleEvmAcceptedPending(false)
         const txHash = await sendCircleEvmEmailPayment({
           session,
-          recipient: activeRecipient as `0x${string}`,
-          amount: payableAmt,
+          recipient: paymentRecipient as `0x${string}`,
+          amount: paymentAmount,
           feeMode: grossUpEvmPlatformCharges ? 'gross' : 'net',
           feeBps: hashPaylinkFeeBps,
         })
