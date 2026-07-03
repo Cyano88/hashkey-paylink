@@ -835,6 +835,10 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   const productParam = searchParams.get('product')
   const paymentTabParam = searchParams.get('tab')
   const initialProductTarget = (productParam ?? '').toLowerCase()
+  const initialPaymentTab = (paymentTabParam ?? '').toLowerCase()
+  const startsInBankPayment = initialProductTarget === 'payment' && initialPaymentTab === 'bank'
+  const startsInPosPayment = initialProductTarget === 'payment' && initialPaymentTab === 'pos'
+  const startsInBillsPayment = initialProductTarget === 'payment' && initialPaymentTab === 'bills'
   const startsInProduct = Boolean(initialProductTarget) || initialProduct === 'polymarket' || window.location.pathname === '/polymarket'
   const startsInPaymentMenu = initialProductTarget === 'payment' && !paymentTabParam
   const { authenticated: privyAuthenticated, user: privyUser, logout: logoutPrivy, getAccessToken } = usePrivy()
@@ -859,8 +863,8 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   const [accessView,     setAccessView]     = useState<AccessView>('overview')
   const [agentUrl,       setAgentUrl]       = useState('')
   const [agentUrlStatus, setAgentUrlStatus] = useState<'idle' | 'checking' | 'ok' | 'incompatible'>('idle')
-  const [paymentFlow,    setPaymentFlow]    = useState<PaymentFlow>('usdc')
-  const [receiveMode,    setReceiveMode]    = useState<ReceiveMode>('paste')
+  const [paymentFlow,    setPaymentFlow]    = useState<PaymentFlow>(startsInBankPayment ? 'bank' : 'usdc')
+  const [receiveMode,    setReceiveMode]    = useState<ReceiveMode>(startsInBankPayment ? 'bank' : 'paste')
   const [circlePocketMode, setCirclePocketMode] = useState(false)
   const [circlePocketView, setCirclePocketView] = useState<CirclePocketView>('chooser')
   const [circlePocketTab, setCirclePocketTab] = useState<CirclePocketTab>('balance')
@@ -880,15 +884,15 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   const [circlePocketWithdrawNotice, setCirclePocketWithdrawNotice] = useState('')
   const [circlePocketWithdrawTxHash, setCirclePocketWithdrawTxHash] = useState('')
   const [circlePocketActivity, setCirclePocketActivity] = useState<string[]>([])
-  const [posMode,        setPosMode]        = useState(false)
-  const [billsMode,      setBillsMode]      = useState(false)
+  const [posMode,        setPosMode]        = useState(startsInPosPayment)
+  const [billsMode,      setBillsMode]      = useState(startsInBillsPayment)
   const [streamMode,     setStreamMode]     = useState(false)
   const [streamSpotlightIndex, setStreamSpotlightIndex] = useState(0)
   const [polymarketMode, setPolymarketMode] = useState(initialProduct === 'polymarket' || window.location.pathname === '/polymarket')
   const [polymarketSpotlightIndex, setPolymarketSpotlightIndex] = useState(0)
   const [productHubOpen, setProductHubOpen] = useState(!startsInProduct)
   const [paymentMenuOpen, setPaymentMenuOpen] = useState(startsInPaymentMenu)
-  const [posCountry,     setPosCountry]     = useState<PosCountry | null>(null)
+  const [posCountry,     setPosCountry]     = useState<PosCountry | null>(startsInBankPayment ? 'NG' : null)
   const [posSettlementPath, setPosSettlementPath] = useState<PosSettlementPath | null>(null)
   const [posMerchantName, setPosMerchantName] = useState('')
   const [posNetworks,    setPosNetworks]    = useState<PosNetwork[]>(['base'])
@@ -3227,7 +3231,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                 Back
               </button>
 
-          {!accessMode && !multiChainMode && (PRIVY_AUTH_ENABLED || isBankReceive) && (
+          {!accessMode && !multiChainMode && (
             <CircleReceiveSelector
               selectedNet={selectedNet}
               isEvmNet={isEvmNet}
