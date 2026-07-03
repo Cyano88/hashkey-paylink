@@ -1442,7 +1442,8 @@ export default function PaymentPage() {
   }, [circlePasskeyPending, circleEvmPaymentProcessing, manualPayDetected, circlePaymasterTxHash])
 
   async function handleManualCheck() {
-    if (!resolvedEvm) return
+    const evmRecipient = isAddress(activeRecipient) ? activeRecipient as `0x${string}` : null
+    if (!evmRecipient) return
     if (isManualChecking) return
     setIsManualChecking(true)
     try {
@@ -2875,7 +2876,8 @@ export default function PaymentPage() {
     const payer  = chain === 'solana' ? (circleSolanaSession?.wallet.address ?? solanaWalletAddr ?? solanaVaultAddr ?? '')
       : (address ?? circleEvmEmailSession?.wallet.address ?? circleSmartAccount ?? directVault ?? '')
     const txH = currentNgPosTxHash()
-    const txHash = txH ?? `manual_${Date.now()}`
+    if (!txH) return
+    const txHash = txH
     const actualAmt = receivedAmount != null
       ? (Number(receivedAmount) / Math.pow(10, meta.decimals)).toFixed(meta.decimals <= 6 ? 6 : 8)
       : payableAmt
@@ -3390,7 +3392,10 @@ export default function PaymentPage() {
               {!txHash && manualPayDetected && chain !== 'solana' && isNgPosPaycrestOfframp && (
                 <div className="flex items-center justify-between px-4 py-3">
                   <span className="text-sm text-gray-500">Tx</span>
-                  <span className="text-xs font-semibold text-emerald-600">Confirmed</span>
+                  <span className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-400">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    {txSyncTick >= 90 ? 'Still syncing' : `Syncing${'.'.repeat((txSyncTick % 3) + 1)}`}
+                  </span>
                 </div>
               )}
               {paymentReceiptId && (
