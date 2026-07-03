@@ -234,7 +234,9 @@ function drawReceiptCanvas(
   const archived = Boolean(receipt.proof?.ogExplorer || receipt.proof?.ogTxHash)
   const amount = compactReceiptAmount(receipt.amount)
   const isPos = receipt.source === 'ngpos'
-  const amountNgn = isPos ? formatNgn(receipt.amountNgn) : ''
+  const settlement = String(receipt.settlementType || '').toLowerCase()
+  const isLocalCurrency = isPos || receipt.source === 'bank-receive' || receipt.source === 'bills' || settlement === 'instant_fiat' || settlement === 'bill_payment'
+  const amountNgn = isLocalCurrency ? formatNgn(receipt.amountNgn) : ''
 
   ctx.fillStyle = '#f4f7fb'
   ctx.fillRect(0, 0, width, height)
@@ -279,8 +281,10 @@ function drawReceiptCanvas(
     ctx.fillText(amountNgn, 84, 294)
   }
 
-  const typeLabel = isPos && receipt.settlementType === 'instant_fiat'
+  const typeLabel = settlement === 'instant_fiat'
     ? 'Base USDC to Naira'
+    : receipt.source === 'bills' || settlement === 'bill_payment'
+    ? 'Local bill payment'
     : receipt.settlementType?.replace(/[-_]/g, ' ') || receipt.source || 'payment'
   const rows: Array<[string, string]> = [
     ['Network', meta.label],

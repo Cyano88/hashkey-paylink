@@ -569,11 +569,19 @@ export default function Dashboard() {
   function receivedUsdc(row: PaymentRow) {
     return Math.max(0, Number(row.recipientAmount) / 1e6)
   }
+  function receivedNgn(row: PaymentRow) {
+    const n = Number.parseFloat(row.amountNgn || '')
+    return Number.isFinite(n) && n > 0 ? n : 0
+  }
+  function normalizedSettlement(row?: PaymentRow | null) {
+    return String(row?.settlementType || '').toLowerCase()
+  }
   function localHistoryKind(row: PaymentRow): Exclude<LocalHistoryFilter, 'all'> {
-    if (row.source === 'bills' || row.settlementType === 'bill_payment') return 'bills'
+    const settlement = normalizedSettlement(row)
+    if (row.source === 'bills' || settlement === 'bill_payment') return 'bills'
     if (row.source === 'bank-receive' || row.source === 'bank_receive') return 'bank'
     if (row.source === 'ngpos') return 'pos'
-    if (row.settlementType === 'instant_fiat') return 'bank'
+    if (settlement === 'instant_fiat') return 'bank'
     return 'pos'
   }
   function localHistoryLabel(row?: PaymentRow | null) {
@@ -582,6 +590,7 @@ export default function Dashboard() {
     return kind === 'bills' ? 'Bill payment' : kind === 'bank' ? 'Bank receive' : 'POS'
   }
   const totalReceived = payments.reduce((s, p) => s + receivedUsdc(p), 0)
+  const totalNgnReceived = payments.reduce((s, p) => s + receivedNgn(p), 0)
   const dayStart = useCallback((date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime(), [])
   const dateFilteredPayments = useMemo(() => {
     if (!isNgPosDashboard || dateFilter === 'all') return payments
@@ -609,6 +618,15 @@ export default function Dashboard() {
     for (const row of dateFilteredPayments) counts[localHistoryKind(row)] += 1
     return counts
   }, [dateFilteredPayments])
+  const localCategoryTotals = useMemo(() => {
+    const totals: Record<LocalHistoryFilter, number> = { all: 0, pos: 0, bank: 0, bills: 0 }
+    for (const row of dateFilteredPayments) {
+      const amount = receivedNgn(row)
+      totals.all += amount
+      totals[localHistoryKind(row)] += amount
+    }
+    return totals
+  }, [dateFilteredPayments])
   const selectedPayments = useMemo(() => {
     if (!isNgPosDashboard || localHistoryFilter === 'all') return dateFilteredPayments
     return dateFilteredPayments.filter(row => localHistoryKind(row) === localHistoryFilter)
@@ -626,6 +644,9 @@ export default function Dashboard() {
   const todayReceived = payments
     .filter(row => row.timestamp != null && row.timestamp >= todayStart && row.timestamp < todayStart + 86_400_000)
     .reduce((s, p) => s + receivedUsdc(p), 0)
+  const todayNgnReceived = payments
+    .filter(row => row.timestamp != null && row.timestamp >= todayStart && row.timestamp < todayStart + 86_400_000)
+    .reduce((s, p) => s + receivedNgn(p), 0)
   const lastPayment = payments[0] ?? null
   const archivedCount = payments.filter(row => Boolean(row.ogTxHash)).length
   const archiveStatus = payments.length === 0
@@ -656,10 +677,14 @@ export default function Dashboard() {
     })
   }
   function fmtUsdc(n: number) { return `${fmt(n)} USDC` }
+  function fmtNgnAmount(n: number) {
+    if (!Number.isFinite(n) || Math.abs(n) < 0.005) return 'NGN 0'
+    return `NGN ${n.toLocaleString('en-NG', { maximumFractionDigits: 2 })}`
+  }
   function fmtNgn(value?: string) {
     const n = Number.parseFloat(value || '')
     if (!Number.isFinite(n)) return 'NGN not captured'
-    return `₦${n.toLocaleString('en-NG', { maximumFractionDigits: 2 })}`
+    return fmtNgnAmount(n)
   }
   function fmtTs(ts: number | null) {
     if (!ts) return '-'
@@ -669,7 +694,16 @@ export default function Dashboard() {
   function fmtNgnSafe(value?: string) {
     const n = Number.parseFloat(value || '')
     if (!Number.isFinite(n)) return 'NGN not captured'
-    return `NGN ${n.toLocaleString('en-NG', { maximumFractionDigits: 2 })}`
+    return fmtNgnAmount(n)
+  }
+  function localPrimaryAmount(row?: PaymentRow | null) {
+    if (!row) return 'NGN 0'
+    const ngn = receivedNgn(row)
+    return ngn > 0 ? fmtNgnAmount(ngn) : fmtUsdc(receivedUsdc(row))
+  }
+  function localSecondaryAmount(row?: PaymentRow | null) {
+    if (!row) return ''
+    return `${fmtUsdc(receivedUsdc(row))} paid on ${rowMeta(row).label}`
   }
   function fmtTime(ts: number | null) {
     if (!ts) return '-'
@@ -677,7 +711,10 @@ export default function Dashboard() {
   }
   function settlementCopy(row?: PaymentRow | null) {
     if (!row) return 'USDC wallet'
-    return row.settlementType === 'instant_fiat' ? 'Naira payout' : 'USDC wallet'
+    const settlement = normalizedSettlement(row)
+    if (row.source === 'bills' || settlement === 'bill_payment') return 'Bill payment'
+    if (row.source === 'bank-receive' || row.source === 'bank_receive' || settlement === 'instant_fiat') return 'Naira payout'
+    return 'USDC wallet'
   }
   function receiptKind(row: PaymentRow) {
     if (row.source === 'ngpos') {
@@ -878,7 +915,7 @@ export default function Dashboard() {
     <div class="row"><span class="label">Status</span><span class="value">Confirmed</span></div>
     <div class="row"><span class="label">Payer</span><span class="value">${escapeHtml(short(receipt.payer))}</span></div>
     <div class="row"><span class="label">Network</span><span class="value">${escapeHtml(chainLabel)}</span></div>
-    <div class="row"><span class="label">Payout</span><span class="value">${escapeHtml(receipt.settlementType === 'instant_fiat' ? 'Naira payout' : 'USDC wallet')}</span></div>
+    <div class="row"><span class="label">Payout</span><span class="value">${escapeHtml(String(receipt.settlementType || '').toLowerCase() === 'instant_fiat' || receipt.source === 'bank-receive' ? 'Naira payout' : receipt.source === 'bills' ? 'Bill payment' : 'USDC wallet')}</span></div>
     <div class="row"><span class="label">Time</span><span class="value">${escapeHtml(new Date(receipt.createdAt).toLocaleString())}</span></div>
     <div class="row"><span class="label">Tx</span><span class="value">${escapeHtml(short(receipt.txHash))}</span></div>
     <div class="row"><span class="label">Receipt</span><span class="value">${escapeHtml(short(receipt.receiptHash))}</span></div>
@@ -1072,6 +1109,12 @@ export default function Dashboard() {
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold">{tab.label}</p>
                     <p className={cn(
+                      'mt-1 font-mono text-base font-bold',
+                      active ? 'text-white dark:text-gray-950' : 'text-gray-900 dark:text-gray-50',
+                    )}>
+                      {fmtNgnAmount(localCategoryTotals[tab.key])}
+                    </p>
+                    <p className={cn(
                       'mt-1 text-[11px] leading-snug',
                       active ? 'text-white/65 dark:text-gray-600' : 'text-gray-400 dark:text-gray-500',
                     )}>
@@ -1082,7 +1125,7 @@ export default function Dashboard() {
                     'shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold',
                     active ? 'bg-white/12 text-white dark:bg-gray-950/10 dark:text-gray-700' : 'bg-gray-100 text-gray-500 dark:bg-white/[0.06] dark:text-gray-400',
                   )}>
-                    {localCategoryCounts[tab.key]}
+                    {localCategoryCounts[tab.key]} {localCategoryCounts[tab.key] === 1 ? 'receipt' : 'receipts'}
                   </span>
                 </div>
               </button>
@@ -1100,21 +1143,36 @@ export default function Dashboard() {
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500">Balance</p>
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500">
+                {isNgPosDashboard ? 'Local total' : 'Balance'}
+              </p>
               <span className={cn(
                 'inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold',
                 balanceError ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300' : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
               )}>
-                {balanceError ? <><AlertCircle className="h-3 w-3" /> Partial</> : <><Info className="h-3 w-3" /> Read-only</>}
-                <span className="text-emerald-300/80 dark:text-emerald-500/50">-</span>
-                <img src="/brand/circle-logo.jpeg" alt="" className="h-3 w-3 rounded-full object-cover" />
-                <span>Powered by Circle</span>
+                {isNgPosDashboard
+                  ? <><Info className="h-3 w-3" /> Naira receipts</>
+                  : balanceError
+                    ? <><AlertCircle className="h-3 w-3" /> Partial</>
+                    : <><Info className="h-3 w-3" /> Read-only</>}
+                {!isNgPosDashboard && (
+                  <>
+                    <span className="text-emerald-300/80 dark:text-emerald-500/50">-</span>
+                    <img src="/brand/circle-logo.jpeg" alt="" className="h-3 w-3 rounded-full object-cover" />
+                    <span>Powered by Circle</span>
+                  </>
+                )}
               </span>
             </div>
             <p className="mt-2 font-mono text-3xl font-bold tracking-tight text-gray-900 dark:text-gray-50">
-              {balanceLoading ? '--' : fmt(globalBalance)}
-              <span className="ml-2 text-sm font-semibold text-gray-400 dark:text-gray-500">USDC</span>
+              {isNgPosDashboard ? fmtNgnAmount(totalNgnReceived) : balanceLoading ? '--' : fmt(globalBalance)}
+              {!isNgPosDashboard && <span className="ml-2 text-sm font-semibold text-gray-400 dark:text-gray-500">USDC</span>}
             </p>
+            {isNgPosDashboard && (
+              <p className="mt-1 text-xs font-medium text-gray-400 dark:text-gray-500">
+                USDC rail balance: {balanceLoading ? '--' : fmtUsdc(globalBalance)}
+              </p>
+            )}
           </div>
           <button
             type="button"
@@ -1155,9 +1213,9 @@ export default function Dashboard() {
         )}>
           <div className="grid divide-y divide-gray-100 dark:divide-white/10 sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-5">
           {[
-            { label: 'Today', value: fmtUsdc(todayReceived), tone: 'emerald' },
-            { label: 'Total', value: fmtUsdc(totalReceived), tone: 'gray' },
-            { label: 'Last payment', value: lastPayment ? fmtTime(lastPayment.timestamp) : 'None yet', tone: 'gray' },
+            { label: 'Today', value: fmtNgnAmount(todayNgnReceived), tone: 'emerald' },
+            { label: 'Total', value: fmtNgnAmount(totalNgnReceived), tone: 'gray' },
+            { label: 'Last payment', value: lastPayment ? localPrimaryAmount(lastPayment) : 'None yet', tone: 'gray' },
             { label: 'Payout', value: settlementCopy(lastPayment), tone: 'blue' },
             { label: '0G proof', value: archiveStatus, tone: 'purple' },
           ].map(item => (
@@ -1360,8 +1418,8 @@ export default function Dashboard() {
 
                     <div className="min-w-0">
                       <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400 sm:hidden">Amount</p>
-                      <p className="font-mono text-sm font-bold text-emerald-700 dark:text-emerald-300">{fmtUsdc(receivedUsdc(row))}</p>
-                      <p className="mt-1 truncate text-xs font-medium text-gray-500 dark:text-gray-400">{fmtNgnSafe(row.amountNgn)}</p>
+                      <p className="font-mono text-sm font-bold text-emerald-700 dark:text-emerald-300">{localPrimaryAmount(row)}</p>
+                      <p className="mt-1 truncate text-xs font-medium text-gray-500 dark:text-gray-400">{localSecondaryAmount(row)}</p>
                     </div>
 
                     <div className="min-w-0">
@@ -1593,11 +1651,11 @@ export default function Dashboard() {
                 <div>
                   <p className="text-[11px] font-medium text-gray-400 dark:text-gray-500">Amount received</p>
                   <p className="mt-1 font-mono text-lg font-bold text-emerald-700 dark:text-emerald-300">
-                    {fmtUsdc(receivedUsdc(activeReceipt))}
+                    {localPrimaryAmount(activeReceipt)}
                   </p>
                 </div>
                 <p className="text-right text-xs font-semibold text-gray-500 dark:text-gray-400">
-                  {fmtNgnSafe(activeReceipt.amountNgn)}
+                  {localSecondaryAmount(activeReceipt)}
                 </p>
               </div>
             </div>
