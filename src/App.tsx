@@ -46,6 +46,8 @@ const isStreamPayRoute =
 const IS_STREAMPAY =
   hostname === 'streampay.xyz'                           ||  // production domain
   hostname.endsWith('.streampay.xyz')                    ||  // subdomains
+  hostname === 'hashpaystream.app'                       ||  // HashPayStream production domain
+  hostname === 'www.hashpaystream.app'                   ||  // HashPayStream www domain
   hostname.includes('streampay')                         ||  // onrender.com service named streampay-*
   isStreamPayRoute                                       ||  // StreamPay share links on hashpaylink.com
   searchParams.get('app') === 'streampay'                      // localhost dev toggle
