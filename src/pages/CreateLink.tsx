@@ -1118,7 +1118,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     setPaymentFlow('bank')
     setReceiveMode('bank')
     setPaymentMode('personal')
-    setSelectedNet('base')
+    onNetworkSelect('base')
     setMultiChainMode(false)
     setAccessMode(false)
     setPaymentMenuOpen(false)
