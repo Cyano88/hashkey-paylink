@@ -159,7 +159,7 @@ const POS_NETWORK_LABELS: Record<PosNetwork, string> = {
   arc: 'Arc Testnet',
   solana: 'Solana',
 }
-const POS_RECEIPT_PAGE_SIZE = 5
+const POS_RECEIPT_PAGE_SIZE = 20
 const RECEIPT_FILTERS: Array<{ key: ReceiptFilter; label: string }> = [
   { key: 'all', label: 'All' },
   { key: 'paylink', label: 'PayLink' },
@@ -226,7 +226,7 @@ function OgArchiveNotice({
   totalCount: number
   className?: string
 }) {
-  const archiveLabel = totalCount > 0 ? `${archivedCount}/${totalCount} archived` : 'No receipts archived yet'
+  const archiveLabel = totalCount > 0 ? `${archivedCount}/${totalCount} archived` : 'No archives yet'
 
   return (
     <div className={cn(
@@ -237,14 +237,13 @@ function OgArchiveNotice({
         0G
       </span>
       <p className="text-[10px] text-gray-400 dark:text-gray-500">
-        Payment records archived on{' '}
         <a
           href={OG_GLOBAL_ARCHIVE_URL}
           target="_blank"
           rel="noopener noreferrer"
           className="font-medium text-gray-500 underline-offset-2 transition-colors hover:text-purple-600 hover:underline dark:text-gray-400 dark:hover:text-purple-300"
         >
-          0G decentralized storage
+          0G archive
         </a>
         {' '}— {archiveLabel}
       </p>
@@ -1208,29 +1207,28 @@ export default function Dashboard() {
 
       {isNgPosDashboard && (
         <div className={cn(
-          'overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm transition-all duration-500 dark:border-white/10 dark:bg-[#17181c]',
+          'overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm transition-all duration-500 dark:border-white/10 dark:bg-[#17181c]',
           receiptFlash && 'border-emerald-200 bg-emerald-50/50 shadow-emerald-100/70 dark:border-emerald-400/30 dark:bg-emerald-950/15 dark:shadow-none',
         )}>
-          <div className="grid divide-y divide-gray-100 dark:divide-white/10 sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-5">
+          <div className="grid divide-y divide-gray-100 dark:divide-white/10 sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-4">
           {[
             { label: 'Today', value: fmtNgnAmount(todayNgnReceived), tone: 'emerald' },
             { label: 'Total', value: fmtNgnAmount(totalNgnReceived), tone: 'gray' },
             { label: 'Last payment', value: lastPayment ? localPrimaryAmount(lastPayment) : 'None yet', tone: 'gray' },
             { label: 'Payout', value: settlementCopy(lastPayment), tone: 'blue' },
-            { label: '0G proof', value: archiveStatus, tone: 'purple' },
           ].map(item => (
             <div
               key={item.label}
-              className="min-w-0 px-4 py-3"
+              className="min-w-0 px-3.5 py-2.5"
             >
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
                 <span className={cn(
                   'h-1.5 w-1.5 shrink-0 rounded-full',
-                  item.tone === 'emerald' ? 'bg-emerald-500' : item.tone === 'blue' ? 'bg-blue-500' : item.tone === 'purple' ? 'bg-purple-500' : 'bg-gray-300 dark:bg-gray-600',
+                  item.tone === 'emerald' ? 'bg-emerald-500' : item.tone === 'blue' ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600',
                 )} />
-                <p className="truncate text-xs font-medium text-gray-400 dark:text-gray-500">{item.label}</p>
+                <p className="truncate text-[11px] font-medium text-gray-400 dark:text-gray-500">{item.label}</p>
               </div>
-              <p className="mt-1.5 truncate text-[15px] font-semibold leading-tight text-gray-900 dark:text-gray-50">{item.value}</p>
+              <p className="mt-1 truncate text-sm font-semibold leading-tight text-gray-900 dark:text-gray-50">{item.value}</p>
             </div>
           ))}
           </div>
@@ -1371,8 +1369,8 @@ export default function Dashboard() {
               <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">{localEmptyCopy.body}</p>
             </div>
           ) : (
-            <div className="space-y-2 p-3">
-              <div className="hidden grid-cols-[1.15fr_1fr_1fr_auto] gap-3 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 sm:grid">
+            <div className="max-h-[56vh] space-y-2 overflow-y-auto p-3 [scrollbar-gutter:stable]">
+              <div className="hidden grid-cols-[1.15fr_1fr_1fr_auto] gap-2.5 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 sm:grid">
                 <span>Payer</span>
                 <span>Amount</span>
                 <span>Type</span>
@@ -1403,29 +1401,29 @@ export default function Dashboard() {
                       }
                     }}
                     className={cn(
-                      'grid gap-3 rounded-xl border border-gray-100 bg-white px-4 py-3 shadow-sm transition-all hover:border-gray-200 hover:bg-gray-50/50 dark:border-white/10 dark:bg-white/[0.03] dark:hover:border-white/15 dark:hover:bg-white/[0.05] sm:grid-cols-[1.15fr_1fr_1fr_auto] sm:items-center',
+                      'grid gap-2 rounded-xl border border-gray-100 bg-white px-3 py-2.5 shadow-sm transition-all hover:border-gray-200 hover:bg-gray-50/50 dark:border-white/10 dark:bg-white/[0.03] dark:hover:border-white/15 dark:hover:bg-white/[0.05] sm:grid-cols-[1.15fr_1fr_1fr_auto] sm:items-center',
                       isNgPosDashboard && 'cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-950',
                     )}
                   >
                     <div className="min-w-0">
-                      <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400 sm:hidden">Payer</p>
+                      <p className="mb-0.5 text-[9px] font-semibold uppercase tracking-wider text-gray-400 sm:hidden">Payer</p>
                       <div className="flex min-w-0 items-center gap-2">
                         <span className="w-6 shrink-0 text-[11px] font-semibold text-gray-400 dark:text-gray-500">#{index + 1}</span>
-                        <p className="truncate text-sm font-semibold text-gray-900 dark:text-gray-50">{customer}</p>
+                        <p className="truncate text-[13px] font-semibold text-gray-900 dark:text-gray-50">{customer}</p>
                       </div>
-                      <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">{fmtTs(row.timestamp)}</p>
+                      <p className="mt-0.5 text-[11px] text-gray-400 dark:text-gray-500">{fmtTs(row.timestamp)}</p>
                     </div>
 
                     <div className="min-w-0">
-                      <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400 sm:hidden">Amount</p>
-                      <p className="font-mono text-sm font-bold text-emerald-700 dark:text-emerald-300">{localPrimaryAmount(row)}</p>
-                      <p className="mt-1 truncate text-xs font-medium text-gray-500 dark:text-gray-400">{localSecondaryAmount(row)}</p>
+                      <p className="mb-0.5 text-[9px] font-semibold uppercase tracking-wider text-gray-400 sm:hidden">Amount</p>
+                      <p className="font-mono text-[13px] font-bold text-emerald-700 dark:text-emerald-300">{localPrimaryAmount(row)}</p>
+                      <p className="mt-0.5 truncate text-[11px] font-medium text-gray-500 dark:text-gray-400">{localSecondaryAmount(row)}</p>
                     </div>
 
                     <div className="min-w-0">
-                      <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400 sm:hidden">Type</p>
+                      <p className="mb-0.5 text-[9px] font-semibold uppercase tracking-wider text-gray-400 sm:hidden">Type</p>
                       <p className="truncate text-xs font-semibold text-gray-700 dark:text-gray-200">{localHistoryLabel(row)}</p>
-                      <p className="mt-1 inline-flex items-center rounded-full border border-gray-100 bg-gray-50 px-2 py-0.5 text-[10px] font-semibold text-gray-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-400">
+                      <p className="mt-0.5 inline-flex items-center rounded-full border border-gray-100 bg-gray-50 px-1.5 py-0.5 text-[9px] font-semibold text-gray-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-400">
                         {settlementCopy(row)} - {chainMeta.label}
                       </p>
                     </div>

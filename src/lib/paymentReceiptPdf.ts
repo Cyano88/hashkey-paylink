@@ -308,7 +308,10 @@ function drawReceiptCanvas(
     y += 39
   }
 
-  const proofLabel = archived ? '0G archived' : '0G pending'
+  const proofLabel = '0G proof'
+  const proofValue = archived
+    ? `Archived for support - ${shortPdfValue(receipt.proof?.ogTxHash || receipt.proof?.ogRootHash || '')}`
+    : 'Archiving after payment'
   roundRect(ctx, 64, 660, width - 128, 50, 16, archived ? '#faf5ff' : '#f8fafc')
   if (ogLogo && archived) {
     ctx.save()
@@ -326,8 +329,8 @@ function drawReceiptCanvas(
   ctx.fillStyle = archived ? '#7e22ce' : '#667085'
   ctx.font = '800 13px Arial'
   ctx.fillText(proofLabel, 112, 681)
-  ctx.font = '700 10px Courier New'
-  ctx.fillText(shortPdfValue(receipt.proof?.ogTxHash || receipt.proof?.ogRootHash || 'Archiving...'), 112, 696)
+  ctx.font = archived ? '700 10px Courier New' : '700 10px Arial'
+  ctx.fillText(proofValue, 112, 696)
 
   ctx.fillStyle = '#667085'
   ctx.font = '600 11px Arial'

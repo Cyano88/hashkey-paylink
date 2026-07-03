@@ -3310,7 +3310,7 @@ export default function PaymentPage() {
       : (txHash ? `${meta.explorerUrl}/tx/${txHash}` : null)
     const ogExplorerUrl = paymentReceipt?.proof?.ogExplorer || (paymentReceipt?.proof?.ogTxHash ? `https://chainscan.0g.ai/tx/${paymentReceipt.proof.ogTxHash}` : '')
     const ogProofValue = paymentReceipt?.proof?.ogTxHash || paymentReceipt?.proof?.ogRootHash || ''
-    const receiptReady = Boolean(paymentReceipt && txHash)
+    const receiptReady = Boolean(paymentReceipt)
     const payoutAmountNgn = Number.parseFloat(paycrestOrder?.amount_ngn || ngPosAmountNgn || '0')
     const payoutLabel = Number.isFinite(payoutAmountNgn) && payoutAmountNgn > 0
       ? `NGN ${payoutAmountNgn.toLocaleString('en-NG', { maximumFractionDigits: 2 })}`
@@ -3515,6 +3515,11 @@ export default function PaymentPage() {
                   </a>
                 )}
               </div>
+            )}
+            {paymentReceiptId && !paymentReceipt && (
+              <p className="text-center text-[11px] font-medium text-gray-400">
+                Preparing receipt...
+              </p>
             )}
 
             {/* Only surface registration errors — success/pending/idle are silent */}
