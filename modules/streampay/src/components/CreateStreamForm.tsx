@@ -2038,7 +2038,7 @@ export function CreateStreamForm() {
                             isCreatorStream ? 'rounded-none' : 'rounded-full',
                           ].join(' ')}
                         />
-                        {isCreatorStream ? 'Powered by Hashpaylink Creator Checkout' : 'Powered by Circle'}
+                        {isCreatorStream ? 'Powered by HashpayStream Creator Checkout' : 'Powered by Circle'}
                       </span>
                     </div>
                   </div>
@@ -2142,7 +2142,7 @@ export function CreateStreamForm() {
 }
 
 // ── Shared badge ──────────────────────────────────────────────────────────────
-export function HashPayLinkBadge({ label = 'Powered by Hash PayLink' }: { label?: string }) {
+export function HashPayLinkBadge({ label = 'Powered by HashpayStream' }: { label?: string }) {
   return (
     <div className="flex justify-center">
       <span className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5 px-3 py-1">

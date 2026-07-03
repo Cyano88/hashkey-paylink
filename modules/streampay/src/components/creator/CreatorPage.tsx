@@ -182,7 +182,7 @@ const WORLD_GLOBE_IMAGE = '/brand/world-globe.png'
 
 const CREATOR_CATEGORIES: Array<{ id: CreatorCategory; label: string; disabled?: boolean }> = [
   { id: 'worldcup-news', label: 'World Cup News' },
-  { id: 'live-scores', label: 'Live Scores' },
+  { id: 'live-scores', label: 'Live Scores', disabled: true },
   { id: 'crypto', label: 'Crypto' },
   { id: 'ebooks', label: 'Ebooks', disabled: true },
 ]
@@ -210,7 +210,7 @@ const OFFICIAL_DISCOVER_CONTENT: PublishedContent[] = [
     category: 'crypto',
     price: '0.10',
     tag: 'Hash PayLink',
-    source: 'Hash PayLink desk',
+    source: 'HashpayStream desk',
     image: WORLD_GLOBE_IMAGE,
     action: 'create',
     cta: 'Create',
@@ -254,7 +254,7 @@ function worldCupNewsCard(article: PolyWorldCupArticle, index: number): Publishe
     category: 'worldcup-news',
     price: '0.10',
     tag: article.tag || 'World Cup',
-    source: article.source || 'Hash PayLink Pulse',
+  source: article.source || 'HashpayStream Pulse',
     image: article.image || WORLD_GLOBE_IMAGE,
     gateLink: `/gate?${params.toString()}`,
     action: 'gate',

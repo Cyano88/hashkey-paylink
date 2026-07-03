@@ -24,6 +24,9 @@ type VaultEntry = {
 
 const registry = new Map<string, VaultEntry>()
 const DATABASE_URL = (process.env.DATABASE_URL ?? process.env.POSTGRES_URL ?? '').trim()
+if (process.env.RENDER && !DATABASE_URL) {
+  throw new Error('DATABASE_URL or POSTGRES_URL is required for durable creator vault storage on Render.')
+}
 const { Pool } = pg
 const pool = DATABASE_URL
   ? new Pool({

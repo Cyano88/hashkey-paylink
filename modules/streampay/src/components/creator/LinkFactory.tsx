@@ -62,7 +62,7 @@ function creatorProofMessage(params: {
   issuedAt: number
 }) {
   return [
-    'Publish Hash PayLink Creator Studio content',
+    'Publish HashpayStream Creator Studio content',
     '',
     `Content ID: ${shortId(params.contentId)}`,
     `Creator wallet: ${params.creator}`,
@@ -401,7 +401,7 @@ export function LinkFactory({
     const contentHash = keccak256(toBytes(content))
     const proofData = {
       domain: {
-        name: 'Hash PayLink Creator Studio',
+        name: 'HashpayStream Creator Studio',
         version: '1',
         chainId: ARC_CHAIN_ID,
         verifyingContract: creatorAddress as Address,
@@ -423,7 +423,7 @@ export function LinkFactory({
         ? await signCircleEvmEmailTypedData({
             session: circleSession,
             data: proofData,
-            memo: 'Publish Hash PayLink Creator Studio content',
+            memo: 'Publish HashpayStream Creator Studio content',
           })
         : walletClient && address
         ? await walletClient.signMessage({
@@ -876,7 +876,7 @@ export function LinkFactory({
                     : 'Paste content viewers can read while nano-payments accrue.'
                   : mode === 'unlock'
                   ? 'Store a private URL server-side and reveal it only after payment.'
-                  : 'External links use fixed unlock because viewing happens outside Hash PayLink.'}
+                  : 'External links use fixed unlock because viewing happens outside HashpayStream.'}
               </p>
               {contentType === 'url' && (
                 <p className="text-[11px] font-medium text-gray-400 dark:text-gray-500">

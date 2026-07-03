@@ -7,7 +7,7 @@
  *
  * Example OG output:
  *   <meta property="og:title"       content="HashpayStream: Active USDC Stream for 0xa2...1d66" />
- *   <meta property="og:description" content="50.00 USDC streaming · 14d 6h remaining · Powered by Hash PayLink on Arc" />
+ *   <meta property="og:description" content="50.00 USDC streaming · 14d 6h remaining · Powered by HashpayStream on Arc" />
  *   <meta property="og:image"       content="https://…/og-streampay.png" />
  *
  * Mount in server.ts (before the SPA fallback):
@@ -70,7 +70,7 @@ function timeRemaining(endTime: bigint): string {
 
 const DEFAULT_OG = {
   title:       'HashpayStream - Real-time USDC Streaming on Arc',
-  description: 'Send and receive USDC in real-time, second by second. Gasless. No signup. Powered by Hash PayLink.',
+  description: 'Send and receive USDC in real time, second by second. Gasless on Arc. Powered by HashpayStream.',
   image:       '/og-streampay.png',
 }
 
@@ -102,13 +102,13 @@ function injectOgTags(
   const tags = `
   <!-- HashpayStream dynamic OG tags -->
   <meta property="og:type"        content="website" />
-  <meta property="og:site_name"   content="Hash PayLink - HashpayStream" />
+  <meta property="og:site_name"   content="HashpayStream" />
   <meta property="og:title"       content="${safeTitle}" />
   <meta property="og:description" content="${safeDescription}" />
   <meta property="og:image"       content="${safeImage}" />
   <meta property="og:url"         content="${safeUrl}" />
   <meta name="twitter:card"        content="summary_large_image" />
-  <meta name="twitter:site"        content="@Hash_PayLink" />
+  <meta name="twitter:site"        content="@hashpaystream" />
   <meta name="twitter:title"       content="${safeTitle}" />
   <meta name="twitter:description" content="${safeDescription}" />
   <meta name="twitter:image"       content="${safeImage}" />
@@ -171,7 +171,7 @@ export default async function streamOgHandler(req: Request, res: Response) {
       `${formatUsdc(_totalAmount)} USDC total`,
       _cancelled ? 'stream cancelled' : timeRemaining(_endTime),
       `From ${shortAddr(_sender)}`,
-      'Powered by Hash PayLink on Arc',
+      'Powered by HashpayStream on Arc',
     ].join(' · ')
 
     return res.send(injectOgTags(html, title, desc, DEFAULT_OG.image, url))

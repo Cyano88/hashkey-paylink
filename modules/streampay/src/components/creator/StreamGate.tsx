@@ -1293,7 +1293,7 @@ export function StreamGate() {
                       <p className="mt-1 text-[12px] leading-relaxed text-gray-500 dark:text-gray-400">
                         {streamContentAvailable
                           ? `Prepay up to ${formatUsdc(sessionCap)} USDC in an Arc stream while this page renders content.`
-                          : 'Streaming is only available for content Hash PayLink can render in-page.'}
+                          : 'Streaming is only available for content HashpayStream can render in-page.'}
                       </p>
                     </div>
                     <span className={['rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-[0.12em]', streamContentAvailable ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300' : 'bg-gray-100 text-gray-400 dark:bg-white/[0.06] dark:text-gray-500'].join(' ')}>
@@ -1319,7 +1319,7 @@ export function StreamGate() {
                       <div className="space-y-1">
                         <p className="text-[13px] font-bold text-gray-900">Private creator content</p>
                         <p className="mx-auto max-w-[280px] text-[12px] leading-relaxed text-gray-500">
-                          Use your Hash PayLink payment wallet to unlock this content.
+                          Use your HashpayStream payment wallet to unlock this content.
                         </p>
                       </div>
                     </div>
@@ -2297,7 +2297,7 @@ function OverlayShell({
       </div>
       {children}
       <div className="flex items-center gap-1.5 text-[10px] text-gray-400 dark:text-gray-500">
-        {paymentMode === 'x402' ? 'Powered by Circle Gateway on Arc' : paymentMode === 'escrow' || paymentMode === 'choice' ? 'Powered by Hashpaylink Creator Checkout' : 'Powered by Arc Network'}
+        {paymentMode === 'x402' ? 'Powered by Circle Gateway on Arc' : paymentMode === 'escrow' || paymentMode === 'choice' ? 'Powered by HashpayStream Creator Checkout' : 'Powered by Arc Network'}
       </div>
     </div>
   )

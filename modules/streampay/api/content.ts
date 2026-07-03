@@ -140,7 +140,7 @@ const OFFICIAL_CONTENT: Record<string, ContentEntry> = {
     mode: 'unlock',
     title: 'World Cup News Pulse',
     description: 'Paid tournament context and market-moving headlines for readers who want the full source.',
-    authorName: 'Hash PayLink Pulse',
+    authorName: 'HashpayStream Pulse',
     xHandle: 'Hash_PayLink',
     coverImage: '/brand/world-globe.png',
     category: 'worldcup-news',
@@ -158,7 +158,7 @@ const OFFICIAL_CONTENT: Record<string, ContentEntry> = {
     mode: 'unlock',
     title: 'World Cup Scores',
     description: 'Live World Cup scores with exact Polymarket market routes when a fixture is confidently matched.',
-    authorName: 'Hash PayLink desk',
+    authorName: 'HashpayStream desk',
     xHandle: 'Hash_PayLink',
     coverImage: '/brand/world-globe.png',
     category: 'live-scores',
@@ -184,7 +184,7 @@ async function readOfficialWorldCupNewsEntry(contentId: string): Promise<Content
     mode: 'unlock',
     title: match.title,
     description: match.description,
-    authorName: match.source || 'Hash PayLink Pulse',
+    authorName: match.source || 'HashpayStream Pulse',
     xHandle: 'Hash_PayLink',
     coverImage: match.image || '/brand/world-globe.png',
     category: 'worldcup-news',
@@ -581,7 +581,7 @@ function creatorProofMessage(params: {
   issuedAt: number
 }) {
   return [
-    'Publish Hash PayLink Creator Studio content',
+    'Publish HashpayStream Creator Studio content',
     '',
     `Content ID: ${shortId(params.contentId)}`,
     `Creator wallet: ${params.creator}`,
@@ -626,7 +626,7 @@ async function verifyCreatorProof(params: {
   const typedData = {
     address: params.creator,
     domain: {
-      name: 'Hash PayLink Creator Studio',
+      name: 'HashpayStream Creator Studio',
       version: '1',
       chainId: 5042002,
       verifyingContract: params.creator,
@@ -674,7 +674,7 @@ async function creatorGatewayMiddleware(entry: ContentEntry) {
     sellerAddress: entry.creator,
     networks: CREATOR_X402_NETWORKS,
     facilitatorUrl: CREATOR_X402_FACILITATOR_URL,
-    description: 'Hash PayLink Creator Studio content access',
+    description: 'HashpayStream Creator Studio content access',
   })
   const middleware = gateway.require(price)
   gatewayCache.set(cacheKey, middleware)

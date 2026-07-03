@@ -864,10 +864,10 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
                 )
               })()}
 
-              {/* Wallet not connected — header handles Connect Wallet */}
+              {/* Legacy browser-wallet stream interaction */}
               {!telegramMode && !isConnected && (
-                <div className="rounded-xl border border-gray-100 bg-gray-50 py-3.5 text-center text-[12px] text-gray-400">
-                  Connect your wallet above to interact
+                <div className="rounded-xl border border-gray-100 bg-gray-50 py-3.5 text-center text-[12px] text-gray-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-500">
+                  Connect a browser wallet to use this legacy stream action.
                 </div>
               )}
 
