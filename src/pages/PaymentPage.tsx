@@ -471,6 +471,7 @@ export default function PaymentPage() {
   const ngPosRegistered  = useRef(false)
   const ngPosRegisteredTx = useRef('')
   const ngPosOfframpMarkedRef = useRef(false)
+  const lastCirclePaymentUnitsRef = useRef<bigint | null>(null)
   const [paycrestOrder, setPaycrestOrder] = useState<PaycrestCheckoutOrder | null>(null)
   const [paycrestPreparing, setPaycrestPreparing] = useState(false)
   const [paycrestStatusText, setPaycrestStatusText] = useState('')
@@ -2395,6 +2396,7 @@ export default function PaymentPage() {
         const paymentRecipient = preparedPaycrestOrder?.receive_address ?? activeRecipient
         const paymentAmount = preparedPaycrestOrder?.amount_usdc ?? payableAmt
         const paymentRequiredUnits = parseUnits(paymentAmount || '0', meta.decimals)
+        lastCirclePaymentUnitsRef.current = paymentRequiredUnits
 
         if (!paymentRecipient || !isAddress(paymentRecipient) || !paymentAmount || parseFloat(paymentAmount) <= 0) {
           setCirclePasskeyError('Naira payout is not ready yet. Prepare the payout, then try again.')
@@ -2470,7 +2472,7 @@ export default function PaymentPage() {
         setCirclePasskeyError(null)
         setCircleEvmAcceptedPending(false)
         setCircleEvmPaymentProcessing(false)
-        setReceivedAmount(expectedEvmRecipientUnits())
+        setReceivedAmount(lastCirclePaymentUnitsRef.current ?? expectedEvmRecipientUnits())
         setManualTxHash(null)
         setManualPayDetected(true)
         setShowCheckButton(false)
@@ -3225,7 +3227,12 @@ export default function PaymentPage() {
     const explorerTxUrl    = txHash      ? `${meta.explorerUrl}/tx/${txHash}`      : null
     void explorerTxUrl
 
-    const recipientAmt = receivedAmount != null
+    const paycrestConfirmedAmount = isNgPosPaycrestOfframp && paycrestOrder?.amount_usdc
+      ? Number.parseFloat(paycrestOrder.amount_usdc)
+      : null
+    const recipientAmt = paycrestConfirmedAmount != null && Number.isFinite(paycrestConfirmedAmount) && paycrestConfirmedAmount > 0
+      ? paycrestConfirmedAmount
+      : receivedAmount != null
       ? Number(receivedAmount) / Math.pow(10, meta.decimals)
       : null
     const requested = parseFloat(payableAmt)
@@ -3297,7 +3304,7 @@ export default function PaymentPage() {
                   {!isPolymarketFunding && (
                     <>
                       {' '}
-                      {isUnder ? 'received - ' : 'received by recipient'}
+                      {isUnder ? 'received - ' : isNgPosPaycrestOfframp ? 'sent for Naira payout' : 'received by recipient'}
                     </>
                   )}
                   {isUnder && (
@@ -3372,12 +3379,18 @@ export default function PaymentPage() {
                   </div>
                 </div>
               )}
-              {!txHash && manualPayDetected && chain !== 'solana' && (
+              {!txHash && manualPayDetected && chain !== 'solana' && !isNgPosPaycrestOfframp && (
                 <div className="flex items-center justify-between px-4 py-3">
                   <span className="text-sm text-gray-500">Tx</span>
                   <span className="text-xs font-medium text-gray-400">
                     {txSyncTick >= 90 ? 'Confirmed' : `Syncing${'.'.repeat((txSyncTick % 3) + 1)}`}
                   </span>
+                </div>
+              )}
+              {!txHash && manualPayDetected && chain !== 'solana' && isNgPosPaycrestOfframp && (
+                <div className="flex items-center justify-between px-4 py-3">
+                  <span className="text-sm text-gray-500">Tx</span>
+                  <span className="text-xs font-semibold text-emerald-600">Confirmed</span>
                 </div>
               )}
               {paymentReceiptId && (

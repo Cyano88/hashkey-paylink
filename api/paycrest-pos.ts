@@ -239,7 +239,7 @@ export async function createPaycrestOfframpOrder(input: {
         institution: input.bankCode,
         accountIdentifier: input.accountNumber,
         accountName: input.accountName,
-        memo: input.memo || `Hash PayLink POS ${input.intentId}`,
+        memo: input.memo || 'Hash PayLink',
       },
     },
     reference,

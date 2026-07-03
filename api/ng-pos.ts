@@ -732,7 +732,7 @@ export default async function handler(req: Request, res: Response) {
         refundAddress,
         payerEmail,
         payerWallet: isAddress(payerWallet) ? payerWallet : refundAddress,
-        memo: `Hash PayLink payment from ${payerName}`,
+        memo: payerName.slice(0, 40) || 'Hash PayLink',
       })
       return res.json({ ok: true, order })
     }
