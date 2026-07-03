@@ -267,8 +267,9 @@ function cleanReviewStatus(value: unknown): ContentEntry['reviewStatus'] {
 }
 
 function rowToContentEntry(row: Record<string, unknown>): ContentEntry {
+  const type = String(row.type ?? '')
   return {
-    type: String(row.type) === 'url' ? 'url' : 'text',
+    type: type === 'url' ? 'url' : type === 'scores' ? 'scores' : 'text',
     content: String(row.content ?? ''),
     creator: String(row.creator ?? ''),
     capRaw: Number(row.cap_raw ?? 0),
@@ -289,6 +290,14 @@ function rowToContentEntry(row: Record<string, unknown>): ContentEntry {
 
 async function readContentEntry(contentId: string): Promise<ContentEntry | null> {
   if (OFFICIAL_CONTENT[contentId]) return OFFICIAL_CONTENT[contentId]
+  if (contentId.startsWith('worldcup-score-')) {
+    return {
+      ...OFFICIAL_CONTENT['worldcup-scores'],
+      title: 'World Cup Scores',
+      content: contentId,
+      ts: Date.now(),
+    }
+  }
   const officialNews = await readOfficialWorldCupNewsEntry(contentId)
   if (officialNews) return officialNews
   if (pool) {
