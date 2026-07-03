@@ -736,7 +736,7 @@ export async function sendCircleArcStream(params: {
   salt: Hex
   predictedVault: Address
 }) {
-  if (params.session.chain !== 'arc') throw new Error('Arc StreamPay requires an Arc Circle smart wallet.')
+  if (params.session.chain !== 'arc') throw new Error('Arc HashpayStream requires an Arc Circle smart wallet.')
   const sdk = authenticatedSdk(params.session)
   const challenge = await circleWalletApi<{ challengeId?: string }>({
     action: 'executeArcStream',
@@ -755,7 +755,7 @@ export async function sendCircleArcStream(params: {
   const result = await executeChallengeWithTimeout(
     sdk,
     challenge.challengeId,
-    'Circle Smart Wallet confirmation did not finish. If you approved it, refresh this StreamPay link in a minute and check whether the stream deployed on Arc.',
+    'Circle Smart Wallet confirmation did not finish. If you approved it, refresh this HashpayStream link in a minute and check whether the stream deployed on Arc.',
   )
   const txHash = findTxHash(result)
   if (txHash) return txHash
@@ -772,7 +772,7 @@ export async function sendCircleArcArenaJoin(params: {
   escrowAddress: Address
   entryUnits: string
 }) {
-  if (params.session.chain !== 'arc') throw new Error('StreamPay Arena requires an Arc Circle smart wallet.')
+  if (params.session.chain !== 'arc') throw new Error('HashpayStream Arena requires an Arc Circle smart wallet.')
   const sdk = authenticatedSdk(params.session)
   const challenge = await circleWalletApi<{ challengeId?: string }>({
     action: 'executeArcArenaJoin',
@@ -802,7 +802,7 @@ export async function sendCircleArcArenaRefund(params: {
   session: CircleEvmEmailSession
   escrowAddress: Address
 }) {
-  if (params.session.chain !== 'arc') throw new Error('StreamPay Arena refunds require an Arc Circle smart wallet.')
+  if (params.session.chain !== 'arc') throw new Error('HashpayStream Arena refunds require an Arc Circle smart wallet.')
   const sdk = authenticatedSdk(params.session)
   const challenge = await circleWalletApi<{ challengeId?: string }>({
     action: 'executeArcArenaRefund',
@@ -861,7 +861,7 @@ export async function signCircleArcStreamClaim(params: {
   nonce: string
   deadline: string
 }) {
-  if (params.session.chain !== 'arc') throw new Error('Arc StreamPay claim requires an Arc Circle smart wallet.')
+  if (params.session.chain !== 'arc') throw new Error('Arc HashpayStream claim requires an Arc Circle smart wallet.')
   const sdk = authenticatedSdk(params.session)
   const typedData = {
     types: {
@@ -898,7 +898,7 @@ export async function signCircleArcStreamClaim(params: {
     walletId: params.session.wallet.id,
     chain: params.session.chain,
     data: JSON.stringify(typedData),
-    memo: 'Claim Arc StreamPay USDC',
+    memo: 'Claim Arc HashpayStream USDC',
   })
   if (!challenge.challengeId) throw new Error('Circle did not return a typed-data signing challenge.')
   const result = await executeChallenge(sdk, challenge.challengeId)
@@ -915,7 +915,7 @@ export async function signCircleArcStreamCancel(params: {
   nonce: string
   deadline: string
 }) {
-  if (params.session.chain !== 'arc') throw new Error('Arc StreamPay cancellation requires an Arc Circle smart wallet.')
+  if (params.session.chain !== 'arc') throw new Error('Arc HashpayStream cancellation requires an Arc Circle smart wallet.')
   const sdk = authenticatedSdk(params.session)
   const typedData = {
     types: {
@@ -950,7 +950,7 @@ export async function signCircleArcStreamCancel(params: {
     walletId: params.session.wallet.id,
     chain: params.session.chain,
     data: JSON.stringify(typedData),
-    memo: 'End Arc StreamPay stream',
+    memo: 'End Arc HashpayStream stream',
   })
   if (!challenge.challengeId) throw new Error('Circle did not return a typed-data signing challenge.')
   const result = await executeChallenge(sdk, challenge.challengeId)

@@ -47,7 +47,7 @@ function emailBody(subscription: AgenticStreamingSubscription, scout: Scout) {
   const textLines = [
     `LP research report - ${reportDate}`,
     '',
-    'Your agentic StreamPay report is ready.',
+    'Your agentic HashpayStream report is ready.',
     '',
     `Agent: ${subscription.agentSlug}`,
     `Stream: ${compactAddress(subscription.vault)} (${subscription.amountPerDay} USDC/day)`,
@@ -75,7 +75,7 @@ function emailBody(subscription: AgenticStreamingSubscription, scout: Scout) {
     const html = `
       <div style="font-family:Arial,sans-serif;line-height:1.5;color:#111827;max-width:620px">
         <h2 style="margin:0 0 8px;font-size:20px">LP research report</h2>
-        <p style="margin:0 0 14px;color:#4b5563">Your agentic StreamPay report is ready.</p>
+        <p style="margin:0 0 14px;color:#4b5563">Your agentic HashpayStream report is ready.</p>
         <p style="margin:0 0 14px;color:#4b5563;font-size:13px">Agent: ${escapeHtml(subscription.agentSlug)} &middot; Stream: ${compactAddress(subscription.vault)} &middot; Rate: ${subscription.amountPerDay} USDC/day</p>
         ${cards || '<p>No live opportunities returned. The agent will retry on the next report.</p>'}
         <p style="font-size:13px;color:#4b5563">Mode: research only. No trades were executed.</p>

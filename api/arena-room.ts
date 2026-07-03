@@ -78,9 +78,9 @@ async function withRoomChainLock<T>(roomId: string, fn: () => Promise<T>): Promi
 type TriviaQuestion = { prompt: string; options: string[]; answer: string }
 
 const ARENA_QUESTIONS: TriviaQuestion[] = [
-  { prompt: 'Which asset is used for StreamPay settlement?', options: ['USDC', 'ETH', 'SOL', 'BTC'], answer: 'USDC' },
+  { prompt: 'Which asset is used for HashpayStream settlement?', options: ['USDC', 'ETH', 'SOL', 'BTC'], answer: 'USDC' },
   { prompt: 'What happens when a player misses a round?', options: ['Their stream halts', 'They lose all funds', 'Room restarts', 'Timer doubles'], answer: 'Their stream halts' },
-  { prompt: 'Which network is StreamPay Arena designed around?', options: ['Arc', 'Dogecoin', 'Litecoin', 'Ripple'], answer: 'Arc' },
+  { prompt: 'Which network is HashpayStream Arena designed around?', options: ['Arc', 'Dogecoin', 'Litecoin', 'Ripple'], answer: 'Arc' },
   { prompt: 'What stays claimable when a player is eliminated?', options: ['Unstreamed USDC', 'Nothing', 'Half the entry', 'Other players\' deposits'], answer: 'Unstreamed USDC' },
   { prompt: 'Where do per-room deposits live until settlement?', options: ['Arena escrow contract', 'Postgres', 'The host\'s wallet', 'A platform treasury'], answer: 'Arena escrow contract' },
   { prompt: 'What is the platform fee on a completed Arena room?', options: ['0.5%', '0%', '2%', '5%'], answer: '0.5%' },

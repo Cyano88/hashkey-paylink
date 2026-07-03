@@ -74,7 +74,7 @@ function platformAgentProfile(): AgentProfile {
   return {
     slug: PLATFORM_AGENT_SLUG,
     name: 'Hash PayLink Agent',
-    purpose: 'Owner-managed platform agent for treasury, x402, LP Scout, and StreamPay services.',
+    purpose: 'Owner-managed platform agent for treasury, x402, LP Scout, and HashpayStream services.',
     ownerKey: 'platform',
     walletAddress: PLATFORM_AGENT_WALLET_ADDRESS || undefined,
     profileImage: agentProfileImage(PLATFORM_AGENT_SLUG, 'Hash PayLink Agent'),

@@ -9,7 +9,7 @@ export default function GettingStarted() {
       />
 
       <Section title="1. Open the app">
-        <p>Use <a href="https://hashpaylink.com/app" target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline">hashpaylink.com/app</a> to create payment links, retail POS QR codes, PolyDesk routes, StreamPay access, and agent payment actions.</p>
+        <p>Use <a href="https://hashpaylink.com/app" target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline">hashpaylink.com/app</a> to create payment links, retail POS QR codes, PolyDesk routes, HashpayStream access, and agent payment actions.</p>
       </Section>
 
       <Section title="2. Create a payment link">

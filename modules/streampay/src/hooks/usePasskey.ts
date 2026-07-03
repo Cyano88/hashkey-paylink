@@ -46,11 +46,11 @@ export function usePasskey(): PasskeyState {
       const cred = await navigator.credentials.create({
         publicKey: {
           challenge,
-          rp:   { name: 'StreamPay', id: window.location.hostname },
+          rp:   { name: 'HashpayStream', id: window.location.hostname },
           user: {
             id:          userId,
             name:        'viewer@streampay',
-            displayName: 'StreamPay Viewer',
+            displayName: 'HashpayStream Viewer',
           },
           pubKeyCredParams: [
             { type: 'public-key', alg: -7   }, // ES256

@@ -40,7 +40,7 @@ export default function ZeroGStorage() {
             ['Access Mode', 'Lets AI agents, APIs, and gated apps verify payment with /api/agent-verify before serving content.'],
             ['Photon Telegram Agent', 'Creates paid AI requests in chat, then unlocks answers only after the 0G payment proof exists.'],
             ['Built-in AI Agent', 'POST /api/agent-ask reads PayLinkArchive on 0G Mainnet before returning an Anthropic-backed answer.'],
-            ['StreamPay and Creator PoA', 'Stream and attention settlement receipts are designed to use the same archive pattern as durable 0G records.'],
+            ['HashpayStream and Creator PoA', 'Stream and attention settlement receipts are designed to use the same archive pattern as durable 0G records.'],
           ]}
         />
         <InfoBox type="info">The core primitive is reusable: USDC payment -&gt; 0G archive -&gt; on-chain root hash -&gt; agent verifies -&gt; service responds with proof.</InfoBox>

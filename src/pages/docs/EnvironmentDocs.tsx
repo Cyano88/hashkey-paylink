@@ -96,12 +96,12 @@ export default function EnvironmentDocs() {
         />
       </Section>
 
-      <Section title="StreamPay and Arena">
+      <Section title="HashpayStream and Arena">
         <Table
           headers={['Variable', 'Required', 'Description']}
           rows={[
-            ['STREAM_FACTORY_ADDRESS', 'StreamPay', 'StreamVaultFactory contract on Arc.'],
-            ['VITE_STREAM_FACTORY_ADDRESS', 'StreamPay', 'Browser-visible StreamVaultFactory address.'],
+            ['STREAM_FACTORY_ADDRESS', 'HashpayStream', 'StreamVaultFactory contract on Arc.'],
+            ['VITE_STREAM_FACTORY_ADDRESS', 'HashpayStream', 'Browser-visible StreamVaultFactory address.'],
             ['ARENA_ESCROW_FACTORY_ADDRESS', 'Arena', 'Arena escrow factory address.'],
             ['VITE_ARENA_ESCROW_FACTORY_ADDRESS', 'Arena', 'Browser-visible Arena escrow factory address.'],
             ['ARENA_RELAYER_PRIVATE_KEY', 'Arena', 'Server-side relayer key for Arena escrow actions.'],

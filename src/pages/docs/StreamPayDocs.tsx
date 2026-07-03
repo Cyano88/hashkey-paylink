@@ -4,13 +4,13 @@ export default function StreamPayDocs() {
   return (
     <DocPage>
       <DocHeader
-        badge="StreamPay"
-        title="StreamPay"
+        badge="HashpayStream"
+        title="HashpayStream"
         description="USDC payroll, agentic streams, and recoverable-risk Arena rooms on Arc."
       />
 
       <InfoBox type="info">
-        StreamPay is hosted on the same Render service as Hash PayLink and loads with <Code>?app=streampay</Code>. The visible product nav focuses on Payroll, Agentic, and Arena.
+        HashpayStream is hosted on the same Render service as Hash PayLink and loads with <Code>?app=streampay</Code>. The visible product nav focuses on Payroll, Agentic, and Arena.
       </InfoBox>
 
       <Section title="Primary modes">
@@ -38,7 +38,7 @@ export default function StreamPayDocs() {
             ['ArenaRoomEscrow', 'Per-room USDC escrow for deposits, refunds, winner settlement, and 0.5% fee', 'Arc Testnet'],
           ]}
         />
-        <InfoBox type="warning">StreamPay contracts are currently deployed on Arc Testnet. Mainnet deployment requires the checklist in modules/streampay/DEPLOYMENT.md.</InfoBox>
+        <InfoBox type="warning">HashpayStream contracts are currently deployed on Arc Testnet. Mainnet deployment requires the checklist in modules/streampay/DEPLOYMENT.md.</InfoBox>
       </Section>
 
       <Section title="Payroll flow">
@@ -62,7 +62,7 @@ export default function StreamPayDocs() {
       </Section>
 
       <Section title="Arena storage and settlement">
-        <p>StreamPay Arena uses Postgres as durable room state and Arc escrow contracts for money. Postgres stores room settings, status, player count, escrow address, and payment status. It does not custody funds.</p>
+        <p>HashpayStream Arena uses Postgres as durable room state and Arc escrow contracts for money. Postgres stores room settings, status, player count, escrow address, and payment status. It does not custody funds.</p>
         <Table
           headers={['Layer', 'Role']}
           rows={[
@@ -74,9 +74,9 @@ export default function StreamPayDocs() {
       </Section>
 
       <Section title="0G proof extension">
-        <p>StreamPay is part of the same Hash PayLink proof architecture. Payroll streams, agentic streams, and Arena outcomes can become 0G-verifiable records using the same durable proof pattern as multi-payer collections and agent receipts.</p>
+        <p>HashpayStream is part of the same Hash PayLink proof architecture. Payroll streams, agentic streams, and Arena outcomes can become 0G-verifiable records using the same durable proof pattern as multi-payer collections and agent receipts.</p>
         <Table
-          headers={['StreamPay event', '0G record']}
+          headers={['HashpayStream event', '0G record']}
           rows={[
             ['Stream created', 'Vault address, sender, recipient, amount, duration, Arc transaction hash.'],
             ['Claim submitted', 'Recipient, claim amount, withdrawn amount, relayer transaction hash.'],
@@ -88,7 +88,7 @@ export default function StreamPayDocs() {
 
       <Section title="Legacy direct routes">
         <InfoBox type="warning">
-          Creator and gate routes still exist as direct legacy module routes, but they are not the primary public StreamPay nav. Do not use them as the main product pitch.
+          Creator and gate routes still exist as direct legacy module routes, but they are not the primary public HashpayStream nav. Do not use them as the main product pitch.
         </InfoBox>
       </Section>
 

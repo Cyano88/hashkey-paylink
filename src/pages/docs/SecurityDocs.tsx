@@ -34,8 +34,8 @@ export default function SecurityDocs() {
         <ul className="list-none space-y-1 mt-2">
           <li>- <Code>PayLinkFactoryV2.sol</Code> - CREATE2 vault factory</li>
           <li>- <Code>PayLinkArchive.sol</Code> - 0G payment proof registry</li>
-          <li>- <Code>StreamVault.sol</Code> and <Code>StreamVaultFactory.sol</Code> - StreamPay payroll</li>
-          <li>- <Code>ArenaRoomEscrow.sol</Code> and <Code>ArenaRoomEscrowFactory.sol</Code> - StreamPay Arena escrow settlement</li>
+          <li>- <Code>StreamVault.sol</Code> and <Code>StreamVaultFactory.sol</Code> - HashpayStream payroll</li>
+          <li>- <Code>ArenaRoomEscrow.sol</Code> and <Code>ArenaRoomEscrowFactory.sol</Code> - HashpayStream Arena escrow settlement</li>
         </ul>
       </Section>
 
@@ -57,7 +57,7 @@ export default function SecurityDocs() {
       </Section>
 
       <NavFooter
-        prev={{ label: 'StreamPay', path: '/docs/streampay' }}
+        prev={{ label: 'HashpayStream', path: '/docs/streampay' }}
         next={{ label: 'Wallet Setup', path: '/docs/wallets' }}
       />
     </DocPage>

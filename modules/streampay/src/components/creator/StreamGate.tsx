@@ -2300,7 +2300,7 @@ function OverlayShell({
       </div>
       {children}
       <div className="flex items-center gap-1.5 text-[10px] text-gray-400">
-        {paymentMode === 'x402' ? 'Powered by Circle Gateway on Arc' : paymentMode === 'escrow' || paymentMode === 'choice' ? 'Powered by Hash PayLink Creator Checkout' : 'Powered by Arc Network'}
+        {paymentMode === 'x402' ? 'Powered by Circle Gateway on Arc' : paymentMode === 'escrow' || paymentMode === 'choice' ? 'Powered by Hashpaylink Creator Checkout' : 'Powered by Arc Network'}
       </div>
     </div>
   )

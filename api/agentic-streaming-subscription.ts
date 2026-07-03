@@ -89,7 +89,7 @@ export default async function handler(req: Request, res: Response) {
     amount: subscription.totalAmount,
     asset: 'USDC',
     direction: 'in',
-    network: 'Arc StreamPay',
+    network: 'Arc HashpayStream',
     wallet: subscription.agentWallet,
     txHash: subscription.vault,
     serviceUrl: subscription.streamUrl,

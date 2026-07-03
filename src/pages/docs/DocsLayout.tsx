@@ -52,7 +52,7 @@ const NAV = [
     ],
   },
   {
-    group: 'StreamPay',
+    group: 'HashpayStream',
     items: [
       { label: 'Overview',        path: '/docs/streampay' },
       { label: 'Payroll',         path: '/docs/streampay/payroll' },

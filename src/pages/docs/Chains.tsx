@@ -14,7 +14,7 @@ export default function Chains() {
           rows={[
             ['Base', 'USDC', 'Payment links, Telegram checkout, PolyDesk funding, retail POS', '8453'],
             ['Arbitrum', 'USDC', 'Payment links, retail POS, and sponsored EVM checkout paths', '42161'],
-            ['Arc Testnet', 'USDC', 'StreamPay, agentic streams, and Arena escrow testing', '5042002'],
+            ['Arc Testnet', 'USDC', 'HashpayStream, agentic streams, and Arena escrow testing', '5042002'],
             ['Solana', 'USDC', 'Payment links and retail POS through the Solana relay path', 'mainnet-beta'],
           ]}
         />
@@ -34,7 +34,7 @@ export default function Chains() {
       </Section>
 
       <Section title="Arc Testnet">
-        <p>Arc powers StreamPay and Arena testing. Privy signs users in, Circle wallet sessions handle user wallet access, and Arena rooms use per-room escrow architecture with durable room state in Postgres.</p>
+        <p>Arc powers HashpayStream and Arena testing. Privy signs users in, Circle wallet sessions handle user wallet access, and Arena rooms use per-room escrow architecture with durable room state in Postgres.</p>
         <Table
           headers={['Property', 'Value']}
           rows={[

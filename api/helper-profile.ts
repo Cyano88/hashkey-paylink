@@ -168,7 +168,7 @@ function inferTopics(text: string) {
   const value = text.toLowerCase()
   return [
     value.includes('polymarket') && 'Polymarket',
-    value.includes('stream') && 'StreamPay',
+    value.includes('stream') && 'HashpayStream',
     value.includes('agent') && 'agent setup',
     value.includes('wallet') && 'wallets',
     value.includes('base') && 'Base',
@@ -186,7 +186,7 @@ function deriveMemorySummary(input: {
   answer?: string
 }) {
   const base = input.existing?.trim()
-    || `Prefers to be called ${input.displayName}. Uses Hash PayLink Agent Helper for payments, Polymarket funding, StreamPay, planning, and agent setup.`
+    || `Prefers to be called ${input.displayName}. Uses Hash PayLink Agent Helper for payments, Polymarket funding, HashpayStream, planning, and agent setup.`
   const question = compactMemoryText(input.question ?? '', 120)
   if (!question) return base.slice(0, 1600)
 

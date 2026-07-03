@@ -103,7 +103,7 @@ class StreamErrorBoundary extends Component<
     this.state = { error: null }
   }
   static getDerivedStateFromError(e: Error) { return { error: e } }
-  componentDidCatch(e: Error, info: ErrorInfo) { console.error('[StreamPay]', e, info) }
+  componentDidCatch(e: Error, info: ErrorInfo) { console.error('[HashpayStream]', e, info) }
   render() {
     if (this.state.error) {
       return (
@@ -628,7 +628,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
         <div className="flex items-center justify-between px-5 pt-5 pb-2 sm:px-7 sm:pt-6 sm:pb-3">
           <div className="flex items-center gap-2">
             <StreamPayActivityMark confirmed={actionState === 'confirmed' && !!txHash} />
-            <span className="text-[12px] font-semibold uppercase tracking-[0.14em] text-gray-500 dark:text-gray-400">StreamPay</span>
+            <span className="text-[12px] font-semibold uppercase tracking-[0.14em] text-gray-500 dark:text-gray-400">HashpayStream</span>
           </div>
           {statusBadge}
         </div>
@@ -640,7 +640,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
           <div>
             <div className="flex items-center gap-2 mb-1">
               <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">
-                {isRecipient ? 'Available for Withdrawal' : isSender ? 'Active Payroll Stream' : 'Stream Overview'}
+                {isRecipient ? 'Claimable streamed USDC' : isSender ? 'Stream progress' : 'Stream progress'}
               </p>
               {reason && (
                 <span className="max-w-[140px] truncate rounded-full border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5 px-2.5 py-0.5 text-[10px] font-semibold text-gray-500 dark:text-gray-300">
@@ -657,9 +657,9 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
             </div>
             <p className="mt-0.5 text-[12px] text-gray-400">
               {stream?.isBeforeStart ? 'Stream begins soon'
-               : isCancelled        ? 'Final vested amount'
-               : isComplete         ? 'Fully vested'
-               : 'Total unlocked · updates every 100ms'}
+               : isCancelled        ? 'Final streamed amount'
+               : isComplete         ? 'Fully streamed'
+               : 'Unlocked so far - updates live'}
             </p>
           </div>
 
@@ -683,6 +683,23 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
             <MetaCell label="Withdrawn" value={formatUsdc(info._alreadyWithdrawn)} />
           </div>
 
+          {stream && (
+            <div className="rounded-2xl border border-gray-100 dark:border-white/10 bg-gray-50/70 dark:bg-white/[0.04] p-3.5 space-y-3">
+              <div className="grid grid-cols-3 gap-2">
+                <StreamMetric label="Streamed" value={formatUsdc(stream.totalUnlocked)} />
+                <StreamMetric label="Claimable" value={formatUsdc(stream.claimable)} tone="green" />
+                <StreamMetric label="Refundable" value={formatUsdc(stream.remainingInStream)} />
+              </div>
+              <p className="text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
+                {isRecipient
+                  ? 'Creator can claim the unlocked balance anytime. New USDC keeps accruing until the stream ends or the reader stops it.'
+                  : isSender
+                    ? 'Reader controls the unstreamed balance. Ending the stream sends the unlocked share to the creator and returns the remaining USDC to the reader wallet.'
+                    : 'Progress shows how much USDC has streamed, what is claimable, and what remains locked in the vault.'}
+              </p>
+            </div>
+          )}
+
           {/* ── Actions ─────────────────────────────────────────────────── */}
           {!isCancelled && (
             <div className="space-y-2.5">
@@ -696,7 +713,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
                 const claimTitle = agenticMode ? 'Agent claim wallet' : 'Claim with Circle Smart Wallet'
                 const claimSubtitle = agenticMode
                   ? `Only ${agentSlug} recipient wallet can claim this stream.`
-                  : 'Telegram StreamPay claims stay inside Circle on Arc'
+                  : 'Telegram HashpayStream claims stay inside Circle on Arc'
                 const claimPlaceholder = agenticMode ? 'Recipient wallet email' : 'email@example.com'
 
                 if (actionKind === 'claim' && actionState === 'confirmed' && txHash) {
@@ -1023,7 +1040,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
                   {actionState === 'signing'  ? 'Sign to confirm…'
                    : actionState === 'relaying' ? 'Processing…'
                    : actionState === 'pending'  ? 'Cancellation pending…'
-                   : 'Cancel Stream & Reclaim Locked Funds'}
+                   : 'End stream and refund unstreamed USDC'}
                 </button>
               )}
 
@@ -1104,6 +1121,18 @@ function MetaCell({ label, value }: { label: string; value: string }) {
     <div className="rounded-xl border border-gray-100 dark:border-white/10 bg-gray-50/60 dark:bg-white/5 px-2 py-2.5 sm:px-3 text-center">
       <p className="text-[9px] sm:text-[10px] font-semibold uppercase tracking-wider text-gray-400 truncate">{label}</p>
       <p className="mt-0.5 text-[12px] sm:text-[13px] font-semibold text-gray-700 dark:text-gray-200 tabular-nums">{value}</p>
+    </div>
+  )
+}
+
+function StreamMetric({ label, value, tone = 'gray' }: { label: string; value: string; tone?: 'gray' | 'green' }) {
+  return (
+    <div className="rounded-xl bg-white dark:bg-[#111216] px-2 py-2 text-center">
+      <p className="text-[9px] sm:text-[10px] font-semibold uppercase tracking-wider text-gray-400 truncate">{label}</p>
+      <p className={[
+        'mt-0.5 text-[11px] sm:text-[12px] font-bold tabular-nums',
+        tone === 'green' ? 'text-emerald-600 dark:text-emerald-300' : 'text-gray-700 dark:text-gray-200',
+      ].join(' ')}>{value}</p>
     </div>
   )
 }

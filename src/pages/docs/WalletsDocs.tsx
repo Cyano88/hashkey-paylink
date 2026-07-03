@@ -11,8 +11,8 @@ export default function WalletsDocs() {
       <InfoBox type="tip">Many Hash PayLink flows do not require the payer to connect a browser wallet. Send via Address lets a payer send USDC from an exchange, hardware wallet, or any wallet that supports the selected network.</InfoBox>
 
       <Section title="Privy + Circle">
-        <SubSection title="StreamPay and Arena">
-          <p>StreamPay and Arena use Privy for email-first sign-in and Circle wallet sessions for Arc wallet actions. This keeps the experience simple for consumers while preserving wallet-based settlement.</p>
+        <SubSection title="HashpayStream and Arena">
+          <p>HashpayStream and Arena use Privy for email-first sign-in and Circle wallet sessions for Arc wallet actions. This keeps the experience simple for consumers while preserving wallet-based settlement.</p>
         </SubSection>
         <SubSection title="Agent and PolyDesk flows">
           <p>Agentic flows use selected paying agents, Circle wallet sessions, and x402-style service receipts where applicable. PolyDesk stores user preferences and alert settings server-side so Telegram sessions can persist.</p>

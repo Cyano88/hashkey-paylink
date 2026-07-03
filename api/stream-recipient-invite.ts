@@ -3,7 +3,7 @@ import crypto from 'node:crypto'
 import { sendTransactionalEmail } from './email-provider.js'
 
 const FROM_EMAIL = process.env.STREAM_INVITE_FROM_EMAIL ?? process.env.ALERT_FROM_EMAIL
-const FROM_NAME = process.env.STREAM_INVITE_FROM_NAME ?? 'StreamPay'
+const FROM_NAME = process.env.STREAM_INVITE_FROM_NAME ?? 'HashpayStream'
 
 function normalizeEmail(value: unknown) {
   const email = String(value ?? '').trim().toLowerCase()
@@ -41,18 +41,18 @@ export default async function handler(req: Request, res: Response) {
     if (!email) return res.status(400).json({ ok: false, error: 'Invalid recipient email.' })
 
     const amount = cleanText(req.body?.amount, 'USDC')
-    const duration = cleanText(req.body?.duration, 'a StreamPay retainer')
-    const reason = cleanText(req.body?.reason, 'StreamPay retainer')
+    const duration = cleanText(req.body?.duration, 'a HashpayStream retainer')
+    const reason = cleanText(req.body?.reason, 'HashpayStream retainer')
     const streamUrl = cleanUrl(req.body?.streamUrl)
 
     if (streamUrl) {
-      const subject = `Your StreamPay claim link is ready`
+      const subject = `Your HashpayStream claim link is ready`
       const text = [
-        'Your StreamPay USDC stream is live.',
+        'Your HashpayStream USDC stream is live.',
         '',
         `Amount: ${amount}`,
         `Duration: ${duration}`,
-        `Memo: ${reason || 'StreamPay retainer'}`,
+        `Memo: ${reason || 'HashpayStream retainer'}`,
         '',
         'Open this link to view and claim with Circle Smart Wallet on Arc:',
         streamUrl,
@@ -60,10 +60,10 @@ export default async function handler(req: Request, res: Response) {
 
       const html = `
         <div style="font-family:Inter,Arial,sans-serif;line-height:1.5;color:#111827">
-          <h2 style="margin:0 0 12px">Your StreamPay claim link is ready</h2>
-          <p>Your StreamPay USDC stream is live.</p>
-          <p><strong>Amount:</strong> ${amount}<br/><strong>Duration:</strong> ${duration}<br/><strong>Memo:</strong> ${reason || 'StreamPay retainer'}</p>
-          <p><a href="${streamUrl}" style="display:inline-block;background:#111827;color:#fff;text-decoration:none;border-radius:12px;padding:12px 18px;font-weight:700">Open StreamPay Claim</a></p>
+          <h2 style="margin:0 0 12px">Your HashpayStream claim link is ready</h2>
+          <p>Your HashpayStream USDC stream is live.</p>
+          <p><strong>Amount:</strong> ${amount}<br/><strong>Duration:</strong> ${duration}<br/><strong>Memo:</strong> ${reason || 'HashpayStream retainer'}</p>
+          <p><a href="${streamUrl}" style="display:inline-block;background:#111827;color:#fff;text-decoration:none;border-radius:12px;padding:12px 18px;font-weight:700">Open HashpayStream Claim</a></p>
           <p style="font-size:13px;color:#6b7280">Claims stay inside Circle Smart Wallet on Arc.</p>
         </div>
       `
@@ -94,13 +94,13 @@ export default async function handler(req: Request, res: Response) {
     setup.searchParams.set('pending', pendingId)
     const setupUrl = setup.toString()
 
-    const subject = `Prepare your StreamPay wallet`
+    const subject = `Prepare your HashpayStream wallet`
     const text = [
-      'You have been invited to receive a StreamPay USDC stream.',
+      'You have been invited to receive a HashpayStream USDC stream.',
       '',
       `Amount: ${amount}`,
       `Duration: ${duration}`,
-      `Memo: ${reason || 'StreamPay retainer'}`,
+      `Memo: ${reason || 'HashpayStream retainer'}`,
       '',
       'Open this link to prepare your Circle Smart Wallet on Arc:',
       setupUrl,
@@ -110,9 +110,9 @@ export default async function handler(req: Request, res: Response) {
 
     const html = `
       <div style="font-family:Inter,Arial,sans-serif;line-height:1.5;color:#111827">
-        <h2 style="margin:0 0 12px">Prepare your StreamPay wallet</h2>
-        <p>You have been invited to receive a StreamPay USDC stream.</p>
-        <p><strong>Amount:</strong> ${amount}<br/><strong>Duration:</strong> ${duration}<br/><strong>Memo:</strong> ${reason || 'StreamPay retainer'}</p>
+        <h2 style="margin:0 0 12px">Prepare your HashpayStream wallet</h2>
+        <p>You have been invited to receive a HashpayStream USDC stream.</p>
+        <p><strong>Amount:</strong> ${amount}<br/><strong>Duration:</strong> ${duration}<br/><strong>Memo:</strong> ${reason || 'HashpayStream retainer'}</p>
         <p><a href="${setupUrl}" style="display:inline-block;background:#111827;color:#fff;text-decoration:none;border-radius:12px;padding:12px 18px;font-weight:700">Prepare Circle Wallet</a></p>
         <p style="font-size:13px;color:#6b7280">You only prepare the receiving wallet. The sender funds and deploys the stream.</p>
       </div>
@@ -130,7 +130,7 @@ export default async function handler(req: Request, res: Response) {
 
     return res.json({ ok: true, email, pendingId, setupUrl })
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Could not send StreamPay invite.'
+    const message = err instanceof Error ? err.message : 'Could not send HashpayStream invite.'
     return res.status(500).json({ ok: false, error: message })
   }
 }

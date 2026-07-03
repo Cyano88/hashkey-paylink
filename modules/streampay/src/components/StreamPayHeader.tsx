@@ -63,8 +63,8 @@ export function StreamPayHeader() {
       <div className="mx-auto flex max-w-5xl items-center justify-between px-4 pt-3 pb-2 sm:px-6">
         <Link to={payrollTo} className="group flex items-center gap-2.5 focus:outline-none">
           <GeometricO />
-          <span className="text-[15px] font-semibold tracking-tight text-gray-900 dark:text-white">
-            Stream<span style={{ color: '#3b82f6' }}>Pay</span>
+          <span className="text-[15px] font-semibold tracking-tight">
+            <span className="text-gray-900 dark:text-white">Hashpay</span><span style={{ color: '#3b82f6' }}>Stream</span>
           </span>
         </Link>
 

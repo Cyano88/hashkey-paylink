@@ -395,7 +395,7 @@ export function CreateStreamForm() {
           : !durationValid
             ? 'Choose duration'
             : !factoryAddr
-              ? 'StreamPay unavailable'
+              ? 'HashpayStream unavailable'
               : !publicClient
                 ? 'Network loading'
                 : circleNeedsFunds
@@ -497,7 +497,7 @@ export function CreateStreamForm() {
           txHash,
           chain: 'arc',
           payer: senderWallet,
-          memo: reason.trim() || 'StreamPay payroll stream',
+          memo: reason.trim() || 'HashpayStream payroll stream',
           amount: formatUsdcFull(amountBn),
           requestedAmount: formatUsdcFull(amountBn),
           source: 'streampay',
@@ -589,7 +589,7 @@ export function CreateStreamForm() {
         if (data.link?.circleWalletAddress) setLinkedCircleAddress(data.link.circleWalletAddress)
       } catch (err) {
         if (!cancelled) {
-          console.warn('[StreamPay] Privy Circle wallet link restore failed', err)
+          console.warn('[HashpayStream] Privy Circle wallet link restore failed', err)
           setPrivyCircleLinkError(null)
         }
       } finally {
@@ -877,7 +877,7 @@ export function CreateStreamForm() {
     }
     if (nav.share && (!nav.canShare || nav.canShare({ files: [file] }))) {
       await nav.share({
-        title: 'StreamPay receipt',
+        title: 'HashpayStream receipt',
         text: `${compactReceiptAmount(streamReceipt.amount)} USDC stream created on Arc`,
         files: [file],
       })
@@ -1066,7 +1066,7 @@ export function CreateStreamForm() {
         return
       }
       setRecipient(data.walletAddress)
-      setRecipientInviteStatus('Recipient wallet ready. StreamPay can now deploy to this wallet.')
+      setRecipientInviteStatus('Recipient wallet ready. HashpayStream can now deploy to this wallet.')
     } catch (err) {
       setRecipientInviteError(err instanceof Error ? err.message.slice(0, 180) : 'Could not check recipient wallet.')
     } finally {
@@ -1246,7 +1246,7 @@ export function CreateStreamForm() {
               </a>
             )}
 
-            <HashPayLinkBadge label={isCreatorStream ? 'Powered by Hash PayLink Vault on Arc' : undefined} />
+            <HashPayLinkBadge label={isCreatorStream ? 'Powered by HashpayStream Vault on Arc' : undefined} />
           </div>
         </div>
       </div>
@@ -1535,7 +1535,7 @@ export function CreateStreamForm() {
                       <p className="text-[12px] font-semibold text-gray-500 dark:text-gray-300">
                         {activeTab === 'running' ? 'No running streams found.' : 'No ended streams found.'}
                       </p>
-                      <p className="text-[11px] text-gray-400">Streams appear here after this wallet has used StreamPay.</p>
+                      <p className="text-[11px] text-gray-400">Streams appear here after this wallet has used HashpayStream.</p>
                     </div>
                   )}
 
@@ -2038,7 +2038,7 @@ export function CreateStreamForm() {
                             isCreatorStream ? 'rounded-none' : 'rounded-full',
                           ].join(' ')}
                         />
-                        {isCreatorStream ? 'Powered by Hash PayLink Creator Checkout' : 'Powered by Circle'}
+                        {isCreatorStream ? 'Powered by Hashpaylink Creator Checkout' : 'Powered by Circle'}
                       </span>
                     </div>
                   </div>
@@ -2124,13 +2124,13 @@ export function CreateStreamForm() {
                 support@hashpaylink.com
               </a>
               <a
-                href="https://x.com/Streampay_"
+                href="https://x.com/hashpaystream"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
               >
                 <XIcon className="h-3.5 w-3.5" />
-                @Streampay_
+                @hashpaystream
               </a>
             </div>
           </div>

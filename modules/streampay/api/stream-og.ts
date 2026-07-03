@@ -6,7 +6,7 @@
  * X (Twitter), WhatsApp, iMessage, and Slack.
  *
  * Example OG output:
- *   <meta property="og:title"       content="Streampay: Active USDC Stream for 0xa2…1d66" />
+ *   <meta property="og:title"       content="HashpayStream: Active USDC Stream for 0xa2...1d66" />
  *   <meta property="og:description" content="50.00 USDC streaming · 14d 6h remaining · Powered by Hash PayLink on Arc" />
  *   <meta property="og:image"       content="https://…/og-streampay.png" />
  *
@@ -69,7 +69,7 @@ function timeRemaining(endTime: bigint): string {
 // ── Default (fallback) OG values ──────────────────────────────────────────────
 
 const DEFAULT_OG = {
-  title:       'Streampay — Real-time USDC Streaming on Arc',
+  title:       'HashpayStream - Real-time USDC Streaming on Arc',
   description: 'Send and receive USDC in real-time, second by second. Gasless. No signup. Powered by Hash PayLink.',
   image:       '/og-streampay.png',
 }
@@ -100,9 +100,9 @@ function injectOgTags(
   const safeUrl = escapeHtml(`${origin}${url}`)
 
   const tags = `
-  <!-- Streampay dynamic OG tags -->
+  <!-- HashpayStream dynamic OG tags -->
   <meta property="og:type"        content="website" />
-  <meta property="og:site_name"   content="Hash PayLink · Streampay" />
+  <meta property="og:site_name"   content="Hash PayLink - HashpayStream" />
   <meta property="og:title"       content="${safeTitle}" />
   <meta property="og:description" content="${safeDescription}" />
   <meta property="og:image"       content="${safeImage}" />
@@ -112,7 +112,7 @@ function injectOgTags(
   <meta name="twitter:title"       content="${safeTitle}" />
   <meta name="twitter:description" content="${safeDescription}" />
   <meta name="twitter:image"       content="${safeImage}" />
-  <!-- /Streampay OG tags -->`
+  <!-- /HashpayStream OG tags -->`
 
   // Replace the generic <title> and inject OG tags before </head>
   return html
@@ -166,7 +166,7 @@ export default async function streamOgHandler(req: Request, res: Response) {
       : BigInt(Math.floor(Date.now() / 1000)) >= _endTime ? 'Complete'
       : 'Active'
 
-    const title = `Streampay: ${status} USDC Stream for ${shortAddr(_recipient)}`
+    const title = `HashpayStream: ${status} USDC Stream for ${shortAddr(_recipient)}`
     const desc  = [
       `${formatUsdc(_totalAmount)} USDC total`,
       _cancelled ? 'stream cancelled' : timeRemaining(_endTime),

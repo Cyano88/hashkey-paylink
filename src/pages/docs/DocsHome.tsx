@@ -29,7 +29,7 @@ const cards = [
   },
   {
     icon: Radio,
-    title: 'StreamPay',
+    title: 'HashpayStream',
     description: 'USDC payroll, agentic streams, and Arena rooms on Arc with Privy + Circle wallet mapping.',
     path: '/docs/streampay',
     color: 'text-indigo-500',
@@ -82,19 +82,19 @@ export default function DocsHome() {
     <DocPage>
       <DocHeader
         title="Hash PayLink Documentation"
-        description="Programmable USDC payment infrastructure for hosted checkout, Telegram workflows, PolyDesk, StreamPay, retail POS, and agent commerce."
+        description="Programmable USDC payment infrastructure for hosted checkout, Telegram workflows, PolyDesk, HashpayStream, retail POS, and agent commerce."
       />
 
       <div>
         <h2 className="mb-4 text-lg font-semibold text-gray-900 dark:text-white">What is Hash PayLink?</h2>
         <p className="mb-4 leading-relaxed text-gray-600 dark:text-gray-400">
-          Hash PayLink is a programmable payment platform that generates shareable URLs and QR codes for collecting USDC, running Telegram payment workflows, opening PolyDesk for Polymarket users, powering StreamPay on Arc, and supporting agent commerce.
+          Hash PayLink is a programmable payment platform that generates shareable URLs and QR codes for collecting USDC, running Telegram payment workflows, opening PolyDesk for Polymarket users, powering HashpayStream on Arc, and supporting agent commerce.
         </p>
         <p className="mb-4 leading-relaxed text-gray-600 dark:text-gray-400">
           Every confirmed multi-payer record can be archived to <strong className="text-gray-800 dark:text-gray-200">0G decentralized storage</strong> and anchored on-chain through the <code className="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-sm dark:bg-gray-800">PayLinkArchive</code> contract. This creates payment proofs that AI agents, APIs, dashboards, and receipt pages can verify without trusting an application database.
         </p>
         <p className="leading-relaxed text-gray-600 dark:text-gray-400">
-          The root domain is the foundation page. The working app lives at <strong className="text-gray-800 dark:text-gray-200">/app</strong>, with direct routes for checkout, Telegram, PolyDesk, StreamPay, agents, receipts, and docs.
+          The root domain is the foundation page. The working app lives at <strong className="text-gray-800 dark:text-gray-200">/app</strong>, with direct routes for checkout, Telegram, PolyDesk, HashpayStream, agents, receipts, and docs.
         </p>
       </div>
 
@@ -104,7 +104,7 @@ export default function DocsHome() {
           <li>- <strong className="text-gray-800 dark:text-gray-200">Payment archive:</strong> confirmed multi-payer records are uploaded to 0G Storage and anchored on 0G Mainnet.</li>
           <li>- <strong className="text-gray-800 dark:text-gray-200">Agent verification:</strong> paid AI services call <code className="rounded bg-white px-1 py-0.5 font-mono text-xs dark:bg-gray-900">/api/agent-verify</code> before responding.</li>
           <li>- <strong className="text-gray-800 dark:text-gray-200">Telegram paid access:</strong> Photon requests use Hash PayLink payments, then unlock answers only after the 0G proof exists.</li>
-          <li>- <strong className="text-gray-800 dark:text-gray-200">StreamPay extension:</strong> payroll, agentic stream, and Arena settlement receipts follow the same durable proof pattern.</li>
+          <li>- <strong className="text-gray-800 dark:text-gray-200">HashpayStream extension:</strong> payroll, agentic stream, and Arena settlement receipts follow the same durable proof pattern.</li>
         </ul>
       </div>
 
@@ -135,7 +135,7 @@ export default function DocsHome() {
         <h2 className="text-base font-semibold text-gray-900 dark:text-white">Key facts</h2>
         <ul className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
           <li>- <strong className="text-gray-800 dark:text-gray-200">Payment fee:</strong> 0.2% standard platform fee; sponsored EVM payments may include gas recovery.</li>
-          <li>- <strong className="text-gray-800 dark:text-gray-200">Arena fee:</strong> 0.5% on completed StreamPay Arena rooms.</li>
+          <li>- <strong className="text-gray-800 dark:text-gray-200">Arena fee:</strong> 0.5% on completed HashpayStream Arena rooms.</li>
           <li>- <strong className="text-gray-800 dark:text-gray-200">Identity:</strong> Privy email sign-in plus Circle wallet mapping on the app surfaces that need user sessions.</li>
           <li>- <strong className="text-gray-800 dark:text-gray-200">Archive contract:</strong> <code className="rounded bg-gray-100 px-1 py-0.5 font-mono text-xs dark:bg-gray-800">0x79a804C49e1E5EBC279A228Ab73a7570A0D0819a</code> on 0G Mainnet.</li>
           <li>- <strong className="text-gray-800 dark:text-gray-200">SDK:</strong> <code className="rounded bg-gray-100 px-1 py-0.5 font-mono text-xs dark:bg-gray-800">@hashpaylink/sdk</code> for hosted checkout URLs and buttons.</li>

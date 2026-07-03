@@ -3,7 +3,7 @@
  *
  * Gasless relay for StreamVault claim() and cancel() on Arc Network.
  *
- * Called by the Streampay frontend after the user signs an EIP-712 message
+ * Called by the HashpayStream frontend after the user signs an EIP-712 message
  * in their wallet. The relayer verifies inputs, then submits the transaction
  * and pays all Arc native USDC gas on the user's behalf.
  *

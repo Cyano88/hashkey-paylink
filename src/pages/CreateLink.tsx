@@ -2227,7 +2227,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   const howItWorksSteps = productHubOpen
     ? [
         { n: '1', title: 'Receive payments', body: 'Personal, business, POS, and QR payment flows' },
-        { n: '2', title: 'Manage services', body: 'Circle wallet balance, x402 service balance, PolyDesk, and StreamPay' },
+        { n: '2', title: 'Manage services', body: 'Circle wallet balance, x402 service balance, PolyDesk, and HashpayStream' },
         { n: '3', title: 'Keep proof', body: 'Receipts, dashboards, and settlement records stay connected' },
       ]
     : polymarketMode
@@ -2334,11 +2334,11 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
           </span>
         )}
         <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-[2.25rem]">
-          {productHubOpen ? 'What do you want to do?' : paymentMenuOpen ? 'Choose payment flow' : circlePocketMode ? 'Circle Pocket' : polymarketMode ? 'PolyDesk' : posMode ? 'Retail POS' : billsMode ? 'Bills' : streamMode ? 'StreamPay' : accessMode ? accessView === 'wallet' ? 'x402 Wallet Manager' : 'x402 Wallet Manager' : paymentFlow === 'bank' ? 'Receive to Bank' : 'Receive USDC'}
+          {productHubOpen ? 'What do you want to do?' : paymentMenuOpen ? 'Choose payment flow' : circlePocketMode ? 'Circle Pocket' : polymarketMode ? 'PolyDesk' : posMode ? 'Retail POS' : billsMode ? 'Bills' : streamMode ? 'HashpayStream' : accessMode ? accessView === 'wallet' ? 'x402 Wallet Manager' : 'x402 Wallet Manager' : paymentFlow === 'bank' ? 'Receive to Bank' : 'Receive USDC'}
         </h1>
         <p className="mt-2 text-[15px] text-gray-500 text-balance dark:text-gray-400">
           {productHubOpen
-            ? 'Receive payments, manage x402, run StreamPay, or PolyDesk.'
+            ? 'Receive payments, manage x402, run HashpayStream, or PolyDesk.'
             : paymentMenuOpen
             ? 'Select the payment experience you want to create.'
             : circlePocketMode
@@ -2857,7 +2857,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
 
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">USDC on Arc</p>
-                <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">Choose a StreamPay flow</h2>
+                <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">Choose a HashpayStream flow</h2>
                 <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
                   Creator Studio, Arena rooms, payroll, and agent streams share the same Arc USDC settlement layer.
                 </p>
@@ -2929,7 +2929,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               </div>
 
               <p className="text-center text-[11px] text-gray-400">
-                Same Hash PayLink platform. StreamPay flows settle on Arc and can attach receipts, dashboards, and 0G records.
+                Same Hash PayLink platform. HashpayStream flows settle on Arc and can attach receipts, dashboards, and 0G records.
               </p>
             </div>
           ) : posMode ? (

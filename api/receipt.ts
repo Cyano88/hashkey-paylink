@@ -12,7 +12,7 @@ function receiptType(source?: string) {
 function receiptTitle(source?: string) {
   if (source === 'ngpos') return 'Retail POS receipt'
   if (source === 'bank-receive') return 'Bank receive receipt'
-  if (source === 'streampay') return 'StreamPay receipt'
+  if (source === 'streampay') return 'HashpayStream receipt'
   if (source === 'polymarket-funding') return 'Polymarket funding receipt'
   return 'Hash PayLink receipt'
 }

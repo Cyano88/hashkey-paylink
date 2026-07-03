@@ -1115,7 +1115,7 @@ export function ArenaPage() {
       if (navigator.share) {
         const label = savedRoomName ? `${savedRoomName} (${roomCode})` : roomCode
         await navigator.share({
-          title: 'StreamPay Arena private room',
+          title: 'HashpayStream Arena private room',
           text: `Join my Stream Trivia room ${label}`,
           url: privateUrl,
         })

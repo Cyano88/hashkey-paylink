@@ -55,12 +55,12 @@ export default function ApiReference() {
         />
       </Section>
 
-      <Section title="StreamPay and Arena">
+      <Section title="HashpayStream and Arena">
         <Table
           headers={['Endpoint', 'Purpose']}
           rows={[
             ['/api/privy-circle-link', 'Privy to Circle wallet mapping'],
-            ['/api/stream-create', 'Create StreamPay streams'],
+            ['/api/stream-create', 'Create HashpayStream streams'],
             ['/api/stream-status', 'Read stream state'],
             ['/api/arena-room', 'Create and manage Arena room state'],
           ]}

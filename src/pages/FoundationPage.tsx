@@ -28,7 +28,7 @@ const products = [
   },
   {
     index: '04',
-    title: 'StreamPay',
+    title: 'HashpayStream',
     copy: 'Stream USDC on Arc for work, agent access, and recoverable-risk Arena games.',
     href: `${APP_URL}?product=streampay`,
   },
@@ -53,7 +53,7 @@ const stack = [
   },
   {
     name: 'Arc',
-    copy: 'Core settlement rail for StreamPay and Arena, where USDC moves over time instead of as one static transfer.',
+    copy: 'Core settlement rail for HashpayStream and Arena, where USDC moves over time instead of as one static transfer.',
   },
   {
     name: '0G Storage',
@@ -61,7 +61,7 @@ const stack = [
   },
   {
     name: 'Privy',
-    copy: 'Infrastructure partner for email-first sessions across payment, funding, and StreamPay flows.',
+    copy: 'Infrastructure partner for email-first sessions across payment, funding, and HashpayStream flows.',
   },
   {
     name: 'Base',
@@ -121,7 +121,7 @@ const demoFlows = [
   },
   {
     stack: 'Arc',
-    title: 'StreamPay and Arena settlement',
+    title: 'HashpayStream and Arena settlement',
     copy: 'USDC streams and recoverable-risk game rooms use Arc as the streaming settlement layer.',
     href: `${APP_URL}?product=streampay`,
     videoUrl: '',
@@ -136,7 +136,7 @@ const demoFlows = [
   {
     stack: 'Telegram',
     title: 'Chat-native payment workflows',
-    copy: 'Payment links, agents, PolyDesk, and StreamPay flows open where users already coordinate.',
+    copy: 'Payment links, agents, PolyDesk, and HashpayStream flows open where users already coordinate.',
     href: 'https://t.me/HashPayLinkBot',
     videoUrl: '',
   },
@@ -167,7 +167,7 @@ const faqs = [
   {
     question: 'What is Hash PayLink?',
     answer:
-      'Hash PayLink is a non-custodial USDC payment platform for payment links, retail POS, PolyDesk, StreamPay, and agent commerce. It gives users simple checkout surfaces while keeping settlement, receipts, and proof records verifiable.',
+      'Hash PayLink is a non-custodial USDC payment platform for payment links, retail POS, PolyDesk, HashpayStream, and agent commerce. It gives users simple checkout surfaces while keeping settlement, receipts, and proof records verifiable.',
   },
   {
     question: 'Does Hash PayLink custody user funds?',
@@ -177,7 +177,7 @@ const faqs = [
   {
     question: 'Why do Circle, Arc, and 0G matter?',
     answer:
-      'Circle powers the USDC and smart-wallet payment experience, Arc gives StreamPay a programmable settlement surface, and 0G provides durable proof records for receipts and agent activity. Together they make Hash PayLink feel simple for users while keeping the payment state verifiable.',
+      'Circle powers the USDC and smart-wallet payment experience, Arc gives HashpayStream a programmable settlement surface, and 0G provides durable proof records for receipts and agent activity. Together they make Hash PayLink feel simple for users while keeping the payment state verifiable.',
   },
   {
     question: 'Where does 0G fit into the platform?',
@@ -185,9 +185,9 @@ const faqs = [
       '0G is used for durable proof records. Payment receipts, agent activity, and important workflow records can be archived so ecosystem teams and users can verify what happened after the payment flow completes.',
   },
   {
-    question: 'Why build StreamPay and Arena on Arc?',
+    question: 'Why build HashpayStream and Arena on Arc?',
     answer:
-      'Arc is a strong fit for real-time USDC flows because StreamPay needs fast settlement, low-friction wallet actions, and predictable payment state. Hash PayLink uses Arc for streaming access, payroll-style payouts, and recoverable-risk Arena rooms where USDC moves over time instead of as a single static transfer.',
+      'Arc is a strong fit for real-time USDC flows because HashpayStream needs fast settlement, low-friction wallet actions, and predictable payment state. Hash PayLink uses Arc for streaming access, payroll-style payouts, and recoverable-risk Arena rooms where USDC moves over time instead of as a single static transfer.',
   },
   {
     question: 'What traction does Hash PayLink have?',
@@ -197,7 +197,7 @@ const faqs = [
   {
     question: 'Why does the chat layer matter?',
     answer:
-      'Payments often start inside conversations, not dashboards. Telegram gives Hash PayLink a distribution layer for saved alerts, payment requests, PolyDesk, agent actions, and StreamPay flows where users already coordinate. It reduces friction without forcing every user into a complex crypto app first.',
+      'Payments often start inside conversations, not dashboards. Telegram gives Hash PayLink a distribution layer for saved alerts, payment requests, PolyDesk, agent actions, and HashpayStream flows where users already coordinate. It reduces friction without forcing every user into a complex crypto app first.',
   },
   {
     question: 'What is PolyDesk?',
@@ -1048,7 +1048,7 @@ export default function FoundationPage() {
                 Moving USDC at product speed.
               </h1>
               <p className="mt-6 max-w-[18rem] text-sm leading-7 text-white/68 sm:max-w-xl sm:text-[15px]">
-                Hash PayLink powers payment links, retail POS, PolyDesk, StreamPay, and agent commerce on Circle USDC, Arc settlement, and 0G proof rails.
+                Hash PayLink powers payment links, retail POS, PolyDesk, HashpayStream, and agent commerce on Circle USDC, Arc settlement, and 0G proof rails.
               </p>
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                 <a
@@ -1279,7 +1279,7 @@ export default function FoundationPage() {
               Built for the screen users already trust.
             </h2>
             <p className="foundation-mobile-command-copy mt-5 text-sm leading-6 text-gray-600 max-sm:mt-2 max-sm:text-xs max-sm:leading-5">
-              Hash PayLink turns payment links, PolyDesk alerts, StreamPay, and agent receipts into clean mobile workflows that feel simple enough for chat and strong enough for fintech teams.
+              Hash PayLink turns payment links, PolyDesk alerts, HashpayStream, and agent receipts into clean mobile workflows that feel simple enough for chat and strong enough for fintech teams.
             </p>
 
             <div className="mt-9 grid max-w-lg grid-cols-2 gap-3 max-sm:hidden">
@@ -1440,7 +1440,7 @@ export default function FoundationPage() {
                 Built on rails people already trust.
               </h2>
               <p className="mt-5 max-w-xl text-sm leading-6 text-gray-600 max-sm:mt-2 max-sm:text-xs max-sm:leading-5">
-                Circle, Arc, and 0G make Hash PayLink possible: Circle powers USDC checkout and smart-wallet sessions, Arc supports programmable StreamPay settlement, and 0G keeps payment and agent records verifiable. The rest of the stack extends distribution, networks, and product context.
+                Circle, Arc, and 0G make Hash PayLink possible: Circle powers USDC checkout and smart-wallet sessions, Arc supports programmable HashpayStream settlement, and 0G keeps payment and agent records verifiable. The rest of the stack extends distribution, networks, and product context.
               </p>
             </div>
 
@@ -1473,7 +1473,7 @@ export default function FoundationPage() {
               <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-500">Start here</p>
               <h3 className="mt-3 text-2xl font-semibold tracking-[-0.035em] text-gray-950">Open the working app.</h3>
               <p className="mt-3 text-sm leading-6 text-gray-600">
-                Create payment links, open POS, enter PolyDesk, or launch StreamPay from the app surface.
+                Create payment links, open POS, enter PolyDesk, or launch HashpayStream from the app surface.
               </p>
               <a
                 href={APP_URL}

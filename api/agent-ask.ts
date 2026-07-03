@@ -262,7 +262,7 @@ function cleanZeroScoutGuidanceText(value: string) {
     .filter(line => line && !/ZeroScout sponsorship is required/i.test(line))
     .filter(line => !line.includes(GENERIC_STRATEGY_PHRASE))
     .filter(line => !GENERIC_STRATEGY_PATTERNS.some(pattern => pattern.test(line)))
-    .filter(line => !/^I can help with payments,\s*PayLinks,\s*StreamPay,\s*PolyDesk,\s*wallets,\s*and setup/i.test(line))
+    .filter(line => !/^I can help with payments,\s*PayLinks,\s*HashpayStream,\s*PolyDesk,\s*wallets,\s*and setup/i.test(line))
     .slice(0, 5)
     .join('\n')
     .trim()
@@ -335,7 +335,7 @@ function fallbackHelperAnswer(question: string) {
     return 'Tell me the payer, amount, network, purpose, and receive wallet. I can then prepare a clean PayLink for sharing.'
   }
   if (/\b(what can you do|help me|how can you help|what do you help with)\b/i.test(question)) {
-    return 'I can help with PayLinks, payment receipts, wallet funding, x402 activation, PolyDesk, StreamPay, setup questions, and everyday planning.'
+    return 'I can help with PayLinks, payment receipts, wallet funding, x402 activation, PolyDesk, HashpayStream, setup questions, and everyday planning.'
   }
   if (isPersonalContextQuestion(question)) {
     return personalContextFallback(question)
@@ -468,14 +468,14 @@ function getHelperResponse(question: string, payerName: string, chain: string, a
 
   if (isGreetingQuestion(question)) {
     const knownName = nameFromMemory(memorySummary, payerName)
-    return `Hey${knownName ? ` ${knownName}` : ''}. I can help you create a PayLink, check a receipt, set up wallets, use StreamPay, or research PolyDesk and Polymarket flows.`
+    return `Hey${knownName ? ` ${knownName}` : ''}. I can help you create a PayLink, check a receipt, set up wallets, use HashpayStream, or research PolyDesk and Polymarket flows.`
   }
 
   const fallbackAnswer = fallbackHelperAnswer(question)
   if (fallbackAnswer) return fallbackAnswer
 
   if (helperMode === 'services') {
-    return 'I can help with Hash PayLink services. Tell me if you mean PayLinks, StreamPay, Agent Wallets, x402, Circle wallet setup, or PolyDesk.'
+    return 'I can help with Hash PayLink services. Tell me if you mean PayLinks, HashpayStream, Agent Wallets, x402, Circle wallet setup, or PolyDesk.'
   }
 
   if (helperMode === 'support') {
@@ -559,7 +559,7 @@ export default async function handler(req: Request, res: Response) {
       return res.status(429).json({
         error: usageTier === 'deep'
           ? 'Deep research limit reached for today. Upgrade to Agent Hash Pro to continue deeper Ask Hash research.'
-          : 'Daily Ask Hash chat limit reached. Payment Links, StreamPay, and other manual tools remain available.',
+          : 'Daily Ask Hash chat limit reached. Payment Links, HashpayStream, and other manual tools remain available.',
         cooldown: true,
         upgradeRequired: usageTier === 'deep',
         upgradeAmount: usageTier === 'deep' ? '10' : undefined,
@@ -682,7 +682,7 @@ export default async function handler(req: Request, res: Response) {
       return res.status(429).json({
         error: usageTier === 'deep'
           ? 'Deep research limit reached for today. Upgrade to Agent Hash Pro to continue deeper Ask Hash research.'
-          : 'Daily Ask Hash chat limit reached. Payment Links, StreamPay, and other manual tools remain available.',
+          : 'Daily Ask Hash chat limit reached. Payment Links, HashpayStream, and other manual tools remain available.',
         cooldown: true,
         upgradeRequired: usageTier === 'deep',
         upgradeAmount: usageTier === 'deep' ? '10' : undefined,

@@ -32,7 +32,7 @@ import PrivacyDocs      from './pages/docs/PrivacyDocs'
 // ── Hostname-based app routing ────────────────────────────────────────────────
 // The same Render service hosts both apps. The active hostname determines
 // which React app is mounted. Add ?app=streampay to any localhost URL for
-// local Streampay development without changing DNS.
+// local HashpayStream development without changing DNS.
 const { hostname, pathname, search } = window.location
 const searchParams = new URLSearchParams(search)
 const IS_APP_HOST = hostname === 'app.hashpaylink.com'
@@ -49,11 +49,11 @@ const IS_STREAMPAY =
   hostname === 'hashpaystream.app'                       ||  // HashPayStream production domain
   hostname === 'www.hashpaystream.app'                   ||  // HashPayStream www domain
   hostname.includes('streampay')                         ||  // onrender.com service named streampay-*
-  isStreamPayRoute                                       ||  // StreamPay share links on hashpaylink.com
+  isStreamPayRoute                                       ||  // HashpayStream share links on hashpaylink.com
   searchParams.get('app') === 'streampay'                      // localhost dev toggle
 
 export default function App() {
-  // Streampay domain → mount the Streampay sub-app (full separate router)
+  // HashpayStream domain -> mount the stream sub-app (full separate router)
   if (IS_STREAMPAY) return <StreamPayApp />
 
   const appShellRoutes = (

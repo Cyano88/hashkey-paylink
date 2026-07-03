@@ -198,7 +198,7 @@ const sectionServices: Record<TelegramSectionId, TelegramService[]> = {
     {
       id: 'streampay-creator',
       title: 'Creator',
-      body: 'Publish creator drops and paid access flows on StreamPay.',
+      body: 'Publish creator drops and paid access flows on HashpayStream.',
       icon: Pencil,
       status: 'Open',
       active: true,
@@ -214,7 +214,7 @@ const sectionServices: Record<TelegramSectionId, TelegramService[]> = {
     {
       id: 'streampay-arena',
       title: 'Arena',
-      body: 'Launch StreamPay Arena rooms with Arc settlement.',
+      body: 'Launch HashpayStream Arena rooms with Arc settlement.',
       icon: UsersRound,
       status: 'Open',
       active: true,
@@ -226,14 +226,14 @@ const sectionDescriptions: Record<TelegramSectionId, string> = {
   'payment-links': 'Create normal USDC requests and share them into Telegram.',
   'agent-wallets': 'Manage Circle wallet balance, x402 service balance, and receipts.',
   'market-tools': 'PolyDesk for Polymarket funding, portfolio alerts, LP Scout, and live market context.',
-  streampay: 'Payroll, creator, x402 stream, and Arena flows on StreamPay.',
+  streampay: 'Payroll, creator, x402 stream, and Arena flows on HashpayStream.',
 }
 
 const telegramSections: Array<{ id: TelegramSectionId; title: string; icon: typeof Coins }> = [
   { id: 'payment-links', title: 'Payment Links', icon: Coins },
   { id: 'agent-wallets', title: 'Agent Wallets', icon: Bot },
   { id: 'market-tools', title: 'PolyDesk', icon: LineChart },
-  { id: 'streampay', title: 'StreamPay', icon: Radio },
+  { id: 'streampay', title: 'HashpayStream', icon: Radio },
 ]
 
 type RequestMode = 'person' | 'group'
@@ -605,7 +605,7 @@ const helperModes: Array<{ id: HelperMode; label: string; intro: string }> = [
   {
     id: 'services',
     label: 'Services',
-    intro: 'Services mode is ready. I can help with StreamPay, Agent Wallets, x402, Circle wallet setup, PolyDesk, and Hash PayLink features. What are you trying to use?',
+    intro: 'Services mode is ready. I can help with HashpayStream, Agent Wallets, x402, Circle wallet setup, PolyDesk, and Hash PayLink features. What are you trying to use?',
   },
   {
     id: 'polydesk',
@@ -3202,7 +3202,7 @@ export function TelegramHelperPanel({
       finishHelperMessage(nextQuestion, { answer: data.answer!, proof: data.proof, zeroscoutSponsorship: data.zeroscoutSponsorship })
       void saveProfile({ question: nextQuestion, answer: data.answer } as Partial<HelperProfile>)
       if (!memoryDraft.trim()) {
-        setMemoryDraft(`User is known as ${helperName || payer}. They use Hash PayLink Agent Helper from Telegram and may ask about payments, Polymarket, StreamPay, agents, research, planning, and daily questions.`)
+        setMemoryDraft(`User is known as ${helperName || payer}. They use Hash PayLink Agent Helper from Telegram and may ask about payments, Polymarket, HashpayStream, agents, research, planning, and daily questions.`)
       }
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') return
@@ -3230,7 +3230,7 @@ export function TelegramHelperPanel({
               >
                 <div className="max-w-[82%] break-words rounded-[18px] rounded-bl-md bg-[#f0f0f0] px-3.5 py-2.5 text-sm leading-relaxed text-gray-900 shadow-sm dark:bg-white/[0.08] dark:text-gray-100">
                   <p>
-                    {welcomeText ?? `Welcome back, ${helperName || cleanTelegramName || 'there'}. Ask me about payments, Polymarket funding, StreamPay, agent setup, research, planning, or daily questions.`}
+                    {welcomeText ?? `Welcome back, ${helperName || cleanTelegramName || 'there'}. Ask me about payments, Polymarket funding, HashpayStream, agent setup, research, planning, or daily questions.`}
                   </p>
                   <div className="mt-2">
                     <ZeroScoutPowerBadge compact />
@@ -5299,7 +5299,7 @@ function AgenticLpResearchPanel({ onBack }: { onBack: () => void }) {
           </div>
           <h2 className="mt-2 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Stream to Hash PayLink Agent for daily reports</h2>
           <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-            Configure the recipient, stream amount, and research focus. StreamPay opens with the Hash PayLink Agent treasury already selected.
+            Configure the recipient, stream amount, and research focus. HashpayStream opens with the Hash PayLink Agent treasury already selected.
           </p>
         </div>
       </div>

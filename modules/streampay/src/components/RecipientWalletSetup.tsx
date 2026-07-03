@@ -47,7 +47,7 @@ export function RecipientWalletSetup() {
       setSession(next)
       setStatus('Activating Circle wallet on Arc...')
       await deployCircleEvmEmailWallet({ session: next })
-      setStatus('Registering wallet for Telegram StreamPay...')
+      setStatus('Registering wallet for Telegram HashpayStream...')
       const res = await fetch('/api/circle-recipient-wallet', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -58,7 +58,7 @@ export function RecipientWalletSetup() {
       setStatus(
         pendingId
           ? 'Circle wallet ready. Ask the sender to check readiness and deploy the stream.'
-          : 'Circle wallet ready for StreamPay.',
+          : 'Circle wallet ready for HashpayStream.',
       )
     } catch (err) {
       setError(setupError(err))
@@ -80,7 +80,7 @@ export function RecipientWalletSetup() {
       <div className="overflow-hidden rounded-2xl border border-gray-100 dark:border-white/10 bg-white dark:bg-[#15151a] shadow-sm">
         <div className="px-5 py-5 space-y-4 sm:px-7 sm:py-6">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Telegram StreamPay</p>
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Telegram HashpayStream</p>
             <h1 className="mt-1 text-[22px] font-bold tracking-tight text-gray-900 dark:text-white">Prepare Circle Wallet</h1>
           </div>
 

@@ -188,7 +188,7 @@ function helperModeInstructions(input: ZeroScoutHelperGuidanceInput) {
   if (mode === 'daily') {
     return [
       'Daily mode is an everyday companion mode for normal conversation, emotions, planning, ideas, and personal support.',
-      'Do not mention payments, PayLinks, wallets, StreamPay, PolyDesk, LP Scout, or Hash PayLink services unless the user asks about them.',
+      'Do not mention payments, PayLinks, wallets, HashpayStream, PolyDesk, LP Scout, or Hash PayLink services unless the user asks about them.',
       'For greetings, reply warmly in one short sentence and ask a simple open question.',
       'For mood or personal support, respond empathetically and naturally without turning it into a product menu.',
     ]

@@ -1125,13 +1125,13 @@ function DiscoverContent({
           support@hashpaylink.com
         </a>
         <a
-          href="https://x.com/Streampay_"
+          href="https://x.com/hashpaystream"
           target="_blank"
           rel="noopener noreferrer"
           className="flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-gray-900 transition-colors dark:text-gray-500 dark:hover:text-gray-200"
         >
           <XIcon className="h-3.5 w-3.5" />
-          @Streampay_
+          @hashpaystream
         </a>
       </div>
     </div>
@@ -1420,13 +1420,13 @@ function SettlementDashboard({
           support@hashpaylink.com
         </a>
         <a
-          href="https://x.com/Streampay_"
+          href="https://x.com/hashpaystream"
           target="_blank"
           rel="noopener noreferrer"
           className="flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-gray-900 transition-colors dark:text-gray-500 dark:hover:text-gray-200"
         >
           <XIcon className="h-3.5 w-3.5" />
-          @Streampay_
+          @hashpaystream
         </a>
       </div>
     </div>
