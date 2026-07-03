@@ -510,6 +510,7 @@ export default function PaymentPage() {
   // effectiveAmt: always USDC
   const effectiveAmt = isFlex ? flexAmtInUsdc : amt
   const payableAmt = isNgPosPaycrestOfframp && paycrestOrder?.amount_usdc ? paycrestOrder.amount_usdc : effectiveAmt
+  const paycrestNeedsPreparation = isNgPosPaycrestOfframp && !paycrestOrder
   const effectiveAmtNumber = parseFloat(effectiveAmt || '0') || 0
   const flexLocalCurrencyLabel = isNgPosPaycrestOfframp && isBankReceivePayment ? 'NGN' : (getFxMeta(fxCurrency)?.symbol ?? fxCurrency)
 
@@ -903,6 +904,7 @@ export default function PaymentPage() {
   }
 
   const circleRequiredUnits = (() => {
+    if (paycrestNeedsPreparation) return 0n
     try {
       const totalUnits = parseUnits(payableAmt || '0', meta.decimals)
       if (grossUpSolanaPlatformCharges) return solanaPaymentRequiredUnits(totalUnits)
@@ -2334,7 +2336,6 @@ export default function PaymentPage() {
 
   async function handleCirclePasskeyPay() {
     if (!showCircleEmailPay) return
-    const paycrestNeedsPreparation = isNgPosPaycrestOfframp && !paycrestOrder
     if (!paycrestNeedsPreparation && (!activeRecipient || !isAddress(activeRecipient))) return
     if (paymentAmountBlocked || (!paycrestNeedsPreparation && (!payableAmt || parseFloat(payableAmt) <= 0))) {
       setCirclePasskeyError(blockedAmountError())
