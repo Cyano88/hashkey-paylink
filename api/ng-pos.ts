@@ -18,6 +18,7 @@ import {
   refreshPaycrestOrderStatus,
   verifyPaycrestAccount,
 } from './paycrest-pos.js'
+import { reconcilePaycrestOrderPayment, schedulePaycrestOrderReconciliation } from './paycrest-reconcile.js'
 import { verifyEvmUsdcTransfer } from './usdc-transfer-verify.js'
 
 const STORE_PATH = process.env.NG_POS_STORE ?? './data/ng-pos-merchants.json'
@@ -416,7 +417,13 @@ export default async function handler(req: Request, res: Response) {
       const merchantIds = merchants.map(merchant => merchant.merchant_id)
       const payments = await listRegisteredPaymentsForEventIds(merchants.map(merchant => `ngpos-${merchant.merchant_id}`))
       const existingTxHashes = new Set(payments.map(payment => payment.txHash.toLowerCase()).filter(Boolean))
-      const paycrestRows = (await listPaycrestPosOrdersForMerchants(merchantIds))
+      const paycrestOrders = await listPaycrestPosOrdersForMerchants(merchantIds)
+      for (const order of paycrestOrders) {
+        if (!order.tx_hash && isVisiblePaycrestHistoryStatus(order.status)) {
+          schedulePaycrestOrderReconciliation(order.intent_id)
+        }
+      }
+      const paycrestRows = paycrestOrders
         .filter(order => order.tx_hash || isVisiblePaycrestHistoryStatus(order.status))
         .filter(order => !order.tx_hash || !existingTxHashes.has(order.tx_hash.toLowerCase()))
         .map(order => ({
@@ -760,8 +767,11 @@ export default async function handler(req: Request, res: Response) {
         refundAddress,
         payerEmail,
         payerWallet: isAddress(payerWallet) ? payerWallet : refundAddress,
+        payerName,
+        source: intent.source === 'bank-receive' ? 'bank-receive' : 'ngpos',
         memo: payerName.slice(0, 40) || 'Hash PayLink',
       })
+      schedulePaycrestOrderReconciliation(order.intent_id)
       return res.json({ ok: true, order })
     }
 
@@ -793,8 +803,12 @@ export default async function handler(req: Request, res: Response) {
     if (action === 'offrampStatus') {
       const id = cleanText(body.intent_id || body.order_id, '').replace(/[^a-zA-Z0-9_-]/g, '')
       if (!id) return res.status(400).json({ ok: false, error: 'Missing order id.' })
-      const order = body.refresh ? await refreshPaycrestOrderStatus(id) : await getPaycrestPosOrder(id)
+      let order = body.refresh ? await refreshPaycrestOrderStatus(id) : await getPaycrestPosOrder(id)
       if (!order) return res.status(404).json({ ok: false, error: 'Paycrest POS order not found.' })
+      if (!order.tx_hash && body.refresh) {
+        const reconciled = await reconcilePaycrestOrderPayment(id).catch(() => null)
+        order = reconciled?.order ?? order
+      }
       return res.json({ ok: true, order })
     }
 
