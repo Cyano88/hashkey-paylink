@@ -28,6 +28,8 @@ import {
   getContent,
   getContentStreamEscrow,
   getContentCheckpointEscrow,
+  getCreatorCheckpointVault,
+  saveCreatorCheckpointVault,
   getContentX402,
   listCreatorContent,
   listApprovedCreatorContent,
@@ -173,6 +175,8 @@ app.post('/api/admin/creator-content', strictLimiter, reviewCreatorContent)
 app.get('/api/get-content',            readLimiter, getContent)
 app.get('/api/get-content-stream',     readLimiter, getContentStreamEscrow)
 app.get('/api/get-content-checkpoint', readLimiter, getContentCheckpointEscrow)
+app.get('/api/creator-checkpoint-vault', readLimiter, getCreatorCheckpointVault)
+app.post('/api/creator-checkpoint-vault', strictLimiter, saveCreatorCheckpointVault)
 app.get('/api/get-content-x402',       readLimiter, getContentX402)
 app.post('/api/creator-unlock-x402',   strictLimiter, unlockContentX402WithAgent)
 app.get('/api/creator-social',         readLimiter, getCreatorSocial)

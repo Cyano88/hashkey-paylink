@@ -74,8 +74,16 @@ type CreatorUnlockEntry = {
   unlockedAt: number
 }
 
+type CheckpointUnlockEntry = {
+  contentId: string
+  walletAddress: string
+  vaultAddress: string
+  createdAt: number
+}
+
 const store = new Map<string, ContentEntry>()
 const unlockStore = new Map<string, CreatorUnlockEntry>()
+const checkpointUnlockStore = new Map<string, CheckpointUnlockEntry>()
 const reactionStore = new Map<string, { contentId: string; walletAddress: string; reaction: 'up' | 'down'; updatedAt: number }>()
 const commentStore = new Map<string, { id: string; contentId: string; walletAddress: string; body: string; createdAt: number; updatedAt: number }>()
 const commentReactionStore = new Map<string, { commentId: string; walletAddress: string; reaction: 'up' | 'down'; updatedAt: number }>()
@@ -592,6 +600,15 @@ function ensureSchema() {
         primary key (content_id, viewer_key)
       );
       create index if not exists streampay_creator_content_views_content_idx on streampay_creator_content_views (content_id, updated_at desc);
+      create table if not exists streampay_checkpoint_unlocks (
+        checkpoint_key text primary key,
+        content_id text not null,
+        wallet_address text not null,
+        vault_address text not null,
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now()
+      );
+      create index if not exists streampay_checkpoint_unlocks_wallet_idx on streampay_checkpoint_unlocks (wallet_address, updated_at desc);
     `).then(() => undefined)
   }
   return schemaReady
@@ -703,6 +720,10 @@ function unlockKey(contentId: string, agentSlug: string, walletAddress = '') {
   return `${contentId}:${wallet || agentSlug}`
 }
 
+function checkpointKey(contentId: string, walletAddress: string) {
+  return `${contentId}:${String(walletAddress || '').trim().toLowerCase()}`
+}
+
 function rowToUnlockEntry(row: Record<string, unknown>): CreatorUnlockEntry {
   return {
     contentId: String(row.content_id ?? ''),
@@ -711,6 +732,15 @@ function rowToUnlockEntry(row: Record<string, unknown>): CreatorUnlockEntry {
     paymentTransaction: String(row.payment_transaction ?? ''),
     receiptActivityId: String(row.receipt_activity_id ?? ''),
     unlockedAt: row.unlocked_at instanceof Date ? row.unlocked_at.getTime() : Date.now(),
+  }
+}
+
+function rowToCheckpointUnlockEntry(row: Record<string, unknown>): CheckpointUnlockEntry {
+  return {
+    contentId: String(row.content_id ?? ''),
+    walletAddress: String(row.wallet_address ?? ''),
+    vaultAddress: String(row.vault_address ?? ''),
+    createdAt: row.created_at instanceof Date ? row.created_at.getTime() : Date.now(),
   }
 }
 
@@ -778,13 +808,20 @@ async function hasWalletUnlockedContent(contentId: string, walletAddress: string
   if (!wallet) return false
   await ensureSchema()
   if (pool) {
-    const result = await pool.query(
+    const fixed = await pool.query(
       `select 1 from streampay_creator_unlocks where content_id = $1 and lower(wallet_address) = $2 limit 1`,
       [contentId, wallet],
     )
-    return result.rowCount > 0
+    if ((fixed.rowCount ?? 0) > 0) return true
+    const checkpoint = await pool.query(
+      `select 1 from streampay_checkpoint_unlocks where content_id = $1 and lower(wallet_address) = $2 limit 1`,
+      [contentId, wallet],
+    )
+    return (checkpoint.rowCount ?? 0) > 0
   }
   return Array.from(unlockStore.values()).some(unlock => (
+    unlock.contentId === contentId && unlock.walletAddress.toLowerCase() === wallet
+  )) || Array.from(checkpointUnlockStore.values()).some(unlock => (
     unlock.contentId === contentId && unlock.walletAddress.toLowerCase() === wallet
   ))
 }
@@ -816,6 +853,41 @@ async function writeCreatorUnlock(entry: CreatorUnlockEntry) {
     return
   }
   unlockStore.set(key, entry)
+}
+
+async function readCheckpointUnlock(contentId: string, walletAddress: string) {
+  const wallet = cleanWalletAddress(walletAddress)
+  if (!wallet) return null
+  if (pool) {
+    await ensureSchema()
+    const result = await pool.query(
+      `select * from streampay_checkpoint_unlocks
+       where content_id = $1 and lower(wallet_address) = $2
+       order by updated_at desc limit 1`,
+      [contentId, wallet],
+    )
+    return (result.rowCount ?? 0) > 0 ? rowToCheckpointUnlockEntry(result.rows[0]) : null
+  }
+  return checkpointUnlockStore.get(checkpointKey(contentId, wallet)) ?? null
+}
+
+async function writeCheckpointUnlock(entry: CheckpointUnlockEntry) {
+  const wallet = cleanWalletAddress(entry.walletAddress)
+  const key = checkpointKey(entry.contentId, wallet)
+  if (pool) {
+    await ensureSchema()
+    await pool.query(
+      `insert into streampay_checkpoint_unlocks
+        (checkpoint_key, content_id, wallet_address, vault_address, created_at, updated_at)
+       values ($1, $2, $3, $4, to_timestamp($5 / 1000.0), now())
+       on conflict (checkpoint_key) do update set
+         vault_address = excluded.vault_address,
+         updated_at = now()`,
+      [key, entry.contentId, wallet, entry.vaultAddress, entry.createdAt],
+    )
+    return
+  }
+  checkpointUnlockStore.set(key, { ...entry, walletAddress: wallet })
 }
 
 async function findLegacyCreatorUnlock(contentId: string, agentSlug: string, walletAddress = '') {
@@ -1371,6 +1443,51 @@ export async function getContentStreamEscrow(req: Request, res: Response) {
   return res.status(200).json({ ok: true, type: entry.type, content: entry.content, coverImage: entry.coverImage })
 }
 
+async function verifyCheckpointVaultState(contentId: string, entry: ContentEntry, vault: string) {
+  const code = await arcClient.getBytecode({ address: vault as `0x${string}` }).catch(() => undefined)
+  if (!code || code === '0x') {
+    throw new Error('Checkpoint escrow is not active on Arc yet. Start pay-as-you-read again.')
+  }
+
+  const info = await arcClient.readContract({
+    address: vault as `0x${string}`,
+    abi: CHECKPOINT_VAULT_ABI,
+    functionName: 'vaultInfo',
+  }) as readonly [`0x${string}`, `0x${string}`, `0x${string}`, `0x${string}`, `0x${string}`, bigint, bigint, bigint, boolean, boolean]
+
+  const sender = info[0]
+  const recipient = info[1]
+  const relayer = info[3]
+  const vaultContentId = info[4]
+  const totalAmount = info[5]
+  const releasedAmount = info[6]
+  const refundableAmount = info[7]
+  const refunded = info[8]
+  const funded = info[9]
+  const rawKey = process.env.RELAYER_PRIVATE_KEY_ARC ?? process.env.RELAYER_PRIVATE_KEY
+  if (!rawKey) throw new Error('Checkpoint relayer is not configured.')
+  if (recipient.toLowerCase() !== entry.creator.toLowerCase()) {
+    throw new Error('This checkpoint escrow does not pay the content creator.')
+  }
+  if (vaultContentId.toLowerCase() !== toContentBytes32(contentId).toLowerCase()) {
+    throw new Error('This checkpoint escrow is for a different content item.')
+  }
+  if (totalAmount < BigInt(Math.max(1, entry.capRaw))) {
+    throw new Error('Checkpoint escrow budget is below this content cap.')
+  }
+  if (!funded) throw new Error('Checkpoint escrow is not funded yet.')
+  if (refunded) throw new Error('This checkpoint escrow has been refunded.')
+  if (!isAddress(relayer)) throw new Error('Checkpoint escrow relayer is invalid.')
+
+  return {
+    sender,
+    totalAmount: totalAmount.toString(),
+    releasedAmount: releasedAmount.toString(),
+    refundableAmount: refundableAmount.toString(),
+    refunded,
+  }
+}
+
 export async function getContentCheckpointEscrow(req: Request, res: Response) {
   const { id, vault } = req.query as { id?: string; vault?: string }
 
@@ -1390,49 +1507,55 @@ export async function getContentCheckpointEscrow(req: Request, res: Response) {
     return res.status(400).json({ ok: false, error: 'Checkpoint escrow is only for readable in-page content.' })
   }
 
-  let sender: `0x${string}` | undefined
+  let checkpointState: Awaited<ReturnType<typeof verifyCheckpointVaultState>> | undefined
   try {
-    const code = await arcClient.getBytecode({ address: vault as `0x${string}` }).catch(() => undefined)
-    if (!code || code === '0x') {
-      return res.status(404).json({
-        ok: false,
-        error: 'Checkpoint escrow is not active on Arc yet. Start pay-as-you-read again.',
-      })
-    }
-
-    const info = await arcClient.readContract({
-      address: vault as `0x${string}`,
-      abi: CHECKPOINT_VAULT_ABI,
-      functionName: 'vaultInfo',
-    }) as readonly [`0x${string}`, `0x${string}`, `0x${string}`, `0x${string}`, `0x${string}`, bigint, bigint, bigint, boolean, boolean]
-
-    sender = info[0]
-    const recipient = info[1]
-    const relayer = info[3]
-    const vaultContentId = info[4]
-    const totalAmount = info[5]
-    const refunded = info[8]
-    const funded = info[9]
-    const rawKey = process.env.RELAYER_PRIVATE_KEY_ARC ?? process.env.RELAYER_PRIVATE_KEY
-    if (!rawKey) return res.status(503).json({ ok: false, error: 'Checkpoint relayer is not configured.' })
-    if (recipient.toLowerCase() !== entry.creator.toLowerCase()) {
-      return res.status(403).json({ ok: false, error: 'This checkpoint escrow does not pay the content creator.' })
-    }
-    if (vaultContentId.toLowerCase() !== toContentBytes32(id).toLowerCase()) {
-      return res.status(403).json({ ok: false, error: 'This checkpoint escrow is for a different content item.' })
-    }
-    if (totalAmount < BigInt(Math.max(1, entry.capRaw))) {
-      return res.status(402).json({ ok: false, error: 'Checkpoint escrow budget is below this content cap.' })
-    }
-    if (!funded) return res.status(402).json({ ok: false, error: 'Checkpoint escrow is not funded yet.' })
-    if (refunded) return res.status(402).json({ ok: false, error: 'This checkpoint escrow has been refunded.' })
-    if (!isAddress(relayer)) return res.status(503).json({ ok: false, error: 'Checkpoint escrow relayer is invalid.' })
+    checkpointState = await verifyCheckpointVaultState(id, entry, vault)
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     return res.status(503).json({ ok: false, error: `Could not verify checkpoint escrow: ${message.slice(0, 160)}` })
   }
 
-  return res.status(200).json({ ok: true, type: entry.type, content: entry.content, coverImage: entry.coverImage, sender })
+  return res.status(200).json({ ok: true, type: entry.type, content: entry.content, coverImage: entry.coverImage, ...checkpointState })
+}
+
+export async function getCreatorCheckpointVault(req: Request, res: Response) {
+  const { contentId, walletAddress } = req.query as { contentId?: string; walletAddress?: string }
+  const wallet = cleanWalletAddress(walletAddress)
+  if (!contentId || contentId.length > MAX_CONTENT_ID_LENGTH || !wallet || !isAddress(wallet)) {
+    return res.status(400).json({ ok: false, error: 'Valid content ID and reader wallet are required.' })
+  }
+  const entry = await readContentEntry(contentId)
+  if (!entry) return res.status(404).json({ ok: false, error: 'Content not found.' })
+  const saved = await readCheckpointUnlock(contentId, wallet)
+  if (!saved || !isAddress(saved.vaultAddress)) return res.status(404).json({ ok: false, error: 'No previous pay-as-you-read session found.' })
+  try {
+    const state = await verifyCheckpointVaultState(contentId, entry, saved.vaultAddress)
+    if (state.sender.toLowerCase() !== wallet) return res.status(403).json({ ok: false, error: 'This checkpoint belongs to another reader wallet.' })
+    return res.json({ ok: true, vaultAddress: saved.vaultAddress, ...state })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    return res.status(404).json({ ok: false, error: message.slice(0, 180) })
+  }
+}
+
+export async function saveCreatorCheckpointVault(req: Request, res: Response) {
+  const contentId = String(req.body?.contentId ?? '').trim()
+  const walletAddress = cleanWalletAddress(req.body?.walletAddress)
+  const vaultAddress = String(req.body?.vaultAddress ?? '').trim()
+  if (!contentId || contentId.length > MAX_CONTENT_ID_LENGTH || !walletAddress || !isAddress(walletAddress) || !isAddress(vaultAddress)) {
+    return res.status(400).json({ ok: false, error: 'Valid content ID, reader wallet, and checkpoint vault are required.' })
+  }
+  const entry = await readContentEntry(contentId)
+  if (!entry) return res.status(404).json({ ok: false, error: 'Content not found.' })
+  try {
+    const state = await verifyCheckpointVaultState(contentId, entry, vaultAddress)
+    if (state.sender.toLowerCase() !== walletAddress) return res.status(403).json({ ok: false, error: 'This checkpoint belongs to another reader wallet.' })
+    await writeCheckpointUnlock({ contentId, walletAddress, vaultAddress, createdAt: Date.now() })
+    return res.json({ ok: true, vaultAddress, ...state })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    return res.status(400).json({ ok: false, error: message.slice(0, 180) })
+  }
 }
 
 export async function getContentX402(req: PaidRequest, res: Response) {

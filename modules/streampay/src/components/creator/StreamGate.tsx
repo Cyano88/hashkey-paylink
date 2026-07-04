@@ -350,6 +350,21 @@ function toContentBytes32(value: string): `0x${string}` {
   return `0x${hex}` as `0x${string}`
 }
 
+function checkpointMarksFromAmounts(releasedAmount?: string, totalAmount?: string) {
+  const marks: Record<number, string> = {}
+  try {
+    const released = BigInt(releasedAmount || '0')
+    const total = BigInt(totalAmount || '0')
+    if (released <= 0n || total <= 0n) return marks
+    for (const mark of [25, 50, 75, 100]) {
+      if (released * 100n >= total * BigInt(mark)) marks[mark] = released.toString()
+    }
+  } catch {
+    return marks
+  }
+  return marks
+}
+
 function formatBalanceLabel(value?: string) {
   if (value === undefined || value === null || value === '') return null
   const amount = Number(value)
@@ -989,11 +1004,51 @@ export function StreamGate() {
   async function fetchCheckpointContent(vaultAddress: string) {
     setContentState('loading')
     const res = await fetch(`/api/get-content-checkpoint?id=${encodeURIComponent(contentId)}&vault=${encodeURIComponent(vaultAddress)}`)
-    const data = await res.json().catch(() => ({})) as { ok?: boolean; type?: string; content?: string; coverImage?: string; sender?: string; error?: string }
+    const data = await res.json().catch(() => ({})) as {
+      ok?: boolean
+      type?: string
+      content?: string
+      coverImage?: string
+      sender?: string
+      totalAmount?: string
+      releasedAmount?: string
+      error?: string
+    }
     if (!res.ok || !data.ok || !data.type || !data.content) throw new Error(data.error || 'Could not verify checkpoint escrow.')
     if (data.sender && /^0x[a-fA-F0-9]{40}$/.test(data.sender)) setReaderWalletAddress(data.sender)
+    const restoredMarks = checkpointMarksFromAmounts(data.releasedAmount, data.totalAmount)
+    setCheckpointReleased(restoredMarks)
+    checkpointReleaseRef.current = new Set(Object.keys(restoredMarks).map(Number))
     setFetchedContent({ type: data.type as FetchedContent['type'], content: data.content, coverImage: data.coverImage })
     setContentState('ready')
+  }
+
+  async function restoreCheckpointVaultForWallet(walletAddress: string) {
+    const wallet = walletAddress.trim()
+    if (!/^0x[a-fA-F0-9]{40}$/.test(wallet)) return false
+    const res = await fetch(`/api/creator-checkpoint-vault?contentId=${encodeURIComponent(contentId)}&walletAddress=${encodeURIComponent(wallet)}`)
+    const data = await res.json().catch(() => ({})) as { ok?: boolean; vaultAddress?: string; totalAmount?: string; releasedAmount?: string }
+    if (!res.ok || !data.ok || !data.vaultAddress || !/^0x[a-fA-F0-9]{40}$/.test(data.vaultAddress)) return false
+    setCheckpointVault(data.vaultAddress)
+    setReaderWalletAddress(wallet)
+    const restoredMarks = checkpointMarksFromAmounts(data.releasedAmount, data.totalAmount)
+    setCheckpointReleased(restoredMarks)
+    checkpointReleaseRef.current = new Set(Object.keys(restoredMarks).map(Number))
+    const nextParams = new URLSearchParams(window.location.search)
+    nextParams.set('pay', 'checkpoint')
+    nextParams.set('checkpointVault', data.vaultAddress)
+    window.history.replaceState(null, '', `${window.location.pathname}?${nextParams.toString()}${window.location.hash}`)
+    await fetchCheckpointContent(data.vaultAddress)
+    setCircleNotice('Previous pay-as-you-read session restored.')
+    return true
+  }
+
+  async function saveCheckpointVaultForWallet(walletAddress: string, vaultAddress: string) {
+    await fetch('/api/creator-checkpoint-vault', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contentId, walletAddress, vaultAddress }),
+    }).catch(() => undefined)
   }
 
   async function startCheckpointEscrow() {
@@ -1018,6 +1073,10 @@ export function StreamGate() {
       const session = checkpointSession ?? await connectCircleEvmEmailWallet(email, 'arc')
       setCheckpointSession(session)
       setReaderWalletAddress(session.wallet.address)
+
+      if (!checkpointVault && await restoreCheckpointVaultForWallet(session.wallet.address)) {
+        return
+      }
 
       const amountUnits = BigInt(Math.max(1, capRaw))
       const contentId32 = toContentBytes32(contentId)
@@ -1048,6 +1107,7 @@ export function StreamGate() {
       nextParams.set('checkpointVault', predicted)
       window.history.replaceState(null, '', `${window.location.pathname}?${nextParams.toString()}${window.location.hash}`)
       await fetchCheckpointContent(predicted)
+      await saveCheckpointVaultForWallet(session.wallet.address, predicted)
       setCircleNotice('Pay-as-you-read active.')
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Could not start checkpoint escrow.'
