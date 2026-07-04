@@ -225,8 +225,8 @@ const OFFICIAL_CREATOR_ADDRESS = (
   || import.meta.env.VITE_DEFAULT_AGENT_WALLET_ADDRESS
   || '0x823c31d5e373dd3fa7cad59af05fa45e3858556c'
 )
-const OFFICIAL_WORLD_CUP_SCORES_GATE = `/gate?app=streampay&id=worldcup-scores&cr=${OFFICIAL_CREATOR_ADDRESS}&r=1000&cap=100000&mode=unlock&pay=x402&t=Live%20Scores%20Pulse`
-const OFFICIAL_DEVELOPER_GUIDE_GATE = `/gate?app=streampay&id=developer-terminal-setup&cr=${OFFICIAL_CREATOR_ADDRESS}&r=1000&cap=100000&mode=unlock&pay=choice&ct=text&t=${encodeURIComponent('Before You Build: AI Terminal Setup')}`
+const OFFICIAL_WORLD_CUP_SCORES_GATE = `/gate?app=streampay&id=worldcup-scores&cr=${OFFICIAL_CREATOR_ADDRESS}&r=1000&cap=100000&mode=unlock&pay=x402&ct=scores&cat=live-scores&t=Live%20Scores%20Pulse`
+const OFFICIAL_DEVELOPER_GUIDE_GATE = `/gate?app=streampay&id=developer-terminal-setup&cr=${OFFICIAL_CREATOR_ADDRESS}&r=1000&cap=100000&mode=unlock&pay=choice&ct=text&cat=developers&t=${encodeURIComponent('Before You Build: AI Terminal Setup')}`
 
 const OFFICIAL_DISCOVER_CONTENT: PublishedContent[] = [
   {
@@ -284,7 +284,7 @@ const OFFICIAL_EBOOKS: PublishedContent[] = [
   tag,
   source: 'Public Domain Reader',
   image: openLibraryCover(isbn),
-  gateLink: `/gate?app=streampay&id=${id}&cr=${OFFICIAL_CREATOR_ADDRESS}&r=1000&cap=100000&mode=unlock&pay=choice&ct=book&t=${encodeURIComponent(title)}`,
+  gateLink: `/gate?app=streampay&id=${id}&cr=${OFFICIAL_CREATOR_ADDRESS}&r=1000&cap=100000&mode=unlock&pay=choice&ct=book&cat=ebooks&t=${encodeURIComponent(title)}`,
   action: 'gate' as const,
   cta: 'Unlock book',
 }))
@@ -315,6 +315,7 @@ function worldCupNewsCard(article: PolyWorldCupArticle, index: number): Publishe
     mode: 'unlock',
     pay: 'choice',
     ct: 'url',
+    cat: 'worldcup-news',
     t: article.title,
   })
   return {
@@ -348,6 +349,7 @@ function worldCupScoreCard(match: PolyStreamMatch, index: number): PublishedCont
     mode: 'unlock',
     pay: 'choice',
     ct: 'scores',
+    cat: 'live-scores',
     t: `${home}${away ? ` vs ${away}` : ''} route`,
   })
   return {

@@ -446,7 +446,8 @@ export function StreamGate() {
     params.get('ct') === 'book' ? 'book' :
     params.get('ct') === 'text' ? 'text' :
     'unknown'
-  const streamContentAvailable = contentKind !== 'url'
+  const contentCategory = (params.get('cat') ?? '').trim().toLowerCase()
+  const streamContentAvailable = contentKind === 'scores' || contentCategory === 'live-scores' || contentCategory === 'video'
   const shouldChoosePayment = params.get('pay') === 'choice' || params.get('choose') === '1'
   const [selectedPaymentMode, setSelectedPaymentMode] = useState<'x402' | 'escrow' | null>(() => {
     if (shouldChoosePayment) return null
@@ -1485,12 +1486,12 @@ export function StreamGate() {
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className={['text-[13px] font-black', streamContentAvailable ? 'text-gray-900 dark:text-gray-100' : 'text-gray-400 dark:text-gray-600'].join(' ')}>
-                        Pay as you read
+                        Pay as you watch
                       </p>
                       <p className="mt-1 text-[12px] leading-relaxed text-gray-500 dark:text-gray-400">
                         {streamContentAvailable
                           ? `Timed Arc stream at $${dripRate.toFixed(4)}/sec. End anytime; unused USDC stays refundable.`
-                          : 'Pay-as-you-read is only available for content HashpayStream can render in-page.'}
+                          : 'Timed streaming is reserved for live and video content. Articles and books use fixed unlock.'}
                       </p>
                     </div>
                     <span className={['rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-[0.12em]', streamContentAvailable ? 'bg-emerald-600 text-white dark:bg-emerald-400 dark:text-gray-950' : 'bg-gray-100 text-gray-400 dark:bg-white/[0.06] dark:text-gray-500'].join(' ')}>
@@ -1523,7 +1524,7 @@ export function StreamGate() {
 
                 {!streamContentAvailable && (
                   <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
-                    External access unavailable for pay-as-you-read.
+                    Progress-based reading unlock is coming next for articles and ebooks.
                   </p>
                 )}
               </div>
@@ -2495,10 +2496,10 @@ function InlineStreamMeter({ snapshot, streamVault }: { snapshot: StreamMeterSna
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-700 dark:text-emerald-300">
-            {snapshot?.cancelled ? 'Stream ended' : 'Timed reading stream'}
+            {snapshot?.cancelled ? 'Stream ended' : 'Timed live stream'}
           </p>
           <p className="mt-0.5 text-[11px] font-semibold text-emerald-700/75 dark:text-emerald-200/75">
-            USDC unlocks by elapsed reading time. End the stream to refund unused balance.
+            USDC unlocks by elapsed live viewing time. End the stream to refund unused balance.
           </p>
         </div>
         {streamVault && (
@@ -2846,7 +2847,7 @@ function OverlayShell({
             </>
           ) : (
             <>
-              Timed reading stream at <span className="font-semibold">${dripRate.toFixed(4)}/sec</span>, up to <span className="font-semibold">${sessionCap.toFixed(2)} USDC</span>
+              Timed live stream at <span className="font-semibold">${dripRate.toFixed(4)}/sec</span>, up to <span className="font-semibold">${sessionCap.toFixed(2)} USDC</span>
             </>
           )}
         </p>

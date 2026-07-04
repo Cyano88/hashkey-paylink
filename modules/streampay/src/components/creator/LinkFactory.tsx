@@ -86,6 +86,7 @@ function buildGateLink(params: {
   title:     string
   mode:      'unlock' | 'stream'
   contentType: 'text' | 'url'
+  category: CreatorCategory
 }): string {
   const { origin, hostname } = window.location
   const p = new URLSearchParams()
@@ -97,6 +98,7 @@ function buildGateLink(params: {
   p.set('mode', params.mode)
   p.set('pay', 'choice')
   p.set('ct', params.contentType)
+  p.set('cat', params.category)
   if (params.title.trim()) p.set('t', params.title.trim())
   return `${origin}/gate?${p.toString()}`
 }
@@ -343,8 +345,9 @@ export function LinkFactory({
     : privateUrlValid
   const hasListingDetails = title.trim().length >= 3 && description.trim().length >= 10 && authorName.trim().length >= 2
 
+  const timedStreamContentAvailable = contentType === 'text' && category === 'live-scores'
   const streamReady = rateNum > 0 && capNum > rateNum
-  const streamContentAvailable = contentType === 'text'
+  const streamContentAvailable = timedStreamContentAvailable
   const creatorAddress = circleSession?.wallet.address || (hasExternalPrivyEvmWallet ? address : '') || ''
   const hasCreatorAddress = /^0x[a-fA-F0-9]{40}$/.test(creatorAddress)
   const canBuild = hasCreatorAddress && capNum > 0 && hasContent && hasListingDetails && (mode === 'unlock' || (streamReady && streamContentAvailable))
@@ -384,11 +387,11 @@ export function LinkFactory({
     : 'border-amber-100 bg-amber-50 text-amber-700 dark:border-amber-400/20 dark:bg-amber-500/10 dark:text-amber-200'
 
   useEffect(() => {
-    if (contentType === 'url' && mode === 'stream') {
+    if (!streamContentAvailable && mode === 'stream') {
       setMode('unlock')
       setGateLink(null)
     }
-  }, [contentType, mode])
+  }, [mode, streamContentAvailable])
 
   async function handleBuild() {
     if (!canBuild || !creatorAddress) return
@@ -474,6 +477,7 @@ export function LinkFactory({
         title,
         mode,
         contentType,
+        category,
       })
       setGateLink(nextGateLink)
       setPublishStatus(reviewStatus)
@@ -694,7 +698,7 @@ export function LinkFactory({
             <div className="grid grid-cols-2 overflow-hidden rounded-xl border border-gray-200 bg-gray-50 p-1 dark:border-white/10 dark:bg-white/[0.04]">
               {([
                 { id: 'unlock', label: 'Unlock', desc: 'Fixed price' },
-                { id: 'stream', label: 'Nano meter', desc: 'Pay as readers consume' },
+                { id: 'stream', label: 'Live stream', desc: 'Timed meter for live content' },
               ] as const).map(option => {
                 const selected = mode === option.id
                 const disabled = option.id === 'stream' && !streamContentAvailable

@@ -883,6 +883,7 @@ function buildGateLink(params: {
   title: string
   mode: 'unlock' | 'stream'
   type: ContentEntry['type']
+  category: string
 }) {
   const p = new URLSearchParams()
   p.set('app', 'streampay')
@@ -893,6 +894,7 @@ function buildGateLink(params: {
   p.set('mode', params.mode)
   p.set('pay', 'choice')
   p.set('ct', params.type)
+  p.set('cat', params.category)
   if (params.title.trim()) p.set('t', params.title.trim())
   return `${baseUrl()}/gate?${p.toString()}`
 }
@@ -924,6 +926,7 @@ function entryToPost(contentId: string, entry: ContentEntry) {
       title: entry.title,
       mode: entry.mode,
       type: entry.type,
+      category: entry.category,
     }),
   }
 }
@@ -1105,7 +1108,8 @@ export async function storeContent(req: Request, res: Response) {
     return res.status(400).json({ ok: false, error: 'creator signature is invalid' })
   }
   const safeRateRaw = Math.max(0, Number(rateRaw) || 0)
-  const safeMode = mode === 'stream' && type !== 'url' ? 'stream' : 'unlock'
+  const safeCategory = cleanCategory(category)
+  const safeMode = mode === 'stream' && type !== 'url' && safeCategory === 'live-scores' ? 'stream' : 'unlock'
   const creatorVerified = await verifyCreatorProof({
     contentId,
     creator,
@@ -1136,7 +1140,7 @@ export async function storeContent(req: Request, res: Response) {
     authorName: cleanMetaText(authorName, 80),
     xHandle: cleanMetaText(xHandle, 40).replace(/^@+/, ''),
     coverImage: String(coverImage ?? '').trim().slice(0, 120_000),
-    category: cleanCategory(category),
+    category: safeCategory,
     reviewStatus: existing?.reviewStatus ?? 'pending',
     reviewedAt: existing?.reviewedAt ?? null,
     reviewNote: existing?.reviewNote ?? '',
@@ -1312,6 +1316,12 @@ export async function getContentStreamEscrow(req: Request, res: Response) {
   }
   if (entry.type === 'url') {
     return res.status(400).json({ ok: false, error: 'External links use fixed unlock only.' })
+  }
+  if (entry.category !== 'live-scores') {
+    return res.status(400).json({
+      ok: false,
+      error: 'Timed streaming is reserved for live and video content. Use fixed unlock for this content.',
+    })
   }
 
   try {
