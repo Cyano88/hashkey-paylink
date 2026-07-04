@@ -3006,7 +3006,10 @@ function BookUnlocked({
         if (!cancelled) setBook(data)
       })
       .catch(err => {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Book could not load.')
+        if (!cancelled) {
+          const message = err instanceof Error ? err.message : 'Book could not load.'
+          setError(message === 'fetch failed' ? 'Book reader is temporarily unavailable. Please refresh.' : message)
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false)

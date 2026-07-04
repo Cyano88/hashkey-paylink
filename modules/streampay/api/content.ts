@@ -274,6 +274,163 @@ function cleanGutenbergText(text: string) {
     .slice(0, MAX_BOOK_TEXT_LENGTH)
 }
 
+const FALLBACK_BOOK_TEXT_BY_GUTENBERG_ID: Record<string, string> = {
+  '345': `
+DRACULA
+
+Reader edition excerpt
+
+Jonathan Harker's Journal
+
+3 May. Bistritz. Left Munich at 8:35 P.M., on 1st May, arriving at Vienna early next morning. I should have arrived at 6:46, but the train was an hour late. Buda-Pesth seems a wonderful place, from the glimpse which I got of it from the train and the little I could walk through the streets.
+
+I feared to go very far from the station, as we had arrived late and would start as near the correct time as possible. The impression I had was that we were leaving the West and entering the East; the most western of splendid bridges over the Danube took us among the traditions of Turkish rule.
+
+The district I was to pass through was full of strange customs and old stories. I had been told that every known superstition in the world gathered into the horseshoe of the Carpathians, as if it were the centre of some imaginative whirlpool.
+
+At the hotel I found that my landlord had received a letter from Count Dracula. He and his wife looked frightened when they heard where I was going. They crossed themselves and made signs that I did not understand.
+
+Before I left, the old woman came to my room and begged me not to go. When I told her that business called me, she asked whether I knew what day it was. It was the eve of St. George's Day, when, as she said, all evil things in the world would have full sway.
+
+She placed a crucifix around my neck. I did not know what to do, for as an English Churchman I had been taught to regard such things as idolatrous. Yet it seemed so kindly meant, and was given in such fear, that I accepted it.
+
+The road climbed into a wild and beautiful country. There were dark forests, green slopes, and great masses of grey rock. Sometimes the road was cut through pine woods that seemed in the falling evening to close behind us like a door.
+
+As we drove on, the other passengers grew silent. They pointed to the setting sun, made the sign of the cross, and whispered to one another. When the driver stopped, I saw a tall man waiting beside a black carriage.
+
+His face was strong, aquiline, with a high bridge of the thin nose and peculiarly arched nostrils. His eyebrows were massive, almost meeting over the nose, and with bushy hair that seemed to curl in its own profusion.
+
+He greeted me in excellent English, though with a strange intonation. "Welcome to my house. Enter freely and of your own will." The words were courteous, but the castle behind him stood black against the sky, and the door closed with a sound that seemed to shut out the world.
+`,
+  '1342': `
+PRIDE AND PREJUDICE
+
+Reader edition excerpt
+
+It is a truth universally acknowledged, that a single man in possession of a good fortune must be in want of a wife.
+
+However little known the feelings or views of such a man may be on his first entering a neighbourhood, this truth is so fixed in the minds of the surrounding families that he is considered the rightful property of one or other of their daughters.
+
+Mrs. Bennet was among the earliest to hear that Netherfield Park had been let at last. A young man of large fortune from the north of England had taken it, and the whole neighbourhood was in motion.
+
+Mr. Bennet listened with dry amusement while his wife urged him to visit the newcomer. Elizabeth, Jane, and their sisters were drawn into the expectation, each in her own manner.
+
+At the assembly, Mr. Bingley proved agreeable and handsome. His friend Mr. Darcy was admired at first for his figure and fortune, then disliked for his pride.
+
+Elizabeth Bennet, lively in mind and quick in judgment, found herself slighted by Darcy and resolved not to be pleased with him. Yet first impressions, however sharp, are not always final.
+`,
+  '84': `
+FRANKENSTEIN
+
+Reader edition excerpt
+
+You will rejoice to hear that no disaster has accompanied the commencement of an enterprise which you have regarded with such evil forebodings.
+
+The sea stretched before us like a field of broken light. I had long desired to reach those regions of frost and silence where few men had ventured, and my heart burned with the hope of discovery.
+
+Yet ambition is a dangerous guest. It enters as a noble companion, speaking of knowledge and glory, then grows into a master that demands every comfort and every human tie.
+
+Victor Frankenstein learned this too late. In youth he loved the secrets of nature and pursued them with a passion that consumed sleep, friendship, and peace.
+
+When at last his work stirred and opened its eyes, triumph became terror. The form he had made stood before him, not as a child of science, but as a mirror of his own unchecked desire.
+`,
+  '1661': `
+THE ADVENTURES OF SHERLOCK HOLMES
+
+Reader edition excerpt
+
+To Sherlock Holmes she is always the woman. I have seldom heard him mention her under any other name.
+
+In his eyes she eclipses and predominates the whole of her sex. It was not that he felt any emotion akin to love for Irene Adler. All emotions, and that one particularly, were abhorrent to his cold, precise, but admirably balanced mind.
+
+He was, I take it, the most perfect reasoning machine that the world has seen. Yet as a lover he would have placed himself in a false position.
+
+For Holmes, facts were clay. From a smear of mud, a bent cigar ash, or the pressure of a boot heel, he built histories that astonished those who had seen only trifles.
+
+I had seen him solve many cases, but the affair of the King of Bohemia showed me that even Holmes could meet an intelligence quick enough to surprise him.
+`,
+  '1260': `
+JANE EYRE
+
+Reader edition excerpt
+
+There was no possibility of taking a walk that day. The cold winter wind had brought with it clouds so sombre, and rain so penetrating, that further outdoor exercise was out of the question.
+
+I was glad of it. I never liked long walks, especially on chilly afternoons. Dreadful to me was the coming home in the raw twilight, with nipped fingers and toes, and a heart saddened by the consciousness of my physical inferiority.
+
+At Gateshead Hall I was a dependent child, tolerated rather than loved. Books became my refuge, and in their pages I found countries wider than the rooms in which I was confined.
+
+But even a quiet child has a spirit. Mine was small, wounded, and watchful; yet it would not consent forever to be treated as less than human.
+`,
+  '768': `
+WUTHERING HEIGHTS
+
+Reader edition excerpt
+
+1801. I have just returned from a visit to my landlord, the solitary neighbour that I shall be troubled with.
+
+This is certainly a beautiful country. In all England, I do not believe that I could have fixed on a situation so completely removed from the stir of society.
+
+Wuthering Heights is the name of Mr. Heathcliff's dwelling. Wuthering being a significant provincial adjective, descriptive of the atmospheric tumult to which its station is exposed in stormy weather.
+
+The house, the moors, and the people seemed all made of the same rough weather. Passion there did not soften into politeness; it hardened, endured, and returned with interest.
+`,
+  '174': `
+THE PICTURE OF DORIAN GRAY
+
+Reader edition excerpt
+
+The studio was filled with the rich odour of roses, and when the light summer wind stirred among the trees of the garden there came through the open door the heavy scent of the lilac.
+
+From the corner of the divan Lord Henry Wotton could just catch the gleam of the honey-sweet blossoms of a laburnum, whose tremulous branches seemed hardly able to bear the burden of a beauty so flame-like as theirs.
+
+Basil Hallward stood before the portrait, troubled by the perfection he had captured. Beauty can be a blessing, but in Dorian Gray it became a temptation.
+
+When youth is made into an idol, conscience becomes easy to hide. Yet what is hidden does not disappear; it waits for a room, a locked door, and a face that changes in secret.
+`,
+  '11': `
+ALICE'S ADVENTURES IN WONDERLAND
+
+Reader edition excerpt
+
+Alice was beginning to get very tired of sitting by her sister on the bank, and of having nothing to do.
+
+Once or twice she had peeped into the book her sister was reading, but it had no pictures or conversations in it. "And what is the use of a book," thought Alice, "without pictures or conversations?"
+
+So she was considering, in her own mind, whether the pleasure of making a daisy-chain would be worth the trouble of getting up, when suddenly a White Rabbit with pink eyes ran close by her.
+
+There was nothing so very remarkable in that, nor did Alice think it so very much out of the way to hear the Rabbit say to itself, "Oh dear! Oh dear! I shall be too late!"
+`,
+  '23': `
+NARRATIVE OF THE LIFE OF FREDERICK DOUGLASS
+
+Reader edition excerpt
+
+I was born in Tuckahoe, near Hillsborough, and about twelve miles from Easton, in Talbot county, Maryland.
+
+I have no accurate knowledge of my age, never having seen any authentic record containing it. By far the larger part of the slaves know as little of their ages as horses know of theirs.
+
+The want of information concerning my own was a source of unhappiness to me even during childhood. The white children could tell their ages. I could not tell why I ought to be deprived of the same privilege.
+
+To know oneself is not a luxury. It is part of freedom. The story that follows is therefore not only a memory of suffering, but a record of a mind insisting on its own humanity.
+`,
+  '35': `
+THE TIME MACHINE
+
+Reader edition excerpt
+
+The Time Traveller was expounding a recondite matter to us. His grey eyes shone and twinkled, and his usually pale face was flushed and animated.
+
+The fire burned brightly, and the soft radiance of the incandescent lights caught the bubbles that flashed and passed in our glasses.
+
+"You must follow me carefully," he said. "I shall have to controvert one or two ideas that are almost universally accepted."
+
+He spoke of length, breadth, thickness, and then of duration. If a cube may exist in three dimensions, why should not a man move in the fourth?
+
+The machine he showed us was small enough to sit upon a table, yet in its polished bars and ivory controls lay the promise of centuries.
+`,
+}
+
 async function fetchOfficialBookText(gutenbergId: string) {
   const cached = bookCache.get(gutenbergId)
   if (cached && Date.now() - cached.ts < BOOK_CACHE_MS) return cached.text
@@ -1809,6 +1966,21 @@ export async function getCreatorBook(req: Request, res: Response) {
       text,
     })
   } catch (err) {
+    const fallback = cleanGutenbergText(FALLBACK_BOOK_TEXT_BY_GUTENBERG_ID[book.gutenbergId] ?? '')
+    if (fallback.length > 500) {
+      bookCache.set(book.gutenbergId, { ts: Date.now(), text: fallback })
+      return res.status(200).json({
+        ok: true,
+        id,
+        title: book.title,
+        description: book.description,
+        source: 'Classic reader',
+        coverImage: openLibraryCover(book.identifier),
+        gutenbergId: book.gutenbergId,
+        text: fallback,
+        fallback: true,
+      })
+    }
     const message = err instanceof Error ? err.message : 'Book text unavailable.'
     return res.status(502).json({ ok: false, error: message.slice(0, 180) })
   }
