@@ -52,10 +52,10 @@ export function StreamPayHeader() {
   })
   const arenaTo = useModePath('/arena')
   const navItems = [
-    { label: 'Payroll', to: payrollTo, active: !isCreatorMode && !isAgenticMode && !isArenaMode },
     { label: 'Creator', to: creatorTo, active: isCreatorMode },
+    { label: 'Arena', to: arenaTo, active: isArenaMode, soon: true },
+    { label: 'Payroll', to: payrollTo, active: !isCreatorMode && !isAgenticMode && !isArenaMode, soon: true },
     { label: 'x402', to: agenticTo, active: isAgenticMode },
-    { label: 'Arena', to: arenaTo, active: isArenaMode },
   ] as const
 
   return (
@@ -75,12 +75,19 @@ export function StreamPayHeader() {
                 <Link
                   key={item.label}
                   to={item.to}
-                  className="rounded-full px-3 py-1 text-[11px] font-semibold transition-all"
+                  onClick={item.soon ? event => event.preventDefault() : undefined}
+                  aria-disabled={item.soon ? true : undefined}
+                  title={item.soon ? `${item.label} is coming soon` : undefined}
+                  className={[
+                    'rounded-full px-3 py-1 text-[11px] font-semibold transition-all',
+                    item.soon ? 'cursor-not-allowed' : '',
+                  ].join(' ')}
                   style={item.active
                     ? { background: '#ffffff', color: '#111827', boxShadow: '0 1px 2px rgba(0,0,0,0.06)' }
                     : { color: '#9ca3af' }}
                 >
                   <span>{item.label}</span>
+                  {item.soon && <span className="ml-1 text-[8px] font-black uppercase tracking-wide text-blue-500">Soon</span>}
                 </Link>
               ))}
             </div>
@@ -103,14 +110,19 @@ export function StreamPayHeader() {
               <Link
                 key={item.label}
                 to={item.to}
+                onClick={item.soon ? event => event.preventDefault() : undefined}
+                aria-disabled={item.soon ? true : undefined}
+                title={item.soon ? `${item.label} is coming soon` : undefined}
                 className={[
                   'rounded-full px-2 py-1.5 text-center text-[10px] font-semibold transition-all',
+                  item.soon ? 'cursor-not-allowed' : '',
                   item.active
                     ? 'bg-white text-gray-900 shadow-sm dark:bg-white dark:text-gray-950'
                     : 'text-gray-400',
                 ].join(' ')}
               >
                 <span>{item.label}</span>
+                {item.soon && <span className="ml-0.5 text-[7px] font-black uppercase tracking-wide text-blue-500">Soon</span>}
               </Link>
             ))}
           </div>
