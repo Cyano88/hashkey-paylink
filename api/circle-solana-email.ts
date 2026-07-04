@@ -448,8 +448,8 @@ export default async function handler(req: Request, res: Response) {
         abi: SMART_WALLET_BATCH_ABI,
         functionName: 'executeBatch',
         args: [[
-          { target: tokenAddress as `0x${string}`, value: 0n, data: fundCallData },
           { target: factoryAddress as `0x${string}`, value: 0n, data: createCallData },
+          { target: tokenAddress as `0x${string}`, value: 0n, data: fundCallData },
         ]],
       })
 

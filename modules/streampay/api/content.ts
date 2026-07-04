@@ -1390,6 +1390,7 @@ export async function getContentCheckpointEscrow(req: Request, res: Response) {
     return res.status(400).json({ ok: false, error: 'Checkpoint escrow is only for readable in-page content.' })
   }
 
+  let sender: `0x${string}` | undefined
   try {
     const code = await arcClient.getBytecode({ address: vault as `0x${string}` }).catch(() => undefined)
     if (!code || code === '0x') {
@@ -1405,7 +1406,7 @@ export async function getContentCheckpointEscrow(req: Request, res: Response) {
       functionName: 'vaultInfo',
     }) as readonly [`0x${string}`, `0x${string}`, `0x${string}`, `0x${string}`, `0x${string}`, bigint, bigint, bigint, boolean, boolean]
 
-    const sender = info[0]
+    sender = info[0]
     const recipient = info[1]
     const relayer = info[3]
     const vaultContentId = info[4]
