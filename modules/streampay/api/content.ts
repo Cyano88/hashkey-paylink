@@ -1031,7 +1031,7 @@ export async function getContentStreamEscrow(req: Request, res: Response) {
 
   if (!id) return res.status(400).json({ ok: false, error: 'id is required' })
   if (!vault || !isAddress(vault)) {
-    return res.status(400).json({ ok: false, error: 'A valid prepaid stream vault is required.' })
+    return res.status(400).json({ ok: false, error: 'A valid nano meter vault is required.' })
   }
 
   const entry = await readContentEntry(id)
@@ -1060,23 +1060,23 @@ export async function getContentStreamEscrow(req: Request, res: Response) {
     ])
     const [, recipient, totalAmount, startTime, endTime,, cancelled] = info
     const now = BigInt(Math.floor(Date.now() / 1000))
-    if (!funded) return res.status(402).json({ ok: false, error: 'Prepaid stream is not funded yet.' })
-    if (cancelled) return res.status(402).json({ ok: false, error: 'This prepaid stream was cancelled.' })
+    if (!funded) return res.status(402).json({ ok: false, error: 'Nano meter is not funded yet.' })
+    if (cancelled) return res.status(402).json({ ok: false, error: 'This nano meter was cancelled.' })
     if (recipient.toLowerCase() !== entry.creator.toLowerCase()) {
       return res.status(403).json({ ok: false, error: 'This stream does not pay the content creator.' })
     }
     if (totalAmount < BigInt(Math.max(1, entry.capRaw))) {
-      return res.status(402).json({ ok: false, error: 'Prepaid stream amount is below this content cap.' })
+      return res.status(402).json({ ok: false, error: 'Nano meter budget is below this content cap.' })
     }
     if (now < startTime) {
-      return res.status(425).json({ ok: false, error: 'Prepaid stream is confirmed and will open shortly.' })
+      return res.status(425).json({ ok: false, error: 'Nano meter is confirmed and will open shortly.' })
     }
     if (now >= endTime) {
-      return res.status(402).json({ ok: false, error: 'This prepaid stream has ended.' })
+      return res.status(402).json({ ok: false, error: 'This nano meter has ended.' })
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
-    return res.status(503).json({ ok: false, error: `Could not verify prepaid stream: ${message.slice(0, 160)}` })
+    return res.status(503).json({ ok: false, error: `Could not verify nano meter: ${message.slice(0, 160)}` })
   }
 
   return res.status(200).json({ ok: true, type: entry.type, content: entry.content })

@@ -644,7 +644,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
           <div>
             <div className="flex items-center gap-2 mb-1">
               <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">
-                {streamRole === 'creator' || isRecipient ? 'Claimable streamed USDC' : 'Stream progress'}
+                {streamRole === 'creator' || isRecipient ? 'Claimable nano earnings' : 'Pay-as-you-read meter'}
               </p>
               {reason && (
                 <span className="max-w-[140px] truncate rounded-full border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5 px-2.5 py-0.5 text-[10px] font-semibold text-gray-500 dark:text-gray-300">
@@ -660,10 +660,10 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
               <span className="mb-0.5 self-end text-[12px] font-medium text-gray-400">USDC</span>
             </div>
             <p className="mt-0.5 text-[12px] text-gray-400">
-              {stream?.isBeforeStart ? 'Stream begins soon'
+              {stream?.isBeforeStart ? 'Meter begins soon'
                : isCancelled        ? 'Final streamed amount'
                : isComplete         ? 'Fully streamed'
-               : 'Unlocked so far - updates live'}
+               : 'Consumed so far - updates live'}
             </p>
           </div>
 
@@ -690,16 +690,16 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
           {stream && (
             <div className="rounded-2xl border border-gray-100 dark:border-white/10 bg-gray-50/70 dark:bg-white/[0.04] p-3.5 space-y-3">
               <div className="grid grid-cols-3 gap-2">
-                <StreamMetric label="Streamed" value={formatUsdc(stream.totalUnlocked)} />
+                <StreamMetric label="Consumed" value={formatUsdc(stream.totalUnlocked)} />
                 <StreamMetric label="Claimable" value={formatUsdc(stream.claimable)} tone="green" />
                 <StreamMetric label="Refundable" value={formatUsdc(stream.remainingInStream)} />
               </div>
               <p className="text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
                 {streamRole === 'creator' || isRecipient
-                  ? 'Creator can claim the unlocked balance anytime. New USDC keeps accruing until the stream ends or the reader stops it.'
+                  ? 'Creator can claim the consumed balance anytime. New USDC keeps accruing only while the reader meter is active.'
                   : streamRole === 'reader' || isSender
-                    ? 'Reader controls the unstreamed balance. Ending the stream sends the unlocked share to the creator and returns the remaining USDC to the reader wallet.'
-                    : 'Progress shows how much USDC has streamed, what is claimable, and what remains locked in the vault.'}
+                    ? 'Reader controls the unconsumed balance. Ending the meter sends the consumed share to the creator and returns the remaining USDC to the reader wallet.'
+                    : 'Progress shows how much USDC was consumed, what is claimable, and what remains refundable in the vault.'}
               </p>
             </div>
           )}

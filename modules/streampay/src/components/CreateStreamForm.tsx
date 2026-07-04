@@ -385,7 +385,7 @@ export function CreateStreamForm() {
     ? 'Use email to open your Arc wallet.'
     : circleStartReady
       ? isCreatorStream
-        ? 'Start the prepaid viewing stream from your Circle wallet.'
+        ? 'Start the pay-as-you-read meter from your Circle wallet.'
         : 'Start the stream from your Circle wallet.'
       : 'Finish the required fields below.'
   const circleCtaLabel = isWorking
@@ -407,7 +407,7 @@ export function CreateStreamForm() {
                   : isAgenticStreaming
                     ? 'Start service stream'
                     : isCreatorStream
-                      ? 'Start pay-per-view stream'
+                      ? 'Start nano meter'
                     : 'Start stream'
   const agenticLinkParams = isAgenticStreaming ? {
     mode: 'agentic-streaming',
@@ -1125,10 +1125,10 @@ export function CreateStreamForm() {
 
           <div className="px-1">
             <h1 className="text-[22px] font-black tracking-tight text-gray-950 dark:text-white">
-              {isAgenticStreaming ? 'x402 Services' : isCreatorStream ? 'Creator Stream Checkout' : 'Payroll'}
+              {isAgenticStreaming ? 'x402 Services' : isCreatorStream ? 'Creator Nano Checkout' : 'Payroll'}
             </h1>
             <p className="mt-1 text-[13px] leading-5 text-gray-500 dark:text-gray-400">
-              {isAgenticStreaming ? 'Daily Polymarket LP research by stream.' : isCreatorStream ? 'Prepay an Arc stream, then return to unlock the creator content.' : 'Stream USDC to anyone on Arc.'}
+              {isAgenticStreaming ? 'Daily Polymarket LP research by stream.' : isCreatorStream ? 'Start a pay-as-you-read meter, then return to the creator content.' : 'Stream USDC to anyone on Arc.'}
             </p>
           </div>
 
@@ -1383,10 +1383,10 @@ export function CreateStreamForm() {
         {/* ── Page title (Rule 4: aligned to same 480px) ── */}
         <div className="px-1">
           <h1 className="text-[22px] font-black tracking-tight text-gray-950 dark:text-white">
-            {isAgenticStreaming ? 'x402 Services' : isCreatorStream ? 'Creator Stream Checkout' : 'Payroll'}
+            {isAgenticStreaming ? 'x402 Services' : isCreatorStream ? 'Creator Nano Checkout' : 'Payroll'}
           </h1>
           <p className="mt-1 text-[13px] leading-5 text-gray-500 dark:text-gray-400">
-            {isAgenticStreaming ? 'Stream USDC for daily Polymarket LP research.' : isCreatorStream ? 'Prepay an Arc stream, then continue back to the content.' : 'Stream USDC to anyone on Arc.'}
+            {isAgenticStreaming ? 'Stream USDC for daily Polymarket LP research.' : isCreatorStream ? 'Start a pay-as-you-read meter, then continue back to the content.' : 'Stream USDC to anyone on Arc.'}
           </p>
         </div>
 
@@ -1599,7 +1599,7 @@ export function CreateStreamForm() {
                 <div className="space-y-3 rounded-2xl border border-emerald-100 bg-emerald-50/50 p-4 dark:border-emerald-900/30 dark:bg-emerald-950/20">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="text-[13px] font-black text-gray-900 dark:text-gray-100">Pay-per-view stream</p>
+                      <p className="text-[13px] font-black text-gray-900 dark:text-gray-100">Pay-as-you-read meter</p>
                       <p className="mt-1 text-[12px] leading-relaxed text-gray-500 dark:text-gray-400">
                         These details are set by the creator content link.
                       </p>
@@ -1615,11 +1615,11 @@ export function CreateStreamForm() {
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <div className="rounded-xl border border-white bg-white/80 px-3 py-2.5 dark:border-white/10 dark:bg-[#15151a]">
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Max spend</p>
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Max budget</p>
                         <p className="mt-0.5 text-[12px] font-bold text-gray-800 dark:text-gray-100">{amount || '0'} USDC</p>
                       </div>
                       <div className="rounded-xl border border-white bg-white/80 px-3 py-2.5 dark:border-white/10 dark:bg-[#15151a]">
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Window</p>
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Meter window</p>
                         <p className="mt-0.5 text-[12px] font-bold text-gray-800 dark:text-gray-100">
                           {durationSecs > 0n ? `${Number(durationSecs)} sec` : 'Ready'}
                         </p>
@@ -1633,7 +1633,7 @@ export function CreateStreamForm() {
                     )}
                   </div>
                   <p className="text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
-                    Start the stream, then tap Continue to content on the confirmation screen.
+                    Start the meter, then tap Continue to content. Only consumed time unlocks for the creator.
                   </p>
                 </div>
               ) : isAgenticStreaming ? (
@@ -2104,9 +2104,9 @@ export function CreateStreamForm() {
                 { n: '2', title: 'Start stream',  desc: 'Pay as access runs' },
                 { n: '3', title: 'Get reports',   desc: 'LP research by email' },
               ] : [
-                { n: '1', title: 'Fund vault',    desc: 'USDC is locked for the stream' },
-                { n: '2', title: 'Stream begins', desc: 'Funds unlock over time' },
-                { n: '3', title: 'Claim anytime', desc: 'Recipient withdraws on Arc' },
+                { n: '1', title: 'Set budget',    desc: 'USDC is locked in your meter' },
+                { n: '2', title: 'Read or view',  desc: 'Tiny amounts unlock over time' },
+                { n: '3', title: 'Stop anytime',  desc: 'Unused USDC stays refundable' },
               ] as const).map(s => (
                 <div key={s.n} className="rounded-2xl border border-gray-100 dark:border-white/10 bg-white dark:bg-[#111216] p-3 sm:p-4 text-center shadow-sm space-y-1.5">
                   <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-gray-200 text-[11px] font-semibold text-gray-500">

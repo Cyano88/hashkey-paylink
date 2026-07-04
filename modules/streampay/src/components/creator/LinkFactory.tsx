@@ -693,7 +693,7 @@ export function LinkFactory({
             <div className="grid grid-cols-2 overflow-hidden rounded-xl border border-gray-200 bg-gray-50 p-1 dark:border-white/10 dark:bg-white/[0.04]">
               {([
                 { id: 'unlock', label: 'Unlock', desc: 'Fixed price' },
-                { id: 'stream', label: 'Stream', desc: 'Pay while viewing' },
+                { id: 'stream', label: 'Nano meter', desc: 'Pay as readers consume' },
               ] as const).map(option => {
                 const selected = mode === option.id
                 const disabled = option.id === 'stream' && !streamContentAvailable
@@ -880,7 +880,7 @@ export function LinkFactory({
               </p>
               {contentType === 'url' && (
                 <p className="text-[11px] font-medium text-gray-400 dark:text-gray-500">
-                  Pay per view stream is unavailable for external access.
+                  Pay-as-you-read is unavailable for external access.
                 </p>
               )}
             </div>
@@ -1070,7 +1070,7 @@ export function LinkFactory({
                   </>
                 ) : streamReady ? (
                   <>
-                    Viewers stream <span className="font-semibold text-gray-600 dark:text-gray-300">${rateStr} USDC/sec</span> up to <span className="font-semibold text-gray-600 dark:text-gray-300">${capStr}</span> - {streamDurationLabel}.
+                    Viewers pay <span className="font-semibold text-gray-600 dark:text-gray-300">${rateStr} USDC/sec</span> while reading, up to <span className="font-semibold text-gray-600 dark:text-gray-300">${capStr}</span> - {streamDurationLabel}.
                   </>
                 ) : (
                   <>Max cap must be greater than the per-second price.</>
@@ -1109,7 +1109,7 @@ export function LinkFactory({
                       ? <><Spinner />Storing content...</>
                       : mode === 'unlock'
                       ? 'Publish'
-                      : 'Publish stream'}
+                      : 'Publish nano meter'}
                   </button>
                 )}
                 {storeError && (
@@ -1128,7 +1128,7 @@ export function LinkFactory({
                       </svg>
                     </span>
                     <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                      {mode === 'unlock' ? 'Content published' : 'Stream published'}
+                      {mode === 'unlock' ? 'Content published' : 'Nano meter published'}
                     </p>
                   </div>
                   <div className={[
@@ -1144,7 +1144,7 @@ export function LinkFactory({
                       <p className="truncate text-[12px] font-semibold text-gray-700 dark:text-gray-200">{title.trim() || (contentType === 'text' ? 'Article' : 'Private link')}</p>
                     </div>
                     <div className="min-w-0 text-right">
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-gray-400 dark:text-gray-500">{mode === 'unlock' ? 'Price' : 'Stream'}</p>
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-gray-400 dark:text-gray-500">{mode === 'unlock' ? 'Price' : 'Meter'}</p>
                       <p className="text-[12px] font-semibold text-gray-700 dark:text-gray-200">
                         {mode === 'unlock' ? `${capStr} USDC` : `${rateStr}/sec`}
                       </p>
@@ -1209,7 +1209,7 @@ export function LinkFactory({
               { n: '2', title: 'Share', desc: 'Send one paid link to viewers' },
               mode === 'unlock'
                 ? { n: '3', title: 'Unlock', desc: 'Arc USDC authorizes access' }
-                : { n: '3', title: 'Stream', desc: 'USDC accrues while content is active' },
+                : { n: '3', title: 'Meter', desc: 'USDC accrues while content is active' },
             ] as const).map(s => (
               <div key={s.n} className="rounded-2xl border border-gray-100 bg-white p-3 sm:p-4 text-center shadow-sm space-y-1.5 dark:border-white/10 dark:bg-white/[0.04]">
                 <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-gray-200 text-[11px] font-semibold text-gray-500 dark:border-white/10 dark:text-gray-300">

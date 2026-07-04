@@ -1224,7 +1224,7 @@ export function StreamGate() {
           setFetchedContent({ type: data.type as 'text' | 'url' | 'scores', content: data.content })
           setContentState('ready')
         } else {
-          setContentError(data.error ?? 'Could not verify prepaid stream')
+          setContentError(data.error ?? 'Could not verify nano meter')
           setContentState('error')
         }
       })
@@ -1264,7 +1264,7 @@ export function StreamGate() {
   const streamDurationSec = dripRate > 0 ? Math.max(1, Math.ceil(sessionCap / dripRate)) : 0
   const prepaidStreamEnded = paymentMode === 'escrow'
     && contentState === 'error'
-    && Boolean(contentError && /prepaid stream (has ended|was cancelled)/i.test(contentError))
+    && Boolean(contentError && /(prepaid stream|nano meter) (has ended|was cancelled)/i.test(contentError))
 
   function streamEscrowHref() {
     const returnParams = new URLSearchParams(window.location.search)
@@ -1348,12 +1348,12 @@ export function StreamGate() {
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className={['text-[13px] font-black', streamContentAvailable ? 'text-gray-900 dark:text-gray-100' : 'text-gray-400 dark:text-gray-600'].join(' ')}>
-                        Pay per view stream
+                        Pay as you read
                       </p>
                       <p className="mt-1 text-[12px] leading-relaxed text-gray-500 dark:text-gray-400">
                         {streamContentAvailable
-                          ? `Prepay up to ${formatUsdc(sessionCap)} USDC in an Arc stream while this page renders content.`
-                          : 'Streaming is only available for content HashpayStream can render in-page.'}
+                          ? `Pay only while this page is open. Up to ${formatUsdc(sessionCap)} USDC can stream; unused USDC stays refundable.`
+                          : 'Pay-as-you-read is only available for content HashpayStream can render in-page.'}
                       </p>
                     </div>
                     <span className={['rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-[0.12em]', streamContentAvailable ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300' : 'bg-gray-100 text-gray-400 dark:bg-white/[0.06] dark:text-gray-500'].join(' ')}>
@@ -1364,7 +1364,7 @@ export function StreamGate() {
 
                 {!streamContentAvailable && (
                   <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
-                    External access unavailable for pay per view stream.
+                    External access unavailable for pay-as-you-read.
                   </p>
                 )}
               </div>
@@ -1796,9 +1796,9 @@ export function StreamGate() {
                   <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full border border-emerald-100 bg-emerald-50 text-emerald-600">
                     <LockIcon />
                   </div>
-                  <p className="mt-3 text-[13px] font-bold text-gray-900">Prepaid viewing stream</p>
+                  <p className="mt-3 text-[13px] font-bold text-gray-900">Pay-as-you-read nano meter</p>
                   <p className="mt-1 text-[12px] leading-relaxed text-gray-500">
-                    Lock up to {formatUsdc(sessionCap)} USDC in an Arc stream. Unused time can be cancelled from the stream page.
+                    Stream ${dripRate.toFixed(4)}/sec up to {formatUsdc(sessionCap)} USDC. Stop anytime; unstreamed USDC remains refundable.
                   </p>
                   {streamVault && contentState === 'error' && contentError && (
                     <p className="mt-3 rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-[11px] font-medium leading-relaxed text-amber-700">
@@ -1815,14 +1815,14 @@ export function StreamGate() {
                     }}
                     className="flex min-h-[48px] w-full items-center justify-center rounded-xl bg-gray-950 px-5 py-3 text-[13px] font-semibold text-white"
                   >
-                    Check prepaid stream
+                    Check nano meter
                   </button>
                 ) : (
                   <a
                     href={streamEscrowHref()}
                     className="flex min-h-[48px] w-full items-center justify-center rounded-xl bg-gray-950 px-5 py-3 text-[13px] font-semibold text-white"
                   >
-                    {prepaidStreamEnded ? 'Start new prepaid stream' : 'Start prepaid stream'}
+                    {prepaidStreamEnded ? 'Start new nano meter' : 'Start nano meter'}
                   </a>
                 )}
               </div>
@@ -1830,7 +1830,7 @@ export function StreamGate() {
               <>
                 {!isConnected && (
                   <div className="rounded-xl border border-gray-100 bg-gray-50 px-5 py-3 text-center text-[12px] text-gray-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-400">
-                    Legacy signed-viewer access is not available for public testing. Use fixed unlock or pay-per-view stream.
+                    Legacy signed-viewer access is not available for public testing. Use fixed unlock or pay-as-you-read.
                   </div>
                 )}
 
@@ -2158,7 +2158,7 @@ export function StreamGate() {
         </div>
         <div className="text-right space-y-0.5">
           <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
-            {gateMode === 'unlock' ? 'Access Price' : 'Stream Rate'}
+            {gateMode === 'unlock' ? 'Access Price' : 'Nano Rate'}
           </p>
           <p className="text-[12px] font-semibold text-gray-700">
             {gateMode === 'unlock' ? `${formatUsdc(sessionCap)} USDC` : `$${dripRate.toFixed(4)}/sec`}

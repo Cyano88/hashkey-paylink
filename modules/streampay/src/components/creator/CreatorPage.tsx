@@ -1391,7 +1391,7 @@ function CreatorAccountEarnings({
       {validWallet && (
         <div className="mt-3 grid grid-cols-3 gap-2 text-center">
           <StreamMiniStat label="Fixed" value={`${fixedTotal.toFixed(2)} USDC`} />
-          <StreamMiniStat label="Streamed" value={`${formatCreatorUsdc(streamedTotal)} USDC`} />
+          <StreamMiniStat label="Consumed" value={`${formatCreatorUsdc(streamedTotal)} USDC`} />
           <StreamMiniStat label="Live" value={`${liveCount}`} green />
         </div>
       )}
@@ -1412,7 +1412,7 @@ function CreatorAccountEarnings({
       {!loading && validWallet && !error && combined.length === 0 && (
         <div className="mt-3 rounded-xl border border-gray-100 bg-white px-4 py-4 text-center dark:border-white/10 dark:bg-[#111216]">
           <p className="text-[12px] font-bold text-gray-600 dark:text-gray-300">No earnings yet</p>
-          <p className="mt-1 text-[11px] leading-5 text-gray-400 dark:text-gray-500">Fixed unlocks and pay-per-view streams appear here after readers pay.</p>
+          <p className="mt-1 text-[11px] leading-5 text-gray-400 dark:text-gray-500">Fixed unlocks and pay-as-you-read meters appear here after readers pay.</p>
         </div>
       )}
 
@@ -1454,11 +1454,11 @@ function CreatorAccountEarnings({
                     <p className="mt-0.5 text-[10px] text-gray-400 dark:text-gray-500">From {shortWallet(stream.sender)}</p>
                   </div>
                   <span className={['rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-[0.12em]', stream.active ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-300' : 'bg-gray-100 text-gray-500 dark:bg-white/[0.08] dark:text-gray-300'].join(' ')}>
-                    Stream {status}
+                    Meter {status}
                   </span>
                 </div>
                 <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-                  <StreamMiniStat label="Streamed" value={`${formatCreatorUsdc(stream.unlocked)} USDC`} />
+                  <StreamMiniStat label="Consumed" value={`${formatCreatorUsdc(stream.unlocked)} USDC`} />
                   <StreamMiniStat label="Claimable" value={`${formatCreatorUsdc(stream.claimable)} USDC`} green />
                   <StreamMiniStat label="Claimed" value={`${formatCreatorUsdc(stream.alreadyWithdrawn)} USDC`} />
                 </div>
@@ -1469,7 +1469,7 @@ function CreatorAccountEarnings({
                     claimable > 0n ? 'bg-gray-950 text-white hover:bg-gray-800' : 'border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 dark:border-white/10 dark:bg-[#111216] dark:text-gray-300 dark:hover:bg-white/[0.06]',
                   ].join(' ')}
                 >
-                  {claimable > 0n ? 'Open claim' : 'View stream'}
+                  {claimable > 0n ? 'Open claim' : 'View meter'}
                 </a>
               </div>
             )
@@ -1528,9 +1528,9 @@ function CreatorStreamClaims({ initialCreatorWallet }: { initialCreatorWallet?: 
     <div className="rounded-2xl border border-gray-100 bg-gray-50/70 p-4 dark:border-white/10 dark:bg-white/[0.04]">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[13px] font-black text-gray-950 dark:text-white">Pay-per-view streams</p>
+          <p className="text-[13px] font-black text-gray-950 dark:text-white">Pay-as-you-read meters</p>
           <p className="mt-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400">
-            Claim streamed USDC sent to your creator wallet.
+            Claim consumed USDC sent to your creator wallet.
           </p>
         </div>
         <div className="shrink-0 rounded-xl bg-white px-3 py-2 text-right shadow-sm dark:bg-[#111216]">
@@ -1573,8 +1573,8 @@ function CreatorStreamClaims({ initialCreatorWallet }: { initialCreatorWallet?: 
 
       {!loading && validWallet && !error && streams.length === 0 && (
         <div className="mt-3 rounded-xl border border-gray-100 bg-white px-4 py-4 text-center dark:border-white/10 dark:bg-[#111216]">
-          <p className="text-[12px] font-bold text-gray-600 dark:text-gray-300">No pay-per-view streams yet</p>
-          <p className="mt-1 text-[11px] leading-5 text-gray-400 dark:text-gray-500">When readers start prepaid streams to this creator wallet, they appear here for claiming.</p>
+          <p className="text-[12px] font-bold text-gray-600 dark:text-gray-300">No nano meters yet</p>
+          <p className="mt-1 text-[11px] leading-5 text-gray-400 dark:text-gray-500">When readers start pay-as-you-read meters to this creator wallet, consumed USDC appears here for claiming.</p>
         </div>
       )}
 
@@ -1595,7 +1595,7 @@ function CreatorStreamClaims({ initialCreatorWallet }: { initialCreatorWallet?: 
                   </span>
                 </div>
                 <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-                  <StreamMiniStat label="Streamed" value={`${formatCreatorUsdc(stream.unlocked)} USDC`} />
+                  <StreamMiniStat label="Consumed" value={`${formatCreatorUsdc(stream.unlocked)} USDC`} />
                   <StreamMiniStat label="Claimable" value={`${formatCreatorUsdc(stream.claimable)} USDC`} green />
                   <StreamMiniStat label="Claimed" value={`${formatCreatorUsdc(stream.alreadyWithdrawn)} USDC`} />
                 </div>
@@ -1606,7 +1606,7 @@ function CreatorStreamClaims({ initialCreatorWallet }: { initialCreatorWallet?: 
                     claimable > 0n ? 'bg-gray-950 text-white hover:bg-gray-800' : 'border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 dark:border-white/10 dark:bg-[#111216] dark:text-gray-300 dark:hover:bg-white/[0.06]',
                   ].join(' ')}
                 >
-                  {claimable > 0n ? 'Open claim' : 'View stream'}
+                  {claimable > 0n ? 'Open claim' : 'View meter'}
                 </a>
               </div>
             )
@@ -1690,10 +1690,10 @@ function ReaderStreamVaults({
         <div className="space-y-4 px-5 py-5 sm:px-7 sm:py-6">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-500 dark:text-gray-400">My streams</p>
-              <h2 className="mt-1 text-[18px] font-black tracking-tight text-gray-950 dark:text-white">Reader stream vaults</h2>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-500 dark:text-gray-400">My meters</p>
+              <h2 className="mt-1 text-[18px] font-black tracking-tight text-gray-950 dark:text-white">Reader nano meters</h2>
               <p className="mt-1 text-[12px] leading-5 text-gray-500 dark:text-gray-400">
-                Recover active pay-per-view streams and refund unstreamed USDC even if the content link is gone.
+                Recover active pay-as-you-read meters and refund unconsumed USDC even if the content link is gone.
               </p>
             </div>
             <div className="shrink-0 rounded-xl bg-gray-50 px-3 py-2 text-right dark:bg-white/[0.04]">
@@ -1747,14 +1747,14 @@ function ReaderStreamVaults({
           {!loading && !validWallet && !error && (
             <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-4 py-6 text-center dark:border-white/10 dark:bg-white/[0.04]">
               <p className="text-[12px] font-bold text-gray-600 dark:text-gray-300">Sign in to recover streams</p>
-              <p className="mt-1 text-[11px] leading-5 text-gray-400 dark:text-gray-500">Use the same email wallet that started the pay-per-view stream.</p>
+              <p className="mt-1 text-[11px] leading-5 text-gray-400 dark:text-gray-500">Use the same email wallet that started the pay-as-you-read meter.</p>
             </div>
           )}
 
           {!loading && validWallet && !streamError && streams.length === 0 && (
             <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-4 py-6 text-center dark:border-white/10 dark:bg-white/[0.04]">
-              <p className="text-[12px] font-bold text-gray-600 dark:text-gray-300">No stream vaults found</p>
-              <p className="mt-1 text-[11px] leading-5 text-gray-400 dark:text-gray-500">Reader streams funded by this wallet will appear here.</p>
+              <p className="text-[12px] font-bold text-gray-600 dark:text-gray-300">No nano meters found</p>
+              <p className="mt-1 text-[11px] leading-5 text-gray-400 dark:text-gray-500">Reader meters funded by this wallet will appear here.</p>
             </div>
           )}
 
@@ -1777,7 +1777,7 @@ function ReaderStreamVaults({
                       </span>
                     </div>
                     <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-                      <StreamMiniStat label="Streamed" value={`${formatCreatorUsdc(stream.unlocked)} USDC`} />
+                      <StreamMiniStat label="Consumed" value={`${formatCreatorUsdc(stream.unlocked)} USDC`} />
                       <StreamMiniStat label="Refundable" value={`${formatCreatorUsdc(refundable)} USDC`} green={refundable > 0n} />
                       <StreamMiniStat label="Budget" value={`${formatCreatorUsdc(stream.totalAmount)} USDC`} />
                     </div>
@@ -1785,7 +1785,7 @@ function ReaderStreamVaults({
                       href={`/stream/${stream.vault}?app=streampay&wallet=circle&role=reader`}
                       className="mt-3 flex w-full items-center justify-center rounded-xl bg-gray-950 py-2.5 text-[12px] font-black text-white transition-all active:scale-[0.98] dark:bg-white dark:text-gray-950"
                     >
-                      Open stream vault
+                      Open meter vault
                     </a>
                   </div>
                 )
