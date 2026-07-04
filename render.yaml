@@ -52,6 +52,10 @@ services:
         value: "0xBAecf54084A0cB65b77a88cbDEf2b663Be71c61b"
       - key: VITE_STREAM_FACTORY_ADDRESS
         value: "0xBAecf54084A0cB65b77a88cbDEf2b663Be71c61b"
+      - key: CHECKPOINT_FACTORY_ADDRESS
+        value: "0x8eEc65a18f3b5deb0E9Fc5e1eCf8263587b02927"
+      - key: VITE_CHECKPOINT_FACTORY_ADDRESS
+        value: "0x8eEc65a18f3b5deb0E9Fc5e1eCf8263587b02927"
       - key: ARC_POA_CONTRACT
         value: "0x91DbDb49c8C68e5775554D42A1B5ce15C89C814B"
       - key: VITE_POA_CONTRACT
