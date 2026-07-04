@@ -15,7 +15,7 @@ import { resolvePrivyCircleLink, savePrivyCircleLink } from '../../../../../src/
 
 type ViewerRow = { viewer: string; amountRaw: string; ts: number }
 type CreatorFixedUnlockRow = {
-  kind: 'fixed'
+  kind: 'fixed' | 'checkpoint'
   contentId: string
   title: string
   amount: number
@@ -1344,6 +1344,7 @@ function CreatorAccountEarnings({
   const validWallet = /^0x[a-fA-F0-9]{40}$/.test(wallet.trim())
   const claimableTotal = streams.reduce((sum, stream) => sum + toCreatorBigInt(stream.claimable), 0n)
   const streamedTotal = streams.reduce((sum, stream) => sum + toCreatorBigInt(stream.unlocked), 0n)
+  const releasedTotal = fixedUnlocks.reduce((sum, item) => sum + item.amount, 0)
   const fixedTotal = fixedUnlocks.reduce((sum, item) => sum + item.amount, 0)
 
   const fetchEarnings = useCallback(async () => {
@@ -1393,12 +1394,12 @@ function CreatorAccountEarnings({
         <div className="min-w-0">
           <p className="text-[13px] font-black text-gray-950 dark:text-white">Creator earnings</p>
           <p className="mt-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400">
-            Fixed unlocks, checkpoint reads, and timed stream claims from this creator wallet.
+            Fixed unlocks and checkpoint reads are already paid. Timed streams show when there is USDC to claim.
           </p>
         </div>
         <div className="shrink-0 rounded-xl bg-white px-3 py-2 text-right shadow-sm dark:bg-[#111216]">
-          <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400">Claimable</p>
-          <p className="mt-0.5 text-[13px] font-black text-emerald-600 dark:text-emerald-300">{formatCreatorUsdc(claimableTotal)} USDC</p>
+          <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400">Earned</p>
+          <p className="mt-0.5 text-[13px] font-black text-emerald-600 dark:text-emerald-300">{releasedTotal.toFixed(2)} USDC</p>
         </div>
       </div>
 
@@ -1432,9 +1433,9 @@ function CreatorAccountEarnings({
 
       {validWallet && (
         <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-          <StreamMiniStat label="Fixed" value={`${fixedTotal.toFixed(2)} USDC`} />
+          <StreamMiniStat label="Paid" value={`${fixedTotal.toFixed(2)} USDC`} green={fixedTotal > 0} />
           <StreamMiniStat label="Streamed" value={`${formatCreatorUsdc(streamedTotal)} USDC`} />
-          <StreamMiniStat label="Claimable" value={`${formatCreatorUsdc(claimableTotal)} USDC`} green />
+          <StreamMiniStat label="To claim" value={`${formatCreatorUsdc(claimableTotal)} USDC`} green={claimableTotal > 0n} />
         </div>
       )}
 
@@ -1454,7 +1455,7 @@ function CreatorAccountEarnings({
       {!loading && validWallet && !error && combined.length === 0 && (
         <div className="mt-3 rounded-xl border border-gray-100 bg-white px-4 py-4 text-center dark:border-white/10 dark:bg-[#111216]">
           <p className="text-[12px] font-bold text-gray-600 dark:text-gray-300">No earnings yet</p>
-          <p className="mt-1 text-[11px] leading-5 text-gray-400 dark:text-gray-500">Fixed unlocks and checkpoint reads appear automatically. Timed stream claims appear when readers use live/video meters.</p>
+          <p className="mt-1 text-[11px] leading-5 text-gray-400 dark:text-gray-500">Payments appear here after readers unlock or reach pay-as-you-read checkpoints for this creator wallet.</p>
         </div>
       )}
 
@@ -1470,12 +1471,12 @@ function CreatorAccountEarnings({
                       <p className="truncate text-[12px] font-black text-gray-800 dark:text-gray-100">{fixed.title}</p>
                       <p className="mt-0.5 text-[10px] text-gray-400 dark:text-gray-500">From {shortWallet(fixed.payer || 'reader')}</p>
                     </div>
-                    <span className="rounded-full bg-blue-50 px-2 py-1 text-[9px] font-black uppercase tracking-[0.12em] text-blue-600 dark:bg-blue-500/10 dark:text-blue-300">Fixed unlock</span>
+                    <span className="rounded-full bg-blue-50 px-2 py-1 text-[9px] font-black uppercase tracking-[0.12em] text-blue-600 dark:bg-blue-500/10 dark:text-blue-300">{fixed.kind === 'checkpoint' ? 'Pay-as-you-read' : 'Fixed unlock'}</span>
                   </div>
                   <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-                    <StreamMiniStat label="Paid" value={`${fixed.amount.toFixed(2)} USDC`} green />
-                    <StreamMiniStat label="Rail" value="x402" />
-                    <StreamMiniStat label="Status" value="Paid" />
+                    <StreamMiniStat label={fixed.kind === 'checkpoint' ? 'Released' : 'Paid'} value={`${fixed.amount.toFixed(2)} USDC`} green />
+                    <StreamMiniStat label="Rail" value={fixed.kind === 'checkpoint' ? 'Arc' : 'x402'} />
+                    <StreamMiniStat label="Status" value={fixed.kind === 'checkpoint' ? 'Released' : 'Paid'} />
                   </div>
                   {fixed.receiptActivityId && (
                     <a href={`/receipt/${fixed.receiptActivityId}`} className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white py-2 text-[12px] font-bold text-gray-600 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-[#111216] dark:text-gray-300 dark:hover:bg-white/[0.06]">
@@ -1698,6 +1699,13 @@ function ReaderStreamVaults({
     return sum + (total > unlocked ? total - unlocked : 0n)
   }, 0n)
   const activeCount = streams.filter(stream => stream.active && !stream.cancelled).length
+  const recoverableStreams = streams.filter(stream => {
+    const total = toCreatorBigInt(stream.totalAmount)
+    const unlocked = toCreatorBigInt(stream.unlocked)
+    const refundable = total > unlocked ? total - unlocked : 0n
+    return (stream.active && !stream.cancelled) || refundable > 0n
+  })
+  const hiddenCompletedCount = Math.max(0, streams.length - recoverableStreams.length)
 
   const fetchReaderStreams = useCallback(async () => {
     if (!validWallet) {
@@ -1735,7 +1743,7 @@ function ReaderStreamVaults({
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-500 dark:text-gray-400">My meters</p>
               <h2 className="mt-1 text-[18px] font-black tracking-tight text-gray-950 dark:text-white">Reader nano meters</h2>
               <p className="mt-1 text-[12px] leading-5 text-gray-500 dark:text-gray-400">
-                Recover active timed streams and refund unconsumed USDC even if the content link is gone.
+                Active and refundable meters appear here. Completed meters are kept as history.
               </p>
             </div>
             <div className="shrink-0 rounded-xl bg-gray-50 px-3 py-2 text-right dark:bg-white/[0.04]">
@@ -1774,8 +1782,8 @@ function ReaderStreamVaults({
 
           {validWallet && (
             <div className="grid grid-cols-3 gap-2 text-center">
-              <StreamMiniStat label="Active" value={`${activeCount}`} green />
-              <StreamMiniStat label="Total" value={`${streams.length}`} />
+              <StreamMiniStat label="Active" value={`${activeCount}`} green={activeCount > 0} />
+              <StreamMiniStat label="Recoverable" value={`${recoverableStreams.length}`} />
               <StreamMiniStat label="Refund" value={`${formatCreatorUsdc(refundableTotal)} USDC`} />
             </div>
           )}
@@ -1800,9 +1808,18 @@ function ReaderStreamVaults({
             </div>
           )}
 
-          {!loading && streams.length > 0 && (
+          {!loading && validWallet && !streamError && streams.length > 0 && recoverableStreams.length === 0 && (
+            <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-4 py-6 text-center dark:border-white/10 dark:bg-white/[0.04]">
+              <p className="text-[12px] font-bold text-gray-600 dark:text-gray-300">No refundable meters</p>
+              <p className="mt-1 text-[11px] leading-5 text-gray-400 dark:text-gray-500">
+                {hiddenCompletedCount} completed {hiddenCompletedCount === 1 ? 'meter is' : 'meters are'} already fully consumed.
+              </p>
+            </div>
+          )}
+
+          {!loading && recoverableStreams.length > 0 && (
             <div className="max-h-[360px] space-y-2 overflow-y-auto [scrollbar-width:none]">
-              {streams.map(stream => {
+              {recoverableStreams.map(stream => {
                 const total = toCreatorBigInt(stream.totalAmount)
                 const unlocked = toCreatorBigInt(stream.unlocked)
                 const refundable = total > unlocked ? total - unlocked : 0n
@@ -1827,7 +1844,7 @@ function ReaderStreamVaults({
                       href={`/stream/${stream.vault}?app=streampay&wallet=circle&role=reader`}
                       className="mt-3 flex w-full items-center justify-center rounded-xl bg-gray-950 py-2.5 text-[12px] font-black text-white transition-all active:scale-[0.98] dark:bg-white dark:text-gray-950"
                     >
-                      Open meter vault
+                      {refundable > 0n ? 'Manage refund' : 'Open active meter'}
                     </a>
                   </div>
                 )

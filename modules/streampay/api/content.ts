@@ -763,6 +763,29 @@ function unlockRowToEarning(row: Record<string, unknown>) {
   }
 }
 
+async function checkpointUnlockToEarning(unlock: CheckpointUnlockEntry, creator: string) {
+  const entry = await readContentEntry(unlock.contentId)
+  if (!entry || entry.creator.toLowerCase() !== creator.toLowerCase()) return null
+  try {
+    const state = await verifyCheckpointVaultState(unlock.contentId, entry, unlock.vaultAddress, { allowRefunded: true })
+    const releasedAmount = BigInt(state.releasedAmount)
+    if (releasedAmount <= 0n) return null
+    return {
+      kind: 'checkpoint' as const,
+      contentId: unlock.contentId,
+      title: entry.title || 'Creator content',
+      amount: Number(releasedAmount) / 1_000_000,
+      asset: 'USDC',
+      payer: unlock.walletAddress,
+      receiptActivityId: '',
+      transaction: unlock.vaultAddress,
+      unlockedAt: unlock.createdAt,
+    }
+  } catch {
+    return null
+  }
+}
+
 function cleanWalletAddress(value: unknown) {
   return String(value ?? '').trim().toLowerCase()
 }
@@ -1447,7 +1470,7 @@ export async function getContentStreamEscrow(req: Request, res: Response) {
   return res.status(200).json({ ok: true, type: entry.type, content: entry.content, coverImage: entry.coverImage })
 }
 
-async function verifyCheckpointVaultState(contentId: string, entry: ContentEntry, vault: string) {
+async function verifyCheckpointVaultState(contentId: string, entry: ContentEntry, vault: string, options: { allowRefunded?: boolean } = {}) {
   const code = await arcClient.getBytecode({ address: vault as `0x${string}` }).catch(() => undefined)
   if (!code || code === '0x') {
     throw new Error('Checkpoint escrow is not active on Arc yet. Start pay-as-you-read again.')
@@ -1480,7 +1503,7 @@ async function verifyCheckpointVaultState(contentId: string, entry: ContentEntry
     throw new Error('Checkpoint escrow budget is below this content cap.')
   }
   if (!funded) throw new Error('Checkpoint escrow is not funded yet.')
-  if (refunded) throw new Error('This checkpoint escrow has been refunded.')
+  if (refunded && !options.allowRefunded) throw new Error('This checkpoint escrow has been refunded.')
   if (!isAddress(relayer)) throw new Error('Checkpoint escrow relayer is invalid.')
 
   return {
@@ -1711,7 +1734,7 @@ export async function listCreatorEarnings(req: Request, res: Response) {
 
   if (pool) {
     await ensureSchema()
-    const result = await pool.query(
+    const fixedResult = await pool.query(
       `select
          u.content_id,
          u.wallet_address,
@@ -1727,10 +1750,23 @@ export async function listCreatorEarnings(req: Request, res: Response) {
        limit 80`,
       [creator],
     )
-    return res.json({ ok: true, fixedUnlocks: result.rows.map(unlockRowToEarning) })
+    const checkpointResult = await pool.query(
+      `select *
+       from streampay_checkpoint_unlocks
+       order by updated_at desc
+       limit 200`,
+    )
+    const checkpointRows = (await Promise.all(
+      checkpointResult.rows.map(row => checkpointUnlockToEarning(rowToCheckpointUnlockEntry(row), creator)),
+    )).filter(Boolean)
+    const rows = [
+      ...fixedResult.rows.map(unlockRowToEarning),
+      ...checkpointRows,
+    ].sort((a, b) => (b?.unlockedAt ?? 0) - (a?.unlockedAt ?? 0)).slice(0, 120)
+    return res.json({ ok: true, fixedUnlocks: rows })
   }
 
-  const rows = Array.from(unlockStore.values())
+  const fixedRows = Array.from(unlockStore.values())
     .map(unlock => {
       const entry = store.get(unlock.contentId) ?? OFFICIAL_CONTENT[unlock.contentId]
       if (!entry || entry.creator.toLowerCase() !== creator.toLowerCase()) return null
@@ -1747,7 +1783,12 @@ export async function listCreatorEarnings(req: Request, res: Response) {
       }
     })
     .filter(Boolean)
+  const checkpointRows = (await Promise.all(
+    Array.from(checkpointUnlockStore.values()).map(unlock => checkpointUnlockToEarning(unlock, creator)),
+  )).filter(Boolean)
+  const rows = [...fixedRows, ...checkpointRows]
     .sort((a, b) => (b?.unlockedAt ?? 0) - (a?.unlockedAt ?? 0))
+    .slice(0, 120)
   return res.json({ ok: true, fixedUnlocks: rows })
 }
 
