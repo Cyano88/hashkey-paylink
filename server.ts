@@ -33,6 +33,7 @@ import {
   listCreatorEarnings,
   getCreatorBook,
   getCreatorSocial,
+  recordCreatorContentView,
   setCreatorReaction,
   addCreatorComment,
   setCreatorCommentReaction,
@@ -171,6 +172,7 @@ app.get('/api/get-content-stream',     readLimiter, getContentStreamEscrow)
 app.get('/api/get-content-x402',       readLimiter, getContentX402)
 app.post('/api/creator-unlock-x402',   strictLimiter, unlockContentX402WithAgent)
 app.get('/api/creator-social',         readLimiter, getCreatorSocial)
+app.post('/api/creator-content-view',  strictLimiter, recordCreatorContentView)
 app.post('/api/creator-social/reaction', strictLimiter, setCreatorReaction)
 app.post('/api/creator-social/comment', strictLimiter, addCreatorComment)
 app.post('/api/creator-social/comment-reaction', strictLimiter, setCreatorCommentReaction)

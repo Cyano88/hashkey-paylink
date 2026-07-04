@@ -179,6 +179,7 @@ const FALLBACK_CREATOR_COVERS = [
 ]
 const POLYMARKET_LOGO = '/brand/polymarket-logo.png'
 const WORLD_GLOBE_IMAGE = '/brand/world-globe.png'
+const DEVELOPER_TERMINAL_SETUP_IMAGE = '/brand/developer-terminal-setup.jpg'
 
 const CREATOR_CATEGORIES: Array<{ id: CreatorCategory; label: string; disabled?: boolean }> = [
   { id: 'worldcup-news', label: 'World Cup News' },
@@ -197,6 +198,8 @@ function normalizeCreatorCategory(value: unknown): CreatorCategory {
 }
 
 function interleaveCreatorCards(cards: PublishedContent[]) {
+  const featured = cards.filter(card => card.id === 'developer-terminal-setup')
+  const rest = cards.filter(card => card.id !== 'developer-terminal-setup')
   const buckets: Record<CreatorCategory, PublishedContent[]> = {
     'worldcup-news': [],
     'live-scores': [],
@@ -204,7 +207,7 @@ function interleaveCreatorCards(cards: PublishedContent[]) {
     ebooks: [],
     developers: [],
   }
-  for (const card of cards) buckets[card.category]?.push(card)
+  for (const card of rest) buckets[card.category]?.push(card)
   const order: CreatorCategory[] = ['worldcup-news', 'live-scores', 'crypto', 'ebooks', 'developers']
   const mixed: PublishedContent[] = []
   const maxLength = Math.max(...order.map(category => buckets[category].length))
@@ -214,7 +217,7 @@ function interleaveCreatorCards(cards: PublishedContent[]) {
       if (card) mixed.push(card)
     }
   }
-  return mixed
+  return [...featured, ...mixed]
 }
 
 const OFFICIAL_CREATOR_ADDRESS = (
@@ -227,6 +230,21 @@ const OFFICIAL_DEVELOPER_GUIDE_GATE = `/gate?app=streampay&id=developer-terminal
 
 const OFFICIAL_DISCOVER_CONTENT: PublishedContent[] = [
   {
+    id: 'developer-terminal-setup',
+    contentId: 'developer-terminal-setup',
+    creator: OFFICIAL_CREATOR_ADDRESS,
+    title: 'Before You Build: AI Terminal Setup',
+    description: 'A simple beginner guide to setting up one terminal for AI coding, GitHub, and deployment.',
+    category: 'developers',
+    price: '0.10',
+    tag: 'Developers',
+    source: 'By SHY',
+    image: DEVELOPER_TERMINAL_SETUP_IMAGE,
+    gateLink: OFFICIAL_DEVELOPER_GUIDE_GATE,
+    action: 'gate',
+    cta: 'Unlock guide',
+  },
+  {
     id: 'hashpaylink-creator-primer',
     title: 'How paid creator links settle on Arc',
     description: 'A short Hash PayLink note on content gates, Circle USDC, and why creators can charge per article or private drop.',
@@ -237,21 +255,6 @@ const OFFICIAL_DISCOVER_CONTENT: PublishedContent[] = [
     image: WORLD_GLOBE_IMAGE,
     action: 'create',
     cta: 'Create',
-  },
-  {
-    id: 'developer-terminal-setup',
-    contentId: 'developer-terminal-setup',
-    creator: OFFICIAL_CREATOR_ADDRESS,
-    title: 'Before You Build: AI Terminal Setup',
-    description: 'A first-time builder guide to connecting Claude Code, Codex, GitHub, Vercel, Railway, and Render from one Mac or Windows terminal.',
-    category: 'developers',
-    price: '0.10',
-    tag: 'Developers',
-    source: 'By SHY',
-    image: WORLD_GLOBE_IMAGE,
-    gateLink: OFFICIAL_DEVELOPER_GUIDE_GATE,
-    action: 'gate',
-    cta: 'Unlock guide',
   },
 ]
 

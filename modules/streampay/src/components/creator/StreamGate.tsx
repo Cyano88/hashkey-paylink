@@ -36,7 +36,7 @@ const ERC20_ABI = parseAbi([
   'function approve(address spender, uint256 amount) returns (bool)',
 ])
 
-type FetchedContent = { type: 'text' | 'url' | 'scores' | 'book'; content: string }
+type FetchedContent = { type: 'text' | 'url' | 'scores' | 'book'; content: string; coverImage?: string }
 type ContentState   = 'idle' | 'loading' | 'ready' | 'error'
 type CreatorReaction = 'up' | 'down'
 type CreatorComment = {
@@ -486,6 +486,8 @@ export function StreamGate() {
   const [commentsOpen, setCommentsOpen] = useState(false)
   const [midpointPromptOpen, setMidpointPromptOpen] = useState(false)
   const [midpointPromptSeen, setMidpointPromptSeen] = useState(false)
+  const [contentViewCount, setContentViewCount] = useState(0)
+  const recordedViewRef = useRef('')
 
   async function handleEndSession() {
     setEnding(true)
@@ -718,7 +720,13 @@ export function StreamGate() {
   useEffect(() => {
     if (!fullyAuthorised || contentState !== 'ready') return
     void refreshCreatorSocial()
-  }, [fullyAuthorised, contentState, contentId, readerWalletAddress])
+  }, [fullyAuthorised, contentState, contentId, readerWalletAddress, selectedAgent?.walletAddress])
+
+  useEffect(() => {
+    if (!fullyAuthorised || contentState !== 'ready') return
+    if (fetchedContent?.type !== 'text' && fetchedContent?.type !== 'book') return
+    void recordCreatorContentView()
+  }, [fullyAuthorised, contentState, contentId, fetchedContent?.type, readerWalletAddress, selectedAgent?.walletAddress, address])
 
   useEffect(() => {
     if (!gatewayReceiptId) return
@@ -818,6 +826,7 @@ export function StreamGate() {
         ok: boolean
         type?: string
         content?: string
+        coverImage?: string
         payment?: { transaction?: string } | null
         receiptActivityId?: string | null
         walletAddress?: string
@@ -826,7 +835,7 @@ export function StreamGate() {
         code?: string
       }
       if (!data.ok || !data.type || !data.content) throw new Error(data.error ?? 'Could not unlock content')
-      setFetchedContent({ type: data.type as FetchedContent['type'], content: data.content })
+      setFetchedContent({ type: data.type as FetchedContent['type'], content: data.content, coverImage: data.coverImage })
       setGatewayTx(data.payment?.transaction ?? null)
       setGatewayReceiptId(data.receiptActivityId ?? null)
       setGatewayRestored(Boolean(data.restored))
@@ -1051,6 +1060,34 @@ export function StreamGate() {
     }
   }
 
+  async function recordCreatorContentView(walletOverride?: string) {
+    if (!contentId) return
+    const wallet = walletOverride || readerWalletAddress || selectedAgent?.walletAddress || address || ''
+    let viewerKey = wallet ? `wallet:${wallet.toLowerCase()}` : ''
+    if (!viewerKey) {
+      const storageKey = 'hashpaystream:reader-session'
+      viewerKey = window.sessionStorage.getItem(storageKey) || ''
+      if (!viewerKey) {
+        viewerKey = `session:${crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`}`
+        window.sessionStorage.setItem(storageKey, viewerKey)
+      }
+    }
+    const recordKey = `${contentId}:${viewerKey}`
+    if (recordedViewRef.current === recordKey) return
+    recordedViewRef.current = recordKey
+    try {
+      const res = await fetch('/api/creator-content-view', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contentId, viewerKey }),
+      })
+      const data = await res.json().catch(() => ({})) as { ok?: boolean; viewCount?: number }
+      if (res.ok && data.ok) setContentViewCount(Number(data.viewCount || 0))
+    } catch {
+      // View count should never interrupt content reading.
+    }
+  }
+
   async function updateCreatorReaction(next: CreatorReaction) {
     const wallet = readerWalletAddress || selectedAgent?.walletAddress || ''
     if (!wallet) {
@@ -1272,9 +1309,9 @@ export function StreamGate() {
     setContentState('loading')
     fetch(`/api/get-content?id=${encodeURIComponent(contentId)}&viewer=${address}`)
       .then(r => r.json())
-      .then((data: { ok: boolean; type?: string; content?: string; error?: string }) => {
+      .then((data: { ok: boolean; type?: string; content?: string; coverImage?: string; error?: string }) => {
         if (data.ok && data.type && data.content) {
-          setFetchedContent({ type: data.type as FetchedContent['type'], content: data.content })
+          setFetchedContent({ type: data.type as FetchedContent['type'], content: data.content, coverImage: data.coverImage })
           setContentState('ready')
         } else {
           setContentError(data.error ?? 'Could not retrieve content')
@@ -1289,9 +1326,9 @@ export function StreamGate() {
     setContentState('loading')
     fetch(`/api/get-content-stream?id=${encodeURIComponent(contentId)}&vault=${encodeURIComponent(streamVault)}`)
       .then(r => r.json())
-      .then((data: { ok: boolean; type?: string; content?: string; error?: string }) => {
+      .then((data: { ok: boolean; type?: string; content?: string; coverImage?: string; error?: string }) => {
         if (data.ok && data.type && data.content) {
-          setFetchedContent({ type: data.type as FetchedContent['type'], content: data.content })
+          setFetchedContent({ type: data.type as FetchedContent['type'], content: data.content, coverImage: data.coverImage })
           setContentState('ready')
         } else {
           setContentError(data.error ?? 'Could not verify nano meter')
@@ -1964,8 +2001,21 @@ export function StreamGate() {
         {fullyAuthorised && contentState === 'ready' && fetchedContent?.type === 'text' && (
           <div className="p-6 space-y-4">
             <p className="text-[10px] font-semibold uppercase tracking-wider text-blue-500">Unlocked Content</p>
+            {fetchedContent.coverImage && (
+              <div className="overflow-hidden rounded-2xl border border-gray-100 bg-gray-100 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
+                <img
+                  src={fetchedContent.coverImage}
+                  alt=""
+                  className="h-40 w-full object-cover sm:h-48"
+                  loading="lazy"
+                />
+              </div>
+            )}
             {title && (
-              <h2 className="text-[18px] font-bold text-gray-900 leading-snug">{title}</h2>
+              <div className="flex items-start justify-between gap-3">
+                <h2 className="min-w-0 text-[18px] font-bold leading-snug text-gray-900 dark:text-white">{title}</h2>
+                <ViewCountBadge count={contentViewCount} />
+              </div>
             )}
             <div
               className="max-h-[480px] overflow-y-auto pr-1"
@@ -2022,7 +2072,22 @@ export function StreamGate() {
 
         {/* ── Private URL — reveal button ── */}
         {fullyAuthorised && contentState === 'ready' && fetchedContent?.type === 'book' && (
-          <BookUnlocked contentId={contentId} title={title} />
+          <BookUnlocked
+            contentId={contentId}
+            title={title}
+            coverImage={fetchedContent.coverImage}
+            viewCount={contentViewCount}
+            social={social}
+            socialLoading={socialLoading}
+            socialError={socialError}
+            commentBody={commentBody}
+            commentsOpen={commentsOpen}
+            onReact={updateCreatorReaction}
+            onCommentBody={setCommentBody}
+            onSubmitComment={addCreatorSocialComment}
+            onToggleComments={() => setCommentsOpen(open => !open)}
+            onCommentReact={updateCreatorCommentReaction}
+          />
         )}
 
         {fullyAuthorised && contentState === 'ready' && fetchedContent?.type === 'url' && (
@@ -2353,8 +2418,47 @@ function CreatorSocialPanel({
   )
 }
 
-function BookUnlocked({ contentId, title }: { contentId: string; title: string }) {
-  const [book, setBook] = useState<{ title?: string; source?: string; text?: string } | null>(null)
+function ViewCountBadge({ count }: { count: number }) {
+  return (
+    <span className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border border-gray-100 bg-gray-50 px-2.5 text-[11px] font-black text-gray-500 dark:border-white/10 dark:bg-white/[0.05] dark:text-gray-300" title="Views">
+      <EyeIcon />
+      {Math.max(0, count).toLocaleString()}
+    </span>
+  )
+}
+
+function BookUnlocked({
+  contentId,
+  title,
+  coverImage,
+  viewCount,
+  social,
+  socialLoading,
+  socialError,
+  commentBody,
+  commentsOpen,
+  onReact,
+  onCommentBody,
+  onSubmitComment,
+  onToggleComments,
+  onCommentReact,
+}: {
+  contentId: string
+  title: string
+  coverImage?: string
+  viewCount: number
+  social: CreatorSocialState
+  socialLoading: boolean
+  socialError: string | null
+  commentBody: string
+  commentsOpen: boolean
+  onReact: (reaction: CreatorReaction) => void
+  onCommentBody: (value: string) => void
+  onSubmitComment: () => void
+  onToggleComments: () => void
+  onCommentReact: (commentId: string, reaction: CreatorReaction, current: CreatorReaction | null) => void
+}) {
+  const [book, setBook] = useState<{ title?: string; source?: string; text?: string; coverImage?: string } | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -2364,7 +2468,7 @@ function BookUnlocked({ contentId, title }: { contentId: string; title: string }
     setError('')
     fetch(`/api/creator-book?id=${encodeURIComponent(contentId)}`)
       .then(async response => {
-        const data = await response.json().catch(() => ({})) as { ok?: boolean; error?: string; title?: string; source?: string; text?: string }
+        const data = await response.json().catch(() => ({})) as { ok?: boolean; error?: string; title?: string; source?: string; text?: string; coverImage?: string }
         if (!response.ok || !data.ok || !data.text) throw new Error(data.error || 'Book could not load.')
         if (!cancelled) setBook(data)
       })
@@ -2384,14 +2488,28 @@ function BookUnlocked({ contentId, title }: { contentId: string; title: string }
     .map(item => item.trim())
     .filter(Boolean)
     .slice(0, 260)
+  const displayTitle = book?.title || title || 'Book reader'
+  const displayCover = book?.coverImage || coverImage
 
   return (
     <div className="space-y-3 p-4 sm:p-5">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-blue-500">Unlocked Book</p>
-          <h2 className="mt-1 text-[18px] font-black leading-snug text-gray-950 dark:text-white">{book?.title || title || 'Book reader'}</h2>
-          <p className="mt-1 text-[11px] font-semibold text-gray-400">{book?.source || 'Public domain reader'}</p>
+      <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-[#111216]">
+        <div className="flex gap-4 p-4">
+          {displayCover && (
+            <div className="h-28 w-20 shrink-0 overflow-hidden rounded-xl bg-gray-100 shadow-sm ring-1 ring-gray-100 dark:bg-white/[0.04] dark:ring-white/10">
+              <img src={displayCover} alt="" className="h-full w-full object-cover" loading="lazy" />
+            </div>
+          )}
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-blue-500">Unlocked Book</p>
+              <ViewCountBadge count={viewCount} />
+            </div>
+            <h2 className="mt-1 text-[20px] font-black leading-tight text-gray-950 dark:text-white">{displayTitle}</h2>
+            <p className="mt-2 inline-flex rounded-full bg-gray-100 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-gray-500 dark:bg-white/[0.08] dark:text-gray-300">
+              {book?.source || 'Classic reader'}
+            </p>
+          </div>
         </div>
       </div>
 
@@ -2409,15 +2527,30 @@ function BookUnlocked({ contentId, title }: { contentId: string; title: string }
       )}
 
       {!loading && !error && (
-        <div className="max-h-[620px] overflow-y-auto rounded-2xl border border-gray-100 bg-white px-4 py-5 shadow-sm dark:border-white/10 dark:bg-[#111216] sm:px-5">
-          <div className="space-y-4 text-[14px] leading-7 text-gray-700 dark:text-gray-200">
+        <div className="max-h-[620px] overflow-y-auto rounded-2xl border border-gray-100 bg-[#fffaf3] px-5 py-6 shadow-sm dark:border-white/10 dark:bg-[#111216] sm:px-6">
+          <div className="mx-auto max-w-[62ch] space-y-4 text-[15px] leading-8 text-gray-800 dark:text-gray-200">
             {paragraphs.map((paragraph, index) => (
-              <p key={`${contentId}-${index}`} className={index === 0 ? 'font-semibold text-gray-900 dark:text-white' : undefined}>
+              <p key={`${contentId}-${index}`} className={index === 0 ? 'text-[16px] font-semibold leading-8 text-gray-950 dark:text-white' : undefined}>
                 {paragraph}
               </p>
             ))}
           </div>
         </div>
+      )}
+
+      {!loading && !error && (
+        <CreatorSocialPanel
+          social={social}
+          loading={socialLoading}
+          error={socialError}
+          commentBody={commentBody}
+          commentsOpen={commentsOpen}
+          onReact={onReact}
+          onCommentBody={onCommentBody}
+          onSubmitComment={onSubmitComment}
+          onToggleComments={onToggleComments}
+          onCommentReact={onCommentReact}
+        />
       )}
     </div>
   )
@@ -2682,6 +2815,15 @@ function ReceiptIcon() {
     <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M7 3.75h10A1.25 1.25 0 0118.25 5v15.25l-2.5-1.25-2.5 1.25-2.5-1.25-2.5 1.25V5A1.25 1.25 0 017 3.75z" />
       <path strokeLinecap="round" strokeLinejoin="round" d="M9 8h6M9 11.5h6M9 15h3.5" />
+    </svg>
+  )
+}
+
+function EyeIcon() {
+  return (
+    <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12s3.75-6.75 9.75-6.75S21.75 12 21.75 12s-3.75 6.75-9.75 6.75S2.25 12 2.25 12z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
     </svg>
   )
 }

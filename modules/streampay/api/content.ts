@@ -76,6 +76,7 @@ const unlockStore = new Map<string, CreatorUnlockEntry>()
 const reactionStore = new Map<string, { contentId: string; walletAddress: string; reaction: 'up' | 'down'; updatedAt: number }>()
 const commentStore = new Map<string, { id: string; contentId: string; walletAddress: string; body: string; createdAt: number; updatedAt: number }>()
 const commentReactionStore = new Map<string, { commentId: string; walletAddress: string; reaction: 'up' | 'down'; updatedAt: number }>()
+const contentViewStore = new Map<string, { contentId: string; viewerKey: string; count: number; updatedAt: number }>()
 const MAX_CONTENT_ID_LENGTH = 128
 const MAX_CONTENT_LENGTH = 100_000
 const MAX_META_TEXT_LENGTH = 2_000
@@ -292,103 +293,105 @@ async function fetchOfficialBookText(gutenbergId: string) {
 }
 
 const DEVELOPER_TERMINAL_SETUP_ARTICLE = `
-<p><em>If you are opening a terminal for the first time, this guide is for you.</em> The goal is simple: one Mac or Windows laptop, one terminal, one GitHub identity, and the main AI/deployment tools connected before you start building.</p>
-<h2>What you are setting up</h2>
-<p><strong>Claude Code</strong> is the AI engineer you run in your terminal. <strong>OpenAI Codex</strong> is a second audit brain you can use when you want another model to review the repo. <strong>GitHub</strong> stores your code. <strong>Vercel</strong> is great for frontends. <strong>Railway</strong> is useful for backends, APIs, bots, and databases. <strong>Render</strong> is useful when you want frontend and backend in one hosted service.</p>
-<p>The benefit is speed. Once this is done, a beginner can open a folder, ask Claude Code to build, use Codex to audit, push to GitHub, and deploy from the same terminal without learning five separate dashboards first.</p>
-<h2>Create accounts first</h2>
-<p>Create these accounts before installing tools. Use the same email where possible so browser login and GitHub SSO stay clean.</p>
+<p><em>If you are new to coding, start here.</em> This guide helps you turn one Mac or Windows laptop into a simple building station. You will set up a terminal, GitHub, Claude Code, Codex, and the main hosting tools without needing to understand everything first.</p>
+<p>Think of it like setting up a gaming console before playing. You do the boring setup once. After that, every new project becomes much easier.</p>
+<h2>The tools in plain English</h2>
 <ul>
-  <li><a href="https://claude.ai">Claude</a> - upgrade to Claude Pro or Max if you want Claude Code through your subscription.</li>
-  <li><a href="https://github.com/signup">GitHub</a> - this becomes your public builder identity and repo home.</li>
-  <li><a href="https://vercel.com/signup">Vercel</a> - sign up with GitHub for automatic frontend deploys.</li>
-  <li><a href="https://railway.app">Railway</a> - sign up with GitHub for backend/API deploys.</li>
-  <li><a href="https://render.com">Render</a> - sign up with GitHub for full-stack web services.</li>
-  <li><a href="https://developers.openai.com/codex">OpenAI Codex</a> - add this when you want a second code auditor.</li>
+  <li><strong>Terminal</strong> - the app where you type commands.</li>
+  <li><strong>Claude Code</strong> - an AI coding helper that works inside your terminal.</li>
+  <li><strong>OpenAI Codex</strong> - a second AI reviewer you can use to check your code.</li>
+  <li><strong>GitHub</strong> - the online home where your code is saved.</li>
+  <li><strong>Vercel</strong> - a fast place to publish websites and frontends.</li>
+  <li><strong>Railway</strong> - useful for APIs, bots, workers, and databases.</li>
+  <li><strong>Render</strong> - useful when one app has both frontend and backend.</li>
 </ul>
-<h2>Install a code editor</h2>
-<p>Use <a href="https://code.visualstudio.com">VS Code</a> first. It is free, standard, and works on Mac and Windows. <a href="https://cursor.com">Cursor</a> is also useful if you want an AI-native editor, but you do not need it on day one.</p>
-<h2>Open the right terminal</h2>
-<p>On Mac, press Cmd + Space, type Terminal, and open it. On Windows, install Windows Terminal from the Microsoft Store, open it, and start with PowerShell. After Git is installed, Git Bash will also be available inside Windows Terminal.</p>
-<h2>Install Node.js</h2>
-<p>Node gives you <strong>npm</strong>, the package manager used by Claude Code, Vercel CLI, Railway CLI, and many web projects.</p>
+<p>The goal is simple: build, review, save to GitHub, and deploy from one terminal.</p>
+<h2>Step 1: Create accounts</h2>
+<p>Create these first. Use the same email if you can, because it makes login easier.</p>
+<ul>
+  <li><a href="https://claude.ai">Claude</a> - use Pro or Max if you want Claude Code through your subscription.</li>
+  <li><a href="https://github.com/signup">GitHub</a> - your public builder profile and code storage.</li>
+  <li><a href="https://vercel.com/signup">Vercel</a> - sign up with GitHub.</li>
+  <li><a href="https://railway.app">Railway</a> - sign up with GitHub.</li>
+  <li><a href="https://render.com">Render</a> - sign up with GitHub.</li>
+  <li><a href="https://developers.openai.com/codex">OpenAI Codex</a> - add this when you want a second code audit.</li>
+</ul>
+<h2>Step 2: Install a code editor</h2>
+<p>Install <a href="https://code.visualstudio.com">VS Code</a>. It is free and works everywhere. You can try <a href="https://cursor.com">Cursor</a> later, but VS Code is enough to start.</p>
+<h2>Step 3: Open your terminal</h2>
+<p>On Mac, press Cmd + Space, type Terminal, and press Enter.</p>
+<p>On Windows, install Windows Terminal from the Microsoft Store. Open it and use PowerShell first. After you install Git, you will also see Git Bash.</p>
+<h2>Step 4: Install Node.js</h2>
+<p>Node.js gives you <code>npm</code>. Many developer tools are installed with npm.</p>
 <p>On Mac, install Homebrew from <a href="https://brew.sh">brew.sh</a>, then run:</p>
-<pre><code>brew --version</code></pre>
 <pre><code>brew install node</code></pre>
-<p>On Windows, install the LTS version from <a href="https://nodejs.org">nodejs.org</a>, accept the defaults, then close and reopen your terminal.</p>
-<p>Verify Node and npm:</p>
+<p>On Windows, install the LTS version from <a href="https://nodejs.org">nodejs.org</a>. Use the default installer settings, then close and reopen your terminal.</p>
+<p>Check that it worked:</p>
 <pre><code>node --version</code></pre>
 <pre><code>npm --version</code></pre>
-<p>You want Node 18 or higher.</p>
-<h2>Install Git</h2>
-<p>Git saves versions of your code and lets your AI agent push work to GitHub.</p>
-<p>On Mac, check first:</p>
+<p>If Node is version 18 or higher, you are good.</p>
+<h2>Step 5: Install Git</h2>
+<p>Git saves your code history. GitHub uses Git.</p>
+<p>Check if you already have it:</p>
 <pre><code>git --version</code></pre>
-<p>If it is missing, install it:</p>
+<p>On Mac, install it with Homebrew if it is missing:</p>
 <pre><code>brew install git</code></pre>
-<p>On Windows, install Git from <a href="https://git-scm.com/download/win">git-scm.com/download/win</a> and accept the defaults. Then verify:</p>
-<pre><code>git --version</code></pre>
-<h2>Install Claude Code</h2>
-<p>Use the official <a href="https://docs.anthropic.com/en/docs/claude-code/setup">Claude Code setup guide</a> for the latest installer. Anthropic now recommends native installers for a cleaner setup, especially on Windows.</p>
-<p>After installing, verify:</p>
+<p>On Windows, install it from <a href="https://git-scm.com/download/win">git-scm.com/download/win</a> and keep the default settings.</p>
+<h2>Step 6: Install Claude Code</h2>
+<p>Use the official <a href="https://docs.anthropic.com/en/docs/claude-code/setup">Claude Code setup guide</a>. Install it, then check:</p>
 <pre><code>claude --version</code></pre>
-<p>Then start Claude Code:</p>
+<p>Start it:</p>
 <pre><code>claude</code></pre>
-<p>Choose the Claude Pro or Max login flow, finish the browser sign-in, then type <code>/exit</code> when you are done. From now on, running <code>claude</code> inside any project folder launches your AI engineer inside that folder.</p>
-<h2>Connect GitHub to the terminal</h2>
-<p>Install the GitHub CLI from <a href="https://cli.github.com">cli.github.com</a>. On Mac with Homebrew:</p>
+<p>Log in with Claude Pro or Max in the browser. When you are done, type:</p>
+<pre><code>/exit</code></pre>
+<p>Later, open any project folder and run <code>claude</code>. That puts your AI engineer inside that project.</p>
+<h2>Step 7: Connect GitHub</h2>
+<p>Install the GitHub CLI from <a href="https://cli.github.com">cli.github.com</a>.</p>
+<p>On Mac:</p>
 <pre><code>brew install gh</code></pre>
 <p>On Windows:</p>
 <pre><code>winget install --id GitHub.cli</code></pre>
 <p>Log in:</p>
 <pre><code>gh auth login</code></pre>
-<p>Pick GitHub.com, HTTPS, and browser login. When it gives you a one-time code, paste it into the browser and authorize. Verify:</p>
+<p>Choose GitHub.com, HTTPS, and browser login. Verify it:</p>
 <pre><code>gh auth status</code></pre>
-<p>This is the link that lets Claude Code create repos, commit, and push without you clicking through GitHub every time.</p>
-<h2>Add Codex as a second auditor</h2>
-<p><em>You can skip this until your first project is working.</em> When ready, install Codex from the official <a href="https://developers.openai.com/codex">OpenAI Codex docs</a>. Package names and recommended surfaces can change, so use the current OpenAI page instead of copying an old command from a random guide.</p>
-<p>A strong workflow is: Claude Code builds, Codex audits, Claude Code fixes. Ask Codex: <em>audit this repo for bugs, broken flows, dead code, and security risks.</em> Then paste the report back to Claude Code.</p>
-<h2>Connect Vercel for frontends</h2>
-<p>Vercel is usually the fastest home for landing pages and React frontends. Install the CLI from the official <a href="https://vercel.com/docs/cli">Vercel CLI docs</a>. With npm:</p>
+<p>This lets your AI helper create repos, commit work, and push code safely through your GitHub account.</p>
+<h2>Step 8: Add Codex for audits</h2>
+<p><em>You can skip this on day one.</em> When your first project works, install Codex from the official <a href="https://developers.openai.com/codex">OpenAI Codex docs</a>.</p>
+<p>A simple workflow is: Claude Code builds. Codex audits. Claude Code fixes. Ask Codex: <em>audit this repo for bugs, broken flows, mobile issues, and security risks.</em></p>
+<h2>Step 9: Connect hosting</h2>
+<p>Use Vercel for simple websites and frontends:</p>
 <pre><code>npm install -g vercel</code></pre>
-<p>Log in:</p>
 <pre><code>vercel login</code></pre>
-<p>Deploy from a project folder:</p>
-<pre><code>vercel</code></pre>
-<p>After the first setup, GitHub pushes can trigger deploys automatically from the Vercel dashboard.</p>
-<h2>Connect Railway for APIs and databases</h2>
-<p>Railway is useful when your app has a backend, API, bot, worker, cron, or database. Install from the official <a href="https://docs.railway.com/reference/cli-api">Railway CLI docs</a>. With npm:</p>
+<p>Use Railway for APIs, bots, workers, and databases:</p>
 <pre><code>npm install -g @railway/cli</code></pre>
-<p>Log in:</p>
 <pre><code>railway login</code></pre>
-<p>Inside a project, link it to a Railway service:</p>
-<pre><code>railway link</code></pre>
-<p>Deploy:</p>
-<pre><code>railway up</code></pre>
-<h2>Connect Render for full-stack services</h2>
-<p>Render is mostly dashboard-driven. Create the account with GitHub, then create a Web Service from a GitHub repo. Set build and start commands in the Render dashboard, then add environment variables there. Keep the official <a href="https://render.com/docs">Render docs</a> open for the service type you are deploying.</p>
-<p>For beginners: use Vercel for frontend-only projects, Railway for backend-heavy projects, and Render when one service needs to run both frontend and backend together.</p>
-<h2>Your daily build loop</h2>
-<p>Once the setup is done, every project starts the same way:</p>
+<p>Use Render when you want frontend and backend in one hosted service. Render is mostly set up from the dashboard after connecting GitHub.</p>
+<h2>Your first real workflow</h2>
+<p>Every new project can start like this:</p>
 <pre><code>mkdir -p ~/projects/my-new-build</code></pre>
 <pre><code>cd ~/projects/my-new-build</code></pre>
 <pre><code>claude</code></pre>
-<p>Then speak plainly: <em>Build the first version, initialize git, create a private GitHub repo with gh, push it, and tell me the repo URL.</em></p>
-<p>When the feature works, run a second pass: <em>Audit the codebase for broken flows, mobile issues, missing error states, and deploy risks.</em> If you also use Codex, ask it the same thing and compare both reports.</p>
-<h2>Security rules</h2>
+<p>Then say what you want in normal English: <em>Build the first version, initialize git, create a private GitHub repo with gh, push it, and tell me the repo URL.</em></p>
+<h2>Safety rules</h2>
 <ul>
-  <li>Never paste API keys, bearer tokens, private keys, seed phrases, or production secrets into any AI chat.</li>
-  <li>Put secrets in Vercel, Railway, or Render environment variables. Do not hardcode them.</li>
-  <li>Make sure <code>.env</code> is in <code>.gitignore</code> before your first commit.</li>
-  <li>Use GitHub SSO in your real browser for hosting accounts.</li>
-  <li>Back up local <code>.env</code> files in a password manager.</li>
-  <li>Rotate keys often during hackathons and live testing.</li>
+  <li>Never paste private keys, seed phrases, API keys, or bearer tokens into AI chat.</li>
+  <li>Put secrets in Vercel, Railway, or Render environment variables.</li>
+  <li>Make sure <code>.env</code> is in <code>.gitignore</code>.</li>
+  <li>Use GitHub login in your real browser.</li>
+  <li>Save important local secrets in a password manager.</li>
 </ul>
-<h2>Ready state</h2>
-<p>You are ready to build when <code>node --version</code>, <code>npm --version</code>, <code>git --version</code>, <code>claude --version</code>, and <code>gh auth status</code> all work in one terminal.</p>
-<p>That is the real beginner unlock. Not a hello-world demo. A working local command center where AI, code, GitHub, and deployment all meet.</p>
+<h2>You are ready when</h2>
+<p>These commands all work in one terminal:</p>
+<pre><code>node --version</code></pre>
+<pre><code>npm --version</code></pre>
+<pre><code>git --version</code></pre>
+<pre><code>claude --version</code></pre>
+<pre><code>gh auth status</code></pre>
+<p>That is the beginner unlock: one laptop, one terminal, AI help, GitHub, and deployment ready to go.</p>
 <p><em>By SHY.</em></p>
 `.trim()
+const DEVELOPER_TERMINAL_SETUP_IMAGE = '/brand/developer-terminal-setup.jpg'
 
 const OFFICIAL_CONTENT: Record<string, ContentEntry> = {
   'developer-terminal-setup': {
@@ -399,10 +402,10 @@ const OFFICIAL_CONTENT: Record<string, ContentEntry> = {
     rateRaw: 1000,
     mode: 'unlock',
     title: 'Before You Build: AI Terminal Setup',
-    description: 'A first-time builder guide to connecting Claude Code, Codex, GitHub, Vercel, Railway, and Render from one Mac or Windows terminal.',
+    description: 'A simple beginner guide to setting up one terminal for AI coding, GitHub, and deployment.',
     authorName: 'SHY',
     xHandle: 'Hash_PayLink',
-    coverImage: '/brand/world-globe.png',
+    coverImage: DEVELOPER_TERMINAL_SETUP_IMAGE,
     category: 'developers',
     reviewStatus: 'approved',
     reviewedAt: Date.now(),
@@ -577,6 +580,15 @@ function ensureSchema() {
         primary key (comment_id, wallet_address)
       );
       create index if not exists streampay_creator_comment_reactions_comment_idx on streampay_creator_comment_reactions (comment_id);
+      create table if not exists streampay_creator_content_views (
+        content_id text not null,
+        viewer_key text not null,
+        view_count integer not null default 1,
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now(),
+        primary key (content_id, viewer_key)
+      );
+      create index if not exists streampay_creator_content_views_content_idx on streampay_creator_content_views (content_id, updated_at desc);
     `).then(() => undefined)
   }
   return schemaReady
@@ -725,6 +737,14 @@ function cleanReaction(value: unknown): 'up' | 'down' | null {
 
 function cleanCommentBody(value: unknown) {
   return String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, MAX_COMMENT_LENGTH)
+}
+
+function cleanViewerKey(value: unknown) {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9:._-]/g, '')
+    .slice(0, 160)
 }
 
 async function readCreatorUnlock(contentId: string, agentSlug: string, walletAddress = '') {
@@ -1272,7 +1292,7 @@ export async function getContent(req: Request, res: Response) {
     return res.status(503).json({ ok: false, error: 'Content gate verification unavailable' })
   }
 
-  return res.status(200).json({ ok: true, type: entry.type, content: entry.content })
+  return res.status(200).json({ ok: true, type: entry.type, content: entry.content, coverImage: entry.coverImage })
 }
 
 export async function getContentStreamEscrow(req: Request, res: Response) {
@@ -1328,7 +1348,7 @@ export async function getContentStreamEscrow(req: Request, res: Response) {
     return res.status(503).json({ ok: false, error: `Could not verify nano meter: ${message.slice(0, 160)}` })
   }
 
-  return res.status(200).json({ ok: true, type: entry.type, content: entry.content })
+  return res.status(200).json({ ok: true, type: entry.type, content: entry.content, coverImage: entry.coverImage })
 }
 
 export async function getContentX402(req: PaidRequest, res: Response) {
@@ -1348,6 +1368,7 @@ export async function getContentX402(req: PaidRequest, res: Response) {
       ok: true,
       type: entry.type,
       content: entry.content,
+      coverImage: entry.coverImage,
       payment: req.payment ?? null,
     })
   })
@@ -1386,6 +1407,7 @@ export async function unlockContentX402WithAgent(req: Request, res: Response) {
         restored: true,
         type: entry.type,
         content: entry.content,
+        coverImage: entry.coverImage,
         payment: existingUnlock.paymentTransaction ? { transaction: existingUnlock.paymentTransaction } : null,
         receiptActivityId: existingUnlock.receiptActivityId || null,
         walletAddress: existingUnlock.walletAddress || walletAddress,
@@ -1424,6 +1446,7 @@ export async function unlockContentX402WithAgent(req: Request, res: Response) {
       restored: false,
       type: response?.type ?? entry.type,
       content: response?.content ?? entry.content,
+      coverImage: entry.coverImage,
       payment: response?.payment ?? null,
       receiptActivityId: paid.receiptActivityId ?? null,
       walletAddress: paid.walletAddress,
@@ -1496,7 +1519,8 @@ export async function getCreatorBook(req: Request, res: Response) {
       id,
       title: book.title,
       description: book.description,
-      source: 'Project Gutenberg public domain text',
+      source: 'Classic reader',
+      coverImage: openLibraryCover(book.identifier),
       gutenbergId: book.gutenbergId,
       text,
     })
@@ -1585,6 +1609,51 @@ export async function getCreatorSocial(req: Request, res: Response) {
   const walletAddress = cleanWalletAddress(req.query.wallet)
   if (!contentId || contentId.length > MAX_CONTENT_ID_LENGTH) return res.status(400).json({ ok: false, error: 'Invalid content id.' })
   return res.json({ ok: true, ...(await readCreatorSocial(contentId, walletAddress)) })
+}
+
+async function readCreatorContentViews(contentId: string) {
+  if (pool) {
+    await ensureSchema()
+    const result = await pool.query(
+      `select coalesce(sum(view_count), 0)::int as view_count
+       from streampay_creator_content_views
+       where content_id = $1`,
+      [contentId],
+    )
+    return Number(result.rows[0]?.view_count ?? 0)
+  }
+  return Array.from(contentViewStore.values())
+    .filter(item => item.contentId === contentId)
+    .reduce((sum, item) => sum + item.count, 0)
+}
+
+export async function recordCreatorContentView(req: Request, res: Response) {
+  const contentId = String(req.body?.contentId ?? '').trim()
+  const viewerKey = cleanViewerKey(req.body?.viewerKey)
+  if (!contentId || contentId.length > MAX_CONTENT_ID_LENGTH || !viewerKey) {
+    return res.status(400).json({ ok: false, error: 'Invalid content view.' })
+  }
+  const entry = await readContentEntry(contentId)
+  if (!entry) return res.status(404).json({ ok: false, error: 'Content not found.' })
+  await ensureSchema()
+  if (pool) {
+    await pool.query(
+      `insert into streampay_creator_content_views (content_id, viewer_key, view_count, created_at, updated_at)
+       values ($1, $2, 1, now(), now())
+       on conflict (content_id, viewer_key) do update set updated_at = now()`,
+      [contentId, viewerKey],
+    )
+  } else {
+    const key = `${contentId}:${viewerKey}`
+    const existing = contentViewStore.get(key)
+    contentViewStore.set(key, {
+      contentId,
+      viewerKey,
+      count: existing?.count ?? 1,
+      updatedAt: Date.now(),
+    })
+  }
+  return res.json({ ok: true, viewCount: await readCreatorContentViews(contentId) })
 }
 
 export async function setCreatorReaction(req: Request, res: Response) {
