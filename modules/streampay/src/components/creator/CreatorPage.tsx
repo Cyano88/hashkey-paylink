@@ -243,7 +243,7 @@ const OFFICIAL_EBOOKS: PublishedContent[] = [
   tag,
   source: 'Google Books Preview',
   image: openLibraryCover(isbn),
-  gateLink: `/gate?app=streampay&id=${id}&cr=${OFFICIAL_CREATOR_ADDRESS}&r=1000&cap=100000&mode=unlock&pay=x402&ct=url&t=${encodeURIComponent(title)}`,
+  gateLink: `/gate?app=streampay&id=${id}&cr=${OFFICIAL_CREATOR_ADDRESS}&r=1000&cap=100000&mode=unlock&pay=choice&ct=text&t=${encodeURIComponent(title)}`,
   action: 'gate' as const,
   cta: 'Unlock book',
 }))
