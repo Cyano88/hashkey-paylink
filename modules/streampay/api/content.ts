@@ -1405,6 +1405,7 @@ export async function getContentCheckpointEscrow(req: Request, res: Response) {
       functionName: 'vaultInfo',
     }) as readonly [`0x${string}`, `0x${string}`, `0x${string}`, `0x${string}`, `0x${string}`, bigint, bigint, bigint, boolean, boolean]
 
+    const sender = info[0]
     const recipient = info[1]
     const relayer = info[3]
     const vaultContentId = info[4]
@@ -1430,7 +1431,7 @@ export async function getContentCheckpointEscrow(req: Request, res: Response) {
     return res.status(503).json({ ok: false, error: `Could not verify checkpoint escrow: ${message.slice(0, 160)}` })
   }
 
-  return res.status(200).json({ ok: true, type: entry.type, content: entry.content, coverImage: entry.coverImage })
+  return res.status(200).json({ ok: true, type: entry.type, content: entry.content, coverImage: entry.coverImage, sender })
 }
 
 export async function getContentX402(req: PaidRequest, res: Response) {

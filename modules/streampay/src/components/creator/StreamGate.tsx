@@ -582,7 +582,7 @@ export function StreamGate() {
   const [approvePending, setApprovePending] = useState(false)
   const safeAgentSlug = cleanAgentSlug(agentSlug)
   const selectedAgent = agentOptions.find(agent => agent.slug === safeAgentSlug)
-  const resolvedReaderWallet = readerWalletAddress || selectedAgent?.walletAddress || address || ''
+  const resolvedReaderWallet = readerWalletAddress || checkpointSession?.wallet.address || selectedAgent?.walletAddress || address || ''
   const selectedWalletNeedsReconnect = Boolean(selectedAgent?.walletAddress && !selectedAgent.connected)
   const readerWalletSessionError = /reconnect|sign in|session|wallet session|activation did not complete/i.test(walletError || '')
   const fundingNeedsReconnect = selectedWalletNeedsReconnect || readerWalletSessionError
@@ -784,13 +784,13 @@ export function StreamGate() {
   useEffect(() => {
     if (!fullyAuthorised || contentState !== 'ready') return
     void refreshCreatorSocial()
-  }, [fullyAuthorised, contentState, contentId, readerWalletAddress, selectedAgent?.walletAddress])
+  }, [fullyAuthorised, contentState, contentId, readerWalletAddress, checkpointSession?.wallet.address, selectedAgent?.walletAddress])
 
   useEffect(() => {
     if (!fullyAuthorised || contentState !== 'ready') return
     if (fetchedContent?.type !== 'text' && fetchedContent?.type !== 'book') return
     void recordCreatorContentView()
-  }, [fullyAuthorised, contentState, contentId, fetchedContent?.type, readerWalletAddress, selectedAgent?.walletAddress, address])
+  }, [fullyAuthorised, contentState, contentId, fetchedContent?.type, readerWalletAddress, checkpointSession?.wallet.address, selectedAgent?.walletAddress, address])
 
   useEffect(() => {
     if (paymentMode !== 'escrow' || !fullyAuthorised || contentState !== 'ready' || !/^0x[a-fA-F0-9]{40}$/.test(streamVault)) {
@@ -989,8 +989,9 @@ export function StreamGate() {
   async function fetchCheckpointContent(vaultAddress: string) {
     setContentState('loading')
     const res = await fetch(`/api/get-content-checkpoint?id=${encodeURIComponent(contentId)}&vault=${encodeURIComponent(vaultAddress)}`)
-    const data = await res.json().catch(() => ({})) as { ok?: boolean; type?: string; content?: string; coverImage?: string; error?: string }
+    const data = await res.json().catch(() => ({})) as { ok?: boolean; type?: string; content?: string; coverImage?: string; sender?: string; error?: string }
     if (!res.ok || !data.ok || !data.type || !data.content) throw new Error(data.error || 'Could not verify checkpoint escrow.')
+    if (data.sender && /^0x[a-fA-F0-9]{40}$/.test(data.sender)) setReaderWalletAddress(data.sender)
     setFetchedContent({ type: data.type as FetchedContent['type'], content: data.content, coverImage: data.coverImage })
     setContentState('ready')
   }
@@ -1336,7 +1337,11 @@ export function StreamGate() {
   async function addCreatorSocialComment() {
     const wallet = resolvedReaderWallet
     const body = commentBody.trim()
-    if (!wallet || body.length < 2) return
+    if (!wallet) {
+      setSocialError('Unlock with a reader wallet before commenting.')
+      return
+    }
+    if (body.length < 2) return
     setSocialError(null)
     try {
       const res = await fetch('/api/creator-social/comment', {
@@ -2298,8 +2303,7 @@ export function StreamGate() {
 
         {/* ── Native text content — reader view ── */}
         {fullyAuthorised && contentState === 'ready' && fetchedContent?.type === 'text' && (
-          <div className="p-6 space-y-4">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-blue-500">Unlocked Content</p>
+          <div className="space-y-3 p-4 sm:p-5">
             {paymentMode === 'escrow' && (
               <InlineStreamMeter snapshot={streamMeter} streamVault={streamVault} />
             )}
@@ -2314,6 +2318,17 @@ export function StreamGate() {
                 onRefund={refundCheckpointEscrow}
               />
             )}
+            <div className="rounded-2xl border border-gray-100 bg-gray-50/70 px-3 py-3 dark:border-white/10 dark:bg-white/[0.04]">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-black uppercase tracking-[0.14em] text-blue-500">Unlocked Content</p>
+                  {title && (
+                    <h2 className="mt-1 min-w-0 text-[17px] font-black leading-snug text-gray-950 dark:text-white">{title}</h2>
+                  )}
+                </div>
+                <ViewCountBadge count={contentViewCount} />
+              </div>
+            </div>
             {fetchedContent.coverImage && (
               <div className="overflow-hidden rounded-2xl border border-gray-100 bg-gray-100 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
                 <img
@@ -2322,12 +2337,6 @@ export function StreamGate() {
                   className="h-40 w-full object-cover sm:h-48"
                   loading="lazy"
                 />
-              </div>
-            )}
-            {title && (
-              <div className="flex items-start justify-between gap-3">
-                <h2 className="min-w-0 text-[18px] font-bold leading-snug text-gray-900 dark:text-white">{title}</h2>
-                <ViewCountBadge count={contentViewCount} />
               </div>
             )}
             <div
@@ -2739,7 +2748,7 @@ function CreatorSocialPanel({
 
 function ViewCountBadge({ count }: { count: number }) {
   return (
-    <span className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border border-gray-100 bg-gray-50 px-2.5 text-[11px] font-black text-gray-500 dark:border-white/10 dark:bg-white/[0.05] dark:text-gray-300" title="Views">
+    <span className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border border-gray-100 bg-white px-2.5 text-[11px] font-black text-gray-500 dark:border-white/10 dark:bg-white/[0.08] dark:text-gray-300" title="Views">
       <EyeIcon />
       {Math.max(0, count).toLocaleString()}
     </span>
@@ -2814,14 +2823,14 @@ function InlineCheckpointMeter({
   const releasedAmount = sessionCap * (latest / 100)
   const refundableAmount = Math.max(0, sessionCap - releasedAmount)
   return (
-    <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-3 dark:border-blue-400/20 dark:bg-blue-500/10">
-      <div className="flex items-start justify-between gap-3">
+    <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-2.5 dark:border-blue-400/20 dark:bg-blue-500/10">
+      <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-blue-700 dark:text-blue-300">
+          <p className="text-[10px] font-black uppercase tracking-[0.14em] text-blue-700 dark:text-blue-300">
             Pay-as-you-read active
           </p>
-          <p className="mt-0.5 text-[11px] font-semibold text-blue-700/75 dark:text-blue-200/75">
-            USDC releases only at scroll checkpoints.
+          <p className="mt-0.5 text-[10px] font-semibold text-blue-700/70 dark:text-blue-200/70">
+            USDC releases at scroll checkpoints.
           </p>
         </div>
         {checkpointVault && (
@@ -2830,16 +2839,16 @@ function InlineCheckpointMeter({
           </span>
         )}
       </div>
-      <div className="mt-3 grid grid-cols-4 gap-1.5">
+      <div className="mt-2 grid grid-cols-4 gap-1.5">
         {marks.map(mark => (
           <div key={mark} className={['h-1.5 rounded-full transition-colors', released[mark] ? 'bg-blue-600 dark:bg-blue-300' : 'bg-white dark:bg-white/10'].join(' ')} />
         ))}
       </div>
-      <div className="mt-3 grid grid-cols-2 gap-2 text-[10px] font-bold">
-        <div className="rounded-xl bg-white px-2 py-2 text-gray-500 ring-1 ring-blue-100 dark:bg-white/10 dark:text-gray-300 dark:ring-white/10">
+      <div className="mt-2 grid grid-cols-2 gap-2 text-[10px] font-bold">
+        <div className="rounded-xl bg-white px-2 py-1.5 text-gray-500 ring-1 ring-blue-100 dark:bg-white/10 dark:text-gray-300 dark:ring-white/10">
           Released<br /><span className="text-gray-950 dark:text-white">{formatUsdc(releasedAmount)} USDC</span>
         </div>
-        <div className="rounded-xl bg-white px-2 py-2 text-gray-500 ring-1 ring-blue-100 dark:bg-white/10 dark:text-gray-300 dark:ring-white/10">
+        <div className="rounded-xl bg-white px-2 py-1.5 text-gray-500 ring-1 ring-blue-100 dark:bg-white/10 dark:text-gray-300 dark:ring-white/10">
           Refundable<br /><span className="text-gray-950 dark:text-white">{refunded ? 'Refunded' : `${formatUsdc(refundableAmount)} USDC`}</span>
         </div>
       </div>
