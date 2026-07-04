@@ -6,6 +6,7 @@ import { useQuery }           from '@tanstack/react-query'
 import { createPublicClient, http, defineChain, parseAbi } from 'viem'
 import { usePoAStream }       from '../../hooks/usePoAStream'
 import { usePasskey }         from '../../hooks/usePasskey'
+import { STREAM_VAULT_ABI }   from '../../lib/streamVaultAbi'
 import { PRIVY_AUTH_ENABLED } from '../../../../../src/lib/authMode'
 import { resolvePrivyCircleLink } from '../../../../../src/lib/privyCircleLink'
 import {
@@ -53,6 +54,13 @@ type CreatorSocialState = {
   downCount: number
   myReaction: CreatorReaction | null
   comments: CreatorComment[]
+}
+type StreamMeterSnapshot = {
+  totalAmount: bigint
+  alreadyWithdrawn: bigint
+  unlocked: bigint
+  claimable: bigint
+  cancelled: boolean
 }
 type WorldCupScoreMatch = {
   fixtureId?: string
@@ -305,6 +313,14 @@ function formatUsdc(value: number) {
   return value.toFixed(6).replace(/0+$/, '').replace(/\.$/, '')
 }
 
+function formatRawUsdc(value: bigint) {
+  const sign = value < 0n ? '-' : ''
+  const abs = value < 0n ? -value : value
+  const whole = abs / 1_000_000n
+  const frac = (abs % 1_000_000n).toString().padStart(6, '0').replace(/0+$/, '')
+  return `${sign}${whole.toString()}${frac ? `.${frac}` : ''}`
+}
+
 function formatBalanceLabel(value?: string) {
   if (value === undefined || value === null || value === '') return null
   const amount = Number(value)
@@ -487,6 +503,7 @@ export function StreamGate() {
   const [midpointPromptOpen, setMidpointPromptOpen] = useState(false)
   const [midpointPromptSeen, setMidpointPromptSeen] = useState(false)
   const [contentViewCount, setContentViewCount] = useState(0)
+  const [streamMeter, setStreamMeter] = useState<StreamMeterSnapshot | null>(null)
   const recordedViewRef = useRef('')
 
   async function handleEndSession() {
@@ -727,6 +744,39 @@ export function StreamGate() {
     if (fetchedContent?.type !== 'text' && fetchedContent?.type !== 'book') return
     void recordCreatorContentView()
   }, [fullyAuthorised, contentState, contentId, fetchedContent?.type, readerWalletAddress, selectedAgent?.walletAddress, address])
+
+  useEffect(() => {
+    if (paymentMode !== 'escrow' || !fullyAuthorised || contentState !== 'ready' || !/^0x[a-fA-F0-9]{40}$/.test(streamVault)) {
+      setStreamMeter(null)
+      return undefined
+    }
+    let cancelled = false
+    async function loadStreamMeter() {
+      try {
+        const info = await arcClient.readContract({
+          address: streamVault as `0x${string}`,
+          abi: STREAM_VAULT_ABI,
+          functionName: 'streamInfo',
+        }) as readonly [`0x${string}`, `0x${string}`, bigint, bigint, bigint, bigint, boolean, bigint, bigint]
+        if (cancelled) return
+        setStreamMeter({
+          totalAmount: info[2],
+          alreadyWithdrawn: info[5],
+          cancelled: info[6],
+          unlocked: info[7],
+          claimable: info[8],
+        })
+      } catch {
+        if (!cancelled) setStreamMeter(null)
+      }
+    }
+    void loadStreamMeter()
+    const timer = window.setInterval(() => { void loadStreamMeter() }, 5000)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [paymentMode, fullyAuthorised, contentState, streamVault])
 
   useEffect(() => {
     if (!gatewayReceiptId) return
@@ -1417,28 +1467,6 @@ export function StreamGate() {
                 <button
                   type="button"
                   onClick={() => {
-                    setContentError(null)
-                    setContentState('idle')
-                    setSelectedPaymentMode('x402')
-                  }}
-                  className="w-full rounded-2xl border border-gray-200 bg-white p-4 text-left shadow-sm transition-colors hover:border-gray-300 dark:border-white/10 dark:bg-[#111216] dark:hover:border-white/25"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-[13px] font-black text-gray-900 dark:text-gray-100">Fixed unlock</p>
-                      <p className="mt-1 text-[12px] leading-relaxed text-gray-500 dark:text-gray-400">
-                        Pay {formatUsdc(sessionCap)} USDC once with x402 and unlock this content.
-                      </p>
-                    </div>
-                    <span className="rounded-full bg-gray-950 px-2 py-1 text-[9px] font-black uppercase tracking-[0.12em] text-white dark:bg-white dark:text-gray-950">
-                      x402
-                    </span>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
                     if (!streamContentAvailable) return
                     setContentError(null)
                     setContentState('idle')
@@ -1448,7 +1476,7 @@ export function StreamGate() {
                   className={[
                     'w-full rounded-2xl border p-4 text-left shadow-sm transition-colors',
                     streamContentAvailable
-                      ? 'border-gray-200 bg-white hover:border-gray-300 dark:border-white/10 dark:bg-[#111216] dark:hover:border-white/25'
+                      ? 'border-emerald-200 bg-emerald-50/60 hover:border-emerald-300 dark:border-emerald-400/20 dark:bg-emerald-500/10 dark:hover:border-emerald-400/35'
                       : 'cursor-not-allowed border-gray-100 bg-gray-50 opacity-70 dark:border-white/10 dark:bg-white/[0.04]',
                   ].join(' ')}
                 >
@@ -1459,12 +1487,34 @@ export function StreamGate() {
                       </p>
                       <p className="mt-1 text-[12px] leading-relaxed text-gray-500 dark:text-gray-400">
                         {streamContentAvailable
-                          ? `Pay only while this page is open. Up to ${formatUsdc(sessionCap)} USDC can stream; unused USDC stays refundable.`
+                          ? `Stream $${dripRate.toFixed(4)}/sec. Stop anytime; unused USDC stays refundable.`
                           : 'Pay-as-you-read is only available for content HashpayStream can render in-page.'}
                       </p>
                     </div>
-                    <span className={['rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-[0.12em]', streamContentAvailable ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300' : 'bg-gray-100 text-gray-400 dark:bg-white/[0.06] dark:text-gray-500'].join(' ')}>
-                      Stream
+                    <span className={['rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-[0.12em]', streamContentAvailable ? 'bg-emerald-600 text-white dark:bg-emerald-400 dark:text-gray-950' : 'bg-gray-100 text-gray-400 dark:bg-white/[0.06] dark:text-gray-500'].join(' ')}>
+                      Nano
+                    </span>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setContentError(null)
+                    setContentState('idle')
+                    setSelectedPaymentMode('x402')
+                  }}
+                  className="w-full rounded-2xl border border-gray-200 bg-white p-4 text-left shadow-sm transition-colors hover:border-gray-300 dark:border-white/10 dark:bg-[#111216] dark:hover:border-white/25"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-[13px] font-black text-gray-900 dark:text-gray-100">Buy full access</p>
+                      <p className="mt-1 text-[12px] leading-relaxed text-gray-500 dark:text-gray-400">
+                        Pay {formatUsdc(sessionCap)} USDC once with x402 and keep access to this content.
+                      </p>
+                    </div>
+                    <span className="rounded-full bg-gray-950 px-2 py-1 text-[9px] font-black uppercase tracking-[0.12em] text-white dark:bg-white dark:text-gray-950">
+                      x402
                     </span>
                   </div>
                 </button>
@@ -2001,6 +2051,9 @@ export function StreamGate() {
         {fullyAuthorised && contentState === 'ready' && fetchedContent?.type === 'text' && (
           <div className="p-6 space-y-4">
             <p className="text-[10px] font-semibold uppercase tracking-wider text-blue-500">Unlocked Content</p>
+            {paymentMode === 'escrow' && (
+              <InlineStreamMeter snapshot={streamMeter} streamVault={streamVault} />
+            )}
             {fetchedContent.coverImage && (
               <div className="overflow-hidden rounded-2xl border border-gray-100 bg-gray-100 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
                 <img
@@ -2077,6 +2130,8 @@ export function StreamGate() {
             title={title}
             coverImage={fetchedContent.coverImage}
             viewCount={contentViewCount}
+            streamMeter={paymentMode === 'escrow' ? streamMeter : null}
+            streamVault={streamVault}
             social={social}
             socialLoading={socialLoading}
             socialError={socialError}
@@ -2427,11 +2482,59 @@ function ViewCountBadge({ count }: { count: number }) {
   )
 }
 
+function InlineStreamMeter({ snapshot, streamVault }: { snapshot: StreamMeterSnapshot | null; streamVault: string }) {
+  const total = snapshot?.totalAmount ?? 0n
+  const consumed = snapshot?.unlocked ?? 0n
+  const claimable = snapshot?.claimable ?? 0n
+  const refundable = total > consumed ? total - consumed : 0n
+  const percent = total > 0n ? Number((consumed * 100n) / total) : 0
+  return (
+    <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-3 dark:border-emerald-400/20 dark:bg-emerald-500/10">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-700 dark:text-emerald-300">
+            {snapshot?.cancelled ? 'Meter ended' : 'Pay-as-you-read active'}
+          </p>
+          <p className="mt-0.5 text-[11px] font-semibold text-emerald-700/75 dark:text-emerald-200/75">
+            Only consumed USDC goes to the creator.
+          </p>
+        </div>
+        {streamVault && (
+          <a href={`/stream/${streamVault}?app=streampay&wallet=circle&role=reader`} className="shrink-0 rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-emerald-700 ring-1 ring-emerald-100 dark:bg-white/10 dark:text-emerald-200 dark:ring-white/10">
+            Manage
+          </a>
+        )}
+      </div>
+      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white dark:bg-white/10">
+        <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${Math.max(0, Math.min(100, percent))}%` }} />
+      </div>
+      <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+        <StreamMeterCell label="Used" value={`${formatRawUsdc(consumed)} USDC`} />
+        <StreamMeterCell label="Refundable" value={`${formatRawUsdc(refundable)} USDC`} />
+        <StreamMeterCell label="Creator claim" value={`${formatRawUsdc(claimable)} USDC`} green />
+      </div>
+    </div>
+  )
+}
+
+function StreamMeterCell({ label, value, green }: { label: string; value: string; green?: boolean }) {
+  return (
+    <div className="rounded-xl bg-white px-2 py-2 dark:bg-white/[0.06]">
+      <p className="text-[9px] font-black uppercase tracking-[0.12em] text-gray-400 dark:text-gray-500">{label}</p>
+      <p className={['mt-0.5 truncate text-[11px] font-black', green ? 'text-emerald-600 dark:text-emerald-300' : 'text-gray-800 dark:text-gray-100'].join(' ')}>
+        {value}
+      </p>
+    </div>
+  )
+}
+
 function BookUnlocked({
   contentId,
   title,
   coverImage,
   viewCount,
+  streamMeter,
+  streamVault,
   social,
   socialLoading,
   socialError,
@@ -2447,6 +2550,8 @@ function BookUnlocked({
   title: string
   coverImage?: string
   viewCount: number
+  streamMeter: StreamMeterSnapshot | null
+  streamVault: string
   social: CreatorSocialState
   socialLoading: boolean
   socialError: string | null
@@ -2493,6 +2598,9 @@ function BookUnlocked({
 
   return (
     <div className="space-y-3 p-4 sm:p-5">
+      {streamVault && (
+        <InlineStreamMeter snapshot={streamMeter} streamVault={streamVault} />
+      )}
       <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-[#111216]">
         <div className="flex gap-4 p-4">
           {displayCover && (

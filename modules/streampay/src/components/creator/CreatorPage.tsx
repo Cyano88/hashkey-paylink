@@ -1343,7 +1343,6 @@ function CreatorAccountEarnings({
   const claimableTotal = streams.reduce((sum, stream) => sum + toCreatorBigInt(stream.claimable), 0n)
   const streamedTotal = streams.reduce((sum, stream) => sum + toCreatorBigInt(stream.unlocked), 0n)
   const fixedTotal = fixedUnlocks.reduce((sum, item) => sum + item.amount, 0)
-  const liveCount = streams.filter(stream => stream.active && !stream.cancelled).length
 
   const fetchEarnings = useCallback(async () => {
     const recipient = wallet.trim()
@@ -1392,7 +1391,7 @@ function CreatorAccountEarnings({
         <div className="min-w-0">
           <p className="text-[13px] font-black text-gray-950 dark:text-white">Creator earnings</p>
           <p className="mt-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400">
-            Sign in with your creator email to see fixed unlocks and streamed USDC.
+            Fixed unlocks and pay-as-you-read streams from this creator wallet.
           </p>
         </div>
         <div className="shrink-0 rounded-xl bg-white px-3 py-2 text-right shadow-sm dark:bg-[#111216]">
@@ -1432,8 +1431,8 @@ function CreatorAccountEarnings({
       {validWallet && (
         <div className="mt-3 grid grid-cols-3 gap-2 text-center">
           <StreamMiniStat label="Fixed" value={`${fixedTotal.toFixed(2)} USDC`} />
-          <StreamMiniStat label="Consumed" value={`${formatCreatorUsdc(streamedTotal)} USDC`} />
-          <StreamMiniStat label="Live" value={`${liveCount}`} green />
+          <StreamMiniStat label="Streamed" value={`${formatCreatorUsdc(streamedTotal)} USDC`} />
+          <StreamMiniStat label="Claimable" value={`${formatCreatorUsdc(claimableTotal)} USDC`} green />
         </div>
       )}
 
@@ -1453,7 +1452,7 @@ function CreatorAccountEarnings({
       {!loading && validWallet && !error && combined.length === 0 && (
         <div className="mt-3 rounded-xl border border-gray-100 bg-white px-4 py-4 text-center dark:border-white/10 dark:bg-[#111216]">
           <p className="text-[12px] font-bold text-gray-600 dark:text-gray-300">No earnings yet</p>
-          <p className="mt-1 text-[11px] leading-5 text-gray-400 dark:text-gray-500">Fixed unlocks and pay-as-you-read meters appear here after readers pay.</p>
+          <p className="mt-1 text-[11px] leading-5 text-gray-400 dark:text-gray-500">Reader payments appear here as fixed unlocks or claimable pay-as-you-read streams.</p>
         </div>
       )}
 
@@ -1491,8 +1490,8 @@ function CreatorAccountEarnings({
               <div key={stream.vault} className="rounded-xl border border-gray-100 bg-white px-3 py-3 dark:border-white/10 dark:bg-[#111216]">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="font-mono text-[12px] font-bold text-gray-800 dark:text-gray-100">{shortWallet(stream.vault)}</p>
-                    <p className="mt-0.5 text-[10px] text-gray-400 dark:text-gray-500">From {shortWallet(stream.sender)}</p>
+                    <p className="text-[12px] font-black text-gray-800 dark:text-gray-100">Pay-as-you-read stream</p>
+                    <p className="mt-0.5 text-[10px] text-gray-400 dark:text-gray-500">Reader {shortWallet(stream.sender)} - Vault {shortWallet(stream.vault)}</p>
                   </div>
                   <span className={['rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-[0.12em]', stream.active ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-300' : 'bg-gray-100 text-gray-500 dark:bg-white/[0.08] dark:text-gray-300'].join(' ')}>
                     Meter {status}
@@ -1510,7 +1509,7 @@ function CreatorAccountEarnings({
                     claimable > 0n ? 'bg-gray-950 text-white hover:bg-gray-800' : 'border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 dark:border-white/10 dark:bg-[#111216] dark:text-gray-300 dark:hover:bg-white/[0.06]',
                   ].join(' ')}
                 >
-                  {claimable > 0n ? 'Open claim' : 'View meter'}
+                  {claimable > 0n ? `Claim ${formatCreatorUsdc(stream.claimable)} USDC` : 'View meter'}
                 </a>
               </div>
             )
