@@ -130,6 +130,85 @@ const SAFE_OFFICIAL_CREATOR = isAddress(OFFICIAL_CREATOR_ADDRESS)
   ? OFFICIAL_CREATOR_ADDRESS
   : '0x823c31d5e373dd3fa7cad59af05fa45e3858556c'
 
+const OFFICIAL_EBOOKS: Array<{
+  id: string
+  title: string
+  description: string
+  tag: string
+  identifier: string
+}> = [
+  {
+    id: 'ebook-pride-prejudice',
+    title: 'Pride and Prejudice',
+    description: 'A sharp romance about love, class, first impressions, and second chances.',
+    tag: 'Romance',
+    identifier: 'ISBN:9780141439518',
+  },
+  {
+    id: 'ebook-dracula',
+    title: 'Dracula',
+    description: 'A gothic horror classic with journals, letters, pursuit, and dread.',
+    tag: 'Horror',
+    identifier: 'ISBN:9780486411095',
+  },
+  {
+    id: 'ebook-frankenstein',
+    title: 'Frankenstein',
+    description: 'A tragic creation story about ambition, loneliness, and responsibility.',
+    tag: 'Tragedy',
+    identifier: 'ISBN:9780486282114',
+  },
+  {
+    id: 'ebook-sherlock-adventures',
+    title: 'The Adventures of Sherlock Holmes',
+    description: 'Brisk detective mysteries built around deduction, disguise, and suspense.',
+    tag: 'Mystery',
+    identifier: 'ISBN:9780486474915',
+  },
+  {
+    id: 'ebook-jane-eyre',
+    title: 'Jane Eyre',
+    description: 'A passionate coming-of-age romance with secrets, independence, and moral tension.',
+    tag: 'Love',
+    identifier: 'ISBN:9780141441146',
+  },
+  {
+    id: 'ebook-wuthering-heights',
+    title: 'Wuthering Heights',
+    description: 'A stormy tale of obsession, revenge, and destructive love.',
+    tag: 'Drama',
+    identifier: 'ISBN:9780141439556',
+  },
+  {
+    id: 'ebook-dorian-gray',
+    title: 'The Picture of Dorian Gray',
+    description: 'A stylish psychological thriller about beauty, vanity, and consequence.',
+    tag: 'Thriller',
+    identifier: 'ISBN:9780141439570',
+  },
+  {
+    id: 'ebook-alice-wonderland',
+    title: 'Alice in Wonderland',
+    description: 'A funny, strange, endlessly imaginative trip through nonsense and wonder.',
+    tag: 'Funny',
+    identifier: 'ISBN:9780486275437',
+  },
+  {
+    id: 'ebook-frederick-douglass',
+    title: 'Narrative of the Life of Frederick Douglass',
+    description: 'A true-life account of survival, literacy, freedom, and moral courage.',
+    tag: 'True Life',
+    identifier: 'ISBN:9780486284996',
+  },
+  {
+    id: 'ebook-time-machine',
+    title: 'The Time Machine',
+    description: 'A compact sci-fi adventure through futurism, fear, and social collapse.',
+    tag: 'Sci-Fi',
+    identifier: 'ISBN:9780486284729',
+  },
+]
+
 const OFFICIAL_CONTENT: Record<string, ContentEntry> = {
   'worldcup-news': {
     type: 'url',
@@ -167,6 +246,24 @@ const OFFICIAL_CONTENT: Record<string, ContentEntry> = {
     reviewNote: '',
     ts: Date.now(),
   },
+  ...Object.fromEntries(OFFICIAL_EBOOKS.map((book, index) => [book.id, {
+    type: 'url' as const,
+    content: book.identifier,
+    creator: SAFE_OFFICIAL_CREATOR,
+    capRaw: Number(process.env.CREATOR_EBOOK_PRICE_RAW ?? '100000'),
+    rateRaw: 1000,
+    mode: 'unlock' as const,
+    title: book.title,
+    description: book.description,
+    authorName: 'Google Books Preview',
+    xHandle: 'Hash_PayLink',
+    coverImage: ['/brand/africa-business-bg.jpeg', '/brand/abuja-business-bg.jpeg', '/brand/world-globe.png'][index % 3],
+    category: 'ebooks',
+    reviewStatus: 'approved' as const,
+    reviewedAt: Date.now(),
+    reviewNote: book.tag,
+    ts: Date.now(),
+  }])),
 }
 
 async function readOfficialWorldCupNewsEntry(contentId: string): Promise<ContentEntry | null> {

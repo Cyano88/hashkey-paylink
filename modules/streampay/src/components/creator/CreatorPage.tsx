@@ -184,7 +184,7 @@ const CREATOR_CATEGORIES: Array<{ id: CreatorCategory; label: string; disabled?:
   { id: 'worldcup-news', label: 'World Cup News' },
   { id: 'live-scores', label: 'Live Scores' },
   { id: 'crypto', label: 'Crypto' },
-  { id: 'ebooks', label: 'Ebooks', disabled: true },
+  { id: 'ebooks', label: 'Ebooks' },
 ]
 
 function normalizeCreatorCategory(value: unknown): CreatorCategory {
@@ -216,6 +216,33 @@ const OFFICIAL_DISCOVER_CONTENT: PublishedContent[] = [
     cta: 'Create',
   },
 ]
+
+const OFFICIAL_EBOOKS: PublishedContent[] = [
+  ['ebook-pride-prejudice', 'Pride and Prejudice', 'A sharp romance about love, class, first impressions, and second chances.', 'Romance'],
+  ['ebook-dracula', 'Dracula', 'A gothic horror classic with journals, letters, pursuit, and dread.', 'Horror'],
+  ['ebook-frankenstein', 'Frankenstein', 'A tragic creation story about ambition, loneliness, and responsibility.', 'Tragedy'],
+  ['ebook-sherlock-adventures', 'The Adventures of Sherlock Holmes', 'Brisk detective mysteries built around deduction, disguise, and suspense.', 'Mystery'],
+  ['ebook-jane-eyre', 'Jane Eyre', 'A passionate coming-of-age romance with secrets, independence, and moral tension.', 'Love'],
+  ['ebook-wuthering-heights', 'Wuthering Heights', 'A stormy tale of obsession, revenge, and destructive love.', 'Drama'],
+  ['ebook-dorian-gray', 'The Picture of Dorian Gray', 'A stylish psychological thriller about beauty, vanity, and consequence.', 'Thriller'],
+  ['ebook-alice-wonderland', 'Alice in Wonderland', 'A funny, strange, endlessly imaginative trip through nonsense and wonder.', 'Funny'],
+  ['ebook-frederick-douglass', 'Narrative of the Life of Frederick Douglass', 'A true-life account of survival, literacy, freedom, and moral courage.', 'True Life'],
+  ['ebook-time-machine', 'The Time Machine', 'A compact sci-fi adventure through futurism, fear, and social collapse.', 'Sci-Fi'],
+].map(([id, title, description, tag], index) => ({
+  id,
+  contentId: id,
+  creator: OFFICIAL_CREATOR_ADDRESS,
+  title,
+  description,
+  category: 'ebooks' as CreatorCategory,
+  price: '0.10',
+  tag,
+  source: 'Google Books Preview',
+  image: FALLBACK_CREATOR_COVERS[index % FALLBACK_CREATOR_COVERS.length],
+  gateLink: `/gate?app=streampay&id=${id}&cr=${OFFICIAL_CREATOR_ADDRESS}&r=1000&cap=100000&mode=unlock&pay=x402&ct=url&t=${encodeURIComponent(title)}`,
+  action: 'gate' as const,
+  cta: 'Unlock book',
+}))
 
 function worldCupArticleId(article: Pick<PolyWorldCupArticle, 'title' | 'url'>, index = 0) {
   const input = `${article.title}|${article.url}|${index}`.toLowerCase()
@@ -751,11 +778,13 @@ function DiscoverContent({
   const scoreCards = scoreMatches.slice(0, 16).map(worldCupScoreCard)
   const officialCards = [
     OFFICIAL_DISCOVER_CONTENT[0],
+    ...OFFICIAL_EBOOKS,
     ...worldCupNewsCards,
     ...scoreCards,
   ].filter(Boolean) as PublishedContent[]
   const heroCards = [
     OFFICIAL_DISCOVER_CONTENT[0],
+    ...OFFICIAL_EBOOKS,
     ...worldCupNewsCards,
     ...scoreCards,
     ...approvedSessionPosts,

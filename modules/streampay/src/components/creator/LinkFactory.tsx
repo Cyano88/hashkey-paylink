@@ -19,7 +19,7 @@ const CREATOR_CATEGORIES: Array<{ id: CreatorCategory; label: string; disabled?:
   { id: 'worldcup-news', label: 'World Cup News' },
   { id: 'live-scores', label: 'Live Scores' },
   { id: 'crypto', label: 'Crypto' },
-  { id: 'ebooks', label: 'Ebooks', disabled: true },
+  { id: 'ebooks', label: 'Ebooks' },
 ]
 
 const COVER_MAX_DATA_URL_BYTES = 28_000
