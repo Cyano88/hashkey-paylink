@@ -106,6 +106,7 @@ type AgentOption = AgentProfile & {
   source?: 'platform' | 'saved' | 'linked' | 'env' | 'store'
 }
 type UnlockStep = 'intro' | 'choose' | 'email' | 'otp' | 'fund'
+const CREATOR_X402_GATEWAY_LABEL = 'Arc Testnet'
 
 let googleBooksScriptPromise: Promise<void> | null = null
 
@@ -422,7 +423,7 @@ function readableUnlockError(message: string) {
     return 'Sign in to this reader wallet again to continue.'
   }
   if (/balance|fund|insufficient|gateway|deposit|activation/i.test(message)) {
-    return 'Reader payment balance is not ready yet. Open x402 Wallet Manager to activate it, then return here.'
+    return 'Reader payment balance is not ready yet. Activate x402, then unlock.'
   }
   return message.slice(0, 180)
 }
@@ -487,6 +488,7 @@ export function StreamGate() {
   const [walletOtpContext, setWalletOtpContext] = useState<{ email: string; slug: string } | null>(null)
   const [walletBusy, setWalletBusy] = useState(false)
   const [walletError, setWalletError] = useState<string | null>(null)
+  const [fundAmount, setFundAmount] = useState('0.5')
   const [fundBusy, setFundBusy] = useState(false)
   const [fundMessage, setFundMessage] = useState<string | null>(null)
   const gatewayActivationPending = isGatewayPendingMessage(fundMessage)
@@ -530,6 +532,12 @@ export function StreamGate() {
   const selectedWalletNeedsReconnect = Boolean(selectedAgent?.walletAddress && !selectedAgent.connected)
   const readerWalletSessionError = /reconnect|sign in|session|wallet session|activation did not complete/i.test(walletError || '')
   const fundingNeedsReconnect = selectedWalletNeedsReconnect || readerWalletSessionError
+  const fundAmountNumber = Number(fundAmount)
+  const fundingBalanceNumber = selectedAgent?.balance !== undefined ? Number(selectedAgent.balance) : null
+  const fundingBalanceKnown = Boolean(selectedAgent?.balanceChecked && fundingBalanceNumber !== null && Number.isFinite(fundingBalanceNumber))
+  const fundingAmountInvalid = !Number.isFinite(fundAmountNumber) || fundAmountNumber <= 0
+  const fundingAmountExceedsBalance = Boolean(fundingBalanceKnown && Number.isFinite(fundAmountNumber) && fundAmountNumber > Number(fundingBalanceNumber))
+  const gatewayActivationBlocked = fundingNeedsReconnect || fundingAmountInvalid || fundingAmountExceedsBalance
 
   useEffect(() => {
     if (privyEmail && !walletEmail) setWalletEmail(privyEmail)
@@ -866,7 +874,7 @@ export function StreamGate() {
     }
     if (!hasActivatedGatewayBalance(selectedAgent, sessionCap)) {
       setUnlockStep('fund')
-      setFundMessage('Open x402 Wallet Manager to activate this reader payment balance before unlocking.')
+      setFundMessage(null)
       return
     }
     await unlockWithAgentX402(selectedAgent.slug)
@@ -1047,6 +1055,88 @@ export function StreamGate() {
       return data
     } catch {
       // Balance refresh is non-blocking; the unlock path will still return a clear error if payment fails.
+    }
+  }
+
+  function x402WalletManagerHref() {
+    const p = new URLSearchParams()
+    p.set('product', 'agent')
+    p.set('profile', 'agent')
+    p.set('n', 'arc')
+    p.set('src', 'creator-checkout')
+    p.set('returnTo', `${window.location.pathname}${window.location.search}${window.location.hash}`)
+    return `/app?${p.toString()}`
+  }
+
+  async function activatePaymentBalance() {
+    const paymentSlug = selectedAgent?.slug || safeAgentSlug
+    setFundMessage(null)
+    setWalletError(null)
+    if (!paymentSlug) {
+      setWalletError('Choose a reader wallet first.')
+      setUnlockStep('choose')
+      return
+    }
+    if (fundingNeedsReconnect) {
+      setWalletError('Reconnect this reader wallet before activating x402.')
+      return
+    }
+    if (fundingAmountInvalid) {
+      setWalletError('Enter a valid USDC amount.')
+      return
+    }
+    if (fundingAmountExceedsBalance) {
+      setWalletError(`Fund this wallet with more USDC on ${CREATOR_X402_GATEWAY_LABEL}, then activate x402.`)
+      return
+    }
+    setFundBusy(true)
+    try {
+      const res = await fetch('/api/agent-wallet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'gateway-deposit-arc', agentSlug: paymentSlug, amount: fundAmount }),
+      })
+      const data = await res.json().catch(() => ({})) as {
+        ok?: boolean
+        code?: string
+        error?: string
+        gatewayBalance?: string
+        walletAddress?: string
+      }
+      if (res.status === 202 && data.code === 'gateway_deposit_pending') {
+        await refreshPaymentWalletStatus(paymentSlug)
+        setFundMessage(data.error || 'Activation is pending. Wait a moment, then check activation again.')
+        setWalletError(null)
+        setContentError(null)
+        return
+      }
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Could not activate x402.')
+      setAgentOptions(current => current.map(agent => (
+        agent.slug === paymentSlug
+          ? { ...agent, connected: true, walletAddress: data.walletAddress || agent.walletAddress, gatewayBalance: data.gatewayBalance, gatewayBalanceChecked: true }
+          : agent
+      )))
+      await refreshPaymentWalletStatus(paymentSlug)
+      setFundMessage('x402 activated. You can unlock now.')
+      setUnlockStep('choose')
+      setContentState('idle')
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Could not activate x402.'
+      const recoveryStep = unlockRecoveryStep(message)
+      if (recoveryStep === 'email') {
+        setAgentOptions(current => current.map(agent => (
+          agent.slug === paymentSlug ? { ...agent, connected: false } : agent
+        )))
+        setUnlockStep(agentOptions.length > 0 ? 'choose' : 'email')
+        setCircleNotice('Reader wallet session needs a fresh code. Select the wallet to reconnect.')
+        setWalletError(null)
+        setContentError(null)
+      } else {
+        if (recoveryStep === 'fund') setUnlockStep('fund')
+        setWalletError(message.slice(0, 180))
+      }
+    } finally {
+      setFundBusy(false)
     }
   }
 
@@ -1467,9 +1557,9 @@ export function StreamGate() {
                       <div className="border-b border-gray-100 pb-3">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <p className="text-[13px] font-bold text-gray-900">Reader payment balance</p>
+                            <p className="text-[13px] font-bold text-gray-900">Activate x402</p>
                             <p className="mt-1 text-[12px] leading-relaxed text-gray-500">
-                              Activate this wallet from x402 Wallet Manager, then return here to unlock.
+                              Move Arc Testnet USDC into the reader payment balance, then unlock.
                             </p>
                           </div>
                           <button
@@ -1523,7 +1613,7 @@ export function StreamGate() {
                           </div>
                           <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
                             <div className="rounded-lg border border-white bg-white px-3 py-2">
-                              <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400">Arc wallet</p>
+                              <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400">{CREATOR_X402_GATEWAY_LABEL} wallet</p>
                               <p className="mt-0.5 truncate text-[12px] font-bold text-gray-900">
                                 {formatBalanceLabel(selectedAgent.balance) || (selectedAgent.balanceChecked ? '0 USDC' : 'Checking...')}
                               </p>
@@ -1541,34 +1631,64 @@ export function StreamGate() {
                               )}
                             </div>
                           </div>
+                          {selectedAgent.balanceChecked && numericBalance(selectedAgent.balance) <= 0 && (
+                            <p className="mt-2 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-[11px] font-medium leading-relaxed text-amber-700">
+                              Fund this reader wallet with Arc Testnet USDC before activating x402.
+                            </p>
+                          )}
+                          {fundingAmountExceedsBalance && (
+                            <p className="mt-2 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-[11px] font-medium leading-relaxed text-amber-700">
+                              Amount is higher than the current {CREATOR_X402_GATEWAY_LABEL} wallet balance.
+                            </p>
+                          )}
                         </div>
                       )}
-                      <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-3">
-                        <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-start">
-                          <div className="min-w-0">
-                            <p className="text-[12px] font-black text-gray-900">Check payment balance</p>
-                            <p className="mt-1 text-[11px] leading-relaxed text-gray-500">
-                              Activation happens in x402 Wallet Manager. After activating there, return here and check status.
-                            </p>
+                      <div className="rounded-xl border border-gray-100 bg-white px-3 py-3">
+                        <label className="block space-y-1.5">
+                          <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-gray-400">Activation amount</span>
+                          <div className="flex min-h-[46px] items-center rounded-xl border border-gray-200 bg-gray-50 px-3 focus-within:border-blue-300">
+                            <input
+                              type="number"
+                              min="0.5"
+                              step="0.1"
+                              value={fundAmount}
+                              onChange={event => {
+                                setFundAmount(event.target.value)
+                                setWalletError(null)
+                                setFundMessage(null)
+                              }}
+                              className="min-w-0 flex-1 bg-transparent text-[15px] font-bold text-gray-900 outline-none"
+                            />
+                            <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-gray-400">USDC</span>
                           </div>
+                        </label>
+                        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
                           <button
                             type="button"
-                            onClick={checkPaymentActivation}
-                            disabled={fundBusy || fundingNeedsReconnect}
-                            className="min-h-10 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[11px] font-bold text-gray-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+                            onClick={() => void activatePaymentBalance()}
+                            disabled={fundBusy || gatewayActivationBlocked}
+                            className="flex min-h-[46px] items-center justify-center rounded-xl bg-gray-950 px-3 py-3 text-[12px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
                           >
-                            Check status
+                            {fundBusy ? <><Spinner />Activating...</> : 'Activate x402'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void checkPaymentActivation()}
+                            disabled={fundBusy || fundingNeedsReconnect}
+                            className="min-h-[46px] rounded-xl border border-gray-200 bg-white px-3 py-3 text-[12px] font-bold text-gray-700 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            Check activation
                           </button>
                         </div>
                       </div>
                       <a
-                        href="/app?product=agent"
-                        className="flex min-h-[48px] w-full items-center justify-center rounded-xl bg-gray-950 px-3 py-3 text-[12px] font-bold text-white"
+                        href={x402WalletManagerHref()}
+                        className="flex min-h-[44px] w-full items-center justify-center rounded-xl border border-gray-200 bg-white px-3 py-3 text-[12px] font-bold text-gray-700"
                       >
-                        Open x402 wallet manager
+                        Open wallet manager instead
                       </a>
                       <p className="text-center text-[11px] leading-relaxed text-gray-400">
-                        Keep this content link open. After activation, return and tap Unlock content.
+                        After activation, tap Unlock content.
                       </p>
                     </div>
                   )}
