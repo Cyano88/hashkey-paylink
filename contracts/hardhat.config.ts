@@ -4,8 +4,10 @@ import * as dotenv from 'dotenv'
 
 dotenv.config()
 
-const PK = process.env.DEPLOYER_PRIVATE_KEY
-  ? [`0x${process.env.DEPLOYER_PRIVATE_KEY.replace(/^0x/, '')}`]
+const RAW_DEPLOYER_KEY = process.env.DEPLOYER_PRIVATE_KEY ?? process.env.RELAYER_PRIVATE_KEY_ARC
+
+const PK = RAW_DEPLOYER_KEY
+  ? [`0x${RAW_DEPLOYER_KEY.replace(/^0x/, '')}`]
   : []
 
 const config: HardhatUserConfig = {
