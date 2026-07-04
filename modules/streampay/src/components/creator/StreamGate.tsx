@@ -725,8 +725,9 @@ export function StreamGate() {
   const gatewayOgExplorer = gatewayReceipt?.og?.ogExplorer
   const gatewayOgProof = gatewayReceipt?.og?.ogTxHash || gatewayReceipt?.og?.rootHash || ''
   const gatewayOgReady = Boolean(gatewayOgProof || gatewayOgExplorer)
+  const gatewayReceiptReady = Boolean(gatewayReceiptId && (gatewayOgReady || gatewayArchiveTimedOut))
   const gatewayArchiveLabel = gatewayArchiveTimedOut
-    ? 'Archive pending'
+    ? 'Archive delayed'
     : gatewayReceiptPollAttempts >= 9
       ? 'Still archiving...'
       : 'Archiving...'
@@ -816,7 +817,7 @@ export function StreamGate() {
   }, [gatewayReceiptId])
 
   async function openGatewayReceiptPdf() {
-    if (!gatewayReceiptId || gatewayReceiptOpening || !gatewayOgReady) return
+    if (!gatewayReceiptId || gatewayReceiptOpening || !gatewayReceiptReady) return
     setGatewayReceiptOpening(true)
     try {
       let sourceReceipt = gatewayReceipt
@@ -2279,16 +2280,16 @@ export function StreamGate() {
                 <button
                   type="button"
                   onClick={openGatewayReceiptPdf}
-                  disabled={gatewayReceiptOpening || !gatewayOgReady}
+                  disabled={gatewayReceiptOpening || !gatewayReceiptReady}
                   className={[
                     'flex w-full items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-sm font-medium transition-all active:scale-[0.98]',
-                    gatewayOgReady
+                    gatewayReceiptReady
                       ? 'bg-gray-900 text-white hover:bg-gray-800'
                       : 'cursor-not-allowed bg-gray-100 text-gray-400',
                   ].join(' ')}
                 >
                   <ReceiptIcon />
-                  {gatewayReceiptOpening ? 'Opening receipt...' : gatewayOgReady ? 'View receipt' : 'Receipt archiving'}
+                  {gatewayReceiptOpening ? 'Opening receipt...' : gatewayReceiptReady ? 'View receipt' : 'Receipt archiving'}
                 </button>
               )}
               <div className={gatewayTxIsExplorerHash ? 'grid grid-cols-2 gap-2' : 'grid gap-2'}>
