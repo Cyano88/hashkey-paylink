@@ -446,6 +446,11 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
       window.history.back()
       return
     }
+    const app = (params.get('app') ?? '').toLowerCase()
+    if (app === 'streampay' || streamRole === 'creator' || streamRole === 'reader') {
+      window.location.href = '/creator?app=streampay&tab=streams'
+      return
+    }
     const fallback = new URLSearchParams()
     fallback.set('app', 'streampay')
     if (telegramMode) {

@@ -3,6 +3,11 @@ interface StreamNotFoundProps {
 }
 
 export function StreamNotFound({ vaultAddress }: StreamNotFoundProps) {
+  const params = new URLSearchParams(window.location.search)
+  const app = (params.get('app') ?? '').toLowerCase()
+  const role = (params.get('role') ?? '').toLowerCase()
+  const isCreatorMeter = app === 'streampay' || role === 'creator' || role === 'reader'
+  const fallbackHref = isCreatorMeter ? '/creator?app=streampay&tab=streams' : '/?app=streampay'
   return (
     <div className="w-full max-w-[480px] mx-auto mt-12">
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-5 py-8 sm:px-8 sm:py-10 text-center space-y-5">
@@ -26,11 +31,11 @@ export function StreamNotFound({ vaultAddress }: StreamNotFoundProps) {
         </div>
 
         <button
-          onClick={() => window.location.href = '/'}
+          onClick={() => window.location.href = fallbackHref}
           className="flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-[14px] font-semibold text-white min-h-[48px] transition-colors active:scale-[0.98]"
           style={{ background: '#111827' }}
         >
-          Create a New Stream
+          {isCreatorMeter ? 'Open meters' : 'Create a New Stream'}
         </button>
 
         <div className="flex items-center justify-center gap-1.5 pt-1">

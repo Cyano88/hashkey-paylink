@@ -2302,7 +2302,14 @@ export function CreatorAdminPage() {
 export function CreatorPage() {
   const { authenticated: privyAuthenticated, user: privyUser, login: loginPrivy, logout: logoutPrivy, getAccessToken } = usePrivy()
   const privyEmail = cleanEmail(emailFromPrivyUser(privyUser))
-  const [activeTab, setActiveTab] = useState<CreatorTab>('discover')
+  const [activeTab, setActiveTab] = useState<CreatorTab>(() => {
+    try {
+      const tab = new URLSearchParams(window.location.search).get('tab')
+      return tab === 'create' || tab === 'earnings' || tab === 'streams' ? tab : 'discover'
+    } catch {
+      return 'discover'
+    }
+  })
   const [latestGateLink, setLatestGateLink] = useState('')
   const [publishedContent, setPublishedContent] = useState<PublishedContent[]>([])
   const [latestCreator, setLatestCreator] = useState(() => {
