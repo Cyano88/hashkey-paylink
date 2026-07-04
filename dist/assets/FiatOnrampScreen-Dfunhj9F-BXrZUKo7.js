@@ -1,0 +1,106 @@
+import{g as L,b$ as q,j as t,c0 as g,c1 as a,c2 as M,c3 as z,c4 as R,c5 as T,a as m}from"./index-C6m2chlg.js";import{a as D}from"./poll-CGBuN8pf-D22wGvHp.js";import{y as I,c as Q,p as U}from"./SelectSourceAsset-BXIwUEql-DU2pqZPt.js";import{n as x}from"./ScreenLayout-Dmp7r6fS-Dqg_5CL8.js";import{t as N,h as B}from"./GooglePay-DA-Ff7zK-1ZbOalr4.js";import{T as W}from"./triangle-alert-B0CAECR0.js";import{c as v}from"./createLucideIcon-BXRsAdGo.js";import{C as Y}from"./circle-x-DE6pGNGQ.js";import{C as $}from"./check-BRuMfzoX.js";import{W as G}from"./wallet-CQEgrQ1T.js";import{S as k}from"./smartphone-DDmdk4T7.js";import"./ModalHeader-rFKqcgRs-D84hSiAk.js";import"./Screen-DXLhhfU3-BHb7bJnc.js";import"./index-Dq_xe9dz-CCJGRYF6.js";/**
+ * @license lucide-react v0.554.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */const O=[["path",{d:"M12 10h.01",key:"1nrarc"}],["path",{d:"M12 14h.01",key:"1etili"}],["path",{d:"M12 6h.01",key:"1vi96p"}],["path",{d:"M16 10h.01",key:"1m94wz"}],["path",{d:"M16 14h.01",key:"1gbofw"}],["path",{d:"M16 6h.01",key:"1x0f13"}],["path",{d:"M8 10h.01",key:"19clt8"}],["path",{d:"M8 14h.01",key:"6423bh"}],["path",{d:"M8 6h.01",key:"1dz90k"}],["path",{d:"M9 22v-3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3",key:"cabbwy"}],["rect",{x:"4",y:"2",width:"16",height:"20",rx:"2",key:"1uxh74"}]],b=v("building",O);/**
+ * @license lucide-react v0.554.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */const F=[["path",{d:"m9 18 6-6-6-6",key:"mthhwq"}]],X=v("chevron-right",F);/**
+ * @license lucide-react v0.554.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */const H=[["rect",{width:"20",height:"14",x:"2",y:"5",rx:"2",key:"ynyp8z"}],["line",{x1:"2",x2:"22",y1:"10",y2:"10",key:"1b3vmo"}]],w=v("credit-card",H);/**
+ * @license lucide-react v0.554.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */const K=[["path",{d:"M10 18v-7",key:"wt116b"}],["path",{d:"M11.12 2.198a2 2 0 0 1 1.76.006l7.866 3.847c.476.233.31.949-.22.949H3.474c-.53 0-.695-.716-.22-.949z",key:"1m329m"}],["path",{d:"M14 18v-7",key:"vav6t3"}],["path",{d:"M18 18v-7",key:"aexdmj"}],["path",{d:"M3 22h18",key:"8prr45"}],["path",{d:"M6 18v-7",key:"1ivflk"}]],f=v("landmark",K),[S,V]=((e,o=750)=>{let s;return[(...r)=>{s&&clearTimeout(s),s=setTimeout(()=>{e(...r)},o)},()=>{s&&clearTimeout(s)}]})(async(e,o)=>{a({isLoading:!0});try{let{getQuotes:s}=g(),r=await s({source:{asset:o.source.selectedAsset.toUpperCase(),amount:e},destination:{asset:o.destination.asset.toUpperCase(),chain:o.destination.chain,address:o.destination.address},environment:o.environment}),i=r.quotes??[],p=r.provider_errors,c=T(i,e);a({localQuotes:i,localSelectedQuote:i[0]??null,isLoading:!1,quotesWarning:c,quotesErrors:p??null})}catch{a({localQuotes:[],localSelectedQuote:null,quotesWarning:"provider_errors",quotesErrors:null})}}),J=e=>{a({amount:e});let{opts:o}=g();S(e,o)},E=async()=>{let{error:e,state:o,onFailure:s,onSuccess:r}=g();V(),e?s(e):o.status==="provider-success"?await r({status:"confirmed"}):o.status==="provider-confirming"?await r({status:"submitted"}):s(Error("User exited flow"))},Z=async()=>{var h,y;let e,o=z();if(!o)return;let s=R();if(!s)return void a({state:{status:"provider-error"},error:Error("Unable to open payment window")});a({isLoading:!0});let{opts:r,amount:i,getProviderUrl:p,getStatus:c,controller:d}=g(),u=()=>{try{s.closed||s.close()}catch{}};d.current=new AbortController;try{let l=await p({source:{asset:r.source.selectedAsset.toUpperCase(),amount:i||"0"},destination:{asset:r.destination.asset.toUpperCase(),chain:r.destination.chain,address:r.destination.address},provider:o.provider,sub_provider:o.sub_provider??void 0,payment_method:o.payment_method,redirect_url:window.location.origin});s.location.href=l.url,e=l.session_id}catch{return u(),void a({state:{status:"provider-error"},isLoading:!1,error:Error("Unable to start payment session")})}a({isLoading:!1}),a({state:{status:"provider-confirming"}});let n=await D({operation:()=>c({session_id:e,provider:o.provider}),until:l=>l.status==="completed"||l.status==="failed"||l.status==="cancelled",delay:0,interval:2e3,attempts:60,signal:d.current.signal});if(n.status!=="aborted"){if(n.status==="max_attempts")return u(),n.error?(console.error(n.error),void a({state:{status:"select-amount"},isLoading:!1,error:Error("Unable to check payment status. Please try again.")})):void a({state:{status:"provider-error"},error:Error("Could not confirm payment status yet.")});((h=n.result)==null?void 0:h.status)==="completed"?(u(),a({state:{status:"provider-success"}})):(u(),a({state:{status:"provider-error"},error:Error(`Transaction ${((y=n.result)==null?void 0:y.status)??"failed"}`)}))}},ee=()=>{let e=M();e&&e.length>0&&a({state:{status:"select-payment-method",quotes:e}})},te=()=>{a({state:{status:"select-source-asset"}})},oe=()=>{a({error:null,state:{status:"select-amount"}})},se=e=>{a({localSelectedQuote:e,state:{status:"select-amount"}})},re=e=>{let{opts:o,amount:s}=g(),r={...o,source:{...o.source,selectedAsset:e}};a({opts:r,state:{status:"select-amount"}}),S(s,r)},ne=({onClose:e})=>t.jsx(x,{showClose:!0,onClose:e,iconVariant:"loading",title:"Processing transaction",subtitle:"Your purchase is in progress. You can leave this screen — we’ll notify you when it’s complete.",primaryCta:{label:"Done",onClick:e},watermark:!0}),ae=({onClose:e,onRetry:o})=>t.jsx(x,{showClose:!0,onClose:e,icon:Y,iconVariant:"error",title:"Something went wrong",subtitle:"We couldn't complete your transaction. Please try again.",primaryCta:{label:"Try again",onClick:o},secondaryCta:{label:"Close",onClick:e},watermark:!0}),ie=({onClose:e})=>t.jsx(x,{showClose:!0,onClose:e,icon:$,iconVariant:"success",title:"Transaction confirmed",subtitle:"Your purchase is processing. Funds should arrive in your wallet within a few minutes.",primaryCta:{label:"Done",onClick:e},watermark:!0});let le={CREDIT_DEBIT_CARD:"card",APPLE_PAY:"Apple Pay",GOOGLE_PAY:"Google Pay",BANK_TRANSFER:"bank deposit",ACH:"bank deposit",SEPA:"bank deposit",PIX:"PIX"},ce={CREDIT_DEBIT_CARD:t.jsx(w,{size:14}),APPLE_PAY:t.jsx(k,{size:14}),GOOGLE_PAY:t.jsx(k,{size:14}),BANK_TRANSFER:t.jsx(b,{size:14}),ACH:t.jsx(b,{size:14}),SEPA:t.jsx(b,{size:14}),PIX:t.jsx(G,{size:14})},de=e=>ce[e]??t.jsx(w,{size:14});const ue=({opts:e,onClose:o,onEditSourceAsset:s,onEditPaymentMethod:r,onContinue:i,onAmountChange:p,amount:c,selectedQuote:d,quotesWarning:u,quotesErrors:n,quotesCount:h,isLoading:y})=>{var C;return t.jsxs(x,{showClose:!0,onClose:o,headerTitle:`Buy ${e.destination.asset.toLocaleUpperCase()}`,primaryCta:{label:"Continue",onClick:i,loading:y,disabled:!d},helpText:u?t.jsxs(pe,{children:[t.jsx(W,{size:16,strokeWidth:2}),t.jsx(me,{children:t.jsxs(t.Fragment,u==="amount_too_low"?{children:[t.jsx(_,{children:"Amount too low"}),t.jsx(P,{children:"Please choose a higher amount to continue."})]}:{children:[t.jsx(_,{children:"Unable to get quotes"}),t.jsx(P,{children:((C=n==null?void 0:n[0])==null?void 0:C.error)??"Something went wrong. Please try again."})]})})]}):d&&h>1?t.jsxs(he,{onClick:r,children:[de(d.payment_method),t.jsxs("span",{children:["Pay with ",(l=d.payment_method,le[l]??l.replace(/_/g," ").toLowerCase().replace(/^\w/,A=>A.toUpperCase()))]}),t.jsx(X,{size:14})]}):null,watermark:!0,children:[t.jsx(Q,{currency:e.source.selectedAsset,value:c,onChange:p,inputMode:"decimal",autoFocus:!0}),t.jsx(U,{selectedAsset:e.source.selectedAsset,onEditSourceAsset:s})]});var l};let pe=m.div`
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  background-color: var(--privy-color-warn-bg, #fffbbb);
+  border: 1px solid var(--privy-color-border-warning, #facd63);
+  overflow: clip;
+  width: 100%;
+
+  svg {
+    flex-shrink: 0;
+    color: var(--privy-color-icon-warning, #facd63);
+  }
+`,me=m.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  flex: 1;
+  min-width: 0;
+  font-size: 0.75rem;
+  line-height: 1.125rem;
+  color: var(--privy-color-foreground);
+  font-feature-settings:
+    'calt' 0,
+    'kern' 0;
+  text-align: left;
+`,_=m.span`
+  font-weight: 600;
+`,P=m.span`
+  font-weight: 400;
+`,he=m.button`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+
+  && {
+    padding: 0;
+    color: var(--privy-color-accent);
+    font-size: 0.875rem;
+    font-style: normal;
+    font-weight: 500;
+    line-height: 1.375rem;
+  }
+`,ye={CREDIT_DEBIT_CARD:"Credit / debit card",APPLE_PAY:"Apple Pay",GOOGLE_PAY:"Google Pay",BANK_TRANSFER:"Bank transfer",ACH:"ACH",SEPA:"SEPA",PIX:"PIX"},ge={CREDIT_DEBIT_CARD:t.jsx(w,{size:20}),APPLE_PAY:t.jsx(B,{width:20,height:20}),GOOGLE_PAY:t.jsx(N,{width:20,height:20}),BANK_TRANSFER:t.jsx(f,{size:20}),ACH:t.jsx(f,{size:20}),SEPA:t.jsx(f,{size:20}),PIX:t.jsx(f,{size:20})},xe=e=>ge[e]??t.jsx(w,{size:20});const Ce=({onClose:e,onSelectPaymentMethod:o,quotes:s,isLoading:r})=>t.jsx(x,{showClose:!0,onClose:e,title:"Select payment method",subtitle:"Choose how you'd like to pay",watermark:!0,children:t.jsx(fe,{children:s.map((i,p)=>{return t.jsx(ve,{onClick:()=>o(i),disabled:r,children:t.jsxs(we,{children:[t.jsx(Ae,{children:xe(i.payment_method)}),t.jsx(je,{children:t.jsx(be,{children:(c=i.payment_method,ye[c]??c.replace(/_/g," ").toLowerCase().replace(/^\w/,d=>d.toUpperCase()))})})]})},`${i.provider}-${i.payment_method}-${p}`);var c})})});let fe=m.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: 100%;
+`,ve=m.button`
+  border-color: var(--privy-color-border-default);
+  border-width: 1px;
+  border-radius: var(--privy-border-radius-md);
+  border-style: solid;
+  display: flex;
+
+  && {
+    padding: 1rem 1rem;
+  }
+`,we=m.div`
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  width: 100%;
+`,Ae=m.div`
+  color: var(--privy-color-foreground-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+`,je=m.div`
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.125rem;
+  flex: 1;
+`,be=m.span`
+  color: var(--privy-color-foreground);
+  font-size: 0.875rem;
+  font-weight: 400;
+  line-height: 1.25rem;
+`;const ke=({onClose:e,onContinue:o,onAmountChange:s,onSelectSource:r,onEditSourceAsset:i,onEditPaymentMethod:p,onSelectPaymentMethod:c,onRetry:d,opts:u,state:n,amount:h,selectedQuote:y,quotesWarning:l,quotesErrors:C,quotesCount:A,isLoading:j})=>n.status==="select-amount"?t.jsx(ue,{onClose:e,onContinue:o,onAmountChange:s,onEditSourceAsset:i,onEditPaymentMethod:p,opts:u,amount:h,selectedQuote:y,quotesWarning:l,quotesErrors:C,quotesCount:A,isLoading:j}):n.status==="select-source-asset"?t.jsx(I,{onSelectSource:r,opts:u,isLoading:j}):n.status==="select-payment-method"?t.jsx(Ce,{onClose:e,onSelectPaymentMethod:c,quotes:n.quotes,isLoading:j}):n.status==="provider-confirming"?t.jsx(ne,{onClose:e}):n.status==="provider-error"?t.jsx(ae,{onClose:e,onRetry:d}):n.status==="provider-success"?t.jsx(ie,{onClose:e}):null,Ne={component:()=>{var l;let{onUserCloseViaDialogOrKeybindRef:e}=L(),o=q();if(!o)return null;let{opts:s,state:r,isLoading:i,amount:p,quotesWarning:c,quotesErrors:d,localQuotes:u,localSelectedQuote:n,initialQuotes:h,initialSelectedQuote:y}=o;return e.current=E,t.jsx(ke,{onClose:E,opts:s,state:r,isLoading:i,amount:p,selectedQuote:n??y,quotesWarning:c,quotesErrors:d,quotesCount:((l=u??h)==null?void 0:l.length)??0,onAmountChange:J,onContinue:Z,onSelectSource:re,onEditSourceAsset:te,onEditPaymentMethod:ee,onSelectPaymentMethod:se,onRetry:oe})}};export{Ne as FiatOnrampScreen,Ne as default};

@@ -700,6 +700,7 @@ export function StreamGate() {
   const [gatewayReferenceCopied, setGatewayReferenceCopied] = useState(false)
   const [gatewayReceiptOpening, setGatewayReceiptOpening] = useState(false)
   const [gatewayRestored, setGatewayRestored] = useState(false)
+  const [receiptOpen, setReceiptOpen] = useState(false)
   const gatewayReference = gatewayTx || gatewayReceiptId || ''
   const gatewayTxIsExplorerHash = /^0x[a-fA-F0-9]{64}$/.test(gatewayTx ?? '')
   const gatewayOgExplorer = gatewayReceipt?.og?.ogExplorer
@@ -2009,8 +2010,8 @@ export function StreamGate() {
                   <h3 className="mt-2 text-[18px] font-black text-gray-950 dark:text-white">Enjoying your stream?</h3>
                   <p className="mt-1 text-[12px] leading-5 text-gray-500 dark:text-gray-400">Your feedback helps creators understand what readers value.</p>
                   <div className="mt-4 grid grid-cols-2 gap-2">
-                    <button type="button" onClick={() => updateCreatorReaction('up')} className="rounded-xl bg-blue-600 px-4 py-3 text-[13px] font-black text-white shadow-sm hover:bg-blue-700">Thumbs up</button>
-                    <button type="button" onClick={() => updateCreatorReaction('down')} className="rounded-xl border border-gray-200 px-4 py-3 text-[13px] font-black text-gray-700 hover:bg-gray-50 dark:border-white/10 dark:text-gray-200 dark:hover:bg-white/10">Thumbs down</button>
+                    <button type="button" onClick={() => updateCreatorReaction('up')} className="rounded-xl bg-blue-600 px-4 py-3 text-[16px] font-black text-white shadow-sm hover:bg-blue-700" aria-label="Thumbs up">👍</button>
+                    <button type="button" onClick={() => updateCreatorReaction('down')} className="rounded-xl border border-gray-200 px-4 py-3 text-[16px] font-black text-gray-700 hover:bg-gray-50 dark:border-white/10 dark:text-gray-200 dark:hover:bg-white/10" aria-label="Thumbs down">👎</button>
                   </div>
                   <button type="button" onClick={() => setMidpointPromptOpen(false)} className="mt-3 text-[11px] font-bold text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">Not now</button>
                 </div>
@@ -2130,39 +2131,30 @@ export function StreamGate() {
         )}
 
         {paymentMode === 'x402' && fullyAuthorised && gatewayReference && (
-          <div className="border-t border-gray-100 bg-emerald-50/70 px-4 py-3 space-y-3">
-            <div className="flex items-start gap-2">
-              <span className="mt-0.5 text-emerald-600"><CheckIcon /></span>
+          <div className="border-t border-gray-100 bg-white px-4 py-3 dark:border-white/10 dark:bg-[#111216]">
+            <button
+              type="button"
+              onClick={() => setReceiptOpen(open => !open)}
+              className="flex w-full items-center gap-2 text-left"
+            >
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100 dark:bg-emerald-400/10 dark:ring-emerald-400/20"><CheckIcon /></span>
               <div className="min-w-0 flex-1">
-                <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-700">
+                <p className="text-[11px] font-black uppercase tracking-[0.14em] text-emerald-700 dark:text-emerald-300">
                   {gatewayRestored ? 'Access restored' : 'Content unlocked'}
                 </p>
-                {gatewayRestored && (
-                  <p className="mt-0.5 text-[11px] font-medium leading-4 text-emerald-700/80">
-                    This reader wallet already unlocked this content.
-                  </p>
-                )}
-                <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
-                  <p className="truncate font-mono text-[11px] font-semibold text-emerald-800">
-                    Circle Gateway {gatewayRestored ? 'receipt' : 'paid'} - {gatewayReference.slice(0, 8)}...{gatewayReference.slice(-6)}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      navigator.clipboard?.writeText(gatewayReference).catch(() => {})
-                      setGatewayReferenceCopied(true)
-                      window.setTimeout(() => setGatewayReferenceCopied(false), 1600)
-                    }}
-                    className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-emerald-200 bg-white text-[9px] font-black text-emerald-700 transition-colors hover:bg-emerald-50"
-                    aria-label="Copy Circle Gateway reference"
-                    title="Copy reference"
-                  >
-                    {gatewayReferenceCopied ? 'OK' : 'CP'}
-                  </button>
-                </div>
+                <p className="mt-0.5 truncate font-mono text-[11px] font-semibold text-gray-500 dark:text-gray-400">
+                  Circle Gateway - {gatewayReference.slice(0, 8)}...{gatewayReference.slice(-6)}
+                </p>
               </div>
-            </div>
-            <div className="grid gap-2">
+              <span className="text-[11px] font-black text-gray-400">{receiptOpen ? 'Hide' : 'Details'}</span>
+            </button>
+            {receiptOpen && (
+            <div className="mt-3 grid gap-2 rounded-2xl border border-gray-100 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.03]">
+              {gatewayRestored && (
+                <p className="text-[11px] font-semibold leading-4 text-emerald-700/80 dark:text-emerald-300/80">
+                  This reader wallet already unlocked this content.
+                </p>
+              )}
               {gatewayReceiptId && (
                 <button
                   type="button"
@@ -2226,6 +2218,7 @@ export function StreamGate() {
                 {gatewayReferenceCopied ? 'Reference copied' : 'Copy reference'}
               </button>
             </div>
+            )}
           </div>
         )}
       </div>
@@ -2278,44 +2271,44 @@ function CreatorSocialPanel({
   onCommentReact: (commentId: string, reaction: CreatorReaction, current: CreatorReaction | null) => void
 }) {
   const reactionClass = (active: boolean) => [
-    'inline-flex h-10 items-center justify-center gap-2 rounded-xl border px-3 text-[12px] font-black transition',
+    'inline-flex h-8 min-w-[58px] items-center justify-center gap-1.5 rounded-full border px-2.5 text-[12px] font-black transition',
     active
-      ? 'border-blue-600 bg-blue-600 text-white'
-      : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-white/10 dark:bg-white/5 dark:text-gray-200 dark:hover:bg-white/10',
+      ? 'border-blue-600 bg-blue-600 text-white shadow-sm'
+      : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:bg-gray-50 dark:border-white/10 dark:bg-white/5 dark:text-gray-200 dark:hover:bg-white/10',
   ].join(' ')
 
   return (
-    <div className="rounded-2xl border border-gray-100 bg-gray-50/80 p-4 dark:border-white/10 dark:bg-white/[0.03]">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="rounded-2xl border border-gray-100 bg-white p-3 shadow-[0_10px_30px_rgba(15,23,42,0.04)] dark:border-white/10 dark:bg-white/[0.03]">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <p className="text-[11px] font-black uppercase tracking-[0.16em] text-gray-400">Reader pulse</p>
-          <p className="mt-1 text-[12px] font-semibold text-gray-500 dark:text-gray-400">{loading ? 'Loading reactions...' : 'Tap again to remove your reaction.'}</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-gray-400">Reader pulse</p>
+          <p className="mt-0.5 text-[11px] font-semibold text-gray-500 dark:text-gray-400">{loading ? 'Loading...' : 'Tap again to remove.'}</p>
         </div>
         <div className="flex items-center gap-2">
           <button type="button" onClick={() => onReact('up')} className={reactionClass(social.myReaction === 'up')}>
-            <span>Thumbs up</span>
+            <span aria-hidden="true">👍</span>
             <span>{social.upCount}</span>
           </button>
           <button type="button" onClick={() => onReact('down')} className={reactionClass(social.myReaction === 'down')}>
-            <span>Thumbs down</span>
+            <span aria-hidden="true">👎</span>
             <span>{social.downCount}</span>
           </button>
         </div>
       </div>
 
-      <div className="mt-4 flex gap-2">
+      <div className="mt-3 flex gap-2">
         <input
           value={commentBody}
           onChange={event => onCommentBody(event.target.value)}
           maxLength={800}
           placeholder="Leave a comment"
-          className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-white px-3 py-3 text-[13px] font-semibold text-gray-900 outline-none focus:border-blue-500 dark:border-white/10 dark:bg-[#0b0c0f] dark:text-white"
+          className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-[12px] font-semibold text-gray-900 outline-none focus:border-blue-500 focus:bg-white dark:border-white/10 dark:bg-[#0b0c0f] dark:text-white"
         />
         <button
           type="button"
           onClick={onSubmitComment}
           disabled={commentBody.trim().length < 2}
-          className="rounded-xl bg-gray-950 px-4 py-3 text-[12px] font-black text-white disabled:cursor-not-allowed disabled:bg-gray-300 dark:bg-white dark:text-gray-950 dark:disabled:bg-white/20 dark:disabled:text-white/40"
+          className="rounded-xl bg-gray-950 px-3.5 py-2.5 text-[12px] font-black text-white disabled:cursor-not-allowed disabled:bg-gray-300 dark:bg-white dark:text-gray-950 dark:disabled:bg-white/20 dark:disabled:text-white/40"
         >
           Post
         </button>
@@ -2325,29 +2318,31 @@ function CreatorSocialPanel({
       <button
         type="button"
         onClick={onToggleComments}
-        className="mt-3 flex w-full items-center justify-between rounded-xl border border-gray-200 bg-white px-3 py-3 text-left text-[12px] font-black text-gray-700 dark:border-white/10 dark:bg-white/5 dark:text-gray-200"
+        className="mt-2 flex w-full items-center justify-between rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5 text-left text-[12px] font-black text-gray-700 dark:border-white/10 dark:bg-white/5 dark:text-gray-200"
       >
         <span>Comments</span>
         <span>{social.comments.length}</span>
       </button>
 
       {commentsOpen && (
-        <div className="mt-3 space-y-2">
+        <div className="mt-2 space-y-2">
           {social.comments.length === 0 ? (
-            <p className="rounded-xl bg-white px-3 py-4 text-center text-[12px] font-semibold text-gray-400 dark:bg-white/5">No comments yet.</p>
+            <p className="rounded-xl bg-gray-50 px-3 py-3 text-center text-[12px] font-semibold text-gray-400 dark:bg-white/5">No comments yet.</p>
           ) : social.comments.map(comment => (
-            <div key={comment.id} className="rounded-xl border border-gray-100 bg-white p-3 dark:border-white/10 dark:bg-[#0b0c0f]">
+            <div key={comment.id} className="rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-[#0b0c0f]">
               <div className="flex items-center justify-between gap-2">
                 <p className="font-mono text-[11px] font-bold text-gray-400">{shortAddress(comment.walletAddress)}</p>
                 <p className="text-[10px] font-semibold text-gray-400">{new Date(comment.createdAt).toLocaleDateString()}</p>
               </div>
-              <p className="mt-2 text-[13px] leading-5 text-gray-700 dark:text-gray-300">{comment.body}</p>
-              <div className="mt-3 flex items-center gap-2">
+              <p className="mt-1.5 text-[13px] leading-5 text-gray-700 dark:text-gray-300">{comment.body}</p>
+              <div className="mt-2 flex items-center gap-2">
                 <button type="button" onClick={() => onCommentReact(comment.id, 'up', comment.myReaction)} className={reactionClass(comment.myReaction === 'up')}>
-                  Up {comment.upCount}
+                  <span aria-hidden="true">👍</span>
+                  <span>{comment.upCount}</span>
                 </button>
                 <button type="button" onClick={() => onCommentReact(comment.id, 'down', comment.myReaction)} className={reactionClass(comment.myReaction === 'down')}>
-                  Down {comment.downCount}
+                  <span aria-hidden="true">👎</span>
+                  <span>{comment.downCount}</span>
                 </button>
               </div>
             </div>
