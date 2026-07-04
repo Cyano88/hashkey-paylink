@@ -40,7 +40,7 @@ type CreatorStreamRow = {
   active: boolean
 }
 type CreatorTab = 'discover' | 'create' | 'earnings' | 'streams'
-type CreatorCategory = 'worldcup-news' | 'live-scores' | 'crypto' | 'ebooks'
+type CreatorCategory = 'worldcup-news' | 'live-scores' | 'crypto' | 'ebooks' | 'developers'
 type PublishedContent = {
   id: string
   contentId?: string
@@ -185,6 +185,7 @@ const CREATOR_CATEGORIES: Array<{ id: CreatorCategory; label: string; disabled?:
   { id: 'live-scores', label: 'Live Scores' },
   { id: 'crypto', label: 'Crypto' },
   { id: 'ebooks', label: 'Ebooks' },
+  { id: 'developers', label: 'Developers' },
 ]
 
 function normalizeCreatorCategory(value: unknown): CreatorCategory {
@@ -201,9 +202,10 @@ function interleaveCreatorCards(cards: PublishedContent[]) {
     'live-scores': [],
     crypto: [],
     ebooks: [],
+    developers: [],
   }
   for (const card of cards) buckets[card.category]?.push(card)
-  const order: CreatorCategory[] = ['worldcup-news', 'live-scores', 'crypto', 'ebooks']
+  const order: CreatorCategory[] = ['worldcup-news', 'live-scores', 'crypto', 'ebooks', 'developers']
   const mixed: PublishedContent[] = []
   const maxLength = Math.max(...order.map(category => buckets[category].length))
   for (let index = 0; index < maxLength; index += 1) {
@@ -221,6 +223,7 @@ const OFFICIAL_CREATOR_ADDRESS = (
   || '0x823c31d5e373dd3fa7cad59af05fa45e3858556c'
 )
 const OFFICIAL_WORLD_CUP_SCORES_GATE = `/gate?app=streampay&id=worldcup-scores&cr=${OFFICIAL_CREATOR_ADDRESS}&r=1000&cap=100000&mode=unlock&pay=x402&t=Live%20Scores%20Pulse`
+const OFFICIAL_DEVELOPER_GUIDE_GATE = `/gate?app=streampay&id=developer-terminal-setup&cr=${OFFICIAL_CREATOR_ADDRESS}&r=1000&cap=100000&mode=unlock&pay=choice&ct=text&t=${encodeURIComponent('Before You Build: AI Terminal Setup')}`
 
 const OFFICIAL_DISCOVER_CONTENT: PublishedContent[] = [
   {
@@ -234,6 +237,21 @@ const OFFICIAL_DISCOVER_CONTENT: PublishedContent[] = [
     image: WORLD_GLOBE_IMAGE,
     action: 'create',
     cta: 'Create',
+  },
+  {
+    id: 'developer-terminal-setup',
+    contentId: 'developer-terminal-setup',
+    creator: OFFICIAL_CREATOR_ADDRESS,
+    title: 'Before You Build: AI Terminal Setup',
+    description: 'A first-time builder guide to connecting Claude Code, Codex, GitHub, Vercel, Railway, and Render from one Mac or Windows terminal.',
+    category: 'developers',
+    price: '0.10',
+    tag: 'Developers',
+    source: 'By SHY',
+    image: WORLD_GLOBE_IMAGE,
+    gateLink: OFFICIAL_DEVELOPER_GUIDE_GATE,
+    action: 'gate',
+    cta: 'Unlock guide',
   },
 ]
 
@@ -801,13 +819,13 @@ function DiscoverContent({
   const scoreMatches = [...(scoreFeed?.matches ?? [])].sort((a, b) => Number(isLiveMatch(b)) - Number(isLiveMatch(a)))
   const scoreCards = scoreMatches.slice(0, 16).map(worldCupScoreCard)
   const officialCards = [
-    OFFICIAL_DISCOVER_CONTENT[0],
+    ...OFFICIAL_DISCOVER_CONTENT,
     ...OFFICIAL_EBOOKS,
     ...worldCupNewsCards,
     ...scoreCards,
   ].filter(Boolean) as PublishedContent[]
   const heroCards = [
-    OFFICIAL_DISCOVER_CONTENT[0],
+    ...OFFICIAL_DISCOVER_CONTENT,
     ...OFFICIAL_EBOOKS,
     ...worldCupNewsCards,
     ...scoreCards,

@@ -286,7 +286,124 @@ async function fetchOfficialBookText(gutenbergId: string) {
   throw new Error(lastError || 'Book text unavailable.')
 }
 
+const DEVELOPER_TERMINAL_SETUP_ARTICLE = `
+<p><em>If you are opening a terminal for the first time, this guide is for you.</em> The goal is simple: one Mac or Windows laptop, one terminal, one GitHub identity, and the main AI/deployment tools connected before you start building.</p>
+<h2>What you are setting up</h2>
+<p><strong>Claude Code</strong> is the AI engineer you run in your terminal. <strong>OpenAI Codex</strong> is a second audit brain you can use when you want another model to review the repo. <strong>GitHub</strong> stores your code. <strong>Vercel</strong> is great for frontends. <strong>Railway</strong> is useful for backends, APIs, bots, and databases. <strong>Render</strong> is useful when you want frontend and backend in one hosted service.</p>
+<p>The benefit is speed. Once this is done, a beginner can open a folder, ask Claude Code to build, use Codex to audit, push to GitHub, and deploy from the same terminal without learning five separate dashboards first.</p>
+<h2>Create accounts first</h2>
+<p>Create these accounts before installing tools. Use the same email where possible so browser login and GitHub SSO stay clean.</p>
+<ul>
+  <li><a href="https://claude.ai">Claude</a> - upgrade to Claude Pro or Max if you want Claude Code through your subscription.</li>
+  <li><a href="https://github.com/signup">GitHub</a> - this becomes your public builder identity and repo home.</li>
+  <li><a href="https://vercel.com/signup">Vercel</a> - sign up with GitHub for automatic frontend deploys.</li>
+  <li><a href="https://railway.app">Railway</a> - sign up with GitHub for backend/API deploys.</li>
+  <li><a href="https://render.com">Render</a> - sign up with GitHub for full-stack web services.</li>
+  <li><a href="https://developers.openai.com/codex">OpenAI Codex</a> - add this when you want a second code auditor.</li>
+</ul>
+<h2>Install a code editor</h2>
+<p>Use <a href="https://code.visualstudio.com">VS Code</a> first. It is free, standard, and works on Mac and Windows. <a href="https://cursor.com">Cursor</a> is also useful if you want an AI-native editor, but you do not need it on day one.</p>
+<h2>Open the right terminal</h2>
+<p>On Mac, press Cmd + Space, type Terminal, and open it. On Windows, install Windows Terminal from the Microsoft Store, open it, and start with PowerShell. After Git is installed, Git Bash will also be available inside Windows Terminal.</p>
+<h2>Install Node.js</h2>
+<p>Node gives you <strong>npm</strong>, the package manager used by Claude Code, Vercel CLI, Railway CLI, and many web projects.</p>
+<p>On Mac, install Homebrew from <a href="https://brew.sh">brew.sh</a>, then run:</p>
+<pre><code>brew --version</code></pre>
+<pre><code>brew install node</code></pre>
+<p>On Windows, install the LTS version from <a href="https://nodejs.org">nodejs.org</a>, accept the defaults, then close and reopen your terminal.</p>
+<p>Verify Node and npm:</p>
+<pre><code>node --version</code></pre>
+<pre><code>npm --version</code></pre>
+<p>You want Node 18 or higher.</p>
+<h2>Install Git</h2>
+<p>Git saves versions of your code and lets your AI agent push work to GitHub.</p>
+<p>On Mac, check first:</p>
+<pre><code>git --version</code></pre>
+<p>If it is missing, install it:</p>
+<pre><code>brew install git</code></pre>
+<p>On Windows, install Git from <a href="https://git-scm.com/download/win">git-scm.com/download/win</a> and accept the defaults. Then verify:</p>
+<pre><code>git --version</code></pre>
+<h2>Install Claude Code</h2>
+<p>Use the official <a href="https://docs.anthropic.com/en/docs/claude-code/setup">Claude Code setup guide</a> for the latest installer. Anthropic now recommends native installers for a cleaner setup, especially on Windows.</p>
+<p>After installing, verify:</p>
+<pre><code>claude --version</code></pre>
+<p>Then start Claude Code:</p>
+<pre><code>claude</code></pre>
+<p>Choose the Claude Pro or Max login flow, finish the browser sign-in, then type <code>/exit</code> when you are done. From now on, running <code>claude</code> inside any project folder launches your AI engineer inside that folder.</p>
+<h2>Connect GitHub to the terminal</h2>
+<p>Install the GitHub CLI from <a href="https://cli.github.com">cli.github.com</a>. On Mac with Homebrew:</p>
+<pre><code>brew install gh</code></pre>
+<p>On Windows:</p>
+<pre><code>winget install --id GitHub.cli</code></pre>
+<p>Log in:</p>
+<pre><code>gh auth login</code></pre>
+<p>Pick GitHub.com, HTTPS, and browser login. When it gives you a one-time code, paste it into the browser and authorize. Verify:</p>
+<pre><code>gh auth status</code></pre>
+<p>This is the link that lets Claude Code create repos, commit, and push without you clicking through GitHub every time.</p>
+<h2>Add Codex as a second auditor</h2>
+<p><em>You can skip this until your first project is working.</em> When ready, install Codex from the official <a href="https://developers.openai.com/codex">OpenAI Codex docs</a>. Package names and recommended surfaces can change, so use the current OpenAI page instead of copying an old command from a random guide.</p>
+<p>A strong workflow is: Claude Code builds, Codex audits, Claude Code fixes. Ask Codex: <em>audit this repo for bugs, broken flows, dead code, and security risks.</em> Then paste the report back to Claude Code.</p>
+<h2>Connect Vercel for frontends</h2>
+<p>Vercel is usually the fastest home for landing pages and React frontends. Install the CLI from the official <a href="https://vercel.com/docs/cli">Vercel CLI docs</a>. With npm:</p>
+<pre><code>npm install -g vercel</code></pre>
+<p>Log in:</p>
+<pre><code>vercel login</code></pre>
+<p>Deploy from a project folder:</p>
+<pre><code>vercel</code></pre>
+<p>After the first setup, GitHub pushes can trigger deploys automatically from the Vercel dashboard.</p>
+<h2>Connect Railway for APIs and databases</h2>
+<p>Railway is useful when your app has a backend, API, bot, worker, cron, or database. Install from the official <a href="https://docs.railway.com/reference/cli-api">Railway CLI docs</a>. With npm:</p>
+<pre><code>npm install -g @railway/cli</code></pre>
+<p>Log in:</p>
+<pre><code>railway login</code></pre>
+<p>Inside a project, link it to a Railway service:</p>
+<pre><code>railway link</code></pre>
+<p>Deploy:</p>
+<pre><code>railway up</code></pre>
+<h2>Connect Render for full-stack services</h2>
+<p>Render is mostly dashboard-driven. Create the account with GitHub, then create a Web Service from a GitHub repo. Set build and start commands in the Render dashboard, then add environment variables there. Keep the official <a href="https://render.com/docs">Render docs</a> open for the service type you are deploying.</p>
+<p>For beginners: use Vercel for frontend-only projects, Railway for backend-heavy projects, and Render when one service needs to run both frontend and backend together.</p>
+<h2>Your daily build loop</h2>
+<p>Once the setup is done, every project starts the same way:</p>
+<pre><code>mkdir -p ~/projects/my-new-build</code></pre>
+<pre><code>cd ~/projects/my-new-build</code></pre>
+<pre><code>claude</code></pre>
+<p>Then speak plainly: <em>Build the first version, initialize git, create a private GitHub repo with gh, push it, and tell me the repo URL.</em></p>
+<p>When the feature works, run a second pass: <em>Audit the codebase for broken flows, mobile issues, missing error states, and deploy risks.</em> If you also use Codex, ask it the same thing and compare both reports.</p>
+<h2>Security rules</h2>
+<ul>
+  <li>Never paste API keys, bearer tokens, private keys, seed phrases, or production secrets into any AI chat.</li>
+  <li>Put secrets in Vercel, Railway, or Render environment variables. Do not hardcode them.</li>
+  <li>Make sure <code>.env</code> is in <code>.gitignore</code> before your first commit.</li>
+  <li>Use GitHub SSO in your real browser for hosting accounts.</li>
+  <li>Back up local <code>.env</code> files in a password manager.</li>
+  <li>Rotate keys often during hackathons and live testing.</li>
+</ul>
+<h2>Ready state</h2>
+<p>You are ready to build when <code>node --version</code>, <code>npm --version</code>, <code>git --version</code>, <code>claude --version</code>, and <code>gh auth status</code> all work in one terminal.</p>
+<p>That is the real beginner unlock. Not a hello-world demo. A working local command center where AI, code, GitHub, and deployment all meet.</p>
+<p><em>By SHY.</em></p>
+`.trim()
+
 const OFFICIAL_CONTENT: Record<string, ContentEntry> = {
+  'developer-terminal-setup': {
+    type: 'text',
+    content: DEVELOPER_TERMINAL_SETUP_ARTICLE,
+    creator: SAFE_OFFICIAL_CREATOR,
+    capRaw: Number(process.env.CREATOR_DEVELOPER_GUIDE_PRICE_RAW ?? '100000'),
+    rateRaw: 1000,
+    mode: 'unlock',
+    title: 'Before You Build: AI Terminal Setup',
+    description: 'A first-time builder guide to connecting Claude Code, Codex, GitHub, Vercel, Railway, and Render from one Mac or Windows terminal.',
+    authorName: 'SHY',
+    xHandle: 'Hash_PayLink',
+    coverImage: '/brand/world-globe.png',
+    category: 'developers',
+    reviewStatus: 'approved',
+    reviewedAt: Date.now(),
+    reviewNote: 'Developer setup',
+    ts: Date.now(),
+  },
   'worldcup-news': {
     type: 'url',
     content: OFFICIAL_WORLD_CUP_NEWS_URL,
@@ -672,7 +789,7 @@ function cleanCategory(value: unknown) {
   if (category === 'news') return 'worldcup-news'
   if (category === 'sports') return 'live-scores'
   if (category === 'general') return 'crypto'
-  return ['worldcup-news', 'live-scores', 'ebooks', 'crypto'].includes(category) ? category : 'crypto'
+  return ['worldcup-news', 'live-scores', 'ebooks', 'crypto', 'developers'].includes(category) ? category : 'crypto'
 }
 
 function baseUrl() {

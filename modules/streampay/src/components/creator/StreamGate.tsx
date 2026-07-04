@@ -153,7 +153,7 @@ function todayMatchdayKey() {
   return new Date().toISOString().slice(0, 10)
 }
 
-const ALLOWED_ARTICLE_TAGS = new Set(['P', 'BR', 'STRONG', 'B', 'EM', 'I', 'U', 'H2', 'H3', 'BLOCKQUOTE', 'UL', 'OL', 'LI', 'A'])
+const ALLOWED_ARTICLE_TAGS = new Set(['P', 'BR', 'STRONG', 'B', 'EM', 'I', 'U', 'H2', 'H3', 'BLOCKQUOTE', 'UL', 'OL', 'LI', 'A', 'CODE', 'PRE'])
 
 function sanitizeArticleHtml(input: string) {
   if (typeof window === 'undefined') return input
@@ -205,6 +205,34 @@ function sanitizeArticleHtml(input: string) {
     if (cleaned) output.appendChild(cleaned)
   })
   return output.innerHTML
+}
+
+function showCopyToast(message: string) {
+  if (typeof document === 'undefined') return
+  const existing = document.getElementById('creator-code-copy-toast')
+  if (existing) existing.remove()
+  const toast = document.createElement('div')
+  toast.id = 'creator-code-copy-toast'
+  toast.textContent = message
+  toast.style.cssText = [
+    'position:fixed',
+    'left:50%',
+    'bottom:22px',
+    'transform:translateX(-50%)',
+    'z-index:9999',
+    'max-width:calc(100vw - 32px)',
+    'border-radius:10px',
+    'background:#111827',
+    'color:#fff',
+    'box-shadow:0 16px 40px rgba(15,23,42,.18)',
+    'font:600 12px/1.2 system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif',
+    'padding:10px 12px',
+    'white-space:nowrap',
+    'overflow:hidden',
+    'text-overflow:ellipsis',
+  ].join(';')
+  document.body.appendChild(toast)
+  window.setTimeout(() => toast.remove(), 1400)
 }
 
 function cleanEmail(value: string) {
@@ -1810,7 +1838,14 @@ export function StreamGate() {
             )}
             <div className="max-h-[480px] overflow-y-auto pr-1">
               <div
-                className="text-[14px] leading-7 text-gray-700 [&_a]:font-semibold [&_a]:text-blue-600 [&_blockquote]:my-4 [&_blockquote]:border-l-2 [&_blockquote]:border-gray-300 [&_blockquote]:pl-3 [&_blockquote]:text-gray-500 [&_h2]:mb-2 [&_h2]:mt-5 [&_h2]:text-[18px] [&_h2]:font-black [&_h3]:mb-2 [&_h3]:mt-4 [&_h3]:text-[16px] [&_h3]:font-bold [&_li]:ml-5 [&_li]:list-disc [&_p]:mb-3 [&_strong]:font-black"
+                className="text-[14px] leading-7 text-gray-700 dark:text-gray-300 [&_a]:font-semibold [&_a]:text-blue-600 dark:[&_a]:text-blue-300 [&_blockquote]:my-4 [&_blockquote]:border-l-2 [&_blockquote]:border-gray-300 dark:[&_blockquote]:border-white/20 [&_blockquote]:pl-3 [&_blockquote]:text-gray-500 dark:[&_blockquote]:text-gray-400 [&_code]:cursor-pointer [&_code]:rounded-md [&_code]:bg-gray-100 dark:[&_code]:bg-white/10 [&_code]:px-2 [&_code]:py-1 [&_code]:font-mono [&_code]:text-[12px] [&_code]:font-semibold [&_code]:text-gray-900 dark:[&_code]:text-white [&_em]:italic [&_h2]:mb-2 [&_h2]:mt-5 [&_h2]:text-[18px] [&_h2]:font-black [&_h2]:text-gray-950 dark:[&_h2]:text-white [&_h3]:mb-2 [&_h3]:mt-4 [&_h3]:text-[16px] [&_h3]:font-bold [&_h3]:text-gray-900 dark:[&_h3]:text-gray-100 [&_li]:ml-5 [&_li]:list-disc [&_p]:mb-3 [&_pre]:mb-3 [&_pre]:overflow-x-auto [&_pre]:rounded-xl [&_pre]:bg-gray-950 [&_pre]:p-3 [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:text-gray-50 [&_strong]:font-black"
+                onClick={async event => {
+                  const code = (event.target as HTMLElement).closest('code')
+                  const value = code?.textContent?.trim()
+                  if (!value || !navigator.clipboard) return
+                  await navigator.clipboard.writeText(value).catch(() => undefined)
+                  showCopyToast(`Copied: ${value.length > 42 ? `${value.slice(0, 39)}...` : value}`)
+                }}
                 dangerouslySetInnerHTML={{ __html: sanitizeArticleHtml(fetchedContent.content) }}
               />
             </div>

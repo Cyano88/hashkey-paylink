@@ -12,7 +12,7 @@ import {
 import { PRIVY_AUTH_ENABLED } from '../../../../../src/lib/authMode'
 
 const ARC_CHAIN_ID = 5042002
-type CreatorCategory = 'worldcup-news' | 'live-scores' | 'ebooks' | 'crypto'
+type CreatorCategory = 'worldcup-news' | 'live-scores' | 'ebooks' | 'crypto' | 'developers'
 type CreatorReviewStatus = 'pending' | 'approved' | 'rejected'
 
 const CREATOR_CATEGORIES: Array<{ id: CreatorCategory; label: string; disabled?: boolean }> = [
@@ -20,6 +20,7 @@ const CREATOR_CATEGORIES: Array<{ id: CreatorCategory; label: string; disabled?:
   { id: 'live-scores', label: 'Live Scores' },
   { id: 'crypto', label: 'Crypto' },
   { id: 'ebooks', label: 'Ebooks' },
+  { id: 'developers', label: 'Developers' },
 ]
 
 const COVER_MAX_DATA_URL_BYTES = 28_000
@@ -122,7 +123,7 @@ function emailFromPrivyUser(user: unknown) {
   return ''
 }
 
-const ALLOWED_ARTICLE_TAGS = new Set(['P', 'BR', 'STRONG', 'B', 'EM', 'I', 'U', 'H2', 'H3', 'BLOCKQUOTE', 'UL', 'OL', 'LI', 'A'])
+const ALLOWED_ARTICLE_TAGS = new Set(['P', 'BR', 'STRONG', 'B', 'EM', 'I', 'U', 'H2', 'H3', 'BLOCKQUOTE', 'UL', 'OL', 'LI', 'A', 'CODE', 'PRE'])
 
 function sanitizeArticleHtml(input: string) {
   if (typeof window === 'undefined') return input
