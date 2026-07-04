@@ -195,6 +195,26 @@ function normalizeCreatorCategory(value: unknown): CreatorCategory {
   return CREATOR_CATEGORIES.some(item => item.id === category) ? category as CreatorCategory : 'crypto'
 }
 
+function interleaveCreatorCards(cards: PublishedContent[]) {
+  const buckets: Record<CreatorCategory, PublishedContent[]> = {
+    'worldcup-news': [],
+    'live-scores': [],
+    crypto: [],
+    ebooks: [],
+  }
+  for (const card of cards) buckets[card.category]?.push(card)
+  const order: CreatorCategory[] = ['worldcup-news', 'live-scores', 'crypto', 'ebooks']
+  const mixed: PublishedContent[] = []
+  const maxLength = Math.max(...order.map(category => buckets[category].length))
+  for (let index = 0; index < maxLength; index += 1) {
+    for (const category of order) {
+      const card = buckets[category][index]
+      if (card) mixed.push(card)
+    }
+  }
+  return mixed
+}
+
 const OFFICIAL_CREATOR_ADDRESS = (
   import.meta.env.VITE_CREATOR_OFFICIAL_WALLET
   || import.meta.env.VITE_DEFAULT_AGENT_WALLET_ADDRESS
@@ -795,8 +815,8 @@ function DiscoverContent({
     ...approvedPosts,
   ].filter(card => categoryFilter === 'all' || card.category === categoryFilter)
   const allCards = [...officialCards, ...approvedSessionPosts, ...approvedPosts]
-  const cards = allCards
-    .filter(card => categoryFilter === 'all' || card.category === categoryFilter)
+  const filteredCards = allCards.filter(card => categoryFilter === 'all' || card.category === categoryFilter)
+  const cards = (categoryFilter === 'all' ? interleaveCreatorCards(filteredCards) : filteredCards)
     .slice(0, 8)
   const hero = heroCards[heroIndex % Math.max(heroCards.length, 1)] || published[0] || OFFICIAL_DISCOVER_CONTENT[0]
   const heroIsScores = Boolean(hero.match)
