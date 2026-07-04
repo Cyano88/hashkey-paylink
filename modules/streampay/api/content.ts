@@ -43,7 +43,7 @@ const ERC1271_ABI = parseAbi([
 const ERC1271_MAGIC_VALUE = '0x1626ba7e'
 
 type ContentEntry = {
-  type: 'text' | 'url' | 'scores'
+  type: 'text' | 'url' | 'scores' | 'book'
   content: string
   creator: string
   capRaw: number
@@ -136,6 +136,7 @@ const OFFICIAL_EBOOKS: Array<{
   description: string
   tag: string
   identifier: string
+  gutenbergId: string
 }> = [
   {
     id: 'ebook-pride-prejudice',
@@ -143,6 +144,7 @@ const OFFICIAL_EBOOKS: Array<{
     description: 'A sharp romance about love, class, first impressions, and second chances.',
     tag: 'Romance',
     identifier: 'ISBN:9780141439518',
+    gutenbergId: '1342',
   },
   {
     id: 'ebook-dracula',
@@ -150,6 +152,7 @@ const OFFICIAL_EBOOKS: Array<{
     description: 'A gothic horror classic with journals, letters, pursuit, and dread.',
     tag: 'Horror',
     identifier: 'ISBN:9780486411095',
+    gutenbergId: '345',
   },
   {
     id: 'ebook-frankenstein',
@@ -157,6 +160,7 @@ const OFFICIAL_EBOOKS: Array<{
     description: 'A tragic creation story about ambition, loneliness, and responsibility.',
     tag: 'Tragedy',
     identifier: 'ISBN:9780486282114',
+    gutenbergId: '84',
   },
   {
     id: 'ebook-sherlock-adventures',
@@ -164,6 +168,7 @@ const OFFICIAL_EBOOKS: Array<{
     description: 'Brisk detective mysteries built around deduction, disguise, and suspense.',
     tag: 'Mystery',
     identifier: 'ISBN:9780486474915',
+    gutenbergId: '1661',
   },
   {
     id: 'ebook-jane-eyre',
@@ -171,6 +176,7 @@ const OFFICIAL_EBOOKS: Array<{
     description: 'A passionate coming-of-age romance with secrets, independence, and moral tension.',
     tag: 'Love',
     identifier: 'ISBN:9780141441146',
+    gutenbergId: '1260',
   },
   {
     id: 'ebook-wuthering-heights',
@@ -178,6 +184,7 @@ const OFFICIAL_EBOOKS: Array<{
     description: 'A stormy tale of obsession, revenge, and destructive love.',
     tag: 'Drama',
     identifier: 'ISBN:9780141439556',
+    gutenbergId: '768',
   },
   {
     id: 'ebook-dorian-gray',
@@ -185,6 +192,7 @@ const OFFICIAL_EBOOKS: Array<{
     description: 'A stylish psychological thriller about beauty, vanity, and consequence.',
     tag: 'Thriller',
     identifier: 'ISBN:9780141439570',
+    gutenbergId: '174',
   },
   {
     id: 'ebook-alice-wonderland',
@@ -192,6 +200,7 @@ const OFFICIAL_EBOOKS: Array<{
     description: 'A funny, strange, endlessly imaginative trip through nonsense and wonder.',
     tag: 'Funny',
     identifier: 'ISBN:9780486275437',
+    gutenbergId: '11',
   },
   {
     id: 'ebook-frederick-douglass',
@@ -199,6 +208,7 @@ const OFFICIAL_EBOOKS: Array<{
     description: 'A true-life account of survival, literacy, freedom, and moral courage.',
     tag: 'True Life',
     identifier: 'ISBN:9780486284996',
+    gutenbergId: '23',
   },
   {
     id: 'ebook-time-machine',
@@ -206,11 +216,74 @@ const OFFICIAL_EBOOKS: Array<{
     description: 'A compact sci-fi adventure through futurism, fear, and social collapse.',
     tag: 'Sci-Fi',
     identifier: 'ISBN:9780486284729',
+    gutenbergId: '35',
   },
 ]
 
 function openLibraryCover(isbn: string) {
   return `https://covers.openlibrary.org/b/isbn/${encodeURIComponent(isbn.replace(/^ISBN:/i, ''))}-L.jpg`
+}
+
+const OFFICIAL_EBOOK_BY_ID = new Map(OFFICIAL_EBOOKS.map(book => [book.id, book]))
+const bookCache = new Map<string, { ts: number; text: string }>()
+const BOOK_CACHE_MS = 12 * 60 * 60 * 1000
+const MAX_BOOK_TEXT_LENGTH = 180_000
+
+function cleanGutenbergText(text: string) {
+  let output = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+  const startPatterns = [
+    /\*\*\*\s*START OF (?:THE|THIS) PROJECT GUTENBERG EBOOK[^\n]*\*\*\*/i,
+    /\*\*\*\s*START OF THE PROJECT GUTENBERG EBOOK[^\n]*\*\*\*/i,
+  ]
+  for (const pattern of startPatterns) {
+    const match = output.match(pattern)
+    if (match?.index !== undefined) {
+      output = output.slice(match.index + match[0].length)
+      break
+    }
+  }
+  const endPatterns = [
+    /\*\*\*\s*END OF (?:THE|THIS) PROJECT GUTENBERG EBOOK[\s\S]*$/i,
+    /\*\*\*\s*END OF THE PROJECT GUTENBERG EBOOK[\s\S]*$/i,
+  ]
+  for (const pattern of endPatterns) output = output.replace(pattern, '')
+  return output
+    .replace(/\n{4,}/g, '\n\n\n')
+    .trim()
+    .slice(0, MAX_BOOK_TEXT_LENGTH)
+}
+
+async function fetchOfficialBookText(gutenbergId: string) {
+  const cached = bookCache.get(gutenbergId)
+  if (cached && Date.now() - cached.ts < BOOK_CACHE_MS) return cached.text
+  const urls = [
+    `https://www.gutenberg.org/files/${gutenbergId}/${gutenbergId}-0.txt`,
+    `https://www.gutenberg.org/files/${gutenbergId}/${gutenbergId}.txt`,
+    `https://www.gutenberg.org/cache/epub/${gutenbergId}/pg${gutenbergId}.txt`,
+  ]
+  let lastError = ''
+  for (const url of urls) {
+    try {
+      const response = await fetch(url, {
+        headers: {
+          'User-Agent': 'HashpayStream reader (public-domain book rendering)',
+          Accept: 'text/plain,*/*;q=0.8',
+        },
+      })
+      if (!response.ok) {
+        lastError = `${response.status} ${response.statusText}`.trim()
+        continue
+      }
+      const text = cleanGutenbergText(await response.text())
+      if (text.length > 500) {
+        bookCache.set(gutenbergId, { ts: Date.now(), text })
+        return text
+      }
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : String(err)
+    }
+  }
+  throw new Error(lastError || 'Book text unavailable.')
 }
 
 const OFFICIAL_CONTENT: Record<string, ContentEntry> = {
@@ -251,15 +324,15 @@ const OFFICIAL_CONTENT: Record<string, ContentEntry> = {
     ts: Date.now(),
   },
   ...Object.fromEntries(OFFICIAL_EBOOKS.map((book, index) => [book.id, {
-    type: 'url' as const,
-    content: book.identifier,
+    type: 'book' as const,
+    content: `gutenberg:${book.gutenbergId}`,
     creator: SAFE_OFFICIAL_CREATOR,
     capRaw: Number(process.env.CREATOR_EBOOK_PRICE_RAW ?? '100000'),
     rateRaw: 1000,
     mode: 'unlock' as const,
     title: book.title,
     description: book.description,
-    authorName: 'Google Books Preview',
+    authorName: 'Public Domain Reader',
     xHandle: 'Hash_PayLink',
     coverImage: openLibraryCover(book.identifier),
     category: 'ebooks',
@@ -1234,4 +1307,25 @@ export async function listCreatorEarnings(req: Request, res: Response) {
     .filter(Boolean)
     .sort((a, b) => (b?.unlockedAt ?? 0) - (a?.unlockedAt ?? 0))
   return res.json({ ok: true, fixedUnlocks: rows })
+}
+
+export async function getCreatorBook(req: Request, res: Response) {
+  const id = String(req.query.id ?? '').trim()
+  const book = OFFICIAL_EBOOK_BY_ID.get(id)
+  if (!book) return res.status(404).json({ ok: false, error: 'Book not found.' })
+  try {
+    const text = await fetchOfficialBookText(book.gutenbergId)
+    return res.status(200).json({
+      ok: true,
+      id,
+      title: book.title,
+      description: book.description,
+      source: 'Project Gutenberg public domain text',
+      gutenbergId: book.gutenbergId,
+      text,
+    })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Book text unavailable.'
+    return res.status(502).json({ ok: false, error: message.slice(0, 180) })
+  }
 }

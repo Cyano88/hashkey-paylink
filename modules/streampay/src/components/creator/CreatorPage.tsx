@@ -261,9 +261,9 @@ const OFFICIAL_EBOOKS: PublishedContent[] = [
   category: 'ebooks' as CreatorCategory,
   price: '0.10',
   tag,
-  source: 'Google Books Preview',
+  source: 'Public Domain Reader',
   image: openLibraryCover(isbn),
-  gateLink: `/gate?app=streampay&id=${id}&cr=${OFFICIAL_CREATOR_ADDRESS}&r=1000&cap=100000&mode=unlock&pay=choice&ct=text&t=${encodeURIComponent(title)}`,
+  gateLink: `/gate?app=streampay&id=${id}&cr=${OFFICIAL_CREATOR_ADDRESS}&r=1000&cap=100000&mode=unlock&pay=choice&ct=book&t=${encodeURIComponent(title)}`,
   action: 'gate' as const,
   cta: 'Unlock book',
 }))

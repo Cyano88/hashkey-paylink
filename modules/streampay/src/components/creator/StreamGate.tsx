@@ -36,21 +36,8 @@ const ERC20_ABI = parseAbi([
   'function approve(address spender, uint256 amount) returns (bool)',
 ])
 
-type FetchedContent = { type: 'text' | 'url' | 'scores'; content: string }
+type FetchedContent = { type: 'text' | 'url' | 'scores' | 'book'; content: string }
 type ContentState   = 'idle' | 'loading' | 'ready' | 'error'
-declare global {
-  interface Window {
-    google?: {
-      books?: {
-        load: (opts?: Record<string, unknown>) => void
-        setOnLoadCallback: (callback: () => void) => void
-        DefaultViewer: new (container: HTMLElement) => {
-          load: (identifier: string, notFoundCallback?: () => void, successCallback?: () => void) => void
-        }
-      }
-    }
-  }
-}
 type WorldCupScoreMatch = {
   fixtureId?: string
   tag: string
@@ -107,53 +94,6 @@ type AgentOption = AgentProfile & {
 }
 type UnlockStep = 'intro' | 'choose' | 'email' | 'otp' | 'fund'
 const CREATOR_X402_GATEWAY_LABEL = 'Arc Testnet'
-
-let googleBooksScriptPromise: Promise<void> | null = null
-
-function googleBookIdentifier(value: string) {
-  const text = String(value || '').trim()
-  if (/^ISBN:\d{10,13}$/i.test(text)) return text.toUpperCase()
-  if (/^\d{10,13}$/.test(text)) return `ISBN:${text}`
-  try {
-    const url = new URL(text)
-    if (!/\.google\.[^/]+$/.test(url.hostname) && !url.hostname.includes('books.google.')) return ''
-    const id = url.searchParams.get('id')
-    if (id) return text
-    const isbn = url.searchParams.get('isbn') || url.searchParams.get('vid')?.replace(/^ISBN/i, '')
-    if (isbn && /^\d{10,13}$/.test(isbn)) return `ISBN:${isbn}`
-    return text
-  } catch {
-    return ''
-  }
-}
-
-function googleBooksFallbackUrl(identifier: string) {
-  const clean = identifier.replace(/^ISBN:/i, '').trim()
-  if (/^\d{10,13}$/.test(clean)) return `https://books.google.com/books?vid=ISBN${encodeURIComponent(clean)}`
-  return `https://books.google.com/books?q=${encodeURIComponent(clean)}`
-}
-
-function loadGoogleBooksScript() {
-  if (window.google?.books?.DefaultViewer) return Promise.resolve()
-  if (googleBooksScriptPromise) return googleBooksScriptPromise
-  googleBooksScriptPromise = new Promise((resolve, reject) => {
-    const existing = document.querySelector<HTMLScriptElement>('script[src="https://www.google.com/books/jsapi.js"]')
-    const script = existing || document.createElement('script')
-    script.src = 'https://www.google.com/books/jsapi.js'
-    script.async = true
-    script.onload = () => {
-      try {
-        window.google?.books?.load()
-        window.google?.books?.setOnLoadCallback(resolve)
-      } catch (err) {
-        reject(err)
-      }
-    }
-    script.onerror = () => reject(new Error('Google Books viewer could not load.'))
-    if (!existing) document.head.appendChild(script)
-  })
-  return googleBooksScriptPromise
-}
 
 function hasWorldCupScore(match: WorldCupScoreMatch) {
   const home = String(match.homeScore ?? '').trim().toLowerCase()
@@ -440,9 +380,10 @@ export function StreamGate() {
   const capRaw    = parseInt(params.get('cap') ?? '100000', 10)
   const title     = params.get('t')    ?? ''
   const requestedGateMode: 'unlock' | 'stream' = params.get('mode') === 'stream' ? 'stream' : 'unlock'
-  const contentKind: 'text' | 'url' | 'scores' | 'unknown' =
+  const contentKind: 'text' | 'url' | 'scores' | 'book' | 'unknown' =
     params.get('ct') === 'url' ? 'url' :
     params.get('ct') === 'scores' ? 'scores' :
+    params.get('ct') === 'book' ? 'book' :
     params.get('ct') === 'text' ? 'text' :
     'unknown'
   const streamContentAvailable = contentKind !== 'url'
@@ -827,7 +768,7 @@ export function StreamGate() {
         code?: string
       }
       if (!data.ok || !data.type || !data.content) throw new Error(data.error ?? 'Could not unlock content')
-      setFetchedContent({ type: data.type as 'text' | 'url' | 'scores', content: data.content })
+      setFetchedContent({ type: data.type as FetchedContent['type'], content: data.content })
       setGatewayTx(data.payment?.transaction ?? null)
       setGatewayReceiptId(data.receiptActivityId ?? null)
       setGatewayRestored(Boolean(data.restored))
@@ -1174,7 +1115,7 @@ export function StreamGate() {
       .then(r => r.json())
       .then((data: { ok: boolean; type?: string; content?: string; error?: string }) => {
         if (data.ok && data.type && data.content) {
-          setFetchedContent({ type: data.type as 'text' | 'url' | 'scores', content: data.content })
+          setFetchedContent({ type: data.type as FetchedContent['type'], content: data.content })
           setContentState('ready')
         } else {
           setContentError(data.error ?? 'Could not retrieve content')
@@ -1191,7 +1132,7 @@ export function StreamGate() {
       .then(r => r.json())
       .then((data: { ok: boolean; type?: string; content?: string; error?: string }) => {
         if (data.ok && data.type && data.content) {
-          setFetchedContent({ type: data.type as 'text' | 'url' | 'scores', content: data.content })
+          setFetchedContent({ type: data.type as FetchedContent['type'], content: data.content })
           setContentState('ready')
         } else {
           setContentError(data.error ?? 'Could not verify nano meter')
@@ -1877,10 +1818,12 @@ export function StreamGate() {
         )}
 
         {/* ── Private URL — reveal button ── */}
+        {fullyAuthorised && contentState === 'ready' && fetchedContent?.type === 'book' && (
+          <BookUnlocked contentId={contentId} title={title} />
+        )}
+
         {fullyAuthorised && contentState === 'ready' && fetchedContent?.type === 'url' && (
-          googleBookIdentifier(fetchedContent.content)
-            ? <GoogleBookUnlocked title={title} identifier={googleBookIdentifier(fetchedContent.content)} />
-            : <div className="p-6 space-y-4 text-center">
+          <div className="p-6 space-y-4 text-center">
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50 border border-emerald-100">
               <svg className="h-5 w-5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
@@ -2109,74 +2052,71 @@ export function StreamGate() {
 
 // ── Shared overlay shell ──────────────────────────────────────────────────────
 
-function GoogleBookUnlocked({ title, identifier }: { title: string; identifier: string }) {
-  const viewerRef = useRef<HTMLDivElement | null>(null)
-  const [status, setStatus] = useState<'loading' | 'ready' | 'fallback'>('loading')
-  const [message, setMessage] = useState('Loading book preview...')
+function BookUnlocked({ contentId, title }: { contentId: string; title: string }) {
+  const [book, setBook] = useState<{ title?: string; source?: string; text?: string } | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
   useEffect(() => {
     let cancelled = false
-    setStatus('loading')
-    setMessage('Loading book preview...')
-    loadGoogleBooksScript()
-      .then(() => {
-        if (cancelled || !viewerRef.current || !window.google?.books?.DefaultViewer) return
-        const viewer = new window.google.books.DefaultViewer(viewerRef.current)
-        viewer.load(
-          identifier,
-          () => {
-            if (cancelled) return
-            setStatus('fallback')
-            setMessage('This book preview is not embeddable here. You can still open it on Google Books.')
-          },
-          () => {
-            if (cancelled) return
-            setStatus('ready')
-            setMessage('')
-          },
-        )
+    setLoading(true)
+    setError('')
+    fetch(`/api/creator-book?id=${encodeURIComponent(contentId)}`)
+      .then(async response => {
+        const data = await response.json().catch(() => ({})) as { ok?: boolean; error?: string; title?: string; source?: string; text?: string }
+        if (!response.ok || !data.ok || !data.text) throw new Error(data.error || 'Book could not load.')
+        if (!cancelled) setBook(data)
       })
-      .catch(() => {
-        if (cancelled) return
-        setStatus('fallback')
-        setMessage('Google Books preview could not load in this browser.')
+      .catch(err => {
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Book could not load.')
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
       })
     return () => {
       cancelled = true
     }
-  }, [identifier])
+  }, [contentId])
+
+  const paragraphs = (book?.text || '')
+    .split(/\n{2,}/)
+    .map(item => item.trim())
+    .filter(Boolean)
+    .slice(0, 260)
 
   return (
-    <div className="space-y-3 p-4">
+    <div className="space-y-3 p-4 sm:p-5">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-blue-500">Unlocked Book</p>
-          {title && <h2 className="mt-1 line-clamp-2 text-[16px] font-black leading-snug text-gray-950 dark:text-white">{title}</h2>}
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-blue-500">Unlocked Book</p>
+          <h2 className="mt-1 text-[18px] font-black leading-snug text-gray-950 dark:text-white">{book?.title || title || 'Book reader'}</h2>
+          <p className="mt-1 text-[11px] font-semibold text-gray-400">{book?.source || 'Public domain reader'}</p>
         </div>
-        <button
-          type="button"
-          onClick={() => window.open(googleBooksFallbackUrl(identifier), '_blank', 'noopener,noreferrer')}
-          className="shrink-0 rounded-xl border border-gray-200 px-3 py-2 text-[11px] font-black text-gray-700 transition-colors hover:bg-gray-50 dark:border-white/10 dark:text-gray-200 dark:hover:bg-white/[0.06]"
-        >
-          Open
-        </button>
       </div>
-      {status !== 'ready' && (
-        <div className="rounded-2xl border border-blue-100 bg-blue-50 px-3 py-2 text-[12px] font-semibold text-blue-700 dark:border-blue-400/20 dark:bg-blue-500/10 dark:text-blue-200">
-          {message}
+
+      {loading && (
+        <div className="flex items-center justify-center gap-2 rounded-2xl border border-gray-100 bg-gray-50 py-12 text-[12px] font-semibold text-gray-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-300">
+          <Spinner />
+          Loading book
         </div>
       )}
-      <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-[#111216]">
-        <div ref={viewerRef} className="h-[560px] w-full min-w-0 sm:h-[640px]" />
-      </div>
-      {status === 'fallback' && (
-        <button
-          type="button"
-          onClick={() => window.open(googleBooksFallbackUrl(identifier), '_blank', 'noopener,noreferrer')}
-          className="flex w-full items-center justify-center rounded-xl bg-gray-950 py-3 text-[13px] font-black text-white transition-transform active:scale-[0.98]"
-        >
-          View on Google Books
-        </button>
+
+      {!loading && error && (
+        <div className="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-[12px] font-semibold text-amber-700 dark:border-amber-400/20 dark:bg-amber-500/10 dark:text-amber-200">
+          {error}
+        </div>
+      )}
+
+      {!loading && !error && (
+        <div className="max-h-[620px] overflow-y-auto rounded-2xl border border-gray-100 bg-white px-4 py-5 shadow-sm dark:border-white/10 dark:bg-[#111216] sm:px-5">
+          <div className="space-y-4 text-[14px] leading-7 text-gray-700 dark:text-gray-200">
+            {paragraphs.map((paragraph, index) => (
+              <p key={`${contentId}-${index}`} className={index === 0 ? 'font-semibold text-gray-900 dark:text-white' : undefined}>
+                {paragraph}
+              </p>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   )

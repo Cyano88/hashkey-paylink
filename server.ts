@@ -31,6 +31,7 @@ import {
   listApprovedCreatorContent,
   listCreatorAdminContent,
   listCreatorEarnings,
+  getCreatorBook,
   reviewCreatorContent,
   unlockContentX402WithAgent,
 } from './modules/streampay/api/content.js'
@@ -205,6 +206,7 @@ app.post('/api/agent-governance',      strictLimiter, agentGovernanceHandler)
 app.get('/api/agent-legal-profile',    readLimiter, agentLegalProfileHandler)
 app.get('/api/poly-worldcup-news',      readLimiter, polyWorldcupNewsHandler)
 app.get('/api/poly-stream',             readLimiter, polyStreamHandler)
+app.get('/api/creator-book',            readLimiter, getCreatorBook)
 app.get('/api/x402/polymarket-scout',  strictLimiter, x402PolymarketScoutHandler)
 app.post('/api/zeroscout/polymarket-brief', strictLimiter, zeroScoutPolymarketBriefHandler)
 app.get('/api/x402/receipt',           readLimiter, x402ReceiptHandler)
