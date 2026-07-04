@@ -504,7 +504,6 @@ export function StreamGate() {
   const [selectedPaymentMode, setSelectedPaymentMode] = useState<'x402' | 'escrow' | 'checkpoint' | null>(() => {
     if (shouldChoosePayment) return null
     if (requestedPaymentMode === 'checkpoint' && checkpointContentAvailable) return 'checkpoint'
-    if (requestedGateMode === 'stream' && streamContentAvailable) return 'escrow'
     return 'x402'
   })
   const paymentMode: 'choice' | 'x402' | 'poa' | 'escrow' | 'checkpoint' = selectedPaymentMode ?? 'choice'
@@ -1667,28 +1666,9 @@ export function StreamGate() {
     : (!isConnected ? 0 : !isOnArc ? 1 : !passkey.registered ? 2 : 3)
 
   const progressPct = Math.min((poa.accrued / sessionCap) * 100, 100)
-  const streamDurationSec = dripRate > 0 ? Math.max(1, Math.ceil(sessionCap / dripRate)) : 0
   const prepaidStreamEnded = paymentMode === 'escrow'
     && contentState === 'error'
     && Boolean(contentError && /(prepaid stream|nano meter) (has ended|was cancelled)/i.test(contentError))
-
-  function streamEscrowHref() {
-    const returnParams = new URLSearchParams(window.location.search)
-    returnParams.set('mode', 'stream')
-    returnParams.set('pay', 'escrow')
-    returnParams.set('streamVault', '__STREAM_VAULT__')
-    const returnTo = `${window.location.pathname}?${returnParams.toString()}`
-    const p = new URLSearchParams()
-    p.set('app', 'streampay')
-    p.set('mode', 'creator-stream')
-    p.set('wallet', 'circle')
-    p.set('recipient', creator)
-    p.set('amount', sessionCap.toFixed(6).replace(/\.?0+$/, ''))
-    p.set('duration', `${streamDurationSec}s`)
-    p.set('reason', title ? `Creator stream: ${title}` : `Creator stream: ${shortAddress(creator)}`)
-    p.set('returnTo', returnTo)
-    return `/stream?${p.toString()}`
-  }
 
   function handleReadableProgress(progress: number) {
     if (paymentMode === 'checkpoint') {
@@ -1752,32 +1732,25 @@ export function StreamGate() {
                 <button
                   type="button"
                   onClick={() => {
-                    if (!streamContentAvailable) return
-                    setContentError(null)
-                    setContentState('idle')
-                    setSelectedPaymentMode('escrow')
+                    return
                   }}
-                  disabled={!streamContentAvailable}
+                  disabled
                   className={[
                     'w-full rounded-2xl border p-4 text-left shadow-sm transition-colors',
-                    streamContentAvailable
-                      ? 'border-emerald-200 bg-emerald-50/60 hover:border-emerald-300 dark:border-emerald-400/20 dark:bg-emerald-500/10 dark:hover:border-emerald-400/35'
-                      : 'cursor-not-allowed border-gray-100 bg-gray-50 opacity-70 dark:border-white/10 dark:bg-white/[0.04]',
+                    'cursor-not-allowed border-gray-100 bg-gray-50 opacity-70 dark:border-white/10 dark:bg-white/[0.04]',
                   ].join(' ')}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className={['text-[13px] font-black', streamContentAvailable ? 'text-gray-900 dark:text-gray-100' : 'text-gray-400 dark:text-gray-600'].join(' ')}>
+                      <p className="text-[13px] font-black text-gray-400 dark:text-gray-600">
                         Pay as you watch
                       </p>
                       <p className="mt-1 text-[12px] leading-relaxed text-gray-500 dark:text-gray-400">
-                        {streamContentAvailable
-                          ? `Timed Arc stream at $${dripRate.toFixed(4)}/sec. End anytime; unused USDC stays refundable.`
-                          : 'Timed streaming is reserved for live and video content. Articles and books use fixed unlock.'}
+                        Timed live/video streaming is paused for public testing.
                       </p>
                     </div>
-                    <span className={['rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-[0.12em]', streamContentAvailable ? 'bg-emerald-600 text-white dark:bg-emerald-400 dark:text-gray-950' : 'bg-gray-100 text-gray-400 dark:bg-white/[0.06] dark:text-gray-500'].join(' ')}>
-                      Nano
+                    <span className="rounded-full bg-gray-100 px-2 py-1 text-[9px] font-black uppercase tracking-[0.12em] text-gray-400 dark:bg-white/[0.06] dark:text-gray-500">
+                      Paused
                     </span>
                   </div>
                 </button>
@@ -2265,12 +2238,13 @@ export function StreamGate() {
                     Check nano meter
                   </button>
                 ) : (
-                  <a
-                    href={streamEscrowHref()}
-                    className="flex min-h-[48px] w-full items-center justify-center rounded-xl bg-gray-950 px-5 py-3 text-[13px] font-semibold text-white"
+                  <button
+                    type="button"
+                    disabled
+                    className="flex min-h-[48px] w-full cursor-not-allowed items-center justify-center rounded-xl bg-gray-200 px-5 py-3 text-[13px] font-semibold text-gray-500 dark:bg-white/10 dark:text-gray-400"
                   >
-                    {prepaidStreamEnded ? 'Start new nano meter' : 'Start nano meter'}
-                  </a>
+                    Timed streaming paused
+                  </button>
                 )}
               </div>
             ) : (
@@ -2841,9 +2815,9 @@ function InlineStreamMeter({ snapshot, streamVault }: { snapshot: StreamMeterSna
           </p>
         </div>
         {streamVault && (
-          <a href={`/stream/${streamVault}?app=streampay&wallet=circle&role=reader`} className="shrink-0 rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-emerald-700 ring-1 ring-emerald-100 dark:bg-white/10 dark:text-emerald-200 dark:ring-white/10">
-            End / refund
-          </a>
+          <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-emerald-700 ring-1 ring-emerald-100 dark:bg-white/10 dark:text-emerald-200 dark:ring-white/10">
+            Timed stream paused
+          </span>
         )}
       </div>
       <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white dark:bg-white/10">
@@ -3153,7 +3127,7 @@ function WorldCupScoresUnlocked() {
           <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-400">Unlocked</p>
           <h2 className="mt-1 text-[18px] font-black tracking-tight text-gray-950">World Cup Scores</h2>
           <p className="mt-1 text-[12px] leading-5 text-gray-500">
-            Live score context with Polymarket routes when an exact market is matched.
+            Live score context with a full fixture route when an exact match is available.
           </p>
         </div>
         <span className={[

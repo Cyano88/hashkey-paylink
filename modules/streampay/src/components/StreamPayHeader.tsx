@@ -1,28 +1,14 @@
 import { Link, useLocation } from 'react-router-dom'
 import { Moon, Sun } from 'lucide-react'
 import { useTheme } from '../../../../src/lib/ThemeContext'
-import { EVM_TREASURY } from '../../../../src/lib/chains'
 
-function useAppPath(path: string): string {
+const HASH_PAYLINK_X402_MANAGER_URL = 'https://hashpaylink.com/agent?profile=agent&walletManager=service'
+
+function useModePath(path: string): string {
   const { search } = useLocation()
   const params = new URLSearchParams(search)
   const app = params.get('app')
   return app ? `${path}?app=${app}` : path
-}
-
-function useModePath(path: string, extras?: Record<string, string>): string {
-  const { search } = useLocation()
-  const params = new URLSearchParams(search)
-  const app = params.get('app')
-  const next = new URLSearchParams()
-  if (app) next.set('app', app)
-  if (extras) {
-    Object.entries(extras).forEach(([key, value]) => {
-      if (value) next.set(key, value)
-    })
-  }
-  const qs = next.toString()
-  return `${path}${qs ? `?${qs}` : ''}`
 }
 
 function isTelegramStreamPay(search: string) {
@@ -35,33 +21,57 @@ export function StreamPayHeader() {
   const { pathname, search } = useLocation()
   const { theme, toggle } = useTheme()
 
-  const isCreatorMode = pathname.startsWith('/creator') || pathname.startsWith('/gate')
-  const isAgenticMode = pathname.startsWith('/agentic') || (new URLSearchParams(search).get('mode') ?? '') === 'agentic-streaming'
-  const isArenaMode = pathname.startsWith('/arena')
-  const telegramMode = isTelegramStreamPay(search)
-
-  const payrollTo = useAppPath('/')
   const creatorTo = useModePath('/creator')
-  const agenticTo = useModePath('/agentic', {
-    mode: 'agentic-streaming',
-    service: 'polymarket-lp',
-    recipient: EVM_TREASURY,
-    amountPerDay: '0.01',
-    duration: '1h',
-    wallet: 'circle',
-  })
-  const arenaTo = useModePath('/arena')
+  const isCreatorMode = pathname.startsWith('/creator') || pathname.startsWith('/gate')
+  const telegramMode = isTelegramStreamPay(search)
   const navItems = [
-    { label: 'Creator', to: creatorTo, active: isCreatorMode },
-    { label: 'Arena', to: arenaTo, active: isArenaMode, soon: true },
-    { label: 'Payroll', to: payrollTo, active: !isCreatorMode && !isAgenticMode && !isArenaMode, soon: true },
-    { label: 'x402', to: agenticTo, active: isAgenticMode },
+    { label: 'Creator', to: creatorTo, active: isCreatorMode, external: false },
+    { label: 'x402', to: HASH_PAYLINK_X402_MANAGER_URL, active: false, external: true },
   ] as const
+
+  const renderNavItem = (item: (typeof navItems)[number], compact = false) => {
+    const className = compact
+      ? [
+          'rounded-full px-2 py-1.5 text-center text-[10px] font-semibold transition-all',
+          item.active
+            ? 'bg-white text-gray-900 shadow-sm dark:bg-white dark:text-gray-950'
+            : 'text-gray-400 hover:text-gray-700 dark:hover:text-gray-200',
+        ].join(' ')
+      : 'rounded-full px-3 py-1 text-[11px] font-semibold transition-all'
+
+    if (item.external) {
+      return (
+        <a
+          key={item.label}
+          href={item.to}
+          className={className}
+          style={!compact ? { color: '#9ca3af' } : undefined}
+        >
+          {item.label}
+        </a>
+      )
+    }
+
+    return (
+      <Link
+        key={item.label}
+        to={item.to}
+        className={className}
+        style={!compact
+          ? item.active
+            ? { background: '#ffffff', color: '#111827', boxShadow: '0 1px 2px rgba(0,0,0,0.06)' }
+            : { color: '#9ca3af' }
+          : undefined}
+      >
+        {item.label}
+      </Link>
+    )
+  }
 
   return (
     <header className="sticky top-0 z-50 border-b border-white/60 dark:border-white/5 bg-white/80 dark:bg-[#111113]/90 backdrop-blur-xl">
       <div className="mx-auto flex max-w-5xl items-center justify-between px-4 pt-3 pb-2 sm:px-6">
-        <Link to={payrollTo} className="group flex items-center gap-2.5 focus:outline-none">
+        <Link to={creatorTo} className="group flex items-center gap-2.5 focus:outline-none">
           <GeometricO />
           <span className="text-[15px] font-semibold tracking-tight">
             <span className="text-gray-900 dark:text-white">Hashpay</span><span style={{ color: '#3b82f6' }}>Stream</span>
@@ -71,25 +81,7 @@ export function StreamPayHeader() {
         <div className="flex items-center gap-x-2">
           {!telegramMode && (
             <div className="hidden sm:flex items-center rounded-full border border-gray-200 dark:border-white/10 bg-gray-50/80 dark:bg-[#1c1c20] p-0.5">
-              {navItems.map(item => (
-                <Link
-                  key={item.label}
-                  to={item.to}
-                  onClick={item.soon ? event => event.preventDefault() : undefined}
-                  aria-disabled={item.soon ? true : undefined}
-                  title={item.soon ? `${item.label} is coming soon` : undefined}
-                  className={[
-                    'rounded-full px-3 py-1 text-[11px] font-semibold transition-all',
-                    item.soon ? 'cursor-not-allowed' : '',
-                  ].join(' ')}
-                  style={item.active
-                    ? { background: '#ffffff', color: '#111827', boxShadow: '0 1px 2px rgba(0,0,0,0.06)' }
-                    : { color: '#9ca3af' }}
-                >
-                  <span>{item.label}</span>
-                  {item.soon && <span className="ml-1 text-[8px] font-black uppercase tracking-wide text-blue-500">Soon</span>}
-                </Link>
-              ))}
+              {navItems.map(item => renderNavItem(item))}
             </div>
           )}
 
@@ -105,26 +97,8 @@ export function StreamPayHeader() {
       </div>
       {!telegramMode && (
         <div className="mx-auto flex max-w-5xl px-4 pb-3 sm:hidden">
-          <div className="grid w-full grid-cols-4 gap-1 rounded-full border border-gray-200 dark:border-white/10 bg-gray-50/80 dark:bg-[#1c1c20] p-0.5">
-            {navItems.map(item => (
-              <Link
-                key={item.label}
-                to={item.to}
-                onClick={item.soon ? event => event.preventDefault() : undefined}
-                aria-disabled={item.soon ? true : undefined}
-                title={item.soon ? `${item.label} is coming soon` : undefined}
-                className={[
-                  'rounded-full px-2 py-1.5 text-center text-[10px] font-semibold transition-all',
-                  item.soon ? 'cursor-not-allowed' : '',
-                  item.active
-                    ? 'bg-white text-gray-900 shadow-sm dark:bg-white dark:text-gray-950'
-                    : 'text-gray-400',
-                ].join(' ')}
-              >
-                <span>{item.label}</span>
-                {item.soon && <span className="ml-0.5 text-[7px] font-black uppercase tracking-wide text-blue-500">Soon</span>}
-              </Link>
-            ))}
+          <div className="grid w-full grid-cols-2 gap-1 rounded-full border border-gray-200 dark:border-white/10 bg-gray-50/80 dark:bg-[#1c1c20] p-0.5">
+            {navItems.map(item => renderNavItem(item, true))}
           </div>
         </div>
       )}

@@ -1,39 +1,24 @@
-import { BrowserRouter, Navigate, Route, Routes, useLocation, useParams, useSearchParams } from 'react-router-dom'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { StreamPayLayout } from './components/StreamPayLayout'
-import { StreamView }      from './components/StreamView'
-import { RecipientWalletSetup } from './components/RecipientWalletSetup'
 import { CreatorAdminPage, CreatorPage } from './components/creator/CreatorPage'
-import { StreamGate }      from './components/creator/StreamGate'
-import { ArenaPage }       from './components/ArenaPage'
+import { StreamGate } from './components/creator/StreamGate'
 
-// ── Payroll page — resolves vault from path param OR query string ─────────────
-function StreamPage() {
-  const { vaultAddress } = useParams<{ vaultAddress?: string }>()
-  const [params]         = useSearchParams()
-  const location         = useLocation()
-  const vault = (vaultAddress ?? params.get('vault') ?? undefined) as `0x${string}` | undefined
-  return <StreamView key={`${location.pathname}${location.search}`} vaultAddress={vault} />
-}
-
-// ── App ───────────────────────────────────────────────────────────────────────
 export default function StreamPayApp() {
   return (
     <BrowserRouter>
       <Routes>
         <Route element={<StreamPayLayout />}>
-          {/* Payroll / Time-Sovereign flows */}
-          <Route index                           element={<StreamPage />} />
-          <Route path="stream"                   element={<StreamPage />} />
-          <Route path="stream/:vaultAddress"     element={<StreamPage />} />
-          <Route path="agentic"                  element={<StreamPage />} />
-          <Route path="arena"                    element={<ArenaPage />} />
-          <Route path="recipient"                element={<RecipientWalletSetup />} />
-          {/* Creator / Event-Sovereign flows */}
-          <Route path="creator"                  element={<CreatorPage />} />
-          <Route path="creator-admin"            element={<CreatorAdminPage />} />
-          <Route path="gate"                     element={<StreamGate />} />
-          {/* Fallback */}
-          <Route path="*"                        element={<Navigate to="/" replace />} />
+          {/* Public test scope: Creator checkout only. Payroll, Arena, and agentic service routes are disabled. */}
+          <Route index element={<Navigate to="/creator" replace />} />
+          <Route path="stream" element={<Navigate to="/creator" replace />} />
+          <Route path="stream/:vaultAddress" element={<Navigate to="/creator" replace />} />
+          <Route path="agentic" element={<Navigate to="/creator" replace />} />
+          <Route path="arena" element={<Navigate to="/creator" replace />} />
+          <Route path="recipient" element={<Navigate to="/creator" replace />} />
+          <Route path="creator" element={<CreatorPage />} />
+          <Route path="creator-admin" element={<CreatorAdminPage />} />
+          <Route path="gate" element={<StreamGate />} />
+          <Route path="*" element={<Navigate to="/creator" replace />} />
         </Route>
       </Routes>
     </BrowserRouter>

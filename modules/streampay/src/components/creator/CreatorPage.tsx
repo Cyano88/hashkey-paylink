@@ -358,7 +358,7 @@ function worldCupScoreCard(match: PolyStreamMatch, index: number): PublishedCont
     creator: OFFICIAL_CREATOR_ADDRESS,
     title: match.title,
     description: match.marketStatus === 'matched'
-      ? 'Live score context is visible. Unlock the direct Polymarket route for this fixture.'
+      ? 'Live score context is visible. Unlock the full fixture route.'
       : 'Live score context is visible. Market routing appears when a fixture is matched.',
     category: 'live-scores',
     price: '0.10',
@@ -1009,7 +1009,7 @@ function DiscoverContent({
                       {scoreError
                         ? 'Scores temporarily unavailable'
                         : featuredScore
-                          ? 'Unlock direct Polymarket trading routes'
+                          ? 'Unlock full match context'
                           : 'Refresh when the matchday feed updates'}
                     </p>
                   </div>
@@ -1180,7 +1180,7 @@ function DiscoverContent({
                       </div>
                     </div>
                     <p className="mt-3 truncate text-[10px] font-semibold text-gray-400 dark:text-gray-500">
-                      {match.marketStatus === 'matched' ? 'Polymarket route available' : 'Trading route pending'}
+                      {match.marketStatus === 'matched' ? 'Live route available' : 'Match route pending'}
                     </p>
                   </div>
                   <span className="inline-flex shrink-0 flex-col items-center justify-center gap-1 rounded-xl bg-gray-950 px-3 py-2 text-white">
@@ -1342,10 +1342,9 @@ function CreatorAccountEarnings({
   const [error, setError] = useState('')
 
   const validWallet = /^0x[a-fA-F0-9]{40}$/.test(wallet.trim())
-  const claimableTotal = streams.reduce((sum, stream) => sum + toCreatorBigInt(stream.claimable), 0n)
-  const streamedTotal = streams.reduce((sum, stream) => sum + toCreatorBigInt(stream.unlocked), 0n)
-  const releasedTotal = fixedUnlocks.reduce((sum, item) => sum + item.amount, 0)
-  const fixedTotal = fixedUnlocks.reduce((sum, item) => sum + item.amount, 0)
+  const fixedTotal = fixedUnlocks.filter(item => item.kind !== 'checkpoint').reduce((sum, item) => sum + item.amount, 0)
+  const checkpointTotal = fixedUnlocks.filter(item => item.kind === 'checkpoint').reduce((sum, item) => sum + item.amount, 0)
+  const releasedTotal = fixedTotal + checkpointTotal
 
   const fetchEarnings = useCallback(async () => {
     const recipient = wallet.trim()
@@ -1393,9 +1392,7 @@ function CreatorAccountEarnings({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-[13px] font-black text-gray-950 dark:text-white">Earnings</p>
-          <p className="mt-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400">
-            Reader payments for this creator wallet.
-          </p>
+          <p className="mt-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400">Fixed unlocks and reading checkpoints paid to this wallet.</p>
         </div>
         <div className="shrink-0 rounded-xl bg-emerald-50 px-3 py-2 text-right dark:bg-emerald-500/10">
           <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400">Earned</p>
@@ -1433,9 +1430,9 @@ function CreatorAccountEarnings({
 
       {validWallet && (
         <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-          <StreamMiniStat label="Paid" value={`${fixedTotal.toFixed(2)} USDC`} green={fixedTotal > 0} />
-          <StreamMiniStat label="Streamed" value={`${formatCreatorUsdc(streamedTotal)} USDC`} />
-          <StreamMiniStat label="To claim" value={`${formatCreatorUsdc(claimableTotal)} USDC`} green={claimableTotal > 0n} />
+          <StreamMiniStat label="Fixed" value={`${fixedTotal.toFixed(2)} USDC`} green={fixedTotal > 0} />
+          <StreamMiniStat label="Reading" value={`${checkpointTotal.toFixed(2)} USDC`} green={checkpointTotal > 0} />
+          <StreamMiniStat label="Total" value={`${releasedTotal.toFixed(2)} USDC`} green={releasedTotal > 0} />
         </div>
       )}
 
@@ -1487,7 +1484,6 @@ function CreatorAccountEarnings({
               )
             }
             const stream = row.item
-            const claimable = toCreatorBigInt(stream.claimable)
             const status = stream.cancelled ? 'Ended' : stream.active ? 'Live' : 'Complete'
             return (
               <div key={stream.vault} className="rounded-xl border border-gray-100 bg-white px-3 py-3 dark:border-white/10 dark:bg-[#111216]">
@@ -1505,15 +1501,9 @@ function CreatorAccountEarnings({
                   <StreamMiniStat label="Claimable" value={`${formatCreatorUsdc(stream.claimable)} USDC`} green />
                   <StreamMiniStat label="Claimed" value={`${formatCreatorUsdc(stream.alreadyWithdrawn)} USDC`} />
                 </div>
-                <a
-                  href={`/stream/${stream.vault}?app=streampay&wallet=circle&role=creator`}
-                  className={[
-                    'mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg py-2 text-[12px] font-bold transition-all active:scale-[0.98]',
-                    claimable > 0n ? 'bg-gray-950 text-white hover:bg-gray-800' : 'border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 dark:border-white/10 dark:bg-[#111216] dark:text-gray-300 dark:hover:bg-white/[0.06]',
-                  ].join(' ')}
-                >
-                  {claimable > 0n ? `Claim ${formatCreatorUsdc(stream.claimable)} USDC` : 'View meter'}
-                </a>
+                <p className="mt-3 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-center text-[11px] font-semibold text-gray-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-400">
+                  Legacy timed-stream claiming is paused for public testing.
+                </p>
               </div>
             )
           })}
@@ -1624,7 +1614,6 @@ function CreatorStreamClaims({ initialCreatorWallet }: { initialCreatorWallet?: 
       {!loading && streams.length > 0 && (
         <div className="mt-3 max-h-[260px] space-y-2 overflow-y-auto [scrollbar-width:none]">
           {streams.map(stream => {
-            const claimable = BigInt(stream.claimable || '0')
             const status = stream.cancelled ? 'Ended' : stream.active ? 'Live' : 'Complete'
             return (
               <div key={stream.vault} className="rounded-xl border border-gray-100 bg-white px-3 py-3 dark:border-white/10 dark:bg-[#111216]">
@@ -1642,15 +1631,9 @@ function CreatorStreamClaims({ initialCreatorWallet }: { initialCreatorWallet?: 
                   <StreamMiniStat label="Claimable" value={`${formatCreatorUsdc(stream.claimable)} USDC`} green />
                   <StreamMiniStat label="Claimed" value={`${formatCreatorUsdc(stream.alreadyWithdrawn)} USDC`} />
                 </div>
-                <a
-                  href={`/stream/${stream.vault}?app=streampay&wallet=circle&role=creator`}
-                  className={[
-                    'mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg py-2 text-[12px] font-bold transition-all active:scale-[0.98]',
-                    claimable > 0n ? 'bg-gray-950 text-white hover:bg-gray-800' : 'border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 dark:border-white/10 dark:bg-[#111216] dark:text-gray-300 dark:hover:bg-white/[0.06]',
-                  ].join(' ')}
-                >
-                  {claimable > 0n ? 'Open claim' : 'View meter'}
-                </a>
+                <p className="mt-3 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-center text-[11px] font-semibold text-gray-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-400">
+                  Legacy timed-stream claiming is paused for public testing.
+                </p>
               </div>
             )
           })}
@@ -1840,12 +1823,9 @@ function ReaderStreamVaults({
                       <StreamMiniStat label="Refundable" value={`${formatCreatorUsdc(refundable)} USDC`} green={refundable > 0n} />
                       <StreamMiniStat label="Budget" value={`${formatCreatorUsdc(stream.totalAmount)} USDC`} />
                     </div>
-                    <a
-                      href={`/stream/${stream.vault}?app=streampay&wallet=circle&role=reader`}
-                      className="mt-3 flex w-full items-center justify-center rounded-xl bg-gray-950 py-2.5 text-[12px] font-black text-white transition-all active:scale-[0.98] dark:bg-white dark:text-gray-950"
-                    >
-                      {refundable > 0n ? 'Manage refund' : 'Open active meter'}
-                    </a>
+                    <p className="mt-3 rounded-xl border border-gray-100 bg-white px-3 py-2 text-center text-[11px] font-semibold text-gray-500 dark:border-white/10 dark:bg-[#111216] dark:text-gray-400">
+                      Legacy timed-stream recovery is paused for public testing.
+                    </p>
                   </div>
                 )
               })}

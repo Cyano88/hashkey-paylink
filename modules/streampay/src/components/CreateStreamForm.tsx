@@ -5,7 +5,7 @@ import {
   useReadContract, useWriteContract, usePublicClient,
 } from 'wagmi'
 import { encodeFunctionData, isAddress, parseAbi, parseEventLogs, stringToHex } from 'viem'
-import { Bot, ChevronDown, Mail, MessageCircle, RefreshCw, Wallet, X as XIcon } from 'lucide-react'
+import { ChevronDown, Mail, RefreshCw, Wallet, X as XIcon } from 'lucide-react'
 import { STREAM_VAULT_ABI, STREAM_VAULT_FACTORY_ABI } from '../lib/streamVaultAbi'
 import { formatUsdcFull } from './TriStateBar'
 import {
@@ -41,8 +41,7 @@ const ERC20_ABI = parseAbi([
 const ARC_MEMO_ABI = parseAbi([
   'function memo(address target, bytes data, bytes32 memoId, bytes memoData)',
 ])
-const HASH_PAYLINK_X402_MANAGER_URL = '/app?product=agent'
-const TELEGRAM_POLYDESK_URL = '/telegram/payment-links?open=1&section=market-tools&service=poly-stream'
+const HASH_PAYLINK_X402_MANAGER_URL = 'https://hashpaylink.com/agent?profile=agent&walletManager=service'
 
 const DURATIONS = [
   { label: '1 hr',    secs: 3_600n },
@@ -93,9 +92,9 @@ function readPrefill() {
   const rawReturnTo = (params.get('returnTo') ?? '').trim()
   const returnTo = rawReturnTo.startsWith('/') && !rawReturnTo.startsWith('//') ? rawReturnTo.slice(0, 800) : ''
   const mode = rawMode || (isAgenticPath ? 'agentic-streaming' : '')
-  const service = (params.get('service') ?? (isAgenticFlow ? 'polymarket-lp' : '')).trim().toLowerCase()
+  const service = (params.get('service') ?? (isAgenticFlow ? 'x402-wallet' : '')).trim().toLowerCase()
   const agentSlug = (params.get('agent') ?? params.get('agentSlug') ?? 'hashpaylink-agent').trim().toLowerCase()
-  const reason = (params.get('reason') ?? (isAgenticFlow ? 'Agentic LP Research: Best Polymarket LP reward markets' : '')).trim()
+  const reason = (params.get('reason') ?? (isAgenticFlow ? 'x402 wallet management' : '')).trim()
   const source = (params.get('src') ?? '').trim().toLowerCase()
   const wallet = (params.get('wallet') ?? '').trim().toLowerCase()
   const preferCircle = source === 'telegram' || wallet !== 'connected'
@@ -327,7 +326,6 @@ export function CreateStreamForm() {
   const [reportEmail, setReportEmail] = useState(prefill.reportEmail)
   const [agenticStatus, setAgenticStatus] = useState('')
   const [agenticError, setAgenticError] = useState<string | null>(null)
-  const [x402View, setX402View] = useState<'overview' | 'services'>('overview')
   const [useCircleWallet] = useState(true)
   const [recentStreams, setRecentStreams] = useState<RecentStream[]>(() => loadRecentStreams(prefill.recipient))
   const [onchainStreams, setOnchainStreams] = useState<OnchainStream[]>([])
@@ -345,7 +343,7 @@ export function CreateStreamForm() {
   const durationValid  = durationSecs > 0n
   const isAgenticStreaming = prefill.mode === 'agentic-streaming'
   const isCreatorStream = prefill.isCreatorStream
-  const agenticService = prefill.service || 'polymarket-lp'
+  const agenticService = prefill.service || 'x402-wallet'
   const agenticReportEmailValid = !isAgenticStreaming || isEmail(reportEmail)
   const isFormValid    = recipientValid && amountValid && durationValid && agenticReportEmailValid
                          && isConnected && isOnArc && !!factoryAddr
@@ -1125,10 +1123,10 @@ export function CreateStreamForm() {
 
           <div className="px-1">
             <h1 className="text-[22px] font-black tracking-tight text-gray-950 dark:text-white">
-              {isAgenticStreaming ? 'x402 Services' : isCreatorStream ? 'Creator Nano Checkout' : 'Payroll'}
+              {isAgenticStreaming ? 'x402 Wallet' : isCreatorStream ? 'Creator Nano Checkout' : 'Creator Stream'}
             </h1>
             <p className="mt-1 text-[13px] leading-5 text-gray-500 dark:text-gray-400">
-              {isAgenticStreaming ? 'Daily Polymarket LP research by stream.' : isCreatorStream ? 'Start a timed Arc stream, then return to the creator content.' : 'Stream USDC to anyone on Arc.'}
+              {isAgenticStreaming ? 'Manage your Circle payment wallet from Hash PayLink.' : isCreatorStream ? 'Start a timed Arc stream, then return to the creator content.' : 'Stream USDC to anyone on Arc.'}
             </p>
           </div>
 
@@ -1259,100 +1257,36 @@ export function CreateStreamForm() {
 
   // ── Status hint ───────────────────────────────────────────────────────────
   if (isAgenticStreaming) {
-    const overviewCards = [
-      {
-        icon: Wallet,
-        title: 'Wallet',
-        body: 'Fund USDC, activate x402, and view receipts.',
-        action: () => { window.location.href = HASH_PAYLINK_X402_MANAGER_URL },
-      },
-      {
-        icon: Bot,
-        title: 'Services',
-        body: 'Open paid creator and Polymarket tools.',
-        action: () => setX402View('services'),
-      },
-    ] as const
-    const serviceCards = [
-      {
-        icon: Bot,
-        title: 'Creator',
-        body: 'Paid posts, unlock links, and earnings.',
-        href: '/creator?app=streampay',
-      },
-      {
-        icon: MessageCircle,
-        title: 'Polymarket',
-        body: 'LP Scout and market actions through chat.',
-        href: TELEGRAM_POLYDESK_URL,
-      },
-    ] as const
-    const visibleCards = x402View === 'overview' ? overviewCards : serviceCards
-
     return (
       <div className="mx-auto mt-8 w-full max-w-lg px-4 sm:px-0">
         <div className="space-y-5">
           <div className="px-1">
-            <h1 className="text-[22px] font-black tracking-tight text-gray-950 dark:text-white">x402 Services</h1>
+            <h1 className="text-[22px] font-black tracking-tight text-gray-950 dark:text-white">x402 Wallet</h1>
             <p className="mt-1 text-[13px] leading-5 text-gray-500 dark:text-gray-400">
-              One wallet for paid creator and Polymarket actions.
+              Manage your Circle x402 wallet from the main Hash PayLink flow.
             </p>
           </div>
 
-          <div className="space-y-3">
-            {x402View === 'services' && (
-              <button
-                type="button"
-                onClick={() => setX402View('overview')}
-                className="inline-flex items-center gap-1.5 px-1 text-[12px] font-bold text-gray-400 transition-colors hover:text-gray-800 dark:hover:text-gray-200"
-              >
-                <ChevronDown className="h-3.5 w-3.5 rotate-90" />
-                Back
-              </button>
-            )}
-
-            <div className="space-y-2">
-              {visibleCards.map(({ icon: Icon, title, body, ...card }) => {
-                const content = (
-                  <>
-                    <span className="flex min-w-0 items-center gap-3">
-                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-gray-600 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300">
-                        <Icon className="h-[18px] w-[18px]" />
-                      </span>
-                      <span className="min-w-0">
-                        <span className="block text-[14px] font-black text-gray-950 dark:text-white">{title}</span>
-                        <span className="mt-1 block text-[12px] leading-5 text-gray-500 dark:text-gray-400">{body}</span>
-                      </span>
-                    </span>
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gray-950 text-white transition-transform group-hover:translate-x-0.5 dark:bg-white dark:text-gray-950">
-                      <ChevronDown className="-rotate-90 h-4 w-4" />
-                    </span>
-                  </>
-                )
-                const className = 'group flex w-full items-center justify-between gap-3 rounded-2xl border border-gray-100 bg-white p-3.5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-gray-200 hover:shadow-md active:scale-[0.99] dark:border-white/10 dark:bg-[#111216] dark:hover:border-white/20'
-                if ('href' in card) {
-                  return (
-                    <a key={title} href={card.href} className={className}>
-                      {content}
-                    </a>
-                  )
-                }
-                return (
-                  <button
-                  key={title}
-                    type="button"
-                    onClick={card.action}
-                    className={className}
-                >
-                    {content}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
+          <a
+            href={HASH_PAYLINK_X402_MANAGER_URL}
+            className="group flex w-full items-center justify-between gap-3 rounded-2xl border border-gray-100 bg-white p-3.5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-gray-200 hover:shadow-md active:scale-[0.99] dark:border-white/10 dark:bg-[#111216] dark:hover:border-white/20"
+          >
+            <span className="flex min-w-0 items-center gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-gray-600 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300">
+                <Wallet className="h-[18px] w-[18px]" />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-[14px] font-black text-gray-950 dark:text-white">Open x402 Wallet Manager</span>
+                <span className="mt-1 block text-[12px] leading-5 text-gray-500 dark:text-gray-400">Fund, activate, and view your payment balance.</span>
+              </span>
+            </span>
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gray-950 text-white transition-transform group-hover:translate-x-0.5 dark:bg-white dark:text-gray-950">
+              <ChevronDown className="-rotate-90 h-4 w-4" />
+            </span>
+          </a>
 
           <p className="px-1 text-center text-[11px] leading-relaxed text-gray-400 dark:text-gray-500">
-            One wallet powers paid services across Hash PayLink.
+            Creator checkout stays inside HashpayStream. Wallet management stays inside Hash PayLink.
           </p>
         </div>
       </div>
@@ -1383,10 +1317,10 @@ export function CreateStreamForm() {
         {/* ── Page title (Rule 4: aligned to same 480px) ── */}
         <div className="px-1">
           <h1 className="text-[22px] font-black tracking-tight text-gray-950 dark:text-white">
-            {isAgenticStreaming ? 'x402 Services' : isCreatorStream ? 'Creator Nano Checkout' : 'Payroll'}
+            {isAgenticStreaming ? 'x402 Wallet' : isCreatorStream ? 'Creator Nano Checkout' : 'Creator Stream'}
           </h1>
           <p className="mt-1 text-[13px] leading-5 text-gray-500 dark:text-gray-400">
-            {isAgenticStreaming ? 'Stream USDC for daily Polymarket LP research.' : isCreatorStream ? 'Start a timed Arc stream, then continue back to the content.' : 'Stream USDC to anyone on Arc.'}
+            {isAgenticStreaming ? 'Open the main Hash PayLink x402 wallet manager.' : isCreatorStream ? 'Start a timed Arc stream, then continue back to the content.' : 'Stream USDC to anyone on Arc.'}
           </p>
         </div>
 
@@ -1656,7 +1590,7 @@ export function CreateStreamForm() {
                       </span>
                     </div>
                     <p className="mt-2 text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
-                      This stream unlocks agentic LP research.
+                      x402 wallet management is handled in the main Hash PayLink flow.
                     </p>
                   </div>
                 </div>

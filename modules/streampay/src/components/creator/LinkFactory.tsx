@@ -345,7 +345,7 @@ export function LinkFactory({
     : privateUrlValid
   const hasListingDetails = title.trim().length >= 3 && description.trim().length >= 10 && authorName.trim().length >= 2
 
-  const timedStreamContentAvailable = contentType === 'text' && category === 'live-scores'
+  const timedStreamContentAvailable = false
   const streamReady = rateNum > 0 && capNum > rateNum
   const streamContentAvailable = timedStreamContentAvailable
   const creatorAddress = circleSession?.wallet.address || (hasExternalPrivyEvmWallet ? address : '') || ''
@@ -695,13 +695,12 @@ export function LinkFactory({
               <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-500 dark:text-gray-400">Publish content</span>
             </div>
 
-            <div className="grid grid-cols-2 overflow-hidden rounded-xl border border-gray-200 bg-gray-50 p-1 dark:border-white/10 dark:bg-white/[0.04]">
+            <div className="grid grid-cols-1 overflow-hidden rounded-xl border border-gray-200 bg-gray-50 p-1 dark:border-white/10 dark:bg-white/[0.04]">
               {([
                 { id: 'unlock', label: 'Unlock', desc: 'Fixed price' },
-                { id: 'stream', label: 'Live stream', desc: 'Timed meter for live content' },
               ] as const).map(option => {
                 const selected = mode === option.id
-                const disabled = option.id === 'stream' && !streamContentAvailable
+                const disabled = false
                 return (
                   <button
                     key={option.id}
