@@ -1250,7 +1250,7 @@ export function CreateStreamForm() {
               </a>
             )}
 
-            <HashPayLinkBadge label={isCreatorStream ? 'Powered by HashpayStream Vault on Arc' : undefined} />
+            <HashPayLinkBadge label={isCreatorStream ? 'Powered by HashpayStream Creator Checkout' : undefined} />
           </div>
         </div>
       </div>
@@ -2033,17 +2033,16 @@ export function CreateStreamForm() {
                       <p className="text-center text-[11px] font-semibold text-amber-600 dark:text-amber-300">{privyCircleLinkError}</p>
                     )}
                     <div className="flex justify-center">
-                      <span className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1 text-[10px] font-semibold text-gray-400 dark:border-white/10 dark:bg-[#15151a] dark:text-gray-500">
-                        <img
-                          src={isCreatorStream ? '/hash-logo-transparent.png' : '/brand/circle-logo.jpeg'}
-                          alt=""
-                          className={[
-                            'h-3 w-3 object-cover',
-                            isCreatorStream ? 'rounded-none' : 'rounded-full',
-                          ].join(' ')}
-                        />
-                        {isCreatorStream ? 'Powered by HashpayStream Creator Checkout' : 'Powered by Circle'}
-                      </span>
+                      {isCreatorStream ? (
+                        <span className="text-[10px] font-semibold text-gray-400 dark:text-gray-500">
+                          Powered by HashpayStream Creator Checkout
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1 text-[10px] font-semibold text-gray-400 dark:border-white/10 dark:bg-[#15151a] dark:text-gray-500">
+                          <img src="/brand/circle-logo.jpeg" alt="" className="h-3 w-3 rounded-full object-cover" />
+                          Powered by Circle
+                        </span>
+                      )}
                     </div>
                   </div>
                 )}
@@ -2146,13 +2145,10 @@ export function CreateStreamForm() {
 }
 
 // ── Shared badge ──────────────────────────────────────────────────────────────
-export function HashPayLinkBadge({ label = 'Powered by HashpayStream' }: { label?: string }) {
+export function HashPayLinkBadge({ label = 'Powered by HashpayStream Creator Checkout' }: { label?: string }) {
   return (
     <div className="flex justify-center">
-      <span className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5 px-3 py-1">
-        <img src="/hash-logo.png" alt="#" className="h-3 w-3 opacity-50" />
-        <span className="text-[10px] font-semibold text-gray-400">{label}</span>
-      </span>
+      <span className="text-[10px] font-semibold text-gray-400 dark:text-gray-500">{label}</span>
     </div>
   )
 }

@@ -38,12 +38,9 @@ export function StreamNotFound({ vaultAddress }: StreamNotFoundProps) {
           {isCreatorMeter ? 'Open meters' : 'Create a New Stream'}
         </button>
 
-        <div className="flex items-center justify-center gap-1.5 pt-1">
-          <img src="/hash-logo.png" alt="" className="h-3 w-3 opacity-20" />
-          <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-gray-300">
-            Powered by HashpayStream
-          </span>
-        </div>
+        <p className="pt-1 text-[10px] font-semibold text-gray-300">
+          Powered by HashpayStream
+        </p>
       </div>
     </div>
   )

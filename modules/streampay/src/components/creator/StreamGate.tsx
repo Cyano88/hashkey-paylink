@@ -541,6 +541,7 @@ export function StreamGate() {
   const [approvePending, setApprovePending] = useState(false)
   const safeAgentSlug = cleanAgentSlug(agentSlug)
   const selectedAgent = agentOptions.find(agent => agent.slug === safeAgentSlug)
+  const resolvedReaderWallet = readerWalletAddress || selectedAgent?.walletAddress || address || ''
   const selectedWalletNeedsReconnect = Boolean(selectedAgent?.walletAddress && !selectedAgent.connected)
   const readerWalletSessionError = /reconnect|sign in|session|wallet session|activation did not complete/i.test(walletError || '')
   const fundingNeedsReconnect = selectedWalletNeedsReconnect || readerWalletSessionError
@@ -1090,7 +1091,7 @@ export function StreamGate() {
   }
 
   async function refreshCreatorSocial(walletOverride?: string) {
-    const wallet = walletOverride || readerWalletAddress || selectedAgent?.walletAddress || ''
+    const wallet = walletOverride || resolvedReaderWallet
     if (!contentId) return
     setSocialLoading(true)
     setSocialError(null)
@@ -1113,7 +1114,7 @@ export function StreamGate() {
 
   async function recordCreatorContentView(walletOverride?: string) {
     if (!contentId) return
-    const wallet = walletOverride || readerWalletAddress || selectedAgent?.walletAddress || address || ''
+    const wallet = walletOverride || resolvedReaderWallet
     let viewerKey = wallet ? `wallet:${wallet.toLowerCase()}` : ''
     if (!viewerKey) {
       const storageKey = 'hashpaystream:reader-session'
@@ -1140,7 +1141,7 @@ export function StreamGate() {
   }
 
   async function updateCreatorReaction(next: CreatorReaction) {
-    const wallet = readerWalletAddress || selectedAgent?.walletAddress || ''
+    const wallet = resolvedReaderWallet
     if (!wallet) {
       setSocialError('Unlock with a reader wallet before reacting.')
       return
@@ -1168,7 +1169,7 @@ export function StreamGate() {
   }
 
   async function addCreatorSocialComment() {
-    const wallet = readerWalletAddress || selectedAgent?.walletAddress || ''
+    const wallet = resolvedReaderWallet
     const body = commentBody.trim()
     if (!wallet || body.length < 2) return
     setSocialError(null)
@@ -1194,7 +1195,7 @@ export function StreamGate() {
   }
 
   async function updateCreatorCommentReaction(commentId: string, next: CreatorReaction, current: CreatorReaction | null) {
-    const wallet = readerWalletAddress || selectedAgent?.walletAddress || ''
+    const wallet = resolvedReaderWallet
     if (!wallet) return
     const reaction = current === next ? null : next
     setSocialError(null)
@@ -1488,7 +1489,7 @@ export function StreamGate() {
                       </p>
                       <p className="mt-1 text-[12px] leading-relaxed text-gray-500 dark:text-gray-400">
                         {streamContentAvailable
-                          ? `Stream $${dripRate.toFixed(4)}/sec. Stop anytime; unused USDC stays refundable.`
+                          ? `Timed Arc stream at $${dripRate.toFixed(4)}/sec. End anytime; unused USDC stays refundable.`
                           : 'Pay-as-you-read is only available for content HashpayStream can render in-page.'}
                       </p>
                     </div>
@@ -2494,15 +2495,15 @@ function InlineStreamMeter({ snapshot, streamVault }: { snapshot: StreamMeterSna
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-700 dark:text-emerald-300">
-            {snapshot?.cancelled ? 'Meter ended' : 'Pay-as-you-read active'}
+            {snapshot?.cancelled ? 'Stream ended' : 'Timed reading stream'}
           </p>
           <p className="mt-0.5 text-[11px] font-semibold text-emerald-700/75 dark:text-emerald-200/75">
-            Only consumed USDC goes to the creator.
+            USDC unlocks by elapsed reading time. End the stream to refund unused balance.
           </p>
         </div>
         {streamVault && (
           <a href={`/stream/${streamVault}?app=streampay&wallet=circle&role=reader`} className="shrink-0 rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-emerald-700 ring-1 ring-emerald-100 dark:bg-white/10 dark:text-emerald-200 dark:ring-white/10">
-            Manage
+            End / refund
           </a>
         )}
       </div>
@@ -2510,7 +2511,7 @@ function InlineStreamMeter({ snapshot, streamVault }: { snapshot: StreamMeterSna
         <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${Math.max(0, Math.min(100, percent))}%` }} />
       </div>
       <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-        <StreamMeterCell label="Used" value={`${formatRawUsdc(consumed)} USDC`} />
+        <StreamMeterCell label="Consumed" value={`${formatRawUsdc(consumed)} USDC`} />
         <StreamMeterCell label="Refundable" value={`${formatRawUsdc(refundable)} USDC`} />
         <StreamMeterCell label="Creator claim" value={`${formatRawUsdc(claimable)} USDC`} green />
       </div>
@@ -2845,7 +2846,7 @@ function OverlayShell({
             </>
           ) : (
             <>
-              Stream <span className="font-semibold">${dripRate.toFixed(4)}/sec</span> up to <span className="font-semibold">${sessionCap.toFixed(2)} USDC</span>
+              Timed reading stream at <span className="font-semibold">${dripRate.toFixed(4)}/sec</span>, up to <span className="font-semibold">${sessionCap.toFixed(2)} USDC</span>
             </>
           )}
         </p>
