@@ -33,6 +33,10 @@ const SMART_WALLET_BATCH_ABI = parseAbi(['function executeBatch((address target,
 const STREAM_FACTORY_ABI = parseAbi([
   'function createStream(address recipient,uint256 totalAmount,uint64 startTime,uint64 endTime,bytes32 salt) returns (address vault)',
 ])
+const CHECKPOINT_FACTORY_ABI = parseAbi([
+  'function createCheckpointVault(address recipient,bytes32 contentId,uint256 totalAmount,bytes32 salt) returns (address vault)',
+])
+const CHECKPOINT_VAULT_ABI = parseAbi(['function refund()'])
 const ARENA_ESCROW_ABI = parseAbi(['function join()', 'function refund()'])
 
 type CircleResponse<T = unknown> = {
@@ -414,6 +418,93 @@ export default async function handler(req: Request, res: Response) {
         }),
       })
       return res.json({ ok: true, vault: predictedVault, ...data })
+    }
+
+    if (action === 'executeArcCheckpointVault') {
+      const { userToken, walletId, walletAddress, factoryAddress, recipient, amountUnits, contentId, salt, predictedVault } = params
+      if (!userToken || !walletId || !walletAddress || !factoryAddress || !recipient || !amountUnits || !contentId || !salt || !predictedVault) {
+        return res.status(400).json({ ok: false, error: 'Missing Arc checkpoint escrow parameters' })
+      }
+      if (!isAddress(walletAddress) || !isAddress(factoryAddress) || !isAddress(recipient) || !isAddress(predictedVault) || !isBytes32(contentId) || !isBytes32(salt)) {
+        return res.status(400).json({ ok: false, error: 'Invalid Arc checkpoint escrow address, content ID, or salt' })
+      }
+      const totalAmount = BigInt(amountUnits)
+      if (totalAmount <= 0n) {
+        return res.status(400).json({ ok: false, error: 'Invalid checkpoint escrow amount' })
+      }
+
+      const tokenAddress = EVM_CHAINS.arc.tokenAddress
+      const fundCallData = encodeFunctionData({
+        abi: ERC20_TRANSFER_ABI,
+        functionName: 'transfer',
+        args: [predictedVault as `0x${string}`, totalAmount],
+      })
+      const createCallData = encodeFunctionData({
+        abi: CHECKPOINT_FACTORY_ABI,
+        functionName: 'createCheckpointVault',
+        args: [recipient as `0x${string}`, contentId as `0x${string}`, totalAmount, salt as `0x${string}`],
+      })
+      const batchCallData = encodeFunctionData({
+        abi: SMART_WALLET_BATCH_ABI,
+        functionName: 'executeBatch',
+        args: [[
+          { target: tokenAddress as `0x${string}`, value: 0n, data: fundCallData },
+          { target: factoryAddress as `0x${string}`, value: 0n, data: createCallData },
+        ]],
+      })
+
+      const data = await circleJson('/v1/w3s/user/transactions/contractExecution', {
+        method: 'POST',
+        userToken,
+        apiKey: circleApiKey({ chain: 'arc' }),
+        body: JSON.stringify({
+          idempotencyKey: crypto.randomUUID(),
+          walletId,
+          feeLevel: 'HIGH',
+          refId: 'hashpaystream-arc-checkpoint-escrow',
+          contractAddress: walletAddress,
+          callData: batchCallData,
+        }),
+      })
+      return res.json({ ok: true, vault: predictedVault, ...data })
+    }
+
+    if (action === 'executeArcCheckpointRefund') {
+      const { userToken, walletId, walletAddress, vaultAddress } = params
+      if (!userToken || !walletId || !walletAddress || !vaultAddress) {
+        return res.status(400).json({ ok: false, error: 'Missing Arc checkpoint refund parameters' })
+      }
+      if (!isAddress(walletAddress) || !isAddress(vaultAddress)) {
+        return res.status(400).json({ ok: false, error: 'Invalid Arc checkpoint wallet or vault address' })
+      }
+
+      const refundCallData = encodeFunctionData({
+        abi: CHECKPOINT_VAULT_ABI,
+        functionName: 'refund',
+        args: [],
+      })
+      const batchCallData = encodeFunctionData({
+        abi: SMART_WALLET_BATCH_ABI,
+        functionName: 'executeBatch',
+        args: [[
+          { target: vaultAddress as `0x${string}`, value: 0n, data: refundCallData },
+        ]],
+      })
+
+      const data = await circleJson('/v1/w3s/user/transactions/contractExecution', {
+        method: 'POST',
+        userToken,
+        apiKey: circleApiKey({ chain: 'arc' }),
+        body: JSON.stringify({
+          idempotencyKey: crypto.randomUUID(),
+          walletId,
+          feeLevel: 'HIGH',
+          refId: 'hashpaystream-arc-checkpoint-refund',
+          contractAddress: walletAddress,
+          callData: batchCallData,
+        }),
+      })
+      return res.json({ ok: true, vaultAddress, ...data })
     }
 
     if (action === 'executeArcArenaJoin') {

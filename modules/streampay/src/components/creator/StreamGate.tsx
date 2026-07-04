@@ -3,12 +3,19 @@ import { usePrivy } from '@privy-io/react-auth'
 import { useSearchParams }    from 'react-router-dom'
 import { useAccount, useChainId, useSwitchChain, useWriteContract } from 'wagmi'
 import { useQuery }           from '@tanstack/react-query'
-import { createPublicClient, http, defineChain, parseAbi } from 'viem'
+import { createPublicClient, http, defineChain, parseAbi, keccak256, toBytes } from 'viem'
 import { usePoAStream }       from '../../hooks/usePoAStream'
 import { usePasskey }         from '../../hooks/usePasskey'
 import { STREAM_VAULT_ABI }   from '../../lib/streamVaultAbi'
+import { CHECKPOINT_VAULT_FACTORY_ABI } from '../../lib/checkpointVaultAbi'
 import { PRIVY_AUTH_ENABLED } from '../../../../../src/lib/authMode'
 import { resolvePrivyCircleLink } from '../../../../../src/lib/privyCircleLink'
+import {
+  connectCircleEvmEmailWallet,
+  sendCircleArcCheckpointRefund,
+  sendCircleArcCheckpointVault,
+  type CircleEvmEmailSession,
+} from '../../../../../src/lib/circleEvmEmailWallet'
 import {
   createPaymentReceiptPdf,
   createX402PaylinkReceipt,
@@ -30,6 +37,7 @@ const arcClient = createPublicClient({
 const ARC_CHAIN_ID = 5042002
 const ARC_USDC     = '0x3600000000000000000000000000000000000000' as const
 const POA_CONTRACT = (import.meta.env.VITE_POA_CONTRACT ?? '') as `0x${string}`
+const CHECKPOINT_FACTORY_ADDRESS = (import.meta.env.VITE_CHECKPOINT_FACTORY_ADDRESS ?? '') as `0x${string}`
 const POLYMARKET_LOGO = '/brand/polymarket-logo.png'
 
 const ERC20_ABI = parseAbi([
@@ -321,6 +329,13 @@ function formatRawUsdc(value: bigint) {
   return `${sign}${whole.toString()}${frac ? `.${frac}` : ''}`
 }
 
+function toContentBytes32(value: string): `0x${string}` {
+  if (/^0x[0-9a-fA-F]{64}$/.test(value)) return value as `0x${string}`
+  const bytes = Array.from(new TextEncoder().encode(value))
+  const hex = bytes.map(byte => byte.toString(16).padStart(2, '0')).join('').slice(0, 64).padEnd(64, '0')
+  return `0x${hex}` as `0x${string}`
+}
+
 function formatBalanceLabel(value?: string) {
   if (value === undefined || value === null || value === '') return null
   const amount = Number(value)
@@ -448,13 +463,16 @@ export function StreamGate() {
     'unknown'
   const contentCategory = (params.get('cat') ?? '').trim().toLowerCase()
   const streamContentAvailable = contentKind === 'scores' || contentCategory === 'live-scores' || contentCategory === 'video'
+  const checkpointContentAvailable = !streamContentAvailable && (contentKind === 'text' || contentKind === 'book' || contentKind === 'unknown')
   const shouldChoosePayment = params.get('pay') === 'choice' || params.get('choose') === '1'
-  const [selectedPaymentMode, setSelectedPaymentMode] = useState<'x402' | 'escrow' | null>(() => {
+  const requestedPaymentMode = params.get('pay')
+  const [selectedPaymentMode, setSelectedPaymentMode] = useState<'x402' | 'escrow' | 'checkpoint' | null>(() => {
     if (shouldChoosePayment) return null
+    if (requestedPaymentMode === 'checkpoint' && checkpointContentAvailable) return 'checkpoint'
     if (requestedGateMode === 'stream' && streamContentAvailable) return 'escrow'
     return 'x402'
   })
-  const paymentMode: 'choice' | 'x402' | 'poa' | 'escrow' = selectedPaymentMode ?? 'choice'
+  const paymentMode: 'choice' | 'x402' | 'poa' | 'escrow' | 'checkpoint' = selectedPaymentMode ?? 'choice'
   const gateMode: 'unlock' | 'stream' = paymentMode === 'escrow' && streamContentAvailable ? 'stream' : 'unlock'
   const streamVault = (params.get('streamVault') ?? params.get('vault') ?? '').trim()
 
@@ -505,7 +523,15 @@ export function StreamGate() {
   const [midpointPromptSeen, setMidpointPromptSeen] = useState(false)
   const [contentViewCount, setContentViewCount] = useState(0)
   const [streamMeter, setStreamMeter] = useState<StreamMeterSnapshot | null>(null)
+  const [checkpointSession, setCheckpointSession] = useState<CircleEvmEmailSession | null>(null)
+  const [checkpointVault, setCheckpointVault] = useState((params.get('checkpointVault') ?? '').trim())
+  const [checkpointBusy, setCheckpointBusy] = useState(false)
+  const [checkpointRefunding, setCheckpointRefunding] = useState(false)
+  const [checkpointRefunded, setCheckpointRefunded] = useState(false)
+  const [checkpointError, setCheckpointError] = useState<string | null>(null)
+  const [checkpointReleased, setCheckpointReleased] = useState<Record<number, string>>({})
   const recordedViewRef = useRef('')
+  const checkpointReleaseRef = useRef<Set<number>>(new Set())
 
   async function handleEndSession() {
     setEnding(true)
@@ -735,7 +761,11 @@ export function StreamGate() {
       : 'Archiving...'
 
   const legacyFullyAuthorised = isConnected && isOnArc && passkey.registered && isApproved
-  const fullyAuthorised = paymentMode === 'x402' || paymentMode === 'escrow' ? contentState === 'ready' : paymentMode === 'choice' ? false : legacyFullyAuthorised
+  const fullyAuthorised = paymentMode === 'x402' || paymentMode === 'escrow' || paymentMode === 'checkpoint'
+    ? contentState === 'ready'
+    : paymentMode === 'choice'
+      ? false
+      : legacyFullyAuthorised
 
   useEffect(() => {
     if (!fullyAuthorised || contentState !== 'ready') return
@@ -940,6 +970,125 @@ export function StreamGate() {
       return
     }
     await unlockWithAgentX402(selectedAgent.slug)
+  }
+
+  async function fetchCheckpointContent(vaultAddress: string) {
+    setContentState('loading')
+    const res = await fetch(`/api/get-content-checkpoint?id=${encodeURIComponent(contentId)}&vault=${encodeURIComponent(vaultAddress)}`)
+    const data = await res.json().catch(() => ({})) as { ok?: boolean; type?: string; content?: string; coverImage?: string; error?: string }
+    if (!res.ok || !data.ok || !data.type || !data.content) throw new Error(data.error || 'Could not verify checkpoint escrow.')
+    setFetchedContent({ type: data.type as FetchedContent['type'], content: data.content, coverImage: data.coverImage })
+    setContentState('ready')
+  }
+
+  async function startCheckpointEscrow() {
+    const email = cleanEmail(walletEmail || privyEmail)
+    setCheckpointError(null)
+    setContentError(null)
+    setCircleNotice(null)
+    if (!checkpointContentAvailable) {
+      setCheckpointError('Pay-as-you-read is only available for articles and books.')
+      return
+    }
+    if (!CHECKPOINT_FACTORY_ADDRESS || !/^0x[a-fA-F0-9]{40}$/.test(CHECKPOINT_FACTORY_ADDRESS)) {
+      setCheckpointError('Checkpoint escrow is not configured yet.')
+      return
+    }
+    if (!email && !checkpointSession) {
+      setCheckpointError('Enter your email to open your Circle reader wallet.')
+      return
+    }
+    setCheckpointBusy(true)
+    try {
+      const session = checkpointSession ?? await connectCircleEvmEmailWallet(email, 'arc')
+      setCheckpointSession(session)
+      setReaderWalletAddress(session.wallet.address)
+
+      const amountUnits = BigInt(Math.max(1, capRaw))
+      const contentId32 = toContentBytes32(contentId)
+      const saltSeed = `${contentId}:${session.wallet.address}:${Date.now()}:${Math.random()}`
+      const salt = keccak256(toBytes(saltSeed))
+      const predicted = await arcClient.readContract({
+        address: CHECKPOINT_FACTORY_ADDRESS,
+        abi: CHECKPOINT_VAULT_FACTORY_ABI,
+        functionName: 'getVaultAddress',
+        args: [session.wallet.address, creator, contentId32, amountUnits, salt],
+      }) as `0x${string}`
+
+      setCircleNotice('Confirm checkpoint escrow in Circle.')
+      const txHash = await sendCircleArcCheckpointVault({
+        session,
+        factoryAddress: CHECKPOINT_FACTORY_ADDRESS,
+        recipient: creator,
+        amountUnits: amountUnits.toString(),
+        contentId: contentId32,
+        salt,
+        predictedVault: predicted,
+      })
+      if (txHash) await arcClient.waitForTransactionReceipt({ hash: txHash as `0x${string}` })
+      setCheckpointVault(predicted)
+      const nextParams = new URLSearchParams(window.location.search)
+      nextParams.set('pay', 'checkpoint')
+      nextParams.set('checkpointVault', predicted)
+      window.history.replaceState(null, '', `${window.location.pathname}?${nextParams.toString()}${window.location.hash}`)
+      await fetchCheckpointContent(predicted)
+      setCircleNotice('Pay-as-you-read active.')
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Could not start checkpoint escrow.'
+      setCheckpointError(message.slice(0, 180))
+      setContentState('error')
+      setContentError(message.slice(0, 180))
+    } finally {
+      setCheckpointBusy(false)
+    }
+  }
+
+  async function releaseCheckpoint(checkpointPct: number) {
+    if (!checkpointVault || checkpointReleaseRef.current.has(checkpointPct)) return
+    checkpointReleaseRef.current.add(checkpointPct)
+    try {
+      const res = await fetch('/api/relay-checkpoint', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vaultAddress: checkpointVault, checkpointPct }),
+      })
+      const data = await res.json().catch(() => ({})) as { ok?: boolean; txHash?: string; releasedAmount?: string; error?: string }
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Checkpoint release failed.')
+      setCheckpointReleased(current => ({ ...current, [checkpointPct]: data.txHash || data.releasedAmount || 'released' }))
+    } catch {
+      checkpointReleaseRef.current.delete(checkpointPct)
+    }
+  }
+
+  async function refundCheckpointEscrow() {
+    const vault = checkpointVault.trim()
+    const email = cleanEmail(walletEmail || privyEmail)
+    if (!vault || !/^0x[a-fA-F0-9]{40}$/.test(vault)) {
+      setCheckpointError('No checkpoint escrow is available to refund.')
+      return
+    }
+    if (!email && !checkpointSession) {
+      setCheckpointError('Enter your email to reopen this reader wallet before refunding.')
+      return
+    }
+    setCheckpointError(null)
+    setCheckpointRefunding(true)
+    try {
+      const session = checkpointSession ?? await connectCircleEvmEmailWallet(email, 'arc')
+      setCheckpointSession(session)
+      setReaderWalletAddress(session.wallet.address)
+      setCircleNotice('Confirm refund in Circle.')
+      const txHash = await sendCircleArcCheckpointRefund({ session, vaultAddress: vault as `0x${string}` })
+      if (txHash) await arcClient.waitForTransactionReceipt({ hash: txHash as `0x${string}` })
+      setCircleNotice('Unread balance refunded.')
+      setCheckpointRefunded(true)
+      setCheckpointError(null)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Could not refund unread balance.'
+      setCheckpointError(message.slice(0, 180))
+    } finally {
+      setCheckpointRefunding(false)
+    }
   }
 
   async function startPaymentWalletLogin(slugOverride?: string) {
@@ -1391,6 +1540,14 @@ export function StreamGate() {
       .catch(() => { setContentError('Server error - please try again'); setContentState('error') })
   }, [paymentMode, streamVault, contentId, contentState])
 
+  useEffect(() => {
+    if (paymentMode !== 'checkpoint' || !checkpointVault || !contentId || contentState !== 'idle') return
+    fetchCheckpointContent(checkpointVault).catch(err => {
+      setContentError(err instanceof Error ? err.message : 'Could not verify checkpoint escrow')
+      setContentState('error')
+    })
+  }, [paymentMode, checkpointVault, contentId, contentState])
+
   // ── IntersectionObserver: drip only when content is visible + ready ───────
   // Drip starts AFTER content is fetched and visible — not on auth alone.
   const contentRef = useRef<HTMLDivElement | null>(null)
@@ -1444,6 +1601,18 @@ export function StreamGate() {
     return `/stream?${p.toString()}`
   }
 
+  function handleReadableProgress(progress: number) {
+    if (paymentMode === 'checkpoint') {
+      for (const mark of [25, 50, 75, 100]) {
+        if (progress >= mark / 100) void releaseCheckpoint(mark)
+      }
+    }
+    if (!midpointPromptSeen && !social.myReaction && progress >= 0.5) {
+      setMidpointPromptSeen(true)
+      setMidpointPromptOpen(true)
+    }
+  }
+
   if (!contentId || !creator) {
     return (
       <div className="w-full max-w-[480px] mx-auto mt-12 text-center text-[13px] text-gray-400 py-12">
@@ -1467,6 +1636,30 @@ export function StreamGate() {
 
             {paymentMode === 'choice' ? (
               <div className="w-full max-w-[340px] space-y-3 text-left">
+                {checkpointContentAvailable && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setContentError(null)
+                      setContentState('idle')
+                      setSelectedPaymentMode('checkpoint')
+                    }}
+                    className="w-full rounded-2xl border border-blue-200 bg-blue-50/70 p-4 text-left shadow-sm transition-colors hover:border-blue-300 dark:border-blue-400/20 dark:bg-blue-500/10 dark:hover:border-blue-400/35"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-[13px] font-black text-gray-900 dark:text-gray-100">Pay as you read</p>
+                        <p className="mt-1 text-[12px] leading-relaxed text-gray-500 dark:text-gray-400">
+                          Prepay {formatUsdc(sessionCap)} USDC. Reading releases 25%, 50%, 75%, and 100%; unread balance stays refundable.
+                        </p>
+                      </div>
+                      <span className="rounded-full bg-blue-600 px-2 py-1 text-[9px] font-black uppercase tracking-[0.12em] text-white dark:bg-blue-400 dark:text-gray-950">
+                        Nano
+                      </span>
+                    </div>
+                  </button>
+                )}
+
                 <button
                   type="button"
                   onClick={() => {
@@ -1524,7 +1717,9 @@ export function StreamGate() {
 
                 {!streamContentAvailable && (
                   <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
-                    Progress-based reading unlock is coming next for articles and ebooks.
+                    {checkpointContentAvailable
+                      ? 'Scroll checkpoints release creator earnings only as readers progress.'
+                      : 'Progress reading is only available for in-page articles and books.'}
                   </p>
                 )}
               </div>
@@ -1917,6 +2112,42 @@ export function StreamGate() {
                   </div>
                 )}
               </div>
+            ) : paymentMode === 'checkpoint' ? (
+              <div className="w-full max-w-[340px] space-y-3 text-left">
+                <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-4 shadow-sm dark:border-blue-400/20 dark:bg-blue-500/10">
+                  <p className="text-[12px] font-black text-gray-950 dark:text-white">Checkpoint escrow</p>
+                  <p className="mt-1 text-[12px] leading-5 text-gray-500 dark:text-gray-400">
+                    Prepay once. We release USDC to the creator only at reading milestones.
+                  </p>
+                  <div className="mt-3 grid grid-cols-4 gap-1.5">
+                    {[25, 50, 75, 100].map(mark => (
+                      <span key={mark} className="rounded-full bg-white px-2 py-1 text-center text-[10px] font-black text-blue-600 ring-1 ring-blue-100 dark:bg-white/10 dark:text-blue-200 dark:ring-white/10">
+                        {mark}%
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <input
+                  type="email"
+                  value={walletEmail}
+                  onChange={event => setWalletEmail(event.target.value)}
+                  placeholder="reader@email.com"
+                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-[13px] font-semibold text-gray-900 outline-none focus:border-blue-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-white"
+                />
+                {(checkpointError || contentError) && (
+                  <p className="rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-[11px] font-semibold text-red-600 dark:border-red-400/20 dark:bg-red-500/10 dark:text-red-200">
+                    {checkpointError || contentError}
+                  </p>
+                )}
+                <button
+                  type="button"
+                  onClick={startCheckpointEscrow}
+                  disabled={checkpointBusy}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-[12px] font-black text-white shadow-sm transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {checkpointBusy ? <><Spinner />Starting escrow...</> : `Start pay-as-you-read`}
+                </button>
+              </div>
             ) : paymentMode === 'escrow' ? (
               <div className="w-full max-w-[320px] space-y-3 text-center">
                 <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
@@ -2057,6 +2288,17 @@ export function StreamGate() {
             {paymentMode === 'escrow' && (
               <InlineStreamMeter snapshot={streamMeter} streamVault={streamVault} />
             )}
+            {paymentMode === 'checkpoint' && (
+              <InlineCheckpointMeter
+                released={checkpointReleased}
+                sessionCap={sessionCap}
+                checkpointVault={checkpointVault}
+                refunding={checkpointRefunding}
+                refunded={checkpointRefunded}
+                error={checkpointError}
+                onRefund={refundCheckpointEscrow}
+              />
+            )}
             {fetchedContent.coverImage && (
               <div className="overflow-hidden rounded-2xl border border-gray-100 bg-gray-100 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
                 <img
@@ -2076,13 +2318,9 @@ export function StreamGate() {
             <div
               className="max-h-[480px] overflow-y-auto pr-1"
               onScroll={event => {
-                if (midpointPromptSeen || social.myReaction) return
                 const el = event.currentTarget
                 const progress = (el.scrollTop + el.clientHeight) / Math.max(el.scrollHeight, 1)
-                if (progress >= 0.5) {
-                  setMidpointPromptSeen(true)
-                  setMidpointPromptOpen(true)
-                }
+                handleReadableProgress(progress)
               }}
             >
               <div
@@ -2135,6 +2373,14 @@ export function StreamGate() {
             viewCount={contentViewCount}
             streamMeter={paymentMode === 'escrow' ? streamMeter : null}
             streamVault={streamVault}
+            checkpointReleased={paymentMode === 'checkpoint' ? checkpointReleased : null}
+            checkpointVault={checkpointVault}
+            sessionCap={sessionCap}
+            checkpointRefunding={checkpointRefunding}
+            checkpointRefunded={checkpointRefunded}
+            checkpointError={checkpointError}
+            onCheckpointRefund={refundCheckpointEscrow}
+            onReadingProgress={handleReadableProgress}
             social={social}
             socialLoading={socialLoading}
             socialError={socialError}
@@ -2531,6 +2777,77 @@ function StreamMeterCell({ label, value, green }: { label: string; value: string
   )
 }
 
+function InlineCheckpointMeter({
+  released,
+  sessionCap,
+  checkpointVault,
+  refunding,
+  refunded,
+  error,
+  onRefund,
+}: {
+  released: Record<number, string>
+  sessionCap: number
+  checkpointVault: string
+  refunding: boolean
+  refunded: boolean
+  error: string | null
+  onRefund: () => void
+}) {
+  const marks = [25, 50, 75, 100]
+  const latest = marks.filter(mark => released[mark]).pop() ?? 0
+  const releasedAmount = sessionCap * (latest / 100)
+  const refundableAmount = Math.max(0, sessionCap - releasedAmount)
+  return (
+    <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-3 dark:border-blue-400/20 dark:bg-blue-500/10">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-blue-700 dark:text-blue-300">
+            Pay-as-you-read active
+          </p>
+          <p className="mt-0.5 text-[11px] font-semibold text-blue-700/75 dark:text-blue-200/75">
+            USDC releases only at scroll checkpoints.
+          </p>
+        </div>
+        {checkpointVault && (
+          <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-blue-700 ring-1 ring-blue-100 dark:bg-white/10 dark:text-blue-200 dark:ring-white/10">
+            {latest}%
+          </span>
+        )}
+      </div>
+      <div className="mt-3 grid grid-cols-4 gap-1.5">
+        {marks.map(mark => (
+          <div key={mark} className={['h-1.5 rounded-full transition-colors', released[mark] ? 'bg-blue-600 dark:bg-blue-300' : 'bg-white dark:bg-white/10'].join(' ')} />
+        ))}
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2 text-[10px] font-bold">
+        <div className="rounded-xl bg-white px-2 py-2 text-gray-500 ring-1 ring-blue-100 dark:bg-white/10 dark:text-gray-300 dark:ring-white/10">
+          Released<br /><span className="text-gray-950 dark:text-white">{formatUsdc(releasedAmount)} USDC</span>
+        </div>
+        <div className="rounded-xl bg-white px-2 py-2 text-gray-500 ring-1 ring-blue-100 dark:bg-white/10 dark:text-gray-300 dark:ring-white/10">
+          Refundable<br /><span className="text-gray-950 dark:text-white">{refunded ? 'Refunded' : `${formatUsdc(refundableAmount)} USDC`}</span>
+        </div>
+      </div>
+      {checkpointVault && refundableAmount > 0 && !refunded && (
+        <button
+          type="button"
+          onClick={onRefund}
+          disabled={refunding}
+          className="mt-2 flex min-h-[36px] w-full items-center justify-center rounded-xl bg-white px-3 text-[11px] font-black text-blue-700 ring-1 ring-blue-100 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white/10 dark:text-blue-200 dark:ring-white/10 dark:hover:bg-white/15"
+        >
+          {refunding ? 'Refunding unread balance...' : 'End reading and refund unread balance'}
+        </button>
+      )}
+      {refunded && (
+        <p className="mt-2 text-[10px] font-black uppercase tracking-[0.12em] text-blue-700 dark:text-blue-200">Reading session ended</p>
+      )}
+      {error && (
+        <p className="mt-2 text-[10px] font-semibold leading-4 text-red-500 dark:text-red-300">{error}</p>
+      )}
+    </div>
+  )
+}
+
 function BookUnlocked({
   contentId,
   title,
@@ -2538,6 +2855,14 @@ function BookUnlocked({
   viewCount,
   streamMeter,
   streamVault,
+  checkpointReleased,
+  checkpointVault,
+  sessionCap,
+  checkpointRefunding,
+  checkpointRefunded,
+  checkpointError,
+  onCheckpointRefund,
+  onReadingProgress,
   social,
   socialLoading,
   socialError,
@@ -2555,6 +2880,14 @@ function BookUnlocked({
   viewCount: number
   streamMeter: StreamMeterSnapshot | null
   streamVault: string
+  checkpointReleased: Record<number, string> | null
+  checkpointVault: string
+  sessionCap: number
+  checkpointRefunding: boolean
+  checkpointRefunded: boolean
+  checkpointError: string | null
+  onCheckpointRefund: () => void
+  onReadingProgress: (progress: number) => void
   social: CreatorSocialState
   socialLoading: boolean
   socialError: string | null
@@ -2604,6 +2937,17 @@ function BookUnlocked({
       {streamVault && (
         <InlineStreamMeter snapshot={streamMeter} streamVault={streamVault} />
       )}
+      {checkpointReleased && (
+        <InlineCheckpointMeter
+          released={checkpointReleased}
+          sessionCap={sessionCap}
+          checkpointVault={checkpointVault}
+          refunding={checkpointRefunding}
+          refunded={checkpointRefunded}
+          error={checkpointError}
+          onRefund={onCheckpointRefund}
+        />
+      )}
       <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-[#111216]">
         <div className="flex gap-4 p-4">
           {displayCover && (
@@ -2638,7 +2982,13 @@ function BookUnlocked({
       )}
 
       {!loading && !error && (
-        <div className="max-h-[620px] overflow-y-auto rounded-2xl border border-gray-100 bg-[#fffaf3] px-5 py-6 shadow-sm dark:border-white/10 dark:bg-[#111216] sm:px-6">
+        <div
+          className="max-h-[620px] overflow-y-auto rounded-2xl border border-gray-100 bg-[#fffaf3] px-5 py-6 shadow-sm dark:border-white/10 dark:bg-[#111216] sm:px-6"
+          onScroll={event => {
+            const el = event.currentTarget
+            onReadingProgress((el.scrollTop + el.clientHeight) / Math.max(el.scrollHeight, 1))
+          }}
+        >
           <div className="mx-auto max-w-[62ch] space-y-4 text-[15px] leading-8 text-gray-800 dark:text-gray-200">
             {paragraphs.map((paragraph, index) => (
               <p key={`${contentId}-${index}`} className={index === 0 ? 'text-[16px] font-semibold leading-8 text-gray-950 dark:text-white' : undefined}>
@@ -2815,7 +3165,7 @@ function OverlayShell({
 }: {
   dripRate: number
   sessionCap: number
-  paymentMode: 'choice' | 'x402' | 'poa' | 'escrow'
+  paymentMode: 'choice' | 'x402' | 'poa' | 'escrow' | 'checkpoint'
   gateMode: 'unlock' | 'stream'
   children: React.ReactNode
 }) {

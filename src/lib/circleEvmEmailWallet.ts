@@ -767,6 +767,74 @@ export async function sendCircleArcStream(params: {
   return null
 }
 
+export async function sendCircleArcCheckpointVault(params: {
+  session: CircleEvmEmailSession
+  factoryAddress: Address
+  recipient: Address
+  amountUnits: string
+  contentId: Hex
+  salt: Hex
+  predictedVault: Address
+}) {
+  if (params.session.chain !== 'arc') throw new Error('Arc checkpoint escrow requires an Arc Circle smart wallet.')
+  const sdk = authenticatedSdk(params.session)
+  const challenge = await circleWalletApi<{ challengeId?: string }>({
+    action: 'executeArcCheckpointVault',
+    userToken: params.session.userToken,
+    walletId: params.session.wallet.id,
+    walletAddress: params.session.wallet.address,
+    factoryAddress: params.factoryAddress,
+    recipient: params.recipient,
+    amountUnits: params.amountUnits,
+    contentId: params.contentId,
+    salt: params.salt,
+    predictedVault: params.predictedVault,
+  })
+  if (!challenge.challengeId) throw new Error('Circle did not return a checkpoint escrow challenge.')
+  const result = await executeChallengeWithTimeout(
+    sdk,
+    challenge.challengeId,
+    'Circle Smart Wallet confirmation did not finish. If you approved it, refresh this HashpayStream link in a minute and check the checkpoint escrow again.',
+  )
+  const txHash = findTxHash(result)
+  if (txHash) return txHash
+  const transactionId = findTransactionId(result)
+  if (transactionId) {
+    const hash = await pollTransactionHash(params.session, transactionId).catch(() => null)
+    if (hash) return hash
+  }
+  return null
+}
+
+export async function sendCircleArcCheckpointRefund(params: {
+  session: CircleEvmEmailSession
+  vaultAddress: Address
+}) {
+  if (params.session.chain !== 'arc') throw new Error('Arc checkpoint refund requires an Arc Circle smart wallet.')
+  const sdk = authenticatedSdk(params.session)
+  const challenge = await circleWalletApi<{ challengeId?: string }>({
+    action: 'executeArcCheckpointRefund',
+    userToken: params.session.userToken,
+    walletId: params.session.wallet.id,
+    walletAddress: params.session.wallet.address,
+    vaultAddress: params.vaultAddress,
+  })
+  if (!challenge.challengeId) throw new Error('Circle did not return a checkpoint refund challenge.')
+  const result = await executeChallengeWithTimeout(
+    sdk,
+    challenge.challengeId,
+    'Circle Smart Wallet refund confirmation did not finish. If you approved it, refresh this HashpayStream link in a minute and check the checkpoint escrow again.',
+  )
+  const txHash = findTxHash(result)
+  if (txHash) return txHash
+  const transactionId = findTransactionId(result)
+  if (transactionId) {
+    const hash = await pollTransactionHash(params.session, transactionId).catch(() => null)
+    if (hash) return hash
+  }
+  return null
+}
+
 export async function sendCircleArcArenaJoin(params: {
   session: CircleEvmEmailSession
   escrowAddress: Address

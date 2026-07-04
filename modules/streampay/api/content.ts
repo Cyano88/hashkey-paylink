@@ -38,6 +38,9 @@ const STREAM_VAULT_ABI = parseAbi([
   'function streamInfo() view returns (address _sender, address _recipient, uint256 _totalAmount, uint64 _startTime, uint64 _endTime, uint256 _alreadyWithdrawn, bool _cancelled, uint256 _unlocked, uint256 _claimable)',
   'function isFunded() view returns (bool)',
 ])
+const CHECKPOINT_VAULT_ABI = parseAbi([
+  'function vaultInfo() view returns (address _sender,address _recipient,address _token,address _relayer,bytes32 _contentId,uint256 _totalAmount,uint256 _releasedAmount,uint256 _refundableAmount,bool _refunded,bool _funded)',
+])
 const ERC1271_ABI = parseAbi([
   'function isValidSignature(bytes32 hash, bytes signature) view returns (bytes4)',
 ])
@@ -855,6 +858,13 @@ function shortId(value: string) {
   return value.length > 12 ? `${value.slice(0, 6)}...${value.slice(-4)}` : value
 }
 
+function toContentBytes32(value: string): `0x${string}` {
+  if (/^0x[0-9a-fA-F]{64}$/.test(value)) return value as `0x${string}`
+  const bytes = Array.from(new TextEncoder().encode(value))
+  const hex = bytes.map(byte => byte.toString(16).padStart(2, '0')).join('').slice(0, 64).padEnd(64, '0')
+  return `0x${hex}` as `0x${string}`
+}
+
 function normalizeAgentSlug(value: unknown) {
   return String(value ?? '').trim().toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').slice(0, 32)
 }
@@ -1356,6 +1366,60 @@ export async function getContentStreamEscrow(req: Request, res: Response) {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     return res.status(503).json({ ok: false, error: `Could not verify nano meter: ${message.slice(0, 160)}` })
+  }
+
+  return res.status(200).json({ ok: true, type: entry.type, content: entry.content, coverImage: entry.coverImage })
+}
+
+export async function getContentCheckpointEscrow(req: Request, res: Response) {
+  const { id, vault } = req.query as { id?: string; vault?: string }
+
+  if (!id) return res.status(400).json({ ok: false, error: 'id is required' })
+  if (!vault || !isAddress(vault)) {
+    return res.status(400).json({ ok: false, error: 'A valid checkpoint escrow is required.' })
+  }
+
+  const entry = await readContentEntry(id)
+  if (!entry) {
+    return res.status(404).json({
+      ok: false,
+      error: 'Content not found. Ask the creator to re-generate the link.',
+    })
+  }
+  if (entry.type === 'url' || entry.category === 'live-scores') {
+    return res.status(400).json({ ok: false, error: 'Checkpoint escrow is only for readable in-page content.' })
+  }
+
+  try {
+    const info = await arcClient.readContract({
+      address: vault as `0x${string}`,
+      abi: CHECKPOINT_VAULT_ABI,
+      functionName: 'vaultInfo',
+    }) as readonly [`0x${string}`, `0x${string}`, `0x${string}`, `0x${string}`, `0x${string}`, bigint, bigint, bigint, boolean, boolean]
+
+    const recipient = info[1]
+    const relayer = info[3]
+    const vaultContentId = info[4]
+    const totalAmount = info[5]
+    const refunded = info[8]
+    const funded = info[9]
+    const rawKey = process.env.RELAYER_PRIVATE_KEY_ARC ?? process.env.RELAYER_PRIVATE_KEY
+    if (!rawKey) return res.status(503).json({ ok: false, error: 'Checkpoint relayer is not configured.' })
+    if (recipient.toLowerCase() !== entry.creator.toLowerCase()) {
+      return res.status(403).json({ ok: false, error: 'This checkpoint escrow does not pay the content creator.' })
+    }
+    if (vaultContentId.toLowerCase() !== toContentBytes32(id).toLowerCase()) {
+      return res.status(403).json({ ok: false, error: 'This checkpoint escrow is for a different content item.' })
+    }
+    if (totalAmount < BigInt(Math.max(1, entry.capRaw))) {
+      return res.status(402).json({ ok: false, error: 'Checkpoint escrow budget is below this content cap.' })
+    }
+    if (!funded) return res.status(402).json({ ok: false, error: 'Checkpoint escrow is not funded yet.' })
+    if (refunded) return res.status(402).json({ ok: false, error: 'This checkpoint escrow has been refunded.' })
+    if (!isAddress(relayer)) return res.status(503).json({ ok: false, error: 'Checkpoint escrow relayer is invalid.' })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    return res.status(503).json({ ok: false, error: `Could not verify checkpoint escrow: ${message.slice(0, 160)}` })
   }
 
   return res.status(200).json({ ok: true, type: entry.type, content: entry.content, coverImage: entry.coverImage })

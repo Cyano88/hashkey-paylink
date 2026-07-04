@@ -20,12 +20,14 @@ import solanaBalanceHandler   from './api/solana-balance.js'
 import evmBalanceHandler      from './api/evm-balance.js'
 // ── Streampay module ──────────────────────────────────────────────────────────
 import relayStreamHandler               from './modules/streampay/api/relay-stream.js'
+import relayCheckpointHandler           from './modules/streampay/api/relay-checkpoint.js'
 import streamOgHandler                 from './modules/streampay/api/stream-og.js'
 import settlePoaHandler                from './modules/streampay/api/settle-poa.js'
 import {
   storeContent,
   getContent,
   getContentStreamEscrow,
+  getContentCheckpointEscrow,
   getContentX402,
   listCreatorContent,
   listApprovedCreatorContent,
@@ -160,6 +162,7 @@ app.post('/api/solana-balance',        solanaBalanceHandler)
 app.post('/api/evm-balance',           readLimiter, evmBalanceHandler)
 // ── Streampay routes ──────────────────────────────────────────────────────────
 app.post('/api/relay-stream',          relayLimiter, relayStreamHandler)
+app.post('/api/relay-checkpoint',      relayLimiter, relayCheckpointHandler)
 app.post('/api/settle-poa',            relayLimiter, settlePoaHandler)
 app.post('/api/store-content',         strictLimiter, storeContent)
 app.get('/api/list-creator-content',   readLimiter, listCreatorContent)
@@ -169,6 +172,7 @@ app.get('/api/admin/creator-content',  strictLimiter, listCreatorAdminContent)
 app.post('/api/admin/creator-content', strictLimiter, reviewCreatorContent)
 app.get('/api/get-content',            readLimiter, getContent)
 app.get('/api/get-content-stream',     readLimiter, getContentStreamEscrow)
+app.get('/api/get-content-checkpoint', readLimiter, getContentCheckpointEscrow)
 app.get('/api/get-content-x402',       readLimiter, getContentX402)
 app.post('/api/creator-unlock-x402',   strictLimiter, unlockContentX402WithAgent)
 app.get('/api/creator-social',         readLimiter, getCreatorSocial)

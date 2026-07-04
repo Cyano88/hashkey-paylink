@@ -23,6 +23,7 @@ USDC streaming payments on Arc Network. Payroll, agentic streams, and Arena room
 | Contract | Address | Purpose |
 |---|---|---|
 | `StreamVaultFactory` | `0xBAecf54084A0cB65b77a88cbDEf2b663Be71c61b` | CREATE2 factory — deploys one `StreamVault` per stream |
+| `CheckpointVaultFactory` | Set after deploy | CREATE2 factory for progress-based article/book escrows |
 | `ArenaRoomEscrowFactory` | `0x82D313F193BE77cba64BEc046CCcb82154941D58` | Deploys deterministic per-room Arena escrows |
 | `ArenaRoomEscrow` | Per room | Holds deposits, refunds unstreamed risk, settles winners, and collects the 0.5% platform fee |
 | `PoASettlement` | `0x91DbDb49c8C68e5775554D42A1B5ce15C89C814B` | Legacy direct-route proof-of-attention settlement |
@@ -40,6 +41,8 @@ Set in Render → Service → **Environment**.
 | `PRIVATE_RPC_URL_ARC` | Server | Alchemy or private Arc RPC endpoint |
 | `STREAM_FACTORY_ADDRESS` | Server | `StreamVaultFactory` address |
 | `VITE_STREAM_FACTORY_ADDRESS` | Browser | Same — must match server value |
+| `CHECKPOINT_FACTORY_ADDRESS` | Server | `CheckpointVaultFactory` address for scroll/checkpoint reading escrows |
+| `VITE_CHECKPOINT_FACTORY_ADDRESS` | Browser | Same checkpoint factory address for reader checkout |
 | `ARENA_ESCROW_FACTORY_ADDRESS` | Server | Dedicated multiplayer Arena escrow factory: `0x82D313F193BE77cba64BEc046CCcb82154941D58` |
 | `VITE_ARENA_ESCROW_FACTORY_ADDRESS` | Browser | Same Arena factory address for client-side room readiness |
 | `ARENA_RELAYER_PRIVATE_KEY` | Server | Room escrow deployer/settlement wallet. Must match the deployed Arena factory relayer. Never expose with `VITE_` |
@@ -190,6 +193,15 @@ Creator                        Viewer                   Arc Network
 Gate links look like: `/gate?id=abc123&cr=0xCreator&r=1000&cap=100000&pay=x402`
 
 The gate also supports Circle Gateway/x402 reader unlocks through `/api/get-content-x402` and `/api/creator-unlock-x402`. The PoA path remains available for session signatures and creator settlement.
+
+Readable articles and books use a separate checkpoint escrow primitive instead of the timed `StreamVault`:
+
+- Reader prepays the content cap into a deterministic `CheckpointVault`.
+- `/api/get-content-checkpoint` reveals the article/book only after the vault is funded and matched to the content creator.
+- The frontend releases 25%, 50%, 75%, and 100% cumulative checkpoints through `/api/relay-checkpoint` as scroll depth is crossed.
+- The reader can refund the unreleased vault balance through the Circle wallet refund action.
+
+Timed `StreamVault` remains reserved for live/video-style content where elapsed viewing time is the product unit.
 
 ---
 
