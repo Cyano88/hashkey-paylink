@@ -40,6 +40,20 @@ const POA_CONTRACT = (import.meta.env.VITE_POA_CONTRACT ?? '') as `0x${string}`
 const CHECKPOINT_FACTORY_ADDRESS = (import.meta.env.VITE_CHECKPOINT_FACTORY_ADDRESS ?? '') as `0x${string}`
 const POLYMARKET_LOGO = '/brand/polymarket-logo.png'
 
+function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+async function waitForCheckpointVaultCode(vaultAddress: `0x${string}`) {
+  const started = Date.now()
+  while (Date.now() - started < 45_000) {
+    const code = await arcClient.getBytecode({ address: vaultAddress }).catch(() => undefined)
+    if (code && code !== '0x') return
+    await sleep(1500)
+  }
+  throw new Error('Checkpoint escrow is still deploying on Arc. Wait a moment, then start pay-as-you-read again.')
+}
+
 const ERC20_ABI = parseAbi([
   'function allowance(address owner, address spender) view returns (uint256)',
   'function approve(address spender, uint256 amount) returns (bool)',
@@ -1026,6 +1040,7 @@ export function StreamGate() {
         predictedVault: predicted,
       })
       if (txHash) await arcClient.waitForTransactionReceipt({ hash: txHash as `0x${string}` })
+      await waitForCheckpointVaultCode(predicted)
       setCheckpointVault(predicted)
       const nextParams = new URLSearchParams(window.location.search)
       nextParams.set('pay', 'checkpoint')

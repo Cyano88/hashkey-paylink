@@ -2027,7 +2027,7 @@ export function CreateStreamForm() {
                     >
                       {isWorking
                         ? <><Spinner /><span className="text-[13px] font-medium">{circleCtaLabel}</span></>
-                        : <><img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert mix-blend-screen" /> {circleCtaLabel}</>}
+                        : circleCtaLabel}
                     </button>
                     {privyCircleLinkError && (
                       <p className="text-center text-[11px] font-semibold text-amber-600 dark:text-amber-300">{privyCircleLinkError}</p>

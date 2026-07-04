@@ -1391,6 +1391,14 @@ export async function getContentCheckpointEscrow(req: Request, res: Response) {
   }
 
   try {
+    const code = await arcClient.getBytecode({ address: vault as `0x${string}` }).catch(() => undefined)
+    if (!code || code === '0x') {
+      return res.status(404).json({
+        ok: false,
+        error: 'Checkpoint escrow is not active on Arc yet. Start pay-as-you-read again.',
+      })
+    }
+
     const info = await arcClient.readContract({
       address: vault as `0x${string}`,
       abi: CHECKPOINT_VAULT_ABI,
