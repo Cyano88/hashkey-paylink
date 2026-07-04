@@ -3173,7 +3173,7 @@ function OverlayShell({
     <div
       className={[
         'flex flex-col items-center justify-center space-y-4',
-        paymentMode === 'x402' || paymentMode === 'choice' || paymentMode === 'escrow'
+        paymentMode === 'x402' || paymentMode === 'choice' || paymentMode === 'escrow' || paymentMode === 'checkpoint'
           ? 'relative min-h-[520px] bg-gradient-to-b from-white/95 to-gray-50/95 p-5 dark:from-[#111216]/95 dark:to-[#0b0c0f]/95 sm:p-7'
           : 'absolute inset-0 bg-white/75 p-6 backdrop-blur-[3px] dark:bg-[#0b0c0f]/75',
       ].join(' ')}
