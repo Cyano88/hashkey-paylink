@@ -1389,24 +1389,24 @@ function CreatorAccountEarnings({
   ].sort((a, b) => b.sort - a.sort)
 
   return (
-    <div className="rounded-2xl border border-gray-100 bg-gray-50/70 p-4 dark:border-white/10 dark:bg-white/[0.04]">
+    <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#111216]">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[13px] font-black text-gray-950 dark:text-white">Creator earnings</p>
+          <p className="text-[13px] font-black text-gray-950 dark:text-white">Earnings</p>
           <p className="mt-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400">
-            Fixed unlocks and checkpoint reads are already paid. Timed streams show when there is USDC to claim.
+            Reader payments for this creator wallet.
           </p>
         </div>
-        <div className="shrink-0 rounded-xl bg-white px-3 py-2 text-right shadow-sm dark:bg-[#111216]">
+        <div className="shrink-0 rounded-xl bg-emerald-50 px-3 py-2 text-right dark:bg-emerald-500/10">
           <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400">Earned</p>
           <p className="mt-0.5 text-[13px] font-black text-emerald-600 dark:text-emerald-300">{releasedTotal.toFixed(2)} USDC</p>
         </div>
       </div>
 
-      <div className="mt-3 rounded-2xl border border-gray-100 bg-white p-3 dark:border-white/10 dark:bg-[#111216]">
+      <div className="mt-3 rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400">Signed in creator</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400">Creator wallet</p>
             <p className="mt-0.5 truncate text-[12px] font-black text-gray-900 dark:text-gray-100">
               {validWallet ? shortWallet(wallet) : authenticated ? (email || 'Email signed in') : 'Not signed in'}
             </p>
@@ -1448,14 +1448,14 @@ function CreatorAccountEarnings({
       {!loading && !validWallet && !authError && (
         <div className="mt-3 rounded-xl border border-dashed border-gray-200 bg-white px-4 py-4 text-center dark:border-white/10 dark:bg-[#111216]">
           <p className="text-[12px] font-bold text-gray-600 dark:text-gray-300">Sign in to view earnings</p>
-          <p className="mt-1 text-[11px] leading-5 text-gray-400 dark:text-gray-500">Your creator email resolves the Arc wallet used on your content links.</p>
+          <p className="mt-1 text-[11px] leading-5 text-gray-400 dark:text-gray-500">Use the creator email connected to your published links.</p>
         </div>
       )}
 
       {!loading && validWallet && !error && combined.length === 0 && (
         <div className="mt-3 rounded-xl border border-gray-100 bg-white px-4 py-4 text-center dark:border-white/10 dark:bg-[#111216]">
           <p className="text-[12px] font-bold text-gray-600 dark:text-gray-300">No earnings yet</p>
-          <p className="mt-1 text-[11px] leading-5 text-gray-400 dark:text-gray-500">Payments appear here after readers unlock or reach pay-as-you-read checkpoints for this creator wallet.</p>
+          <p className="mt-1 text-[11px] leading-5 text-gray-400 dark:text-gray-500">Share a paid link. Unlocks and reading checkpoints appear here automatically.</p>
         </div>
       )}
 
@@ -1737,25 +1737,25 @@ function ReaderStreamVaults({
   return (
     <div className="w-full">
       <div className="rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-[#111216]">
-        <div className="space-y-4 px-5 py-5 sm:px-7 sm:py-6">
+        <div className="space-y-3 px-5 py-5 sm:px-6">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-500 dark:text-gray-400">My meters</p>
-              <h2 className="mt-1 text-[18px] font-black tracking-tight text-gray-950 dark:text-white">Reader nano meters</h2>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-500 dark:text-gray-400">Reader wallet</p>
+              <h2 className="mt-1 text-[18px] font-black tracking-tight text-gray-950 dark:text-white">Refunds</h2>
               <p className="mt-1 text-[12px] leading-5 text-gray-500 dark:text-gray-400">
-                Active and refundable meters appear here. Completed meters are kept as history.
+                Recover unused USDC from pay-as-you-read streams.
               </p>
             </div>
-            <div className="shrink-0 rounded-xl bg-gray-50 px-3 py-2 text-right dark:bg-white/[0.04]">
+            <div className="shrink-0 rounded-xl bg-emerald-50 px-3 py-2 text-right dark:bg-emerald-500/10">
               <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400">Refundable</p>
               <p className="mt-0.5 text-[13px] font-black text-emerald-600 dark:text-emerald-300">{formatCreatorUsdc(refundableTotal)} USDC</p>
             </div>
           </div>
 
-          <div className="rounded-2xl border border-gray-100 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
+          <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400">Reader wallet</p>
+                <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400">Signed in as</p>
                 <p className="mt-0.5 truncate text-[12px] font-black text-gray-900 dark:text-gray-100">
                   {validWallet ? shortWallet(readerWallet) : authenticated ? (email || 'Email signed in') : 'Not signed in'}
                 </p>
@@ -1782,8 +1782,8 @@ function ReaderStreamVaults({
 
           {validWallet && (
             <div className="grid grid-cols-3 gap-2 text-center">
-              <StreamMiniStat label="Active" value={`${activeCount}`} green={activeCount > 0} />
-              <StreamMiniStat label="Recoverable" value={`${recoverableStreams.length}`} />
+              <StreamMiniStat label="Active streams" value={`${activeCount}`} green={activeCount > 0} />
+              <StreamMiniStat label="Need action" value={`${recoverableStreams.length}`} green={recoverableStreams.length > 0} />
               <StreamMiniStat label="Refund" value={`${formatCreatorUsdc(refundableTotal)} USDC`} />
             </div>
           )}
@@ -1797,22 +1797,22 @@ function ReaderStreamVaults({
           {!loading && !validWallet && !error && (
             <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-4 py-6 text-center dark:border-white/10 dark:bg-white/[0.04]">
               <p className="text-[12px] font-bold text-gray-600 dark:text-gray-300">Sign in to recover streams</p>
-              <p className="mt-1 text-[11px] leading-5 text-gray-400 dark:text-gray-500">Use the same email wallet that started the timed stream.</p>
+              <p className="mt-1 text-[11px] leading-5 text-gray-400 dark:text-gray-500">Use the same email wallet that paid for the content.</p>
             </div>
           )}
 
           {!loading && validWallet && !streamError && streams.length === 0 && (
             <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-4 py-6 text-center dark:border-white/10 dark:bg-white/[0.04]">
-              <p className="text-[12px] font-bold text-gray-600 dark:text-gray-300">No nano meters found</p>
-              <p className="mt-1 text-[11px] leading-5 text-gray-400 dark:text-gray-500">Reader meters funded by this wallet will appear here.</p>
+              <p className="text-[12px] font-bold text-gray-600 dark:text-gray-300">No streams found</p>
+              <p className="mt-1 text-[11px] leading-5 text-gray-400 dark:text-gray-500">Pay-as-you-read streams started by this wallet will appear here.</p>
             </div>
           )}
 
           {!loading && validWallet && !streamError && streams.length > 0 && recoverableStreams.length === 0 && (
             <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-4 py-6 text-center dark:border-white/10 dark:bg-white/[0.04]">
-              <p className="text-[12px] font-bold text-gray-600 dark:text-gray-300">No refundable meters</p>
+              <p className="text-[12px] font-bold text-gray-600 dark:text-gray-300">Nothing to refund</p>
               <p className="mt-1 text-[11px] leading-5 text-gray-400 dark:text-gray-500">
-                {hiddenCompletedCount} completed {hiddenCompletedCount === 1 ? 'meter is' : 'meters are'} already fully consumed.
+                {hiddenCompletedCount} completed {hiddenCompletedCount === 1 ? 'stream has' : 'streams have'} no unused USDC left.
               </p>
             </div>
           )}
@@ -1995,10 +1995,10 @@ function SettlementDashboard({
             onSignOut={onCreatorSignOut}
           />
 
-          <div className="rounded-2xl border border-blue-100 bg-blue-50/60 px-4 py-3 dark:border-blue-400/20 dark:bg-blue-500/10">
-            <p className="text-[13px] font-bold text-gray-900 dark:text-blue-100">Signed-viewer settlement</p>
-            <p className="mt-1 text-[12px] leading-5 text-gray-500 dark:text-blue-200/70">
-              Advanced settlement for older signed-viewer gates.
+          <div className="rounded-xl border border-gray-100 bg-gray-50/70 px-4 py-3 dark:border-white/10 dark:bg-white/[0.04]">
+            <p className="text-[12px] font-bold text-gray-700 dark:text-gray-200">Older stream claims</p>
+            <p className="mt-1 text-[11px] leading-5 text-gray-400 dark:text-gray-500">
+              For legacy signed-viewer links only. Most creator payments appear in the earnings card above.
             </p>
           </div>
 
