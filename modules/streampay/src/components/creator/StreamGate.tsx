@@ -572,7 +572,7 @@ export function StreamGate() {
           // Status lookup below still gives enough information to let the user reconnect.
         }
         try {
-          const statusRes = await fetch(`/api/agent-wallet?agent=${encodeURIComponent(cleanSlug)}&balance=1&chain=arc&x402=1`)
+          const statusRes = await fetch(`/api/agent-wallet?agent=${encodeURIComponent(cleanSlug)}&balance=1&chain=arc&x402=1&x402Chain=arc`)
           const status = await statusRes.json().catch(() => ({})) as AgentWalletStatus
           if (statusRes.ok && status.ok !== false) {
             option = {
@@ -845,7 +845,7 @@ export function StreamGate() {
           agent.slug === paymentSlug ? { ...agent, connected: false } : agent
         )))
         setUnlockStep(agentOptions.length > 0 ? 'choose' : 'email')
-        setCircleNotice('Reader wallet session needs a fresh code. Select the wallet to reconnect.')
+        setCircleNotice('Sign in once to refresh this reader wallet.')
         setWalletError(null)
         setContentError(null)
       } else {
@@ -895,7 +895,7 @@ export function StreamGate() {
     if (savedWallet && !slugOverride) {
       setAgentSlug(savedWallet.slug)
       setUnlockStep('choose')
-      setCircleNotice('Reader wallet already open. Select it to continue.')
+      setCircleNotice('Reader wallet ready.')
       return
     }
     setAgentSlug(slug)
@@ -967,7 +967,7 @@ export function StreamGate() {
         })))
       setWalletOtp('')
       setWalletOtpContext(null)
-      setCircleNotice('Payment wallet connected.')
+      setCircleNotice('Reader wallet ready.')
       setUnlockStep('choose')
       setContentState('idle')
       void refreshPaymentWalletStatus(slug)
@@ -1033,7 +1033,7 @@ export function StreamGate() {
     const cleanSlug = cleanAgentSlug(slug)
     if (!cleanSlug) return
     try {
-      const res = await fetch(`/api/agent-wallet?agent=${encodeURIComponent(cleanSlug)}&balance=1&chain=arc&x402=1`)
+      const res = await fetch(`/api/agent-wallet?agent=${encodeURIComponent(cleanSlug)}&balance=1&chain=arc&x402=1&x402Chain=arc`)
       const data = await res.json().catch(() => ({})) as AgentWalletStatus
       if (!res.ok || data.ok === false) return
       const walletAddress = data.walletAddress
@@ -1078,7 +1078,7 @@ export function StreamGate() {
       return
     }
     if (fundingNeedsReconnect) {
-      setWalletError('Reconnect this reader wallet before activating x402.')
+      setWalletError('Sign in once to refresh this reader wallet.')
       return
     }
     if (fundingAmountInvalid) {
@@ -1128,7 +1128,7 @@ export function StreamGate() {
           agent.slug === paymentSlug ? { ...agent, connected: false } : agent
         )))
         setUnlockStep(agentOptions.length > 0 ? 'choose' : 'email')
-        setCircleNotice('Reader wallet session needs a fresh code. Select the wallet to reconnect.')
+        setCircleNotice('Sign in once to refresh this reader wallet.')
         setWalletError(null)
         setContentError(null)
       } else {
@@ -1148,7 +1148,7 @@ export function StreamGate() {
       return
     }
     if (fundingNeedsReconnect) {
-      setWalletError('Reconnect this reader wallet before checking the payment balance.')
+      setWalletError('Sign in once to refresh this reader wallet.')
       return
     }
     setFundBusy(true)
@@ -1681,14 +1681,11 @@ export function StreamGate() {
                           </button>
                         </div>
                       </div>
-                      <a
-                        href={x402WalletManagerHref()}
-                        className="flex min-h-[44px] w-full items-center justify-center rounded-xl border border-gray-200 bg-white px-3 py-3 text-[12px] font-bold text-gray-700"
-                      >
-                        Open wallet manager instead
-                      </a>
                       <p className="text-center text-[11px] leading-relaxed text-gray-400">
-                        After activation, tap Unlock content.
+                        Want to manage your Circle x402 wallet?{' '}
+                        <a href={x402WalletManagerHref()} className="font-semibold text-gray-500 underline underline-offset-2">
+                          Open wallet manager
+                        </a>
                       </p>
                     </div>
                   )}

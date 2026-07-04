@@ -633,7 +633,7 @@ export default async function handler(req: Request, res: Response) {
     const store = await readStore()
     const record = resolveAgentRecord(store, agentSlug)
     const balanceChain = normalizeBalanceChain(req.query.chain, record?.chain ?? 'BASE')
-    const gatewayBalanceChain = normalizeGatewayBalanceChain(req.query.gatewayChain ?? req.query.x402Chain)
+    const gatewayBalanceChain = normalizeGatewayBalanceChain(req.query.gatewayChain ?? req.query.x402Chain ?? req.query.chain)
     let balance: string | undefined
     let balanceError: string | undefined
     let balanceChecked = false
@@ -665,7 +665,7 @@ export default async function handler(req: Request, res: Response) {
       } catch (err) {
         if (isCircleLoginExpired(err)) {
           sessionExpired = true
-          balanceError = 'Circle Agent Wallet session expired. Reconnect this reader wallet to continue.'
+          balanceError = 'Wallet session expired. Sign in once to continue.'
         } else {
           balanceError = err instanceof Error ? err.message.slice(0, 240) : 'Balance lookup failed.'
         }
@@ -692,7 +692,7 @@ export default async function handler(req: Request, res: Response) {
       } catch (err) {
         if (isCircleLoginExpired(err)) {
           sessionExpired = true
-          gatewayBalanceError = 'Circle Agent Wallet session expired. Reconnect this reader wallet to continue.'
+          gatewayBalanceError = 'Wallet session expired. Sign in once to continue.'
         } else {
           gatewayBalanceError = err instanceof Error ? err.message.slice(0, 240) : 'x402 balance lookup failed.'
         }
@@ -919,7 +919,7 @@ export default async function handler(req: Request, res: Response) {
           return res.status(409).json({
             ok: false,
             code: 'circle_session_expired',
-            error: 'Circle Agent Wallet is connected, but the secure session expired. Reconnect the Arc reader wallet, then retry x402 activation.',
+            error: 'Wallet session expired. Sign in once, then retry x402 activation.',
           })
         }
         throw err
