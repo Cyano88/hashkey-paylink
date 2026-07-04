@@ -2113,19 +2113,19 @@ export function StreamGate() {
                 )}
               </div>
             ) : paymentMode === 'checkpoint' ? (
-              <div className="w-full max-w-[340px] space-y-3 text-left">
-                <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-4 shadow-sm dark:border-blue-400/20 dark:bg-blue-500/10">
-                  <p className="text-[12px] font-black text-gray-950 dark:text-white">Checkpoint escrow</p>
+              <div className="w-full space-y-3 text-left">
+                <div>
+                  <p className="text-[12px] font-black text-gray-950 dark:text-white">Pay as you read</p>
                   <p className="mt-1 text-[12px] leading-5 text-gray-500 dark:text-gray-400">
-                    Prepay once. We release USDC to the creator only at reading milestones.
+                    Prepay {formatUsdc(sessionCap)} USDC. Creator earnings unlock only as you reach reading milestones.
                   </p>
-                  <div className="mt-3 grid grid-cols-4 gap-1.5">
-                    {[25, 50, 75, 100].map(mark => (
-                      <span key={mark} className="rounded-full bg-white px-2 py-1 text-center text-[10px] font-black text-blue-600 ring-1 ring-blue-100 dark:bg-white/10 dark:text-blue-200 dark:ring-white/10">
-                        {mark}%
-                      </span>
-                    ))}
-                  </div>
+                </div>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {[25, 50, 75, 100].map(mark => (
+                    <span key={mark} className="rounded-lg bg-blue-50 px-2 py-1.5 text-center text-[10px] font-black text-blue-600 ring-1 ring-blue-100 dark:bg-blue-500/10 dark:text-blue-200 dark:ring-blue-400/20">
+                      {mark}%
+                    </span>
+                  ))}
                 </div>
                 <input
                   type="email"
@@ -2143,9 +2143,9 @@ export function StreamGate() {
                   type="button"
                   onClick={startCheckpointEscrow}
                   disabled={checkpointBusy}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-[12px] font-black text-white shadow-sm transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl bg-gray-950 px-4 py-3 text-[13px] font-semibold text-white shadow-sm transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-100"
                 >
-                  {checkpointBusy ? <><Spinner />Starting escrow...</> : `Start pay-as-you-read`}
+                  {checkpointBusy ? <><Spinner />Starting...</> : 'Start pay-as-you-read'}
                 </button>
               </div>
             ) : paymentMode === 'escrow' ? (
@@ -3204,7 +3204,7 @@ function OverlayShell({
       </div>
       {children}
       <div className="flex items-center gap-1.5 text-[10px] text-gray-400 dark:text-gray-500">
-        {paymentMode === 'x402' ? 'Powered by Circle Gateway on Arc' : paymentMode === 'escrow' || paymentMode === 'choice' ? 'Powered by HashpayStream Creator Checkout' : 'Powered by Arc Network'}
+        {paymentMode === 'x402' ? 'Powered by Circle Gateway on Arc' : paymentMode === 'poa' ? 'Powered by Arc Network' : 'Powered by HashpayStream Creator Checkout'}
       </div>
     </div>
   )

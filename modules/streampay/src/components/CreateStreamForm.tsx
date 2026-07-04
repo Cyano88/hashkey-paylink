@@ -385,7 +385,7 @@ export function CreateStreamForm() {
     ? 'Use email to open your Arc wallet.'
     : circleStartReady
       ? isCreatorStream
-        ? 'Start the pay-as-you-read meter from your Circle wallet.'
+        ? 'Start the timed Arc stream from your Circle wallet.'
         : 'Start the stream from your Circle wallet.'
       : 'Finish the required fields below.'
   const circleCtaLabel = isWorking
@@ -1128,7 +1128,7 @@ export function CreateStreamForm() {
               {isAgenticStreaming ? 'x402 Services' : isCreatorStream ? 'Creator Nano Checkout' : 'Payroll'}
             </h1>
             <p className="mt-1 text-[13px] leading-5 text-gray-500 dark:text-gray-400">
-              {isAgenticStreaming ? 'Daily Polymarket LP research by stream.' : isCreatorStream ? 'Start a pay-as-you-read meter, then return to the creator content.' : 'Stream USDC to anyone on Arc.'}
+              {isAgenticStreaming ? 'Daily Polymarket LP research by stream.' : isCreatorStream ? 'Start a timed Arc stream, then return to the creator content.' : 'Stream USDC to anyone on Arc.'}
             </p>
           </div>
 
@@ -1386,7 +1386,7 @@ export function CreateStreamForm() {
             {isAgenticStreaming ? 'x402 Services' : isCreatorStream ? 'Creator Nano Checkout' : 'Payroll'}
           </h1>
           <p className="mt-1 text-[13px] leading-5 text-gray-500 dark:text-gray-400">
-            {isAgenticStreaming ? 'Stream USDC for daily Polymarket LP research.' : isCreatorStream ? 'Start a pay-as-you-read meter, then continue back to the content.' : 'Stream USDC to anyone on Arc.'}
+            {isAgenticStreaming ? 'Stream USDC for daily Polymarket LP research.' : isCreatorStream ? 'Start a timed Arc stream, then continue back to the content.' : 'Stream USDC to anyone on Arc.'}
           </p>
         </div>
 

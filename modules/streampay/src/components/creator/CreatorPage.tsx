@@ -1393,7 +1393,7 @@ function CreatorAccountEarnings({
         <div className="min-w-0">
           <p className="text-[13px] font-black text-gray-950 dark:text-white">Creator earnings</p>
           <p className="mt-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400">
-            Fixed unlocks and pay-as-you-read streams from this creator wallet.
+            Fixed unlocks, checkpoint reads, and timed stream claims from this creator wallet.
           </p>
         </div>
         <div className="shrink-0 rounded-xl bg-white px-3 py-2 text-right shadow-sm dark:bg-[#111216]">
@@ -1454,7 +1454,7 @@ function CreatorAccountEarnings({
       {!loading && validWallet && !error && combined.length === 0 && (
         <div className="mt-3 rounded-xl border border-gray-100 bg-white px-4 py-4 text-center dark:border-white/10 dark:bg-[#111216]">
           <p className="text-[12px] font-bold text-gray-600 dark:text-gray-300">No earnings yet</p>
-          <p className="mt-1 text-[11px] leading-5 text-gray-400 dark:text-gray-500">Reader payments appear here as fixed unlocks or claimable pay-as-you-read streams.</p>
+          <p className="mt-1 text-[11px] leading-5 text-gray-400 dark:text-gray-500">Fixed unlocks and checkpoint reads appear automatically. Timed stream claims appear when readers use live/video meters.</p>
         </div>
       )}
 
@@ -1616,7 +1616,7 @@ function CreatorStreamClaims({ initialCreatorWallet }: { initialCreatorWallet?: 
       {!loading && validWallet && !error && streams.length === 0 && (
         <div className="mt-3 rounded-xl border border-gray-100 bg-white px-4 py-4 text-center dark:border-white/10 dark:bg-[#111216]">
           <p className="text-[12px] font-bold text-gray-600 dark:text-gray-300">No nano meters yet</p>
-          <p className="mt-1 text-[11px] leading-5 text-gray-400 dark:text-gray-500">When readers start pay-as-you-read meters to this creator wallet, consumed USDC appears here for claiming.</p>
+          <p className="mt-1 text-[11px] leading-5 text-gray-400 dark:text-gray-500">When readers start timed live/video streams to this creator wallet, consumed USDC appears here for claiming.</p>
         </div>
       )}
 
@@ -1735,7 +1735,7 @@ function ReaderStreamVaults({
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-500 dark:text-gray-400">My meters</p>
               <h2 className="mt-1 text-[18px] font-black tracking-tight text-gray-950 dark:text-white">Reader nano meters</h2>
               <p className="mt-1 text-[12px] leading-5 text-gray-500 dark:text-gray-400">
-                Recover active pay-as-you-read meters and refund unconsumed USDC even if the content link is gone.
+                Recover active timed streams and refund unconsumed USDC even if the content link is gone.
               </p>
             </div>
             <div className="shrink-0 rounded-xl bg-gray-50 px-3 py-2 text-right dark:bg-white/[0.04]">
@@ -1789,7 +1789,7 @@ function ReaderStreamVaults({
           {!loading && !validWallet && !error && (
             <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-4 py-6 text-center dark:border-white/10 dark:bg-white/[0.04]">
               <p className="text-[12px] font-bold text-gray-600 dark:text-gray-300">Sign in to recover streams</p>
-              <p className="mt-1 text-[11px] leading-5 text-gray-400 dark:text-gray-500">Use the same email wallet that started the pay-as-you-read meter.</p>
+              <p className="mt-1 text-[11px] leading-5 text-gray-400 dark:text-gray-500">Use the same email wallet that started the timed stream.</p>
             </div>
           )}
 
