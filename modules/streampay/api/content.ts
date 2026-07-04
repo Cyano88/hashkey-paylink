@@ -6,6 +6,7 @@
  */
 
 import type { Request, Response } from 'express'
+import { randomUUID } from 'node:crypto'
 import pg from 'pg'
 import {
   createPublicClient, http, defineChain,
@@ -72,9 +73,13 @@ type CreatorUnlockEntry = {
 
 const store = new Map<string, ContentEntry>()
 const unlockStore = new Map<string, CreatorUnlockEntry>()
+const reactionStore = new Map<string, { contentId: string; walletAddress: string; reaction: 'up' | 'down'; updatedAt: number }>()
+const commentStore = new Map<string, { id: string; contentId: string; walletAddress: string; body: string; createdAt: number; updatedAt: number }>()
+const commentReactionStore = new Map<string, { commentId: string; walletAddress: string; reaction: 'up' | 'down'; updatedAt: number }>()
 const MAX_CONTENT_ID_LENGTH = 128
 const MAX_CONTENT_LENGTH = 100_000
 const MAX_META_TEXT_LENGTH = 2_000
+const MAX_COMMENT_LENGTH = 800
 const MAX_CREATOR_PROOF_AGE_MS = 10 * 60 * 1000
 const DATABASE_URL = (process.env.DATABASE_URL ?? process.env.POSTGRES_URL ?? '').trim()
 const CREATOR_X402_NETWORKS = (process.env.X402_CREATOR_ACCEPT_NETWORKS ?? 'eip155:5042002')
@@ -547,6 +552,31 @@ function ensureSchema() {
       create index if not exists streampay_creator_unlocks_content_idx on streampay_creator_unlocks (content_id, updated_at desc);
       create index if not exists streampay_creator_unlocks_agent_idx on streampay_creator_unlocks (agent_slug, updated_at desc);
       create index if not exists streampay_creator_unlocks_wallet_idx on streampay_creator_unlocks (wallet_address, updated_at desc);
+      create table if not exists streampay_creator_reactions (
+        content_id text not null,
+        wallet_address text not null,
+        reaction text not null check (reaction in ('up', 'down')),
+        updated_at timestamptz not null default now(),
+        primary key (content_id, wallet_address)
+      );
+      create index if not exists streampay_creator_reactions_content_idx on streampay_creator_reactions (content_id, updated_at desc);
+      create table if not exists streampay_creator_comments (
+        comment_id text primary key,
+        content_id text not null,
+        wallet_address text not null,
+        body text not null,
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now()
+      );
+      create index if not exists streampay_creator_comments_content_idx on streampay_creator_comments (content_id, created_at desc);
+      create table if not exists streampay_creator_comment_reactions (
+        comment_id text not null,
+        wallet_address text not null,
+        reaction text not null check (reaction in ('up', 'down')),
+        updated_at timestamptz not null default now(),
+        primary key (comment_id, wallet_address)
+      );
+      create index if not exists streampay_creator_comment_reactions_comment_idx on streampay_creator_comment_reactions (comment_id);
     `).then(() => undefined)
   }
   return schemaReady
@@ -684,6 +714,19 @@ function unlockRowToEarning(row: Record<string, unknown>) {
   }
 }
 
+function cleanWalletAddress(value: unknown) {
+  return String(value ?? '').trim().toLowerCase()
+}
+
+function cleanReaction(value: unknown): 'up' | 'down' | null {
+  const reaction = String(value ?? '').trim().toLowerCase()
+  return reaction === 'up' || reaction === 'down' ? reaction : null
+}
+
+function cleanCommentBody(value: unknown) {
+  return String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, MAX_COMMENT_LENGTH)
+}
+
 async function readCreatorUnlock(contentId: string, agentSlug: string, walletAddress = '') {
   const wallet = String(walletAddress || '').trim().toLowerCase()
   if (pool) {
@@ -705,6 +748,22 @@ async function readCreatorUnlock(contentId: string, agentSlug: string, walletAdd
   }
   if (wallet) return unlockStore.get(unlockKey(contentId, agentSlug, wallet)) ?? unlockStore.get(unlockKey(contentId, agentSlug)) ?? null
   return unlockStore.get(unlockKey(contentId, agentSlug)) ?? null
+}
+
+async function hasWalletUnlockedContent(contentId: string, walletAddress: string) {
+  const wallet = cleanWalletAddress(walletAddress)
+  if (!wallet) return false
+  await ensureSchema()
+  if (pool) {
+    const result = await pool.query(
+      `select 1 from streampay_creator_unlocks where content_id = $1 and lower(wallet_address) = $2 limit 1`,
+      [contentId, wallet],
+    )
+    return result.rowCount > 0
+  }
+  return Array.from(unlockStore.values()).some(unlock => (
+    unlock.contentId === contentId && unlock.walletAddress.toLowerCase() === wallet
+  ))
 }
 
 async function writeCreatorUnlock(entry: CreatorUnlockEntry) {
@@ -1445,4 +1504,162 @@ export async function getCreatorBook(req: Request, res: Response) {
     const message = err instanceof Error ? err.message : 'Book text unavailable.'
     return res.status(502).json({ ok: false, error: message.slice(0, 180) })
   }
+}
+
+async function readCreatorSocial(contentId: string, walletAddress = '') {
+  const wallet = cleanWalletAddress(walletAddress)
+  await ensureSchema()
+  if (pool) {
+    const [reactionRows, commentRows] = await Promise.all([
+      pool.query(
+        `select
+           count(*) filter (where reaction = 'up')::int as up_count,
+           count(*) filter (where reaction = 'down')::int as down_count,
+           max(reaction) filter (where lower(wallet_address) = $2) as my_reaction
+         from streampay_creator_reactions
+         where content_id = $1`,
+        [contentId, wallet],
+      ),
+      pool.query(
+        `select
+           c.comment_id,
+           c.wallet_address,
+           c.body,
+           c.created_at,
+           count(cr.*) filter (where cr.reaction = 'up')::int as up_count,
+           count(cr.*) filter (where cr.reaction = 'down')::int as down_count,
+           max(cr.reaction) filter (where lower(cr.wallet_address) = $2) as my_reaction
+         from streampay_creator_comments c
+         left join streampay_creator_comment_reactions cr on cr.comment_id = c.comment_id
+         where c.content_id = $1
+         group by c.comment_id
+         order by c.created_at desc
+         limit 50`,
+        [contentId, wallet],
+      ),
+    ])
+    const reaction = reactionRows.rows[0] ?? {}
+    return {
+      upCount: Number(reaction.up_count ?? 0),
+      downCount: Number(reaction.down_count ?? 0),
+      myReaction: cleanReaction(reaction.my_reaction),
+      comments: commentRows.rows.map(row => ({
+        id: String(row.comment_id),
+        walletAddress: String(row.wallet_address ?? ''),
+        body: String(row.body ?? ''),
+        createdAt: row.created_at instanceof Date ? row.created_at.getTime() : Date.now(),
+        upCount: Number(row.up_count ?? 0),
+        downCount: Number(row.down_count ?? 0),
+        myReaction: cleanReaction(row.my_reaction),
+      })),
+    }
+  }
+
+  const reactions = Array.from(reactionStore.values()).filter(item => item.contentId === contentId)
+  const comments = Array.from(commentStore.values())
+    .filter(item => item.contentId === contentId)
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .slice(0, 50)
+    .map(comment => {
+      const commentReactions = Array.from(commentReactionStore.values()).filter(item => item.commentId === comment.id)
+      return {
+        id: comment.id,
+        walletAddress: comment.walletAddress,
+        body: comment.body,
+        createdAt: comment.createdAt,
+        upCount: commentReactions.filter(item => item.reaction === 'up').length,
+        downCount: commentReactions.filter(item => item.reaction === 'down').length,
+        myReaction: cleanReaction(commentReactions.find(item => item.walletAddress === wallet)?.reaction),
+      }
+    })
+  return {
+    upCount: reactions.filter(item => item.reaction === 'up').length,
+    downCount: reactions.filter(item => item.reaction === 'down').length,
+    myReaction: cleanReaction(reactions.find(item => item.walletAddress === wallet)?.reaction),
+    comments,
+  }
+}
+
+export async function getCreatorSocial(req: Request, res: Response) {
+  const contentId = String(req.query.id ?? '').trim()
+  const walletAddress = cleanWalletAddress(req.query.wallet)
+  if (!contentId || contentId.length > MAX_CONTENT_ID_LENGTH) return res.status(400).json({ ok: false, error: 'Invalid content id.' })
+  return res.json({ ok: true, ...(await readCreatorSocial(contentId, walletAddress)) })
+}
+
+export async function setCreatorReaction(req: Request, res: Response) {
+  const contentId = String(req.body?.contentId ?? '').trim()
+  const walletAddress = cleanWalletAddress(req.body?.walletAddress)
+  const reaction = cleanReaction(req.body?.reaction)
+  if (!contentId || contentId.length > MAX_CONTENT_ID_LENGTH || !walletAddress) return res.status(400).json({ ok: false, error: 'Invalid content or wallet.' })
+  if (!(await hasWalletUnlockedContent(contentId, walletAddress))) return res.status(403).json({ ok: false, error: 'Unlock this content before reacting.' })
+  await ensureSchema()
+  if (pool) {
+    if (reaction) {
+      await pool.query(
+        `insert into streampay_creator_reactions (content_id, wallet_address, reaction, updated_at)
+         values ($1, $2, $3, now())
+         on conflict (content_id, wallet_address) do update set reaction = excluded.reaction, updated_at = now()`,
+        [contentId, walletAddress, reaction],
+      )
+    } else {
+      await pool.query(`delete from streampay_creator_reactions where content_id = $1 and wallet_address = $2`, [contentId, walletAddress])
+    }
+  } else {
+    const key = `${contentId}:${walletAddress}`
+    if (reaction) reactionStore.set(key, { contentId, walletAddress, reaction, updatedAt: Date.now() })
+    else reactionStore.delete(key)
+  }
+  return res.json({ ok: true, ...(await readCreatorSocial(contentId, walletAddress)) })
+}
+
+export async function addCreatorComment(req: Request, res: Response) {
+  const contentId = String(req.body?.contentId ?? '').trim()
+  const walletAddress = cleanWalletAddress(req.body?.walletAddress)
+  const body = cleanCommentBody(req.body?.body)
+  if (!contentId || contentId.length > MAX_CONTENT_ID_LENGTH || !walletAddress || body.length < 2) return res.status(400).json({ ok: false, error: 'Write a short comment first.' })
+  if (!(await hasWalletUnlockedContent(contentId, walletAddress))) return res.status(403).json({ ok: false, error: 'Unlock this content before commenting.' })
+  const commentId = randomUUID()
+  await ensureSchema()
+  if (pool) {
+    await pool.query(
+      `insert into streampay_creator_comments (comment_id, content_id, wallet_address, body, created_at, updated_at)
+       values ($1, $2, $3, $4, now(), now())`,
+      [commentId, contentId, walletAddress, body],
+    )
+  } else {
+    const now = Date.now()
+    commentStore.set(commentId, { id: commentId, contentId, walletAddress, body, createdAt: now, updatedAt: now })
+  }
+  return res.json({ ok: true, ...(await readCreatorSocial(contentId, walletAddress)) })
+}
+
+export async function setCreatorCommentReaction(req: Request, res: Response) {
+  const contentId = String(req.body?.contentId ?? '').trim()
+  const commentId = String(req.body?.commentId ?? '').trim()
+  const walletAddress = cleanWalletAddress(req.body?.walletAddress)
+  const reaction = cleanReaction(req.body?.reaction)
+  if (!contentId || !commentId || !walletAddress) return res.status(400).json({ ok: false, error: 'Invalid comment reaction.' })
+  if (!(await hasWalletUnlockedContent(contentId, walletAddress))) return res.status(403).json({ ok: false, error: 'Unlock this content before reacting.' })
+  await ensureSchema()
+  if (pool) {
+    const comment = await pool.query(`select 1 from streampay_creator_comments where comment_id = $1 and content_id = $2 limit 1`, [commentId, contentId])
+    if (!comment.rowCount) return res.status(404).json({ ok: false, error: 'Comment not found.' })
+    if (reaction) {
+      await pool.query(
+        `insert into streampay_creator_comment_reactions (comment_id, wallet_address, reaction, updated_at)
+         values ($1, $2, $3, now())
+         on conflict (comment_id, wallet_address) do update set reaction = excluded.reaction, updated_at = now()`,
+        [commentId, walletAddress, reaction],
+      )
+    } else {
+      await pool.query(`delete from streampay_creator_comment_reactions where comment_id = $1 and wallet_address = $2`, [commentId, walletAddress])
+    }
+  } else {
+    if (!commentStore.has(commentId)) return res.status(404).json({ ok: false, error: 'Comment not found.' })
+    const key = `${commentId}:${walletAddress}`
+    if (reaction) commentReactionStore.set(key, { commentId, walletAddress, reaction, updatedAt: Date.now() })
+    else commentReactionStore.delete(key)
+  }
+  return res.json({ ok: true, ...(await readCreatorSocial(contentId, walletAddress)) })
 }
