@@ -10,7 +10,7 @@ import { randomUUID } from 'node:crypto'
 import pg from 'pg'
 import {
   createPublicClient, http, defineChain,
-  parseAbi, isAddress, keccak256, toBytes, verifyMessage, verifyTypedData, hashTypedData,
+  parseAbi, parseAbiItem, isAddress, keccak256, toBytes, verifyMessage, verifyTypedData, hashTypedData,
   type Address, type Hex,
 } from 'viem'
 import type { NextFunction } from 'express'
@@ -41,6 +41,9 @@ const STREAM_VAULT_ABI = parseAbi([
 const CHECKPOINT_VAULT_ABI = parseAbi([
   'function vaultInfo() view returns (address _sender,address _recipient,address _token,address _relayer,bytes32 _contentId,uint256 _totalAmount,uint256 _releasedAmount,uint256 _refundableAmount,bool _refunded,bool _funded)',
 ])
+const CHECKPOINT_VAULT_CREATED_EVENT = parseAbiItem(
+  'event CheckpointVaultCreated(address indexed vault,address indexed sender,address indexed recipient,bytes32 contentId,uint256 totalAmount,bytes32 salt)',
+)
 const ERC1271_ABI = parseAbi([
   'function isValidSignature(bytes32 hash, bytes signature) view returns (bytes4)',
 ])
@@ -103,6 +106,7 @@ const CREATOR_X402_FACILITATOR_URL = process.env.X402_CREATOR_FACILITATOR_URL?.t
   || 'https://gateway-api-testnet.circle.com'
 const CREATOR_AGENT_X402_PAY_CHAIN = process.env.CREATOR_AGENT_X402_PAY_CHAIN?.trim() || 'ARC-TESTNET'
 const CREATOR_ADMIN_KEY = (process.env.CREATOR_ADMIN_KEY ?? '').trim()
+const CHECKPOINT_FACTORY_ADDRESS = (process.env.CHECKPOINT_FACTORY_ADDRESS ?? process.env.VITE_CHECKPOINT_FACTORY_ADDRESS ?? '').trim()
 
 type PaidRequest = Request & {
   payment?: {
@@ -1488,6 +1492,34 @@ async function verifyCheckpointVaultState(contentId: string, entry: ContentEntry
   }
 }
 
+async function findCheckpointUnlockOnChain(contentId: string, entry: ContentEntry, walletAddress: string) {
+  const wallet = cleanWalletAddress(walletAddress)
+  if (!CHECKPOINT_FACTORY_ADDRESS || !isAddress(CHECKPOINT_FACTORY_ADDRESS) || !wallet || !isAddress(wallet)) return null
+  const targetContentId = toContentBytes32(contentId).toLowerCase()
+  const logs = await arcClient.getLogs({
+    address: CHECKPOINT_FACTORY_ADDRESS as `0x${string}`,
+    event: CHECKPOINT_VAULT_CREATED_EVENT,
+    args: { sender: wallet as `0x${string}` },
+    fromBlock: 0n,
+    toBlock: 'latest',
+  }).catch(() => [])
+
+  for (const log of logs.reverse()) {
+    const vault = log.args.vault
+    const logContentId = String(log.args.contentId ?? '').toLowerCase()
+    if (!vault || logContentId !== targetContentId) continue
+    try {
+      const state = await verifyCheckpointVaultState(contentId, entry, vault)
+      if (state.sender.toLowerCase() !== wallet) continue
+      await writeCheckpointUnlock({ contentId, walletAddress: wallet, vaultAddress: vault, createdAt: Date.now() })
+      return { vaultAddress: vault, state }
+    } catch {
+      continue
+    }
+  }
+  return null
+}
+
 export async function getContentCheckpointEscrow(req: Request, res: Response) {
   const { id, vault } = req.query as { id?: string; vault?: string }
 
@@ -1527,7 +1559,11 @@ export async function getCreatorCheckpointVault(req: Request, res: Response) {
   const entry = await readContentEntry(contentId)
   if (!entry) return res.status(404).json({ ok: false, error: 'Content not found.' })
   const saved = await readCheckpointUnlock(contentId, wallet)
-  if (!saved || !isAddress(saved.vaultAddress)) return res.status(404).json({ ok: false, error: 'No previous pay-as-you-read session found.' })
+  if (!saved || !isAddress(saved.vaultAddress)) {
+    const discovered = await findCheckpointUnlockOnChain(contentId, entry, wallet)
+    if (!discovered) return res.status(404).json({ ok: false, error: 'No previous pay-as-you-read session found.' })
+    return res.json({ ok: true, vaultAddress: discovered.vaultAddress, ...discovered.state })
+  }
   try {
     const state = await verifyCheckpointVaultState(contentId, entry, saved.vaultAddress)
     if (state.sender.toLowerCase() !== wallet) return res.status(403).json({ ok: false, error: 'This checkpoint belongs to another reader wallet.' })

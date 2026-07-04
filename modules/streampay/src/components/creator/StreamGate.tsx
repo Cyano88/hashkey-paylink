@@ -365,6 +365,12 @@ function checkpointMarksFromAmounts(releasedAmount?: string, totalAmount?: strin
   return marks
 }
 
+function readableScrollProgress(el: HTMLElement) {
+  const maxScroll = el.scrollHeight - el.clientHeight
+  if (maxScroll <= 8) return 0
+  return Math.min(1, Math.max(0, el.scrollTop / maxScroll))
+}
+
 function formatBalanceLabel(value?: string) {
   if (value === undefined || value === null || value === '') return null
   const amount = Number(value)
@@ -1015,7 +1021,10 @@ export function StreamGate() {
       error?: string
     }
     if (!res.ok || !data.ok || !data.type || !data.content) throw new Error(data.error || 'Could not verify checkpoint escrow.')
-    if (data.sender && /^0x[a-fA-F0-9]{40}$/.test(data.sender)) setReaderWalletAddress(data.sender)
+    if (data.sender && /^0x[a-fA-F0-9]{40}$/.test(data.sender)) {
+      setReaderWalletAddress(data.sender)
+      void saveCheckpointVaultForWallet(data.sender, vaultAddress)
+    }
     const restoredMarks = checkpointMarksFromAmounts(data.releasedAmount, data.totalAmount)
     setCheckpointReleased(restoredMarks)
     checkpointReleaseRef.current = new Set(Object.keys(restoredMarks).map(Number))
@@ -2403,8 +2412,7 @@ export function StreamGate() {
               className="max-h-[480px] overflow-y-auto pr-1"
               onScroll={event => {
                 const el = event.currentTarget
-                const progress = (el.scrollTop + el.clientHeight) / Math.max(el.scrollHeight, 1)
-                handleReadableProgress(progress)
+                handleReadableProgress(readableScrollProgress(el))
               }}
             >
               <div
@@ -3070,7 +3078,7 @@ function BookUnlocked({
           className="max-h-[620px] overflow-y-auto rounded-2xl border border-gray-100 bg-[#fffaf3] px-5 py-6 shadow-sm dark:border-white/10 dark:bg-[#111216] sm:px-6"
           onScroll={event => {
             const el = event.currentTarget
-            onReadingProgress((el.scrollTop + el.clientHeight) / Math.max(el.scrollHeight, 1))
+            onReadingProgress(readableScrollProgress(el))
           }}
         >
           <div className="mx-auto max-w-[62ch] space-y-4 text-[15px] leading-8 text-gray-800 dark:text-gray-200">
