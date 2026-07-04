@@ -217,18 +217,22 @@ const OFFICIAL_DISCOVER_CONTENT: PublishedContent[] = [
   },
 ]
 
+function openLibraryCover(isbn: string) {
+  return `https://covers.openlibrary.org/b/isbn/${encodeURIComponent(isbn)}-L.jpg`
+}
+
 const OFFICIAL_EBOOKS: PublishedContent[] = [
-  ['ebook-pride-prejudice', 'Pride and Prejudice', 'A sharp romance about love, class, first impressions, and second chances.', 'Romance'],
-  ['ebook-dracula', 'Dracula', 'A gothic horror classic with journals, letters, pursuit, and dread.', 'Horror'],
-  ['ebook-frankenstein', 'Frankenstein', 'A tragic creation story about ambition, loneliness, and responsibility.', 'Tragedy'],
-  ['ebook-sherlock-adventures', 'The Adventures of Sherlock Holmes', 'Brisk detective mysteries built around deduction, disguise, and suspense.', 'Mystery'],
-  ['ebook-jane-eyre', 'Jane Eyre', 'A passionate coming-of-age romance with secrets, independence, and moral tension.', 'Love'],
-  ['ebook-wuthering-heights', 'Wuthering Heights', 'A stormy tale of obsession, revenge, and destructive love.', 'Drama'],
-  ['ebook-dorian-gray', 'The Picture of Dorian Gray', 'A stylish psychological thriller about beauty, vanity, and consequence.', 'Thriller'],
-  ['ebook-alice-wonderland', 'Alice in Wonderland', 'A funny, strange, endlessly imaginative trip through nonsense and wonder.', 'Funny'],
-  ['ebook-frederick-douglass', 'Narrative of the Life of Frederick Douglass', 'A true-life account of survival, literacy, freedom, and moral courage.', 'True Life'],
-  ['ebook-time-machine', 'The Time Machine', 'A compact sci-fi adventure through futurism, fear, and social collapse.', 'Sci-Fi'],
-].map(([id, title, description, tag], index) => ({
+  ['ebook-pride-prejudice', 'Pride and Prejudice', 'A sharp romance about love, class, first impressions, and second chances.', 'Romance', '9780141439518'],
+  ['ebook-dracula', 'Dracula', 'A gothic horror classic with journals, letters, pursuit, and dread.', 'Horror', '9780486411095'],
+  ['ebook-frankenstein', 'Frankenstein', 'A tragic creation story about ambition, loneliness, and responsibility.', 'Tragedy', '9780486282114'],
+  ['ebook-sherlock-adventures', 'The Adventures of Sherlock Holmes', 'Brisk detective mysteries built around deduction, disguise, and suspense.', 'Mystery', '9780486474915'],
+  ['ebook-jane-eyre', 'Jane Eyre', 'A passionate coming-of-age romance with secrets, independence, and moral tension.', 'Love', '9780141441146'],
+  ['ebook-wuthering-heights', 'Wuthering Heights', 'A stormy tale of obsession, revenge, and destructive love.', 'Drama', '9780141439556'],
+  ['ebook-dorian-gray', 'The Picture of Dorian Gray', 'A stylish psychological thriller about beauty, vanity, and consequence.', 'Thriller', '9780141439570'],
+  ['ebook-alice-wonderland', 'Alice in Wonderland', 'A funny, strange, endlessly imaginative trip through nonsense and wonder.', 'Funny', '9780486275437'],
+  ['ebook-frederick-douglass', 'Narrative of the Life of Frederick Douglass', 'A true-life account of survival, literacy, freedom, and moral courage.', 'True Life', '9780486284996'],
+  ['ebook-time-machine', 'The Time Machine', 'A compact sci-fi adventure through futurism, fear, and social collapse.', 'Sci-Fi', '9780486284729'],
+].map(([id, title, description, tag, isbn]) => ({
   id,
   contentId: id,
   creator: OFFICIAL_CREATOR_ADDRESS,
@@ -238,7 +242,7 @@ const OFFICIAL_EBOOKS: PublishedContent[] = [
   price: '0.10',
   tag,
   source: 'Google Books Preview',
-  image: FALLBACK_CREATOR_COVERS[index % FALLBACK_CREATOR_COVERS.length],
+  image: openLibraryCover(isbn),
   gateLink: `/gate?app=streampay&id=${id}&cr=${OFFICIAL_CREATOR_ADDRESS}&r=1000&cap=100000&mode=unlock&pay=x402&ct=url&t=${encodeURIComponent(title)}`,
   action: 'gate' as const,
   cta: 'Unlock book',
@@ -1143,6 +1147,8 @@ function DiscoverContent({
                 </button>
               )
             }
+            const isEbook = card.category === 'ebooks'
+            const imageBroken = Boolean(brokenImages[card.id])
             return (
               <button
                 key={card.id}
@@ -1151,19 +1157,33 @@ function DiscoverContent({
                 className="group flex h-[132px] w-full gap-3 rounded-2xl border border-gray-100 bg-white p-2 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-white/10 dark:bg-white/[0.04] dark:hover:border-white/20"
               >
                 <div className="relative h-full w-24 shrink-0 overflow-hidden rounded-xl bg-gray-100 dark:bg-white/[0.06]">
-                  <img
-                    src={brokenImages[card.id] ? WORLD_GLOBE_IMAGE : card.image || WORLD_GLOBE_IMAGE}
-                    alt=""
-                    className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
-                    onError={() => setBrokenImages(current => ({ ...current, [card.id]: true }))}
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-gray-950/70 to-transparent" />
+                  {isEbook && imageBroken ? (
+                    <div className="flex h-full w-full flex-col justify-between bg-gradient-to-br from-gray-950 via-gray-800 to-blue-950 p-2 text-white">
+                      <span className="text-[8px] font-black uppercase tracking-[0.16em] text-blue-200">Ebook</span>
+                      <span className="line-clamp-4 text-[11px] font-black leading-tight">{card.title}</span>
+                      <span className="h-1 w-10 rounded-full bg-blue-300" />
+                    </div>
+                  ) : (
+                    <img
+                      src={imageBroken ? WORLD_GLOBE_IMAGE : card.image || WORLD_GLOBE_IMAGE}
+                      alt=""
+                      className={[
+                        'h-full w-full transition-transform duration-500 group-hover:scale-[1.04]',
+                        isEbook ? 'object-contain bg-gray-50 p-1 dark:bg-[#111216]' : 'object-cover',
+                      ].join(' ')}
+                      onError={() => setBrokenImages(current => ({ ...current, [card.id]: true }))}
+                    />
+                  )}
+                  {!isEbook && <div className="absolute inset-0 bg-gradient-to-t from-gray-950/70 to-transparent" />}
                   {countdown && (
                     <div className="absolute inset-x-1.5 top-1.5 rounded-full bg-white/90 px-2 py-1 text-center text-[8px] font-black uppercase tracking-[0.12em] text-gray-950 backdrop-blur">
                       {countdown.isLive ? 'Pay to view live' : `Starts in ${countdown.label}`}
                     </div>
                   )}
-                  <span className="absolute bottom-1.5 left-1.5 right-1.5 truncate rounded-full bg-white/90 px-2 py-1 text-center text-[8px] font-bold uppercase tracking-[0.12em] text-gray-950">
+                  <span className={[
+                    'absolute bottom-1.5 left-1.5 right-1.5 truncate rounded-full px-2 py-1 text-center text-[8px] font-bold uppercase tracking-[0.12em]',
+                    isEbook ? 'bg-gray-950/85 text-white backdrop-blur' : 'bg-white/90 text-gray-950',
+                  ].join(' ')}>
                     {card.tag}
                   </span>
                 </div>

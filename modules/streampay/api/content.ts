@@ -209,6 +209,10 @@ const OFFICIAL_EBOOKS: Array<{
   },
 ]
 
+function openLibraryCover(isbn: string) {
+  return `https://covers.openlibrary.org/b/isbn/${encodeURIComponent(isbn.replace(/^ISBN:/i, ''))}-L.jpg`
+}
+
 const OFFICIAL_CONTENT: Record<string, ContentEntry> = {
   'worldcup-news': {
     type: 'url',
@@ -257,7 +261,7 @@ const OFFICIAL_CONTENT: Record<string, ContentEntry> = {
     description: book.description,
     authorName: 'Google Books Preview',
     xHandle: 'Hash_PayLink',
-    coverImage: ['/brand/africa-business-bg.jpeg', '/brand/abuja-business-bg.jpeg', '/brand/world-globe.png'][index % 3],
+    coverImage: openLibraryCover(book.identifier),
     category: 'ebooks',
     reviewStatus: 'approved' as const,
     reviewedAt: Date.now(),
