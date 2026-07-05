@@ -113,6 +113,25 @@ type ServerCreatorPost = {
   reviewStatus?: 'pending' | 'approved' | 'rejected'
   reviewNote?: string
 }
+
+function contentCtaFor(type?: 'text' | 'url' | 'video', category?: CreatorCategory) {
+  if (type === 'video' || category === 'hashwatch') return 'Watch'
+  if (type === 'text' && category === 'developers') return 'Unlock guide'
+  if (type === 'text' && category === 'ebooks') return 'Read book'
+  return 'Unlock'
+}
+
+function dedupeContentCards(cards: PublishedContent[]) {
+  const seen = new Set<string>()
+  const deduped: PublishedContent[] = []
+  for (const card of cards) {
+    const key = card.contentId || card.gateLink || card.id
+    if (!key || seen.has(key)) continue
+    seen.add(key)
+    deduped.push(card)
+  }
+  return deduped
+}
 type PolyWorldCupArticle = {
   title: string
   description: string
@@ -725,6 +744,8 @@ function contentFromGate(link: string, meta: GateCreatedMeta, index: number): Pu
     author,
     xHandle,
     gateLink: link,
+    action: 'gate',
+    cta: contentCtaFor(meta.contentType, category),
     editable: true,
     reviewStatus: meta.reviewStatus ?? 'pending',
     draft: {
@@ -766,6 +787,8 @@ function contentFromServerPost(post: ServerCreatorPost, index: number): Publishe
     author,
     xHandle,
     gateLink: post.gateLink,
+    action: 'gate',
+    cta: contentCtaFor(post.type, category),
     startsAt: post.startsAt,
     editable: false,
     reviewStatus: post.reviewStatus || 'pending',
@@ -868,7 +891,12 @@ function DiscoverContent({
     return () => window.clearInterval(timer)
   }, [])
 
-  const approvedSessionPosts = published.filter(card => card.reviewStatus === 'approved')
+  const approvedPostsById = new Set(approvedPosts.map(card => card.contentId || card.gateLink || card.id))
+  const approvedSessionPosts = dedupeContentCards(published.filter(card => {
+    if (card.reviewStatus !== 'approved') return false
+    const key = card.contentId || card.gateLink || card.id
+    return !approvedPostsById.has(key)
+  }))
   const scoreMatches = [...(scoreFeed?.matches ?? [])].sort((a, b) => Number(isLiveMatch(b)) - Number(isLiveMatch(a)))
   const scoreCards = scoreMatches.slice(0, 16).map(worldCupScoreCard)
   const officialCards = [
@@ -877,15 +905,15 @@ function DiscoverContent({
     ...worldCupNewsCards,
     ...scoreCards,
   ].filter(Boolean) as PublishedContent[]
-  const heroCards = [
+  const heroCards = dedupeContentCards([
     ...OFFICIAL_DISCOVER_CONTENT,
     ...OFFICIAL_EBOOKS,
     ...worldCupNewsCards,
     ...scoreCards,
     ...approvedSessionPosts,
     ...approvedPosts,
-  ].filter(card => categoryFilter === 'all' || card.category === categoryFilter)
-  const allCards = [...officialCards, ...approvedSessionPosts, ...approvedPosts]
+  ].filter(card => categoryFilter === 'all' || card.category === categoryFilter))
+  const allCards = dedupeContentCards([...officialCards, ...approvedSessionPosts, ...approvedPosts])
   const filteredCards = allCards.filter(card => categoryFilter === 'all' || card.category === categoryFilter)
   const cards = (categoryFilter === 'all' ? interleaveCreatorCards(filteredCards) : filteredCards)
     .slice(0, 8)
@@ -2208,6 +2236,12 @@ export function CreatorAdminPage() {
     }
   }, [adminKey, status])
 
+  function selectReviewStatus(nextStatus: 'pending' | 'approved' | 'rejected') {
+    setStatus(nextStatus)
+    setPosts([])
+    setError('')
+  }
+
   async function reviewPost(post: PublishedContent, action: 'approve' | 'reject') {
     if (!post.contentId) return
     setBusyId(post.contentId)
@@ -2266,7 +2300,7 @@ export function CreatorAdminPage() {
               <button
                 key={item}
                 type="button"
-                onClick={() => setStatus(item)}
+                onClick={() => selectReviewStatus(item)}
                 className={[
                   'min-h-10 flex-1 rounded-lg px-3 text-[11px] font-black capitalize transition-colors',
                   status === item ? 'bg-gray-950 text-white dark:bg-white dark:text-gray-950' : 'text-gray-500 hover:bg-white hover:text-gray-900 dark:text-gray-400 dark:hover:bg-white/[0.08] dark:hover:text-gray-100',
@@ -2314,22 +2348,34 @@ export function CreatorAdminPage() {
                   >
                     Preview
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => reviewPost(post, 'reject')}
-                    disabled={busyId === post.contentId}
-                    className="min-h-10 rounded-xl border border-red-100 bg-red-50 text-[12px] font-black text-red-600 disabled:opacity-50 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-300"
-                  >
-                    Reject
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => reviewPost(post, 'approve')}
-                    disabled={busyId === post.contentId}
-                    className="min-h-10 rounded-xl bg-gray-950 text-[12px] font-black text-white disabled:opacity-50 dark:bg-white dark:text-gray-950"
-                  >
-                    Approve
-                  </button>
+                  {status === 'rejected' ? (
+                    <div className="flex min-h-10 items-center justify-center rounded-xl border border-red-100 bg-red-50 text-[12px] font-black text-red-600 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-300">
+                      Rejected
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => reviewPost(post, 'reject')}
+                      disabled={busyId === post.contentId}
+                      className="min-h-10 rounded-xl border border-red-100 bg-red-50 text-[12px] font-black text-red-600 disabled:opacity-50 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-300"
+                    >
+                      Reject
+                    </button>
+                  )}
+                  {status === 'approved' ? (
+                    <div className="flex min-h-10 items-center justify-center rounded-xl bg-emerald-50 text-[12px] font-black text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
+                      Approved
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => reviewPost(post, 'approve')}
+                      disabled={busyId === post.contentId}
+                      className="min-h-10 rounded-xl bg-gray-950 text-[12px] font-black text-white disabled:opacity-50 dark:bg-white dark:text-gray-950"
+                    >
+                      Approve
+                    </button>
+                  )}
                 </div>
               </div>
             ))}

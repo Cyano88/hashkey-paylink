@@ -1454,7 +1454,8 @@ export async function storeContent(req: Request, res: Response) {
   }
   const safeRateRaw = Math.max(0, Number(rateRaw) || 0)
   const safeCategory = cleanCategory(category)
-  const safeMode = mode === 'stream' && safeType !== 'url' && safeCategory === 'live-scores' ? 'stream' : 'unlock'
+  const streamModeAllowed = safeType === 'text' || (safeType === 'video' && safeCategory === 'hashwatch') || safeCategory === 'live-scores'
+  const safeMode = mode === 'stream' && safeType !== 'url' && streamModeAllowed ? 'stream' : 'unlock'
   const creatorVerified = await verifyCreatorProof({
     contentId,
     creator,
