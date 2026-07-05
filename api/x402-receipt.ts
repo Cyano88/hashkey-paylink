@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express'
 import { ensureAgentActivityArchived, findAgentActivity } from './agent-activity.js'
 import { getAgentGovernanceProfile, getAgentLegalProfile } from './agent-legal.js'
+import { findCreatorUnlockReceipt } from '../modules/streampay/api/content.js'
 
 const CIRCLE_GATEWAY_API_BASE = (process.env.CIRCLE_GATEWAY_API_BASE ?? 'https://gateway-api-testnet.circle.com').replace(/\/+$/, '')
 const CIRCLE_API_KEY = String(
@@ -39,7 +40,20 @@ export default async function handler(req: Request, res: Response) {
 
   try {
     const initialActivity = await findAgentActivity(id)
-    if (!initialActivity?.proof) return res.status(404).json({ ok: false, error: 'x402 receipt not found.' })
+    if (!initialActivity?.proof) {
+      const creatorReceipt = await findCreatorUnlockReceipt(id)
+      if (creatorReceipt) {
+        return res.json({
+          ok: true,
+          receipt: {
+            ...creatorReceipt,
+            legal: getAgentLegalProfile(creatorReceipt.proof.seller),
+            governance: getAgentGovernanceProfile(),
+          },
+        })
+      }
+      return res.status(404).json({ ok: false, error: 'x402 receipt not found.' })
+    }
     const activity = initialActivity.og ? initialActivity : await ensureAgentActivityArchived(id) ?? initialActivity
     const shouldVerify = String(req.query.verify ?? '') === '1'
     const circle = shouldVerify

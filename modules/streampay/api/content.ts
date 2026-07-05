@@ -6,7 +6,7 @@
  */
 
 import type { Request, Response } from 'express'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import pg from 'pg'
 import {
   createPublicClient, http, defineChain,
@@ -994,6 +994,115 @@ function unlockRowToEarning(row: Record<string, unknown>) {
     receiptActivityId: String(row.receipt_activity_id ?? ''),
     transaction: String(row.payment_transaction ?? ''),
     unlockedAt: row.unlocked_at instanceof Date ? row.unlocked_at.getTime() : Date.now(),
+  }
+}
+
+export async function findCreatorUnlockReceipt(activityId: string) {
+  const id = String(activityId ?? '').trim()
+  if (!id) return null
+  if (pool) {
+    await ensureSchema()
+    const result = await pool.query(
+      `select
+         u.content_id,
+         u.agent_slug,
+         u.wallet_address,
+         u.payment_transaction,
+         u.receipt_activity_id,
+         u.unlocked_at,
+         c.creator,
+         c.type,
+         c.cap_raw,
+         c.mode,
+         c.title,
+         c.description,
+         c.category
+       from streampay_creator_unlocks u
+       left join streampay_creator_content c on c.content_id = u.content_id
+       where u.receipt_activity_id = $1
+       order by u.updated_at desc
+       limit 1`,
+      [id],
+    )
+    if ((result.rowCount ?? 0) > 0) return creatorUnlockReceiptFromRow(result.rows[0], id)
+    return null
+  }
+  const found = Array.from(unlockStore.values()).find(item => item.receiptActivityId === id)
+  if (!found) return null
+  const entry = await readContentEntry(found.contentId)
+  return creatorUnlockReceiptFromRow({
+    content_id: found.contentId,
+    agent_slug: found.agentSlug,
+    wallet_address: found.walletAddress,
+    payment_transaction: found.paymentTransaction,
+    receipt_activity_id: found.receiptActivityId,
+    unlocked_at: new Date(found.unlockedAt),
+    creator: entry?.creator ?? '',
+    type: entry?.type ?? 'text',
+    cap_raw: entry?.capRaw ?? 0,
+    mode: entry?.mode ?? 'unlock',
+    title: entry?.title ?? 'Creator content',
+    description: entry?.description ?? '',
+    category: entry?.category ?? 'crypto',
+  }, id)
+}
+
+function creatorUnlockReceiptFromRow(row: Record<string, unknown>, activityId: string) {
+  const capRaw = Math.max(1, Number(row.cap_raw ?? 0) || 0)
+  const amount = Math.ceil(capRaw) / 1_000_000
+  const txRef = String(row.payment_transaction ?? '')
+  const payer = String(row.wallet_address ?? '')
+  const creator = String(row.creator ?? '')
+  const contentId = String(row.content_id ?? '')
+  const category = String(row.category ?? 'creator')
+  const contentType = String(row.type ?? 'text')
+  const title = String(row.title ?? '').trim() || (
+    contentType === 'video' || category === 'hashwatch'
+      ? 'HashWatch video unlocked'
+      : contentType === 'book' || category === 'ebooks'
+      ? 'Book unlocked'
+      : 'Creator content unlocked'
+  )
+  const proofHash = createHash('sha256').update([
+    'hashpaystream-x402-receipt',
+    activityId,
+    contentId,
+    payer,
+    creator,
+    txRef,
+    String(amount),
+  ].join(':')).digest('hex')
+  return {
+    type: 'circle_gateway_x402_receipt',
+    activityId,
+    agentSlug: String(row.agent_slug ?? ''),
+    title,
+    amount: `${amount.toLocaleString('en-US', { useGrouping: false, maximumFractionDigits: 6 })} USDC`,
+    asset: 'USDC',
+    chain: 'arc',
+    txHash: txRef || proofHash,
+    payer,
+    merchantId: creator,
+    source: 'x402',
+    detail: `${category === 'hashwatch' || contentType === 'video' ? 'HashWatch pay-as-you-watch access' : category === 'developers' ? 'Developer guide access' : category === 'ebooks' || contentType === 'book' ? 'Ebook reader access' : 'Creator content access'} on HashpayStream`,
+    createdAt: row.unlocked_at instanceof Date ? row.unlocked_at.getTime() : Date.now(),
+    proof: {
+      kind: 'circle_gateway_x402',
+      provider: 'Circle Gateway',
+      service: 'HashpayStream Creator Checkout',
+      payer,
+      seller: creator,
+      amount: `${amount.toLocaleString('en-US', { useGrouping: false, maximumFractionDigits: 6 })} USDC`,
+      network: 'Arc',
+      transaction: txRef,
+      serviceUrl: `${baseUrl()}/api/get-content-x402?id=${encodeURIComponent(contentId)}`,
+      generatedAt: new Date().toISOString(),
+      receiptHash: proofHash,
+      proofHash,
+      contentId,
+      contentType,
+      category,
+    },
   }
 }
 

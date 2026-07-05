@@ -128,11 +128,11 @@ export function compactReceiptAmount(value?: string) {
 }
 
 export function paymentReceiptFileName(receipt?: PaylinkReceipt) {
-  const prefix = receipt?.source === 'streampay' ? 'streampay'
+  const prefix = receipt?.source === 'streampay' ? 'hashpaystream'
     : receipt?.source === 'bank-receive' ? 'bank-receive'
     : receipt?.source === 'ngpos' ? 'pos'
     : receipt?.source === 'polymarket-funding' ? 'polymarket-funding'
-    : receipt?.source === 'x402' ? 'x402'
+    : receipt?.source === 'x402' ? 'hashpaystream'
     : 'paylink'
   return `hashpaylink-${prefix}-receipt-${receipt?.receiptId.slice(0, 10) || 'receipt'}.pdf`
 }
@@ -160,11 +160,11 @@ function receiptLabels(receipt: PaylinkReceipt) {
   const isBank = receipt.source === 'bank-receive'
   const isPolymarket = receipt.source === 'polymarket-funding' || receipt.settlementType === 'polymarket_bridge'
   const isX402 = receipt.source === 'x402' || receipt.settlementType === 'circle-gateway-x402'
-  const heading = isStream ? 'HashpayStream receipt' : isBank ? 'Bank receive receipt' : isPos ? 'Retail POS receipt' : isPolymarket ? 'Polymarket funding receipt' : isX402 ? 'Creator x402 receipt' : 'Request payment receipt'
+  const heading = isStream ? 'HashpayStream receipt' : isBank ? 'Bank receive receipt' : isPos ? 'Retail POS receipt' : isPolymarket ? 'Polymarket funding receipt' : isX402 ? 'HashpayStream receipt' : 'Request payment receipt'
   const title = isStream ? 'Stream created' : isBank ? 'Bank payout confirmed' : isPos ? 'Retail payment confirmed' : isPolymarket ? 'Polymarket funded' : isX402 ? 'Creator content unlocked' : 'Payment confirmed'
   const amountLabel = isStream ? 'Stream amount' : isBank ? 'Amount paid' : isPolymarket ? 'Amount funded' : isX402 ? 'Access price' : 'Amount paid'
   const payer = isStream ? 'Sender' : isBank ? 'Payer wallet' : isPos ? 'Payer wallet' : isPolymarket ? 'Funder' : isX402 ? 'Reader wallet' : 'Payer'
-  const context = isStream ? 'Stream memo' : isBank ? 'Payer' : isPos ? 'Payer' : isPolymarket ? 'For' : isX402 ? 'Content' : 'Memo'
+  const context = isStream ? 'Stream memo' : isBank ? 'Payer' : isPos ? 'Payer' : isPolymarket ? 'For' : isX402 ? 'Access' : 'Memo'
   const contextValue = isStream
     ? (receipt.memo || receipt.merchantId || receipt.eventId || '-')
     : isBank

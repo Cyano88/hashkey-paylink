@@ -838,7 +838,7 @@ export function StreamGate() {
   const gatewayOgExplorer = gatewayReceipt?.og?.ogExplorer
   const gatewayOgProof = gatewayReceipt?.og?.ogTxHash || gatewayReceipt?.og?.rootHash || ''
   const gatewayOgReady = Boolean(gatewayOgProof || gatewayOgExplorer)
-  const gatewayReceiptReady = Boolean(gatewayReceiptId && (gatewayOgReady || gatewayArchiveTimedOut))
+  const gatewayReceiptReady = Boolean(gatewayReceiptId)
   const gatewayArchiveLabel = gatewayArchiveTimedOut
     ? 'Archive delayed'
     : gatewayReceiptPollAttempts >= 6
@@ -934,7 +934,7 @@ export function StreamGate() {
   }, [gatewayReceiptId])
 
   async function openGatewayReceiptPdf() {
-    if (!gatewayReceiptId || gatewayReceiptOpening || !gatewayReceiptReady) return
+    if (!gatewayReceiptId || gatewayReceiptOpening) return
     setGatewayReceiptOpening(true)
     try {
       let sourceReceipt = gatewayReceipt
@@ -2676,16 +2676,14 @@ export function StreamGate() {
                 <button
                   type="button"
                   onClick={openGatewayReceiptPdf}
-                  disabled={gatewayReceiptOpening || !gatewayReceiptReady}
+                  disabled={gatewayReceiptOpening}
                   className={[
                     'flex w-full items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-sm font-medium transition-all active:scale-[0.98]',
-                    gatewayReceiptReady
-                      ? 'bg-gray-900 text-white hover:bg-gray-800'
-                      : 'cursor-not-allowed bg-gray-100 text-gray-400',
+                    'bg-gray-900 text-white hover:bg-gray-800',
                   ].join(' ')}
                 >
                   <ReceiptIcon />
-                  {gatewayReceiptOpening ? 'Opening receipt...' : gatewayReceiptReady ? 'View receipt' : 'Receipt archiving'}
+                  {gatewayReceiptOpening ? 'Opening receipt...' : 'View receipt'}
                 </button>
               )}
               <div className={gatewayTxIsExplorerHash ? 'grid grid-cols-2 gap-2' : 'grid gap-2'}>
