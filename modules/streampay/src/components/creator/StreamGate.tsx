@@ -8,7 +8,7 @@ import { usePoAStream }       from '../../hooks/usePoAStream'
 import { usePasskey }         from '../../hooks/usePasskey'
 import { STREAM_VAULT_ABI }   from '../../lib/streamVaultAbi'
 import { CHECKPOINT_VAULT_FACTORY_ABI } from '../../lib/checkpointVaultAbi'
-import { PRIVY_AUTH_ENABLED } from '../../../../../src/lib/authMode'
+import { CHECKPOINT_FACTORY_ADDRESS, PRIVY_AUTH_ENABLED } from '../../../../../src/lib/authMode'
 import { resolvePrivyCircleLink } from '../../../../../src/lib/privyCircleLink'
 import {
   connectCircleEvmEmailWallet,
@@ -37,7 +37,6 @@ const arcClient = createPublicClient({
 const ARC_CHAIN_ID = 5042002
 const ARC_USDC     = '0x3600000000000000000000000000000000000000' as const
 const POA_CONTRACT = (import.meta.env.VITE_POA_CONTRACT ?? '') as `0x${string}`
-const CHECKPOINT_FACTORY_ADDRESS = (import.meta.env.VITE_CHECKPOINT_FACTORY_ADDRESS ?? '') as `0x${string}`
 const POLYMARKET_LOGO = '/brand/polymarket-logo.png'
 
 function sleep(ms: number) {

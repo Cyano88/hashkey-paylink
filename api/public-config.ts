@@ -19,6 +19,9 @@ export default function handler(_req: Request, res: Response) {
       privyAppId,
       privyEnabled: Boolean(privyAppId && authBridge !== 'legacy'),
     },
+    streampay: {
+      checkpointFactoryAddress: publicEnv('VITE_CHECKPOINT_FACTORY_ADDRESS', 'CHECKPOINT_FACTORY_ADDRESS'),
+    },
     circle: {
       userWalletAppId: publicEnv('VITE_CIRCLE_USER_WALLET_APP_ID', 'CIRCLE_USER_WALLET_APP_ID'),
       arcTestnetUserWalletAppId: publicEnv(

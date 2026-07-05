@@ -112,6 +112,9 @@ function runtimePublicConfigScript() {
       privyAppId,
       privyEnabled: Boolean(privyAppId && authBridge !== 'legacy'),
     },
+    streampay: {
+      checkpointFactoryAddress: publicEnv('VITE_CHECKPOINT_FACTORY_ADDRESS', 'CHECKPOINT_FACTORY_ADDRESS'),
+    },
   }).replace(/</g, '\\u003c')
   return `<script>window.__HASH_PAYLINK_CONFIG__=${payload};</script>`
 }
