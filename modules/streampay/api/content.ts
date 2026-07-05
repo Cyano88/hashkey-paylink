@@ -75,6 +75,10 @@ type CreatorUnlockEntry = {
   walletAddress: string
   paymentTransaction: string
   receiptActivityId: string
+  ogRootHash?: string
+  ogTxHash?: string
+  ogExplorer?: string
+  ogArchivedAt?: number
   unlockedAt: number
 }
 
@@ -798,12 +802,21 @@ function ensureSchema() {
         wallet_address text not null default '',
         payment_transaction text not null default '',
         receipt_activity_id text not null default '',
+        og_root_hash text not null default '',
+        og_tx_hash text not null default '',
+        og_explorer text not null default '',
+        og_archived_at timestamptz,
         unlocked_at timestamptz not null default now(),
         updated_at timestamptz not null default now()
       );
+      alter table streampay_creator_unlocks add column if not exists og_root_hash text not null default '';
+      alter table streampay_creator_unlocks add column if not exists og_tx_hash text not null default '';
+      alter table streampay_creator_unlocks add column if not exists og_explorer text not null default '';
+      alter table streampay_creator_unlocks add column if not exists og_archived_at timestamptz;
       create index if not exists streampay_creator_unlocks_content_idx on streampay_creator_unlocks (content_id, updated_at desc);
       create index if not exists streampay_creator_unlocks_agent_idx on streampay_creator_unlocks (agent_slug, updated_at desc);
       create index if not exists streampay_creator_unlocks_wallet_idx on streampay_creator_unlocks (wallet_address, updated_at desc);
+      create index if not exists streampay_creator_unlocks_receipt_idx on streampay_creator_unlocks (receipt_activity_id);
       create table if not exists streampay_creator_reactions (
         content_id text not null,
         wallet_address text not null,
@@ -969,6 +982,10 @@ function rowToUnlockEntry(row: Record<string, unknown>): CreatorUnlockEntry {
     walletAddress: String(row.wallet_address ?? ''),
     paymentTransaction: String(row.payment_transaction ?? ''),
     receiptActivityId: String(row.receipt_activity_id ?? ''),
+    ogRootHash: String(row.og_root_hash ?? ''),
+    ogTxHash: String(row.og_tx_hash ?? ''),
+    ogExplorer: String(row.og_explorer ?? ''),
+    ogArchivedAt: row.og_archived_at instanceof Date ? row.og_archived_at.getTime() : undefined,
     unlockedAt: row.unlocked_at instanceof Date ? row.unlocked_at.getTime() : Date.now(),
   }
 }
@@ -1009,6 +1026,10 @@ export async function findCreatorUnlockReceipt(activityId: string) {
          u.wallet_address,
          u.payment_transaction,
          u.receipt_activity_id,
+         u.og_root_hash,
+         u.og_tx_hash,
+         u.og_explorer,
+         u.og_archived_at,
          u.unlocked_at,
          c.creator,
          c.type,
@@ -1036,6 +1057,10 @@ export async function findCreatorUnlockReceipt(activityId: string) {
     wallet_address: found.walletAddress,
     payment_transaction: found.paymentTransaction,
     receipt_activity_id: found.receiptActivityId,
+    og_root_hash: found.ogRootHash ?? '',
+    og_tx_hash: found.ogTxHash ?? '',
+    og_explorer: found.ogExplorer ?? '',
+    og_archived_at: found.ogArchivedAt ? new Date(found.ogArchivedAt) : null,
     unlocked_at: new Date(found.unlockedAt),
     creator: entry?.creator ?? '',
     type: entry?.type ?? 'text',
@@ -1103,7 +1128,58 @@ function creatorUnlockReceiptFromRow(row: Record<string, unknown>, activityId: s
       contentType,
       category,
     },
+    og: String(row.og_tx_hash ?? '') || String(row.og_root_hash ?? '') || String(row.og_explorer ?? '')
+      ? {
+          rootHash: String(row.og_root_hash ?? ''),
+          ogTxHash: String(row.og_tx_hash ?? ''),
+          ogExplorer: String(row.og_explorer ?? ''),
+          archivedAt: row.og_archived_at instanceof Date ? row.og_archived_at.getTime() : Date.now(),
+        }
+      : undefined,
   }
+}
+
+export async function updateCreatorUnlockOgProof(activityId: string, og?: {
+  rootHash?: string
+  ogTxHash?: string
+  ogExplorer?: string
+  archivedAt?: number
+}) {
+  const id = String(activityId ?? '').trim()
+  if (!id || !og || (!og.rootHash && !og.ogTxHash && !og.ogExplorer)) return false
+  if (pool) {
+    await ensureSchema()
+    const result = await pool.query(
+      `update streampay_creator_unlocks
+       set og_root_hash = $2,
+           og_tx_hash = $3,
+           og_explorer = $4,
+           og_archived_at = to_timestamp($5 / 1000.0),
+           updated_at = now()
+       where receipt_activity_id = $1`,
+      [
+        id,
+        String(og.rootHash ?? ''),
+        String(og.ogTxHash ?? ''),
+        String(og.ogExplorer ?? ''),
+        Number(og.archivedAt || Date.now()),
+      ],
+    )
+    return (result.rowCount ?? 0) > 0
+  }
+  let updated = false
+  for (const [key, item] of unlockStore.entries()) {
+    if (item.receiptActivityId !== id) continue
+    unlockStore.set(key, {
+      ...item,
+      ogRootHash: String(og.rootHash ?? ''),
+      ogTxHash: String(og.ogTxHash ?? ''),
+      ogExplorer: String(og.ogExplorer ?? ''),
+      ogArchivedAt: Number(og.archivedAt || Date.now()),
+    })
+    updated = true
+  }
+  return updated
 }
 
 async function checkpointUnlockToEarning(unlock: CheckpointUnlockEntry, creator: string) {
@@ -1202,13 +1278,17 @@ async function writeCreatorUnlock(entry: CreatorUnlockEntry) {
     await ensureSchema()
     await pool.query(
       `insert into streampay_creator_unlocks
-        (unlock_key, content_id, agent_slug, wallet_address, payment_transaction, receipt_activity_id, unlocked_at, updated_at)
-       values ($1, $2, $3, $4, $5, $6, to_timestamp($7 / 1000.0), now())
+        (unlock_key, content_id, agent_slug, wallet_address, payment_transaction, receipt_activity_id, og_root_hash, og_tx_hash, og_explorer, og_archived_at, unlocked_at, updated_at)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, case when $10 > 0 then to_timestamp($10 / 1000.0) else null end, to_timestamp($11 / 1000.0), now())
        on conflict (unlock_key) do update set
          agent_slug = excluded.agent_slug,
          wallet_address = excluded.wallet_address,
          payment_transaction = excluded.payment_transaction,
          receipt_activity_id = excluded.receipt_activity_id,
+         og_root_hash = case when excluded.og_root_hash <> '' then excluded.og_root_hash else streampay_creator_unlocks.og_root_hash end,
+         og_tx_hash = case when excluded.og_tx_hash <> '' then excluded.og_tx_hash else streampay_creator_unlocks.og_tx_hash end,
+         og_explorer = case when excluded.og_explorer <> '' then excluded.og_explorer else streampay_creator_unlocks.og_explorer end,
+         og_archived_at = coalesce(excluded.og_archived_at, streampay_creator_unlocks.og_archived_at),
          updated_at = now()`,
       [
         key,
@@ -1217,6 +1297,10 @@ async function writeCreatorUnlock(entry: CreatorUnlockEntry) {
         entry.walletAddress,
         entry.paymentTransaction,
         entry.receiptActivityId,
+        entry.ogRootHash ?? '',
+        entry.ogTxHash ?? '',
+        entry.ogExplorer ?? '',
+        entry.ogArchivedAt ?? 0,
         entry.unlockedAt,
       ],
     )
