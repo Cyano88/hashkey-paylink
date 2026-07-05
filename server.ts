@@ -103,6 +103,11 @@ function publicEnv(...names: string[]) {
   return ''
 }
 
+const CHECKPOINT_FACTORY_ADDRESS = publicEnv(
+  'VITE_CHECKPOINT_FACTORY_ADDRESS',
+  'CHECKPOINT_FACTORY_ADDRESS',
+) || '0x8eEc65a18f3b5deb0E9Fc5e1eCf8263587b02927'
+
 function runtimePublicConfigScript() {
   const privyAppId = publicEnv('VITE_PRIVY_APP_ID', 'PRIVY_APP_ID')
   const authBridge = publicEnv('VITE_AUTH_BRIDGE', 'AUTH_BRIDGE') || 'legacy'
@@ -113,7 +118,7 @@ function runtimePublicConfigScript() {
       privyEnabled: Boolean(privyAppId && authBridge !== 'legacy'),
     },
     streampay: {
-      checkpointFactoryAddress: publicEnv('VITE_CHECKPOINT_FACTORY_ADDRESS', 'CHECKPOINT_FACTORY_ADDRESS'),
+      checkpointFactoryAddress: CHECKPOINT_FACTORY_ADDRESS,
     },
   }).replace(/</g, '\\u003c')
   return `<script>window.__HASH_PAYLINK_CONFIG__=${payload};</script>`

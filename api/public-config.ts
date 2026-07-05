@@ -8,6 +8,11 @@ function publicEnv(...names: string[]) {
   return ''
 }
 
+const CHECKPOINT_FACTORY_ADDRESS = publicEnv(
+  'VITE_CHECKPOINT_FACTORY_ADDRESS',
+  'CHECKPOINT_FACTORY_ADDRESS',
+) || '0x8eEc65a18f3b5deb0E9Fc5e1eCf8263587b02927'
+
 export default function handler(_req: Request, res: Response) {
   res.setHeader('Cache-Control', 'no-store')
   const privyAppId = publicEnv('VITE_PRIVY_APP_ID', 'PRIVY_APP_ID')
@@ -20,7 +25,7 @@ export default function handler(_req: Request, res: Response) {
       privyEnabled: Boolean(privyAppId && authBridge !== 'legacy'),
     },
     streampay: {
-      checkpointFactoryAddress: publicEnv('VITE_CHECKPOINT_FACTORY_ADDRESS', 'CHECKPOINT_FACTORY_ADDRESS'),
+      checkpointFactoryAddress: CHECKPOINT_FACTORY_ADDRESS,
     },
     circle: {
       userWalletAppId: publicEnv('VITE_CIRCLE_USER_WALLET_APP_ID', 'CIRCLE_USER_WALLET_APP_ID'),
