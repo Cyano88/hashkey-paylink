@@ -9,7 +9,7 @@ type AgentHashMessage = {
 
 const STREAM_AGENT_WELCOME: AgentHashMessage = {
   from: 'bot',
-  text: 'Agent Hash is ready for HashpayStream, a Hash PayLink creator product powered by ZeroScout intelligence. I can help publish paid content, price a drop, explain pay-as-you-read, summarize unlocked content, or read creator earnings.',
+  text: 'Agent Hash is ready for HashpayStream, a Hash PayLink creator product powered by ZeroScout intelligence. I can help publish paid content, price a drop, explain pay-as-you-read, explain HashWatch videos, summarize unlocked content, or read creator earnings.',
 }
 
 const THINKING_COPY = ['Reading Stream context...', 'Checking creator flow...', 'Preparing guidance...', 'Keeping it creator-only...']
@@ -159,7 +159,7 @@ export function StreamAgentHash() {
     setTyping(false)
     setMessages([{
       from: 'bot',
-      text: 'Chat cleared. I can help with HashpayStream creator posts, pay-as-you-read, x402 unlocks, receipts, and earnings.',
+      text: 'Chat cleared. I can help with HashpayStream creator posts, HashWatch videos, pay-as-you-read, x402 unlocks, receipts, and earnings.',
     }])
     try {
       window.localStorage.removeItem('hashpaystream-agent-hash')
@@ -289,7 +289,7 @@ export function StreamAgentHash() {
 
           <div className="border-t border-gray-100 bg-white p-3 dark:border-white/10 dark:bg-[#111114]">
             <div className="mb-2 flex flex-wrap gap-1.5">
-              {['Suggest a price', 'Explain checkpoints', 'Improve my post', 'Read my earnings'].map(prompt => (
+              {['Suggest a price', 'Explain HashWatch', 'Improve my post', 'Read my earnings'].map(prompt => (
                 <button
                   key={prompt}
                   type="button"

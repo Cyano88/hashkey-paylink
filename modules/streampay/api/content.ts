@@ -51,7 +51,7 @@ const ERC1271_ABI = parseAbi([
 const ERC1271_MAGIC_VALUE = '0x1626ba7e'
 
 type ContentEntry = {
-  type: 'text' | 'url' | 'scores' | 'book'
+  type: 'text' | 'url' | 'scores' | 'book' | 'video'
   content: string
   creator: string
   capRaw: number
@@ -121,7 +121,7 @@ type PaidRequest = Request & {
 
 type CreatorUnlockResponse = {
   ok?: boolean
-  type?: 'text' | 'url' | 'scores'
+  type?: 'text' | 'url' | 'scores' | 'book' | 'video'
   content?: string
   payment?: PaidRequest['payment'] | null
   error?: string
@@ -679,6 +679,24 @@ const OFFICIAL_CONTENT: Record<string, ContentEntry> = {
     reviewNote: '',
     ts: Date.now(),
   },
+  'hashwatch-video-demo': {
+    type: 'video',
+    content: 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4',
+    creator: SAFE_OFFICIAL_CREATOR,
+    capRaw: Number(process.env.CREATOR_HASHWATCH_VIDEO_PRICE_RAW ?? '100000'),
+    rateRaw: 1000,
+    mode: 'unlock',
+    title: 'HashWatch: Pay-As-You-Watch Demo',
+    description: 'A short in-platform video drop for testing watch checkpoints and refundable unread balance.',
+    authorName: 'HashpayStream Studio',
+    xHandle: 'Hash_PayLink',
+    coverImage: 'https://images.unsplash.com/photo-1492724441997-5dc865305da7?auto=format&fit=crop&w=1200&q=80',
+    category: 'hashwatch',
+    reviewStatus: 'approved',
+    reviewedAt: Date.now(),
+    reviewNote: 'HashWatch',
+    ts: Date.now(),
+  },
   ...Object.fromEntries(OFFICIAL_EBOOKS.map((book, index) => [book.id, {
     type: 'book' as const,
     content: book.gutenbergId ? `gutenberg:${book.gutenbergId}` : `preview:${book.id}`,
@@ -842,7 +860,7 @@ function cleanReviewStatus(value: unknown): ContentEntry['reviewStatus'] {
 function rowToContentEntry(row: Record<string, unknown>): ContentEntry {
   const type = String(row.type ?? '')
   return {
-    type: type === 'url' ? 'url' : type === 'scores' ? 'scores' : 'text',
+    type: type === 'url' ? 'url' : type === 'scores' ? 'scores' : type === 'book' ? 'book' : type === 'video' ? 'video' : 'text',
     content: String(row.content ?? ''),
     creator: String(row.creator ?? ''),
     capRaw: Number(row.cap_raw ?? 0),
@@ -1192,8 +1210,9 @@ function cleanCategory(value: unknown) {
   const category = String(value ?? 'crypto').trim().toLowerCase()
   if (category === 'news') return 'worldcup-news'
   if (category === 'sports') return 'live-scores'
+  if (category === 'video' || category === 'videos' || category === 'watch') return 'hashwatch'
   if (category === 'general') return 'crypto'
-  return ['worldcup-news', 'live-scores', 'ebooks', 'crypto', 'developers'].includes(category) ? category : 'crypto'
+  return ['worldcup-news', 'live-scores', 'ebooks', 'crypto', 'developers', 'hashwatch'].includes(category) ? category : 'crypto'
 }
 
 function baseUrl() {
@@ -1422,9 +1441,10 @@ export async function storeContent(req: Request, res: Response) {
   if (contentId.length > MAX_CONTENT_ID_LENGTH || content.length > MAX_CONTENT_LENGTH) {
     return res.status(400).json({ ok: false, error: 'contentId or content is too large' })
   }
-  if (type !== 'text' && type !== 'url') {
-    return res.status(400).json({ ok: false, error: 'type must be "text" or "url"' })
+  if (type !== 'text' && type !== 'url' && type !== 'video') {
+    return res.status(400).json({ ok: false, error: 'type must be "text", "url", or "video"' })
   }
+  const safeType = type as ContentEntry['type']
   if (!isAddress(creator)) {
     return res.status(400).json({ ok: false, error: 'creator must be a valid EVM address' })
   }
@@ -1434,7 +1454,7 @@ export async function storeContent(req: Request, res: Response) {
   }
   const safeRateRaw = Math.max(0, Number(rateRaw) || 0)
   const safeCategory = cleanCategory(category)
-  const safeMode = mode === 'stream' && type !== 'url' && safeCategory === 'live-scores' ? 'stream' : 'unlock'
+  const safeMode = mode === 'stream' && safeType !== 'url' && safeCategory === 'live-scores' ? 'stream' : 'unlock'
   const creatorVerified = await verifyCreatorProof({
     contentId,
     creator,
@@ -1454,7 +1474,7 @@ export async function storeContent(req: Request, res: Response) {
   }
 
   await writeContentEntry(contentId, {
-    type,
+    type: safeType,
     content,
     creator,
     capRaw: safeCapRaw,
@@ -1676,7 +1696,7 @@ export async function buildHashpayStreamAgentContext(params: { creator?: unknown
     acc[card.category] = (acc[card.category] ?? 0) + 1
     return acc
   }, {})
-  const contentByCategory = ['developers', 'worldcup-news', 'live-scores', 'ebooks', 'crypto'].reduce<Record<string, AgentContentCard[]>>((acc, category) => {
+  const contentByCategory = ['developers', 'hashwatch', 'worldcup-news', 'live-scores', 'ebooks', 'crypto'].reduce<Record<string, AgentContentCard[]>>((acc, category) => {
     acc[category] = cards.filter(card => card.category === category).slice(0, 15)
     return acc
   }, {})
@@ -1716,7 +1736,7 @@ export async function buildHashpayStreamAgentContext(params: { creator?: unknown
     unlockModes: [
       { id: 'checkpoint', label: 'Pay as you read', description: 'Reader prepays once; creator earnings release at scroll checkpoints; unread USDC remains refundable.' },
       { id: 'x402', label: 'Fixed unlock', description: 'Reader pays once with Circle Gateway x402 and keeps access to the content.' },
-      { id: 'stream', label: 'Timed stream', description: 'For video/live-rendered content only; USDC streams while the meter runs.' },
+      { id: 'watch', label: 'Pay as you watch', description: 'For HashWatch videos; reader prepays once and creator earnings release at playback checkpoints.' },
     ],
     statsCapabilities: {
       contentViews: true,
@@ -1736,6 +1756,7 @@ export async function buildHashpayStreamAgentContext(params: { creator?: unknown
       mostDiscussed,
       mostUnlocked,
       bestEbooks: contentByCategory.ebooks ?? [],
+      hashWatch: contentByCategory.hashwatch ?? [],
       latestWorldCupNews: worldCupNewsCards,
       liveScores: scoreEntries.slice(0, 12).map(([contentId, entry]) => entryToPost(contentId, entry)),
       byCategory: contentByCategory,
@@ -2001,7 +2022,7 @@ export async function getContentCheckpointEscrow(req: Request, res: Response) {
     })
   }
   if (entry.type === 'url' || entry.category === 'live-scores') {
-    return res.status(400).json({ ok: false, error: 'Checkpoint escrow is only for readable in-page content.' })
+    return res.status(400).json({ ok: false, error: 'Checkpoint escrow is only for in-page articles, books, and HashWatch videos.' })
   }
 
   let checkpointState: Awaited<ReturnType<typeof verifyCheckpointVaultState>> | undefined

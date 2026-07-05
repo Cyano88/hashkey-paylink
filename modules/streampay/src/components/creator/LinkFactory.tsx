@@ -12,7 +12,7 @@ import {
 import { PRIVY_AUTH_ENABLED } from '../../../../../src/lib/authMode'
 
 const ARC_CHAIN_ID = 5042002
-type CreatorCategory = 'worldcup-news' | 'live-scores' | 'ebooks' | 'crypto' | 'developers'
+type CreatorCategory = 'worldcup-news' | 'live-scores' | 'ebooks' | 'crypto' | 'developers' | 'hashwatch'
 type CreatorReviewStatus = 'pending' | 'approved' | 'rejected'
 
 const CREATOR_CATEGORIES: Array<{ id: CreatorCategory; label: string; disabled?: boolean }> = [
@@ -21,6 +21,7 @@ const CREATOR_CATEGORIES: Array<{ id: CreatorCategory; label: string; disabled?:
   { id: 'crypto', label: 'Crypto' },
   { id: 'ebooks', label: 'Ebooks' },
   { id: 'developers', label: 'Developers' },
+  { id: 'hashwatch', label: 'HashWatch' },
 ]
 
 const COVER_MAX_DATA_URL_BYTES = 28_000
@@ -31,6 +32,7 @@ function normalizeCreatorCategory(value: unknown): CreatorCategory {
   const category = String(value ?? '').trim().toLowerCase()
   if (category === 'news') return 'worldcup-news'
   if (category === 'sports') return 'live-scores'
+  if (category === 'video' || category === 'videos' || category === 'watch') return 'hashwatch'
   if (category === 'general') return 'crypto'
   return CREATOR_CATEGORIES.some(item => item.id === category) ? category as CreatorCategory : 'crypto'
 }
@@ -85,7 +87,7 @@ function buildGateLink(params: {
   capRaw:    number
   title:     string
   mode:      'unlock' | 'stream'
-  contentType: 'text' | 'url'
+  contentType: 'text' | 'url' | 'video'
   category: CreatorCategory
 }): string {
   const { origin, hostname } = window.location
@@ -250,7 +252,7 @@ export function LinkFactory({
     rateStr: string
     capStr: string
     mode: 'unlock' | 'stream'
-    contentType: 'text' | 'url'
+    contentType: 'text' | 'url' | 'video'
     capRaw: number
     reviewStatus: CreatorReviewStatus
   }) => void
@@ -267,7 +269,7 @@ export function LinkFactory({
     rateStr: string
     capStr: string
     mode: 'unlock' | 'stream'
-    contentType: 'text' | 'url'
+    contentType: 'text' | 'url' | 'video'
   } | null
   draftKey?: string
 }) {
@@ -288,7 +290,7 @@ export function LinkFactory({
     : !!address
 
   const [mode,        setMode]        = useState<'unlock' | 'stream'>('unlock')
-  const [contentType, setContentType] = useState<'text' | 'url'>('text')
+  const [contentType, setContentType] = useState<'text' | 'url' | 'video'>('text')
   const [contentBody, setContentBody] = useState(articleStarterHtml())
   const [privateUrl,  setPrivateUrl]  = useState('')
   const [title,       setTitle]       = useState('')
@@ -339,13 +341,16 @@ export function LinkFactory({
   const privateUrlValid = (() => {
     try { new URL(privateUrl); return true } catch { return false }
   })()
+  const videoUrlValid = privateUrlValid && /\.(mp4|webm|ogg)(\?.*)?$/i.test(privateUrl.trim())
 
   const hasContent = contentType === 'text'
     ? articleTextLength(contentBody) > 10
+    : contentType === 'video'
+    ? videoUrlValid
     : privateUrlValid
   const hasListingDetails = title.trim().length >= 3 && description.trim().length >= 10 && authorName.trim().length >= 2
 
-  const timedStreamContentAvailable = false
+  const timedStreamContentAvailable = contentType === 'video' && videoUrlValid
   const streamReady = rateNum > 0 && capNum > rateNum
   const streamContentAvailable = timedStreamContentAvailable
   const creatorAddress = circleSession?.wallet.address || (hasExternalPrivyEvmWallet ? address : '') || ''
@@ -851,7 +856,7 @@ export function LinkFactory({
             {/* Content type toggle */}
             <div className="space-y-1.5">
               <span className="text-[13px] font-semibold text-gray-700 dark:text-gray-200">Content</span>
-              <div className="grid grid-cols-2 overflow-hidden rounded-xl border border-gray-200 bg-gray-50 p-1 dark:border-white/10 dark:bg-white/[0.04]">
+              <div className="grid grid-cols-3 overflow-hidden rounded-xl border border-gray-200 bg-gray-50 p-1 dark:border-white/10 dark:bg-white/[0.04]">
                 <button
                   type="button"
                   onClick={() => { setContentType('text'); setGateLink(null) }}
@@ -872,12 +877,24 @@ export function LinkFactory({
                 >
                   Private Link
                 </button>
+                <button
+                  type="button"
+                  onClick={() => { setContentType('video'); setCategory('hashwatch'); setMode('unlock'); setGateLink(null) }}
+                  className="rounded-lg py-2.5 text-[12px] font-semibold transition-all"
+                  style={contentType === 'video'
+                    ? { background: '#111827', color: '#ffffff' }
+                    : { background: 'transparent', color: '#6b7280' }}
+                >
+                  HashWatch
+                </button>
               </div>
               <p className="text-[11px] text-gray-400 dark:text-gray-500">
                 {contentType === 'text'
                   ? mode === 'unlock'
                     ? 'Paste the content viewers unlock after payment.'
                     : 'Paste content viewers can read while nano-payments accrue.'
+                  : contentType === 'video'
+                  ? 'Add a direct MP4, WebM, or OGG video URL so viewers can watch inside HashpayStream.'
                   : mode === 'unlock'
                   ? 'Store a private URL server-side and reveal it only after payment.'
                   : 'External links use fixed unlock because viewing happens outside HashpayStream.'}
@@ -885,6 +902,11 @@ export function LinkFactory({
               {contentType === 'url' && (
                 <p className="text-[11px] font-medium text-gray-400 dark:text-gray-500">
                   Pay-as-you-read is unavailable for external access.
+                </p>
+              )}
+              {contentType === 'video' && (
+                <p className="text-[11px] font-medium text-blue-500 dark:text-blue-300">
+                  HashWatch supports pay-as-you-watch checkpoints for videos rendered on-platform.
                 </p>
               )}
             </div>
@@ -992,28 +1014,36 @@ export function LinkFactory({
               </div>
             )}
 
-            {/* Private link */}
-            {contentType === 'url' && (
+            {/* Private link / HashWatch video URL */}
+            {(contentType === 'url' || contentType === 'video') && (
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-[13px] font-semibold text-gray-700 dark:text-gray-200">Private Link</span>
-                  <span className="text-[11px] text-gray-400 dark:text-gray-500">stored server-side only</span>
+                  <span className="text-[13px] font-semibold text-gray-700 dark:text-gray-200">
+                    {contentType === 'video' ? 'Video URL' : 'Private Link'}
+                  </span>
+                  <span className="text-[11px] text-gray-400 dark:text-gray-500">
+                    {contentType === 'video' ? 'MP4/WebM/OGG' : 'stored server-side only'}
+                  </span>
                 </div>
                 <input
                   type="url"
-                  placeholder="https://your-private-content.com/..."
+                  placeholder={contentType === 'video' ? 'https://your-cdn.com/video.mp4' : 'https://your-private-content.com/...'}
                   value={privateUrl}
                   onChange={e => { setPrivateUrl(e.target.value); setGateLink(null) }}
                   className={[
                     'w-full rounded-xl border-2 px-4 py-3 text-[13px] text-gray-800 focus:outline-none transition-colors min-h-[48px] dark:text-gray-100',
                     'placeholder:text-gray-300 dark:placeholder:text-gray-600',
-                    privateUrl && !privateUrlValid ? 'border-red-200 bg-red-50/30 dark:border-red-400/30 dark:bg-red-500/10'
-                      : privateUrlValid            ? 'border-blue-200 bg-blue-50/20 dark:border-blue-400/30 dark:bg-blue-500/10'
+                    privateUrl && (contentType === 'video' ? !videoUrlValid : !privateUrlValid) ? 'border-red-200 bg-red-50/30 dark:border-red-400/30 dark:bg-red-500/10'
+                      : (contentType === 'video' ? videoUrlValid : privateUrlValid)            ? 'border-blue-200 bg-blue-50/20 dark:border-blue-400/30 dark:bg-blue-500/10'
                       :                              'border-gray-200 focus:border-gray-400 dark:border-white/10 dark:bg-white/[0.04] dark:focus:border-white/30',
                   ].join(' ')}
                 />
-                {privateUrl && !privateUrlValid && (
-                  <p className="text-[11px] text-red-400">Enter a valid URL including https://</p>
+                {privateUrl && (contentType === 'video' ? !videoUrlValid : !privateUrlValid) && (
+                  <p className="text-[11px] text-red-400">
+                    {contentType === 'video'
+                      ? 'Use a direct video file URL ending in .mp4, .webm, or .ogg.'
+                      : 'Enter a valid URL including https://'}
+                  </p>
                 )}
               </div>
             )}
@@ -1145,7 +1175,9 @@ export function LinkFactory({
                   <div className="grid grid-cols-2 gap-2 rounded-lg border border-gray-100 bg-white p-2 dark:border-white/10 dark:bg-[#111216]">
                     <div className="min-w-0">
                       <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-gray-400 dark:text-gray-500">Content</p>
-                      <p className="truncate text-[12px] font-semibold text-gray-700 dark:text-gray-200">{title.trim() || (contentType === 'text' ? 'Article' : 'Private link')}</p>
+                      <p className="truncate text-[12px] font-semibold text-gray-700 dark:text-gray-200">
+                        {title.trim() || (contentType === 'video' ? 'HashWatch video' : contentType === 'text' ? 'Article' : 'Private link')}
+                      </p>
                     </div>
                     <div className="min-w-0 text-right">
                       <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-gray-400 dark:text-gray-500">{mode === 'unlock' ? 'Price' : 'Meter'}</p>

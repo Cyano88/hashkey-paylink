@@ -40,7 +40,7 @@ type CreatorStreamRow = {
   active: boolean
 }
 type CreatorTab = 'discover' | 'create' | 'earnings' | 'streams'
-type CreatorCategory = 'worldcup-news' | 'live-scores' | 'crypto' | 'ebooks' | 'developers'
+type CreatorCategory = 'worldcup-news' | 'live-scores' | 'crypto' | 'ebooks' | 'developers' | 'hashwatch'
 type PublishedContent = {
   id: string
   contentId?: string
@@ -76,7 +76,7 @@ type CreatorDraft = {
   rateStr: string
   capStr: string
   mode: 'unlock' | 'stream'
-  contentType: 'text' | 'url'
+  contentType: 'text' | 'url' | 'video'
 }
 type GateCreatedMeta = {
   creator: string
@@ -91,7 +91,7 @@ type GateCreatedMeta = {
   rateStr: string
   capStr: string
   mode: 'unlock' | 'stream'
-  contentType: 'text' | 'url'
+  contentType: 'text' | 'url' | 'video'
   capRaw: number
 }
 type ServerCreatorPost = {
@@ -104,7 +104,7 @@ type ServerCreatorPost = {
   xHandle: string
   coverImage: string
   category: CreatorCategory
-  type: 'text' | 'url'
+  type: 'text' | 'url' | 'video'
   mode: 'unlock' | 'stream'
   capRaw: number
   rateRaw: number
@@ -187,12 +187,14 @@ const CREATOR_CATEGORIES: Array<{ id: CreatorCategory; label: string; disabled?:
   { id: 'crypto', label: 'Crypto' },
   { id: 'ebooks', label: 'Ebooks' },
   { id: 'developers', label: 'Developers' },
+  { id: 'hashwatch', label: 'HashWatch' },
 ]
 
 function normalizeCreatorCategory(value: unknown): CreatorCategory {
   const category = String(value ?? '').trim().toLowerCase()
   if (category === 'news') return 'worldcup-news'
   if (category === 'sports') return 'live-scores'
+  if (category === 'video' || category === 'videos' || category === 'watch') return 'hashwatch'
   if (category === 'general') return 'crypto'
   return CREATOR_CATEGORIES.some(item => item.id === category) ? category as CreatorCategory : 'crypto'
 }
@@ -206,9 +208,10 @@ function interleaveCreatorCards(cards: PublishedContent[]) {
     crypto: [],
     ebooks: [],
     developers: [],
+    hashwatch: [],
   }
   for (const card of rest) buckets[card.category]?.push(card)
-  const order: CreatorCategory[] = ['worldcup-news', 'live-scores', 'crypto', 'ebooks', 'developers']
+  const order: CreatorCategory[] = ['hashwatch', 'worldcup-news', 'live-scores', 'ebooks', 'developers', 'crypto']
   const mixed: PublishedContent[] = []
   const maxLength = Math.max(...order.map(category => buckets[category].length))
   for (let index = 0; index < maxLength; index += 1) {
@@ -227,6 +230,7 @@ const OFFICIAL_CREATOR_ADDRESS = (
 )
 const OFFICIAL_WORLD_CUP_SCORES_GATE = `/gate?app=streampay&id=worldcup-scores&cr=${OFFICIAL_CREATOR_ADDRESS}&r=1000&cap=100000&mode=unlock&pay=x402&ct=scores&cat=live-scores&t=Live%20Scores%20Pulse`
 const OFFICIAL_DEVELOPER_GUIDE_GATE = `/gate?app=streampay&id=developer-terminal-setup&cr=${OFFICIAL_CREATOR_ADDRESS}&r=1000&cap=100000&mode=unlock&pay=choice&ct=text&cat=developers&t=${encodeURIComponent('Before You Build: AI Terminal Setup')}`
+const OFFICIAL_HASHWATCH_VIDEO_GATE = `/gate?app=streampay&id=hashwatch-video-demo&cr=${OFFICIAL_CREATOR_ADDRESS}&r=1000&cap=100000&mode=unlock&pay=choice&ct=video&cat=hashwatch&t=${encodeURIComponent('HashWatch: Pay-As-You-Watch Demo')}`
 
 const OFFICIAL_DISCOVER_CONTENT: PublishedContent[] = [
   {
@@ -243,6 +247,21 @@ const OFFICIAL_DISCOVER_CONTENT: PublishedContent[] = [
     gateLink: OFFICIAL_DEVELOPER_GUIDE_GATE,
     action: 'gate',
     cta: 'Unlock guide',
+  },
+  {
+    id: 'hashwatch-video-demo',
+    contentId: 'hashwatch-video-demo',
+    creator: OFFICIAL_CREATOR_ADDRESS,
+    title: 'HashWatch: Pay-As-You-Watch Demo',
+    description: 'Watch in-platform video while USDC releases only as the viewer reaches playback checkpoints.',
+    category: 'hashwatch',
+    price: '0.10',
+    tag: 'HashWatch',
+    source: 'HashpayStream Studio',
+    image: 'https://images.unsplash.com/photo-1492724441997-5dc865305da7?auto=format&fit=crop&w=1200&q=80',
+    gateLink: OFFICIAL_HASHWATCH_VIDEO_GATE,
+    action: 'gate',
+    cta: 'Watch demo',
   },
   {
     id: 'hashpaylink-creator-primer',
@@ -684,7 +703,7 @@ function isLiveMatch(match: PolyStreamMatch) {
 }
 
 function contentFromGate(link: string, meta: GateCreatedMeta, index: number): PublishedContent {
-  const title = meta.title.trim() || (meta.contentType === 'url' ? 'Private creator drop' : 'Creator article')
+  const title = meta.title.trim() || (meta.contentType === 'video' ? 'HashWatch video drop' : meta.contentType === 'url' ? 'Private creator drop' : 'Creator article')
   const author = meta.authorName.trim() || 'Creator Studio'
   const xHandle = meta.xHandle.trim()
   const category = normalizeCreatorCategory(meta.category)
@@ -695,6 +714,8 @@ function contentFromGate(link: string, meta: GateCreatedMeta, index: number): Pu
     title,
     description: meta.description.trim() || (meta.mode === 'stream'
       ? 'Nano-streaming access is ready. Viewers pay while reading or watching.'
+      : meta.contentType === 'video'
+      ? 'HashWatch video is ready for fixed unlock or pay-as-you-watch checkpoints.'
       : 'Fixed-price creator content is ready for paid unlock.'),
     category,
     price: formatPrice(String(meta.capRaw / 1_000_000)),
@@ -731,9 +752,11 @@ function contentFromServerPost(post: ServerCreatorPost, index: number): Publishe
     id: post.contentId || post.id || `server-${index}`,
     contentId: post.contentId,
     creator: post.creator,
-    title: post.title?.trim() || (post.type === 'url' ? 'Private creator drop' : 'Creator article'),
+    title: post.title?.trim() || (post.type === 'video' ? 'HashWatch video drop' : post.type === 'url' ? 'Private creator drop' : 'Creator article'),
     description: post.description?.trim() || (post.mode === 'stream'
       ? 'Nano-streaming access is ready. Viewers pay while reading or watching.'
+      : post.type === 'video'
+      ? 'HashWatch video is ready for fixed unlock or pay-as-you-watch checkpoints.'
       : 'Fixed-price creator content is ready for paid unlock.'),
     category,
     price: formatPrice(String((Number(post.capRaw) || 0) / 1_000_000)),

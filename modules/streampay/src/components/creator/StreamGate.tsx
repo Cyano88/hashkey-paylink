@@ -59,7 +59,7 @@ const ERC20_ABI = parseAbi([
   'function approve(address spender, uint256 amount) returns (bool)',
 ])
 
-type FetchedContent = { type: 'text' | 'url' | 'scores' | 'book'; content: string; coverImage?: string }
+type FetchedContent = { type: 'text' | 'url' | 'scores' | 'book' | 'video'; content: string; coverImage?: string }
 type ContentState   = 'idle' | 'loading' | 'ready' | 'error'
 type CreatorReaction = 'up' | 'down'
 type CreatorComment = {
@@ -490,15 +490,17 @@ export function StreamGate() {
   const capRaw    = parseInt(params.get('cap') ?? '100000', 10)
   const title     = params.get('t')    ?? ''
   const requestedGateMode: 'unlock' | 'stream' = params.get('mode') === 'stream' ? 'stream' : 'unlock'
-  const contentKind: 'text' | 'url' | 'scores' | 'book' | 'unknown' =
+  const contentKind: 'text' | 'url' | 'scores' | 'book' | 'video' | 'unknown' =
     params.get('ct') === 'url' ? 'url' :
     params.get('ct') === 'scores' ? 'scores' :
     params.get('ct') === 'book' ? 'book' :
+    params.get('ct') === 'video' ? 'video' :
     params.get('ct') === 'text' ? 'text' :
     'unknown'
   const contentCategory = (params.get('cat') ?? '').trim().toLowerCase()
-  const streamContentAvailable = contentKind === 'scores' || contentCategory === 'live-scores' || contentCategory === 'video'
-  const checkpointContentAvailable = !streamContentAvailable && (contentKind === 'text' || contentKind === 'book' || contentKind === 'unknown')
+  const isVideoContent = contentKind === 'video' || contentCategory === 'hashwatch'
+  const streamContentAvailable = contentKind === 'scores' || contentCategory === 'live-scores'
+  const checkpointContentAvailable = contentKind === 'text' || contentKind === 'book' || contentKind === 'video' || contentKind === 'unknown' || isVideoContent
   const shouldChoosePayment = params.get('pay') === 'choice' || params.get('choose') === '1'
   const requestedPaymentMode = params.get('pay')
   const [selectedPaymentMode, setSelectedPaymentMode] = useState<'x402' | 'escrow' | 'checkpoint' | null>(() => {
@@ -1717,13 +1719,15 @@ export function StreamGate() {
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <p className="text-[13px] font-black text-gray-900 dark:text-gray-100">Pay as you read</p>
+                        <p className="text-[13px] font-black text-gray-900 dark:text-gray-100">
+                          {isVideoContent ? 'Pay as you watch' : 'Pay as you read'}
+                        </p>
                         <p className="mt-1 text-[12px] leading-relaxed text-gray-500 dark:text-gray-400">
-                          Prepay {formatUsdc(sessionCap)} USDC. Reading releases 25%, 50%, 75%, and 100%; unread balance stays refundable.
+                          Prepay {formatUsdc(sessionCap)} USDC. {isVideoContent ? 'Playback' : 'Reading'} releases 25%, 50%, 75%, and 100%; unused balance stays refundable.
                         </p>
                       </div>
-                      <span className="rounded-full bg-blue-600 px-2 py-1 text-[9px] font-black uppercase tracking-[0.12em] text-white dark:bg-blue-400 dark:text-gray-950">
-                        Nano
+                    <span className="rounded-full bg-blue-600 px-2 py-1 text-[9px] font-black uppercase tracking-[0.12em] text-white dark:bg-blue-400 dark:text-gray-950">
+                        {isVideoContent ? 'Watch' : 'Nano'}
                       </span>
                     </div>
                   </button>
@@ -1743,10 +1747,10 @@ export function StreamGate() {
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-[13px] font-black text-gray-400 dark:text-gray-600">
-                        Pay as you watch
+                        Timed stream
                       </p>
                       <p className="mt-1 text-[12px] leading-relaxed text-gray-500 dark:text-gray-400">
-                        Timed live/video streaming is paused for public testing.
+                        Old timed streaming is paused for public testing.
                       </p>
                     </div>
                     <span className="rounded-full bg-gray-100 px-2 py-1 text-[9px] font-black uppercase tracking-[0.12em] text-gray-400 dark:bg-white/[0.06] dark:text-gray-500">
@@ -1780,7 +1784,9 @@ export function StreamGate() {
                 {!streamContentAvailable && (
                   <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
                     {checkpointContentAvailable
-                      ? 'Scroll checkpoints release creator earnings only as readers progress.'
+                      ? isVideoContent
+                        ? 'Playback checkpoints release creator earnings only as viewers watch.'
+                        : 'Scroll checkpoints release creator earnings only as readers progress.'
                       : 'Progress reading is only available for in-page articles and books.'}
                   </p>
                 )}
@@ -2483,6 +2489,33 @@ export function StreamGate() {
           <WorldCupScoresUnlocked />
         )}
 
+        {fullyAuthorised && contentState === 'ready' && fetchedContent?.type === 'video' && (
+          <VideoUnlocked
+            title={title}
+            videoUrl={fetchedContent.content}
+            coverImage={fetchedContent.coverImage}
+            viewCount={contentViewCount}
+            checkpointReleased={paymentMode === 'checkpoint' ? checkpointReleased : null}
+            checkpointVault={checkpointVault}
+            sessionCap={sessionCap}
+            checkpointRefunding={checkpointRefunding}
+            checkpointRefunded={checkpointRefunded}
+            checkpointError={checkpointError}
+            onCheckpointRefund={refundCheckpointEscrow}
+            onWatchProgress={handleReadableProgress}
+            social={social}
+            socialLoading={socialLoading}
+            socialError={socialError}
+            commentBody={commentBody}
+            commentsOpen={commentsOpen}
+            onReact={updateCreatorReaction}
+            onCommentBody={setCommentBody}
+            onSubmitComment={addCreatorSocialComment}
+            onToggleComments={() => setCommentsOpen(open => !open)}
+            onCommentReact={updateCreatorCommentReaction}
+          />
+        )}
+
         {/* ── Content error ── */}
         {fullyAuthorised && contentState === 'error' && (
           <div className="p-6 text-center space-y-3">
@@ -3082,6 +3115,122 @@ function BookUnlocked({
           onCommentReact={onCommentReact}
         />
       )}
+    </div>
+  )
+}
+
+function VideoUnlocked({
+  title,
+  videoUrl,
+  coverImage,
+  viewCount,
+  checkpointReleased,
+  checkpointVault,
+  sessionCap,
+  checkpointRefunding,
+  checkpointRefunded,
+  checkpointError,
+  onCheckpointRefund,
+  onWatchProgress,
+  social,
+  socialLoading,
+  socialError,
+  commentBody,
+  commentsOpen,
+  onReact,
+  onCommentBody,
+  onSubmitComment,
+  onToggleComments,
+  onCommentReact,
+}: {
+  title: string
+  videoUrl: string
+  coverImage?: string
+  viewCount: number
+  checkpointReleased: Record<number, string> | null
+  checkpointVault: string
+  sessionCap: number
+  checkpointRefunding: boolean
+  checkpointRefunded: boolean
+  checkpointError: string | null
+  onCheckpointRefund: () => void
+  onWatchProgress: (progress: number) => void
+  social: CreatorSocialState
+  socialLoading: boolean
+  socialError: string
+  commentBody: string
+  commentsOpen: boolean
+  onReact: (reaction: 'up' | 'down') => void
+  onCommentBody: (value: string) => void
+  onSubmitComment: () => void
+  onToggleComments: () => void
+  onCommentReact: (commentId: string, reaction: 'up' | 'down') => void
+}) {
+  const [videoError, setVideoError] = useState('')
+  return (
+    <div className="space-y-3 p-4 sm:p-5">
+      {checkpointReleased && (
+        <InlineCheckpointMeter
+          released={checkpointReleased}
+          sessionCap={sessionCap}
+          checkpointVault={checkpointVault}
+          refunding={checkpointRefunding}
+          refunded={checkpointRefunded}
+          error={checkpointError}
+          onRefund={onCheckpointRefund}
+        />
+      )}
+      <div className="rounded-2xl border border-gray-100 bg-gray-50/70 px-3 py-3 dark:border-white/10 dark:bg-white/[0.04]">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[10px] font-black uppercase tracking-[0.14em] text-blue-500">Unlocked Video</p>
+            <h2 className="mt-1 min-w-0 text-[17px] font-black leading-snug text-gray-950 dark:text-white">
+              {title || 'HashWatch video'}
+            </h2>
+          </div>
+          <ViewCountBadge count={viewCount} />
+        </div>
+      </div>
+      <div className="overflow-hidden rounded-2xl border border-gray-100 bg-black shadow-sm dark:border-white/10">
+        <video
+          className="aspect-video w-full bg-black"
+          src={videoUrl}
+          poster={coverImage}
+          controls
+          playsInline
+          preload="metadata"
+          onTimeUpdate={event => {
+            const video = event.currentTarget
+            if (!Number.isFinite(video.duration) || video.duration <= 0) return
+            onWatchProgress(Math.min(video.currentTime / video.duration, 1))
+          }}
+          onEnded={() => onWatchProgress(1)}
+          onError={() => setVideoError('This video could not load. Ask the creator for a direct MP4, WebM, or OGG URL.')}
+        />
+      </div>
+      <div className="rounded-2xl border border-blue-100 bg-blue-50/70 px-3 py-3 dark:border-blue-400/20 dark:bg-blue-500/10">
+        <p className="text-[12px] font-bold text-blue-700 dark:text-blue-200">Pay-as-you-watch active</p>
+        <p className="mt-1 text-[11px] leading-5 text-blue-600/80 dark:text-blue-200/70">
+          Creator earnings release only at playback checkpoints. Unwatched balance stays refundable.
+        </p>
+      </div>
+      {videoError && (
+        <p className="rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-[12px] font-medium text-red-500 dark:border-red-400/20 dark:bg-red-500/10 dark:text-red-200">
+          {videoError}
+        </p>
+      )}
+      <CreatorSocialPanel
+        social={social}
+        loading={socialLoading}
+        error={socialError}
+        commentBody={commentBody}
+        commentsOpen={commentsOpen}
+        onReact={onReact}
+        onCommentBody={onCommentBody}
+        onSubmitComment={onSubmitComment}
+        onToggleComments={onToggleComments}
+        onCommentReact={onCommentReact}
+      />
     </div>
   )
 }
