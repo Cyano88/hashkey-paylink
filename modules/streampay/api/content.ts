@@ -157,133 +157,141 @@ const OFFICIAL_EBOOKS: Array<{
   title: string
   description: string
   tag: string
-  identifier: string
-  gutenbergId: string
+  identifier?: string
+  gutenbergId?: string
+  source: string
+  previewText: string
 }> = [
   {
-    id: 'ebook-pride-prejudice',
-    title: 'Pride and Prejudice',
-    description: 'A sharp romance about love, class, first impressions, and second chances.',
+    id: 'ebook-yesteryear',
+    title: 'Yesteryear',
+    description: 'A buzzy 2026 satire about nostalgia, online identity, and the fantasy of simpler times.',
+    tag: 'Trending',
+    source: 'Trending preview',
+    previewText: `Yesteryear is the kind of current fiction that gives a creator shelf immediate cultural heat. Its hook is simple and sharp: a modern woman whose public identity is built around old-fashioned domestic ideals is forced to confront the reality behind the fantasy.
+
+For HashpayStream, this belongs in the ebook rail because it shows how paid reading can work for books people are already talking about. A reader can unlock a short editorial preview, react, comment, and decide whether to buy or follow the full book through the publisher's channels.
+
+Why it matters: trending books create conversation. A creator can publish a review, chapter reaction, reading guide, or fan analysis and charge by unlock or by reading checkpoints without pretending to own the original copyrighted text.`,
+  },
+  {
+    id: 'ebook-whistler',
+    title: 'Whistler',
+    description: 'Ann Patchett returns with an emotional story about family, memory, grief, and reconnection.',
+    tag: 'Literary',
+    source: 'Trending preview',
+    previewText: `Whistler is current literary fiction with a strong reader signal: recognizable author, emotional subject, and a story built around the long echo of family relationships.
+
+This preview is intentionally editorial. It gives readers the context they need before deciding whether to pay for a creator's essay, reading notes, or reaction thread around the book.
+
+Best HashpayStream use case: a creator publishes a paid companion piece that tracks the book's themes as the reader moves through it. Pay-as-you-read checkpoints make that feel natural because each section can release value as the reader progresses.`,
+  },
+  {
+    id: 'ebook-calamity-club',
+    title: 'The Calamity Club',
+    description: "Kathryn Stockett's long-awaited second novel, set around women fighting for agency in 1930s Mississippi.",
+    tag: 'Historical',
+    source: 'Trending preview',
+    previewText: `The Calamity Club has a built-in reader conversation: a major author returning after a long gap, a historical setting, and a story centered on women under pressure.
+
+A HashpayStream creator can turn that attention into paid analysis without reposting the book. The platform can host a spoiler-free review, a character guide, a historical context note, or a reading-club prompt.
+
+That is the practical creator model: the original book remains with its publisher, while the creator monetizes commentary, curation, and discussion around the reading experience.`,
+  },
+  {
+    id: 'ebook-weddings',
+    title: 'Weddings',
+    description: "Danielle Steel's 2026 bestseller brings a clean mainstream fiction signal to the shelf.",
     tag: 'Romance',
-    identifier: 'ISBN:9780141439518',
-    gutenbergId: '1342',
+    source: 'Trending preview',
+    previewText: `Weddings represents the kind of mass-market fiction readers recognize immediately. It is useful in a demo because it shows HashpayStream is not only for crypto-native essays or niche technical content.
+
+The monetizable creator layer is the companion experience: wedding tropes, relationship arcs, favorite scenes, chapter reactions, and reader discussion.
+
+For consumer testing, this kind of title makes the product feel familiar. The payment layer disappears into a normal reading habit: unlock the guide, read, react, and comment.`,
   },
   {
-    id: 'ebook-dracula',
-    title: 'Dracula',
-    description: 'A gothic horror classic with journals, letters, pursuit, and dread.',
-    tag: 'Horror',
-    identifier: 'ISBN:9780486411095',
-    gutenbergId: '345',
-  },
-  {
-    id: 'ebook-frankenstein',
-    title: 'Frankenstein',
-    description: 'A tragic creation story about ambition, loneliness, and responsibility.',
-    tag: 'Tragedy',
-    identifier: 'ISBN:9780486282114',
-    gutenbergId: '84',
-  },
-  {
-    id: 'ebook-sherlock-adventures',
-    title: 'The Adventures of Sherlock Holmes',
-    description: 'Brisk detective mysteries built around deduction, disguise, and suspense.',
-    tag: 'Mystery',
-    identifier: 'ISBN:9780486474915',
-    gutenbergId: '1661',
-  },
-  {
-    id: 'ebook-jane-eyre',
-    title: 'Jane Eyre',
-    description: 'A passionate coming-of-age romance with secrets, independence, and moral tension.',
-    tag: 'Love',
-    identifier: 'ISBN:9780141441146',
-    gutenbergId: '1260',
-  },
-  {
-    id: 'ebook-wuthering-heights',
-    title: 'Wuthering Heights',
-    description: 'A stormy tale of obsession, revenge, and destructive love.',
-    tag: 'Drama',
-    identifier: 'ISBN:9780141439556',
-    gutenbergId: '768',
-  },
-  {
-    id: 'ebook-dorian-gray',
-    title: 'The Picture of Dorian Gray',
-    description: 'A stylish psychological thriller about beauty, vanity, and consequence.',
+    id: 'ebook-choke-point',
+    title: 'Choke Point',
+    description: 'A current thriller pick for readers who want stakes, speed, and high-pressure conflict.',
     tag: 'Thriller',
-    identifier: 'ISBN:9780141439570',
-    gutenbergId: '174',
+    source: 'Trending preview',
+    previewText: `Choke Point gives the ebook rail a fast commercial-thriller lane. It is the kind of title that supports short paid reactions, spoiler sections, and chapter-by-chapter commentary.
+
+HashpayStream should treat this as a discovery card, not a replacement for the publisher's book. The creator value is in the paid layer around the title: summaries, predictions, character maps, and discussion prompts.
+
+This is also a strong match for checkpoint reading. A creator can release value in pieces as the reader reaches sections of the commentary instead of charging only once upfront.`,
   },
   {
-    id: 'ebook-alice-wonderland',
-    title: 'Alice in Wonderland',
-    description: 'A funny, strange, endlessly imaginative trip through nonsense and wonder.',
-    tag: 'Funny',
-    identifier: 'ISBN:9780486275437',
-    gutenbergId: '11',
+    id: 'ebook-the-correspondent',
+    title: 'The Correspondent',
+    description: 'A slow-burn literary hit about letters, memory, age, and a life revealed through correspondence.',
+    tag: 'Book Club',
+    identifier: 'ISBN:9780241721254',
+    source: 'Trending preview',
+    previewText: `The Correspondent is a useful shelf anchor because it has both literary credibility and broad reader warmth. Its form also makes it easy for creators to build thoughtful paid companion notes.
+
+A reader might unlock a creator's short guide to the novel's structure, emotional arc, or best discussion questions. That is exactly where HashpayStream fits: charging small amounts for context and curation around a book conversation.
+
+The full novel belongs to the author and publisher. The paid HashpayStream object is the creator's original analysis, reaction, and community layer.`,
   },
   {
-    id: 'ebook-frederick-douglass',
-    title: 'Narrative of the Life of Frederick Douglass',
-    description: 'A true-life account of survival, literacy, freedom, and moral courage.',
-    tag: 'True Life',
-    identifier: 'ISBN:9780486284996',
-    gutenbergId: '23',
+    id: 'ebook-it-could-have-been-her',
+    title: 'It Could Have Been Her',
+    description: 'A current Lisa Jewell suspense pick for readers who like secrets, pressure, and twisty reveals.',
+    tag: 'Suspense',
+    source: 'Trending preview',
+    previewText: `It Could Have Been Her gives the shelf a current psychological-suspense lane. It is the kind of title readers use to compare theories, debate endings, and ask for spoiler-free recommendations.
+
+On HashpayStream, the paid content should be a creator-owned reading note or review, not the copyrighted book. Readers can unlock the analysis, leave reactions, and discuss the title under one wallet identity.
+
+This is a cleaner consumer product than a plain link list because the reader gets a real in-platform experience before choosing whether to buy or read the original elsewhere.`,
   },
   {
-    id: 'ebook-time-machine',
-    title: 'The Time Machine',
-    description: 'A compact sci-fi adventure through futurism, fear, and social collapse.',
-    tag: 'Sci-Fi',
-    identifier: 'ISBN:9780486284729',
-    gutenbergId: '35',
-  },
-  {
-    id: 'ebook-great-gatsby',
-    title: 'The Great Gatsby',
-    description: 'A glittering, tragic story about money, longing, parties, and the cost of illusion.',
-    tag: 'Modern Classic',
-    identifier: 'ISBN:9780743273565',
-    gutenbergId: '64317',
-  },
-  {
-    id: 'ebook-yellow-wallpaper',
-    title: 'The Yellow Wallpaper',
-    description: 'A short psychological horror story about confinement, control, and a mind under pressure.',
-    tag: 'Psychological',
-    identifier: 'ISBN:9780486298573',
-    gutenbergId: '1952',
-  },
-  {
-    id: 'ebook-secret-garden',
-    title: 'The Secret Garden',
-    description: 'A warm story of grief, friendship, healing, and a hidden place coming back to life.',
+    id: 'ebook-theo-of-golden',
+    title: 'Theo of Golden',
+    description: 'A warm trade-paperback bestseller with strong reader-community appeal.',
     tag: 'Feel Good',
-    identifier: 'ISBN:9780141321066',
-    gutenbergId: '17396',
+    source: 'Trending preview',
+    previewText: `Theo of Golden belongs on the shelf because it signals reader comfort and word-of-mouth appeal. It is useful for showing that HashpayStream can monetize soft, community-driven reading too.
+
+The paid layer can be a discussion guide, a reflection essay, or a creator's curated notes for a reading group.
+
+This is where nanopayments become practical: instead of asking every reader to subscribe, a creator can charge a small amount for one helpful companion piece.`,
   },
   {
-    id: 'ebook-war-worlds',
-    title: 'The War of the Worlds',
-    description: 'A tense invasion story with panic, survival, and early science-fiction spectacle.',
+    id: 'ebook-dear-debbie',
+    title: 'Dear Debbie',
+    description: 'A current Freida McFadden reader favorite for suspense and page-turning discussion.',
+    tag: 'Suspense',
+    source: 'Trending preview',
+    previewText: `Dear Debbie gives the shelf a sharp suspense lane. Books like this are built for reactions: theories, twists, endings, and reader debates.
+
+HashpayStream can host the original creator layer around that attention. A creator can publish spoiler-free notes for everyone, then gated spoiler commentary for paid readers.
+
+That is a strong live-test flow because the content is easy to understand: pay a tiny amount, unlock the creator's take, and join the discussion.`,
+  },
+  {
+    id: 'ebook-project-hail-mary',
+    title: 'Project Hail Mary',
+    description: 'A durable sci-fi favorite still charting in audio and ebook conversations.',
     tag: 'Sci-Fi',
-    identifier: 'ISBN:9780486295060',
-    gutenbergId: '36',
-  },
-  {
-    id: 'ebook-moby-dick',
-    title: 'Moby-Dick',
-    description: 'A vast sea obsession about revenge, fate, danger, and the hunt for the white whale.',
-    tag: 'Adventure',
-    identifier: 'ISBN:9781503280786',
-    gutenbergId: '2701',
+    source: 'Trending preview',
+    previewText: `Project Hail Mary is not brand new, but it remains active in reader conversation. That matters for discovery: some books trend because they keep finding new audiences.
+
+For HashpayStream, a creator can sell a science explainer, a spoiler-safe recommendation, or a chapter reaction series around it.
+
+The product lesson is simple: paid content does not need to be the book itself. It can be the layer that helps readers enjoy, understand, and discuss the book better.`,
   },
 ]
 
-function openLibraryCover(isbn: string) {
-  return `https://covers.openlibrary.org/b/isbn/${encodeURIComponent(isbn.replace(/^ISBN:/i, ''))}-L.jpg`
+function titleCover(title: string) {
+  return `https://placehold.co/320x480/111827/ffffff/png?text=${encodeURIComponent(title.replace(/\s+/g, '+'))}`
+}
+
+function openLibraryCover(identifier?: string, title = 'Book') {
+  if (!identifier) return titleCover(title)
+  return `https://covers.openlibrary.org/b/isbn/${encodeURIComponent(identifier.replace(/^ISBN:/i, ''))}-L.jpg`
 }
 
 const OFFICIAL_EBOOK_BY_ID = new Map(OFFICIAL_EBOOKS.map(book => [book.id, book]))
@@ -663,16 +671,16 @@ const OFFICIAL_CONTENT: Record<string, ContentEntry> = {
   },
   ...Object.fromEntries(OFFICIAL_EBOOKS.map((book, index) => [book.id, {
     type: 'book' as const,
-    content: `gutenberg:${book.gutenbergId}`,
+    content: book.gutenbergId ? `gutenberg:${book.gutenbergId}` : `preview:${book.id}`,
     creator: SAFE_OFFICIAL_CREATOR,
     capRaw: Number(process.env.CREATOR_EBOOK_PRICE_RAW ?? '100000'),
     rateRaw: 1000,
     mode: 'unlock' as const,
     title: book.title,
     description: book.description,
-    authorName: 'Public Domain Reader',
+    authorName: book.source,
     xHandle: 'Hash_PayLink',
-    coverImage: openLibraryCover(book.identifier),
+    coverImage: openLibraryCover(book.identifier, book.title),
     category: 'ebooks',
     reviewStatus: 'approved' as const,
     reviewedAt: Date.now(),
@@ -2220,6 +2228,18 @@ export async function getCreatorBook(req: Request, res: Response) {
   const id = String(req.query.id ?? '').trim()
   const book = OFFICIAL_EBOOK_BY_ID.get(id)
   if (!book) return res.status(404).json({ ok: false, error: 'Book not found.' })
+  if (!book.gutenbergId) {
+    return res.status(200).json({
+      ok: true,
+      id,
+      title: book.title,
+      description: book.description,
+      source: book.source,
+      coverImage: openLibraryCover(book.identifier, book.title),
+      text: cleanGutenbergText(book.previewText),
+      preview: true,
+    })
+  }
   try {
     const text = await fetchOfficialBookText(book.gutenbergId)
     return res.status(200).json({
@@ -2227,8 +2247,8 @@ export async function getCreatorBook(req: Request, res: Response) {
       id,
       title: book.title,
       description: book.description,
-      source: 'Classic reader',
-      coverImage: openLibraryCover(book.identifier),
+      source: book.source,
+      coverImage: openLibraryCover(book.identifier, book.title),
       gutenbergId: book.gutenbergId,
       text,
     })
@@ -2241,8 +2261,8 @@ export async function getCreatorBook(req: Request, res: Response) {
         id,
         title: book.title,
         description: book.description,
-        source: 'Classic reader',
-        coverImage: openLibraryCover(book.identifier),
+        source: book.source,
+        coverImage: openLibraryCover(book.identifier, book.title),
         gutenbergId: book.gutenbergId,
         text: fallback,
         fallback: true,

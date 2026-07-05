@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { usePrivy } from '@privy-io/react-auth'
-import { ExternalLink, Loader2, LockKeyhole, Mail, Plus, TrendingUp, X as XIcon } from 'lucide-react'
+import { Loader2, LockKeyhole, Plus, TrendingUp } from 'lucide-react'
 import { LinkFactory }            from './LinkFactory'
 import { readGhostVault }         from '../../hooks/usePoAStream'
 import type { GhostVaultEntry }   from '../../hooks/usePoAStream'
@@ -258,26 +258,26 @@ const OFFICIAL_DISCOVER_CONTENT: PublishedContent[] = [
   },
 ]
 
-function openLibraryCover(isbn: string) {
-  return `https://covers.openlibrary.org/b/isbn/${encodeURIComponent(isbn)}-L.jpg`
+function titleCover(title: string) {
+  return `https://placehold.co/320x480/111827/ffffff/png?text=${encodeURIComponent(title.replace(/\s+/g, '+'))}`
+}
+
+function bookCover(identifier: string | undefined, title: string) {
+  if (!identifier) return titleCover(title)
+  return `https://covers.openlibrary.org/b/isbn/${encodeURIComponent(identifier.replace(/^ISBN:/i, ''))}-L.jpg`
 }
 
 const OFFICIAL_EBOOKS: PublishedContent[] = [
-  ['ebook-pride-prejudice', 'Pride and Prejudice', 'A sharp romance about love, class, first impressions, and second chances.', 'Romance', '9780141439518'],
-  ['ebook-dracula', 'Dracula', 'A gothic horror classic with journals, letters, pursuit, and dread.', 'Horror', '9780486411095'],
-  ['ebook-frankenstein', 'Frankenstein', 'A tragic creation story about ambition, loneliness, and responsibility.', 'Tragedy', '9780486282114'],
-  ['ebook-sherlock-adventures', 'The Adventures of Sherlock Holmes', 'Brisk detective mysteries built around deduction, disguise, and suspense.', 'Mystery', '9780486474915'],
-  ['ebook-jane-eyre', 'Jane Eyre', 'A passionate coming-of-age romance with secrets, independence, and moral tension.', 'Love', '9780141441146'],
-  ['ebook-wuthering-heights', 'Wuthering Heights', 'A stormy tale of obsession, revenge, and destructive love.', 'Drama', '9780141439556'],
-  ['ebook-dorian-gray', 'The Picture of Dorian Gray', 'A stylish psychological thriller about beauty, vanity, and consequence.', 'Thriller', '9780141439570'],
-  ['ebook-alice-wonderland', 'Alice in Wonderland', 'A funny, strange, endlessly imaginative trip through nonsense and wonder.', 'Funny', '9780486275437'],
-  ['ebook-frederick-douglass', 'Narrative of the Life of Frederick Douglass', 'A true-life account of survival, literacy, freedom, and moral courage.', 'True Life', '9780486284996'],
-  ['ebook-time-machine', 'The Time Machine', 'A compact sci-fi adventure through futurism, fear, and social collapse.', 'Sci-Fi', '9780486284729'],
-  ['ebook-great-gatsby', 'The Great Gatsby', 'A glittering, tragic story about money, longing, parties, and the cost of illusion.', 'Modern Classic', '9780743273565'],
-  ['ebook-yellow-wallpaper', 'The Yellow Wallpaper', 'A short psychological horror story about confinement, control, and a mind under pressure.', 'Psychological', '9780486298573'],
-  ['ebook-secret-garden', 'The Secret Garden', 'A warm story of grief, friendship, healing, and a hidden place coming back to life.', 'Feel Good', '9780141321066'],
-  ['ebook-war-worlds', 'The War of the Worlds', 'A tense invasion story with panic, survival, and early science-fiction spectacle.', 'Sci-Fi', '9780486295060'],
-  ['ebook-moby-dick', 'Moby-Dick', 'A vast sea obsession about revenge, fate, danger, and the hunt for the white whale.', 'Adventure', '9781503280786'],
+  ['ebook-yesteryear', 'Yesteryear', 'A buzzy 2026 satire about nostalgia, online identity, and the fantasy of simpler times.', 'Trending', undefined],
+  ['ebook-whistler', 'Whistler', 'Ann Patchett returns with an emotional story about family, memory, grief, and reconnection.', 'Literary', undefined],
+  ['ebook-calamity-club', 'The Calamity Club', "Kathryn Stockett's long-awaited second novel, set around women fighting for agency in 1930s Mississippi.", 'Historical', undefined],
+  ['ebook-weddings', 'Weddings', "Danielle Steel's 2026 bestseller brings a clean mainstream fiction signal to the shelf.", 'Romance', undefined],
+  ['ebook-choke-point', 'Choke Point', 'A current thriller pick for readers who want stakes, speed, and high-pressure conflict.', 'Thriller', undefined],
+  ['ebook-the-correspondent', 'The Correspondent', 'A slow-burn literary hit about letters, memory, age, and a life revealed through correspondence.', 'Book Club', '9780241721254'],
+  ['ebook-it-could-have-been-her', 'It Could Have Been Her', 'A current Lisa Jewell suspense pick for readers who like secrets, pressure, and twisty reveals.', 'Suspense', undefined],
+  ['ebook-theo-of-golden', 'Theo of Golden', 'A warm trade-paperback bestseller with strong reader-community appeal.', 'Feel Good', undefined],
+  ['ebook-dear-debbie', 'Dear Debbie', 'A current Freida McFadden reader favorite for suspense and page-turning discussion.', 'Suspense', undefined],
+  ['ebook-project-hail-mary', 'Project Hail Mary', 'A durable sci-fi favorite still charting in audio and ebook conversations.', 'Sci-Fi', undefined],
 ].map(([id, title, description, tag, isbn]) => ({
   id,
   contentId: id,
@@ -287,11 +287,11 @@ const OFFICIAL_EBOOKS: PublishedContent[] = [
   category: 'ebooks' as CreatorCategory,
   price: '0.10',
   tag,
-  source: 'Public Domain Reader',
-  image: openLibraryCover(isbn),
+  source: 'Trending preview',
+  image: bookCover(isbn, title),
   gateLink: `/gate?app=streampay&id=${id}&cr=${OFFICIAL_CREATOR_ADDRESS}&r=1000&cap=100000&mode=unlock&pay=choice&ct=book&cat=ebooks&t=${encodeURIComponent(title)}`,
   action: 'gate' as const,
-  cta: 'Unlock book',
+  cta: 'Unlock preview',
 }))
 
 function worldCupArticleId(article: Pick<PolyWorldCupArticle, 'title' | 'url'>, index = 0) {
@@ -1296,34 +1296,6 @@ function DiscoverContent({
         </div>
 
       </section>
-
-      <div className="border-t border-gray-100 pt-4 pb-2 flex flex-wrap items-center justify-center gap-x-8 gap-y-2 dark:border-white/10">
-        <a
-          href="mailto:support@hashpaylink.com"
-          className="flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-gray-900 transition-colors dark:text-gray-500 dark:hover:text-gray-200"
-        >
-          <Mail className="h-3.5 w-3.5" />
-          Support
-        </a>
-        <a
-          href="https://x.com/Hash_PayLink"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-gray-900 transition-colors dark:text-gray-500 dark:hover:text-gray-200"
-        >
-          <XIcon className="h-3.5 w-3.5" />
-          DM us
-        </a>
-        <a
-          href="https://hashpaylink.com/docs/streampay"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-gray-900 transition-colors dark:text-gray-500 dark:hover:text-gray-200"
-        >
-          <ExternalLink className="h-3.5 w-3.5" />
-          Docs
-        </a>
-      </div>
     </div>
   )
 }
@@ -2152,35 +2124,6 @@ function SettlementDashboard({
           )}
 
         </div>
-      </div>
-
-      {/* ── Footer links ── */}
-      <div className="border-t border-gray-100 pt-4 pb-2 flex flex-wrap items-center justify-center gap-x-8 gap-y-2 dark:border-white/10">
-        <a
-          href="mailto:support@hashpaylink.com"
-          className="flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-gray-900 transition-colors dark:text-gray-500 dark:hover:text-gray-200"
-        >
-          <Mail className="h-3.5 w-3.5" />
-          Support
-        </a>
-        <a
-          href="https://x.com/Hash_PayLink"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-gray-900 transition-colors dark:text-gray-500 dark:hover:text-gray-200"
-        >
-          <XIcon className="h-3.5 w-3.5" />
-          DM us
-        </a>
-        <a
-          href="https://hashpaylink.com/docs/streampay"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-gray-900 transition-colors dark:text-gray-500 dark:hover:text-gray-200"
-        >
-          <ExternalLink className="h-3.5 w-3.5" />
-          Docs
-        </a>
       </div>
     </div>
   )
