@@ -89,6 +89,11 @@ function streamPageContext() {
   return 'HashpayStream creator app.'
 }
 
+function isClearChatCommand(value: string) {
+  return /^(clear|reset|delete)\s+(chat|conversation|history)$/i.test(value.trim())
+    || /^(clear|reset)\s*$/i.test(value.trim())
+}
+
 export function StreamAgentHash() {
   const [open, setOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
@@ -149,9 +154,28 @@ export function StreamAgentHash() {
     else openPanel()
   }
 
+  function clearChat() {
+    setInput('')
+    setTyping(false)
+    setMessages([{
+      from: 'bot',
+      text: 'Chat cleared. I can help with HashpayStream creator posts, pay-as-you-read, x402 unlocks, receipts, and earnings.',
+    }])
+    try {
+      window.localStorage.removeItem('hashpaystream-agent-hash')
+    } catch {
+      // Local chat memory is best-effort.
+    }
+    scrollToBottom()
+  }
+
   async function askAgent(text = input) {
     const question = text.trim()
     if (!question || typing) return
+    if (isClearChatCommand(question)) {
+      clearChat()
+      return
+    }
     setMessages(current => [...current, { from: 'user', text: question }])
     setInput('')
     setTyping(true)
@@ -276,6 +300,14 @@ export function StreamAgentHash() {
                   {prompt}
                 </button>
               ))}
+              <button
+                type="button"
+                onClick={clearChat}
+                disabled={typing}
+                className="rounded-full border border-transparent px-2.5 py-1 text-[11px] font-semibold text-gray-400 transition hover:bg-gray-50 hover:text-gray-700 disabled:opacity-50 dark:hover:bg-white/[0.05] dark:hover:text-gray-200"
+              >
+                Clear chat
+              </button>
             </div>
             <div className="flex items-center gap-2">
               <input
