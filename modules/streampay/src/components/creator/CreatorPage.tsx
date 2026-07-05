@@ -288,16 +288,16 @@ function bookCover(identifier: string | undefined, title: string, tag: string) {
 }
 
 const OFFICIAL_EBOOKS: PublishedContent[] = [
-  ['ebook-yesteryear', 'Yesteryear', 'A buzzy 2026 satire about nostalgia, online identity, and the fantasy of simpler times.', 'Trending', undefined, 'https://covers.openlibrary.org/b/id/15213215-L.jpg'],
-  ['ebook-whistler', 'Whistler', 'Ann Patchett returns with an emotional story about family, memory, grief, and reconnection.', 'Literary', undefined, 'https://covers.openlibrary.org/b/id/15234903-L.jpg'],
-  ['ebook-calamity-club', 'The Calamity Club', "Kathryn Stockett's long-awaited second novel, set around women fighting for agency in 1930s Mississippi.", 'Historical', undefined, undefined],
-  ['ebook-weddings', 'Weddings', "Danielle Steel's 2026 bestseller brings a clean mainstream fiction signal to the shelf.", 'Romance', undefined, undefined],
-  ['ebook-choke-point', 'Choke Point', 'A current thriller pick for readers who want stakes, speed, and high-pressure conflict.', 'Thriller', undefined, undefined],
-  ['ebook-the-correspondent', 'The Correspondent', 'A slow-burn literary hit about letters, memory, age, and a life revealed through correspondence.', 'Book Club', '9780241721254', 'https://covers.openlibrary.org/b/id/15232808-L.jpg'],
-  ['ebook-it-could-have-been-her', 'It Could Have Been Her', 'A current Lisa Jewell suspense pick for readers who like secrets, pressure, and twisty reveals.', 'Suspense', undefined, undefined],
-  ['ebook-theo-of-golden', 'Theo of Golden', 'A warm trade-paperback bestseller with strong reader-community appeal.', 'Feel Good', undefined, 'https://covers.openlibrary.org/b/id/15205233-L.jpg'],
-  ['ebook-dear-debbie', 'Dear Debbie', 'A current Freida McFadden reader favorite for suspense and page-turning discussion.', 'Suspense', undefined, 'https://covers.openlibrary.org/b/id/15171146-L.jpg'],
-  ['ebook-project-hail-mary', 'Project Hail Mary', 'A durable sci-fi favorite still charting in audio and ebook conversations.', 'Sci-Fi', undefined, 'https://covers.openlibrary.org/b/id/11200092-L.jpg'],
+  ['ebook-dracula', 'Dracula', 'A gothic horror classic with journals, letters, pursuit, and dread.', 'Horror', '9780141439846', 'https://covers.openlibrary.org/b/id/13182210-L.jpg'],
+  ['ebook-pride-and-prejudice', 'Pride and Prejudice', 'A sharp romance about love, class, first impressions, and second chances.', 'Romance', '9780141439518', 'https://covers.openlibrary.org/b/id/14357252-L.jpg'],
+  ['ebook-jane-eyre', 'Jane Eyre', 'A passionate coming-of-age romance with secrets, independence, and moral tension.', 'Love', '9780141441146', 'https://covers.openlibrary.org/b/id/12818862-L.jpg'],
+  ['ebook-wuthering-heights', 'Wuthering Heights', 'A stormy tale of obsession, revenge, and destructive love.', 'Drama', '9780141439556', 'https://covers.openlibrary.org/b/id/12645111-L.jpg'],
+  ['ebook-frankenstein', 'Frankenstein', 'A tragic science-fiction classic about ambition, creation, and responsibility.', 'Sci-Fi', '9780486282114', 'https://covers.openlibrary.org/b/id/11238547-L.jpg'],
+  ['ebook-sherlock-holmes', 'The Adventures of Sherlock Holmes', 'Detective stories built for clues, deduction, and chapter-by-chapter reading.', 'Mystery', '9780140439076', 'https://covers.openlibrary.org/b/id/12767901-L.jpg'],
+  ['ebook-dorian-gray', 'The Picture of Dorian Gray', 'A dark literary classic about beauty, corruption, and a hidden moral cost.', 'Literary', '9780141439570', 'https://covers.openlibrary.org/b/id/12614796-L.jpg'],
+  ['ebook-alice-wonderland', "Alice's Adventures in Wonderland", 'A playful fantasy classic with strange scenes, sharp dialogue, and fast movement.', 'Fantasy', '9780141439761', 'https://covers.openlibrary.org/b/id/10527843-L.jpg'],
+  ['ebook-time-machine', 'The Time Machine', 'A compact science-fiction classic about invention, time, and future worlds.', 'Sci-Fi', '9780141439976', 'https://covers.openlibrary.org/b/id/8231856-L.jpg'],
+  ['ebook-frederick-douglass', 'Narrative of the Life of Frederick Douglass', 'A true-life public-domain classic about memory, freedom, and human dignity.', 'True Life', '9780486284996', 'https://covers.openlibrary.org/b/id/8231995-L.jpg'],
 ].map(([id, title, description, tag, isbn, coverUrl]) => ({
   id,
   contentId: id,
@@ -307,11 +307,11 @@ const OFFICIAL_EBOOKS: PublishedContent[] = [
   category: 'ebooks' as CreatorCategory,
   price: '0.10',
   tag,
-  source: 'Trending preview',
+  source: 'Full reader',
   image: coverUrl || bookCover(isbn, title, tag),
   gateLink: `/gate?app=streampay&id=${id}&cr=${OFFICIAL_CREATOR_ADDRESS}&r=1000&cap=100000&mode=unlock&pay=choice&ct=book&cat=ebooks&t=${encodeURIComponent(title)}`,
   action: 'gate' as const,
-  cta: 'Unlock preview',
+  cta: 'Read book',
 }))
 
 function worldCupArticleId(article: Pick<PolyWorldCupArticle, 'title' | 'url'>, index = 0) {
