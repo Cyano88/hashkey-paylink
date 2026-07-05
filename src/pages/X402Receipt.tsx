@@ -28,6 +28,7 @@ type ReceiptResponse = {
     memo?: string
     merchantId?: string
     source?: string
+    settlementType?: string
     detail?: string
     createdAt: number
     legal?: Record<string, unknown>
@@ -105,11 +106,12 @@ export default function X402Receipt() {
   const receiptFile = useMemo(() => {
     const receipt = data?.receipt
     if (!receipt) return ''
+    const isCheckpoint = receipt.settlementType === 'checkpoint-escrow'
     return [
       'Hash PayLink Receipt',
       '',
       `Title: ${receipt.title ?? 'Receipt'}`,
-      `Amount: ${receipt.amount ?? 'x402 payment'}`,
+      `Amount: ${receipt.amount ?? (isCheckpoint ? 'checkpoint release' : 'x402 payment')}`,
       `Service: ${String(proof.service ?? receipt.source ?? 'Hash PayLink service')}`,
       `Buyer: ${String(proof.buyerAgent ?? proof.payer ?? receipt.payer ?? '')}`,
       `Seller: ${String(proof.sellerAgent ?? proof.seller ?? receipt.merchantId ?? '')}`,
@@ -122,7 +124,9 @@ export default function X402Receipt() {
       og?.ogTxHash ? `0G tx: ${og.ogTxHash}` : '',
       `Receipt URL: ${window.location.href}`,
       '',
-      'This receipt records a Circle Gateway x402 creator content payment.',
+      isCheckpoint
+        ? 'This receipt records a HashpayStream checkpoint escrow release on Arc.'
+        : 'This receipt records a Circle Gateway x402 creator content payment.',
     ].filter(Boolean).join('\n')
   }, [data?.receipt, governance.governanceVersion, legal.entityName, og?.ogTxHash, og?.rootHash, proof])
 

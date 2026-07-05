@@ -975,6 +975,17 @@ function checkpointKey(contentId: string, walletAddress: string) {
   return `${contentId}:${String(walletAddress || '').trim().toLowerCase()}`
 }
 
+function checkpointReceiptId(vaultAddress: string) {
+  return `hps-checkpoint-${String(vaultAddress || '').trim().toLowerCase()}`
+}
+
+function parseCheckpointReceiptId(receiptId: string) {
+  const value = String(receiptId || '').trim().toLowerCase()
+  if (!value.startsWith('hps-checkpoint-')) return ''
+  const vault = value.slice('hps-checkpoint-'.length)
+  return isAddress(vault) ? vault : ''
+}
+
 function rowToUnlockEntry(row: Record<string, unknown>): CreatorUnlockEntry {
   return {
     contentId: String(row.content_id ?? ''),
@@ -1196,12 +1207,85 @@ async function checkpointUnlockToEarning(unlock: CheckpointUnlockEntry, creator:
       amount: Number(releasedAmount) / 1_000_000,
       asset: 'USDC',
       payer: unlock.walletAddress,
-      receiptActivityId: '',
+      receiptActivityId: checkpointReceiptId(unlock.vaultAddress),
       transaction: unlock.vaultAddress,
       unlockedAt: unlock.createdAt,
     }
   } catch {
     return null
+  }
+}
+
+export async function findCheckpointReceipt(receiptId: string) {
+  const vault = parseCheckpointReceiptId(receiptId)
+  if (!vault) return null
+
+  let unlock: CheckpointUnlockEntry | null = null
+  if (pool) {
+    await ensureSchema()
+    const result = await pool.query(
+      `select *
+       from streampay_checkpoint_unlocks
+       where lower(vault_address) = $1
+       order by updated_at desc
+       limit 1`,
+      [vault],
+    )
+    unlock = (result.rowCount ?? 0) > 0 ? rowToCheckpointUnlockEntry(result.rows[0]) : null
+  } else {
+    unlock = Array.from(checkpointUnlockStore.values()).find(item => item.vaultAddress.toLowerCase() === vault) ?? null
+  }
+  if (!unlock) return null
+
+  const entry = await readContentEntry(unlock.contentId)
+  if (!entry) return null
+  const state = await verifyCheckpointVaultState(unlock.contentId, entry, unlock.vaultAddress, { allowRefunded: true })
+  const released = Number(BigInt(state.releasedAmount)) / 1_000_000
+  const total = Number(BigInt(state.totalAmount)) / 1_000_000
+  const refundable = Number(BigInt(state.refundableAmount)) / 1_000_000
+  const progress = total > 0 ? Math.min(100, Math.round((released / total) * 100)) : 0
+  const proofHash = createHash('sha256').update(JSON.stringify({
+    type: 'hashpaystream_checkpoint_receipt',
+    receiptId,
+    contentId: unlock.contentId,
+    vaultAddress: unlock.vaultAddress,
+    reader: state.sender,
+    creator: entry.creator,
+    releasedAmount: state.releasedAmount,
+    refundableAmount: state.refundableAmount,
+    totalAmount: state.totalAmount,
+  })).digest('hex')
+
+  return {
+    type: 'hashpaystream_checkpoint_receipt',
+    activityId: receiptId,
+    agentSlug: 'hashpaystream',
+    title: entry.type === 'video' ? 'Pay-as-you-watch checkpoint receipt' : 'Pay-as-you-read checkpoint receipt',
+    amount: `${released.toLocaleString('en-US', { useGrouping: false, maximumFractionDigits: 6 })} USDC`,
+    asset: 'USDC',
+    chain: 'arc',
+    txHash: unlock.vaultAddress,
+    payer: state.sender,
+    merchantId: entry.creator,
+    source: 'streampay',
+    settlementType: 'checkpoint-escrow',
+    detail: `${entry.title || 'Creator content'} - ${progress}% released, ${refundable.toLocaleString('en-US', { useGrouping: false, maximumFractionDigits: 6 })} USDC refundable`,
+    createdAt: unlock.createdAt,
+    proof: {
+      service: 'HashpayStream checkpoint escrow',
+      network: 'Arc Testnet',
+      transaction: unlock.vaultAddress,
+      payer: state.sender,
+      seller: entry.creator,
+      amount: state.releasedAmount,
+      totalAmount: state.totalAmount,
+      refundableAmount: state.refundableAmount,
+      releasedAmount: state.releasedAmount,
+      contentId: unlock.contentId,
+      checkpointProgress: progress,
+      receiptHash: proofHash,
+      proofHash,
+    },
   }
 }
 

@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express'
 import { ensureAgentActivityArchived, findAgentActivity } from './agent-activity.js'
 import { getAgentGovernanceProfile, getAgentLegalProfile } from './agent-legal.js'
-import { findCreatorUnlockReceipt, updateCreatorUnlockOgProof } from '../modules/streampay/api/content.js'
+import { findCheckpointReceipt, findCreatorUnlockReceipt, updateCreatorUnlockOgProof } from '../modules/streampay/api/content.js'
 
 const CIRCLE_GATEWAY_API_BASE = (process.env.CIRCLE_GATEWAY_API_BASE ?? 'https://gateway-api-testnet.circle.com').replace(/\/+$/, '')
 const CIRCLE_API_KEY = String(
@@ -48,6 +48,17 @@ export default async function handler(req: Request, res: Response) {
           receipt: {
             ...creatorReceipt,
             legal: getAgentLegalProfile(creatorReceipt.proof.seller),
+            governance: getAgentGovernanceProfile(),
+          },
+        })
+      }
+      const checkpointReceipt = await findCheckpointReceipt(id)
+      if (checkpointReceipt) {
+        return res.json({
+          ok: true,
+          receipt: {
+            ...checkpointReceipt,
+            legal: getAgentLegalProfile(checkpointReceipt.proof.seller),
             governance: getAgentGovernanceProfile(),
           },
         })

@@ -47,6 +47,7 @@ export type X402ReceiptLike = {
   memo?: string
   merchantId?: string
   source?: string
+  settlementType?: string
   detail?: string
   createdAt?: number
   proof?: Record<string, unknown>
@@ -64,8 +65,10 @@ export function createX402PaylinkReceipt(receipt: X402ReceiptLike, activityId: s
   const amount = normalizeX402ReceiptAmount(receipt.amount, proof.amount)
   const payer = String(proof.payer ?? proof.buyerAgent ?? receipt.payer ?? '')
   const creator = String(proof.seller ?? proof.sellerAgent ?? receipt.merchantId ?? '')
+  const source = receipt.source === 'streampay' ? 'streampay' : 'x402'
+  const settlementType = receipt.settlementType || (source === 'streampay' ? 'checkpoint-escrow' : 'circle-gateway-x402')
   return {
-    type: 'circle_gateway_x402_receipt',
+    type: receipt.type || 'circle_gateway_x402_receipt',
     receiptId: receipt.activityId ?? activityId,
     receiptHash: proofHash,
     title: receipt.title || 'Creator content unlocked',
@@ -78,9 +81,9 @@ export function createX402PaylinkReceipt(receipt: X402ReceiptLike, activityId: s
     amount,
     asset: 'USDC',
     createdAt: receipt.createdAt ?? Date.now(),
-    source: 'x402',
+    source,
     merchantId: creator,
-    settlementType: 'circle-gateway-x402',
+    settlementType,
     proof: {
       receiptHash: proofHash,
       ogRootHash: receipt.og?.rootHash ? String(receipt.og.rootHash) : String(proof.ogRootHash ?? ''),
@@ -156,16 +159,19 @@ function formatNgn(value?: string) {
 
 function receiptLabels(receipt: PaylinkReceipt) {
   const isStream = receipt.source === 'streampay' || receipt.settlementType === 'stream-created'
+  const isCheckpoint = receipt.settlementType === 'checkpoint-escrow'
   const isPos = receipt.source === 'ngpos'
   const isBank = receipt.source === 'bank-receive'
   const isPolymarket = receipt.source === 'polymarket-funding' || receipt.settlementType === 'polymarket_bridge'
   const isX402 = receipt.source === 'x402' || receipt.settlementType === 'circle-gateway-x402'
   const heading = isStream ? 'HashpayStream receipt' : isBank ? 'Bank receive receipt' : isPos ? 'Retail POS receipt' : isPolymarket ? 'Polymarket funding receipt' : isX402 ? 'HashpayStream receipt' : 'Request payment receipt'
-  const title = isStream ? 'Stream created' : isBank ? 'Bank payout confirmed' : isPos ? 'Retail payment confirmed' : isPolymarket ? 'Polymarket funded' : isX402 ? 'Creator content unlocked' : 'Payment confirmed'
-  const amountLabel = isStream ? 'Stream amount' : isBank ? 'Amount paid' : isPolymarket ? 'Amount funded' : isX402 ? 'Access price' : 'Amount paid'
-  const payer = isStream ? 'Sender' : isBank ? 'Payer wallet' : isPos ? 'Payer wallet' : isPolymarket ? 'Funder' : isX402 ? 'Reader wallet' : 'Payer'
-  const context = isStream ? 'Stream memo' : isBank ? 'Payer' : isPos ? 'Payer' : isPolymarket ? 'For' : isX402 ? 'Access' : 'Memo'
-  const contextValue = isStream
+  const title = isCheckpoint ? 'Checkpoint release confirmed' : isStream ? 'Stream created' : isBank ? 'Bank payout confirmed' : isPos ? 'Retail payment confirmed' : isPolymarket ? 'Polymarket funded' : isX402 ? 'Creator content unlocked' : 'Payment confirmed'
+  const amountLabel = isCheckpoint ? 'Released amount' : isStream ? 'Stream amount' : isBank ? 'Amount paid' : isPolymarket ? 'Amount funded' : isX402 ? 'Access price' : 'Amount paid'
+  const payer = isCheckpoint ? 'Reader wallet' : isStream ? 'Sender' : isBank ? 'Payer wallet' : isPos ? 'Payer wallet' : isPolymarket ? 'Funder' : isX402 ? 'Reader wallet' : 'Payer'
+  const context = isCheckpoint ? 'Content' : isStream ? 'Stream memo' : isBank ? 'Payer' : isPos ? 'Payer' : isPolymarket ? 'For' : isX402 ? 'Access' : 'Memo'
+  const contextValue = isCheckpoint
+    ? (receipt.memo || receipt.eventId || 'Creator content')
+    : isStream
     ? (receipt.memo || receipt.merchantId || receipt.eventId || '-')
     : isBank
     ? (receipt.memo || receipt.eventId || '-')
@@ -176,7 +182,7 @@ function receiptLabels(receipt: PaylinkReceipt) {
     : isX402
     ? (receipt.memo || receipt.eventId || 'Creator content')
     : (receipt.memo || receipt.merchantId || receipt.eventId || '-')
-  const merchantLabel = isStream ? 'Stream vault' : isBank ? 'Bank receive link' : isPos ? 'Merchant' : isPolymarket ? 'Polymarket profile' : isX402 ? 'Creator' : 'Recipient'
+  const merchantLabel = isCheckpoint ? 'Creator' : isStream ? 'Stream vault' : isBank ? 'Bank receive link' : isPos ? 'Merchant' : isPolymarket ? 'Polymarket profile' : isX402 ? 'Creator' : 'Recipient'
   const merchantValue = receipt.merchantId || ''
   return { heading, title, amountLabel, payer, context, contextValue, merchantLabel, merchantValue }
 }

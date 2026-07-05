@@ -365,6 +365,10 @@ function checkpointMarksFromAmounts(releasedAmount?: string, totalAmount?: strin
   return marks
 }
 
+function checkpointReceiptId(vaultAddress: string) {
+  return `hps-checkpoint-${vaultAddress.trim().toLowerCase()}`
+}
+
 function readableScrollProgress(el: HTMLElement) {
   const maxScroll = el.scrollHeight - el.clientHeight
   if (maxScroll <= 8) return 0
@@ -1059,6 +1063,13 @@ export function StreamGate() {
 
   async function fetchCheckpointContent(vaultAddress: string) {
     setContentState('loading')
+    const receiptId = checkpointReceiptId(vaultAddress)
+    setGatewayTx(vaultAddress)
+    setGatewayReceiptId(receiptId)
+    setGatewayReceipt(null)
+    setGatewayReceiptPollAttempts(0)
+    setGatewayArchiveTimedOut(false)
+    setGatewayRestored(false)
     const res = await fetch(`/api/get-content-checkpoint?id=${encodeURIComponent(contentId)}&vault=${encodeURIComponent(vaultAddress)}`)
     const data = await res.json().catch(() => ({})) as {
       ok?: boolean
@@ -1089,6 +1100,8 @@ export function StreamGate() {
     const data = await res.json().catch(() => ({})) as { ok?: boolean; vaultAddress?: string; totalAmount?: string; releasedAmount?: string }
     if (!res.ok || !data.ok || !data.vaultAddress || !/^0x[a-fA-F0-9]{40}$/.test(data.vaultAddress)) return false
     setCheckpointVault(data.vaultAddress)
+    setGatewayTx(data.vaultAddress)
+    setGatewayReceiptId(checkpointReceiptId(data.vaultAddress))
     setReaderWalletAddress(wallet)
     const restoredMarks = checkpointMarksFromAmounts(data.releasedAmount, data.totalAmount)
     setCheckpointReleased(restoredMarks)
@@ -2647,7 +2660,7 @@ export function StreamGate() {
           </div>
         )}
 
-        {paymentMode === 'x402' && fullyAuthorised && gatewayReference && (
+        {(paymentMode === 'x402' || paymentMode === 'checkpoint') && fullyAuthorised && gatewayReference && (
           <div className="border-t border-gray-100 bg-white px-4 py-3 dark:border-white/10 dark:bg-[#111216]">
             <button
               type="button"
@@ -2657,10 +2670,12 @@ export function StreamGate() {
               <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100 dark:bg-emerald-400/10 dark:ring-emerald-400/20"><CheckIcon /></span>
               <div className="min-w-0 flex-1">
                 <p className="text-[11px] font-black uppercase tracking-[0.14em] text-emerald-700 dark:text-emerald-300">
-                  {gatewayRestored ? 'Access restored' : 'Content unlocked'}
+                  {paymentMode === 'checkpoint'
+                    ? (isVideoContent ? 'Watch receipt ready' : 'Reading receipt ready')
+                    : gatewayRestored ? 'Access restored' : 'Content unlocked'}
                 </p>
                 <p className="mt-0.5 truncate font-mono text-[11px] font-semibold text-gray-500 dark:text-gray-400">
-                  Circle Gateway - {gatewayReference.slice(0, 8)}...{gatewayReference.slice(-6)}
+                  {paymentMode === 'checkpoint' ? 'Arc checkpoint' : 'Circle Gateway'} - {gatewayReference.slice(0, 8)}...{gatewayReference.slice(-6)}
                 </p>
               </div>
               <span className="text-[11px] font-black text-gray-400">{receiptOpen ? 'Hide' : 'Details'}</span>
@@ -2670,6 +2685,11 @@ export function StreamGate() {
               {gatewayRestored && (
                 <p className="text-[11px] font-semibold leading-4 text-emerald-700/80 dark:text-emerald-300/80">
                   This reader wallet already unlocked this content.
+                </p>
+              )}
+              {paymentMode === 'checkpoint' && (
+                <p className="text-[11px] font-semibold leading-4 text-emerald-700/80 dark:text-emerald-300/80">
+                  This receipt updates from the checkpoint vault state as USDC releases.
                 </p>
               )}
               {gatewayReceiptId && (
