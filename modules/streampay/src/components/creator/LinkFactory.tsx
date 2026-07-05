@@ -105,6 +105,22 @@ function buildGateLink(params: {
   return `${origin}/gate?${p.toString()}`
 }
 
+function youtubeVideoId(value: string) {
+  try {
+    const url = new URL(value.trim())
+    const host = url.hostname.replace(/^www\./, '').toLowerCase()
+    if (host === 'youtu.be') return url.pathname.split('/').filter(Boolean)[0] || ''
+    if (host === 'youtube.com' || host === 'm.youtube.com' || host === 'music.youtube.com') {
+      if (url.pathname === '/watch') return url.searchParams.get('v') || ''
+      const parts = url.pathname.split('/').filter(Boolean)
+      if (['embed', 'shorts', 'live'].includes(parts[0] || '')) return parts[1] || ''
+    }
+  } catch {
+    return ''
+  }
+  return ''
+}
+
 function cleanEmail(value: string) {
   return value.trim().toLowerCase()
 }
@@ -341,7 +357,7 @@ export function LinkFactory({
   const privateUrlValid = (() => {
     try { new URL(privateUrl); return true } catch { return false }
   })()
-  const videoUrlValid = privateUrlValid && /\.(mp4|webm|ogg)(\?.*)?$/i.test(privateUrl.trim())
+  const videoUrlValid = privateUrlValid && (/(\.mp4|\.webm|\.ogg)(\?.*)?$/i.test(privateUrl.trim()) || Boolean(youtubeVideoId(privateUrl)))
 
   const hasContent = contentType === 'text'
     ? articleTextLength(contentBody) > 10
@@ -894,7 +910,7 @@ export function LinkFactory({
                     ? 'Paste the content viewers unlock after payment.'
                     : 'Paste content viewers can read while nano-payments accrue.'
                   : contentType === 'video'
-                  ? 'Add a direct MP4, WebM, or OGG video URL so viewers can watch inside HashpayStream.'
+                  ? 'Add a YouTube link or direct MP4, WebM, or OGG video URL so viewers can watch inside HashpayStream.'
                   : mode === 'unlock'
                   ? 'Store a private URL server-side and reveal it only after payment.'
                   : 'External links use fixed unlock because viewing happens outside HashpayStream.'}
@@ -1022,12 +1038,12 @@ export function LinkFactory({
                     {contentType === 'video' ? 'Video URL' : 'Private Link'}
                   </span>
                   <span className="text-[11px] text-gray-400 dark:text-gray-500">
-                    {contentType === 'video' ? 'MP4/WebM/OGG' : 'stored server-side only'}
+                    {contentType === 'video' ? 'YouTube or MP4' : 'stored server-side only'}
                   </span>
                 </div>
                 <input
                   type="url"
-                  placeholder={contentType === 'video' ? 'https://your-cdn.com/video.mp4' : 'https://your-private-content.com/...'}
+                  placeholder={contentType === 'video' ? 'https://youtube.com/watch?v=... or https://cdn.com/video.mp4' : 'https://your-private-content.com/...'}
                   value={privateUrl}
                   onChange={e => { setPrivateUrl(e.target.value); setGateLink(null) }}
                   className={[
@@ -1041,7 +1057,7 @@ export function LinkFactory({
                 {privateUrl && (contentType === 'video' ? !videoUrlValid : !privateUrlValid) && (
                   <p className="text-[11px] text-red-400">
                     {contentType === 'video'
-                      ? 'Use a direct video file URL ending in .mp4, .webm, or .ogg.'
+                      ? 'Use a YouTube link or direct video file URL ending in .mp4, .webm, or .ogg.'
                       : 'Enter a valid URL including https://'}
                   </p>
                 )}

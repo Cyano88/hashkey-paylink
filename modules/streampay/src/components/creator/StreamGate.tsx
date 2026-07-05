@@ -371,6 +371,51 @@ function readableScrollProgress(el: HTMLElement) {
   return Math.min(1, Math.max(0, el.scrollTop / maxScroll))
 }
 
+function youtubeVideoId(value: string) {
+  try {
+    const url = new URL(value.trim())
+    const host = url.hostname.replace(/^www\./, '').toLowerCase()
+    if (host === 'youtu.be') return url.pathname.split('/').filter(Boolean)[0] || ''
+    if (host === 'youtube.com' || host === 'm.youtube.com' || host === 'music.youtube.com') {
+      if (url.pathname === '/watch') return url.searchParams.get('v') || ''
+      const parts = url.pathname.split('/').filter(Boolean)
+      if (['embed', 'shorts', 'live'].includes(parts[0] || '')) return parts[1] || ''
+    }
+  } catch {
+    return ''
+  }
+  return ''
+}
+
+let youtubeApiLoad: Promise<void> | null = null
+
+function loadYoutubeIframeApi() {
+  if (typeof window === 'undefined') return Promise.reject(new Error('YouTube player is only available in the browser.'))
+  if ((window as any).YT?.Player) return Promise.resolve()
+  if (youtubeApiLoad) return youtubeApiLoad
+  youtubeApiLoad = new Promise<void>((resolve, reject) => {
+    const existing = document.querySelector<HTMLScriptElement>('script[src="https://www.youtube.com/iframe_api"]')
+    const previousReady = (window as any).onYouTubeIframeAPIReady
+    const timeout = window.setTimeout(() => reject(new Error('YouTube player took too long to load.')), 12000)
+    ;(window as any).onYouTubeIframeAPIReady = () => {
+      window.clearTimeout(timeout)
+      if (typeof previousReady === 'function') previousReady()
+      resolve()
+    }
+    if (!existing) {
+      const script = document.createElement('script')
+      script.src = 'https://www.youtube.com/iframe_api'
+      script.async = true
+      script.onerror = () => {
+        window.clearTimeout(timeout)
+        reject(new Error('YouTube player could not load.'))
+      }
+      document.head.appendChild(script)
+    }
+  })
+  return youtubeApiLoad
+}
+
 function formatBalanceLabel(value?: string) {
   if (value === undefined || value === null || value === '') return null
   const amount = Number(value)
@@ -3119,6 +3164,71 @@ function BookUnlocked({
   )
 }
 
+function YouTubeCheckpointPlayer({
+  videoId,
+  onWatchProgress,
+  onError,
+}: {
+  videoId: string
+  onWatchProgress: (progress: number) => void
+  onError: (message: string) => void
+}) {
+  const containerId = useRef(`youtube-player-${Math.random().toString(36).slice(2)}`)
+  const playerRef = useRef<any>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    let interval: number | undefined
+
+    loadYoutubeIframeApi()
+      .then(() => {
+        if (cancelled) return
+        playerRef.current = new (window as any).YT.Player(containerId.current, {
+          videoId,
+          playerVars: {
+            playsinline: 1,
+            modestbranding: 1,
+            rel: 0,
+          },
+          events: {
+            onReady: () => {
+              interval = window.setInterval(() => {
+                const player = playerRef.current
+                if (!player?.getDuration || !player?.getCurrentTime) return
+                const duration = Number(player.getDuration())
+                const current = Number(player.getCurrentTime())
+                if (!Number.isFinite(duration) || duration <= 0 || !Number.isFinite(current)) return
+                onWatchProgress(Math.min(1, Math.max(0, current / duration)))
+              }, 1500)
+            },
+            onStateChange: (event: any) => {
+              if (event?.data === (window as any).YT?.PlayerState?.ENDED) onWatchProgress(1)
+            },
+            onError: () => {
+              onError('This YouTube video cannot be embedded here. Ask the creator for an embeddable YouTube link or direct MP4/WebM/OGG URL.')
+            },
+          },
+        })
+      })
+      .catch(error => {
+        if (!cancelled) onError(error instanceof Error ? error.message : 'YouTube player could not load.')
+      })
+
+    return () => {
+      cancelled = true
+      if (interval) window.clearInterval(interval)
+      try {
+        playerRef.current?.destroy?.()
+      } catch {
+        // Ignore third-party player teardown errors.
+      }
+      playerRef.current = null
+    }
+  }, [videoId, onWatchProgress, onError])
+
+  return <div id={containerId.current} className="aspect-video w-full bg-black" />
+}
+
 function VideoUnlocked({
   title,
   videoUrl,
@@ -3167,6 +3277,7 @@ function VideoUnlocked({
   onCommentReact: (commentId: string, reaction: 'up' | 'down') => void
 }) {
   const [videoError, setVideoError] = useState('')
+  const youtubeId = youtubeVideoId(videoUrl)
   return (
     <div className="space-y-3 p-4 sm:p-5">
       {checkpointReleased && (
@@ -3192,21 +3303,29 @@ function VideoUnlocked({
         </div>
       </div>
       <div className="overflow-hidden rounded-2xl border border-gray-100 bg-black shadow-sm dark:border-white/10">
-        <video
-          className="aspect-video w-full bg-black"
-          src={videoUrl}
-          poster={coverImage}
-          controls
-          playsInline
-          preload="metadata"
-          onTimeUpdate={event => {
-            const video = event.currentTarget
-            if (!Number.isFinite(video.duration) || video.duration <= 0) return
-            onWatchProgress(Math.min(video.currentTime / video.duration, 1))
-          }}
-          onEnded={() => onWatchProgress(1)}
-          onError={() => setVideoError('This video could not load. Ask the creator for a direct MP4, WebM, or OGG URL.')}
-        />
+        {youtubeId ? (
+          <YouTubeCheckpointPlayer
+            videoId={youtubeId}
+            onWatchProgress={onWatchProgress}
+            onError={setVideoError}
+          />
+        ) : (
+          <video
+            className="aspect-video w-full bg-black"
+            src={videoUrl}
+            poster={coverImage}
+            controls
+            playsInline
+            preload="metadata"
+            onTimeUpdate={event => {
+              const video = event.currentTarget
+              if (!Number.isFinite(video.duration) || video.duration <= 0) return
+              onWatchProgress(Math.min(video.currentTime / video.duration, 1))
+            }}
+            onEnded={() => onWatchProgress(1)}
+            onError={() => setVideoError('This video could not load. Ask the creator for an embeddable YouTube link or direct MP4/WebM/OGG URL.')}
+          />
+        )}
       </div>
       <div className="rounded-2xl border border-blue-100 bg-blue-50/70 px-3 py-3 dark:border-blue-400/20 dark:bg-blue-500/10">
         <p className="text-[12px] font-bold text-blue-700 dark:text-blue-200">Pay-as-you-watch active</p>
