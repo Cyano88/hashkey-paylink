@@ -43,7 +43,7 @@ const MAX_PAYER_LENGTH = 128
 const MAX_QUESTION_LENGTH = 4_000
 const MAX_MEMORY_LENGTH = 1_600
 const HELPER_FREE_ACCESS_MODE = 'helper-free'
-const HELPER_MODES = new Set(['payments', 'daily', 'services', 'polydesk', 'support'])
+const HELPER_MODES = new Set(['payments', 'daily', 'services', 'polydesk', 'support', 'streampay'])
 const HELPER_SIMPLE_DAILY_PROMPT_LIMIT = Math.max(1, parseInt(process.env.HELPER_SIMPLE_DAILY_PROMPT_LIMIT ?? process.env.HELPER_DAILY_PROMPT_LIMIT ?? '100', 10) || 100)
 const HELPER_DEEP_DAILY_PROMPT_LIMIT = Math.max(1, parseInt(process.env.HELPER_DEEP_DAILY_PROMPT_LIMIT ?? '2', 10) || 2)
 const HELPER_USAGE_WINDOW_MS = 24 * 60 * 60 * 1000
@@ -398,6 +398,7 @@ function classifyHelperRequest(question: string, helperMode = ''): { helperInten
   if (isNameQuestion(question)) return { helperIntent: 'personal-memory', qualityMode: 'fast' }
   if (isGreetingQuestion(question)) return { helperIntent: 'greeting', qualityMode: 'fast' }
   if (helperMode === 'polydesk') return { helperIntent: 'polydesk', qualityMode: 'deep' }
+  if (helperMode === 'streampay') return { helperIntent: 'hashpaystream-creator', qualityMode: 'standard' }
   if (helperMode === 'daily') return { helperIntent: 'daily-assistant', qualityMode: 'fast' }
   if (helperMode === 'services') return { helperIntent: 'hashpaylink-services', qualityMode: 'standard' }
   if (helperMode === 'support') return { helperIntent: 'support', qualityMode: 'standard' }
@@ -468,6 +469,9 @@ function getHelperResponse(question: string, payerName: string, chain: string, a
 
   if (isGreetingQuestion(question)) {
     const knownName = nameFromMemory(memorySummary, payerName)
+    if (helperMode === 'streampay') {
+      return `Hey${knownName ? ` ${knownName}` : ''}. I can help you publish paid content, price a drop, explain pay-as-you-read, summarize unlocked content, or understand creator earnings.`
+    }
     return `Hey${knownName ? ` ${knownName}` : ''}. I can help you create a PayLink, check a receipt, set up wallets, use HashpayStream, or research PolyDesk and Polymarket flows.`
   }
 
@@ -476,6 +480,10 @@ function getHelperResponse(question: string, payerName: string, chain: string, a
 
   if (helperMode === 'services') {
     return 'I can help with Hash PayLink services. Tell me if you mean PayLinks, HashpayStream, Agent Wallets, x402, Circle wallet setup, or PolyDesk.'
+  }
+
+  if (helperMode === 'streampay') {
+    return 'I can help with HashpayStream Creator. Ask me to improve a post, suggest pricing, explain pay-as-you-read checkpoints, summarize unlocked content, or read your earnings state.'
   }
 
   if (helperMode === 'support') {

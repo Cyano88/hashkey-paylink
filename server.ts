@@ -68,8 +68,6 @@ import localCurrencyProfileHandler from './api/local-currency-profile.js'
 import { paycrestWebhookHandler } from './api/paycrest-pos.js'
 import streamRecipientInviteHandler from './api/stream-recipient-invite.js'
 import streamHistoryHandler from './api/stream-history.js'
-import agenticStreamingSubscriptionHandler from './api/agentic-streaming-subscription.js'
-import agenticStreamingReportHandler from './api/agentic-streaming-report.js'
 import arenaRoomHandler from './api/arena-room.js'
 import agentVerifyHandler   from './api/agent-verify.js'
 import agentAskHandler     from './api/agent-ask.js'
@@ -211,8 +209,6 @@ app.all('/api/ng-pos',                  strictLimiter, ngPosHandler)
 app.all('/api/local-currency-profile',  strictLimiter, localCurrencyProfileHandler)
 app.post('/api/stream-recipient-invite', strictLimiter, streamRecipientInviteHandler)
 app.get('/api/stream-history',         readLimiter, streamHistoryHandler)
-app.all('/api/agentic-streaming-subscription', strictLimiter, agenticStreamingSubscriptionHandler)
-app.post('/api/agentic-streaming-report', strictLimiter, agenticStreamingReportHandler)
 app.all('/api/arena-room',             arenaLimiter, arenaRoomHandler)
 // ── Agentic Economy — 0G payment verification primitives ─────────────────────
 app.all('/api/agent-verify',           strictLimiter, agentVerifyHandler)

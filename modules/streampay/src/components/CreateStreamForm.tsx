@@ -16,7 +16,6 @@ import {
   signCircleArcStreamCancel,
   type CircleEvmEmailSession,
 } from '../../../../src/lib/circleEvmEmailWallet'
-import { EVM_TREASURY } from '../../../../src/lib/chains'
 import { PRIVY_AUTH_ENABLED } from '../../../../src/lib/authMode'
 import { resolvePrivyCircleLink, savePrivyCircleLink } from '../../../../src/lib/privyCircleLink'
 import {
@@ -41,8 +40,6 @@ const ERC20_ABI = parseAbi([
 const ARC_MEMO_ABI = parseAbi([
   'function memo(address target, bytes data, bytes32 memoId, bytes memoData)',
 ])
-const HASH_PAYLINK_X402_MANAGER_URL = 'https://hashpaylink.com/agent?profile=agent&walletManager=service'
-
 const DURATIONS = [
   { label: '1 hr',    secs: 3_600n },
   { label: '8 hrs',   secs: 28_800n },
@@ -77,28 +74,21 @@ type OnchainStream = {
 function readPrefill() {
   const params = new URLSearchParams(window.location.search)
   const path = window.location.pathname.toLowerCase()
-  const isAgenticPath = path.startsWith('/agentic')
   const rawMode = (params.get('mode') ?? '').trim().toLowerCase()
-  const isAgenticFlow = isAgenticPath || rawMode === 'agentic-streaming'
   const isCreatorStream = rawMode === 'creator-stream'
   const rawDuration = (params.get('duration') ?? '').trim().toLowerCase()
-  const amountPerDay = (params.get('amountPerDay') ?? '').trim()
-  const amount = (isAgenticFlow ? amountPerDay || '0.01' : params.get('amount') ?? '').trim()
-  const recipient = (params.get('recipient') ?? (isAgenticFlow ? EVM_TREASURY : '')).trim()
+  const amount = (params.get('amount') ?? '').trim()
+  const recipient = (params.get('recipient') ?? '').trim()
   const rawRecipientEmail = (params.get('recipientEmail') ?? params.get('email') ?? '').trim()
   const recipientEmail = isEmail(rawRecipientEmail) ? cleanEmail(rawRecipientEmail) : ''
-  const rawReportEmail = (params.get('reportEmail') ?? '').trim()
-  const reportEmail = isEmail(rawReportEmail) ? cleanEmail(rawReportEmail) : ''
   const rawReturnTo = (params.get('returnTo') ?? '').trim()
   const returnTo = rawReturnTo.startsWith('/') && !rawReturnTo.startsWith('//') ? rawReturnTo.slice(0, 800) : ''
-  const mode = rawMode || (isAgenticPath ? 'agentic-streaming' : '')
-  const service = (params.get('service') ?? (isAgenticFlow ? 'x402-wallet' : '')).trim().toLowerCase()
-  const agentSlug = (params.get('agent') ?? params.get('agentSlug') ?? 'hashpaylink-agent').trim().toLowerCase()
-  const reason = (params.get('reason') ?? (isAgenticFlow ? 'x402 wallet management' : '')).trim()
+  const mode = rawMode
+  const reason = (params.get('reason') ?? '').trim()
   const source = (params.get('src') ?? '').trim().toLowerCase()
   const wallet = (params.get('wallet') ?? '').trim().toLowerCase()
   const preferCircle = source === 'telegram' || wallet !== 'connected'
-  let durationPreset: bigint | null = isAgenticFlow && !rawDuration ? 3_600n : null
+  let durationPreset: bigint | null = null
   let customDays = ''
 
   const match = rawDuration.match(/^(\d+)([smhdw])$/)
@@ -118,7 +108,7 @@ function readPrefill() {
     if (!durationPreset) customDays = (Number(seconds) / 86_400).toString()
   }
 
-  return { amount, recipient, recipientEmail, reportEmail, mode, service, agentSlug, amountPerDay, reason, duration: rawDuration, durationPreset, customDays, preferCircle, returnTo, isCreatorStream }
+  return { amount, recipient, recipientEmail, mode, reason, duration: rawDuration, durationPreset, customDays, preferCircle, returnTo, isCreatorStream }
 }
 
 function parseUsdc(val: string): bigint {
@@ -211,7 +201,6 @@ function buildStreamLink(
   reason: string,
   circleMode = false,
   recipientEmail = '',
-  agentic?: { mode: string; service: string; reportEmail: string; agentSlug: string; amountPerDay: string },
   senderManage = false,
 ): string {
   const { hostname, origin } = window.location
@@ -227,11 +216,6 @@ function buildStreamLink(
     p.set('wallet', 'circle')
   }
   if (isEmail(recipientEmail)) p.set('recipientEmail', cleanEmail(recipientEmail))
-  if (agentic?.mode) p.set('mode', agentic.mode)
-  if (agentic?.service) p.set('service', agentic.service)
-  if (agentic?.reportEmail && isEmail(agentic.reportEmail)) p.set('reportEmail', cleanEmail(agentic.reportEmail))
-  if (agentic?.agentSlug) p.set('agent', agentic.agentSlug)
-  if (agentic?.amountPerDay) p.set('amountPerDay', agentic.amountPerDay)
   if (senderManage) {
     p.set('manage', 'sender')
     p.set('role', 'reader')
@@ -323,9 +307,6 @@ export function CreateStreamForm() {
   const [streamEmailSending, setStreamEmailSending] = useState(false)
   const [streamEmailStatus, setStreamEmailStatus] = useState('')
   const [streamEmailError, setStreamEmailError] = useState<string | null>(null)
-  const [reportEmail, setReportEmail] = useState(prefill.reportEmail)
-  const [agenticStatus, setAgenticStatus] = useState('')
-  const [agenticError, setAgenticError] = useState<string | null>(null)
   const [useCircleWallet] = useState(true)
   const [recentStreams, setRecentStreams] = useState<RecentStream[]>(() => loadRecentStreams(prefill.recipient))
   const [onchainStreams, setOnchainStreams] = useState<OnchainStream[]>([])
@@ -341,17 +322,14 @@ export function CreateStreamForm() {
   const durationSecs   = durationPreset
     ?? (customDays ? BigInt(Math.round(parseFloat(customDays) * 86400)) : 0n)
   const durationValid  = durationSecs > 0n
-  const isAgenticStreaming = prefill.mode === 'agentic-streaming'
   const isCreatorStream = prefill.isCreatorStream
-  const agenticService = prefill.service || 'x402-wallet'
-  const agenticReportEmailValid = !isAgenticStreaming || isEmail(reportEmail)
-  const isFormValid    = recipientValid && amountValid && durationValid && agenticReportEmailValid
+  const isFormValid    = recipientValid && amountValid && durationValid
                          && isConnected && isOnArc && !!factoryAddr
   const circleConfigured = canUseCircleEvmEmailWallet('arc')
   const circleAvailable = useCircleWallet && circleConfigured
   const recipientLocked = circleAvailable && !!prefill.recipient
   const usingCircleWalletFlow = circleAvailable
-  const circleReady = recipientValid && amountValid && durationValid && !!factoryAddr && agenticReportEmailValid
+  const circleReady = recipientValid && amountValid && durationValid && !!factoryAddr
   const circleFundingAddress = circleSession?.wallet.address ?? linkedCircleAddress
   const circleNeedsFunds = circleBalance !== null && amountValid && circleBalance < amountBn
   const circleWithdrawAmountBn = parseUsdc(circleWithdrawAmount)
@@ -390,9 +368,7 @@ export function CreateStreamForm() {
     ? statusMsg
     : !streamPayPrivyReady
       ? 'Continue securely'
-      : !agenticReportEmailValid
-        ? 'Add delivery email'
-        : !amountValid
+      : !amountValid
           ? 'Add amount'
           : !durationValid
             ? 'Choose duration'
@@ -402,18 +378,9 @@ export function CreateStreamForm() {
                 ? 'Network loading'
                 : circleNeedsFunds
                   ? 'Add USDC to wallet'
-                  : isAgenticStreaming
-                    ? 'Start service stream'
-                    : isCreatorStream
+                  : isCreatorStream
                       ? 'Start nano meter'
                     : 'Start stream'
-  const agenticLinkParams = isAgenticStreaming ? {
-    mode: 'agentic-streaming',
-    service: agenticService,
-    reportEmail,
-    agentSlug: prefill.agentSlug || 'hashpaylink-agent',
-    amountPerDay: prefill.amountPerDay || '',
-  } : undefined
   const historyTabActive = activeTab === 'running' || activeTab === 'ended'
   const visibleOnchainStreams = onchainStreams.filter(stream => activeTab === 'running' ? stream.active && !stream.cancelled : !stream.active || stream.cancelled)
 
@@ -456,37 +423,6 @@ export function CreateStreamForm() {
       await sleep(2_500)
     }
     return false
-  }
-
-  async function registerAgenticSubscription(vault: `0x${string}`, streamUrl: string, senderWallet?: `0x${string}`) {
-    if (!isAgenticStreaming) return
-    setAgenticStatus('')
-    setAgenticError(null)
-    try {
-      const res = await fetch('/api/agentic-streaming-subscription', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          service: agenticService,
-          vault,
-          streamUrl,
-          agentSlug: prefill.agentSlug || 'hashpaylink-agent',
-          agentWallet: recipient,
-          senderWallet,
-          reportEmail,
-          amountPerDay: prefill.amountPerDay || '',
-          totalAmount: amount,
-          duration: prefill.duration || `${Number(durationSecs) / 86_400}d`,
-          reason,
-          source: 'streampay-telegram',
-        }),
-      })
-      const data = await res.json().catch(() => ({})) as { ok?: boolean; error?: string }
-      if (!res.ok || !data.ok) throw new Error(data.error ?? 'Could not register x402 service.')
-      setAgenticStatus('Registered. 0G proof appears in Agent activity after archive.')
-    } catch (err) {
-      setAgenticError(err instanceof Error ? err.message.slice(0, 180) : 'Could not register x402 service.')
-    }
   }
 
   async function registerStreamReceipt(vault: `0x${string}`, txHash: `0x${string}`, senderWallet: string) {
@@ -712,11 +648,10 @@ export function CreateStreamForm() {
       const vault = (event?.args as { vault?: `0x${string}` })?.vault
       if (!vault) throw new Error('Could not extract vault address from receipt.')
 
-      const nextStreamLink = buildStreamLink(vault, reason, false, '', agenticLinkParams)
+      const nextStreamLink = buildStreamLink(vault, reason)
       setStreamLink(nextStreamLink)
       rememberStream(nextStreamLink)
       await registerStreamReceipt(vault, deployTx, connectedAddr)
-      await registerAgenticSubscription(vault, nextStreamLink, connectedAddr)
       setStep('success'); setStatusMsg('')
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
@@ -791,10 +726,9 @@ export function CreateStreamForm() {
         if (!deployed) {
           throw new Error('Circle submitted the stream, but Arc confirmation is still pending. Refresh this page in a minute and check the stream link again.')
         }
-        const nextStreamLink = buildStreamLink(predicted, reason, true, streamRecipientEmail, agenticLinkParams)
+        const nextStreamLink = buildStreamLink(predicted, reason, true, streamRecipientEmail)
         setStreamLink(nextStreamLink)
         rememberStream(nextStreamLink)
-        await registerAgenticSubscription(predicted, nextStreamLink, session.wallet.address)
         void refreshCircleBalance(session.wallet.address)
         setStep('success')
         setStatusMsg('')
@@ -809,11 +743,10 @@ export function CreateStreamForm() {
       const vault = (event?.args as { vault?: `0x${string}` })?.vault
       if (!vault) throw new Error('Could not extract vault address from receipt.')
 
-      const nextStreamLink = buildStreamLink(vault, reason, true, streamRecipientEmail, agenticLinkParams)
+      const nextStreamLink = buildStreamLink(vault, reason, true, streamRecipientEmail)
       setStreamLink(nextStreamLink)
       rememberStream(nextStreamLink)
       await registerStreamReceipt(vault, txHash, session.wallet.address)
-      await registerAgenticSubscription(vault, nextStreamLink, session.wallet.address)
       void refreshCircleBalance(session.wallet.address)
       setStep('success')
       setStatusMsg('')
@@ -1123,10 +1056,10 @@ export function CreateStreamForm() {
 
           <div className="px-1">
             <h1 className="text-[22px] font-black tracking-tight text-gray-950 dark:text-white">
-              {isAgenticStreaming ? 'x402 Wallet' : isCreatorStream ? 'Creator Nano Checkout' : 'Creator Stream'}
+              {isCreatorStream ? 'Creator Nano Checkout' : 'Creator Stream'}
             </h1>
             <p className="mt-1 text-[13px] leading-5 text-gray-500 dark:text-gray-400">
-              {isAgenticStreaming ? 'Manage your Circle payment wallet from Hash PayLink.' : isCreatorStream ? 'Start a timed Arc stream, then return to the creator content.' : 'Stream USDC to anyone on Arc.'}
+              {isCreatorStream ? 'Start a timed Arc stream, then return to the creator content.' : 'Stream USDC to anyone on Arc.'}
             </p>
           </div>
 
@@ -1150,11 +1083,6 @@ export function CreateStreamForm() {
                   {recipient.slice(0, 6)}…{recipient.slice(-4)}
                 </span>
               </p>
-              {isAgenticStreaming && (
-                <p className="text-[12px] text-gray-400">
-                  Report email saved as <span className="font-semibold text-gray-600 dark:text-gray-300">{reportEmail}</span>
-                </p>
-              )}
             </div>
 
             <div className="rounded-xl bg-gray-50 dark:bg-white/5 border-2 border-gray-200 dark:border-white/10 p-4 text-left space-y-3">
@@ -1201,8 +1129,6 @@ export function CreateStreamForm() {
               </div>
               {streamEmailStatus && <p className="text-center text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">{streamEmailStatus}</p>}
               {streamEmailError && <p className="text-center text-[11px] font-semibold text-red-500 dark:text-red-400">{streamEmailError}</p>}
-              {agenticStatus && <p className="text-center text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">{agenticStatus}</p>}
-              {agenticError && <p className="text-center text-[11px] font-semibold text-red-500 dark:text-red-400">{agenticError}</p>}
             </div>
 
             {streamReceiptId && (
@@ -1256,47 +1182,8 @@ export function CreateStreamForm() {
   }
 
   // ── Status hint ───────────────────────────────────────────────────────────
-  if (isAgenticStreaming) {
-    return (
-      <div className="mx-auto mt-8 w-full max-w-lg px-4 sm:px-0">
-        <div className="space-y-5">
-          <div className="px-1">
-            <h1 className="text-[22px] font-black tracking-tight text-gray-950 dark:text-white">x402 Wallet</h1>
-            <p className="mt-1 text-[13px] leading-5 text-gray-500 dark:text-gray-400">
-              Manage your Circle x402 wallet from the main Hash PayLink flow.
-            </p>
-          </div>
-
-          <a
-            href={HASH_PAYLINK_X402_MANAGER_URL}
-            className="group flex w-full items-center justify-between gap-3 rounded-2xl border border-gray-100 bg-white p-3.5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-gray-200 hover:shadow-md active:scale-[0.99] dark:border-white/10 dark:bg-[#111216] dark:hover:border-white/20"
-          >
-            <span className="flex min-w-0 items-center gap-3">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-gray-600 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300">
-                <Wallet className="h-[18px] w-[18px]" />
-              </span>
-              <span className="min-w-0">
-                <span className="block text-[14px] font-black text-gray-950 dark:text-white">Open x402 Wallet Manager</span>
-                <span className="mt-1 block text-[12px] leading-5 text-gray-500 dark:text-gray-400">Fund, activate, and view your payment balance.</span>
-              </span>
-            </span>
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gray-950 text-white transition-transform group-hover:translate-x-0.5 dark:bg-white dark:text-gray-950">
-              <ChevronDown className="-rotate-90 h-4 w-4" />
-            </span>
-          </a>
-
-          <p className="px-1 text-center text-[11px] leading-relaxed text-gray-400 dark:text-gray-500">
-            Creator checkout stays inside HashpayStream. Wallet management stays inside Hash PayLink.
-          </p>
-        </div>
-      </div>
-    )
-  }
-
   const hint = (() => {
     if (isWorking) return step === 'funding' ? 'Step 1 of 2 — funding vault' : 'Step 2 of 2 — deploying stream'
-    if (isAgenticStreaming && !agenticReportEmailValid) return 'Enter the email that should receive daily LP research'
-    if (isAgenticStreaming) return 'Daily LP research starts after your stream is live'
     if (circleAvailable) return 'Secure email sign-in starts your Arc stream'
     if (!isConnected) return 'Connect your wallet to continue'
     if (!isOnArc) return null
@@ -1317,10 +1204,10 @@ export function CreateStreamForm() {
         {/* ── Page title (Rule 4: aligned to same 480px) ── */}
         <div className="px-1">
           <h1 className="text-[22px] font-black tracking-tight text-gray-950 dark:text-white">
-            {isAgenticStreaming ? 'x402 Wallet' : isCreatorStream ? 'Creator Nano Checkout' : 'Creator Stream'}
+            {isCreatorStream ? 'Creator Nano Checkout' : 'Creator Stream'}
           </h1>
           <p className="mt-1 text-[13px] leading-5 text-gray-500 dark:text-gray-400">
-            {isAgenticStreaming ? 'Open the main Hash PayLink x402 wallet manager.' : isCreatorStream ? 'Start a timed Arc stream, then continue back to the content.' : 'Stream USDC to anyone on Arc.'}
+            {isCreatorStream ? 'Start a timed Arc stream, then continue back to the content.' : 'Stream USDC to anyone on Arc.'}
           </p>
         </div>
 
@@ -1441,7 +1328,7 @@ export function CreateStreamForm() {
                   ) : visibleOnchainStreams.length > 0 ? (
                     <div className="space-y-2">
                       {visibleOnchainStreams.map(stream => {
-                        const streamUrl = buildStreamLink(stream.vault, reason, true, streamRecipientEmail, agenticLinkParams)
+                        const streamUrl = buildStreamLink(stream.vault, reason, true, streamRecipientEmail)
                         const endMs = Number(BigInt(stream.endTime)) * 1000
                         const status = stream.cancelled ? 'Cancelled' : stream.active ? 'Live' : 'Complete'
                         const isEnding = endingVault.toLowerCase() === stream.vault.toLowerCase()
@@ -1496,38 +1383,6 @@ export function CreateStreamForm() {
           <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-card dark:border-white/10 dark:bg-[#111216]">
             <div className="space-y-5 p-5 sm:p-6">
 
-              {isAgenticStreaming && (
-                <div className="rounded-xl border border-gray-100 bg-gray-50/80 p-3.5 dark:border-white/10 dark:bg-white/5">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-[13px] font-bold text-gray-900 dark:text-gray-100">LP research</p>
-                      <p className="text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
-                        Reports delivered to your email.
-                      </p>
-                    </div>
-                    <span className="shrink-0 rounded-full border border-gray-200 dark:border-white/10 bg-white dark:bg-[#15151a] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                      {prefill.amountPerDay || '0.01'} USDC/day
-                    </span>
-                  </div>
-                  <div className="mt-3 space-y-1.5">
-                    <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Delivery email</span>
-                    <input
-                      type="email"
-                      name="streampay-agentic-report-email"
-                      autoComplete="off"
-                      value={reportEmail}
-                      onChange={e => setReportEmail(e.target.value.trim())}
-                      disabled={isWorking}
-                      placeholder="you@example.com"
-                      className="min-h-[44px] w-full rounded-xl border border-gray-200 bg-white px-3.5 py-2.5 text-[13px] text-gray-800 placeholder:text-gray-300 transition-colors focus:border-gray-400 focus:outline-none disabled:opacity-50 dark:border-white/10 dark:bg-[#15151a] dark:text-gray-100 dark:placeholder:text-gray-600"
-                    />
-                    {!agenticReportEmailValid && (
-                      <p className="text-[11px] font-semibold text-red-500">Add a valid email for daily LP research.</p>
-                    )}
-                  </div>
-                </div>
-              )}
-
               {/* ── Creator checkout summary / Recipient capsule ── */}
               {isCreatorStream ? (
                 <div className="space-y-3 rounded-2xl border border-emerald-100 bg-emerald-50/50 p-4 dark:border-emerald-900/30 dark:bg-emerald-950/20">
@@ -1569,30 +1424,6 @@ export function CreateStreamForm() {
                   <p className="text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
                     Start the meter, then tap Continue to content. Only consumed time unlocks for the creator.
                   </p>
-                </div>
-              ) : isAgenticStreaming ? (
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5">
-                      <StaticStreamMark />
-                      <span className="text-[13px] font-semibold text-gray-700 dark:text-gray-200">Recipient</span>
-                    </div>
-                    <span className="text-[11px] text-gray-400">Arc Network</span>
-                  </div>
-                  <div className="rounded-xl border border-gray-100 bg-gray-50/80 px-3.5 py-3 dark:border-white/10 dark:bg-white/5">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-[12px] font-bold text-gray-900 dark:text-gray-100">Hash PayLink Agent</p>
-                        <p className="mt-1 truncate font-mono text-[11px] text-gray-400">{shortAddress(recipient)}</p>
-                      </div>
-                      <span className="shrink-0 rounded-full border border-blue-100 bg-blue-50 px-2.5 py-1 text-[10px] font-bold text-blue-600 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-300">
-                        Fixed
-                      </span>
-                    </div>
-                    <p className="mt-2 text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
-                      x402 wallet management is handled in the main Hash PayLink flow.
-                    </p>
-                  </div>
                 </div>
               ) : (
                 <div className="space-y-1.5">
@@ -2032,11 +1863,7 @@ export function CreateStreamForm() {
               How It Works
             </p>
             <div className="grid grid-cols-3 gap-2 sm:gap-3">
-              {(isAgenticStreaming ? [
-                { n: '1', title: 'Sign in',       desc: 'Open your Arc wallet' },
-                { n: '2', title: 'Start stream',  desc: 'Pay as access runs' },
-                { n: '3', title: 'Get reports',   desc: 'LP research by email' },
-              ] : [
+              {([
                 { n: '1', title: 'Set budget',    desc: 'USDC is locked in your meter' },
                 { n: '2', title: 'Read or view',  desc: 'Tiny amounts unlock over time' },
                 { n: '3', title: 'Stop anytime',  desc: 'Unused USDC stays refundable' },

@@ -107,11 +107,7 @@ type TelegramServiceId =
   | 'lp-scout'
   | 'poly-worldcup-news'
   | 'poly-stream'
-  | 'agentic-lp-research'
-  | 'streampay-payroll'
   | 'streampay-creator'
-  | 'streampay-x402'
-  | 'streampay-arena'
 
 type TelegramService = {
   id: TelegramServiceId
@@ -188,34 +184,10 @@ const sectionServices: Record<TelegramSectionId, TelegramService[]> = {
   ],
   streampay: [
     {
-      id: 'streampay-payroll',
-      title: 'Payroll',
-      body: 'Create Arc USDC streams for payroll and scheduled payouts.',
-      icon: Radio,
-      status: 'Open',
-      active: true,
-    },
-    {
       id: 'streampay-creator',
-      title: 'Creator',
-      body: 'Publish creator drops and paid access flows on HashpayStream.',
+      title: 'HashpayStream Creator',
+      body: 'Publish paid posts, unlock content, and track creator earnings.',
       icon: Pencil,
-      status: 'Open',
-      active: true,
-    },
-    {
-      id: 'streampay-x402',
-      title: 'x402 Stream',
-      body: 'Open x402-backed agentic streams and service retainers.',
-      icon: Sparkles,
-      status: 'Open',
-      active: true,
-    },
-    {
-      id: 'streampay-arena',
-      title: 'Arena',
-      body: 'Launch HashpayStream Arena rooms with Arc settlement.',
-      icon: UsersRound,
       status: 'Open',
       active: true,
     },
@@ -226,7 +198,7 @@ const sectionDescriptions: Record<TelegramSectionId, string> = {
   'payment-links': 'Create normal USDC requests and share them into Telegram.',
   'agent-wallets': 'Manage Circle wallet balance, x402 service balance, and receipts.',
   'market-tools': 'PolyDesk for Polymarket funding, portfolio alerts, LP Scout, and live market context.',
-  streampay: 'Payroll, creator, x402 stream, and Arena flows on HashpayStream.',
+  streampay: 'Creator publishing, paid access, reader comments, and earnings on HashpayStream.',
 }
 
 const telegramSections: Array<{ id: TelegramSectionId; title: string; icon: typeof Coins }> = [
@@ -963,12 +935,10 @@ export default function TelegramPaymentLinks() {
       ? 'poly-stream'
       : initialServiceParam === 'poly-worldcup'
       ? 'poly-worldcup'
-      : initialServiceParam === 'agentic-lp-research'
-      ? 'agentic-lp-research'
       : ''
   const initialAgentService = initialService === 'agent-dashboard'
   const initialHelperService = initialService === 'hashpaylink-helper'
-  const initialMarketService = initialService === 'poly-portfolio' || initialService === 'lp-scout' || initialService === 'poly-worldcup' || initialService === 'poly-worldcup-news' || initialService === 'poly-stream' || initialService === 'agentic-lp-research'
+  const initialMarketService = initialService === 'poly-portfolio' || initialService === 'lp-scout' || initialService === 'poly-worldcup' || initialService === 'poly-worldcup-news' || initialService === 'poly-stream'
   const initialPersonTarget = displayTelegramName(searchParams.get('target') ?? searchParams.get('payer') ?? searchParams.get('p'), '')
   const initialGroupTarget = displayTelegramName(searchParams.get('target') ?? searchParams.get('group') ?? searchParams.get('g') ?? searchParams.get('chat'), '')
   const [opened, setOpened] = useState(searchParams.get('open') !== '0')
@@ -1178,20 +1148,8 @@ export default function TelegramPaymentLinks() {
       setActiveService('agent-dashboard')
       return
     }
-    if (service.id === 'streampay-payroll') {
-      window.location.href = '/?app=streampay&src=telegram'
-      return
-    }
     if (service.id === 'streampay-creator') {
       window.location.href = '/creator?app=streampay&src=telegram'
-      return
-    }
-    if (service.id === 'streampay-x402') {
-      window.location.href = '/agentic?app=streampay&mode=agentic-streaming&src=telegram'
-      return
-    }
-    if (service.id === 'streampay-arena') {
-      window.location.href = '/arena?app=streampay&game=trivia&src=telegram'
       return
     }
     if (service.id === 'poly-portfolio') {
@@ -1212,10 +1170,6 @@ export default function TelegramPaymentLinks() {
     }
     if (service.id === 'poly-stream') {
       setActiveService('poly-stream')
-      return
-    }
-    if (service.id === 'agentic-lp-research') {
-      setActiveService('agentic-lp-research')
       return
     }
   }
@@ -1540,8 +1494,6 @@ export default function TelegramPaymentLinks() {
               onBack={() => setActiveService('poly-worldcup')}
               onOpenNews={() => setActiveService('poly-worldcup-news')}
             />
-          ) : activeService === 'agentic-lp-research' ? (
-            <AgenticLpResearchPanel onBack={() => setActiveService('')} />
           ) : activeService === 'hashpaylink-helper' ? (
             <TelegramHelperPanel
               telegramName={telegramName}
@@ -2941,7 +2893,7 @@ export function TelegramHelperPanel({
     finishHelperMessage(nextQuestion, {
       answer: [
         'LP Scout is paid access.',
-        'Choose agentic x402 access for strict LP Scout proof, or pay normal USDC access below.',
+        'Choose x402 access for strict LP Scout proof, or pay normal USDC access below.',
         'Normal USDC access is not LP Scout x402 proof.',
       ].join('\n'),
       actionLink: { label: 'x402 access', url: x402Url },
@@ -5264,82 +5216,6 @@ export function PolyStreamPanel({
   )
 }
 
-function AgenticLpResearchPanel({ onBack }: { onBack: () => void }) {
-  const [email, setEmail] = useState('')
-  const [duration, setDuration] = useState('7d')
-  const [focus, setFocus] = useState('Best Polymarket LP reward markets')
-  const [budget, setBudget] = useState('')
-  const [streamAmount, setStreamAmount] = useState('5')
-  const emailReady = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
-  const durationReady = /^\d+[dhw]$/.test(duration.trim())
-  const amountReady = Number(streamAmount) > 0
-  const canContinue = emailReady && durationReady && amountReady
-  const streamHref = useMemo(() => {
-    const params = new URLSearchParams()
-    params.set('app', 'streampay')
-    params.set('amount', streamAmount.trim() || '5')
-    params.set('recipient', EVM_TREASURY)
-    params.set('duration', duration.trim() || '7d')
-    params.set('reason', `Agentic LP Research: ${focus.trim() || 'Best Polymarket LP reward markets'} for ${email.trim() || 'report recipient'}${budget.trim() ? `, budget ${budget.trim()}` : ''}`)
-    params.set('src', 'agentic-lp-research')
-    params.set('wallet', 'circle')
-    return `/?${params.toString()}`
-  }, [budget, duration, email, focus, streamAmount])
-
-  return (
-    <div className="mt-4 space-y-4">
-      <PolyDeskBackButton onClick={onBack} />
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-100 bg-white text-gray-700 shadow-sm dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200">
-              <Sparkles className="h-4 w-4" />
-            </span>
-            <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Agentic LP Research</p>
-          </div>
-          <h2 className="mt-2 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Stream to Hash PayLink Agent for daily reports</h2>
-          <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-            Configure the recipient, stream amount, and research focus. HashpayStream opens with the Hash PayLink Agent treasury already selected.
-          </p>
-        </div>
-      </div>
-
-      <div className="space-y-3 rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
-        <InputBlock label="Report email" value={email} onChange={setEmail} placeholder="you@example.com" />
-        {email && !emailReady && <p className="px-1 text-xs text-red-500 dark:text-red-300">Enter a valid email address.</p>}
-        <InputBlock label="Stream amount" value={streamAmount} onChange={setStreamAmount} placeholder="5" />
-        <InputBlock label="Duration" value={duration} onChange={setDuration} placeholder="7d, 14d, 30d" />
-        {duration && !durationReady && <p className="px-1 text-xs text-red-500 dark:text-red-300">Use a duration like 7d, 2w, or 24h.</p>}
-        <InputBlock label="Research focus" value={focus} onChange={setFocus} placeholder="Best LP reward markets" />
-        <InputBlock label="Optional budget" value={budget} onChange={setBudget} placeholder="Example: 250 USDC" />
-        <a
-          href={streamHref}
-          aria-disabled={!canContinue}
-          onClick={event => { if (!canContinue) event.preventDefault() }}
-          className={cn(
-            'flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200',
-            !canContinue && 'pointer-events-none opacity-50',
-          )}
-        >
-          <Radio className="h-4 w-4" />
-          Stream to Hash PayLink Agent
-        </a>
-        <p className="px-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-          Recipient: Hash PayLink Agent treasury on Base, {shortAddress(EVM_TREASURY)}.
-        </p>
-      </div>
-
-      <div className="rounded-xl border border-gray-100 bg-white p-3 dark:border-white/10 dark:bg-white/[0.05]">
-        <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Service summary</p>
-        <div className="mt-2 grid gap-2 text-xs text-gray-500 dark:text-gray-400">
-          <div className="flex items-center justify-between gap-3"><span>Email</span><span className="truncate font-semibold text-gray-800 dark:text-gray-200">{email || 'Not set'}</span></div>
-          <div className="flex items-center justify-between gap-3"><span>Stream</span><span className="font-semibold text-gray-800 dark:text-gray-200">{streamAmount || '0'} USDC / {duration || 'Not set'}</span></div>
-          <div className="flex items-center justify-between gap-3"><span>Focus</span><span className="truncate font-semibold text-gray-800 dark:text-gray-200">{focus || 'Default LP report'}</span></div>
-        </div>
-      </div>
-    </div>
-  )
-}
 function PolymarketFundingPanel({
   mode,
   network,

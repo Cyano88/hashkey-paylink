@@ -717,13 +717,9 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
                 const hasBalance = claimable > 0n
                 const circleConfigured = canUseCircleEvmEmailWallet('arc')
                 const circleWalletMatches = !!circleSession && circleSession.wallet.address.toLowerCase() === info._recipient.toLowerCase()
-                const agenticMode = (params.get('mode') ?? '').toLowerCase() === 'agentic-streaming'
-                const agentSlug = (params.get('agent') ?? params.get('agentSlug') ?? 'hashpaylink-agent').trim()
-                const claimTitle = agenticMode ? 'Agent claim wallet' : 'Claim with Circle Smart Wallet'
-                const claimSubtitle = agenticMode
-                  ? `Only ${agentSlug} recipient wallet can claim this stream.`
-                  : 'Creators claim streamed USDC with the recipient Circle wallet on Arc'
-                const claimPlaceholder = agenticMode ? 'Recipient wallet email' : 'email@example.com'
+                const claimTitle = 'Claim with Circle Smart Wallet'
+                const claimSubtitle = 'Creators claim streamed USDC with the recipient Circle wallet on Arc'
+                const claimPlaceholder = 'email@example.com'
 
                 if (actionKind === 'claim' && actionState === 'confirmed' && txHash) {
                   return (
@@ -751,18 +747,13 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
                     <div className="min-w-0">
                       <p className="text-[12px] font-bold text-gray-800 dark:text-gray-100">{claimTitle}</p>
                       <p className="text-[11px] text-gray-500 dark:text-gray-400">{claimSubtitle}</p>
-                      {agenticMode && (
-                        <p className="mt-1 font-mono text-[10px] font-semibold text-blue-500 dark:text-blue-300">
-                          Recipient {shortAddr(info._recipient)}
-                        </p>
-                      )}
                     </div>
 
                     {!circleSession && (
                       <input
                         type="email"
-                        name={agenticMode ? 'streampay-agent-claim-email' : 'streampay-claim-email'}
-                        autoComplete={agenticMode ? 'off' : 'email'}
+                        name="streampay-claim-email"
+                        autoComplete="email"
                         placeholder={claimPlaceholder}
                         value={circleEmail}
                         onChange={e => setCircleEmail(e.target.value)}
@@ -791,7 +782,7 @@ function StreamDetail({ vaultAddress, reason }: { vaultAddress: `0x${string}`; r
                         {!circleWalletMatches && (
                           <div className="rounded-lg border border-red-100 dark:border-red-900/40 bg-red-50 dark:bg-red-950/20 px-2.5 py-2 space-y-2">
                             <p className="text-[11px] font-semibold text-red-500 dark:text-red-300">
-                              {agenticMode ? 'Connect the recipient agent wallet to claim.' : 'This wallet is not the stream recipient.'}
+                              This wallet is not the stream recipient.
                             </p>
                             <div className="flex items-center justify-between gap-3">
                               <div className="min-w-0">

@@ -153,7 +153,7 @@ function helperRefinementLane(input: ZeroScoutHelperGuidanceInput): HelperRefine
   if (shouldUseDeepHelperReview(input)) return 'multi-stack'
   if (input.request.qualityMode === 'fast') return 'og-compute'
   const helperMode = String(input.request.helperMode ?? '').trim().toLowerCase()
-  if (helperMode === 'payments' || helperMode === 'daily' || helperMode === 'services' || helperMode === 'support') return 'og-compute'
+  if (helperMode === 'payments' || helperMode === 'daily' || helperMode === 'services' || helperMode === 'support' || helperMode === 'streampay') return 'og-compute'
   if (helperMode === 'polydesk') return 'multi-stack'
   const forcedLane = forcedSimpleHelperLane()
   if (forcedLane) return forcedLane
@@ -202,6 +202,15 @@ function helperModeInstructions(input: ZeroScoutHelperGuidanceInput) {
   if (mode === 'services') {
     return [
       'Services mode should explain Hash PayLink services only when the user asks about product capabilities or setup.',
+    ]
+  }
+  if (mode === 'streampay') {
+    return [
+      'HashpayStream mode is only for creator monetization and reader access on HashpayStream.',
+      'Focus on paid posts, creator publishing, pay-as-you-read checkpoints, fixed x402 unlocks, comments/reactions, receipts, and creator earnings.',
+      'Do not suggest Payroll, Arena, PolyDesk, Polymarket, LP Scout, or external market tooling.',
+      'When asked what to build next, prefer simple creator-facing actions that fit the current HashpayStream UI.',
+      'For unlocked content, help summarize, explain, or suggest follow-up questions without pretending to access private content unless content context is supplied.',
     ]
   }
   if (mode === 'polydesk') {

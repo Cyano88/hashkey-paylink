@@ -1,5 +1,6 @@
 import { Outlet } from 'react-router-dom'
 import { StreamPayHeader } from './StreamPayHeader'
+import { StreamAgentHash } from './StreamAgentHash'
 
 export function StreamPayLayout() {
   return (
@@ -22,6 +23,7 @@ export function StreamPayLayout() {
           </a>
         </p>
       </footer>
+      <StreamAgentHash />
     </div>
   )
 }
