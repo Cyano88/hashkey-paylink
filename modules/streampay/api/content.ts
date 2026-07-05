@@ -159,6 +159,7 @@ const OFFICIAL_EBOOKS: Array<{
   tag: string
   identifier?: string
   gutenbergId?: string
+  coverUrl?: string
   source: string
   previewText: string
 }> = [
@@ -167,6 +168,7 @@ const OFFICIAL_EBOOKS: Array<{
     title: 'Yesteryear',
     description: 'A buzzy 2026 satire about nostalgia, online identity, and the fantasy of simpler times.',
     tag: 'Trending',
+    coverUrl: 'https://covers.openlibrary.org/b/id/15213215-L.jpg',
     source: 'Trending preview',
     previewText: `Yesteryear is the kind of current fiction that gives a creator shelf immediate cultural heat. Its hook is simple and sharp: a modern woman whose public identity is built around old-fashioned domestic ideals is forced to confront the reality behind the fantasy.
 
@@ -179,6 +181,7 @@ Why it matters: trending books create conversation. A creator can publish a revi
     title: 'Whistler',
     description: 'Ann Patchett returns with an emotional story about family, memory, grief, and reconnection.',
     tag: 'Literary',
+    coverUrl: 'https://covers.openlibrary.org/b/id/15234903-L.jpg',
     source: 'Trending preview',
     previewText: `Whistler is current literary fiction with a strong reader signal: recognizable author, emotional subject, and a story built around the long echo of family relationships.
 
@@ -228,6 +231,7 @@ This is also a strong match for checkpoint reading. A creator can release value 
     description: 'A slow-burn literary hit about letters, memory, age, and a life revealed through correspondence.',
     tag: 'Book Club',
     identifier: 'ISBN:9780241721254',
+    coverUrl: 'https://covers.openlibrary.org/b/id/15232808-L.jpg',
     source: 'Trending preview',
     previewText: `The Correspondent is a useful shelf anchor because it has both literary credibility and broad reader warmth. Its form also makes it easy for creators to build thoughtful paid companion notes.
 
@@ -252,6 +256,7 @@ This is a cleaner consumer product than a plain link list because the reader get
     title: 'Theo of Golden',
     description: 'A warm trade-paperback bestseller with strong reader-community appeal.',
     tag: 'Feel Good',
+    coverUrl: 'https://covers.openlibrary.org/b/id/15205233-L.jpg',
     source: 'Trending preview',
     previewText: `Theo of Golden belongs on the shelf because it signals reader comfort and word-of-mouth appeal. It is useful for showing that HashpayStream can monetize soft, community-driven reading too.
 
@@ -264,6 +269,7 @@ This is where nanopayments become practical: instead of asking every reader to s
     title: 'Dear Debbie',
     description: 'A current Freida McFadden reader favorite for suspense and page-turning discussion.',
     tag: 'Suspense',
+    coverUrl: 'https://covers.openlibrary.org/b/id/15171146-L.jpg',
     source: 'Trending preview',
     previewText: `Dear Debbie gives the shelf a sharp suspense lane. Books like this are built for reactions: theories, twists, endings, and reader debates.
 
@@ -276,6 +282,7 @@ That is a strong live-test flow because the content is easy to understand: pay a
     title: 'Project Hail Mary',
     description: 'A durable sci-fi favorite still charting in audio and ebook conversations.',
     tag: 'Sci-Fi',
+    coverUrl: 'https://covers.openlibrary.org/b/id/11200092-L.jpg',
     source: 'Trending preview',
     previewText: `Project Hail Mary is not brand new, but it remains active in reader conversation. That matters for discovery: some books trend because they keep finding new audiences.
 
@@ -285,12 +292,32 @@ The product lesson is simple: paid content does not need to be the book itself. 
   },
 ]
 
-function titleCover(title: string) {
-  return `https://placehold.co/320x480/111827/ffffff/png?text=${encodeURIComponent(title.replace(/\s+/g, '+'))}`
+function titleCover(title: string, tag = 'Trending') {
+  const words = title.split(/\s+/).filter(Boolean)
+  const lineOne = words.slice(0, 2).join(' ')
+  const lineTwo = words.slice(2, 5).join(' ')
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="320" height="480" viewBox="0 0 320 480">
+      <defs>
+        <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#111827"/>
+          <stop offset="0.55" stop-color="#1d4ed8"/>
+          <stop offset="1" stop-color="#020617"/>
+        </linearGradient>
+      </defs>
+      <rect width="320" height="480" rx="18" fill="url(#g)"/>
+      <rect x="22" y="22" width="276" height="436" rx="14" fill="none" stroke="rgba(255,255,255,0.22)" stroke-width="2"/>
+      <text x="36" y="74" fill="#bfdbfe" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="800" letter-spacing="2">${tag.toUpperCase()}</text>
+      <text x="36" y="214" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="38" font-weight="900">${lineOne}</text>
+      <text x="36" y="260" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="30" font-weight="800">${lineTwo}</text>
+      <text x="36" y="402" fill="#dbeafe" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="800">HashpayStream</text>
+      <text x="36" y="428" fill="#93c5fd" font-family="Inter, Arial, sans-serif" font-size="13" font-weight="700" letter-spacing="1.5">CREATOR PREVIEW</text>
+    </svg>`
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`
 }
 
-function openLibraryCover(identifier?: string, title = 'Book') {
-  if (!identifier) return titleCover(title)
+function openLibraryCover(identifier?: string, title = 'Book', tag = 'Trending') {
+  if (!identifier) return titleCover(title, tag)
   return `https://covers.openlibrary.org/b/isbn/${encodeURIComponent(identifier.replace(/^ISBN:/i, ''))}-L.jpg`
 }
 
@@ -680,7 +707,7 @@ const OFFICIAL_CONTENT: Record<string, ContentEntry> = {
     description: book.description,
     authorName: book.source,
     xHandle: 'Hash_PayLink',
-    coverImage: openLibraryCover(book.identifier, book.title),
+    coverImage: book.coverUrl || openLibraryCover(book.identifier, book.title, book.tag),
     category: 'ebooks',
     reviewStatus: 'approved' as const,
     reviewedAt: Date.now(),
@@ -2235,7 +2262,7 @@ export async function getCreatorBook(req: Request, res: Response) {
       title: book.title,
       description: book.description,
       source: book.source,
-      coverImage: openLibraryCover(book.identifier, book.title),
+      coverImage: book.coverUrl || openLibraryCover(book.identifier, book.title, book.tag),
       text: cleanGutenbergText(book.previewText),
       preview: true,
     })
@@ -2248,7 +2275,7 @@ export async function getCreatorBook(req: Request, res: Response) {
       title: book.title,
       description: book.description,
       source: book.source,
-      coverImage: openLibraryCover(book.identifier, book.title),
+      coverImage: book.coverUrl || openLibraryCover(book.identifier, book.title, book.tag),
       gutenbergId: book.gutenbergId,
       text,
     })
@@ -2262,7 +2289,7 @@ export async function getCreatorBook(req: Request, res: Response) {
         title: book.title,
         description: book.description,
         source: book.source,
-        coverImage: openLibraryCover(book.identifier, book.title),
+        coverImage: book.coverUrl || openLibraryCover(book.identifier, book.title, book.tag),
         gutenbergId: book.gutenbergId,
         text: fallback,
         fallback: true,

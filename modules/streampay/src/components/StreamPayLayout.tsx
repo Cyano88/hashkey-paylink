@@ -12,8 +12,8 @@ export function StreamPayLayout() {
         <Outlet />
       </main>
 
-      <footer className="w-full max-w-[480px] mx-auto px-4 py-5">
-        <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 border-t border-gray-100 pt-4 dark:border-white/10">
+      <div className="w-full max-w-[480px] mx-auto px-4 pt-3 pb-2">
+        <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
           <a
             href="mailto:support@hashpaylink.com"
             className="flex items-center gap-1.5 text-xs text-gray-400 transition-colors hover:text-gray-900 dark:hover:text-gray-200"
@@ -40,7 +40,10 @@ export function StreamPayLayout() {
             Docs
           </a>
         </div>
-        <p className="mt-3 text-center text-[10px] font-medium uppercase tracking-[0.18em] text-gray-300 dark:text-gray-600">
+      </div>
+
+      <footer className="w-full max-w-[480px] mx-auto px-4 pb-5">
+        <p className="border-t border-gray-100 pt-4 text-center text-[10px] font-medium uppercase tracking-[0.18em] text-gray-300 dark:border-white/10 dark:text-gray-600">
           <a
             href="https://testnet.arcscan.app"
             target="_blank"

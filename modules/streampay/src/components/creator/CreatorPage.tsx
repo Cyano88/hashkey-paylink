@@ -258,27 +258,47 @@ const OFFICIAL_DISCOVER_CONTENT: PublishedContent[] = [
   },
 ]
 
-function titleCover(title: string) {
-  return `https://placehold.co/320x480/111827/ffffff/png?text=${encodeURIComponent(title.replace(/\s+/g, '+'))}`
+function titleCover(title: string, tag = 'Trending') {
+  const words = title.split(/\s+/).filter(Boolean)
+  const lineOne = words.slice(0, 2).join(' ')
+  const lineTwo = words.slice(2, 5).join(' ')
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="320" height="480" viewBox="0 0 320 480">
+      <defs>
+        <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#111827"/>
+          <stop offset="0.55" stop-color="#1d4ed8"/>
+          <stop offset="1" stop-color="#020617"/>
+        </linearGradient>
+      </defs>
+      <rect width="320" height="480" rx="18" fill="url(#g)"/>
+      <rect x="22" y="22" width="276" height="436" rx="14" fill="none" stroke="rgba(255,255,255,0.22)" stroke-width="2"/>
+      <text x="36" y="74" fill="#bfdbfe" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="800" letter-spacing="2">${tag.toUpperCase()}</text>
+      <text x="36" y="214" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="38" font-weight="900">${lineOne}</text>
+      <text x="36" y="260" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="30" font-weight="800">${lineTwo}</text>
+      <text x="36" y="402" fill="#dbeafe" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="800">HashpayStream</text>
+      <text x="36" y="428" fill="#93c5fd" font-family="Inter, Arial, sans-serif" font-size="13" font-weight="700" letter-spacing="1.5">CREATOR PREVIEW</text>
+    </svg>`
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`
 }
 
-function bookCover(identifier: string | undefined, title: string) {
-  if (!identifier) return titleCover(title)
+function bookCover(identifier: string | undefined, title: string, tag: string) {
+  if (!identifier) return titleCover(title, tag)
   return `https://covers.openlibrary.org/b/isbn/${encodeURIComponent(identifier.replace(/^ISBN:/i, ''))}-L.jpg`
 }
 
 const OFFICIAL_EBOOKS: PublishedContent[] = [
-  ['ebook-yesteryear', 'Yesteryear', 'A buzzy 2026 satire about nostalgia, online identity, and the fantasy of simpler times.', 'Trending', undefined],
-  ['ebook-whistler', 'Whistler', 'Ann Patchett returns with an emotional story about family, memory, grief, and reconnection.', 'Literary', undefined],
-  ['ebook-calamity-club', 'The Calamity Club', "Kathryn Stockett's long-awaited second novel, set around women fighting for agency in 1930s Mississippi.", 'Historical', undefined],
-  ['ebook-weddings', 'Weddings', "Danielle Steel's 2026 bestseller brings a clean mainstream fiction signal to the shelf.", 'Romance', undefined],
-  ['ebook-choke-point', 'Choke Point', 'A current thriller pick for readers who want stakes, speed, and high-pressure conflict.', 'Thriller', undefined],
-  ['ebook-the-correspondent', 'The Correspondent', 'A slow-burn literary hit about letters, memory, age, and a life revealed through correspondence.', 'Book Club', '9780241721254'],
-  ['ebook-it-could-have-been-her', 'It Could Have Been Her', 'A current Lisa Jewell suspense pick for readers who like secrets, pressure, and twisty reveals.', 'Suspense', undefined],
-  ['ebook-theo-of-golden', 'Theo of Golden', 'A warm trade-paperback bestseller with strong reader-community appeal.', 'Feel Good', undefined],
-  ['ebook-dear-debbie', 'Dear Debbie', 'A current Freida McFadden reader favorite for suspense and page-turning discussion.', 'Suspense', undefined],
-  ['ebook-project-hail-mary', 'Project Hail Mary', 'A durable sci-fi favorite still charting in audio and ebook conversations.', 'Sci-Fi', undefined],
-].map(([id, title, description, tag, isbn]) => ({
+  ['ebook-yesteryear', 'Yesteryear', 'A buzzy 2026 satire about nostalgia, online identity, and the fantasy of simpler times.', 'Trending', undefined, 'https://covers.openlibrary.org/b/id/15213215-L.jpg'],
+  ['ebook-whistler', 'Whistler', 'Ann Patchett returns with an emotional story about family, memory, grief, and reconnection.', 'Literary', undefined, 'https://covers.openlibrary.org/b/id/15234903-L.jpg'],
+  ['ebook-calamity-club', 'The Calamity Club', "Kathryn Stockett's long-awaited second novel, set around women fighting for agency in 1930s Mississippi.", 'Historical', undefined, undefined],
+  ['ebook-weddings', 'Weddings', "Danielle Steel's 2026 bestseller brings a clean mainstream fiction signal to the shelf.", 'Romance', undefined, undefined],
+  ['ebook-choke-point', 'Choke Point', 'A current thriller pick for readers who want stakes, speed, and high-pressure conflict.', 'Thriller', undefined, undefined],
+  ['ebook-the-correspondent', 'The Correspondent', 'A slow-burn literary hit about letters, memory, age, and a life revealed through correspondence.', 'Book Club', '9780241721254', 'https://covers.openlibrary.org/b/id/15232808-L.jpg'],
+  ['ebook-it-could-have-been-her', 'It Could Have Been Her', 'A current Lisa Jewell suspense pick for readers who like secrets, pressure, and twisty reveals.', 'Suspense', undefined, undefined],
+  ['ebook-theo-of-golden', 'Theo of Golden', 'A warm trade-paperback bestseller with strong reader-community appeal.', 'Feel Good', undefined, 'https://covers.openlibrary.org/b/id/15205233-L.jpg'],
+  ['ebook-dear-debbie', 'Dear Debbie', 'A current Freida McFadden reader favorite for suspense and page-turning discussion.', 'Suspense', undefined, 'https://covers.openlibrary.org/b/id/15171146-L.jpg'],
+  ['ebook-project-hail-mary', 'Project Hail Mary', 'A durable sci-fi favorite still charting in audio and ebook conversations.', 'Sci-Fi', undefined, 'https://covers.openlibrary.org/b/id/11200092-L.jpg'],
+].map(([id, title, description, tag, isbn, coverUrl]) => ({
   id,
   contentId: id,
   creator: OFFICIAL_CREATOR_ADDRESS,
@@ -288,7 +308,7 @@ const OFFICIAL_EBOOKS: PublishedContent[] = [
   price: '0.10',
   tag,
   source: 'Trending preview',
-  image: bookCover(isbn, title),
+  image: coverUrl || bookCover(isbn, title, tag),
   gateLink: `/gate?app=streampay&id=${id}&cr=${OFFICIAL_CREATOR_ADDRESS}&r=1000&cap=100000&mode=unlock&pay=choice&ct=book&cat=ebooks&t=${encodeURIComponent(title)}`,
   action: 'gate' as const,
   cta: 'Unlock preview',
