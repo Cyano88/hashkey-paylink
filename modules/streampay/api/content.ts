@@ -17,6 +17,7 @@ import type { NextFunction } from 'express'
 import { getAgentWalletRecord, payAgentX402Service } from '../../../api/agent-wallet.js'
 import { listAgentActivity } from '../../../api/agent-activity.js'
 import { getPolyWorldcupNewsFeed, polyWorldcupArticleId } from '../../../api/poly-worldcup-news.js'
+import { getPolyStreamFeed } from '../../../api/poly-stream.js'
 
 const arcChain = defineChain({
   id:             5042002,
@@ -238,6 +239,46 @@ const OFFICIAL_EBOOKS: Array<{
     tag: 'Sci-Fi',
     identifier: 'ISBN:9780486284729',
     gutenbergId: '35',
+  },
+  {
+    id: 'ebook-great-gatsby',
+    title: 'The Great Gatsby',
+    description: 'A glittering, tragic story about money, longing, parties, and the cost of illusion.',
+    tag: 'Modern Classic',
+    identifier: 'ISBN:9780743273565',
+    gutenbergId: '64317',
+  },
+  {
+    id: 'ebook-yellow-wallpaper',
+    title: 'The Yellow Wallpaper',
+    description: 'A short psychological horror story about confinement, control, and a mind under pressure.',
+    tag: 'Psychological',
+    identifier: 'ISBN:9780486298573',
+    gutenbergId: '1952',
+  },
+  {
+    id: 'ebook-secret-garden',
+    title: 'The Secret Garden',
+    description: 'A warm story of grief, friendship, healing, and a hidden place coming back to life.',
+    tag: 'Feel Good',
+    identifier: 'ISBN:9780141321066',
+    gutenbergId: '17396',
+  },
+  {
+    id: 'ebook-war-worlds',
+    title: 'The War of the Worlds',
+    description: 'A tense invasion story with panic, survival, and early science-fiction spectacle.',
+    tag: 'Sci-Fi',
+    identifier: 'ISBN:9780486295060',
+    gutenbergId: '36',
+  },
+  {
+    id: 'ebook-moby-dick',
+    title: 'Moby-Dick',
+    description: 'A vast sea obsession about revenge, fate, danger, and the hunt for the white whale.',
+    tag: 'Adventure',
+    identifier: 'ISBN:9781503280786',
+    gutenbergId: '2701',
   },
 ]
 
@@ -1465,6 +1506,232 @@ export async function listApprovedCreatorContent(_req: Request, res: Response) {
     .map(([contentId, entry]) => entryToPost(contentId, entry))
 
   return res.status(200).json({ ok: true, posts })
+}
+
+type AgentContentCard = ReturnType<typeof entryToPost> & {
+  priceUsdc: number
+  social: {
+    views: number
+    likes: number
+    dislikes: number
+    comments: number
+    unlocks: number
+    score: number
+  }
+}
+
+function priceUsdc(entry: Pick<ContentEntry, 'capRaw'>) {
+  return Math.max(0.000001, Math.ceil(Math.max(1, Number(entry.capRaw) || 0)) / 1_000_000)
+}
+
+function scoreContentId(match: { fixtureId?: string; title?: string; kickoffAt?: string; time?: string }, index: number) {
+  const raw = match.fixtureId || `${match.title || 'fixture'}-${match.kickoffAt || match.time || index}`
+  return `worldcup-score-${String(raw).replace(/[^a-zA-Z0-9]+/g, '-').slice(0, 64)}`
+}
+
+function scoreTitleParts(title: string) {
+  const parts = title.split(/\s+(?:vs\.?|v)\s+/i).map(part => part.trim()).filter(Boolean)
+  return { home: parts[0] || title, away: parts[1] || '' }
+}
+
+function scoreEntryFromMatch(match: Record<string, unknown>, index: number): [string, ContentEntry] {
+  const title = String(match.title ?? 'World Cup fixture')
+  const { home, away } = scoreTitleParts(title)
+  const contentId = scoreContentId({
+    fixtureId: String(match.fixtureId ?? ''),
+    title,
+    kickoffAt: String(match.kickoffAt ?? ''),
+    time: String(match.time ?? ''),
+  }, index)
+  return [contentId, {
+    ...OFFICIAL_CONTENT['worldcup-scores'],
+    content: contentId,
+    title: away ? `${home} vs ${away}` : title,
+    description: String(match.marketStatus ?? '') === 'matched'
+      ? 'Live score context with a matched route available.'
+      : 'Live or upcoming World Cup fixture context.',
+    reviewNote: String(match.status ?? match.tag ?? 'Fixture'),
+    ts: Date.now(),
+  }]
+}
+
+async function contentUnlockCount(contentId: string) {
+  if (pool) {
+    await ensureSchema()
+    const [fixed, checkpoint] = await Promise.all([
+      pool.query(`select count(*)::int as count from streampay_creator_unlocks where content_id = $1`, [contentId]),
+      pool.query(`select count(*)::int as count from streampay_checkpoint_unlocks where content_id = $1`, [contentId]),
+    ])
+    return Number(fixed.rows[0]?.count ?? 0) + Number(checkpoint.rows[0]?.count ?? 0)
+  }
+  return Array.from(unlockStore.values()).filter(item => item.contentId === contentId).length
+    + Array.from(checkpointUnlockStore.values()).filter(item => item.contentId === contentId).length
+}
+
+async function agentCardFromEntry(contentId: string, entry: ContentEntry): Promise<AgentContentCard> {
+  const [social, views, unlocks] = await Promise.all([
+    readCreatorSocial(contentId),
+    readCreatorContentViews(contentId),
+    contentUnlockCount(contentId),
+  ])
+  const comments = Array.isArray(social.comments) ? social.comments.length : 0
+  const likes = Number(social.upCount ?? 0)
+  const dislikes = Number(social.downCount ?? 0)
+  const score = (views * 3) + (likes * 6) + (comments * 5) + (unlocks * 8) - (dislikes * 2)
+  return {
+    ...entryToPost(contentId, entry),
+    priceUsdc: priceUsdc(entry),
+    social: {
+      views,
+      likes,
+      dislikes,
+      comments,
+      unlocks,
+      score,
+    },
+  }
+}
+
+async function approvedContentEntries() {
+  if (pool) {
+    await ensureSchema()
+    const result = await pool.query(
+      `select * from streampay_creator_content
+       where review_status = 'approved'
+       order by coalesce(reviewed_at, updated_at) desc, updated_at desc
+       limit 60`,
+    )
+    return result.rows.map(row => [String(row.content_id), rowToContentEntry(row)] as [string, ContentEntry])
+  }
+  return Array.from(store.entries())
+    .filter(([, entry]) => entry.reviewStatus === 'approved')
+    .sort((a, b) => (b[1].reviewedAt ?? b[1].ts) - (a[1].reviewedAt ?? a[1].ts))
+    .slice(0, 60)
+}
+
+export async function buildHashpayStreamAgentContext(params: { creator?: unknown; wallet?: unknown; date?: unknown } = {}) {
+  const creator = String(params.creator ?? '').trim()
+  const wallet = cleanWalletAddress(params.wallet)
+  const selectedDate = String(params.date ?? new Date().toISOString().slice(0, 10)).trim().slice(0, 10)
+  const [newsFeed, scoreFeed, approvedEntries] = await Promise.all([
+    getPolyWorldcupNewsFeed().catch(() => null),
+    getPolyStreamFeed(selectedDate).catch(() => null),
+    approvedContentEntries().catch(() => [] as Array<[string, ContentEntry]>),
+  ])
+
+  const newsEntries: Array<[string, ContentEntry]> = (newsFeed?.articles ?? [])
+    .filter(article => article.url)
+    .slice(0, 10)
+    .map((article, index) => [polyWorldcupArticleId(article, index), {
+      ...OFFICIAL_CONTENT['worldcup-news'],
+      content: article.url,
+      title: article.title,
+      description: article.description,
+      authorName: article.source || 'HashpayStream Pulse',
+      coverImage: article.image || '/brand/world-globe.png',
+      reviewNote: article.tag,
+      ts: Number.isFinite(Date.parse(article.publishedAt)) ? Date.parse(article.publishedAt) : Date.now(),
+    }] as [string, ContentEntry])
+
+  const scoreEntries: Array<[string, ContentEntry]> = (scoreFeed?.matches ?? [])
+    .slice(0, 16)
+    .map((match, index) => scoreEntryFromMatch(match as Record<string, unknown>, index))
+
+  const officialEntries = Object.entries(OFFICIAL_CONTENT)
+    .filter(([contentId]) => contentId !== 'worldcup-scores' && (contentId !== 'worldcup-news' || !newsEntries.length))
+
+  const deduped = new Map<string, ContentEntry>()
+  for (const [contentId, entry] of [
+    ...officialEntries,
+    ...newsEntries,
+    ...scoreEntries,
+    ...approvedEntries,
+  ] as Array<[string, ContentEntry]>) {
+    if (!deduped.has(contentId)) deduped.set(contentId, entry)
+  }
+
+  const cards = (await Promise.all(
+    Array.from(deduped.entries()).slice(0, 90).map(([contentId, entry]) => agentCardFromEntry(contentId, entry)),
+  )).sort((a, b) => b.social.score - a.social.score || b.createdAt - a.createdAt)
+
+  const categoryCounts = cards.reduce<Record<string, number>>((acc, card) => {
+    acc[card.category] = (acc[card.category] ?? 0) + 1
+    return acc
+  }, {})
+  const contentByCategory = ['developers', 'worldcup-news', 'live-scores', 'ebooks', 'crypto'].reduce<Record<string, AgentContentCard[]>>((acc, category) => {
+    acc[category] = cards.filter(card => card.category === category).slice(0, 15)
+    return acc
+  }, {})
+  const topViewed = [...cards].sort((a, b) => b.social.views - a.social.views).slice(0, 8)
+  const mostLiked = [...cards].sort((a, b) => b.social.likes - a.social.likes).slice(0, 8)
+  const mostDiscussed = [...cards].sort((a, b) => b.social.comments - a.social.comments).slice(0, 8)
+  const mostUnlocked = [...cards].sort((a, b) => b.social.unlocks - a.social.unlocks).slice(0, 8)
+  const worldCupNewsCards = newsEntries.length
+    ? newsEntries.slice(0, 8).map(([contentId, entry]) => entryToPost(contentId, entry))
+    : cards.filter(card => card.category === 'worldcup-news').slice(0, 8)
+
+  let creatorEarnings: unknown = null
+  if (creator && isAddress(creator)) {
+    const fakeReq = { query: { creator } } as unknown as Request
+    const json = await new Promise<unknown>(resolve => {
+      const fakeRes = {
+        json: (payload: unknown) => resolve(payload),
+        status: () => fakeRes,
+      } as unknown as Response
+      void listCreatorEarnings(fakeReq, fakeRes)
+    }).catch(() => null)
+    creatorEarnings = json
+  }
+
+  return {
+    ok: true,
+    product: 'HashpayStream',
+    updatedAt: new Date().toISOString(),
+    selectedDate,
+    wallet: wallet || undefined,
+    creator: creator && isAddress(creator) ? creator : undefined,
+    x402: {
+      managerUrl: 'https://hashpaylink.com/agent?profile=agent&walletManager=service',
+      activationCopy: 'Fund Circle wallet balance, activate x402 service balance, then use fixed unlocks and paid services.',
+      supportedInCreatorCheckout: ['fixed x402 unlock'],
+    },
+    unlockModes: [
+      { id: 'checkpoint', label: 'Pay as you read', description: 'Reader prepays once; creator earnings release at scroll checkpoints; unread USDC remains refundable.' },
+      { id: 'x402', label: 'Fixed unlock', description: 'Reader pays once with Circle Gateway x402 and keeps access to the content.' },
+      { id: 'stream', label: 'Timed stream', description: 'For video/live-rendered content only; USDC streams while the meter runs.' },
+    ],
+    statsCapabilities: {
+      contentViews: true,
+      reactions: true,
+      comments: true,
+      unlocks: true,
+      worldCupNews: Boolean(newsFeed?.articles?.length),
+      worldCupScores: Boolean(scoreFeed?.matches?.length),
+      worldCupTopScorers: false,
+      note: 'Top-scorer tables are not currently wired to a verified provider endpoint.',
+    },
+    discovery: {
+      categoryCounts,
+      trending: cards.slice(0, 12),
+      topViewed,
+      mostLiked,
+      mostDiscussed,
+      mostUnlocked,
+      bestEbooks: contentByCategory.ebooks ?? [],
+      latestWorldCupNews: worldCupNewsCards,
+      liveScores: scoreEntries.slice(0, 12).map(([contentId, entry]) => entryToPost(contentId, entry)),
+      byCategory: contentByCategory,
+    },
+    creatorEarnings,
+  }
+}
+
+export async function getHashpayStreamAgentContext(req: Request, res: Response) {
+  return res.json(await buildHashpayStreamAgentContext({
+    creator: req.query.creator,
+    wallet: req.query.wallet,
+    date: req.query.date,
+  }))
 }
 
 export async function listCreatorAdminContent(req: Request, res: Response) {

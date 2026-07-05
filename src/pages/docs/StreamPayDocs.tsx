@@ -6,25 +6,28 @@ export default function StreamPayDocs() {
       <DocHeader
         badge="HashpayStream"
         title="HashpayStream"
-        description="USDC payroll, agentic streams, and recoverable-risk Arena rooms on Arc."
+        description="Creator content, fixed x402 unlocks, and pay-as-you-read USDC settlement on Arc."
       />
 
       <InfoBox type="info">
-        HashpayStream is hosted on the same Render service as Hash PayLink and loads with <Code>?app=streampay</Code>. The visible product nav focuses on Payroll, Agentic, and Arena.
+        HashpayStream is a Hash PayLink creator product. Public testing is focused on Creator, x402 wallet access, Agent Hash guidance, paid articles, live-score routes, ebooks, comments, receipts, and checkpoint-based pay-as-you-read.
       </InfoBox>
 
-      <Section title="Primary modes">
-        <SubSection title="Payroll - Time-Sovereign Streaming">
-          <p>Employers deposit USDC into a StreamVault contract. Recipients accumulate claimable USDC as time passes and can claim with a gasless EIP-712 signature through <Code>/api/relay-stream</Code>.</p>
-          <p className="mt-2">Privy email sign-in and Circle wallet mapping are the primary website identity layer for sender-side stream creation.</p>
+      <Section title="Public creator flow">
+        <SubSection title="Discover">
+          <p>Readers browse approved creator posts and official drops across World Cup news, live scores, crypto, ebooks, and developer guides. Each card can route to a gated checkout with a stable content ID.</p>
         </SubSection>
 
-        <SubSection title="Agentic - Daily Service Streaming">
-          <p>Users stream Arc USDC to the Hash PayLink Agent for recurring services such as daily Polymarket LP research. The same Privy + Circle setup is mirrored between website and Telegram flows.</p>
+        <SubSection title="Fixed unlock">
+          <p>Fixed unlocks use the Circle Gateway/x402 flow. A reader pays once, access is restored for the same reader wallet, and the receipt follows the Hash PayLink receipt and 0G archive pattern.</p>
         </SubSection>
 
-        <SubSection title="Arena - Recoverable-Risk Rooms">
-          <p>Private Arena rooms use per-room escrow contracts. Players deposit USDC, risk streams round by round, and keep unstreamed balances claimable when eliminated. Completed rooms charge a 0.5% platform fee.</p>
+        <SubSection title="Pay as you read">
+          <p>Checkpoint reading locks a prepaid USDC budget and releases creator earnings only as the reader reaches scroll milestones. Unread balance stays refundable from the reader streams tab.</p>
+        </SubSection>
+
+        <SubSection title="Creator earnings">
+          <p>Creators sign in with an email wallet, view fixed unlocks and checkpoint reads tied to their creator wallet, and track claimable stream earnings without pasting vault IDs.</p>
         </SubSection>
       </Section>
 
@@ -32,23 +35,23 @@ export default function StreamPayDocs() {
         <Table
           headers={['Contract', 'Purpose', 'Network']}
           rows={[
-            ['StreamVaultFactory', 'CREATE2 factory for per-stream payroll vaults', 'Arc Testnet'],
-            ['StreamVault', 'Per-recipient vault with EIP-712 claim/cancel', 'Arc Testnet'],
-            ['ArenaRoomEscrowFactory', 'CREATE2 factory for private Arena room escrows', 'Arc Testnet'],
-            ['ArenaRoomEscrow', 'Per-room USDC escrow for deposits, refunds, winner settlement, and 0.5% fee', 'Arc Testnet'],
+            ['CheckpointVaultFactory', 'CREATE2 factory for pay-as-you-read checkpoint escrow vaults', 'Arc Testnet'],
+            ['CheckpointVault', 'Per-reader prepaid vault with milestone release and unread refund support', 'Arc Testnet'],
+            ['StreamVaultFactory', 'Timed stream factory retained for live/video meter flows', 'Arc Testnet'],
+            ['StreamVault', 'Per-recipient stream vault with claim/cancel support', 'Arc Testnet'],
           ]}
         />
-        <InfoBox type="warning">HashpayStream contracts are currently deployed on Arc Testnet. Mainnet deployment requires the checklist in modules/streampay/DEPLOYMENT.md.</InfoBox>
+        <InfoBox type="warning">HashpayStream public testing currently uses Arc Testnet contracts and Circle email wallet sessions.</InfoBox>
       </Section>
 
-      <Section title="Payroll flow">
+      <Section title="Pay-as-you-read flow">
         <ol className="list-none space-y-3">
           {[
-            ['1', 'Sign in', 'Sender signs in with Privy and opens a mapped Circle wallet session.'],
-            ['2', 'Deploy vault', 'The app deploys or uses a StreamVault with a defined amount, duration, and recipient.'],
-            ['3', 'Fund stream', 'USDC is locked in the vault on Arc.'],
-            ['4', 'Claim', 'Recipient signs an EIP-712 claim message; the relayer submits it and the recipient receives unlocked USDC.'],
-            ['5', 'Cancel if needed', 'Sender can cancel and return the locked remainder according to the vault rules.'],
+            ['1', 'Choose content', 'Reader opens a Creator checkout from an approved content card or direct gate link.'],
+            ['2', 'Pick access mode', 'Reader chooses fixed unlock or pay-as-you-read when the content can render inside HashpayStream.'],
+            ['3', 'Start checkpoint escrow', 'The reader wallet prepays the content budget into an Arc checkpoint vault.'],
+            ['4', 'Read naturally', 'Creator earnings release at reading milestones such as 25%, 50%, 75%, and 100%.'],
+            ['5', 'Recover unread balance', 'Reader can end reading and refund the unread portion from the content page or Streams tab.'],
           ].map(([num, title, desc]) => (
             <li key={num} className="flex gap-4">
               <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-bold text-blue-600 dark:bg-blue-950/50 dark:text-blue-400">{num}</span>
@@ -61,47 +64,46 @@ export default function StreamPayDocs() {
         </ol>
       </Section>
 
-      <Section title="Arena storage and settlement">
-        <p>HashpayStream Arena uses Postgres as durable room state and Arc escrow contracts for money. Postgres stores room settings, status, player count, escrow address, and payment status. It does not custody funds.</p>
+      <Section title="Durable state">
+        <p>HashpayStream stores creator content, unlocks, checkpoint reads, reactions, comments, views, and recent meter recovery state in durable backend storage when <Code>DATABASE_URL</Code> is configured. This is required for Render redeploy safety.</p>
         <Table
           headers={['Layer', 'Role']}
           rows={[
-            ['Postgres', 'Room settings, invite links, status, deposit state, and UI continuity across Render redeploys.'],
-            ['Arena escrow', 'USDC deposits, recoverable refunds, winner settlement, and 0.5% platform fee.'],
-            ['0G extension', 'Permanent room proofs and final result archives after settlement.'],
+            ['Postgres', 'Creator posts, unlock records, checkpoint reads, comments, reactions, and content views.'],
+            ['Arc vaults', 'USDC escrow, checkpoint release, timed stream claim, and refund state.'],
+            ['0G extension', 'Receipt and creator activity archive records when proof is available.'],
           ]}
         />
       </Section>
 
       <Section title="0G proof extension">
-        <p>HashpayStream is part of the same Hash PayLink proof architecture. Payroll streams, agentic streams, and Arena outcomes can become 0G-verifiable records using the same durable proof pattern as multi-payer collections and agent receipts.</p>
+        <p>HashpayStream is part of the same Hash PayLink proof architecture. Creator unlocks, checkpoint reads, comments, and stream activity can use the same durable proof pattern as multi-payer collections and agent receipts.</p>
         <Table
           headers={['HashpayStream event', '0G record']}
           rows={[
-            ['Stream created', 'Vault address, sender, recipient, amount, duration, Arc transaction hash.'],
-            ['Claim submitted', 'Recipient, claim amount, withdrawn amount, relayer transaction hash.'],
-            ['Stream cancelled', 'Unlocked recipient amount, refunded sender amount, cancellation transaction hash.'],
-            ['Arena room settled', 'Room ID, escrow address, entrants, winner, refunds, platform fee, and settlement transaction.'],
+            ['Fixed unlock', 'Content ID, reader wallet, creator wallet, amount, Circle Gateway receipt reference.'],
+            ['Checkpoint read', 'Content ID, vault address, reader wallet, creator wallet, released amount, progress milestone.'],
+            ['Refund', 'Vault address, reader wallet, consumed amount, refunded amount, Arc transaction hash.'],
+            ['Creator claim', 'Creator wallet, claimable amount, vault address, settlement transaction.'],
           ]}
         />
       </Section>
 
-      <Section title="Legacy direct routes">
-        <InfoBox type="warning">
-          Creator and gate routes still exist as direct legacy module routes, but they are not the primary public HashpayStream nav. Do not use them as the main product pitch.
-        </InfoBox>
+      <Section title="Agent Hash">
+        <p>Agent Hash runs inside HashpayStream as a creator-focused assistant powered by ZeroScout intelligence. It can explain checkout modes, recommend content from verified app context, help with x402 activation wording, and answer earnings or publishing questions without guessing unavailable live stats.</p>
       </Section>
 
       <Section title="Environment variables">
         <Table
           headers={['Variable', 'Description']}
           rows={[
+            ['CHECKPOINT_FACTORY_ADDRESS', 'Server-side CheckpointVaultFactory address on Arc'],
+            ['VITE_CHECKPOINT_FACTORY_ADDRESS', 'Browser-accessible checkpoint factory address'],
             ['STREAM_FACTORY_ADDRESS', 'StreamVaultFactory contract on Arc'],
             ['VITE_STREAM_FACTORY_ADDRESS', 'Browser-accessible factory address'],
-            ['ARENA_ESCROW_FACTORY_ADDRESS', 'Server-side Arena escrow factory address'],
-            ['VITE_ARENA_ESCROW_FACTORY_ADDRESS', 'Browser-accessible Arena factory address'],
-            ['ARENA_RELAYER_PRIVATE_KEY', 'Server-only room escrow deployer and settlement wallet'],
-            ['DATABASE_URL', 'Postgres room state and Privy/Circle mapping storage'],
+            ['DATABASE_URL', 'Durable creator content, unlocks, social activity, and recovery state'],
+            ['ZEROSCOUT_API_URL', 'ZeroScout intelligence endpoint for Agent Hash guidance'],
+            ['ZEROSCOUT_INTEGRATION_SECRET', 'Server-side ZeroScout integration secret'],
           ]}
         />
       </Section>

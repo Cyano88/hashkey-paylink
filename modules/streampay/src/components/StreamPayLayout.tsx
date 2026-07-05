@@ -1,4 +1,5 @@
 import { Outlet } from 'react-router-dom'
+import { ExternalLink, Mail, X } from 'lucide-react'
 import { StreamPayHeader } from './StreamPayHeader'
 import { StreamAgentHash } from './StreamAgentHash'
 
@@ -11,8 +12,35 @@ export function StreamPayLayout() {
         <Outlet />
       </main>
 
-      <footer className="w-full max-w-[480px] mx-auto py-6 px-4 flex items-center justify-center">
-        <p className="text-[11px] font-medium tracking-widest uppercase text-gray-300 dark:text-gray-600 text-center">
+      <footer className="w-full max-w-[480px] mx-auto px-4 py-5">
+        <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 border-t border-gray-100 pt-4 dark:border-white/10">
+          <a
+            href="mailto:support@hashpaylink.com"
+            className="flex items-center gap-1.5 text-xs text-gray-400 transition-colors hover:text-gray-900 dark:hover:text-gray-200"
+          >
+            <Mail className="h-3.5 w-3.5 shrink-0" />
+            Support
+          </a>
+          <a
+            href="https://x.com/Hash_PayLink"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 text-xs text-gray-400 transition-colors hover:text-gray-900 dark:hover:text-gray-200"
+          >
+            <X className="h-3.5 w-3.5 shrink-0" />
+            DM us
+          </a>
+          <a
+            href="https://hashpaylink.com/docs/streampay"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 text-xs text-gray-400 transition-colors hover:text-gray-900 dark:hover:text-gray-200"
+          >
+            <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+            Docs
+          </a>
+        </div>
+        <p className="mt-3 text-center text-[10px] font-medium uppercase tracking-[0.18em] text-gray-300 dark:text-gray-600">
           <a
             href="https://testnet.arcscan.app"
             target="_blank"

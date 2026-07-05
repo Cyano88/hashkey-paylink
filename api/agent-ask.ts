@@ -28,6 +28,7 @@ import {
   type ZeroScoutSponsoredAction,
 } from './zeroscout-sponsored-action.js'
 import { readDurableJson, writeDurableJson } from './render-durable-store.js'
+import { buildHashpayStreamAgentContext } from '../modules/streampay/api/content.js'
 
 // ─── 0G Mainnet config ────────────────────────────────────────────────────────
 const OG_RPC       = (process.env.OG_RPC_URL ?? process.env.OG_EVM_RPC_URL ?? process.env.ZG_RPC_URL ?? 'https://evmrpc.0g.ai').trim()
@@ -138,6 +139,55 @@ function agentHashProPaymentLink(payer: string) {
     id: `agent-hash-pro-${crypto.createHash('sha256').update(payer.toLowerCase()).digest('hex').slice(0, 16)}`,
   })
   return `https://hashpaylink.com/pay?${params.toString()}`
+}
+
+function compactContentCard(card: Record<string, unknown>) {
+  const social = (card.social && typeof card.social === 'object' ? card.social : {}) as Record<string, unknown>
+  return {
+    id: card.contentId ?? card.id,
+    title: card.title,
+    category: card.category,
+    author: card.authorName,
+    priceUsdc: card.priceUsdc,
+    mode: card.mode,
+    type: card.type,
+    gateLink: card.gateLink,
+    views: social.views,
+    likes: social.likes,
+    comments: social.comments,
+    unlocks: social.unlocks,
+  }
+}
+
+function extractCreatorFromMemory(memorySummary: string) {
+  const match = /[?&]cr=(0x[a-fA-F0-9]{40})\b/i.exec(memorySummary)
+    || /\bcreator(?: wallet)?:?\s*(0x[a-fA-F0-9]{40})\b/i.exec(memorySummary)
+  return match?.[1] ?? ''
+}
+
+function compactHashpayStreamContext(context: unknown) {
+  const data = context && typeof context === 'object' ? context as Record<string, unknown> : {}
+  const discovery = data.discovery && typeof data.discovery === 'object' ? data.discovery as Record<string, unknown> : {}
+  const takeCards = (key: string, limit: number) => Array.isArray(discovery[key])
+    ? (discovery[key] as Array<Record<string, unknown>>).slice(0, limit).map(compactContentCard)
+    : []
+  return {
+    product: data.product,
+    updatedAt: data.updatedAt,
+    x402: data.x402,
+    unlockModes: data.unlockModes,
+    statsCapabilities: data.statsCapabilities,
+    categoryCounts: discovery.categoryCounts,
+    trending: takeCards('trending', 8),
+    topViewed: takeCards('topViewed', 5),
+    mostLiked: takeCards('mostLiked', 5),
+    mostDiscussed: takeCards('mostDiscussed', 5),
+    mostUnlocked: takeCards('mostUnlocked', 5),
+    bestEbooks: takeCards('bestEbooks', 12),
+    latestWorldCupNews: takeCards('latestWorldCupNews', 5),
+    liveScores: takeCards('liveScores', 8),
+    creatorEarnings: data.creatorEarnings,
+  }
 }
 
 async function consumeHelperPrompt(eventId: string, payer: string, tier: HelperUsageTier) {
@@ -582,6 +632,12 @@ export default async function handler(req: Request, res: Response) {
     const memorySummaryHash = memorySummary
       ? crypto.createHash('sha256').update(memorySummary).digest('hex')
       : undefined
+    const hashpayStreamContext = helperMode === 'streampay'
+      ? compactHashpayStreamContext(await buildHashpayStreamAgentContext({
+          creator: extractCreatorFromMemory(memorySummary),
+          wallet: /^0x[a-fA-F0-9]{40}$/.test(access.payment.payer) ? access.payment.payer : '',
+        }))
+      : undefined
     let zeroScoutGuidance: ZeroScoutHelperGuidance | undefined
     try {
       zeroScoutGuidance = await getZeroScoutHelperGuidance({
@@ -601,6 +657,7 @@ export default async function handler(req: Request, res: Response) {
           qualityMode: helperRouting.qualityMode,
           memorySummary,
           memorySummaryHash,
+          hashpayStreamContext,
         },
         sourceProof: {
           type: accessMode === HELPER_FREE_ACCESS_MODE ? 'helper-free-access' : 'helper_access_receipt',
@@ -609,11 +666,11 @@ export default async function handler(req: Request, res: Response) {
           rootHash: access.proof.rootHash,
           ogTxHash: access.proof.ogTxHash,
         },
-        strictGuidance: helperMode === 'daily',
+        strictGuidance: helperMode === 'daily' || helperMode === 'streampay',
       })
     } catch (err) {
-      if (helperMode === 'daily') {
-        console.warn('[agent-ask] ZeroScout Daily guidance failed:', safeZeroScoutGuidanceError(err))
+      if (helperMode === 'daily' || helperMode === 'streampay') {
+        console.warn(`[agent-ask] ZeroScout ${helperMode} guidance failed:`, safeZeroScoutGuidanceError(err))
         return res.status(503).json({
           error: userFacingZeroScoutGuidanceError(err),
           zeroscoutRequired: true,
@@ -624,9 +681,11 @@ export default async function handler(req: Request, res: Response) {
       console.warn('[agent-ask] ZeroScout helper guidance failed:', safeZeroScoutGuidanceError(err))
     }
 
-    if (helperMode === 'daily' && !answerFromZeroScoutGuidance(question, zeroScoutGuidance)) {
+    if ((helperMode === 'daily' || helperMode === 'streampay') && !answerFromZeroScoutGuidance(question, zeroScoutGuidance)) {
       return res.status(503).json({
-        error: 'ZeroScout Daily guidance is required before Daily mode responses are returned. Try again shortly.',
+        error: helperMode === 'streampay'
+          ? 'ZeroScout HashpayStream guidance is required before creator agent responses are returned. Try again shortly.'
+          : 'ZeroScout Daily guidance is required before Daily mode responses are returned. Try again shortly.',
         zeroscoutRequired: true,
         helperMode,
         helperIntent: helperRouting.helperIntent,
@@ -661,6 +720,9 @@ export default async function handler(req: Request, res: Response) {
         qualityMode: helperRouting.qualityMode,
         memorySummaryHash,
         guidanceRequestHash: zeroScoutGuidance?.requestHash,
+        hashpayStreamContextHash: hashpayStreamContext
+          ? crypto.createHash('sha256').update(JSON.stringify(hashpayStreamContext)).digest('hex')
+          : undefined,
       },
       sourceProof: {
         type: accessMode === HELPER_FREE_ACCESS_MODE ? 'helper-free-access' : 'helper_access_receipt',
@@ -675,7 +737,7 @@ export default async function handler(req: Request, res: Response) {
       },
     })
     if (!zeroscoutSponsorship) {
-      const strictSponsorshipRequired = helperRouting.qualityMode === 'deep' || accessMode !== HELPER_FREE_ACCESS_MODE
+      const strictSponsorshipRequired = helperRouting.qualityMode === 'deep' || accessMode !== HELPER_FREE_ACCESS_MODE || helperMode === 'streampay'
       if (strictSponsorshipRequired) {
         return res.status(503).json({
           error: 'ZeroScout sponsorship is required before helper responses are returned. Try again shortly.',

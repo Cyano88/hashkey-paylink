@@ -790,8 +790,8 @@ export function StreamGate() {
   const gatewayReceiptReady = Boolean(gatewayReceiptId && (gatewayOgReady || gatewayArchiveTimedOut))
   const gatewayArchiveLabel = gatewayArchiveTimedOut
     ? 'Archive delayed'
-    : gatewayReceiptPollAttempts >= 9
-      ? 'Still archiving...'
+    : gatewayReceiptPollAttempts >= 6
+      ? 'Archive pending'
       : 'Archiving...'
 
   const legacyFullyAuthorised = isConnected && isOnArc && passkey.registered && isApproved
@@ -871,8 +871,8 @@ export function StreamGate() {
       } catch {
         // Receipt polling should not affect already-unlocked creator content.
       }
-      if (!cancelled && attempts < 40) timer = window.setTimeout(loadReceipt, 5_000)
-      if (!cancelled && attempts >= 40) setGatewayArchiveTimedOut(true)
+      if (!cancelled && attempts < 12) timer = window.setTimeout(loadReceipt, 5_000)
+      if (!cancelled && attempts >= 12) setGatewayArchiveTimedOut(true)
     }
 
     void loadReceipt()
@@ -2622,7 +2622,7 @@ export function StreamGate() {
                     {gatewayOgProof && <span className="font-mono text-[10px] text-purple-500">{gatewayOgProof.slice(0, 6)}...{gatewayOgProof.slice(-4)}</span>}
                   </a>
                 ) : (
-                  <div className="flex items-center justify-center gap-1.5 rounded-xl border border-gray-100 bg-white px-3 py-2.5 text-[12px] font-semibold text-gray-400">
+                  <div className="flex items-center justify-center gap-1.5 rounded-xl border border-gray-100 bg-white px-3 py-2.5 text-[12px] font-semibold text-gray-400 dark:border-white/10 dark:bg-[#111216]">
                     {gatewayArchiveTimedOut ? (
                       <span className="h-3.5 w-3.5 rounded-full border border-gray-300" />
                     ) : (
@@ -3273,7 +3273,7 @@ function OverlayShell({
       </div>
       {children}
       <div className="flex items-center gap-1.5 text-[10px] text-gray-400 dark:text-gray-500">
-        {paymentMode === 'x402' ? 'Powered by Circle Gateway on Arc' : paymentMode === 'poa' ? 'Powered by Arc Network' : 'Powered by HashpayStream Creator Checkout'}
+        Powered by HashpayStream Creator Checkout
       </div>
     </div>
   )

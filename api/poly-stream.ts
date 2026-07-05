@@ -1357,19 +1357,13 @@ async function fetchProviderMatches(selectedDate: string): Promise<ScoreMatch[]>
   return enrichMatchesWithPolymarket(detailedMatches)
 }
 
-export default async function polyStreamHandler(req: Request, res: Response) {
-  if (req.method !== 'GET') {
-    res.setHeader('Allow', 'GET')
-    return res.status(405).json({ ok: false, error: 'Method not allowed' })
-  }
-
+export async function getPolyStreamFeed(selectedDate: string): Promise<ScoreFeed & { providerError?: string }> {
   const ttl = 0
-  if (ttl > 0 && cache && cache.expiresAt > Date.now()) return res.json(req.query.debug === '1' ? { ...cache.feed, providerError: lastProviderError } : cache.feed)
+  if (ttl > 0 && cache && cache.expiresAt > Date.now()) return { ...cache.feed, providerError: lastProviderError }
 
   const provider = providerName()
   const fanVibeConfigured = Boolean(fanVibeFeedUrl())
   const providerConfigured = fanVibeConfigured || Boolean(envValue('POLY_STREAM_API_KEY', 'SPORTS_API_KEY'))
-  const selectedDate = requestDate(req)
 
   try {
     lastProviderSource = ''
@@ -1387,7 +1381,7 @@ export default async function polyStreamHandler(req: Request, res: Response) {
       matches,
     }
     cache = ttl > 0 ? { expiresAt: Date.now() + ttl, feed } : null
-    return res.json(req.query.debug === '1' ? { ...feed, providerError: lastProviderError } : feed)
+    return { ...feed, providerError: lastProviderError }
   } catch (err) {
     lastProviderError = err instanceof Error ? err.message : 'Score provider failed.'
     const feed: ScoreFeed = {
@@ -1401,6 +1395,16 @@ export default async function polyStreamHandler(req: Request, res: Response) {
       matches: [],
     }
     cache = ttl > 0 ? { expiresAt: Date.now() + Math.min(ttl, 15_000), feed } : null
-    return res.json(req.query.debug === '1' ? { ...feed, providerError: lastProviderError } : feed)
+    return { ...feed, providerError: lastProviderError }
   }
+}
+
+export default async function polyStreamHandler(req: Request, res: Response) {
+  if (req.method !== 'GET') {
+    res.setHeader('Allow', 'GET')
+    return res.status(405).json({ ok: false, error: 'Method not allowed' })
+  }
+
+  const feed = await getPolyStreamFeed(requestDate(req))
+  return res.json(req.query.debug === '1' ? feed : { ...feed, providerError: undefined })
 }

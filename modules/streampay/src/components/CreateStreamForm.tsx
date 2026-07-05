@@ -5,7 +5,7 @@ import {
   useReadContract, useWriteContract, usePublicClient,
 } from 'wagmi'
 import { encodeFunctionData, isAddress, parseAbi, parseEventLogs, stringToHex } from 'viem'
-import { ChevronDown, Mail, RefreshCw, Wallet, X as XIcon } from 'lucide-react'
+import { ChevronDown, ExternalLink, Mail, RefreshCw, Wallet, X as XIcon } from 'lucide-react'
 import { STREAM_VAULT_ABI, STREAM_VAULT_FACTORY_ABI } from '../lib/streamVaultAbi'
 import { formatUsdcFull } from './TriStateBar'
 import {
@@ -1885,16 +1885,25 @@ export function CreateStreamForm() {
                 className="flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
               >
                 <Mail className="h-3.5 w-3.5" />
-                support@hashpaylink.com
+                Support
               </a>
               <a
-                href="https://x.com/hashpaystream"
+                href="https://x.com/Hash_PayLink"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
               >
                 <XIcon className="h-3.5 w-3.5" />
-                @hashpaystream
+                DM us
+              </a>
+              <a
+                href="https://hashpaylink.com/docs/streampay"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                Docs
               </a>
             </div>
           </div>

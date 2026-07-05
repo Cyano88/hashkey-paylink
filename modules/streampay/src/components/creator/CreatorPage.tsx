@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { usePrivy } from '@privy-io/react-auth'
-import { Loader2, LockKeyhole, Mail, Plus, TrendingUp, X as XIcon } from 'lucide-react'
+import { ExternalLink, Loader2, LockKeyhole, Mail, Plus, TrendingUp, X as XIcon } from 'lucide-react'
 import { LinkFactory }            from './LinkFactory'
 import { readGhostVault }         from '../../hooks/usePoAStream'
 import type { GhostVaultEntry }   from '../../hooks/usePoAStream'
@@ -273,6 +273,11 @@ const OFFICIAL_EBOOKS: PublishedContent[] = [
   ['ebook-alice-wonderland', 'Alice in Wonderland', 'A funny, strange, endlessly imaginative trip through nonsense and wonder.', 'Funny', '9780486275437'],
   ['ebook-frederick-douglass', 'Narrative of the Life of Frederick Douglass', 'A true-life account of survival, literacy, freedom, and moral courage.', 'True Life', '9780486284996'],
   ['ebook-time-machine', 'The Time Machine', 'A compact sci-fi adventure through futurism, fear, and social collapse.', 'Sci-Fi', '9780486284729'],
+  ['ebook-great-gatsby', 'The Great Gatsby', 'A glittering, tragic story about money, longing, parties, and the cost of illusion.', 'Modern Classic', '9780743273565'],
+  ['ebook-yellow-wallpaper', 'The Yellow Wallpaper', 'A short psychological horror story about confinement, control, and a mind under pressure.', 'Psychological', '9780486298573'],
+  ['ebook-secret-garden', 'The Secret Garden', 'A warm story of grief, friendship, healing, and a hidden place coming back to life.', 'Feel Good', '9780141321066'],
+  ['ebook-war-worlds', 'The War of the Worlds', 'A tense invasion story with panic, survival, and early science-fiction spectacle.', 'Sci-Fi', '9780486295060'],
+  ['ebook-moby-dick', 'Moby-Dick', 'A vast sea obsession about revenge, fate, danger, and the hunt for the white whale.', 'Adventure', '9781503280786'],
 ].map(([id, title, description, tag, isbn]) => ({
   id,
   contentId: id,
@@ -1298,16 +1303,25 @@ function DiscoverContent({
           className="flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-gray-900 transition-colors dark:text-gray-500 dark:hover:text-gray-200"
         >
           <Mail className="h-3.5 w-3.5" />
-          support@hashpaylink.com
+          Support
         </a>
         <a
-          href="https://x.com/hashpaystream"
+          href="https://x.com/Hash_PayLink"
           target="_blank"
           rel="noopener noreferrer"
           className="flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-gray-900 transition-colors dark:text-gray-500 dark:hover:text-gray-200"
         >
           <XIcon className="h-3.5 w-3.5" />
-          @hashpaystream
+          DM us
+        </a>
+        <a
+          href="https://hashpaylink.com/docs/streampay"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-gray-900 transition-colors dark:text-gray-500 dark:hover:text-gray-200"
+        >
+          <ExternalLink className="h-3.5 w-3.5" />
+          Docs
         </a>
       </div>
     </div>
@@ -2147,16 +2161,25 @@ function SettlementDashboard({
           className="flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-gray-900 transition-colors dark:text-gray-500 dark:hover:text-gray-200"
         >
           <Mail className="h-3.5 w-3.5" />
-          support@hashpaylink.com
+          Support
         </a>
         <a
-          href="https://x.com/hashpaystream"
+          href="https://x.com/Hash_PayLink"
           target="_blank"
           rel="noopener noreferrer"
           className="flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-gray-900 transition-colors dark:text-gray-500 dark:hover:text-gray-200"
         >
           <XIcon className="h-3.5 w-3.5" />
-          @hashpaystream
+          DM us
+        </a>
+        <a
+          href="https://hashpaylink.com/docs/streampay"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-gray-900 transition-colors dark:text-gray-500 dark:hover:text-gray-200"
+        >
+          <ExternalLink className="h-3.5 w-3.5" />
+          Docs
         </a>
       </div>
     </div>

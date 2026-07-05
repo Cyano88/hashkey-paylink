@@ -27,6 +27,7 @@ type ZeroScoutHelperGuidanceInput = {
     qualityMode?: 'fast' | 'standard' | 'deep'
     memorySummary?: string
     memorySummaryHash?: string
+    hashpayStreamContext?: unknown
   }
   sourceProof?: Record<string, unknown>
   strictGuidance?: boolean
@@ -208,7 +209,11 @@ function helperModeInstructions(input: ZeroScoutHelperGuidanceInput) {
     return [
       'HashpayStream mode is only for creator monetization and reader access on HashpayStream.',
       'Focus on paid posts, creator publishing, pay-as-you-read checkpoints, fixed x402 unlocks, comments/reactions, receipts, and creator earnings.',
+      'When hashpayStreamContext is supplied, use it as the verified source for trending content, highest views, likes, comments, unlock URLs, ebooks, World Cup news, live scores, x402 activation help, and creator earnings.',
+      'If the user asks for a content recommendation, include 2-5 matching content titles and mention that they can unlock from the shown card or HashpayStream gate link.',
+      'If top scorers or other sports stats are not marked available in hashpayStreamContext.statsCapabilities, say that exact stat is not currently verified instead of guessing.',
       'Do not suggest Payroll, Arena, PolyDesk, Polymarket, LP Scout, or external market tooling.',
+      'If the user asks something unrelated to HashpayStream creator or reader workflows, be honest that this Agent Hash mode is scoped to HashpayStream. Answer only the part that touches HashpayStream, Hash PayLink affiliation, ZeroScout intelligence, creator content, reader access, wallet funding, receipts, or earnings.',
       'When asked what to build next, prefer simple creator-facing actions that fit the current HashpayStream UI.',
       'For unlocked content, help summarize, explain, or suggest follow-up questions without pretending to access private content unless content context is supplied.',
     ]
@@ -252,6 +257,7 @@ export async function getZeroScoutHelperGuidance(input: ZeroScoutHelperGuidanceI
     qualityMode: input.request.qualityMode,
     memorySummary: sanitizedMemorySummary || undefined,
     memorySummaryHash: input.request.memorySummaryHash,
+    hashpayStreamContext: input.request.hashpayStreamContext,
   }
   const hash = requestHash({
     service: input.service,

@@ -35,6 +35,7 @@ import {
   listApprovedCreatorContent,
   listCreatorAdminContent,
   listCreatorEarnings,
+  getHashpayStreamAgentContext,
   getCreatorBook,
   getCreatorSocial,
   recordCreatorContentView,
@@ -167,6 +168,7 @@ app.post('/api/settle-poa',            relayLimiter, settlePoaHandler)
 app.post('/api/store-content',         strictLimiter, storeContent)
 app.get('/api/list-creator-content',   readLimiter, listCreatorContent)
 app.get('/api/creator-earnings',       readLimiter, listCreatorEarnings)
+app.get('/api/hashpaystream-agent-context', readLimiter, getHashpayStreamAgentContext)
 app.get('/api/creator-discover-content', readLimiter, listApprovedCreatorContent)
 app.get('/api/admin/creator-content',  strictLimiter, listCreatorAdminContent)
 app.post('/api/admin/creator-content', strictLimiter, reviewCreatorContent)

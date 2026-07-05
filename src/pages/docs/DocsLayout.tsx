@@ -55,9 +55,9 @@ const NAV = [
     group: 'HashpayStream',
     items: [
       { label: 'Overview',        path: '/docs/streampay' },
-      { label: 'Payroll',         path: '/docs/streampay/payroll' },
-      { label: 'Agentic Streams', path: '/docs/streampay/agentic' },
-      { label: 'Arena',           path: '/docs/streampay/arena' },
+      { label: 'Creator Checkout', path: '/docs/streampay/creator' },
+      { label: 'Pay-as-you-read', path: '/docs/streampay/checkpoints' },
+      { label: 'Agent Hash',      path: '/docs/streampay/agent' },
     ],
   },
   {

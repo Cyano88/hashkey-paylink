@@ -9,7 +9,7 @@ type AgentHashMessage = {
 
 const STREAM_AGENT_WELCOME: AgentHashMessage = {
   from: 'bot',
-  text: 'Agent Hash is ready for HashpayStream. I can help publish paid content, price a drop, explain pay-as-you-read, summarize unlocked content, or read creator earnings.',
+  text: 'Agent Hash is ready for HashpayStream, a Hash PayLink creator product powered by ZeroScout intelligence. I can help publish paid content, price a drop, explain pay-as-you-read, summarize unlocked content, or read creator earnings.',
 }
 
 const THINKING_COPY = ['Reading Stream context...', 'Checking creator flow...', 'Preparing guidance...', 'Keeping it creator-only...']
@@ -58,6 +58,26 @@ function StreamAgentThinking() {
       <p className="ml-3 mt-1 text-[11px] italic text-gray-400">{THINKING_COPY[step]}</p>
     </div>
   )
+}
+
+function linksFromAgentText(text: string) {
+  const matches = text.match(/https?:\/\/[^\s)]+/g) ?? []
+  return Array.from(new Set(matches)).slice(0, 4).map(href => {
+    try {
+      const url = new URL(href)
+      const path = `${url.pathname}${url.search}`.replace(/\/$/, '')
+      return {
+        href,
+        label: `${url.hostname}${path}`.replace(/^www\./, ''),
+      }
+    } catch {
+      return { href, label: href }
+    }
+  })
+}
+
+function textWithoutAgentLinks(text: string) {
+  return text.replace(/https?:\/\/[^\s)]+/g, '').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim()
 }
 
 function streamPageContext() {
@@ -188,7 +208,7 @@ export function StreamAgentHash() {
               <StreamAgentHashIcon header staticPose={!open} />
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">Agent Hash</p>
-                <p className="mt-0.5 truncate text-[11px] font-medium text-gray-400">HashpayStream mode - Powered by ZeroScout</p>
+                <p className="mt-0.5 truncate text-[11px] font-medium text-gray-400">HashpayStream by Hash PayLink - Powered by ZeroScout</p>
               </div>
             </div>
             <button
@@ -209,10 +229,23 @@ export function StreamAgentHash() {
             </div>
 
             {messages.map((message, index) => (
-              <div key={index} className={`space-y-1.5 ${message.from === 'user' ? 'flex justify-end' : ''}`}>
+              <div key={index} className={`space-y-1.5 ${message.from === 'user' ? 'flex flex-col items-end' : ''}`}>
                 <div className={`max-w-[82%] break-words whitespace-pre-line rounded-[18px] px-3.5 py-2.5 text-sm leading-relaxed shadow-sm ${message.from === 'user' ? 'rounded-br-md bg-black text-white dark:bg-white dark:text-gray-950' : 'rounded-bl-md bg-[#f0f0f0] text-gray-900 dark:bg-white/[0.08] dark:text-gray-100'}`}>
-                  {message.text}
+                  {textWithoutAgentLinks(message.text) || message.text}
                 </div>
+                {linksFromAgentText(message.text).map(link => (
+                  <a
+                    key={link.href}
+                    href={link.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={link.href}
+                    className="ml-1 inline-flex max-w-[82%] items-center gap-1.5 rounded-full border border-gray-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-gray-500 shadow-sm transition hover:border-gray-300 hover:text-gray-900 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-400 dark:hover:text-gray-100"
+                  >
+                    <ExternalLink className="h-3 w-3 shrink-0" />
+                    <span className="min-w-0 truncate">{link.label}</span>
+                  </a>
+                ))}
                 {message.link && (
                   <a href={message.link.href} target="_blank" rel="noopener noreferrer" className="ml-1 inline-flex items-center gap-1.5 text-[11px] font-semibold text-gray-500 transition hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100">
                     <ExternalLink className="h-3 w-3 shrink-0" />
