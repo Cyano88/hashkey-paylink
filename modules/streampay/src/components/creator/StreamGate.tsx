@@ -396,7 +396,11 @@ function loadYoutubeIframeApi() {
   youtubeApiLoad = new Promise<void>((resolve, reject) => {
     const existing = document.querySelector<HTMLScriptElement>('script[src="https://www.youtube.com/iframe_api"]')
     const previousReady = (window as any).onYouTubeIframeAPIReady
-    const timeout = window.setTimeout(() => reject(new Error('YouTube player took too long to load.')), 12000)
+    const fail = (error: Error) => {
+      youtubeApiLoad = null
+      reject(error)
+    }
+    const timeout = window.setTimeout(() => fail(new Error('YouTube player took too long to load.')), 12000)
     ;(window as any).onYouTubeIframeAPIReady = () => {
       window.clearTimeout(timeout)
       if (typeof previousReady === 'function') previousReady()
@@ -408,7 +412,7 @@ function loadYoutubeIframeApi() {
       script.async = true
       script.onerror = () => {
         window.clearTimeout(timeout)
-        reject(new Error('YouTube player could not load.'))
+        fail(new Error('YouTube player could not load.'))
       }
       document.head.appendChild(script)
     }
@@ -1163,7 +1167,7 @@ export function StreamGate() {
       window.history.replaceState(null, '', `${window.location.pathname}?${nextParams.toString()}${window.location.hash}`)
       await fetchCheckpointContent(predicted)
       await saveCheckpointVaultForWallet(session.wallet.address, predicted)
-      setCircleNotice('Pay-as-you-read active.')
+      setCircleNotice(isVideoContent ? 'Pay-as-you-watch active.' : 'Pay-as-you-read active.')
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Could not start checkpoint escrow.'
       setCheckpointError(message.slice(0, 180))
@@ -2928,6 +2932,7 @@ function InlineCheckpointMeter({
   refunding,
   refunded,
   error,
+  mode = 'read',
   onRefund,
 }: {
   released: Record<number, string>
@@ -2936,21 +2941,37 @@ function InlineCheckpointMeter({
   refunding: boolean
   refunded: boolean
   error: string | null
+  mode?: 'read' | 'watch'
   onRefund: () => void
 }) {
   const marks = [25, 50, 75, 100]
   const latest = marks.filter(mark => released[mark]).pop() ?? 0
   const releasedAmount = sessionCap * (latest / 100)
   const refundableAmount = Math.max(0, sessionCap - releasedAmount)
+  const copy = mode === 'watch'
+    ? {
+        title: 'Pay-as-you-watch active',
+        body: 'USDC releases at playback checkpoints.',
+        refunding: 'Refunding unwatched balance...',
+        refund: 'End watching and refund unwatched balance',
+        ended: 'Watch session ended',
+      }
+    : {
+        title: 'Pay-as-you-read active',
+        body: 'USDC releases at scroll checkpoints.',
+        refunding: 'Refunding unread balance...',
+        refund: 'End reading and refund unread balance',
+        ended: 'Reading session ended',
+      }
   return (
     <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-2.5 dark:border-blue-400/20 dark:bg-blue-500/10">
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="text-[10px] font-black uppercase tracking-[0.14em] text-blue-700 dark:text-blue-300">
-            Pay-as-you-read active
+            {copy.title}
           </p>
           <p className="mt-0.5 text-[10px] font-semibold text-blue-700/70 dark:text-blue-200/70">
-            USDC releases at scroll checkpoints.
+            {copy.body}
           </p>
         </div>
         {checkpointVault && (
@@ -2979,11 +3000,11 @@ function InlineCheckpointMeter({
           disabled={refunding}
           className="mt-2 flex min-h-[36px] w-full items-center justify-center rounded-xl bg-white px-3 text-[11px] font-black text-blue-700 ring-1 ring-blue-100 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white/10 dark:text-blue-200 dark:ring-white/10 dark:hover:bg-white/15"
         >
-          {refunding ? 'Refunding unread balance...' : 'End reading and refund unread balance'}
+          {refunding ? copy.refunding : copy.refund}
         </button>
       )}
       {refunded && (
-        <p className="mt-2 text-[10px] font-black uppercase tracking-[0.12em] text-blue-700 dark:text-blue-200">Reading session ended</p>
+        <p className="mt-2 text-[10px] font-black uppercase tracking-[0.12em] text-blue-700 dark:text-blue-200">{copy.ended}</p>
       )}
       {error && (
         <p className="mt-2 text-[10px] font-semibold leading-4 text-red-500 dark:text-red-300">{error}</p>
@@ -3288,6 +3309,7 @@ function VideoUnlocked({
           refunding={checkpointRefunding}
           refunded={checkpointRefunded}
           error={checkpointError}
+          mode="watch"
           onRefund={onCheckpointRefund}
         />
       )}
@@ -3326,12 +3348,6 @@ function VideoUnlocked({
             onError={() => setVideoError('This video could not load. Ask the creator for an embeddable YouTube link or direct MP4/WebM/OGG URL.')}
           />
         )}
-      </div>
-      <div className="rounded-2xl border border-blue-100 bg-blue-50/70 px-3 py-3 dark:border-blue-400/20 dark:bg-blue-500/10">
-        <p className="text-[12px] font-bold text-blue-700 dark:text-blue-200">Pay-as-you-watch active</p>
-        <p className="mt-1 text-[11px] leading-5 text-blue-600/80 dark:text-blue-200/70">
-          Creator earnings release only at playback checkpoints. Unwatched balance stays refundable.
-        </p>
       </div>
       {videoError && (
         <p className="rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-[12px] font-medium text-red-500 dark:border-red-400/20 dark:bg-red-500/10 dark:text-red-200">
