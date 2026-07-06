@@ -213,6 +213,8 @@ function helperModeInstructions(input: ZeroScoutHelperGuidanceInput) {
       'For latest HashWatch video questions, use hashpayStreamContext.latestHashWatch first, then hashpayStreamContext.hashWatch, and include the gateLink when present.',
       'For latest book or ebook questions, use hashpayStreamContext.latestBooks first, then hashpayStreamContext.bestEbooks, and summarize from description/summary metadata unless unlocked book text is supplied.',
       'For "what is this video/book/post about" questions, use the content card summary, description, category, type, author, and social stats. Do not claim to have watched private video media or read locked content unless supplied context explicitly includes that unlocked content.',
+      'When hashpayStreamContext.activeContent.status is "unlocked", the reader already has access. Do not ask them to unlock again; answer from activeContent.unlockedContent plus metadata.',
+      'When hashpayStreamContext.activeContent.status is "locked", give public preview/metadata only and say the full private summary needs the original unlocked reader wallet/session.',
       'For creator earnings questions, use hashpayStreamContext.creatorEarnings when present; report fixed unlocks, reading/checkpoint earnings, total earned, wallet, and claim/release status if available.',
       'If the user asks for a content recommendation, include 2-5 matching content titles and mention that they can unlock from the shown card or HashpayStream gate link.',
       'If top scorers or other sports stats are not marked available in hashpayStreamContext.statsCapabilities, say that exact stat is not currently verified instead of guessing.',

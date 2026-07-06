@@ -1842,6 +1842,64 @@ type AgentContentCard = ReturnType<typeof entryToPost> & {
   }
 }
 
+function safeContentPreview(entry: ContentEntry, maxLength = 900) {
+  if (entry.type === 'url') return 'Private external link. Full destination is hidden unless access is verified.'
+  if (entry.type === 'video') return 'Private HashWatch video media. Agent Hash can explain verified metadata unless unlocked context is supplied.'
+  if (entry.type === 'book') return entry.description || 'Book text is available to verified readers in the HashpayStream reader.'
+  return cleanMetaText(entry.content || entry.description || '', maxLength)
+}
+
+function unlockedContentContext(entry: ContentEntry) {
+  const content = String(entry.content ?? '')
+  if (entry.type === 'url') {
+    return {
+      kind: 'private-link',
+      summary: entry.description || 'Unlocked private creator link.',
+      privateUrl: content.slice(0, 1_000),
+    }
+  }
+  if (entry.type === 'video') {
+    return {
+      kind: 'hashwatch-video',
+      summary: entry.description || 'Unlocked HashWatch video.',
+      videoUrl: content.slice(0, 1_000),
+      note: 'Use supplied metadata and URL context. Do not claim frame-level video analysis unless ZeroScout can inspect the media URL.',
+    }
+  }
+  if (entry.type === 'book') {
+    return {
+      kind: 'ebook',
+      summary: entry.description || 'Unlocked ebook.',
+      source: content.slice(0, 120),
+      note: 'Use book metadata here. Full public-domain text can be retrieved by the reader endpoint when available.',
+    }
+  }
+  return {
+    kind: 'paid-post',
+    summary: entry.description || entry.title,
+    text: cleanMetaText(content, 2_400),
+  }
+}
+
+async function buildAccessAwareContentContext(contentId: string, walletAddress: string) {
+  const safeContentId = String(contentId ?? '').trim()
+  if (!safeContentId || safeContentId.length > MAX_CONTENT_ID_LENGTH) return null
+  const entry = await readContentEntry(safeContentId)
+  if (!entry) return { contentId: safeContentId, status: 'not-found' as const }
+  const unlocked = await hasWalletUnlockedContent(safeContentId, walletAddress)
+  return {
+    status: unlocked ? 'unlocked' as const : 'locked' as const,
+    contentId: safeContentId,
+    metadata: entryToPost(safeContentId, entry),
+    priceUsdc: priceUsdc(entry),
+    preview: safeContentPreview(entry),
+    unlockedContent: unlocked ? unlockedContentContext(entry) : null,
+    accessRule: unlocked
+      ? 'This wallet has already unlocked this content. Do not ask for another unlock; answer from unlockedContent and metadata.'
+      : 'This wallet is not verified as unlocked for this content. Give public metadata/preview only and say full private summary requires unlocking or reconnecting the original reader wallet.',
+  }
+}
+
 function contentInsights(entry: ContentEntry) {
   const title = entry.title || (entry.type === 'video' ? 'HashWatch video' : entry.type === 'book' ? 'Ebook' : 'Creator post')
   const description = cleanMetaText(entry.description || '', 280)
@@ -1973,9 +2031,10 @@ async function approvedContentEntries() {
     .slice(0, 60)
 }
 
-export async function buildHashpayStreamAgentContext(params: { creator?: unknown; wallet?: unknown; date?: unknown } = {}) {
+export async function buildHashpayStreamAgentContext(params: { creator?: unknown; wallet?: unknown; date?: unknown; contentId?: unknown } = {}) {
   const creator = String(params.creator ?? '').trim()
   const wallet = cleanWalletAddress(params.wallet)
+  const activeContentId = String(params.contentId ?? '').trim()
   const selectedDate = String(params.date ?? new Date().toISOString().slice(0, 10)).trim().slice(0, 10)
   const [newsFeed, scoreFeed, approvedEntries] = await Promise.all([
     getPolyWorldcupNewsFeed().catch(() => null),
@@ -2122,11 +2181,14 @@ export async function buildHashpayStreamAgentContext(params: { creator?: unknown
         'For latest video questions, use discovery.latestHashWatch first, then discovery.hashWatch.',
         'For latest book questions, use discovery.latestBooks first, then discovery.bestEbooks.',
         'For "what is this about" questions, use the card insights summary and description; do not pretend to have watched a private video or read locked text unless the user supplies unlocked content.',
+        'If activeContent.status is unlocked, never ask the reader to unlock the same content again. Use activeContent.unlockedContent and metadata.',
+        'If activeContent.status is locked, give public metadata and explain that full private analysis requires the original unlocked wallet/session.',
         'For creator earnings, use creatorEarnings only when a creator wallet is supplied; otherwise ask for the creator wallet or tell the user to open Creator Hub earnings.',
         'For price suggestions, compare content type, description depth, and current HashpayStream prices; suggest a practical USDC range.',
         'For 0G archive questions, say archived only when proof metadata exists; otherwise say archiving can continue in the background.',
       ],
     },
+    activeContent: activeContentId ? await buildAccessAwareContentContext(activeContentId, wallet) : null,
     creatorEarnings,
   }
 }

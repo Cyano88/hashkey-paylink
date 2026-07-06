@@ -171,6 +171,20 @@ function extractCreatorFromMemory(memorySummary: string) {
   return match?.[1] ?? ''
 }
 
+function extractActiveContentIdFromMemory(memorySummary: string) {
+  const match = /Active content ID:\s*([a-zA-Z0-9_-]{1,128})/i.exec(memorySummary)
+    || /[?&]id=([a-zA-Z0-9_-]{1,128})\b/i.exec(memorySummary)
+    || /"contentId"\s*:\s*"([^"]{1,128})"/i.exec(memorySummary)
+  return match?.[1] ?? ''
+}
+
+function extractReaderWalletFromMemory(memorySummary: string) {
+  const match = /"walletAddress"\s*:\s*"(0x[a-fA-F0-9]{40})"/i.exec(memorySummary)
+    || /reader wallet:?\s*(0x[a-fA-F0-9]{40})/i.exec(memorySummary)
+    || /walletAddress[=:]\s*(0x[a-fA-F0-9]{40})/i.exec(memorySummary)
+  return match?.[1] ?? ''
+}
+
 function compactHashpayStreamContext(context: unknown) {
   const data = context && typeof context === 'object' ? context as Record<string, unknown> : {}
   const discovery = data.discovery && typeof data.discovery === 'object' ? data.discovery as Record<string, unknown> : {}
@@ -196,6 +210,7 @@ function compactHashpayStreamContext(context: unknown) {
     latestBooks: takeCards('latestBooks', 6),
     latestByType: data.latestByType,
     assistantPlaybook: data.assistantPlaybook,
+    activeContent: data.activeContent,
     latestWorldCupNews: takeCards('latestWorldCupNews', 5),
     liveScores: takeCards('liveScores', 8),
     creatorEarnings: data.creatorEarnings,
@@ -647,7 +662,8 @@ export default async function handler(req: Request, res: Response) {
     const hashpayStreamContext = helperMode === 'streampay'
       ? compactHashpayStreamContext(await buildHashpayStreamAgentContext({
           creator: extractCreatorFromMemory(memorySummary),
-          wallet: /^0x[a-fA-F0-9]{40}$/.test(access.payment.payer) ? access.payment.payer : '',
+          wallet: extractReaderWalletFromMemory(memorySummary) || (/^0x[a-fA-F0-9]{40}$/.test(access.payment.payer) ? access.payment.payer : ''),
+          contentId: extractActiveContentIdFromMemory(memorySummary),
         }))
       : undefined
     let zeroScoutGuidance: ZeroScoutHelperGuidance | undefined

@@ -89,6 +89,25 @@ function streamPageContext() {
   return 'HashpayStream creator app.'
 }
 
+function streamAgentAccessContext() {
+  if (typeof window === 'undefined') return ''
+  const params = new URLSearchParams(window.location.search)
+  const contentId = params.get('id') || ''
+  const creator = params.get('cr') || ''
+  let saved = ''
+  try {
+    const raw = window.localStorage.getItem('hashpaystream:agent-access')
+    if (raw) saved = JSON.stringify(JSON.parse(raw)).slice(0, 900)
+  } catch {
+    // Access hints are best-effort and verified again on the server.
+  }
+  return [
+    contentId ? `Active content ID: ${contentId}` : '',
+    creator ? `Active creator wallet: ${creator}` : '',
+    saved ? `Verified access hints from this browser: ${saved}` : '',
+  ].filter(Boolean).join(' | ')
+}
+
 function isClearChatCommand(value: string) {
   return /^(clear|reset|delete)\s+(chat|conversation|history)$/i.test(value.trim())
     || /^(clear|reset)\s*$/i.test(value.trim())
@@ -196,7 +215,7 @@ export function StreamAgentHash() {
           question,
           accessMode: 'helper-free',
           helperMode: 'streampay',
-          memorySummary: `${streamPageContext()} Agent Hash mode: HashpayStream Creator. Recent context: ${recent || 'new session'}. Current message: ${question}`.slice(0, 1600),
+          memorySummary: `${streamPageContext()} ${streamAgentAccessContext()} Agent Hash mode: HashpayStream Creator. Recent context: ${recent || 'new session'}. Current message: ${question}`.slice(0, 2200),
         }),
       })
       const contentType = res.headers.get('content-type') || ''

@@ -532,6 +532,22 @@ function readableUnlockError(message: string) {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
+function saveAgentAccessHint(contentId: string, walletAddress: string, mode: 'x402' | 'checkpoint') {
+  const content = contentId.trim()
+  const wallet = walletAddress.trim()
+  if (!content || !wallet) return
+  try {
+    window.localStorage.setItem('hashpaystream:agent-access', JSON.stringify({
+      contentId: content,
+      walletAddress: wallet,
+      mode,
+      unlockedAt: Date.now(),
+    }))
+  } catch {
+    // Best-effort hint only. Agent Hash verifies access on the server.
+  }
+}
+
 export function StreamGate() {
   const [params] = useSearchParams()
 
@@ -1011,6 +1027,7 @@ export function StreamGate() {
       setGatewayReceiptId(data.receiptActivityId ?? null)
       setGatewayRestored(Boolean(data.restored))
       setReaderWalletAddress(data.walletAddress || selectedAgent?.walletAddress || '')
+      saveAgentAccessHint(contentId, data.walletAddress || selectedAgent?.walletAddress || '', 'x402')
       setContentState('ready')
       setCircleNotice(
         data.restored
@@ -1083,6 +1100,7 @@ export function StreamGate() {
     if (!res.ok || !data.ok || !data.type || !data.content) throw new Error(data.error || 'Could not verify checkpoint escrow.')
     if (data.sender && /^0x[a-fA-F0-9]{40}$/.test(data.sender)) {
       setReaderWalletAddress(data.sender)
+      saveAgentAccessHint(contentId, data.sender, 'checkpoint')
       void saveCheckpointVaultForWallet(data.sender, vaultAddress)
     }
     const restoredMarks = checkpointMarksFromAmounts(data.releasedAmount, data.totalAmount)
@@ -1102,6 +1120,7 @@ export function StreamGate() {
     setGatewayTx(data.vaultAddress)
     setGatewayReceiptId(checkpointReceiptId(data.vaultAddress))
     setReaderWalletAddress(wallet)
+    saveAgentAccessHint(contentId, wallet, 'checkpoint')
     const restoredMarks = checkpointMarksFromAmounts(data.releasedAmount, data.totalAmount)
     setCheckpointReleased(restoredMarks)
     checkpointReleaseRef.current = new Set(Object.keys(restoredMarks).map(Number))
