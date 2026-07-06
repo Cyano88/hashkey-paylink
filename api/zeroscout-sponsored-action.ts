@@ -373,6 +373,17 @@ export async function getZeroScoutHelperGuidance(input: ZeroScoutHelperGuidanceI
         requestHash: hash,
         request,
         mediaInspection,
+        mediaUrl: mediaInspection?.allowed ? mediaInspection.mediaUrl : undefined,
+        videoUrl: mediaInspection?.allowed ? mediaInspection.mediaUrl : undefined,
+        url: mediaInspection?.allowed ? mediaInspection.mediaUrl : undefined,
+        mediaTask: mediaInspection?.requested ? 'video-url-analysis' : undefined,
+        mediaType: mediaInspection?.allowed ? mediaInspection.mediaType : undefined,
+        forceMediaInspection: mediaInspection?.requested ? true : undefined,
+        requiredProvider: mediaInspection?.requested ? HASHWATCH_MEDIA_PROVIDER_HINT || undefined : undefined,
+        requiredModelFamily: mediaInspection?.requested ? 'qwen-vl' : undefined,
+        requiredModel: mediaInspection?.requested ? HASHWATCH_MEDIA_MODEL_HINT || undefined : undefined,
+        preferredModel: mediaInspection?.requested ? HASHWATCH_MEDIA_MODEL_HINT || undefined : undefined,
+        allowedModels: mediaInspection?.requested ? HASHWATCH_MEDIA_MODEL_CANDIDATES : undefined,
         mediaModelPreference: mediaInspection?.requested ? HASHWATCH_MEDIA_MODEL_HINT || undefined : undefined,
         mediaRouting: mediaInspection?.requested
           ? {
@@ -384,7 +395,7 @@ export async function getZeroScoutHelperGuidance(input: ZeroScoutHelperGuidanceI
               allowedModels: HASHWATCH_MEDIA_MODEL_CANDIDATES,
               rejectMetadataOnlyAnswer: true,
               rejectTextOnlyModel: true,
-              mediaUrlField: 'data.mediaInspection.mediaUrl',
+              mediaUrlField: 'data.mediaUrl',
             }
           : undefined,
         sourceProof: input.sourceProof,
