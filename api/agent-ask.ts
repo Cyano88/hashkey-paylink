@@ -325,6 +325,18 @@ function isZeroScoutVideoInspectionRequest(question: string) {
     && /\b(url|link|video|media|content|it|this|that)\b/i.test(question)
 }
 
+function explainUnlockedHashpayStreamContent(title: string, summary: string, unlockedSummary: string) {
+  const suppliedContext = unlockedSummary && unlockedSummary !== summary ? unlockedSummary : summary
+  if (!suppliedContext) {
+    return `This unlocked content is "${title}". I can explain the verified metadata I have here, and I can give a deeper breakdown if ZeroScout/0G compute inspects the media URL.`
+  }
+  return [
+    `In plain context, "${title}" is a creator tutorial about ${suppliedContext.charAt(0).toLowerCase()}${suppliedContext.slice(1)}.`,
+    'It is positioned as an onboarding guide, so the expected value is helping a beginner understand the basic workflow, tools, and steps needed to start creating 3D animated digital art.',
+    'I can explain from the verified unlock context without charging again; deeper frame-by-frame analysis needs ZeroScout/0G compute to inspect the actual media URL.',
+  ].join(' ')
+}
+
 function hashpayStreamContextAnswer(question: string, hashpayStreamContext?: unknown, memorySummary = '') {
   const context = recordValue(hashpayStreamContext)
   if (!Object.keys(context).length) return ''
@@ -366,9 +378,8 @@ function hashpayStreamContextAnswer(question: string, hashpayStreamContext?: unk
     const mediaNote = stringValue(unlockedContent.note)
     return [
       `You do not need to unlock it again. I found a verified unlock/session for "${activeTitle}".`,
-      activeSummary ? `From the verified HashpayStream context: ${activeSummary}` : '',
-      unlockedSummary && unlockedSummary !== activeSummary ? `Unlocked context: ${unlockedSummary}` : '',
-      mediaNote ? `Note: ${mediaNote}` : 'If ZeroScout video inspection is temporarily unavailable, I can still explain the verified title, description, creator metadata, and unlocked session context without charging again.',
+      explainUnlockedHashpayStreamContent(activeTitle, activeSummary, unlockedSummary),
+      mediaNote && !/do not claim|frame-level|supplied metadata/i.test(mediaNote) ? `Note: ${mediaNote}` : '',
     ].filter(Boolean).join(' ')
   }
 
