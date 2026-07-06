@@ -273,9 +273,14 @@ function firstAvailableCard(...values: unknown[]) {
   return {}
 }
 
+function cardArray(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter((card): card is Record<string, unknown> => Boolean(card && typeof card === 'object'))
+    : []
+}
+
 function cardList(...values: unknown[]) {
-  return values.flatMap(value => Array.isArray(value) ? value : [])
-    .filter((card): card is Record<string, unknown> => Boolean(card && typeof card === 'object'))
+  return values.flatMap(cardArray)
 }
 
 function normalizedWords(value: string) {
@@ -315,9 +320,23 @@ function findContentCardForQuestion(question: string, context: Record<string, un
 function cardLine(card: Record<string, unknown>) {
   const title = stringValue(card.title) || 'Untitled content'
   const summary = stringValue(card.summary) || stringValue(card.description)
-  const price = typeof card.priceUsdc === 'number' ? ` Price: ${card.priceUsdc} USDC.` : ''
+  const price = typeof card.priceUsdc === 'number'
+    ? Number(card.priceUsdc) <= 0 ? ' Price: Free.' : ` Price: ${card.priceUsdc} USDC.`
+    : ''
   const gateLink = stringValue(card.gateLink)
   return `${title}${summary ? `: ${summary}` : ''}.${price}${gateLink ? ` Open: ${gateLink}` : ''}`.replace(/\.\./g, '.')
+}
+
+function cardBullets(cards: Record<string, unknown>[], limit = 3) {
+  return cards.slice(0, limit).map((card, index) => {
+    const title = stringValue(card.title) || 'Untitled content'
+    const category = stringValue(card.category)
+    const price = typeof card.priceUsdc === 'number'
+      ? Number(card.priceUsdc) <= 0 ? 'Free' : `${card.priceUsdc} USDC`
+      : ''
+    const gateLink = stringValue(card.gateLink)
+    return `${index + 1}. ${title}${category ? ` (${category})` : ''}${price ? ` - ${price}` : ''}${gateLink ? `\nOpen: ${gateLink}` : ''}`
+  }).join('\n')
 }
 
 function explainCard(card: Record<string, unknown>) {
@@ -333,6 +352,91 @@ function explainCard(card: Record<string, unknown>) {
     accessNote,
     gateLink ? `Gate: ${gateLink}` : '',
   ].filter(Boolean).join(' ')
+}
+
+function hashpayStreamHowToGuide() {
+  return [
+    '**How To Use HashpayStream**',
+    '',
+    '1. Discover content',
+    'Browse Creator library, HashWatch, ebooks, World Cup news, live scores, developer posts, and creator drops.',
+    '',
+    '2. Choose the right access mode',
+    'Use fixed x402 unlock for full access. Use pay-as-you-read for articles/books. Use pay-as-you-watch for HashWatch videos.',
+    '',
+    '3. Unlock or watch',
+    'Free demos open directly. Paid content uses the creator gate. If your receipt/session is already verified, Agent Hash should not ask you to unlock again.',
+    '',
+    '4. Track receipts and earnings',
+    'Fixed x402 unlocks create a receipt. Checkpoint reading/watch sessions show released and refundable USDC. 0G archive proof appears only when proof metadata exists.',
+    '',
+    '5. Use Agent Hash',
+    'Ask for latest HashWatch, latest books, top viewed posts, World Cup news, live scores, pricing, post improvement, earnings, receipts, or summaries of verified unlocked content.',
+  ].join('\n')
+}
+
+function hashpayStreamPaymentGuide(context: Record<string, unknown>) {
+  const modes = Array.isArray(context.unlockModes) ? context.unlockModes as Record<string, unknown>[] : []
+  const modeLines = modes.length
+    ? modes.map(mode => `- ${stringValue(mode.label)}: ${stringValue(mode.description)}`).join('\n')
+    : [
+        '- Fixed unlock: pay once with x402 and keep access.',
+        '- Pay as you read: prepay once, release creator earnings at reading checkpoints, refund unread balance.',
+        '- Pay as you watch: prepay once, release creator earnings at video checkpoints, refund unwatched balance.',
+      ].join('\n')
+  return [
+    '**HashpayStream Payment Modes**',
+    modeLines,
+    '',
+    'Launch note: timed streaming is paused for public testing. Keep users on fixed x402 unlocks and checkpoint reading/watch flows.',
+  ].join('\n')
+}
+
+function hashpayStreamReceiptGuide() {
+  return [
+    '**Receipts And 0G Archive**',
+    'Receipts should be shown when a fixed unlock or checkpoint session has a stable receipt ID.',
+    '0G archive should not stay as a permanent loading state. If proof metadata exists, show the archive link/proof. If proof is not ready, say it continues in the background and keep the content usable.',
+    'Do not claim “archived” unless `ogTxHash`, `rootHash`, or `ogExplorer` exists in verified receipt state.',
+  ].join('\n')
+}
+
+function hashpayStreamPricingAnswer(context: Record<string, unknown>) {
+  const active = recordValue(context.activeContent)
+  const metadata = recordValue(active.metadata)
+  const title = stringValue(metadata.title)
+  const category = stringValue(metadata.category)
+  const type = stringValue(metadata.type)
+  const baseline = cardList(context.trending, context.latestPosts, context.hashWatch, context.bestEbooks)
+    .map(card => Number(card.priceUsdc))
+    .filter(price => Number.isFinite(price) && price > 0)
+  const average = baseline.length ? baseline.reduce((sum, price) => sum + price, 0) / baseline.length : 0.1
+  const suggested = Math.max(0.05, Math.min(0.25, Math.round(average * 100) / 100))
+  return [
+    '**Suggested Price**',
+    title ? `For "${title}", start around ${suggested.toFixed(2)} USDC.` : `For a normal launch post, start around ${suggested.toFixed(2)} USDC.`,
+    type === 'video' || category === 'hashwatch'
+      ? 'For HashWatch, keep short demos free and charge only for creator-owned tutorial depth, replay value, or private workflow value.'
+      : 'For articles/books, charge more when the content saves time, contains original analysis, or includes a private link/resource.',
+    'Keep public launch pricing simple: Free demo, 0.10 USDC standard posts, 0.15-0.25 USDC for deeper tutorials.',
+  ].join('\n')
+}
+
+function hashpayStreamImprovePostAnswer(context: Record<string, unknown>) {
+  const active = recordValue(context.activeContent)
+  const metadata = recordValue(active.metadata)
+  const card = Object.keys(metadata).length ? metadata : firstAvailableCard(context.latestPosts, context.trending)
+  const title = stringValue(card.title) || 'your post'
+  const description = stringValue(card.description)
+  return [
+    `**Improve "${title}"**`,
+    '1. Make the first sentence say exactly who it is for.',
+    '2. Add one concrete outcome the reader/viewer gets after unlocking.',
+    '3. Keep the price visible and simple.',
+    '4. Add a stronger CTA: “Unlock guide”, “Watch demo”, or “Read full post”.',
+    description ? `Current description: ${description}` : '',
+    'Launch copy should be specific, not broad. Avoid saying “learn everything”; say the exact workflow, checklist, tutorial, or insight unlocked.',
+  ].filter(Boolean).join('\n')
 }
 
 function visibleHashpayStreamMemoryAnswer(question: string, memorySummary: string) {
@@ -389,7 +493,7 @@ function explainUnlockedHashpayStreamContent(title: string, summary: string, unl
   ].join(' ')
 }
 
-function hashpayStreamContextAnswer(question: string, hashpayStreamContext?: unknown, memorySummary = '') {
+export function hashpayStreamContextAnswer(question: string, hashpayStreamContext?: unknown, memorySummary = '') {
   const context = recordValue(hashpayStreamContext)
   if (!Object.keys(context).length) return ''
   const value = question.toLowerCase()
@@ -406,6 +510,75 @@ function hashpayStreamContextAnswer(question: string, hashpayStreamContext?: unk
   const activeGateLink = stringValue(activeMetadata.gateLink)
   const wantsCurrentContent = Boolean(activeStatus) && /\b(this|recent|recently|unlocked|video|book|post|context|about|summar|explain)\b/i.test(question)
   const wantsVideoInspection = isZeroScoutVideoInspectionRequest(question) || (activeStatus === 'unlocked' && Boolean(unlockedUrl) && isHashWatchVideoBreakdownRequest(question, activeTitle))
+
+  if (/\b(how\s+to\s+use|guide|walk\s*through|what\s+can\s+hashpaystream|how\s+does\s+hashpaystream)\b/i.test(value)) {
+    return hashpayStreamHowToGuide()
+  }
+
+  if (/\b(latest|newest|recent)\b.*\b(hashwatch|video)\b|\bhashwatch\b.*\b(latest|newest|recent)\b/i.test(value)) {
+    const card = firstAvailableCard(context.latestHashWatch, context.hashWatch)
+    return Object.keys(card).length ? `Latest HashWatch:\n${cardBullets([card], 1)}` : 'I do not have a verified HashWatch video in the current HashpayStream context.'
+  }
+
+  if (/\b(latest|newest|recent)\b.*\b(book|ebook)\b|\b(book|ebook)\b.*\b(latest|newest|recent)\b/i.test(value)) {
+    const card = firstAvailableCard(context.latestBooks, context.bestEbooks)
+    return Object.keys(card).length ? `Latest book:\n${cardBullets([card], 1)}` : 'I do not have a verified book in the current HashpayStream context.'
+  }
+
+  if (/\b(top|highest|most)\b.*\b(view|viewed|popular)\b|\b(best|trending)\b.*\b(content|post|drop)\b/i.test(value)) {
+    const cards = cardList(context.topViewed, context.trending, context.mostUnlocked)
+    return cards.length ? `Top HashpayStream content:\n${cardBullets(cards, 5)}` : 'I do not have verified view/trending data in the current HashpayStream context.'
+  }
+
+  if (/\b(recommend|suggest|show|find)\b.*\b(sport|world cup|football|score|fixture|match)\b|\b(world cup|live score|scores?)\b/i.test(value)) {
+    if (/\b(score|scores|fixture|match|route|polymarket)\b/i.test(value)) {
+      const scores = cardList(context.liveScores)
+      return scores.length
+        ? `Verified live-score routes available:\n${cardBullets(scores, 4)}\nPolymarket routing is included only when the score card has a verified route.`
+        : 'Live-score routing is not verified in the current HashpayStream context. I should not invent scores or Polymarket routes.'
+    }
+    const sports = cardList(context.latestWorldCupNews, context.liveScores)
+    return sports.length ? `Sports content to open:\n${cardBullets(sports, 4)}` : 'I do not have verified sports content in the current HashpayStream context.'
+  }
+
+  if (/\b(recommend|suggest|show|find)\b.*\b(ai|developer|terminal|build|coding)\b|\bbefore you build\b|\bterminal setup\b/i.test(value)) {
+    const aiCards = cardList(context.latestPosts, context.trending)
+      .filter(card => /\b(developer|terminal|ai|build|coding)\b/i.test(`${stringValue(card.title)} ${stringValue(card.description)} ${stringValue(card.category)}`))
+    return aiCards.length
+      ? `AI/developer content to open:\n${cardBullets(aiCards, 3)}`
+      : 'I do not have a verified AI/developer card in the current HashpayStream context.'
+  }
+
+  if (/\b(price|pricing|charge|how much|suggest a price)\b/i.test(value)) {
+    return hashpayStreamPricingAnswer(context)
+  }
+
+  if (/\b(improve|rewrite|make better|optimi[sz]e)\b.*\b(post|content|drop|description)?\b/i.test(value)) {
+    return hashpayStreamImprovePostAnswer(context)
+  }
+
+  if (/\b(payment mode|payment flow|x402|pay as you read|pay-as-you-read|pay as you watch|pay-as-you-watch|checkpoint|fixed unlock|unlock mode)\b/i.test(value)) {
+    return hashpayStreamPaymentGuide(context)
+  }
+
+  if (/\b(receipt|reciept|proof|0g|archive|archiving|archived)\b/i.test(value)) {
+    return hashpayStreamReceiptGuide()
+  }
+
+  if (/\b(thumbs?|like|dislike|comment|reaction|reader pulse|social)\b/i.test(value)) {
+    return [
+      '**Reactions And Comments**',
+      'HashpayStream supports content views, thumbs up/down, comments, and comment reactions.',
+      'These are social signals only; they must not pause video playback, change payment state, or trigger a second unlock.',
+      'For launch, keep the reaction UI simple: tap once to react, tap again to remove.',
+    ].join('\n')
+  }
+
+  if (/\b(earning|earned|revenue|claim|released|read my earnings)\b/i.test(value)) {
+    const earnings = recordValue(context.creatorEarnings)
+    if (Object.keys(earnings).length) return `Creator earnings are available in the verified HashpayStream context. Open the earnings card for the exact fixed, reading/checkpoint, total, and claim state.`
+    return 'I need the creator wallet context to read verified HashpayStream earnings. Open Creator Hub earnings or use Agent Hash from that creator wallet page.'
+  }
 
   if (Boolean(activeStatus) && wantsVideoInspection) {
     if (activeStatus === 'unlocked' && unlockedUrl) {
@@ -457,22 +630,6 @@ function hashpayStreamContextAnswer(question: string, hashpayStreamContext?: unk
     if (Object.keys(matchedCard).length) return explainCard(matchedCard)
     const visibleAnswer = visibleHashpayStreamMemoryAnswer(question, memorySummary)
     if (visibleAnswer) return visibleAnswer
-  }
-
-  if (/\b(latest|newest|recent)\b.*\b(hashwatch|video)\b|\bhashwatch\b.*\b(latest|newest|recent)\b/i.test(value)) {
-    const card = firstAvailableCard(context.latestHashWatch, context.hashWatch)
-    return Object.keys(card).length ? `Latest HashWatch: ${cardLine(card)}` : 'I do not have a verified HashWatch video in the current HashpayStream context.'
-  }
-
-  if (/\b(latest|newest|recent)\b.*\b(book|ebook)\b|\b(book|ebook)\b.*\b(latest|newest|recent)\b/i.test(value)) {
-    const card = firstAvailableCard(context.latestBooks, context.bestEbooks)
-    return Object.keys(card).length ? `Latest book: ${cardLine(card)}` : 'I do not have a verified book in the current HashpayStream context.'
-  }
-
-  if (/\b(earning|earned|revenue|claim|released)\b/i.test(value)) {
-    const earnings = recordValue(context.creatorEarnings)
-    if (Object.keys(earnings).length) return `Creator earnings are available in the verified HashpayStream context. Open the earnings card for the exact fixed, reading/checkpoint, total, and claim state.`
-    return 'I need the creator wallet context to read verified HashpayStream earnings. Open Creator Hub earnings or use Agent Hash from that creator wallet page.'
   }
 
   return ''
@@ -785,6 +942,29 @@ function activeHashpayStreamTitle(hashpayStreamContext?: unknown) {
   return stringValue(metadata.title)
 }
 
+export function publicHashWatchDemoFallback(question: string, hashpayStreamContext?: unknown, reason = '') {
+  const context = recordValue(hashpayStreamContext)
+  const activeContent = recordValue(context.activeContent)
+  const metadata = recordValue(activeContent.metadata)
+  const contentId = stringValue(activeContent.contentId)
+  const title = stringValue(metadata.title)
+  const isDemo = contentId === 'hashwatch-video-demo'
+    || /hashwatch:\s*pay-as-you-watch demo/i.test(title)
+    || /hashwatch-pay-as-you-watch-demo\.mp4/i.test(JSON.stringify(activeContent))
+  if (!isDemo || !isHashWatchVideoBreakdownRequest(question, title)) return ''
+
+  const delayNote = /\btimed out\b|AbortError|aborted|longer than|taking longer/i.test(reason)
+    ? 'ZeroScout is taking longer than the live chat window, so here is the verified first-party demo walkthrough now.'
+    : 'Here is the verified first-party demo walkthrough.'
+  return [
+    `${delayNote} This public HashWatch demo does not require an unlock or payment.`,
+    'It is a 30-second walkthrough of the pay-as-you-watch flow: a viewer opens a HashWatch video, starts playback, and HashpayStream tracks watch progress instead of releasing the full creator payment immediately.',
+    'The main product point is checkpoint settlement. As the viewer reaches watch milestones, creator earnings release progressively, while the remaining unwatched balance stays refundable.',
+    'The demo also shows the receipt-oriented flow: the watch session can produce a checkpoint receipt, the viewer can inspect the payment state, and Agent Hash can use the public demo context without asking for a second unlock.',
+    'Main learning points: short demo videos should route to live ZeroScout media analysis, longer creator videos should use background analysis, and the user experience should always separate access/payment state from media-analysis availability.',
+  ].join(' ')
+}
+
 export function isBadHashpayStreamMediaInspectionDenial(answer: string) {
   const deniesMediaInspection = /\b(hashpaystream|streaming access|payments)\b/i.test(answer)
     && /\b(doesn'?t|does not|isn'?t|is not|currently offers?|not something)\b/i.test(answer)
@@ -932,12 +1112,16 @@ function getHelperResponse(question: string, payerName: string, chain: string, a
   if (isGreetingQuestion(question)) {
     const knownName = nameFromMemory(memorySummary, payerName)
     if (helperMode === 'streampay') {
-      return `Hey${knownName ? ` ${knownName}` : ''}. I can help you publish paid content, price a drop, explain pay-as-you-read, summarize unlocked content, or understand creator earnings.`
+      return `Hey${knownName ? ` ${knownName}` : ''}. I am Agent Hash for HashpayStream. I can help with creator posts, HashWatch, books, World Cup news, live scores, x402 unlocks, pay-as-you-read/watch checkpoints, receipts, earnings, and unlocked-content summaries.`
     }
     return `Hey${knownName ? ` ${knownName}` : ''}. I can help you create a PayLink, check a receipt, set up wallets, use HashpayStream, or research PolyDesk and Polymarket flows.`
   }
 
   if (isHashpayStreamMediaInspection && zeroScoutAnswer && !isUnusableHashpayStreamMediaGuidance(zeroScoutAnswer, zeroScoutGuidance)) return zeroScoutAnswer
+  if (isHashpayStreamMediaInspection) {
+    const demoFallback = publicHashWatchDemoFallback(question, hashpayStreamContext)
+    if (demoFallback) return demoFallback
+  }
 
   if (helperMode === 'streampay') {
     const streamAnswer = hashpayStreamContextAnswer(question, hashpayStreamContext, memorySummary)
@@ -954,7 +1138,7 @@ function getHelperResponse(question: string, payerName: string, chain: string, a
   }
 
   if (helperMode === 'streampay') {
-    return 'I can help with HashpayStream Creator. Ask me to improve a post, suggest pricing, explain pay-as-you-read checkpoints, summarize unlocked content, or read your earnings state.'
+    return 'I am Agent Hash for HashpayStream, trained to understand your creator and reader workflow over time. I cannot provide that exact answer from verified HashpayStream context right now, but I can help with creator content, HashWatch, books, World Cup news, live scores, payment modes, receipts, reactions, earnings, pricing, and unlocked-content summaries.'
   }
 
   if (helperMode === 'support') {
@@ -1104,6 +1288,16 @@ export default async function handler(req: Request, res: Response) {
     } catch (err) {
       if (hashpayStreamVideoInspectionRequested) {
         console.warn('[agent-ask] ZeroScout HashWatch media inspection failed:', safeZeroScoutGuidanceError(err))
+        const demoFallback = publicHashWatchDemoFallback(question, hashpayStreamContext, safeZeroScoutGuidanceError(err))
+        if (demoFallback) {
+          return res.status(200).json({
+            answer: demoFallback,
+            zeroscoutRequired: false,
+            zeroscoutDeferred: true,
+            helperMode,
+            helperIntent: helperRouting.helperIntent,
+          })
+        }
         return res.status(200).json({
           answer: [
             'Your unlock is verified, but ZeroScout/0G compute could not inspect the video in this request.',

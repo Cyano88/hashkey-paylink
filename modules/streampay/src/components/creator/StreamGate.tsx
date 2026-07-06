@@ -2748,8 +2748,9 @@ export function StreamGate() {
                   {gatewayReceiptOpening ? 'Opening receipt...' : 'View receipt'}
                 </button>
               )}
-              <div className={gatewayTxIsExplorerHash ? 'grid grid-cols-2 gap-2' : 'grid gap-2'}>
-                {gatewayOgReady ? (
+              {(gatewayOgReady || gatewayTxIsExplorerHash) && (
+              <div className={gatewayTxIsExplorerHash && gatewayOgReady ? 'grid grid-cols-2 gap-2' : 'grid gap-2'}>
+                {gatewayOgReady && (
                   <a
                     href={gatewayOgExplorer || undefined}
                     target="_blank"
@@ -2763,15 +2764,6 @@ export function StreamGate() {
                     0G archived
                     {gatewayOgProof && <span className="font-mono text-[10px] text-purple-500">{gatewayOgProof.slice(0, 6)}...{gatewayOgProof.slice(-4)}</span>}
                   </a>
-                ) : (
-                  <div className="flex items-center justify-center gap-1.5 rounded-xl border border-gray-100 bg-white px-3 py-2.5 text-[12px] font-semibold text-gray-400 dark:border-white/10 dark:bg-[#111216]">
-                    {gatewayArchiveTimedOut ? (
-                      <span className="h-3.5 w-3.5 rounded-full border border-gray-300" />
-                    ) : (
-                      <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-gray-200 border-t-gray-400" />
-                    )}
-                    {gatewayArchiveLabel}
-                  </div>
                 )}
                 {gatewayTxIsExplorerHash && (
                   <button
@@ -2783,6 +2775,7 @@ export function StreamGate() {
                   </button>
                 )}
               </div>
+              )}
               <button
                 type="button"
                 onClick={() => {
