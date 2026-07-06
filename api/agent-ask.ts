@@ -770,6 +770,13 @@ function answerFromZeroScoutGuidance(question: string, zeroScoutGuidance?: ZeroS
   return guidance.length <= limit ? guidance : `${guidance.slice(0, limit - 20).trim()}...`
 }
 
+function activeHashpayStreamTitle(hashpayStreamContext?: unknown) {
+  const context = recordValue(hashpayStreamContext)
+  const activeContent = recordValue(context.activeContent)
+  const metadata = recordValue(activeContent.metadata)
+  return stringValue(metadata.title)
+}
+
 function isBadHashpayStreamMediaInspectionDenial(answer: string) {
   const deniesMediaInspection = /\b(hashpaystream|streaming access|payments)\b/i.test(answer)
     && /\b(doesn'?t|does not|isn'?t|is not|currently offers?|not something)\b/i.test(answer)
@@ -798,6 +805,11 @@ function userFacingZeroScoutGuidanceError(error: unknown) {
 
 function getHelperResponse(question: string, payerName: string, chain: string, amount: string, memorySummary = '', zeroScoutGuidance?: ZeroScoutHelperGuidance, accessMode = 'paid', helperMode = '', hashpayStreamContext?: unknown): string {
   const zeroScoutAnswer = answerFromZeroScoutGuidance(question, zeroScoutGuidance)
+  const isHashpayStreamMediaInspection = helperMode === 'streampay'
+    && (
+      isZeroScoutVideoInspectionRequest(question)
+      || isHashWatchVideoBreakdownRequest(question, activeHashpayStreamTitle(hashpayStreamContext) || extractActiveContentTitleFromMemory(memorySummary))
+    )
 
   if (isNameQuestion(question)) {
     const knownName = nameFromMemory(memorySummary, payerName)
@@ -814,7 +826,7 @@ function getHelperResponse(question: string, payerName: string, chain: string, a
     return `Hey${knownName ? ` ${knownName}` : ''}. I can help you create a PayLink, check a receipt, set up wallets, use HashpayStream, or research PolyDesk and Polymarket flows.`
   }
 
-  if (helperMode === 'streampay' && isZeroScoutVideoInspectionRequest(question) && zeroScoutAnswer && !isBadHashpayStreamMediaInspectionDenial(zeroScoutAnswer)) return zeroScoutAnswer
+  if (isHashpayStreamMediaInspection && zeroScoutAnswer && !isBadHashpayStreamMediaInspectionDenial(zeroScoutAnswer)) return zeroScoutAnswer
 
   if (helperMode === 'streampay') {
     const streamAnswer = hashpayStreamContextAnswer(question, hashpayStreamContext, memorySummary)

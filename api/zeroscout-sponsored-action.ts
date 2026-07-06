@@ -60,7 +60,7 @@ export type ZeroScoutHelperGuidance = {
 const SPONSOR_TIMEOUT_MS = Math.max(1000, Number(process.env.ZEROSCOUT_SPONSOR_TIMEOUT_MS ?? 30_000))
 const FAST_SPONSOR_TIMEOUT_MS = Math.max(1000, Number(process.env.ZEROSCOUT_FAST_SPONSOR_TIMEOUT_MS ?? 1_500))
 const HELPER_GUIDANCE_TIMEOUT_MS = Math.max(1000, Number(process.env.ZEROSCOUT_HELPER_GUIDANCE_TIMEOUT_MS ?? 10_000))
-const HASHWATCH_MEDIA_GUIDANCE_TIMEOUT_MS = Math.max(1000, Number(process.env.ZEROSCOUT_HASHWATCH_MEDIA_GUIDANCE_TIMEOUT_MS ?? 8_000))
+const HASHWATCH_MEDIA_GUIDANCE_TIMEOUT_MS = Math.max(1000, Number(process.env.ZEROSCOUT_HASHWATCH_MEDIA_GUIDANCE_TIMEOUT_MS ?? 25_000))
 const MAX_GUIDANCE_CONTEXT_LENGTH = 900
 
 function stableStringify(value: unknown): string {
@@ -366,8 +366,8 @@ export async function getZeroScoutHelperGuidance(input: ZeroScoutHelperGuidanceI
           : 'single-lane-short-refinement',
         requestedRefinementLane: refinementLane,
         fallbackOrder: helperFallbackOrder(refinementLane),
-        latencyTargetMs: input.request.qualityMode === 'deep' ? 20_000 : input.request.qualityMode === 'fast' ? 4_000 : 8_000,
-        maxAnswerChars: input.request.qualityMode === 'deep' ? 1_200 : 420,
+        latencyTargetMs: mediaInspection?.requested ? HASHWATCH_MEDIA_GUIDANCE_TIMEOUT_MS : input.request.qualityMode === 'deep' ? 20_000 : input.request.qualityMode === 'fast' ? 4_000 : 8_000,
+        maxAnswerChars: mediaInspection?.requested ? 1_600 : input.request.qualityMode === 'deep' ? 1_200 : 420,
         helperModeInstructions: helperModeInstructions(input),
         separationRules: [
           'This is helper context guidance only, not LP Scout paid proof.',
