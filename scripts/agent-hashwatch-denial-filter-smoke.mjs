@@ -6,6 +6,7 @@ const badAnswers = [
   "I don't have access to the actual video content or transcript for that HashWatch tutorial. I can see you're browsing HashpayStream with HashWatch content available, but I can't watch or analyze videos directly.",
   "I can see you've unlocked the video, however I don't have access to the actual video frames or content to walk you through it step by step.",
   "Frame-by-frame video analysis isn't something HashpayStream currently offers; use a dedicated video analysis tool.",
+  "I can see you've unlocked the HashWatch video, however I'm not able to perform video content analysis directly from this chat. Video-level AI vision analysis requires external processing that isn't available in this helper session.",
 ]
 
 const acceptableAnswer = 'Your unlock is verified, and ZeroScout inspected the media URL. Here is the video breakdown and main learning points.'

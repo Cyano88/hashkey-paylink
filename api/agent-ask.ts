@@ -791,10 +791,23 @@ export function isBadHashpayStreamMediaInspectionDenial(answer: string) {
     && /\b(video analysis|frame[-\s]*by[-\s]*frame|deeper analysis|ai vision|dedicated video analysis)\b/i.test(answer)
   const deniesVideoAccess = /\b(i\s+don'?t\s+have\s+access|i\s+do\s+not\s+have\s+access|i\s+can'?t\s+watch|i\s+cannot\s+watch|can'?t\s+watch|cannot\s+watch|can'?t\s+pull|cannot\s+pull)\b/i.test(answer)
     && /\b(actual\s+video|video\s+content|video\s+frames?|transcript|watch\s+or\s+analy[sz]e\s+videos?|analy[sz]e\s+videos?\s+directly)\b/i.test(answer)
+  const deniesVideoCapability = /\b(not\s+able\s+to\s+(?:perform|analy[sz]e)|requires?\s+(?:a\s+)?(?:separate|external|dedicated)|isn'?t\s+available|not\s+available)\b/i.test(answer)
+    && /\b(video(?:-level)?|video\s+content|ai\s+vision|qwen-vl|external\s+processing|helper\s+session)\b/i.test(answer)
   const genericCapabilityAnswer = /\b(i'?m Agent Hash|I can help|What would you like)\b/i.test(answer)
     && /\b(HashpayStream|ZeroScout|content|creator tools|access status)\b/i.test(answer)
     && !/\b(inspect|analysis|analy[sz]ed|breakdown|frame|media URL|video URL|unlocked|verified)\b/i.test(answer)
-  return deniesMediaInspection || deniesVideoAccess || genericCapabilityAnswer
+  return deniesMediaInspection || deniesVideoAccess || deniesVideoCapability || genericCapabilityAnswer
+}
+
+function isUnusableHashpayStreamMediaGuidance(answer: string, zeroScoutGuidance?: ZeroScoutHelperGuidance) {
+  if (!answer) return false
+  const zeroscout = zeroScoutGuidance?.zeroscout as (ZeroScoutHelperGuidance['zeroscout'] & Record<string, unknown>) | undefined
+  const aiProvider = String(zeroscout?.aiProvider ?? '')
+  const gaps = Array.isArray(zeroscout?.dataGaps) ? zeroscout.dataGaps.join(' ') : ''
+  const flags = Array.isArray(zeroscout?.riskFlags) ? zeroscout.riskFlags.join(' ') : ''
+  return isBadHashpayStreamMediaInspectionDenial(answer)
+    || /\bGLM-5-FP8|text-only-router\b/i.test(aiProvider)
+    || /\bNo video URL supplied|No Qwen-VL integration|No video transcript or frame data|tool-not-available|capability-mismatch|request-exceeds-helper-capability\b/i.test(`${gaps} ${flags}`)
 }
 
 function zeroScoutMediaDiagnostic(question: string, zeroScoutGuidance?: ZeroScoutHelperGuidance) {
@@ -815,7 +828,7 @@ function zeroScoutMediaDiagnostic(question: string, zeroScoutGuidance?: ZeroScou
     guidanceHash: zeroScoutGuidance?.guidanceHash,
     requestHash: zeroScoutGuidance?.requestHash,
     answerChars: answer.length,
-    answerRejectedByHashpayStreamGuard: Boolean(answer && isBadHashpayStreamMediaInspectionDenial(answer)),
+    answerRejectedByHashpayStreamGuard: Boolean(answer && isUnusableHashpayStreamMediaGuidance(answer, zeroScoutGuidance)),
     fieldsPresent: {
       suggestedAnswer: Boolean(textSnippet(zeroscout?.suggestedAnswer)),
       summary: Boolean(textSnippet(zeroscout?.summary)),
@@ -903,7 +916,7 @@ function getHelperResponse(question: string, payerName: string, chain: string, a
     return `Hey${knownName ? ` ${knownName}` : ''}. I can help you create a PayLink, check a receipt, set up wallets, use HashpayStream, or research PolyDesk and Polymarket flows.`
   }
 
-  if (isHashpayStreamMediaInspection && zeroScoutAnswer && !isBadHashpayStreamMediaInspectionDenial(zeroScoutAnswer)) return zeroScoutAnswer
+  if (isHashpayStreamMediaInspection && zeroScoutAnswer && !isUnusableHashpayStreamMediaGuidance(zeroScoutAnswer, zeroScoutGuidance)) return zeroScoutAnswer
 
   if (helperMode === 'streampay') {
     const streamAnswer = hashpayStreamContextAnswer(question, hashpayStreamContext, memorySummary)
