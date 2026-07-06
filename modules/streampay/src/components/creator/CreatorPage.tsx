@@ -1124,21 +1124,6 @@ function DiscoverContent({
                     {featuredScore ? <LockKeyhole className="h-4 w-4" /> : <Loader2 className={['h-4 w-4', scoreLoading ? 'animate-spin' : ''].join(' ')} />}
                     {featuredScore ? 'Unlock' : 'Refresh'}
                   </span>
-                  {hero.gateLink && (
-                    <span
-                      role="button"
-                      tabIndex={0}
-                      onClick={event => void shareGate(event, hero)}
-                      onKeyDown={event => {
-                        if (event.key !== 'Enter' && event.key !== ' ') return
-                        void shareGate(event, hero)
-                      }}
-                      className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-[11px] font-bold text-white/80 backdrop-blur-sm"
-                    >
-                      <Share2 className="h-3.5 w-3.5" />
-                      {copiedGateId === hero.id ? 'Shared' : 'Share'}
-                    </span>
-                  )}
                 </div>
               </div>
             </>
@@ -1174,21 +1159,6 @@ function DiscoverContent({
                       <LockKeyhole className="h-4 w-4" />
                       {heroCta}
                     </span>
-                    {hero.gateLink && (
-                      <span
-                        role="button"
-                        tabIndex={0}
-                        onClick={event => void shareGate(event, hero)}
-                        onKeyDown={event => {
-                          if (event.key !== 'Enter' && event.key !== ' ') return
-                          void shareGate(event, hero)
-                        }}
-                        className="inline-flex items-center gap-1.5 rounded-xl border border-white/20 bg-white/10 px-3 py-3 text-[11px] font-bold text-white/82 backdrop-blur-sm"
-                      >
-                        <Share2 className="h-3.5 w-3.5" />
-                        {copiedGateId === hero.id ? 'Shared' : 'Share'}
-                      </span>
-                    )}
                   </span>
                   <span className="rounded-full border border-white/20 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-white/75">
                     {hero.tag}
@@ -1322,10 +1292,10 @@ function DiscoverContent({
                       {match.marketStatus === 'matched' ? 'Live route available' : 'Match route pending'}
                     </p>
                   </div>
-                  <span className="inline-flex shrink-0 flex-col gap-1.5">
-                    <span className="inline-flex flex-col items-center justify-center gap-1 rounded-xl bg-gray-950 px-3 py-2 text-white">
+                  <span className="inline-flex w-[76px] shrink-0 flex-col items-stretch gap-1.5">
+                    <span className="inline-flex flex-col items-center justify-center gap-1 rounded-xl bg-gray-950 px-2.5 py-2 text-white dark:bg-white dark:text-gray-950">
                       <LockKeyhole className="h-4 w-4" />
-                      <span className="text-[10px] font-black">{card.cta || 'Unlock'}</span>
+                      <span className="w-full truncate text-center text-[10px] font-black">{card.cta || 'Unlock'}</span>
                     </span>
                     {card.gateLink && (
                       <span
@@ -1336,11 +1306,16 @@ function DiscoverContent({
                           if (event.key !== 'Enter' && event.key !== ' ') return
                           void shareGate(event, card)
                         }}
-                        className="inline-flex items-center justify-center gap-1 rounded-xl border border-gray-100 bg-gray-50 px-2 py-1.5 text-gray-500 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300"
+                        aria-label={`Share ${card.title}`}
+                        className={[
+                          'inline-flex h-8 items-center justify-center rounded-xl border transition-colors',
+                          copiedGateId === card.id
+                            ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-300'
+                            : 'border-gray-100 bg-gray-50 text-gray-500 hover:bg-gray-100 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300 dark:hover:bg-white/[0.1]',
+                        ].join(' ')}
                         title="Share unlock link"
                       >
-                        <Share2 className="h-3 w-3" />
-                        <span className="text-[9px] font-black">{copiedGateId === card.id ? 'Shared' : 'Share'}</span>
+                        <Share2 className="h-3.5 w-3.5" />
                       </span>
                     )}
                   </span>
@@ -1420,11 +1395,16 @@ function DiscoverContent({
                           if (event.key !== 'Enter' && event.key !== ' ') return
                           void shareGate(event, card)
                         }}
-                        className="inline-flex items-center gap-1.5 rounded-full border border-gray-100 px-2 py-1 text-[10px] font-bold text-gray-400 hover:bg-gray-50 dark:border-white/10 dark:text-gray-300 dark:hover:bg-white/[0.06]"
+                        aria-label={`Share ${card.title}`}
+                        className={[
+                          'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border transition-colors',
+                          copiedGateId === card.id
+                            ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-300'
+                            : 'border-gray-100 text-gray-400 hover:bg-gray-50 dark:border-white/10 dark:text-gray-300 dark:hover:bg-white/[0.06]',
+                        ].join(' ')}
                         title="Share unlock link"
                       >
-                        <Share2 className="h-3 w-3" />
-                        {copiedGateId === card.id ? 'Shared' : 'Share'}
+                        <Share2 className="h-3.5 w-3.5" />
                       </span>
                     )}
                     {card.editable && card.draft && (
