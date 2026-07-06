@@ -108,6 +108,27 @@ function streamAgentAccessContext() {
   ].filter(Boolean).join(' | ')
 }
 
+function streamVisibleContentContext() {
+  if (typeof window === 'undefined') return ''
+  const text = document.body?.innerText || ''
+  const anchors = [
+    'HashWatch',
+    'Digital Art',
+    'Creator library',
+    'Full reader',
+    'Latest HashWatch',
+    'Latest book',
+    'Earnings',
+  ]
+  const snippets = anchors.flatMap(anchor => {
+    const index = text.toLowerCase().indexOf(anchor.toLowerCase())
+    if (index < 0) return []
+    return text.slice(Math.max(0, index - 220), Math.min(text.length, index + 700)).replace(/\s+/g, ' ').trim()
+  })
+  const unique = Array.from(new Set(snippets)).join(' | ')
+  return unique ? `Visible HashpayStream content: ${unique.slice(0, 1200)}` : ''
+}
+
 function isClearChatCommand(value: string) {
   return /^(clear|reset|delete)\s+(chat|conversation|history)$/i.test(value.trim())
     || /^(clear|reset)\s*$/i.test(value.trim())
@@ -215,7 +236,7 @@ export function StreamAgentHash() {
           question,
           accessMode: 'helper-free',
           helperMode: 'streampay',
-          memorySummary: `${streamPageContext()} ${streamAgentAccessContext()} Agent Hash mode: HashpayStream Creator. Recent context: ${recent || 'new session'}. Current message: ${question}`.slice(0, 2200),
+          memorySummary: `${streamPageContext()} ${streamAgentAccessContext()} ${streamVisibleContentContext()} Agent Hash mode: HashpayStream Creator. Recent context: ${recent || 'new session'}. Current message: ${question}`.slice(0, 2600),
         }),
       })
       const contentType = res.headers.get('content-type') || ''

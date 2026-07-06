@@ -237,6 +237,45 @@ function firstAvailableCard(...values: unknown[]) {
   return {}
 }
 
+function cardList(...values: unknown[]) {
+  return values.flatMap(value => Array.isArray(value) ? value : [])
+    .filter((card): card is Record<string, unknown> => Boolean(card && typeof card === 'object'))
+}
+
+function normalizedWords(value: string) {
+  return new Set(value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').split(/\s+/).filter(word => word.length > 2))
+}
+
+function scoreCardForQuestion(card: Record<string, unknown>, question: string) {
+  const questionWords = normalizedWords(question)
+  if (!questionWords.size) return 0
+  const haystack = [
+    stringValue(card.title),
+    stringValue(card.description),
+    stringValue(card.summary),
+    stringValue(card.author),
+    stringValue(card.category),
+    stringValue(card.type),
+  ].join(' ').toLowerCase()
+  if (/\bdigital\s+art\b/i.test(question) && !/\bdigital\s+art\b/i.test(haystack)) return 0
+  let score = 0
+  for (const word of questionWords) {
+    if (haystack.includes(word)) score += word.length > 4 ? 2 : 1
+  }
+  if (/\bdigital\s+art\b/i.test(question) && /\bdigital\s+art\b/i.test(haystack)) score += 8
+  if (/\bhash\s*watch|hashwatch|video\b/i.test(question) && /\bvideo|hashwatch\b/i.test(haystack)) score += 3
+  if (/\bcreate|creation|tutorial|guide\b/i.test(question) && /\bcreate|creation|tutorial|guide\b/i.test(haystack)) score += 3
+  return score
+}
+
+function findContentCardForQuestion(question: string, context: Record<string, unknown>) {
+  const cards = cardList(context.latestHashWatch, context.hashWatch, context.latestPosts, context.trending, context.topViewed, context.mostUnlocked)
+  return cards
+    .map(card => ({ card, score: scoreCardForQuestion(card, question) }))
+    .filter(item => item.score >= 4)
+    .sort((a, b) => b.score - a.score)[0]?.card ?? {}
+}
+
 function cardLine(card: Record<string, unknown>) {
   const title = stringValue(card.title) || 'Untitled content'
   const summary = stringValue(card.summary) || stringValue(card.description)
@@ -245,7 +284,37 @@ function cardLine(card: Record<string, unknown>) {
   return `${title}${summary ? `: ${summary}` : ''}.${price}${gateLink ? ` Open: ${gateLink}` : ''}`.replace(/\.\./g, '.')
 }
 
-function hashpayStreamContextAnswer(question: string, hashpayStreamContext?: unknown) {
+function explainCard(card: Record<string, unknown>) {
+  const title = stringValue(card.title) || 'this HashpayStream content'
+  const summary = stringValue(card.summary) || stringValue(card.description)
+  const author = stringValue(card.author)
+  const gateLink = stringValue(card.gateLink)
+  const accessNote = 'If your unlock receipt/session is verified, Agent Hash should not ask you to unlock it again. If the private video itself is not available to this chat, I can still explain the verified title, creator, description, and access context.'
+  return [
+    `"${title}" is a HashWatch video${author ? ` by ${author}` : ''}.`,
+    summary ? `Context: ${summary}` : '',
+    'It is positioned as creator education: a practical video for learning or onboarding around the topic, with HashpayStream handling paid access and watch-based monetization.',
+    accessNote,
+    gateLink ? `Gate: ${gateLink}` : '',
+  ].filter(Boolean).join(' ')
+}
+
+function visibleHashpayStreamMemoryAnswer(question: string, memorySummary: string) {
+  if (!/\b(explain|context|about|summar|unlocked|video|hash\s*watch|hashwatch|digital\s+art)\b/i.test(question)) return ''
+  if (!/\bdigital\s+art\b/i.test(question) || !/\bdigital\s+art\b/i.test(memorySummary)) return ''
+  const digitalArtIndex = memorySummary.toLowerCase().indexOf('digital art')
+  const snippet = digitalArtIndex >= 0
+    ? memorySummary.slice(Math.max(0, digitalArtIndex - 260), Math.min(memorySummary.length, digitalArtIndex + 520)).replace(/\s+/g, ' ').trim()
+    : ''
+  return [
+    'The Digital Art HashWatch video is presented as a creator tutorial for onboarding someone into 3D animated digital art creation.',
+    snippet ? `Visible HashpayStream context: ${snippet}` : '',
+    'From the public metadata, its value is practical education: it helps a viewer understand the creation workflow while HashpayStream handles paid access, receipts, and watch-based release checkpoints.',
+    'If your unlock receipt/session is verified, Agent Hash should not ask you to unlock it again. Full private video analysis still depends on the unlocked session or ZeroScout media inspection being available.',
+  ].filter(Boolean).join(' ')
+}
+
+function hashpayStreamContextAnswer(question: string, hashpayStreamContext?: unknown, memorySummary = '') {
   const context = recordValue(hashpayStreamContext)
   if (!Object.keys(context).length) return ''
   const value = question.toLowerCase()
@@ -276,6 +345,13 @@ function hashpayStreamContextAnswer(question: string, hashpayStreamContext?: unk
       activeSummary ? `Public preview: ${activeSummary}` : '',
       'For the full private summary, reopen Agent Hash from the same unlocked gate/session or reconnect the original reader wallet. I will not ask for a second unlock if that receipt/session is verified.',
     ].filter(Boolean).join(' ')
+  }
+
+  if (/\b(explain|context|about|summar|unlocked|video|hash\s*watch|hashwatch|digital\s+art)\b/i.test(question)) {
+    const matchedCard = findContentCardForQuestion(question, context)
+    if (Object.keys(matchedCard).length) return explainCard(matchedCard)
+    const visibleAnswer = visibleHashpayStreamMemoryAnswer(question, memorySummary)
+    if (visibleAnswer) return visibleAnswer
   }
 
   if (/\b(latest|newest|recent)\b.*\b(hashwatch|video)\b|\bhashwatch\b.*\b(latest|newest|recent)\b/i.test(value)) {
@@ -615,7 +691,6 @@ function userFacingZeroScoutGuidanceError(error: unknown) {
 
 function getHelperResponse(question: string, payerName: string, chain: string, amount: string, memorySummary = '', zeroScoutGuidance?: ZeroScoutHelperGuidance, accessMode = 'paid', helperMode = '', hashpayStreamContext?: unknown): string {
   const zeroScoutAnswer = answerFromZeroScoutGuidance(question, zeroScoutGuidance)
-  if (zeroScoutAnswer) return zeroScoutAnswer
 
   if (isNameQuestion(question)) {
     const knownName = nameFromMemory(memorySummary, payerName)
@@ -633,9 +708,11 @@ function getHelperResponse(question: string, payerName: string, chain: string, a
   }
 
   if (helperMode === 'streampay') {
-    const streamAnswer = hashpayStreamContextAnswer(question, hashpayStreamContext)
+    const streamAnswer = hashpayStreamContextAnswer(question, hashpayStreamContext, memorySummary)
     if (streamAnswer) return streamAnswer
   }
+
+  if (zeroScoutAnswer) return zeroScoutAnswer
 
   const fallbackAnswer = fallbackHelperAnswer(question)
   if (fallbackAnswer) return fallbackAnswer
