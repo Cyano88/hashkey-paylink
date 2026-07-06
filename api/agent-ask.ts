@@ -810,7 +810,7 @@ function userFacingZeroScoutGuidanceError(error: unknown) {
     return 'ZeroScout returned a response the app could not use for a media breakdown.'
   }
   if (/\b(credit|credits|top up|quota|billing|wallet that owns this integration key)\b/i.test(message)) {
-    return 'Agent Hash is undergoing self-maintenance so we can keep offering you the best service. Please try again shortly.'
+    return 'ZeroScout rejected the request because the server integration account needs credits, quota, billing, or API-key wallet attention.'
   }
   return `Agent Hash could not reach its ZeroScout intelligence layer just now. Please try again shortly.`
 }
