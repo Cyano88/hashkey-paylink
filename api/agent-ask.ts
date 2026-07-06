@@ -797,6 +797,18 @@ function safeZeroScoutGuidanceError(error: unknown) {
 
 function userFacingZeroScoutGuidanceError(error: unknown) {
   const message = safeZeroScoutGuidanceError(error)
+  if (/ZEROSCOUT_API_URL/i.test(message)) {
+    return 'ZeroScout media inspection is not configured on the server. Set ZEROSCOUT_API_URL and redeploy.'
+  }
+  if (/ZEROSCOUT_INTEGRATION_SECRET/i.test(message)) {
+    return 'ZeroScout media inspection is missing its server integration secret. Set ZEROSCOUT_INTEGRATION_SECRET and redeploy.'
+  }
+  if (/\btimed out\b|AbortError|aborted/i.test(message)) {
+    return 'ZeroScout/0G compute timed out while inspecting the media URL.'
+  }
+  if (/non-JSON|invalid response|missing result id|did not include suggestedAnswer|missing stored proof/i.test(message)) {
+    return 'ZeroScout returned a response the app could not use for a media breakdown.'
+  }
   if (/\b(credit|credits|top up|quota|billing|wallet that owns this integration key)\b/i.test(message)) {
     return 'Agent Hash is undergoing self-maintenance so we can keep offering you the best service. Please try again shortly.'
   }
@@ -953,6 +965,12 @@ export default async function handler(req: Request, res: Response) {
           contentTitle: extractActiveContentTitleFromMemory(memorySummary) || streamClientHint?.contentTitle,
         }))
       : undefined
+    const hashpayStreamVideoInspectionRequested = helperMode === 'streampay'
+      ? isZeroScoutVideoInspectionRequest(question)
+        || isHashWatchVideoBreakdownRequest(question, streamClientHint?.contentTitle)
+        || isHashWatchVideoBreakdownRequest(question, extractActiveContentTitleFromMemory(memorySummary))
+        || isHashWatchVideoBreakdownRequest(question, activeHashpayStreamTitle(hashpayStreamContext))
+      : false
     let zeroScoutGuidance: ZeroScoutHelperGuidance | undefined
     try {
       zeroScoutGuidance = await getZeroScoutHelperGuidance({
@@ -970,11 +988,7 @@ export default async function handler(req: Request, res: Response) {
           helperMode,
           helperIntent: helperRouting.helperIntent,
           qualityMode: helperRouting.qualityMode,
-          hashpayStreamVideoInspectionRequested: helperMode === 'streampay'
-            ? isZeroScoutVideoInspectionRequest(question)
-              || isHashWatchVideoBreakdownRequest(question, streamClientHint?.contentTitle)
-              || isHashWatchVideoBreakdownRequest(question, extractActiveContentTitleFromMemory(memorySummary))
-            : undefined,
+          hashpayStreamVideoInspectionRequested,
           memorySummary,
           memorySummaryHash,
           hashpayStreamContext,
@@ -986,9 +1000,22 @@ export default async function handler(req: Request, res: Response) {
           rootHash: access.proof.rootHash,
           ogTxHash: access.proof.ogTxHash,
         },
-        strictGuidance: helperMode === 'daily',
+        strictGuidance: helperMode === 'daily' || hashpayStreamVideoInspectionRequested,
       })
     } catch (err) {
+      if (hashpayStreamVideoInspectionRequested) {
+        console.warn('[agent-ask] ZeroScout HashWatch media inspection failed:', safeZeroScoutGuidanceError(err))
+        return res.status(200).json({
+          answer: [
+            'Your unlock is verified, but ZeroScout/0G compute could not inspect the video in this request.',
+            `Reason: ${userFacingZeroScoutGuidanceError(err)}`,
+            'You do not need to unlock again. Try again shortly; if this repeats, the ZeroScout media worker or API key needs attention on the server.',
+          ].join(' '),
+          zeroscoutRequired: true,
+          helperMode,
+          helperIntent: helperRouting.helperIntent,
+        })
+      }
       if (helperMode === 'daily') {
         console.warn(`[agent-ask] ZeroScout ${helperMode} guidance failed:`, safeZeroScoutGuidanceError(err))
         return res.status(503).json({
