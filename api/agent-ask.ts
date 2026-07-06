@@ -320,9 +320,12 @@ function isHashpayStreamLinkRequest(question: string) {
 }
 
 function isZeroScoutVideoInspectionRequest(question: string) {
-  return /\b(zeroscout|zero\s*scout|0g|og compute|compute)\b/i.test(question)
+  const asksNamedCompute = /\b(zeroscout|zero\s*scout|0g|og compute|compute)\b/i.test(question)
     && /\b(inspect|analy[sz]e|scan|break\s*down|watch|read|review)\b/i.test(question)
     && /\b(url|link|video|media|content|it|this|that)\b/i.test(question)
+  const asksForDeepVideoAnalysis = /\b(deep|deeper|frame[-\s]*by[-\s]*frame|break\s*down|inspect|analy[sz]e|scan|review)\b/i.test(question)
+    && /\b(video|media|content|it|this|that|tutorial|guide|analysis)\b/i.test(question)
+  return asksNamedCompute || asksForDeepVideoAnalysis
 }
 
 function explainUnlockedHashpayStreamContent(title: string, summary: string, unlockedSummary: string) {
@@ -717,6 +720,12 @@ function answerFromZeroScoutGuidance(question: string, zeroScoutGuidance?: ZeroS
   return guidance.length <= limit ? guidance : `${guidance.slice(0, limit - 20).trim()}...`
 }
 
+function isBadHashpayStreamMediaInspectionDenial(answer: string) {
+  return /\b(hashpaystream|streaming access|payments)\b/i.test(answer)
+    && /\b(doesn'?t|does not|isn'?t|is not|currently offers?|not something)\b/i.test(answer)
+    && /\b(video analysis|frame[-\s]*by[-\s]*frame|deeper analysis|ai vision|dedicated video analysis)\b/i.test(answer)
+}
+
 function safeZeroScoutGuidanceError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error)
   return message
@@ -751,7 +760,7 @@ function getHelperResponse(question: string, payerName: string, chain: string, a
     return `Hey${knownName ? ` ${knownName}` : ''}. I can help you create a PayLink, check a receipt, set up wallets, use HashpayStream, or research PolyDesk and Polymarket flows.`
   }
 
-  if (helperMode === 'streampay' && isZeroScoutVideoInspectionRequest(question) && zeroScoutAnswer) return zeroScoutAnswer
+  if (helperMode === 'streampay' && isZeroScoutVideoInspectionRequest(question) && zeroScoutAnswer && !isBadHashpayStreamMediaInspectionDenial(zeroScoutAnswer)) return zeroScoutAnswer
 
   if (helperMode === 'streampay') {
     const streamAnswer = hashpayStreamContextAnswer(question, hashpayStreamContext, memorySummary)
