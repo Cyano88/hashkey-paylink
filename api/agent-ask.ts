@@ -42,7 +42,7 @@ const ARCHIVE_ABI = [
 const MAX_EVENT_ID_LENGTH = 128
 const MAX_PAYER_LENGTH = 128
 const MAX_QUESTION_LENGTH = 4_000
-const MAX_MEMORY_LENGTH = 1_600
+const MAX_MEMORY_LENGTH = 2_600
 const HELPER_FREE_ACCESS_MODE = 'helper-free'
 const HELPER_MODES = new Set(['payments', 'daily', 'services', 'polydesk', 'support', 'streampay'])
 const HELPER_SIMPLE_DAILY_PROMPT_LIMIT = Math.max(1, parseInt(process.env.HELPER_SIMPLE_DAILY_PROMPT_LIMIT ?? process.env.HELPER_DAILY_PROMPT_LIMIT ?? '100', 10) || 100)
@@ -215,6 +215,86 @@ function compactHashpayStreamContext(context: unknown) {
     liveScores: takeCards('liveScores', 8),
     creatorEarnings: data.creatorEarnings,
   }
+}
+
+function recordValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' ? value as Record<string, unknown> : {}
+}
+
+function stringValue(value: unknown) {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function firstCard(value: unknown): Record<string, unknown> {
+  return Array.isArray(value) && value[0] && typeof value[0] === 'object' ? value[0] as Record<string, unknown> : {}
+}
+
+function firstAvailableCard(...values: unknown[]) {
+  for (const value of values) {
+    const card = firstCard(value)
+    if (Object.keys(card).length) return card
+  }
+  return {}
+}
+
+function cardLine(card: Record<string, unknown>) {
+  const title = stringValue(card.title) || 'Untitled content'
+  const summary = stringValue(card.summary) || stringValue(card.description)
+  const price = typeof card.priceUsdc === 'number' ? ` Price: ${card.priceUsdc} USDC.` : ''
+  const gateLink = stringValue(card.gateLink)
+  return `${title}${summary ? `: ${summary}` : ''}.${price}${gateLink ? ` Open: ${gateLink}` : ''}`.replace(/\.\./g, '.')
+}
+
+function hashpayStreamContextAnswer(question: string, hashpayStreamContext?: unknown) {
+  const context = recordValue(hashpayStreamContext)
+  if (!Object.keys(context).length) return ''
+  const value = question.toLowerCase()
+  const activeContent = recordValue(context.activeContent)
+  const activeMetadata = recordValue(activeContent.metadata)
+  const activeTitle = stringValue(activeMetadata.title) || 'this content'
+  const activeSummary = stringValue(activeMetadata.summary)
+    || stringValue(activeMetadata.description)
+    || stringValue(activeContent.preview)
+  const activeStatus = stringValue(activeContent.status)
+  const unlockedContent = recordValue(activeContent.unlockedContent)
+  const unlockedSummary = stringValue(unlockedContent.summary)
+  const wantsCurrentContent = Boolean(activeStatus) && /\b(this|recent|recently|unlocked|video|book|post|context|about|summar|explain)\b/i.test(question)
+
+  if (wantsCurrentContent && activeStatus === 'unlocked') {
+    const mediaNote = stringValue(unlockedContent.note)
+    return [
+      `You do not need to unlock it again. I found a verified unlock/session for "${activeTitle}".`,
+      activeSummary ? `From the verified HashpayStream context: ${activeSummary}` : '',
+      unlockedSummary && unlockedSummary !== activeSummary ? `Unlocked context: ${unlockedSummary}` : '',
+      mediaNote ? `Note: ${mediaNote}` : 'If ZeroScout video inspection is temporarily unavailable, I can still explain the verified title, description, creator metadata, and unlocked session context without charging again.',
+    ].filter(Boolean).join(' ')
+  }
+
+  if (wantsCurrentContent && activeStatus === 'locked') {
+    return [
+      `I can see "${activeTitle}", but this chat is not currently tied to the wallet/session that unlocked it.`,
+      activeSummary ? `Public preview: ${activeSummary}` : '',
+      'For the full private summary, reopen Agent Hash from the same unlocked gate/session or reconnect the original reader wallet. I will not ask for a second unlock if that receipt/session is verified.',
+    ].filter(Boolean).join(' ')
+  }
+
+  if (/\b(latest|newest|recent)\b.*\b(hashwatch|video)\b|\bhashwatch\b.*\b(latest|newest|recent)\b/i.test(value)) {
+    const card = firstAvailableCard(context.latestHashWatch, context.hashWatch)
+    return Object.keys(card).length ? `Latest HashWatch: ${cardLine(card)}` : 'I do not have a verified HashWatch video in the current HashpayStream context.'
+  }
+
+  if (/\b(latest|newest|recent)\b.*\b(book|ebook)\b|\b(book|ebook)\b.*\b(latest|newest|recent)\b/i.test(value)) {
+    const card = firstAvailableCard(context.latestBooks, context.bestEbooks)
+    return Object.keys(card).length ? `Latest book: ${cardLine(card)}` : 'I do not have a verified book in the current HashpayStream context.'
+  }
+
+  if (/\b(earning|earned|revenue|claim|released)\b/i.test(value)) {
+    const earnings = recordValue(context.creatorEarnings)
+    if (Object.keys(earnings).length) return `Creator earnings are available in the verified HashpayStream context. Open the earnings card for the exact fixed, reading/checkpoint, total, and claim state.`
+    return 'I need the creator wallet context to read verified HashpayStream earnings. Open Creator Hub earnings or use Agent Hash from that creator wallet page.'
+  }
+
+  return ''
 }
 
 async function consumeHelperPrompt(eventId: string, payer: string, tier: HelperUsageTier) {
@@ -533,7 +613,7 @@ function userFacingZeroScoutGuidanceError(error: unknown) {
   return `Agent Hash could not reach its ZeroScout intelligence layer just now. Please try again shortly.`
 }
 
-function getHelperResponse(question: string, payerName: string, chain: string, amount: string, memorySummary = '', zeroScoutGuidance?: ZeroScoutHelperGuidance, accessMode = 'paid', helperMode = ''): string {
+function getHelperResponse(question: string, payerName: string, chain: string, amount: string, memorySummary = '', zeroScoutGuidance?: ZeroScoutHelperGuidance, accessMode = 'paid', helperMode = '', hashpayStreamContext?: unknown): string {
   const zeroScoutAnswer = answerFromZeroScoutGuidance(question, zeroScoutGuidance)
   if (zeroScoutAnswer) return zeroScoutAnswer
 
@@ -550,6 +630,11 @@ function getHelperResponse(question: string, payerName: string, chain: string, a
       return `Hey${knownName ? ` ${knownName}` : ''}. I can help you publish paid content, price a drop, explain pay-as-you-read, summarize unlocked content, or understand creator earnings.`
     }
     return `Hey${knownName ? ` ${knownName}` : ''}. I can help you create a PayLink, check a receipt, set up wallets, use HashpayStream, or research PolyDesk and Polymarket flows.`
+  }
+
+  if (helperMode === 'streampay') {
+    const streamAnswer = hashpayStreamContextAnswer(question, hashpayStreamContext)
+    if (streamAnswer) return streamAnswer
   }
 
   const fallbackAnswer = fallbackHelperAnswer(question)
@@ -694,10 +779,10 @@ export default async function handler(req: Request, res: Response) {
           rootHash: access.proof.rootHash,
           ogTxHash: access.proof.ogTxHash,
         },
-        strictGuidance: helperMode === 'daily' || helperMode === 'streampay',
+        strictGuidance: helperMode === 'daily',
       })
     } catch (err) {
-      if (helperMode === 'daily' || helperMode === 'streampay') {
+      if (helperMode === 'daily') {
         console.warn(`[agent-ask] ZeroScout ${helperMode} guidance failed:`, safeZeroScoutGuidanceError(err))
         return res.status(503).json({
           error: userFacingZeroScoutGuidanceError(err),
@@ -709,11 +794,9 @@ export default async function handler(req: Request, res: Response) {
       console.warn('[agent-ask] ZeroScout helper guidance failed:', safeZeroScoutGuidanceError(err))
     }
 
-    if ((helperMode === 'daily' || helperMode === 'streampay') && !answerFromZeroScoutGuidance(question, zeroScoutGuidance)) {
+    if (helperMode === 'daily' && !answerFromZeroScoutGuidance(question, zeroScoutGuidance)) {
       return res.status(503).json({
-        error: helperMode === 'streampay'
-          ? 'ZeroScout HashpayStream guidance is required before creator agent responses are returned. Try again shortly.'
-          : 'ZeroScout Daily guidance is required before Daily mode responses are returned. Try again shortly.',
+        error: 'ZeroScout Daily guidance is required before Daily mode responses are returned. Try again shortly.',
         zeroscoutRequired: true,
         helperMode,
         helperIntent: helperRouting.helperIntent,
@@ -729,41 +812,54 @@ export default async function handler(req: Request, res: Response) {
       zeroScoutGuidance,
       accessMode,
       helperMode,
+      hashpayStreamContext,
     )
 
-    const zeroscoutSponsorship: ZeroScoutSponsoredAction | undefined = await sponsorZeroScoutAction({
-      service: 'Hash PayLink Helper',
-      action: 'helper-chat-response',
-      user: {
-        payer: access.payment.payer,
-        email: access.payment.payer,
-        wallet: access.payment.payer,
-      },
-      request: {
-        eventId,
-        question,
-        accessMode,
-        helperMode,
-        helperIntent: helperRouting.helperIntent,
-        qualityMode: helperRouting.qualityMode,
-        memorySummaryHash,
-        guidanceRequestHash: zeroScoutGuidance?.requestHash,
-        hashpayStreamContextHash: hashpayStreamContext
-          ? crypto.createHash('sha256').update(JSON.stringify(hashpayStreamContext)).digest('hex')
-          : undefined,
-      },
-      sourceProof: {
-        type: accessMode === HELPER_FREE_ACCESS_MODE ? 'helper-free-access' : 'helper_access_receipt',
-        ...access.proof,
-      },
-      result: {
-        answerHash: crypto.createHash('sha256').update(answer).digest('hex'),
-        guidanceHash: zeroScoutGuidance?.guidanceHash,
-        helperIntent: helperRouting.helperIntent,
-        qualityMode: helperRouting.qualityMode,
-        usageRemaining: usagePreview.remaining,
-      },
-    })
+    let zeroscoutSponsorship: ZeroScoutSponsoredAction | undefined
+    try {
+      zeroscoutSponsorship = await sponsorZeroScoutAction({
+        service: 'Hash PayLink Helper',
+        action: 'helper-chat-response',
+        user: {
+          payer: access.payment.payer,
+          email: access.payment.payer,
+          wallet: access.payment.payer,
+        },
+        request: {
+          eventId,
+          question,
+          accessMode,
+          helperMode,
+          helperIntent: helperRouting.helperIntent,
+          qualityMode: helperRouting.qualityMode,
+          memorySummaryHash,
+          guidanceRequestHash: zeroScoutGuidance?.requestHash,
+          hashpayStreamContextHash: hashpayStreamContext
+            ? crypto.createHash('sha256').update(JSON.stringify(hashpayStreamContext)).digest('hex')
+            : undefined,
+        },
+        sourceProof: {
+          type: accessMode === HELPER_FREE_ACCESS_MODE ? 'helper-free-access' : 'helper_access_receipt',
+          ...access.proof,
+        },
+        result: {
+          answerHash: crypto.createHash('sha256').update(answer).digest('hex'),
+          guidanceHash: zeroScoutGuidance?.guidanceHash,
+          helperIntent: helperRouting.helperIntent,
+          qualityMode: helperRouting.qualityMode,
+          usageRemaining: usagePreview.remaining,
+        },
+      })
+    } catch (err) {
+      const strictSponsorshipRequired = helperRouting.qualityMode === 'deep' || accessMode !== HELPER_FREE_ACCESS_MODE
+      console.warn('[agent-ask] ZeroScout response sponsorship failed:', safeZeroScoutGuidanceError(err))
+      if (strictSponsorshipRequired) {
+        return res.status(503).json({
+          error: 'ZeroScout sponsorship is required before helper responses are returned. Try again shortly.',
+          zeroscoutRequired: true,
+        })
+      }
+    }
     if (!zeroscoutSponsorship) {
       const strictSponsorshipRequired = helperRouting.qualityMode === 'deep' || accessMode !== HELPER_FREE_ACCESS_MODE
       if (strictSponsorshipRequired) {
