@@ -61,10 +61,10 @@ const SPONSOR_TIMEOUT_MS = Math.max(1000, Number(process.env.ZEROSCOUT_SPONSOR_T
 const FAST_SPONSOR_TIMEOUT_MS = Math.max(1000, Number(process.env.ZEROSCOUT_FAST_SPONSOR_TIMEOUT_MS ?? 1_500))
 const HELPER_GUIDANCE_TIMEOUT_MS = Math.max(1000, Number(process.env.ZEROSCOUT_HELPER_GUIDANCE_TIMEOUT_MS ?? 10_000))
 const HASHWATCH_MEDIA_GUIDANCE_TIMEOUT_MS = Math.max(1000, Number(process.env.ZEROSCOUT_HASHWATCH_MEDIA_GUIDANCE_TIMEOUT_MS ?? 60_000))
-const HASHWATCH_MEDIA_MODEL_HINT = String(process.env.ZEROSCOUT_HASHWATCH_MEDIA_MODEL ?? 'Qwen/Qwen2.5-VL-72B-Instruct').trim()
+const HASHWATCH_MEDIA_MODEL_HINT = String(process.env.ZEROSCOUT_HASHWATCH_MEDIA_MODEL ?? 'qwen3.7-plus').trim()
 const HASHWATCH_MEDIA_MODEL_CANDIDATES = String(
   process.env.ZEROSCOUT_HASHWATCH_MEDIA_MODEL_CANDIDATES
-    ?? 'Qwen/Qwen2.5-VL-72B-Instruct,qwen2.5-vl-72b-instruct,qwen-vl-max-latest,Qwen/Qwen2.5-Omni-7B',
+    ?? 'qwen3.7-plus,Qwen/Qwen2.5-VL-72B-Instruct,qwen2.5-vl-72b-instruct,qwen-vl-max-latest,Qwen/Qwen2.5-Omni-7B',
 )
   .split(',')
   .map(item => item.trim())
