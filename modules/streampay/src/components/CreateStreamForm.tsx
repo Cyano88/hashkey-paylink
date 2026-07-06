@@ -1134,14 +1134,16 @@ export function CreateStreamForm() {
             {streamReceiptId && (
               <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 p-3 text-left dark:border-emerald-900/40 dark:bg-emerald-950/20">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-300">
-                  {streamReceipt?.proof?.ogTxHash || streamReceipt?.proof?.ogExplorer ? 'Shareable receipt' : 'Archiving receipt...'}
+                  {streamReceipt ? 'Shareable receipt' : 'Preparing receipt'}
                 </p>
                 <p className="mt-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-200">
                   {streamReceipt?.proof?.ogTxHash || streamReceipt?.proof?.ogExplorer
                     ? '0G proof is ready. Open or share the PDF receipt.'
-                    : 'Waiting for 0G proof before receipt actions unlock.'}
+                    : streamReceipt
+                      ? 'Receipt is ready. 0G archive continues in background and will attach when confirmed.'
+                      : 'Creating the receipt record before opening actions unlock.'}
                 </p>
-                {(streamReceipt?.proof?.ogTxHash || streamReceipt?.proof?.ogExplorer) && (
+                {streamReceipt && (
                 <div className="mt-3 grid grid-cols-2 gap-2">
                   <button
                     type="button"

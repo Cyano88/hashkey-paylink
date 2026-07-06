@@ -3320,9 +3320,9 @@ export default function PaymentPage() {
       paycrestOrder?.bank_last4 ? `****${paycrestOrder.bank_last4}` : '',
     ].filter(Boolean).join(' ')
     const archivePendingLabel = receiptArchiveTimedOut
-      ? 'Pending'
+      ? 'Background'
       : paymentReceipt
-      ? 'Pending'
+      ? 'Background'
       : 'Preparing'
 
     return (
@@ -3502,7 +3502,7 @@ export default function PaymentPage() {
                 </button>
                 {!ogProofValue && (
                   <p className="text-center text-[11px] font-medium text-gray-400">
-                    Receipt is ready. 0G proof can finalize later.
+                    Receipt is ready. 0G archive continues in background and will attach when confirmed.
                   </p>
                 )}
                 {isPolymarketBridge && (

@@ -843,10 +843,10 @@ export function StreamGate() {
   const gatewayOgReady = Boolean(gatewayOgProof || gatewayOgExplorer)
   const gatewayReceiptReady = Boolean(gatewayReceiptId)
   const gatewayArchiveLabel = gatewayArchiveTimedOut
-    ? 'Archive delayed'
+    ? 'Archiving in background'
     : gatewayReceiptPollAttempts >= 6
-      ? 'Archive pending'
-      : 'Archiving...'
+      ? 'Still archiving'
+      : 'Archiving to 0G...'
 
   const legacyFullyAuthorised = isConnected && isOnArc && passkey.registered && isApproved
   const fullyAuthorised = paymentMode === 'x402' || paymentMode === 'escrow' || paymentMode === 'checkpoint'
@@ -1190,7 +1190,7 @@ export function StreamGate() {
     }
   }
 
-  async function releaseCheckpoint(checkpointPct: number) {
+  const releaseCheckpoint = useCallback(async (checkpointPct: number) => {
     if (!checkpointVault || checkpointReleaseRef.current.has(checkpointPct)) return
     checkpointReleaseRef.current.add(checkpointPct)
     try {
@@ -1201,11 +1201,14 @@ export function StreamGate() {
       })
       const data = await res.json().catch(() => ({})) as { ok?: boolean; txHash?: string; releasedAmount?: string; error?: string }
       if (!res.ok || !data.ok) throw new Error(data.error || 'Checkpoint release failed.')
+      setCheckpointError(null)
       setCheckpointReleased(current => ({ ...current, [checkpointPct]: data.txHash || data.releasedAmount || 'released' }))
-    } catch {
+    } catch (err) {
       checkpointReleaseRef.current.delete(checkpointPct)
+      const message = err instanceof Error ? err.message : 'Checkpoint release failed.'
+      setCheckpointError(`Checkpoint ${checkpointPct}% release failed: ${message}`.slice(0, 180))
     }
-  }
+  }, [checkpointVault])
 
   async function refundCheckpointEscrow() {
     const vault = checkpointVault.trim()
@@ -1733,7 +1736,7 @@ export function StreamGate() {
     && contentState === 'error'
     && Boolean(contentError && /(prepaid stream|nano meter) (has ended|was cancelled)/i.test(contentError))
 
-  function handleReadableProgress(progress: number) {
+  const handleReadableProgress = useCallback((progress: number) => {
     if (paymentMode === 'checkpoint') {
       for (const mark of [25, 50, 75, 100]) {
         if (progress >= mark / 100) void releaseCheckpoint(mark)
@@ -1743,7 +1746,7 @@ export function StreamGate() {
       setMidpointPromptSeen(true)
       setMidpointPromptOpen(true)
     }
-  }
+  }, [midpointPromptSeen, paymentMode, releaseCheckpoint, social.myReaction])
 
   if (!contentId || !creator) {
     return (
@@ -3213,6 +3216,16 @@ function YouTubeCheckpointPlayer({
 }) {
   const containerId = useRef(`youtube-player-${Math.random().toString(36).slice(2)}`)
   const playerRef = useRef<any>(null)
+  const progressRef = useRef(onWatchProgress)
+  const errorRef = useRef(onError)
+
+  useEffect(() => {
+    progressRef.current = onWatchProgress
+  }, [onWatchProgress])
+
+  useEffect(() => {
+    errorRef.current = onError
+  }, [onError])
 
   useEffect(() => {
     let cancelled = false
@@ -3236,20 +3249,20 @@ function YouTubeCheckpointPlayer({
                 const duration = Number(player.getDuration())
                 const current = Number(player.getCurrentTime())
                 if (!Number.isFinite(duration) || duration <= 0 || !Number.isFinite(current)) return
-                onWatchProgress(Math.min(1, Math.max(0, current / duration)))
+                progressRef.current(Math.min(1, Math.max(0, current / duration)))
               }, 1500)
             },
             onStateChange: (event: any) => {
-              if (event?.data === (window as any).YT?.PlayerState?.ENDED) onWatchProgress(1)
+              if (event?.data === (window as any).YT?.PlayerState?.ENDED) progressRef.current(1)
             },
             onError: () => {
-              onError('This YouTube video cannot be embedded here. Ask the creator for an embeddable YouTube link or direct MP4/WebM/OGG URL.')
+              errorRef.current('This YouTube video cannot be embedded here. Ask the creator for an embeddable YouTube link or direct MP4/WebM/OGG URL.')
             },
           },
         })
       })
       .catch(error => {
-        if (!cancelled) onError(error instanceof Error ? error.message : 'YouTube player could not load.')
+        if (!cancelled) errorRef.current(error instanceof Error ? error.message : 'YouTube player could not load.')
       })
 
     return () => {
@@ -3262,7 +3275,7 @@ function YouTubeCheckpointPlayer({
       }
       playerRef.current = null
     }
-  }, [videoId, onWatchProgress, onError])
+  }, [videoId])
 
   return <div id={containerId.current} className="aspect-video w-full bg-black" />
 }

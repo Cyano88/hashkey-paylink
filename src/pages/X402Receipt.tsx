@@ -363,7 +363,7 @@ export default function X402Receipt() {
               <div className="mt-3 flex items-center justify-between gap-4 rounded-xl border border-gray-100 bg-gray-50/70 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">
                 <span className="text-xs text-gray-400 dark:text-gray-500">0G proof</span>
                 <span className="rounded border border-gray-100 bg-gray-50 px-2 py-1 text-[11px] font-semibold text-gray-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-500">
-                  Archiving
+                  Archiving in background
                 </span>
               </div>
             )}
