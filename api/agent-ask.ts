@@ -869,6 +869,17 @@ function userFacingZeroScoutGuidanceError(error: unknown) {
   return `Agent Hash could not reach its ZeroScout intelligence layer just now. Please try again shortly.`
 }
 
+function userFacingZeroScoutMediaFollowUp(error: unknown) {
+  const message = safeZeroScoutGuidanceError(error)
+  if (/\b(credit|credits|top up|quota|billing|wallet that owns this integration key)\b/i.test(message)) {
+    return 'You do not need to unlock again. The server operator needs to restore ZeroScout credits, quota, billing, or the API-key wallet before media analysis can run.'
+  }
+  if (/\btimed out\b|AbortError|aborted/i.test(message)) {
+    return 'You do not need to unlock again. If this repeats, the ZeroScout media worker needs a longer async/queued analysis path for video URLs.'
+  }
+  return 'You do not need to unlock again. Try again shortly; if this repeats, the ZeroScout media worker or API configuration needs attention on the server.'
+}
+
 function getHelperResponse(question: string, payerName: string, chain: string, amount: string, memorySummary = '', zeroScoutGuidance?: ZeroScoutHelperGuidance, accessMode = 'paid', helperMode = '', hashpayStreamContext?: unknown): string {
   const zeroScoutAnswer = answerFromZeroScoutGuidance(question, zeroScoutGuidance)
   const isHashpayStreamMediaInspection = helperMode === 'streampay'
@@ -1063,7 +1074,7 @@ export default async function handler(req: Request, res: Response) {
           answer: [
             'Your unlock is verified, but ZeroScout/0G compute could not inspect the video in this request.',
             `Reason: ${userFacingZeroScoutGuidanceError(err)}`,
-            'You do not need to unlock again. Try again shortly; if this repeats, the ZeroScout media worker needs a longer async/queued analysis path for video URLs.',
+            userFacingZeroScoutMediaFollowUp(err),
           ].join(' '),
           zeroscoutRequired: true,
           helperMode,
