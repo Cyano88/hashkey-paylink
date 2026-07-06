@@ -856,7 +856,10 @@ function zeroScoutMediaDiagnostic(question: string, zeroScoutGuidance?: ZeroScou
 
 function safeZeroScoutGuidanceError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error)
-  return message
+  const status = typeof (error as { status?: unknown })?.status === 'number'
+    ? `HTTP ${(error as { status: number }).status}: `
+    : ''
+  return `${status}${message}`
     .replace(/Bearer\s+[a-zA-Z0-9._-]{8,}/gi, 'Bearer [redacted-token]')
     .replace(/sk-[a-zA-Z0-9_-]{8,}/g, '[redacted-api-key]')
     .slice(0, 220)
@@ -869,6 +872,12 @@ function userFacingZeroScoutGuidanceError(error: unknown) {
   }
   if (/ZEROSCOUT_INTEGRATION_SECRET/i.test(message)) {
     return 'ZeroScout media inspection is missing its server integration secret. Set ZEROSCOUT_INTEGRATION_SECRET and redeploy.'
+  }
+  if (/\b(401|403|unauthorized|forbidden|key cannot use|integration key)\b/i.test(message)) {
+    return 'ZeroScout rejected the server integration key or scope. Check that ZEROSCOUT_INTEGRATION_SECRET matches an active ZeroScout key that can use the intelligence helper endpoint.'
+  }
+  if (/\b(fetch failed|ENOTFOUND|ECONNREFUSED|ECONNRESET|ETIMEDOUT|EAI_AGAIN|network error)\b/i.test(message)) {
+    return 'The HashpayStream server could not reach the configured ZeroScout API URL. Check ZEROSCOUT_API_URL and the ZeroScout service health, then redeploy.'
   }
   if (/\btimed out\b|AbortError|aborted/i.test(message)) {
     return 'ZeroScout/0G compute is taking longer than the live chat window while inspecting this media URL.'
@@ -884,6 +893,12 @@ function userFacingZeroScoutGuidanceError(error: unknown) {
 
 function userFacingZeroScoutMediaFollowUp(error: unknown) {
   const message = safeZeroScoutGuidanceError(error)
+  if (/\b(401|403|unauthorized|forbidden|key cannot use|integration key)\b/i.test(message)) {
+    return 'You do not need to unlock again. The server operator needs to update the ZeroScout integration key or its allowed scopes.'
+  }
+  if (/\b(fetch failed|ENOTFOUND|ECONNREFUSED|ECONNRESET|ETIMEDOUT|EAI_AGAIN|network error)\b/i.test(message)) {
+    return 'You do not need to unlock again. The server operator needs to fix the ZeroScout API URL or network route.'
+  }
   if (/\b(credit|credits|top up|quota|billing|wallet that owns this integration key)\b/i.test(message)) {
     return 'You do not need to unlock again. The server operator needs to restore ZeroScout credits, quota, billing, or the API-key wallet before media analysis can run.'
   }
