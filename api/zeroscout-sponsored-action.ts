@@ -69,6 +69,7 @@ const HASHWATCH_MEDIA_MODEL_CANDIDATES = String(
   .split(',')
   .map(item => item.trim())
   .filter(Boolean)
+const HASHWATCH_MEDIA_PROVIDER_HINT = String(process.env.ZEROSCOUT_HASHWATCH_MEDIA_PROVIDER ?? 'qwen-vl').trim()
 const MAX_GUIDANCE_CONTEXT_LENGTH = 900
 
 function stableStringify(value: unknown): string {
@@ -190,6 +191,10 @@ function hashpayStreamMediaInspectionRequest(input: ZeroScoutHelperGuidanceInput
     requested: true,
     allowed: true,
     mediaType: 'hashwatch-video',
+    mediaTask: 'video-url-analysis',
+    routingRequired: true,
+    requiredProvider: HASHWATCH_MEDIA_PROVIDER_HINT || undefined,
+    requiredModelFamily: 'qwen-vl',
     mediaUrl,
     preferredModel: HASHWATCH_MEDIA_MODEL_HINT || undefined,
     modelPreference: HASHWATCH_MEDIA_MODEL_HINT || undefined,
@@ -369,6 +374,19 @@ export async function getZeroScoutHelperGuidance(input: ZeroScoutHelperGuidanceI
         request,
         mediaInspection,
         mediaModelPreference: mediaInspection?.requested ? HASHWATCH_MEDIA_MODEL_HINT || undefined : undefined,
+        mediaRouting: mediaInspection?.requested
+          ? {
+              task: 'video-url-analysis',
+              forceMediaInspection: true,
+              requiredProvider: HASHWATCH_MEDIA_PROVIDER_HINT || undefined,
+              requiredModelFamily: 'qwen-vl',
+              requiredModel: HASHWATCH_MEDIA_MODEL_HINT || undefined,
+              allowedModels: HASHWATCH_MEDIA_MODEL_CANDIDATES,
+              rejectMetadataOnlyAnswer: true,
+              rejectTextOnlyModel: true,
+              mediaUrlField: 'data.mediaInspection.mediaUrl',
+            }
+          : undefined,
         sourceProof: input.sourceProof,
         helperIntent: input.request.helperIntent,
         helperMode: input.request.helperMode,
@@ -382,9 +400,11 @@ export async function getZeroScoutHelperGuidance(input: ZeroScoutHelperGuidanceI
           ? {
               preferredModel: HASHWATCH_MEDIA_MODEL_HINT,
               preferredProvider: HASHWATCH_MEDIA_MODEL_HINT,
+              providerHint: HASHWATCH_MEDIA_PROVIDER_HINT,
               candidateModels: HASHWATCH_MEDIA_MODEL_CANDIDATES,
-              requiredCapabilities: ['video-understanding', 'temporal-grounding', 'media-url-inspection'],
-              reason: 'HashWatch video/media breakdown requests need a media-capable model path.',
+              requiredCapabilities: ['video-understanding', 'temporal-grounding', 'media-url-inspection', 'youtube-url-ingestion'],
+              blockedProviders: ['zai-org/GLM-5-FP8', 'text-only-router'],
+              reason: 'HashWatch video/media breakdown requests must route to a video-capable Qwen VL model, not a text-only metadata model.',
             }
           : undefined,
         latencyTargetMs: mediaInspection?.requested ? HASHWATCH_MEDIA_GUIDANCE_TIMEOUT_MS : input.request.qualityMode === 'deep' ? 20_000 : input.request.qualityMode === 'fast' ? 4_000 : 8_000,

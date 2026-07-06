@@ -142,6 +142,8 @@ services:
         value: "Qwen/Qwen2.5-VL-72B-Instruct"
       - key: ZEROSCOUT_HASHWATCH_MEDIA_MODEL_CANDIDATES
         value: "Qwen/Qwen2.5-VL-72B-Instruct,qwen2.5-vl-72b-instruct,qwen-vl-max-latest,Qwen/Qwen2.5-Omni-7B"
+      - key: ZEROSCOUT_HASHWATCH_MEDIA_PROVIDER
+        value: "qwen-vl"
       - key: ZEROSCOUT_HASHWATCH_MEDIA_GUIDANCE_TIMEOUT_MS
         value: "90000"
       - key: OG_RPC_URL
