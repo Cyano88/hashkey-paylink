@@ -409,7 +409,15 @@ function hashpayStreamContextAnswer(question: string, hashpayStreamContext?: unk
 
   if (Boolean(activeStatus) && wantsVideoInspection) {
     if (activeStatus === 'unlocked' && unlockedUrl) {
-      return `Your unlock is verified for "${activeTitle}". I tried to route the unlocked video URL to ZeroScout/0G compute, but the compute layer did not return a usable analysis in this request. Media URL attempted: ${unlockedUrl}`
+      const verifiedContext = unlockedSummary || activeSummary
+      return [
+        `Your unlock is verified for "${activeTitle}".`,
+        'I forwarded the unlocked video URL to ZeroScout/0G compute, but it did not return a usable media breakdown in this live chat request.',
+        'This is not an unlock/payment problem; the app has the verified media URL, but the media worker did not return inspected video details yet.',
+        verifiedContext ? `Verified HashWatch context: ${verifiedContext}` : '',
+        `Media URL sent: ${unlockedUrl}`,
+        'You do not need to unlock again. If this repeats, the correct product path is an async video-analysis job that keeps working in the background and returns the breakdown when ZeroScout finishes.',
+      ].filter(Boolean).join(' ')
     }
     return activeStatus === 'unlocked'
       ? `Your unlock is verified for "${activeTitle}", but I do not have a direct video URL in this chat context to forward to ZeroScout/0G compute.`
