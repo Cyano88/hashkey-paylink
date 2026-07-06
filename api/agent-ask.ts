@@ -797,6 +797,50 @@ export function isBadHashpayStreamMediaInspectionDenial(answer: string) {
   return deniesMediaInspection || deniesVideoAccess || genericCapabilityAnswer
 }
 
+function zeroScoutMediaDiagnostic(question: string, zeroScoutGuidance?: ZeroScoutHelperGuidance) {
+  const zeroscout = zeroScoutGuidance?.zeroscout as (ZeroScoutHelperGuidance['zeroscout'] & Record<string, unknown>) | undefined
+  const answer = answerFromZeroScoutGuidance(question, zeroScoutGuidance)
+  const textSnippet = (value: unknown) => String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, 700)
+  const stringArray = (value: unknown) => Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string').slice(0, 8)
+    : []
+  const nestedResult = recordValue(zeroscout?.result)
+  return {
+    requested: true,
+    guidanceReceived: Boolean(zeroScoutGuidance),
+    resultId: zeroscout?.id,
+    aiProvider: zeroscout?.aiProvider,
+    network: zeroscout?.network,
+    storageMode: zeroscout?.storageMode,
+    guidanceHash: zeroScoutGuidance?.guidanceHash,
+    requestHash: zeroScoutGuidance?.requestHash,
+    answerChars: answer.length,
+    answerRejectedByHashpayStreamGuard: Boolean(answer && isBadHashpayStreamMediaInspectionDenial(answer)),
+    fieldsPresent: {
+      suggestedAnswer: Boolean(textSnippet(zeroscout?.suggestedAnswer)),
+      summary: Boolean(textSnippet(zeroscout?.summary)),
+      guidance: Boolean(textSnippet(zeroscout?.guidance)),
+      answer: Boolean(textSnippet(zeroscout?.answer)),
+      message: Boolean(textSnippet(zeroscout?.message)),
+      response: Boolean(textSnippet(zeroscout?.response)),
+      nestedSuggestedAnswer: Boolean(textSnippet(nestedResult.suggestedAnswer)),
+      nestedSummary: Boolean(textSnippet(nestedResult.summary)),
+    },
+    answerSnippet: textSnippet(answer),
+    suggestedAnswerSnippet: textSnippet(zeroscout?.suggestedAnswer),
+    summarySnippet: textSnippet(zeroscout?.summary),
+    guidanceSnippet: textSnippet(zeroscout?.guidance),
+    messageSnippet: textSnippet(zeroscout?.message),
+    responseSnippet: textSnippet(zeroscout?.response),
+    nestedSuggestedAnswerSnippet: textSnippet(nestedResult.suggestedAnswer),
+    nestedSummarySnippet: textSnippet(nestedResult.summary),
+    signals: stringArray(zeroscout?.signals),
+    riskFlags: stringArray(zeroscout?.riskFlags),
+    recommendedActions: stringArray(zeroscout?.recommendedActions),
+    dataGaps: stringArray(zeroscout?.dataGaps),
+  }
+}
+
 function safeZeroScoutGuidanceError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error)
   return message
@@ -1148,6 +1192,9 @@ export default async function handler(req: Request, res: Response) {
       proof:           accessMode === HELPER_FREE_ACCESS_MODE ? undefined : result?.proof,
       zeroscoutSponsorship,
       zeroscoutPending: !zeroscoutSponsorship,
+      zeroscoutMediaDiagnostic: hashpayStreamVideoInspectionRequested
+        ? zeroScoutMediaDiagnostic(question, zeroScoutGuidance)
+        : undefined,
     })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
