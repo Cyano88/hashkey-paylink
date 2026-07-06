@@ -1,0 +1,84 @@
+import assert from 'node:assert/strict'
+
+const originalEnv = { ...process.env }
+const originalFetch = globalThis.fetch
+
+function restore() {
+  process.env = { ...originalEnv }
+  if (originalFetch) globalThis.fetch = originalFetch
+  else delete globalThis.fetch
+}
+
+function jsonResponse(body, status = 200) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    text: async () => JSON.stringify(body),
+  }
+}
+
+try {
+  process.env.ZEROSCOUT_API_URL = 'https://zeroscout.test'
+  process.env.ZEROSCOUT_INTEGRATION_SECRET = 'test-secret'
+  process.env.ZEROSCOUT_RETRY_ATTEMPTS = '0'
+  process.env.ZEROSCOUT_REQUEST_TIMEOUT_MS = '5000'
+
+  let seenPayload
+  globalThis.fetch = async (_url, init) => {
+    seenPayload = JSON.parse(String(init.body))
+    return jsonResponse({
+      id: 'zs_hashwatch_media_smoke',
+      suggestedAnswer: 'The video URL was accepted for 0G compute media inspection.',
+      summary: 'HashWatch media inspection payload accepted.',
+      signals: ['mediaInspection.allowed=true'],
+      riskFlags: [],
+      recommendedActions: ['inspect supplied mediaUrl only for this unlocked session'],
+      dataGaps: [],
+    })
+  }
+
+  const { getZeroScoutHelperGuidance } = await import('../api/zeroscout-sponsored-action.ts')
+  const videoUrl = 'https://cdn.example.com/private/hashwatch-digital-art.mp4'
+  const guidance = await getZeroScoutHelperGuidance({
+    service: 'Hash PayLink Helper',
+    action: 'helper-chat-preflight',
+    user: { payer: '0x116a00000000000000000000000000000000ee73' },
+    request: {
+      eventId: 'hashwatch-media-smoke',
+      question: 'I want ZeroScout to inspect the video URL',
+      accessMode: 'helper-free',
+      helperMode: 'streampay',
+      helperIntent: 'hashpaystream-creator',
+      qualityMode: 'standard',
+      hashpayStreamVideoInspectionRequested: true,
+      hashpayStreamContext: {
+        activeContent: {
+          status: 'unlocked',
+          contentId: 'digital-art-video',
+          metadata: {
+            title: 'A simple tutorial on how to create 3D animated Digital Art',
+            description: 'A 25mins video guide to onboard any normie in Digital Art creation',
+            creator: '0x116a00000000000000000000000000000000ee73',
+          },
+          unlockedContent: {
+            kind: 'hashwatch-video',
+            videoUrl,
+          },
+        },
+      },
+    },
+    sourceProof: { type: 'helper-free-access' },
+  })
+
+  assert.equal(guidance?.zeroscout.id, 'zs_hashwatch_media_smoke')
+  assert.equal(seenPayload?.analysisType, 'zeroscout-helper-context-guidance')
+  assert.equal(seenPayload?.data?.requestedRefinementLane, 'og-compute')
+  assert.equal(seenPayload?.data?.mediaInspection?.allowed, true)
+  assert.equal(seenPayload?.data?.mediaInspection?.mediaUrl, videoUrl)
+  assert.equal(seenPayload?.data?.request?.mediaInspection?.allowed, true)
+  assert.equal(seenPayload?.data?.request?.mediaInspection?.mediaUrl, videoUrl)
+
+  console.log('zeroscout hashwatch media smoke ok')
+} finally {
+  restore()
+}

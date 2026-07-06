@@ -25,6 +25,7 @@ type ZeroScoutHelperGuidanceInput = {
     helperMode?: string
     helperIntent?: string
     qualityMode?: 'fast' | 'standard' | 'deep'
+    hashpayStreamVideoInspectionRequested?: boolean
     memorySummary?: string
     memorySummaryHash?: string
     hashpayStreamContext?: unknown
@@ -138,6 +139,50 @@ function buildGuidanceText(result: ZeroScoutIntelligenceResult) {
     .slice(0, 1_000)
 }
 
+function recordValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' ? value as Record<string, unknown> : {}
+}
+
+function stringValue(value: unknown) {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function hashpayStreamMediaInspectionRequest(input: ZeroScoutHelperGuidanceInput) {
+  if (!input.request.hashpayStreamVideoInspectionRequested) return undefined
+  const context = recordValue(input.request.hashpayStreamContext)
+  const activeContent = recordValue(context.activeContent)
+  const unlockedContent = recordValue(activeContent.unlockedContent)
+  const metadata = recordValue(activeContent.metadata)
+  const status = stringValue(activeContent.status)
+  const mediaUrl = stringValue(unlockedContent.videoUrl)
+  if (status !== 'unlocked' || !mediaUrl) {
+    return {
+      requested: true,
+      allowed: false,
+      reason: status === 'unlocked'
+        ? 'activeContent is unlocked but no videoUrl was supplied'
+        : 'activeContent is not verified unlocked',
+      contentId: stringValue(activeContent.contentId),
+      title: stringValue(metadata.title),
+    }
+  }
+  return {
+    requested: true,
+    allowed: true,
+    mediaType: 'hashwatch-video',
+    mediaUrl,
+    contentId: stringValue(activeContent.contentId),
+    title: stringValue(metadata.title),
+    description: stringValue(metadata.description),
+    creator: stringValue(metadata.creator),
+    policy: [
+      'This mediaUrl is private HashpayStream content and is supplied only because activeContent.status is unlocked.',
+      'Inspect or fetch the media URL only for this user request.',
+      'If the media URL cannot be fetched, return a clear limitation and summarize verified metadata instead.',
+    ],
+  }
+}
+
 function shouldUseDeepHelperReview(input: ZeroScoutHelperGuidanceInput) {
   return input.request.qualityMode === 'deep'
 }
@@ -215,6 +260,8 @@ function helperModeInstructions(input: ZeroScoutHelperGuidanceInput) {
       'For "what is this video/book/post about" questions, use the content card summary, description, category, type, author, and social stats. Do not claim to have watched private video media or read locked content unless supplied context explicitly includes that unlocked content.',
       'When hashpayStreamContext.activeContent.status is "unlocked", the reader already has access. Do not ask them to unlock again; answer from activeContent.unlockedContent plus metadata.',
       'When hashpayStreamContext.activeContent.status is "locked", give public preview/metadata only and say the full private summary needs the original unlocked reader wallet/session.',
+      'When the user asks ZeroScout/0G compute to inspect, scan, analyze, or break down a HashWatch video URL, only use hashpayStreamContext.activeContent.unlockedContent.videoUrl if activeContent.status is "unlocked". If it is locked or missing, do not request or infer the private media URL.',
+      'For unlocked HashWatch media inspection, explain what can be verified from the media URL and metadata. If the compute layer cannot fetch or inspect the media URL, say that clearly and still summarize the verified metadata.',
       'For creator earnings questions, use hashpayStreamContext.creatorEarnings when present; report fixed unlocks, reading/checkpoint earnings, total earned, wallet, and claim/release status if available.',
       'If the user asks for a content recommendation, include 2-5 matching content titles and mention that they can unlock from the shown card or HashpayStream gate link.',
       'If top scorers or other sports stats are not marked available in hashpayStreamContext.statsCapabilities, say that exact stat is not currently verified instead of guessing.',
@@ -254,6 +301,7 @@ export async function getZeroScoutHelperGuidance(input: ZeroScoutHelperGuidanceI
   const sanitizedMemorySummary = sanitizeHelperContext(input.request.memorySummary)
   const refinementLane = helperRefinementLane(input)
   const reviewFlags = helperReviewFlags(refinementLane)
+  const mediaInspection = hashpayStreamMediaInspectionRequest(input)
   const request = {
     eventId: input.request.eventId,
     question: sanitizeHelperContext(input.request.question),
@@ -261,9 +309,11 @@ export async function getZeroScoutHelperGuidance(input: ZeroScoutHelperGuidanceI
     helperMode: input.request.helperMode,
     helperIntent: input.request.helperIntent,
     qualityMode: input.request.qualityMode,
+    hashpayStreamVideoInspectionRequested: input.request.hashpayStreamVideoInspectionRequested,
     memorySummary: sanitizedMemorySummary || undefined,
     memorySummaryHash: input.request.memorySummaryHash,
     hashpayStreamContext: input.request.hashpayStreamContext,
+    mediaInspection,
   }
   const hash = requestHash({
     service: input.service,
@@ -286,6 +336,7 @@ export async function getZeroScoutHelperGuidance(input: ZeroScoutHelperGuidanceI
         user: cleanUser(input.user),
         requestHash: hash,
         request,
+        mediaInspection,
         sourceProof: input.sourceProof,
         helperIntent: input.request.helperIntent,
         helperMode: input.request.helperMode,

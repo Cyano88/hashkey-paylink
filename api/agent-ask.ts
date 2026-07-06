@@ -314,6 +314,17 @@ function visibleHashpayStreamMemoryAnswer(question: string, memorySummary: strin
   ].filter(Boolean).join(' ')
 }
 
+function isHashpayStreamLinkRequest(question: string) {
+  return /\b(link|url|watch|open|play|view)\b/i.test(question)
+    && /\b(video|content|it|that|this|hash\s*watch|hashwatch)\b/i.test(question)
+}
+
+function isZeroScoutVideoInspectionRequest(question: string) {
+  return /\b(zeroscout|zero\s*scout|0g|og compute|compute)\b/i.test(question)
+    && /\b(inspect|analy[sz]e|scan|break\s*down|watch|read|review)\b/i.test(question)
+    && /\b(url|link|video|media|content|it|this|that)\b/i.test(question)
+}
+
 function hashpayStreamContextAnswer(question: string, hashpayStreamContext?: unknown, memorySummary = '') {
   const context = recordValue(hashpayStreamContext)
   if (!Object.keys(context).length) return ''
@@ -327,7 +338,29 @@ function hashpayStreamContextAnswer(question: string, hashpayStreamContext?: unk
   const activeStatus = stringValue(activeContent.status)
   const unlockedContent = recordValue(activeContent.unlockedContent)
   const unlockedSummary = stringValue(unlockedContent.summary)
+  const unlockedUrl = stringValue(unlockedContent.videoUrl) || stringValue(unlockedContent.privateUrl)
+  const activeGateLink = stringValue(activeMetadata.gateLink)
   const wantsCurrentContent = Boolean(activeStatus) && /\b(this|recent|recently|unlocked|video|book|post|context|about|summar|explain)\b/i.test(question)
+
+  if (Boolean(activeStatus) && isZeroScoutVideoInspectionRequest(question)) {
+    if (activeStatus === 'unlocked' && unlockedUrl) {
+      return `Your unlock is verified for "${activeTitle}". I can forward the unlocked video URL to ZeroScout/0G compute for analysis. If the compute layer is available, it should inspect this media URL and return a breakdown: ${unlockedUrl}`
+    }
+    return activeStatus === 'unlocked'
+      ? `Your unlock is verified for "${activeTitle}", but I do not have a direct video URL in this chat context to forward to ZeroScout/0G compute.`
+      : `I cannot forward a private video URL to ZeroScout/0G compute until the original reader wallet/session is verified as unlocked.`
+  }
+
+  if (Boolean(activeStatus) && isHashpayStreamLinkRequest(question)) {
+    if (activeStatus === 'unlocked' && unlockedUrl) {
+      return `You do not need to unlock it again. Here is the unlocked video link for "${activeTitle}": ${unlockedUrl}`
+    }
+    if (activeGateLink) {
+      return activeStatus === 'unlocked'
+        ? `Your unlock is verified, but I do not have a direct media URL in this chat context. Open the HashpayStream watch page here: ${activeGateLink}`
+        : `I can share the public gate link for "${activeTitle}". Reopen it with the original unlocked wallet/session to watch without paying again: ${activeGateLink}`
+    }
+  }
 
   if (wantsCurrentContent && activeStatus === 'unlocked') {
     const mediaNote = stringValue(unlockedContent.note)
@@ -707,6 +740,8 @@ function getHelperResponse(question: string, payerName: string, chain: string, a
     return `Hey${knownName ? ` ${knownName}` : ''}. I can help you create a PayLink, check a receipt, set up wallets, use HashpayStream, or research PolyDesk and Polymarket flows.`
   }
 
+  if (helperMode === 'streampay' && isZeroScoutVideoInspectionRequest(question) && zeroScoutAnswer) return zeroScoutAnswer
+
   if (helperMode === 'streampay') {
     const streamAnswer = hashpayStreamContextAnswer(question, hashpayStreamContext, memorySummary)
     if (streamAnswer) return streamAnswer
@@ -845,6 +880,7 @@ export default async function handler(req: Request, res: Response) {
           helperMode,
           helperIntent: helperRouting.helperIntent,
           qualityMode: helperRouting.qualityMode,
+          hashpayStreamVideoInspectionRequested: helperMode === 'streampay' ? isZeroScoutVideoInspectionRequest(question) : undefined,
           memorySummary,
           memorySummaryHash,
           hashpayStreamContext,
