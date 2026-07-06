@@ -358,16 +358,23 @@ function isHashpayStreamLinkRequest(question: string) {
 function isZeroScoutVideoInspectionRequest(question: string) {
   const asksNamedCompute = /\b(zeroscout|zero\s*scout|0g|og compute|compute)\b/i.test(question)
     && (
-      /\b(inspect|analy[sz]e|scan|break\s*down|watch|read|review|use|run|send|forward)\b/i.test(question)
+      /\b(inspect|analy[sz]e|analysis|scan|break\s*down|watch|read|review|use|run|send|forward|foward|route)\b/i.test(question)
       || question.trim().split(/\s+/).length <= 5
     )
     && (
       /\b(url|link|video|media|content|it|this|that|analysis|tutorial|guide)\b/i.test(question)
       || question.trim().split(/\s+/).length <= 5
     )
-  const asksForDeepVideoAnalysis = /\b(deep|deeper|frame[-\s]*by[-\s]*frame|break\s*down|inspect|analy[sz]e|scan|review)\b/i.test(question)
+  const asksForDeepVideoAnalysis = /\b(deep|deeper|detailed|frame[-\s]*by[-\s]*frame|break\s*down|inspect|analy[sz]e|analysis|scan|review)\b/i.test(question)
     && /\b(video|media|content|it|this|that|tutorial|guide|analysis)\b/i.test(question)
   return asksNamedCompute || asksForDeepVideoAnalysis
+}
+
+function isHashWatchVideoBreakdownRequest(question: string, activeTitle = '') {
+  const combined = `${question} ${activeTitle}`.toLowerCase()
+  const mentionsVideo = /\b(hash\s*watch|hashwatch|video|watch|tutorial|guide|digital\s+art|url|link)\b/i.test(combined)
+  const wantsBreakdown = /\b(explain|context|summar[yi]ze|summary|break\s*down|breakdown|analysis|analy[sz]e|detailed|inspect|scan|review|frame[-\s]*by[-\s]*frame|what\s+is\s+it\s+about|what\s+this\s+is\s+about)\b/i.test(question)
+  return mentionsVideo && wantsBreakdown
 }
 
 function explainUnlockedHashpayStreamContent(title: string, summary: string, unlockedSummary: string) {
@@ -398,8 +405,9 @@ function hashpayStreamContextAnswer(question: string, hashpayStreamContext?: unk
   const unlockedUrl = normalizedHashpayStreamMediaUrl(stringValue(unlockedContent.videoUrl) || stringValue(unlockedContent.privateUrl))
   const activeGateLink = stringValue(activeMetadata.gateLink)
   const wantsCurrentContent = Boolean(activeStatus) && /\b(this|recent|recently|unlocked|video|book|post|context|about|summar|explain)\b/i.test(question)
+  const wantsVideoInspection = isZeroScoutVideoInspectionRequest(question) || (activeStatus === 'unlocked' && Boolean(unlockedUrl) && isHashWatchVideoBreakdownRequest(question, activeTitle))
 
-  if (Boolean(activeStatus) && isZeroScoutVideoInspectionRequest(question)) {
+  if (Boolean(activeStatus) && wantsVideoInspection) {
     if (activeStatus === 'unlocked' && unlockedUrl) {
       return `Your unlock is verified for "${activeTitle}". I tried to route the unlocked video URL to ZeroScout/0G compute, but the compute layer did not return a usable analysis in this request. Media URL attempted: ${unlockedUrl}`
     }
@@ -950,7 +958,11 @@ export default async function handler(req: Request, res: Response) {
           helperMode,
           helperIntent: helperRouting.helperIntent,
           qualityMode: helperRouting.qualityMode,
-          hashpayStreamVideoInspectionRequested: helperMode === 'streampay' ? isZeroScoutVideoInspectionRequest(question) : undefined,
+          hashpayStreamVideoInspectionRequested: helperMode === 'streampay'
+            ? isZeroScoutVideoInspectionRequest(question)
+              || isHashWatchVideoBreakdownRequest(question, streamClientHint?.contentTitle)
+              || isHashWatchVideoBreakdownRequest(question, extractActiveContentTitleFromMemory(memorySummary))
+            : undefined,
           memorySummary,
           memorySummaryHash,
           hashpayStreamContext,
