@@ -31,7 +31,7 @@ export function StreamPayLayout() {
             DM us
           </a>
           <a
-            href="https://hashpaylink.com/docs/streampay"
+            href="https://hashpaylink.com/hashpaystream/docs"
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-1.5 text-xs text-gray-400 transition-colors hover:text-gray-900 dark:hover:text-gray-200"

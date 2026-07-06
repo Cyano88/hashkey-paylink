@@ -30,8 +30,8 @@ const cards = [
   {
     icon: Radio,
     title: 'HashpayStream',
-    description: 'USDC payroll, agentic streams, and Arena rooms on Arc with Privy + Circle wallet mapping.',
-    path: '/docs/streampay',
+    description: 'Creator checkout for USDC-paid content, checkpoint payouts, receipts, and Agent Hash on Arc.',
+    path: '/hashpaystream/docs',
     color: 'text-indigo-500',
     bg: 'bg-indigo-50 dark:bg-indigo-950/40',
   },

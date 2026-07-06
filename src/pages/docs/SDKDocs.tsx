@@ -93,7 +93,7 @@ const url = buildPayLinkUrl({
 
       <NavFooter
         prev={{ label: 'API Endpoints', path: '/docs/api' }}
-        next={{ label: 'HashpayStream', path: '/docs/streampay' }}
+        next={{ label: 'HashpayStream', path: '/hashpaystream/docs' }}
       />
     </DocPage>
   )

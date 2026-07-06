@@ -57,7 +57,7 @@ export default function SecurityDocs() {
       </Section>
 
       <NavFooter
-        prev={{ label: 'HashpayStream', path: '/docs/streampay' }}
+        prev={{ label: 'HashpayStream', path: '/hashpaystream/docs' }}
         next={{ label: 'Wallet Setup', path: '/docs/wallets' }}
       />
     </DocPage>

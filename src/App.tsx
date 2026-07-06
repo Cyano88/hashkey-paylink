@@ -81,6 +81,10 @@ export default function App() {
     <SolanaProvider>
     <BrowserRouter>
       <Routes>
+        <Route path="hashpaystream/docs" element={<DocsLayout />}>
+          <Route index element={<StreamPayDocs />} />
+          <Route path="*" element={<StreamPayDocs />} />
+        </Route>
         <Route path="docs" element={<DocsLayout />}>
           <Route index element={<DocsHome />} />
           <Route path="getting-started"    element={<GettingStarted />} />

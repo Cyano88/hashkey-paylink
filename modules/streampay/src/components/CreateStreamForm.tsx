@@ -1899,7 +1899,7 @@ export function CreateStreamForm() {
                 DM us
               </a>
               <a
-                href="https://hashpaylink.com/docs/streampay"
+                href="https://hashpaylink.com/hashpaystream/docs"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"

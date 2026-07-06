@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState, type SyntheticEvent } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { usePrivy } from '@privy-io/react-auth'
-import { Loader2, LockKeyhole, Plus, Share2, TrendingUp } from 'lucide-react'
+import { Loader2, LockKeyhole, Plus, TrendingUp } from 'lucide-react'
 import { LinkFactory }            from './LinkFactory'
 import { readGhostVault }         from '../../hooks/usePoAStream'
 import type { GhostVaultEntry }   from '../../hooks/usePoAStream'
@@ -40,24 +40,6 @@ type CreatorStreamRow = {
   active: boolean
 }
 
-function shareableGateLink(link?: string) {
-  if (!link) return ''
-  if (/^https?:\/\//i.test(link)) return link
-  if (typeof window === 'undefined') return link
-  return new URL(link, window.location.origin).toString()
-}
-
-async function shareCreatorGateLink(link: string | undefined, title = 'HashpayStream content') {
-  const value = shareableGateLink(link)
-  if (!value || typeof navigator === 'undefined') return false
-  if (navigator.share) {
-    await navigator.share({ title, text: 'Unlock this on HashpayStream.', url: value }).catch(() => undefined)
-    return true
-  }
-  if (!navigator.clipboard) return false
-  await navigator.clipboard.writeText(value).catch(() => undefined)
-  return true
-}
 type CreatorTab = 'discover' | 'create' | 'earnings' | 'streams'
 type CreatorCategory = 'worldcup-news' | 'live-scores' | 'crypto' | 'ebooks' | 'developers' | 'hashwatch'
 type PublishedContent = {
@@ -836,7 +818,6 @@ function DiscoverContent({
   const [categoryFilter, setCategoryFilter] = useState<CreatorCategory | 'all'>('all')
   const [heroIndex, setHeroIndex] = useState(0)
   const [now, setNow] = useState(Date.now())
-  const [copiedGateId, setCopiedGateId] = useState('')
 
   const loadScores = useCallback(async (silent = false) => {
     if (!silent) {
@@ -964,15 +945,6 @@ function DiscoverContent({
       return
     }
     onCreate()
-  }
-
-  async function shareGate(event: SyntheticEvent, card: PublishedContent) {
-    event.preventDefault()
-    event.stopPropagation()
-    if (!card.gateLink) return
-    await shareCreatorGateLink(card.gateLink, card.title)
-    setCopiedGateId(card.id)
-    window.setTimeout(() => setCopiedGateId(current => current === card.id ? '' : current), 1200)
   }
 
   const heroCta = hero.cta || (hero.action === 'gate' ? 'Unlock' : 'Create')
@@ -1252,7 +1224,7 @@ function DiscoverContent({
                   key={card.id}
                   type="button"
                   onClick={() => openContent(card)}
-                  className="group grid h-[132px] w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-2xl border border-gray-100 bg-white p-3 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-white/10 dark:bg-white/[0.04] dark:hover:border-white/20"
+                  className="group grid h-[132px] w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 overflow-hidden rounded-2xl border border-gray-100 bg-white p-3 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-white/10 dark:bg-white/[0.04] dark:hover:border-white/20"
                 >
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
@@ -1297,27 +1269,6 @@ function DiscoverContent({
                       <LockKeyhole className="h-4 w-4" />
                       <span className="w-full truncate text-center text-[10px] font-black">{card.cta || 'Unlock'}</span>
                     </span>
-                    {card.gateLink && (
-                      <span
-                        role="button"
-                        tabIndex={0}
-                        onClick={event => void shareGate(event, card)}
-                        onKeyDown={event => {
-                          if (event.key !== 'Enter' && event.key !== ' ') return
-                          void shareGate(event, card)
-                        }}
-                        aria-label={`Share ${card.title}`}
-                        className={[
-                          'inline-flex h-8 items-center justify-center rounded-xl border transition-colors',
-                          copiedGateId === card.id
-                            ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-300'
-                            : 'border-gray-100 bg-gray-50 text-gray-500 hover:bg-gray-100 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300 dark:hover:bg-white/[0.1]',
-                        ].join(' ')}
-                        title="Share unlock link"
-                      >
-                        <Share2 className="h-3.5 w-3.5" />
-                      </span>
-                    )}
                   </span>
                 </button>
               )
@@ -1329,7 +1280,7 @@ function DiscoverContent({
                 key={card.id}
                 type="button"
                 onClick={() => openContent(card)}
-                className="group flex h-[132px] w-full gap-3 rounded-2xl border border-gray-100 bg-white p-2 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-white/10 dark:bg-white/[0.04] dark:hover:border-white/20"
+                className="group flex h-[132px] w-full gap-3 overflow-hidden rounded-2xl border border-gray-100 bg-white p-2 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-white/10 dark:bg-white/[0.04] dark:hover:border-white/20"
               >
                 <div className="relative h-full w-24 shrink-0 overflow-hidden rounded-xl bg-gray-100 dark:bg-white/[0.06]">
                   {isEbook && imageBroken ? (
@@ -1381,32 +1332,11 @@ function DiscoverContent({
                   {card.description}
                 </p>
                   </div>
-                <div className="mt-2 flex items-center justify-between gap-2">
+                <div className="mt-2 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
                   <span className="min-w-0 truncate text-[10px] font-semibold text-gray-400 dark:text-gray-500">
                     {card.xHandle ? `@${card.xHandle.replace(/^@/, '')}` : card.source}
                   </span>
-                  <span className="inline-flex shrink-0 items-center gap-2">
-                    {card.gateLink && (
-                      <span
-                        role="button"
-                        tabIndex={0}
-                        onClick={event => void shareGate(event, card)}
-                        onKeyDown={event => {
-                          if (event.key !== 'Enter' && event.key !== ' ') return
-                          void shareGate(event, card)
-                        }}
-                        aria-label={`Share ${card.title}`}
-                        className={[
-                          'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border transition-colors',
-                          copiedGateId === card.id
-                            ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-300'
-                            : 'border-gray-100 text-gray-400 hover:bg-gray-50 dark:border-white/10 dark:text-gray-300 dark:hover:bg-white/[0.06]',
-                        ].join(' ')}
-                        title="Share unlock link"
-                      >
-                        <Share2 className="h-3.5 w-3.5" />
-                      </span>
-                    )}
+                  <span className="inline-flex max-w-[122px] shrink-0 items-center justify-end gap-1.5 overflow-hidden">
                     {card.editable && card.draft && (
                       <span
                         role="button"
@@ -1421,14 +1351,14 @@ function DiscoverContent({
                           event.stopPropagation()
                           onEdit(card)
                         }}
-                        className="rounded-full border border-gray-200 px-2 py-1 text-[10px] font-bold text-gray-500 hover:bg-gray-50 dark:border-white/10 dark:text-gray-300 dark:hover:bg-white/[0.06]"
+                        className="h-7 shrink-0 rounded-full border border-gray-200 px-2 text-[10px] font-bold leading-7 text-gray-500 hover:bg-gray-50 dark:border-white/10 dark:text-gray-300 dark:hover:bg-white/[0.06]"
                       >
                         Edit
                       </span>
                     )}
-                  <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-gray-950 dark:text-gray-100">
-                      <LockKeyhole className="h-3.5 w-3.5" />
-                      {card.cta || (card.action === 'gate' ? 'Unlock' : 'Create')}
+                  <span className="inline-flex min-w-0 max-w-[96px] shrink items-center justify-end gap-1.5 text-[11px] font-bold text-gray-950 dark:text-gray-100">
+                      <LockKeyhole className="h-3.5 w-3.5 shrink-0" />
+                      <span className="truncate">{card.cta || (card.action === 'gate' ? 'Unlock' : 'Create')}</span>
                     </span>
                   </span>
                 </div>
