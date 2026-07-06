@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, type SyntheticEvent } from 'react'
 import { usePrivy } from '@privy-io/react-auth'
-import { Loader2, LockKeyhole, Plus, TrendingUp } from 'lucide-react'
+import { Loader2, LockKeyhole, Plus, Share2, TrendingUp } from 'lucide-react'
 import { LinkFactory }            from './LinkFactory'
 import { readGhostVault }         from '../../hooks/usePoAStream'
 import type { GhostVaultEntry }   from '../../hooks/usePoAStream'
@@ -38,6 +38,25 @@ type CreatorStreamRow = {
   claimable: string
   cancelled: boolean
   active: boolean
+}
+
+function shareableGateLink(link?: string) {
+  if (!link) return ''
+  if (/^https?:\/\//i.test(link)) return link
+  if (typeof window === 'undefined') return link
+  return new URL(link, window.location.origin).toString()
+}
+
+async function shareCreatorGateLink(link: string | undefined, title = 'HashpayStream content') {
+  const value = shareableGateLink(link)
+  if (!value || typeof navigator === 'undefined') return false
+  if (navigator.share) {
+    await navigator.share({ title, text: 'Unlock this on HashpayStream.', url: value }).catch(() => undefined)
+    return true
+  }
+  if (!navigator.clipboard) return false
+  await navigator.clipboard.writeText(value).catch(() => undefined)
+  return true
 }
 type CreatorTab = 'discover' | 'create' | 'earnings' | 'streams'
 type CreatorCategory = 'worldcup-news' | 'live-scores' | 'crypto' | 'ebooks' | 'developers' | 'hashwatch'
@@ -817,6 +836,7 @@ function DiscoverContent({
   const [categoryFilter, setCategoryFilter] = useState<CreatorCategory | 'all'>('all')
   const [heroIndex, setHeroIndex] = useState(0)
   const [now, setNow] = useState(Date.now())
+  const [copiedGateId, setCopiedGateId] = useState('')
 
   const loadScores = useCallback(async (silent = false) => {
     if (!silent) {
@@ -944,6 +964,15 @@ function DiscoverContent({
       return
     }
     onCreate()
+  }
+
+  async function shareGate(event: SyntheticEvent, card: PublishedContent) {
+    event.preventDefault()
+    event.stopPropagation()
+    if (!card.gateLink) return
+    await shareCreatorGateLink(card.gateLink, card.title)
+    setCopiedGateId(card.id)
+    window.setTimeout(() => setCopiedGateId(current => current === card.id ? '' : current), 1200)
   }
 
   const heroCta = hero.cta || (hero.action === 'gate' ? 'Unlock' : 'Create')
@@ -1095,6 +1124,21 @@ function DiscoverContent({
                     {featuredScore ? <LockKeyhole className="h-4 w-4" /> : <Loader2 className={['h-4 w-4', scoreLoading ? 'animate-spin' : ''].join(' ')} />}
                     {featuredScore ? 'Unlock' : 'Refresh'}
                   </span>
+                  {hero.gateLink && (
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      onClick={event => void shareGate(event, hero)}
+                      onKeyDown={event => {
+                        if (event.key !== 'Enter' && event.key !== ' ') return
+                        void shareGate(event, hero)
+                      }}
+                      className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-[11px] font-bold text-white/80 backdrop-blur-sm"
+                    >
+                      <Share2 className="h-3.5 w-3.5" />
+                      {copiedGateId === hero.id ? 'Shared' : 'Share'}
+                    </span>
+                  )}
                 </div>
               </div>
             </>
@@ -1125,9 +1169,26 @@ function DiscoverContent({
                   {hero.description}
                 </p>
                 <div className="mt-5 flex items-center justify-between gap-3">
-                  <span className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-3 text-[12px] font-black text-gray-950 shadow-sm">
-                    <LockKeyhole className="h-4 w-4" />
-                    {heroCta}
+                  <span className="inline-flex min-w-0 items-center gap-2">
+                    <span className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-3 text-[12px] font-black text-gray-950 shadow-sm">
+                      <LockKeyhole className="h-4 w-4" />
+                      {heroCta}
+                    </span>
+                    {hero.gateLink && (
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        onClick={event => void shareGate(event, hero)}
+                        onKeyDown={event => {
+                          if (event.key !== 'Enter' && event.key !== ' ') return
+                          void shareGate(event, hero)
+                        }}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-white/20 bg-white/10 px-3 py-3 text-[11px] font-bold text-white/82 backdrop-blur-sm"
+                      >
+                        <Share2 className="h-3.5 w-3.5" />
+                        {copiedGateId === hero.id ? 'Shared' : 'Share'}
+                      </span>
+                    )}
                   </span>
                   <span className="rounded-full border border-white/20 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-white/75">
                     {hero.tag}
@@ -1261,9 +1322,27 @@ function DiscoverContent({
                       {match.marketStatus === 'matched' ? 'Live route available' : 'Match route pending'}
                     </p>
                   </div>
-                  <span className="inline-flex shrink-0 flex-col items-center justify-center gap-1 rounded-xl bg-gray-950 px-3 py-2 text-white">
-                    <LockKeyhole className="h-4 w-4" />
-                    <span className="text-[10px] font-black">{card.cta || 'Unlock'}</span>
+                  <span className="inline-flex shrink-0 flex-col gap-1.5">
+                    <span className="inline-flex flex-col items-center justify-center gap-1 rounded-xl bg-gray-950 px-3 py-2 text-white">
+                      <LockKeyhole className="h-4 w-4" />
+                      <span className="text-[10px] font-black">{card.cta || 'Unlock'}</span>
+                    </span>
+                    {card.gateLink && (
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        onClick={event => void shareGate(event, card)}
+                        onKeyDown={event => {
+                          if (event.key !== 'Enter' && event.key !== ' ') return
+                          void shareGate(event, card)
+                        }}
+                        className="inline-flex items-center justify-center gap-1 rounded-xl border border-gray-100 bg-gray-50 px-2 py-1.5 text-gray-500 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300"
+                        title="Share unlock link"
+                      >
+                        <Share2 className="h-3 w-3" />
+                        <span className="text-[9px] font-black">{copiedGateId === card.id ? 'Shared' : 'Share'}</span>
+                      </span>
+                    )}
                   </span>
                 </button>
               )
@@ -1332,6 +1411,22 @@ function DiscoverContent({
                     {card.xHandle ? `@${card.xHandle.replace(/^@/, '')}` : card.source}
                   </span>
                   <span className="inline-flex shrink-0 items-center gap-2">
+                    {card.gateLink && (
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        onClick={event => void shareGate(event, card)}
+                        onKeyDown={event => {
+                          if (event.key !== 'Enter' && event.key !== ' ') return
+                          void shareGate(event, card)
+                        }}
+                        className="inline-flex items-center gap-1.5 rounded-full border border-gray-100 px-2 py-1 text-[10px] font-bold text-gray-400 hover:bg-gray-50 dark:border-white/10 dark:text-gray-300 dark:hover:bg-white/[0.06]"
+                        title="Share unlock link"
+                      >
+                        <Share2 className="h-3 w-3" />
+                        {copiedGateId === card.id ? 'Shared' : 'Share'}
+                      </span>
+                    )}
                     {card.editable && card.draft && (
                       <span
                         role="button"
@@ -2034,13 +2129,6 @@ function SettlementDashboard({
             onSignOut={onCreatorSignOut}
           />
 
-          <div className="rounded-xl border border-gray-100 bg-gray-50/70 px-4 py-3 dark:border-white/10 dark:bg-white/[0.04]">
-            <p className="text-[12px] font-bold text-gray-700 dark:text-gray-200">Older stream claims</p>
-            <p className="mt-1 text-[11px] leading-5 text-gray-400 dark:text-gray-500">
-              For legacy signed-viewer links only. Most creator payments appear in the earnings card above.
-            </p>
-          </div>
-
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-[13px] font-semibold text-gray-700 dark:text-gray-200">My posts</span>
@@ -2099,102 +2187,109 @@ function SettlementDashboard({
             )}
           </div>
 
-          {/* Gate link input */}
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <span className="text-[13px] font-semibold text-gray-700 dark:text-gray-200">Gate lookup</span>
-              <span className="text-[11px] text-gray-400 dark:text-gray-500">Auto-detects ID</span>
+          <details className="rounded-xl border border-gray-100 bg-gray-50/70 px-4 py-3 dark:border-white/10 dark:bg-white/[0.04]">
+            <summary className="cursor-pointer list-none text-[12px] font-bold text-gray-600 dark:text-gray-300 [&::-webkit-details-marker]:hidden">
+              Legacy signed-link recovery
+            </summary>
+            <p className="mt-1 text-[11px] leading-5 text-gray-400 dark:text-gray-500">
+              Only use this for older signed-viewer links. Current creator payments appear in the earnings card above.
+            </p>
+
+            <div className="mt-4 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[13px] font-semibold text-gray-700 dark:text-gray-200">Gate lookup</span>
+                <span className="text-[11px] text-gray-400 dark:text-gray-500">Auto-detects ID</span>
+              </div>
+              <input
+                type="text"
+                placeholder="Gate link or content ID"
+                value={gateInput}
+                onChange={e => handleGateInput(e.target.value)}
+                className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-[13px] text-gray-800 placeholder:text-gray-300 focus:outline-none focus:border-gray-400 transition-colors min-h-[48px] dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-100 dark:placeholder:text-gray-600 dark:focus:border-white/30"
+              />
+              {contentId && (
+                <p className="text-[11px] text-gray-400 dark:text-gray-500">
+                  Tracking: <span className="font-mono font-semibold text-gray-600 dark:text-gray-300">{contentId}</span>
+                  {' '}
+                  <button
+                    onClick={() => fetchViewers(contentId)}
+                    className="text-blue-500 hover:text-blue-700 underline underline-offset-2 transition-colors dark:text-blue-300 dark:hover:text-blue-200"
+                  >
+                    Refresh
+                  </button>
+                </p>
+              )}
             </div>
-            <input
-              type="text"
-              placeholder="Gate link or content ID"
-              value={gateInput}
-              onChange={e => handleGateInput(e.target.value)}
-              className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-[13px] text-gray-800 placeholder:text-gray-300 focus:outline-none focus:border-gray-400 transition-colors min-h-[48px] dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-100 dark:placeholder:text-gray-600 dark:focus:border-white/30"
-            />
-            {contentId && (
-              <p className="text-[11px] text-gray-400 dark:text-gray-500">
-                Tracking: <span className="font-mono font-semibold text-gray-600 dark:text-gray-300">{contentId}</span>
-                {' '}
-                <button
-                  onClick={() => fetchViewers(contentId)}
-                  className="text-blue-500 hover:text-blue-700 underline underline-offset-2 transition-colors dark:text-blue-300 dark:hover:text-blue-200"
-                >
-                  Refresh
-                </button>
-              </p>
+
+            {loading && (
+              <div className="mt-3 flex items-center justify-center gap-2 rounded-xl border border-gray-100 bg-gray-50 px-4 py-4 text-[12px] text-gray-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-500">
+                <VaultSpinner />Looking up payments...
+              </div>
             )}
-          </div>
 
-          {/* Viewers list */}
-          {loading && (
-            <div className="flex items-center justify-center gap-2 rounded-xl border border-gray-100 bg-gray-50 px-4 py-4 text-[12px] text-gray-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-500">
-              <VaultSpinner />Looking up payments...
-            </div>
-          )}
+            {!loading && contentId && viewers.length === 0 && (
+              <div className="mt-3 rounded-xl border border-gray-100 bg-gray-50 px-4 py-4 text-center text-[12px] text-gray-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-500">
+                No legacy signed-viewer payments found for this gate.
+              </div>
+            )}
 
-          {!loading && contentId && viewers.length === 0 && (
-            <div className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-4 text-center text-[12px] text-gray-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-500">
-              No payments yet. Share your gated link and check back here.
-            </div>
-          )}
+            {!loading && viewers.length > 0 && (
+              <div className="mt-3 space-y-2">
+                <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">
+                  {viewers.length} legacy payment{viewers.length > 1 ? 's' : ''} ready
+                </p>
+                {viewers.map(v => {
+                  const amt    = (Number(v.amountRaw) / 1_000_000).toFixed(6)
+                  const txHash = settledTxs[v.viewer]
+                  const err    = errors[v.viewer]
+                  const busy   = settlingFor === v.viewer
 
-          {!loading && viewers.length > 0 && (
-            <div className="space-y-2">
-              <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">
-                {viewers.length} payment{viewers.length > 1 ? 's' : ''} ready
-              </p>
-              {viewers.map(v => {
-                const amt    = (Number(v.amountRaw) / 1_000_000).toFixed(6)
-                const txHash = settledTxs[v.viewer]
-                const err    = errors[v.viewer]
-                const busy   = settlingFor === v.viewer
-
-                return (
-                  <div key={v.viewer} className="rounded-xl border border-gray-100 bg-gray-50/60 px-4 py-3 space-y-2 dark:border-white/10 dark:bg-white/[0.04]">
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-0.5">
-                        <p className="font-mono text-[12px] text-gray-700 dark:text-gray-200">
-                          {v.viewer.slice(0, 8)}...{v.viewer.slice(-6)}
-                        </p>
-                        <p className="text-[10px] text-gray-400 dark:text-gray-500">
-                          {new Date(v.ts).toLocaleString()}
+                  return (
+                    <div key={v.viewer} className="rounded-xl border border-gray-100 bg-gray-50/60 px-4 py-3 space-y-2 dark:border-white/10 dark:bg-white/[0.04]">
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <p className="font-mono text-[12px] text-gray-700 dark:text-gray-200">
+                            {v.viewer.slice(0, 8)}...{v.viewer.slice(-6)}
+                          </p>
+                          <p className="text-[10px] text-gray-400 dark:text-gray-500">
+                            {new Date(v.ts).toLocaleString()}
+                          </p>
+                        </div>
+                        <p className="font-mono text-[13px] font-semibold text-gray-800 dark:text-gray-100">
+                          ${amt} <span className="text-[10px] font-normal text-gray-400 dark:text-gray-500">USDC</span>
                         </p>
                       </div>
-                      <p className="font-mono text-[13px] font-semibold text-gray-800 dark:text-gray-100">
-                        ${amt} <span className="text-[10px] font-normal text-gray-400 dark:text-gray-500">USDC</span>
-                      </p>
+
+                      {txHash ? (
+                        <button
+                          type="button"
+                          onClick={() => window.open(`https://testnet.arcscan.app/tx/${txHash}`, '_blank', 'noopener,noreferrer')}
+                          className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 py-2 text-[12px] font-semibold text-emerald-700 hover:bg-emerald-100 transition-colors"
+                        >
+                          <CheckIcon />Settled - View on Arcscan
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleSettle(v.viewer)}
+                          disabled={busy}
+                          className="flex w-full items-center justify-center gap-1.5 rounded-lg py-2 text-[12px] font-semibold transition-all active:scale-[0.98]"
+                          style={!busy
+                            ? { background: '#111827', color: '#ffffff' }
+                            : { background: '#f3f4f6', color: '#9ca3af', cursor: 'not-allowed' }}
+                        >
+                          {busy ? <><Spinner />Settling...</> : 'Claim legacy earnings'}
+                        </button>
+                      )}
+
+                      {err && (
+                        <p className="text-[11px] text-red-500 text-center">{err}</p>
+                      )}
                     </div>
-
-                    {txHash ? (
-                      <button
-                        type="button"
-                        onClick={() => window.open(`https://testnet.arcscan.app/tx/${txHash}`, '_blank', 'noopener,noreferrer')}
-                        className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 py-2 text-[12px] font-semibold text-emerald-700 hover:bg-emerald-100 transition-colors"
-                      >
-                        <CheckIcon />Settled - View on Arcscan
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => handleSettle(v.viewer)}
-                        disabled={busy}
-                        className="flex w-full items-center justify-center gap-1.5 rounded-lg py-2 text-[12px] font-semibold transition-all active:scale-[0.98]"
-                        style={!busy
-                          ? { background: '#111827', color: '#ffffff' }
-                          : { background: '#f3f4f6', color: '#9ca3af', cursor: 'not-allowed' }}
-                      >
-                        {busy ? <><Spinner />Settling...</> : 'Claim earnings'}
-                      </button>
-                    )}
-
-                    {err && (
-                      <p className="text-[11px] text-red-500 text-center">{err}</p>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-          )}
+                  )
+                })}
+              </div>
+            )}
+          </details>
 
         </div>
       </div>

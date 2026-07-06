@@ -91,5 +91,59 @@ assert.match(hashpayStreamContextAnswer('Latest book', context), /Latest book:\n
 assert.doesNotMatch(hashpayStreamContextAnswer('Latest book', context), /Pay-As-You-Watch Demo.*onboarding guide/i)
 assert.match(hashpayStreamContextAnswer('Suggest a price', context), /Suggested Price/i)
 assert.match(hashpayStreamContextAnswer('Improve my post', context), /Improve/i)
+assert.match(hashpayStreamContextAnswer('Payment modes', context), /HashpayStream Payment Modes/i)
+assert.doesNotMatch(hashpayStreamContextAnswer('Top viewed', {
+  topViewed: [{
+    title: 'Before You Build: AI Terminal Setup',
+    category: 'developers',
+    priceUsdc: 0.1,
+    gateLink: '/gate?id=developer-terminal-setup',
+  }],
+}), /Open:\s*\n/i)
+
+const unlockedBookAnswer = hashpayStreamContextAnswer('Summarize this unlocked book for me', {
+  activeContent: {
+    status: 'unlocked',
+    contentId: 'ebook-dracula',
+    metadata: {
+      title: 'Dracula',
+      description: 'A gothic horror classic with journals, letters, pursuit, and dread.',
+      type: 'book',
+      category: 'ebooks',
+    },
+    unlockedContent: {
+      kind: 'ebook',
+      summary: 'A gothic horror classic with journals, letters, pursuit, and dread.',
+      textExcerpt: "Jonathan Harker travels toward Count Dracula's castle and notices fear, superstition, and isolation building around him.",
+    },
+  },
+})
+
+assert.match(unlockedBookAnswer, /verified unlock\/session/i)
+assert.match(unlockedBookAnswer, /unlocked ebook/i)
+assert.match(unlockedBookAnswer, /Verified excerpt/i)
+assert.match(unlockedBookAnswer, /do not need to unlock it again/i)
+
+const unlockedNewsAnswer = hashpayStreamContextAnswer('Summarize this unlocked news content', {
+  activeContent: {
+    status: 'unlocked',
+    contentId: 'worldcup-news-test',
+    metadata: {
+      title: 'World Cup News Pulse',
+      description: 'Paid tournament context and market-moving headlines for readers who want the full source.',
+      type: 'url',
+      category: 'worldcup-news',
+    },
+    unlockedContent: {
+      kind: 'private-link',
+      summary: 'Paid tournament context and market-moving headlines for readers who want the full source.',
+      privateUrl: 'https://example.com/world-cup-news',
+    },
+  },
+})
+
+assert.match(unlockedNewsAnswer, /unlocked external creator\/news link/i)
+assert.match(unlockedNewsAnswer, /private URL is verified/i)
+assert.match(unlockedNewsAnswer, /do not need to unlock it again/i)
 
 console.log('agent hashwatch denial filter smoke ok')

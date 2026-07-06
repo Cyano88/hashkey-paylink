@@ -1870,18 +1870,21 @@ function safeContentPreview(entry: ContentEntry, maxLength = 900) {
   return cleanMetaText(entry.content || entry.description || '', maxLength)
 }
 
-function unlockedContentContext(entry: ContentEntry) {
+async function unlockedContentContext(entry: ContentEntry) {
   const content = String(entry.content ?? '')
   if (entry.type === 'url') {
     return {
       kind: 'private-link',
+      title: entry.title,
       summary: entry.description || 'Unlocked private creator link.',
       privateUrl: content.slice(0, 1_000),
+      note: 'This is an unlocked external URL. Agent Hash may summarize the verified title and description now; deeper article analysis should route the URL through ZeroScout/0G when available.',
     }
   }
   if (entry.type === 'video') {
     return {
       kind: 'hashwatch-video',
+      title: entry.title,
       summary: entry.description || 'Unlocked HashWatch video.',
       videoUrl: absoluteMediaUrl(content).slice(0, 1_000),
       durationSeconds: entry.durationSeconds,
@@ -1889,15 +1892,29 @@ function unlockedContentContext(entry: ContentEntry) {
     }
   }
   if (entry.type === 'book') {
+    const bookId = content.startsWith('gutenberg:') ? content.slice('gutenberg:'.length).trim() : ''
+    let textExcerpt = ''
+    if (bookId) {
+      try {
+        textExcerpt = cleanMetaText((await fetchOfficialBookText(bookId)).slice(0, 4_000), 4_000)
+      } catch {
+        textExcerpt = cleanMetaText((FALLBACK_BOOK_TEXT_BY_GUTENBERG_ID[bookId] ?? '').slice(0, 4_000), 4_000)
+      }
+    }
     return {
       kind: 'ebook',
+      title: entry.title,
       summary: entry.description || 'Unlocked ebook.',
       source: content.slice(0, 120),
-      note: 'Use book metadata here. Full public-domain text can be retrieved by the reader endpoint when available.',
+      textExcerpt,
+      note: textExcerpt
+        ? 'Use this verified unlocked book excerpt plus metadata for summaries. Do not claim the entire book was fully read inside Agent Hash unless full text is supplied.'
+        : 'Use book metadata here. Full public-domain text can be retrieved by the reader endpoint when available.',
     }
   }
   return {
     kind: 'paid-post',
+    title: entry.title,
     summary: entry.description || entry.title,
     text: cleanMetaText(content, 2_400),
   }
@@ -1916,7 +1933,7 @@ async function buildAccessAwareContentContext(contentId: string, walletAddress: 
     metadata: entryToPost(safeContentId, entry),
     priceUsdc: priceUsdc(entry),
     preview: safeContentPreview(entry),
-    unlockedContent: unlocked ? unlockedContentContext(entry) : null,
+    unlockedContent: unlocked ? await unlockedContentContext(entry) : null,
     accessRule: publicDemo
       ? 'This is a public HashWatch demo. Do not ask for payment or another unlock; answer from unlockedContent and metadata.'
       : unlocked

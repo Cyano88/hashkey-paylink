@@ -335,7 +335,7 @@ function cardBullets(cards: Record<string, unknown>[], limit = 3) {
       ? Number(card.priceUsdc) <= 0 ? 'Free' : `${card.priceUsdc} USDC`
       : ''
     const gateLink = stringValue(card.gateLink)
-    return `${index + 1}. ${title}${category ? ` (${category})` : ''}${price ? ` - ${price}` : ''}${gateLink ? `\nOpen: ${gateLink}` : ''}`
+    return `${index + 1}. ${title}${category ? ` (${category})` : ''}${price ? ` - ${price}` : ''}${gateLink ? ` | Open: ${gateLink}` : ''}`
   }).join('\n')
 }
 
@@ -481,15 +481,46 @@ function isHashWatchVideoBreakdownRequest(question: string, activeTitle = '') {
   return mentionsVideo && wantsBreakdown
 }
 
-function explainUnlockedHashpayStreamContent(title: string, summary: string, unlockedSummary: string) {
+function explainUnlockedHashpayStreamContent(title: string, summary: string, unlockedContent: Record<string, unknown>) {
+  const kind = stringValue(unlockedContent.kind)
+  const unlockedSummary = stringValue(unlockedContent.summary)
+  const text = stringValue(unlockedContent.text)
+  const textExcerpt = stringValue(unlockedContent.textExcerpt)
+  const privateUrl = stringValue(unlockedContent.privateUrl)
+  const videoUrl = stringValue(unlockedContent.videoUrl)
   const suppliedContext = unlockedSummary && unlockedSummary !== summary ? unlockedSummary : summary
   if (!suppliedContext) {
-    return `This unlocked content is "${title}". I can explain the verified metadata I have here, and I can give a deeper breakdown if ZeroScout/0G compute inspects the media URL.`
+    return `This unlocked content is "${title}". I can explain the verified metadata I have here.`
+  }
+  if (kind === 'ebook') {
+    return [
+      `In plain context, "${title}" is an unlocked ebook: ${suppliedContext}`,
+      textExcerpt ? `Verified excerpt available to Agent Hash: ${textExcerpt.slice(0, 700)}${textExcerpt.length > 700 ? '...' : ''}` : '',
+      'I can summarize the verified book context without asking for another unlock. Longer chapter-by-chapter summaries need more book text supplied from the reader.',
+    ].filter(Boolean).join(' ')
+  }
+  if (kind === 'private-link') {
+    return [
+      `In plain context, "${title}" is an unlocked external creator/news link: ${suppliedContext}`,
+      privateUrl ? 'The private URL is verified in this unlocked session. Agent Hash can summarize the verified metadata now; deeper URL reading should route the link through ZeroScout/0G when that service is available.' : '',
+    ].filter(Boolean).join(' ')
+  }
+  if (kind === 'paid-post') {
+    return [
+      `In plain context, "${title}" is an unlocked paid post: ${suppliedContext}`,
+      text ? `Verified post text: ${text.slice(0, 900)}${text.length > 900 ? '...' : ''}` : '',
+      'I can summarize this unlocked post from the verified text/context without asking for another unlock.',
+    ].filter(Boolean).join(' ')
+  }
+  if (kind === 'hashwatch-video') {
+    return [
+      `In plain context, "${title}" is an unlocked HashWatch video: ${suppliedContext}`,
+      videoUrl ? 'The unlocked media URL is verified. Deeper visual analysis depends on ZeroScout/0G media inspection; Agent Hash should not pretend it watched frames unless that inspection returns usable results.' : '',
+    ].filter(Boolean).join(' ')
   }
   return [
-    `In plain context, "${title}" is a creator tutorial about ${suppliedContext.charAt(0).toLowerCase()}${suppliedContext.slice(1)}.`,
-    'It is positioned as an onboarding guide, so the expected value is helping a beginner understand the basic workflow, tools, and steps needed to start creating 3D animated digital art.',
-    'I can explain from the verified unlock context without charging again; deeper frame-by-frame analysis needs ZeroScout/0G compute to inspect the actual media URL.',
+    `In plain context, "${title}" is unlocked content: ${suppliedContext}`,
+    'I can explain from the verified unlock context without charging again.',
   ].join(' ')
 }
 
@@ -557,7 +588,7 @@ export function hashpayStreamContextAnswer(question: string, hashpayStreamContex
     return hashpayStreamImprovePostAnswer(context)
   }
 
-  if (/\b(payment mode|payment flow|x402|pay as you read|pay-as-you-read|pay as you watch|pay-as-you-watch|checkpoint|fixed unlock|unlock mode)\b/i.test(value)) {
+  if (/\b(payment modes?|payment flows?|x402|pay as you read|pay-as-you-read|pay as you watch|pay-as-you-watch|checkpoint|fixed unlock|unlock modes?)\b/i.test(value)) {
     return hashpayStreamPaymentGuide(context)
   }
 
@@ -612,7 +643,7 @@ export function hashpayStreamContextAnswer(question: string, hashpayStreamContex
     const mediaNote = stringValue(unlockedContent.note)
     return [
       `You do not need to unlock it again. I found a verified unlock/session for "${activeTitle}".`,
-      explainUnlockedHashpayStreamContent(activeTitle, activeSummary, unlockedSummary),
+      explainUnlockedHashpayStreamContent(activeTitle, activeSummary, unlockedContent),
       mediaNote && !/do not claim|frame-level|supplied metadata/i.test(mediaNote) ? `Note: ${mediaNote}` : '',
     ].filter(Boolean).join(' ')
   }
@@ -748,6 +779,13 @@ function nameFromMemory(memorySummary: string, payerName: string) {
     .map(item => String(item ?? '').trim().replace(/\b(?:not|is not|isn't)\s+@?[a-zA-Z0-9_.-]+.*$/i, '').replace(/\banymore\b.*$/i, '').trim())
     .find(Boolean)
   return picked ? titleName(picked) : ''
+}
+
+function introducedName(question: string) {
+  const match = /\b(?:my name is|i am|i'm|call me)\s+([A-Za-z][A-Za-z0-9_-]{1,40}(?:\s+[A-Za-z][A-Za-z0-9_-]{1,40}){0,2})\b/i.exec(question)
+  const name = match?.[1]?.trim() ?? ''
+  if (!name || /\b(agent|hash|trying|asking|looking|tired|ready|done|here)\b/i.test(name)) return ''
+  return titleName(name)
 }
 
 function cleanZeroScoutGuidanceText(value: string) {
@@ -1107,6 +1145,11 @@ function getHelperResponse(question: string, payerName: string, chain: string, a
     return knownName
       ? `You are ${knownName}.`
       : "I do not know your preferred name yet. Tell me what to call you and I will remember it for future chats."
+  }
+
+  const newName = introducedName(question)
+  if (newName) {
+    return `Got it, ${newName}. I will use your name naturally when it helps this HashpayStream workflow.`
   }
 
   if (isGreetingQuestion(question)) {

@@ -139,6 +139,7 @@ type AgentOption = AgentProfile & {
 }
 type UnlockStep = 'intro' | 'choose' | 'email' | 'otp' | 'fund'
 const CREATOR_X402_GATEWAY_LABEL = 'Arc Testnet'
+const ARC_TESTNET_FAUCET_URL = 'https://faucet.circle.com/'
 
 function hasWorldCupScore(match: WorldCupScoreMatch) {
   const home = String(match.homeScore ?? '').trim().toLowerCase()
@@ -278,6 +279,24 @@ function showCopyToast(message: string) {
   ].join(';')
   document.body.appendChild(toast)
   window.setTimeout(() => toast.remove(), 1400)
+}
+
+function currentGateShareUrl() {
+  if (typeof window === 'undefined') return ''
+  return window.location.href
+}
+
+async function shareGateLink(title: string) {
+  const url = currentGateShareUrl()
+  if (!url || typeof navigator === 'undefined') return false
+  if (navigator.share) {
+    await navigator.share({ title: title || 'HashpayStream content', text: 'Unlock this on HashpayStream.', url }).catch(() => undefined)
+    return true
+  }
+  if (!navigator.clipboard) return false
+  await navigator.clipboard.writeText(url).catch(() => undefined)
+  showCopyToast('Link copied')
+  return true
 }
 
 function cleanEmail(value: string) {
@@ -616,6 +635,7 @@ export function StreamGate() {
   const [fundAmount, setFundAmount] = useState('0.5')
   const [fundBusy, setFundBusy] = useState(false)
   const [fundMessage, setFundMessage] = useState<string | null>(null)
+  const [gateShared, setGateShared] = useState(false)
   const gatewayActivationPending = isGatewayPendingMessage(fundMessage)
   const [copiedWallet, setCopiedWallet] = useState(false)
   const [readerWalletAddress, setReaderWalletAddress] = useState('')
@@ -1788,6 +1808,12 @@ export function StreamGate() {
     }
   }, [midpointPromptSeen, paymentMode, releaseCheckpoint, social.myReaction])
 
+  async function shareCurrentGate() {
+    await shareGateLink(title || 'HashpayStream content')
+    setGateShared(true)
+    window.setTimeout(() => setGateShared(false), 1200)
+  }
+
   if (!contentId || !creator) {
     return (
       <div className="w-full max-w-[480px] mx-auto mt-12 text-center text-[13px] text-gray-400 py-12">
@@ -1798,6 +1824,20 @@ export function StreamGate() {
 
   return (
     <div className="w-full max-w-[560px] mx-auto mt-6 px-3 sm:mt-8 sm:px-0 space-y-4">
+      <div className="flex items-center justify-between gap-3 rounded-2xl border border-gray-100 bg-white px-4 py-3 shadow-sm dark:border-white/10 dark:bg-[#111216]">
+        <div className="min-w-0">
+          <p className="truncate text-[12px] font-black text-gray-950 dark:text-white">{title || 'HashpayStream content'}</p>
+          <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-gray-400 dark:text-gray-500">Share this unlock page</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => void shareCurrentGate()}
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-2 text-[11px] font-bold text-gray-600 transition-colors hover:bg-gray-50 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-300 dark:hover:bg-white/[0.08]"
+        >
+          <ShareIcon />
+          {gateShared ? 'Shared' : 'Share'}
+        </button>
+      </div>
 
       {/* ── Content card ── */}
       <div ref={contentRef} className="relative overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-[#111216]">
@@ -1884,6 +1924,26 @@ export function StreamGate() {
                     </span>
                   </div>
                 </button>
+
+                <div className="rounded-xl border border-gray-100 bg-white/80 px-3 py-2.5 text-[11px] leading-5 text-gray-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-400">
+                  Need test funds? Get Arc Testnet USDC, then move it to x402 for fixed unlocks.
+                  <span className="mt-2 flex flex-wrap gap-2">
+                    <a
+                      href={ARC_TESTNET_FAUCET_URL}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded-full border border-gray-200 bg-white px-2.5 py-1 text-[10px] font-bold text-gray-600 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300"
+                    >
+                      Faucet
+                    </a>
+                    <a
+                      href={x402WalletManagerHref()}
+                      className="rounded-full border border-gray-200 bg-white px-2.5 py-1 text-[10px] font-bold text-gray-600 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300"
+                    >
+                      Move to x402
+                    </a>
+                  </span>
+                </div>
 
                 {!streamContentAvailable && (
                   <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
@@ -2200,6 +2260,28 @@ export function StreamGate() {
                           )}
                         </div>
                       )}
+                      <div className="rounded-xl border border-gray-100 bg-white px-3 py-3">
+                        <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-gray-400">Funding steps</p>
+                        <p className="mt-1 text-[11px] leading-5 text-gray-500">
+                          1. Fund the reader wallet with Arc Testnet USDC. 2. Move a small amount into x402 payment balance. 3. Unlock.
+                        </p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <a
+                            href={ARC_TESTNET_FAUCET_URL}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="rounded-full border border-gray-200 px-2.5 py-1 text-[10px] font-bold text-gray-600"
+                          >
+                            Faucet
+                          </a>
+                          <a
+                            href={x402WalletManagerHref()}
+                            className="rounded-full border border-gray-200 px-2.5 py-1 text-[10px] font-bold text-gray-600"
+                          >
+                            Move to x402
+                          </a>
+                        </div>
+                      </div>
                       <div className="rounded-xl border border-gray-100 bg-white px-3 py-3">
                         <label className="block space-y-1.5">
                           <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-gray-400">Activation amount</span>
@@ -3666,6 +3748,17 @@ function LockIcon() {
     <svg className="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.25}>
       <path strokeLinecap="round" strokeLinejoin="round"
         d="M7.5 10.5V8a4.5 4.5 0 119 0v2.5M6.75 10.5h10.5A1.75 1.75 0 0119 12.25v6A1.75 1.75 0 0117.25 20H6.75A1.75 1.75 0 015 18.25v-6a1.75 1.75 0 011.75-1.75z" />
+    </svg>
+  )
+}
+
+function ShareIcon() {
+  return (
+    <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 12.5 16 7.5M7.5 11.5 16 16.5" />
+      <circle cx="5.5" cy="12" r="2.5" />
+      <circle cx="18.5" cy="6" r="2.5" />
+      <circle cx="18.5" cy="18" r="2.5" />
     </svg>
   )
 }
