@@ -143,15 +143,21 @@ function agentHashProPaymentLink(payer: string) {
 
 function compactContentCard(card: Record<string, unknown>) {
   const social = (card.social && typeof card.social === 'object' ? card.social : {}) as Record<string, unknown>
+  const insights = (card.insights && typeof card.insights === 'object' ? card.insights : {}) as Record<string, unknown>
   return {
     id: card.contentId ?? card.id,
     title: card.title,
+    description: card.description,
     category: card.category,
     author: card.authorName,
     priceUsdc: card.priceUsdc,
     mode: card.mode,
     type: card.type,
     gateLink: card.gateLink,
+    createdAt: card.createdAt,
+    summary: insights.summary,
+    explainPrompt: insights.explainPrompt,
+    suggestedQuestions: insights.suggestedQuestions,
     views: social.views,
     likes: social.likes,
     comments: social.comments,
@@ -183,7 +189,13 @@ function compactHashpayStreamContext(context: unknown) {
     mostLiked: takeCards('mostLiked', 5),
     mostDiscussed: takeCards('mostDiscussed', 5),
     mostUnlocked: takeCards('mostUnlocked', 5),
+    latestPosts: takeCards('latestPosts', 8),
+    hashWatch: takeCards('hashWatch', 12),
+    latestHashWatch: takeCards('latestHashWatch', 6),
     bestEbooks: takeCards('bestEbooks', 12),
+    latestBooks: takeCards('latestBooks', 6),
+    latestByType: data.latestByType,
+    assistantPlaybook: data.assistantPlaybook,
     latestWorldCupNews: takeCards('latestWorldCupNews', 5),
     liveScores: takeCards('liveScores', 8),
     creatorEarnings: data.creatorEarnings,
@@ -737,7 +749,7 @@ export default async function handler(req: Request, res: Response) {
       },
     })
     if (!zeroscoutSponsorship) {
-      const strictSponsorshipRequired = helperRouting.qualityMode === 'deep' || accessMode !== HELPER_FREE_ACCESS_MODE || helperMode === 'streampay'
+      const strictSponsorshipRequired = helperRouting.qualityMode === 'deep' || accessMode !== HELPER_FREE_ACCESS_MODE
       if (strictSponsorshipRequired) {
         return res.status(503).json({
           error: 'ZeroScout sponsorship is required before helper responses are returned. Try again shortly.',

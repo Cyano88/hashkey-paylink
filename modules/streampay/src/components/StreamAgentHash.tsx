@@ -289,7 +289,7 @@ export function StreamAgentHash() {
 
           <div className="border-t border-gray-100 bg-white p-3 dark:border-white/10 dark:bg-[#111114]">
             <div className="mb-2 flex flex-wrap gap-1.5">
-              {['Suggest a price', 'Explain HashWatch', 'Improve my post', 'Read my earnings'].map(prompt => (
+              {['Latest HashWatch', 'Latest book', 'Suggest a price', 'Read my earnings', 'Improve my post'].map(prompt => (
                 <button
                   key={prompt}
                   type="button"

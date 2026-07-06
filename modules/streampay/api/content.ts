@@ -1826,6 +1826,12 @@ export async function listApprovedCreatorContent(_req: Request, res: Response) {
 
 type AgentContentCard = ReturnType<typeof entryToPost> & {
   priceUsdc: number
+  insights: {
+    summary: string
+    explainPrompt: string
+    suggestedQuestions: string[]
+    contentInputs: string[]
+  }
   social: {
     views: number
     likes: number
@@ -1833,6 +1839,47 @@ type AgentContentCard = ReturnType<typeof entryToPost> & {
     comments: number
     unlocks: number
     score: number
+  }
+}
+
+function contentInsights(entry: ContentEntry) {
+  const title = entry.title || (entry.type === 'video' ? 'HashWatch video' : entry.type === 'book' ? 'Ebook' : 'Creator post')
+  const description = cleanMetaText(entry.description || '', 280)
+  const typeLabel = entry.type === 'video'
+    ? 'HashWatch video'
+    : entry.type === 'book'
+      ? 'ebook'
+      : entry.type === 'scores'
+        ? 'live-score card'
+        : entry.type === 'url'
+          ? 'private link'
+          : 'paid post'
+  const summary = description
+    ? `${title}: ${description}`
+    : `${title} is a ${typeLabel} on HashpayStream. Use the title, category, creator metadata, social stats, and unlock mode as verified context.`
+  const suggestedQuestions = entry.type === 'video'
+    ? ['What is this HashWatch video about?', 'Who should unlock this video?', 'What price fits this video?']
+    : entry.type === 'book'
+      ? ['Summarize this book.', 'Who would enjoy this book?', 'Why use pay-as-you-read for this book?']
+      : ['Summarize this post.', 'Suggest a price.', 'How should the creator improve this post?']
+  return {
+    summary,
+    explainPrompt: `Explain "${title}" as a ${typeLabel} using only verified HashpayStream metadata unless unlocked content text is supplied in the user chat.`,
+    suggestedQuestions,
+    contentInputs: [
+      'title',
+      'description',
+      'creator',
+      'category',
+      'content type',
+      'unlock mode',
+      'price',
+      'views',
+      'likes',
+      'comments',
+      'unlocks',
+      'gate link',
+    ],
   }
 }
 
@@ -1897,6 +1944,7 @@ async function agentCardFromEntry(contentId: string, entry: ContentEntry): Promi
   return {
     ...entryToPost(contentId, entry),
     priceUsdc: priceUsdc(entry),
+    insights: contentInsights(entry),
     social: {
       views,
       likes,
@@ -1982,6 +2030,15 @@ export async function buildHashpayStreamAgentContext(params: { creator?: unknown
   const mostLiked = [...cards].sort((a, b) => b.social.likes - a.social.likes).slice(0, 8)
   const mostDiscussed = [...cards].sort((a, b) => b.social.comments - a.social.comments).slice(0, 8)
   const mostUnlocked = [...cards].sort((a, b) => b.social.unlocks - a.social.unlocks).slice(0, 8)
+  const latestPosts = [...cards].sort((a, b) => b.createdAt - a.createdAt).slice(0, 12)
+  const latestHashWatch = [...cards]
+    .filter(card => card.type === 'video' || card.category === 'hashwatch')
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .slice(0, 8)
+  const latestBooks = [...cards]
+    .filter(card => card.type === 'book' || card.category === 'ebooks')
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .slice(0, 8)
   const worldCupNewsCards = newsEntries.length
     ? newsEntries.slice(0, 8).map(([contentId, entry]) => entryToPost(contentId, entry))
     : cards.filter(card => card.category === 'worldcup-news').slice(0, 8)
@@ -2033,11 +2090,42 @@ export async function buildHashpayStreamAgentContext(params: { creator?: unknown
       mostLiked,
       mostDiscussed,
       mostUnlocked,
+      latestPosts,
       bestEbooks: contentByCategory.ebooks ?? [],
       hashWatch: contentByCategory.hashwatch ?? [],
+      latestHashWatch,
+      latestBooks,
       latestWorldCupNews: worldCupNewsCards,
       liveScores: scoreEntries.slice(0, 12).map(([contentId, entry]) => entryToPost(contentId, entry)),
       byCategory: contentByCategory,
+    },
+    latestByType: {
+      video: latestHashWatch[0] ?? null,
+      book: latestBooks[0] ?? null,
+      post: latestPosts[0] ?? null,
+    },
+    assistantPlaybook: {
+      answerScope: [
+        'creator publishing',
+        'fixed x402 unlocks',
+        'pay-as-you-read checkpoints',
+        'pay-as-you-watch HashWatch checkpoints',
+        'HashWatch video discovery',
+        'ebook discovery and summaries from verified metadata',
+        'content pricing',
+        'post improvement',
+        'social reactions and comments',
+        'creator earnings',
+        'receipts and 0G archive status',
+      ],
+      contentRules: [
+        'For latest video questions, use discovery.latestHashWatch first, then discovery.hashWatch.',
+        'For latest book questions, use discovery.latestBooks first, then discovery.bestEbooks.',
+        'For "what is this about" questions, use the card insights summary and description; do not pretend to have watched a private video or read locked text unless the user supplies unlocked content.',
+        'For creator earnings, use creatorEarnings only when a creator wallet is supplied; otherwise ask for the creator wallet or tell the user to open Creator Hub earnings.',
+        'For price suggestions, compare content type, description depth, and current HashpayStream prices; suggest a practical USDC range.',
+        'For 0G archive questions, say archived only when proof metadata exists; otherwise say archiving can continue in the background.',
+      ],
     },
     creatorEarnings,
   }
