@@ -124,7 +124,7 @@ function readStreamAgentAccessHint(): StreamAgentAccessHint | null {
     return {
       contentId: typeof parsed.contentId === 'string' ? parsed.contentId.slice(0, 128) : '',
       walletAddress: typeof parsed.walletAddress === 'string' ? parsed.walletAddress.slice(0, 64) : '',
-      mode: parsed.mode === 'x402' || parsed.mode === 'checkpoint' ? parsed.mode : undefined,
+      mode: parsed.mode === 'x402' || parsed.mode === 'checkpoint' || parsed.mode === 'watch' ? parsed.mode : undefined,
       unlockedAt: typeof parsed.unlockedAt === 'number' ? parsed.unlockedAt : undefined,
     }
   } catch {

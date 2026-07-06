@@ -777,14 +777,16 @@ function activeHashpayStreamTitle(hashpayStreamContext?: unknown) {
   return stringValue(metadata.title)
 }
 
-function isBadHashpayStreamMediaInspectionDenial(answer: string) {
+export function isBadHashpayStreamMediaInspectionDenial(answer: string) {
   const deniesMediaInspection = /\b(hashpaystream|streaming access|payments)\b/i.test(answer)
     && /\b(doesn'?t|does not|isn'?t|is not|currently offers?|not something)\b/i.test(answer)
     && /\b(video analysis|frame[-\s]*by[-\s]*frame|deeper analysis|ai vision|dedicated video analysis)\b/i.test(answer)
+  const deniesVideoAccess = /\b(i\s+don'?t\s+have\s+access|i\s+do\s+not\s+have\s+access|i\s+can'?t\s+watch|i\s+cannot\s+watch|can'?t\s+watch|cannot\s+watch|can'?t\s+pull|cannot\s+pull)\b/i.test(answer)
+    && /\b(actual\s+video|video\s+content|video\s+frames?|transcript|watch\s+or\s+analy[sz]e\s+videos?|analy[sz]e\s+videos?\s+directly)\b/i.test(answer)
   const genericCapabilityAnswer = /\b(i'?m Agent Hash|I can help|What would you like)\b/i.test(answer)
     && /\b(HashpayStream|ZeroScout|content|creator tools|access status)\b/i.test(answer)
     && !/\b(inspect|analysis|analy[sz]ed|breakdown|frame|media URL|video URL|unlocked|verified)\b/i.test(answer)
-  return deniesMediaInspection || genericCapabilityAnswer
+  return deniesMediaInspection || deniesVideoAccess || genericCapabilityAnswer
 }
 
 function safeZeroScoutGuidanceError(error: unknown) {
