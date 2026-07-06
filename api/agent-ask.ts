@@ -804,7 +804,7 @@ function userFacingZeroScoutGuidanceError(error: unknown) {
     return 'ZeroScout media inspection is missing its server integration secret. Set ZEROSCOUT_INTEGRATION_SECRET and redeploy.'
   }
   if (/\btimed out\b|AbortError|aborted/i.test(message)) {
-    return 'ZeroScout/0G compute timed out while inspecting the media URL.'
+    return 'ZeroScout/0G compute is taking longer than the live chat window while inspecting this media URL.'
   }
   if (/non-JSON|invalid response|missing result id|did not include suggestedAnswer|missing stored proof/i.test(message)) {
     return 'ZeroScout returned a response the app could not use for a media breakdown.'
@@ -1009,7 +1009,7 @@ export default async function handler(req: Request, res: Response) {
           answer: [
             'Your unlock is verified, but ZeroScout/0G compute could not inspect the video in this request.',
             `Reason: ${userFacingZeroScoutGuidanceError(err)}`,
-            'You do not need to unlock again. Try again shortly; if this repeats, the ZeroScout media worker or API key needs attention on the server.',
+            'You do not need to unlock again. Try again shortly; if this repeats, the ZeroScout media worker needs a longer async/queued analysis path for video URLs.',
           ].join(' '),
           zeroscoutRequired: true,
           helperMode,
