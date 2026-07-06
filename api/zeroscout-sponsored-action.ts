@@ -59,6 +59,8 @@ export type ZeroScoutHelperGuidance = {
 
 const SPONSOR_TIMEOUT_MS = Math.max(1000, Number(process.env.ZEROSCOUT_SPONSOR_TIMEOUT_MS ?? 30_000))
 const FAST_SPONSOR_TIMEOUT_MS = Math.max(1000, Number(process.env.ZEROSCOUT_FAST_SPONSOR_TIMEOUT_MS ?? 1_500))
+const HELPER_GUIDANCE_TIMEOUT_MS = Math.max(1000, Number(process.env.ZEROSCOUT_HELPER_GUIDANCE_TIMEOUT_MS ?? 10_000))
+const HASHWATCH_MEDIA_GUIDANCE_TIMEOUT_MS = Math.max(1000, Number(process.env.ZEROSCOUT_HASHWATCH_MEDIA_GUIDANCE_TIMEOUT_MS ?? 8_000))
 const MAX_GUIDANCE_CONTEXT_LENGTH = 900
 
 function stableStringify(value: unknown): string {
@@ -185,6 +187,13 @@ function hashpayStreamMediaInspectionRequest(input: ZeroScoutHelperGuidanceInput
 
 function shouldUseDeepHelperReview(input: ZeroScoutHelperGuidanceInput) {
   return input.request.qualityMode === 'deep'
+}
+
+function helperGuidanceTimeoutMs(input: ZeroScoutHelperGuidanceInput, mediaInspection: ReturnType<typeof hashpayStreamMediaInspectionRequest>) {
+  if (mediaInspection?.requested) return HASHWATCH_MEDIA_GUIDANCE_TIMEOUT_MS
+  if (input.strictGuidance || input.request.qualityMode === 'deep') return Math.max(HELPER_GUIDANCE_TIMEOUT_MS, 20_000)
+  if (input.request.qualityMode === 'fast') return Math.min(HELPER_GUIDANCE_TIMEOUT_MS, 4_000)
+  return HELPER_GUIDANCE_TIMEOUT_MS
 }
 
 type HelperRefinementLane = 'og-compute' | 'openai' | 'anthropic' | 'multi-stack'
@@ -363,6 +372,8 @@ export async function getZeroScoutHelperGuidance(input: ZeroScoutHelperGuidanceI
       },
       includeClaudeReview: reviewFlags.includeClaudeReview,
       includeOpenAiReview: reviewFlags.includeOpenAiReview,
+    }, {
+      timeoutMs: helperGuidanceTimeoutMs(input, mediaInspection),
     })
 
     const guidance = buildGuidanceText(zeroscout)

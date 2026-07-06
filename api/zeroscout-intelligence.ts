@@ -61,6 +61,7 @@ const RETRY_DELAY_MS = Math.max(100, Number(process.env.ZEROSCOUT_RETRY_DELAY_MS
 type ZeroScoutCallOptions = {
   requireProof?: boolean
   endpointPath?: string
+  timeoutMs?: number
 }
 
 function sleep(ms: number) {
@@ -156,10 +157,11 @@ export async function callZeroScoutIntelligence(payload: ZeroScoutPayload, optio
   }
 
   const requestId = cryptoRandomId()
+  const timeoutMs = Math.max(1000, Number(options.timeoutMs ?? REQUEST_TIMEOUT_MS) || REQUEST_TIMEOUT_MS)
   let lastError: unknown
   for (let attempt = 0; attempt <= RETRY_ATTEMPTS; attempt += 1) {
     const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+    const timeout = setTimeout(() => controller.abort(), timeoutMs)
     try {
       const response = await fetch(endpoint, {
         method: 'POST',
