@@ -876,6 +876,9 @@ function userFacingZeroScoutGuidanceError(error: unknown) {
   if (/\b(401|403|unauthorized|forbidden|key cannot use|integration key)\b/i.test(message)) {
     return 'ZeroScout rejected the server integration key or scope. Check that ZEROSCOUT_INTEGRATION_SECRET matches an active ZeroScout key that can use the intelligence helper endpoint.'
   }
+  if (/\b(capped at|longer than|background analysis|shorter demo clip|duration)\b/i.test(message)) {
+    return 'This video is longer than the live Agent Hash media-inspection limit. Use a short demo clip for live analysis while longer videos run through background analysis.'
+  }
   if (/\b(fetch failed|ENOTFOUND|ECONNREFUSED|ECONNRESET|ETIMEDOUT|EAI_AGAIN|network error)\b/i.test(message)) {
     return 'The HashpayStream server could not reach the configured ZeroScout API URL. Check ZEROSCOUT_API_URL and the ZeroScout service health, then redeploy.'
   }
@@ -895,6 +898,9 @@ function userFacingZeroScoutMediaFollowUp(error: unknown) {
   const message = safeZeroScoutGuidanceError(error)
   if (/\b(401|403|unauthorized|forbidden|key cannot use|integration key)\b/i.test(message)) {
     return 'You do not need to unlock again. The server operator needs to update the ZeroScout integration key or its allowed scopes.'
+  }
+  if (/\b(capped at|longer than|background analysis|shorter demo clip|duration)\b/i.test(message)) {
+    return 'You do not need to unlock again. This unlock can still be summarized from verified metadata now; full long-video analysis should run in the background.'
   }
   if (/\b(fetch failed|ENOTFOUND|ECONNREFUSED|ECONNRESET|ETIMEDOUT|EAI_AGAIN|network error)\b/i.test(message)) {
     return 'You do not need to unlock again. The server operator needs to fix the ZeroScout API URL or network route.'

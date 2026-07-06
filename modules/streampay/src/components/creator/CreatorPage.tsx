@@ -59,6 +59,7 @@ type PublishedContent = {
   action?: 'create' | 'gate'
   cta?: string
   editable?: boolean
+  durationSeconds?: number
   reviewStatus?: 'pending' | 'approved' | 'rejected'
   reviewNote?: string
   draft?: CreatorDraft
@@ -272,7 +273,7 @@ const OFFICIAL_DISCOVER_CONTENT: PublishedContent[] = [
     contentId: 'hashwatch-video-demo',
     creator: OFFICIAL_CREATOR_ADDRESS,
     title: 'HashWatch: Pay-As-You-Watch Demo',
-    description: 'Watch in-platform video while USDC releases only as the viewer reaches playback checkpoints.',
+    description: 'Watch a 30 second in-platform walkthrough while USDC releases only as the viewer reaches playback checkpoints.',
     category: 'hashwatch',
     price: '0.10',
     tag: 'HashWatch',
@@ -281,6 +282,7 @@ const OFFICIAL_DISCOVER_CONTENT: PublishedContent[] = [
     gateLink: OFFICIAL_HASHWATCH_VIDEO_GATE,
     action: 'gate',
     cta: 'Watch demo',
+    durationSeconds: 30,
   },
   {
     id: 'hashpaylink-creator-primer',

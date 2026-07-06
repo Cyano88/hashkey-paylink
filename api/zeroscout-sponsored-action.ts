@@ -61,6 +61,7 @@ const SPONSOR_TIMEOUT_MS = Math.max(1000, Number(process.env.ZEROSCOUT_SPONSOR_T
 const FAST_SPONSOR_TIMEOUT_MS = Math.max(1000, Number(process.env.ZEROSCOUT_FAST_SPONSOR_TIMEOUT_MS ?? 1_500))
 const HELPER_GUIDANCE_TIMEOUT_MS = Math.max(1000, Number(process.env.ZEROSCOUT_HELPER_GUIDANCE_TIMEOUT_MS ?? 10_000))
 const HASHWATCH_MEDIA_GUIDANCE_TIMEOUT_MS = Math.max(1000, Number(process.env.ZEROSCOUT_HASHWATCH_MEDIA_GUIDANCE_TIMEOUT_MS ?? 60_000))
+const HASHWATCH_MAX_LIVE_MEDIA_SECONDS = Math.max(30, Number(process.env.ZEROSCOUT_HASHWATCH_MAX_LIVE_MEDIA_SECONDS ?? 300))
 const HASHWATCH_MEDIA_MODEL_HINT = String(process.env.ZEROSCOUT_HASHWATCH_MEDIA_MODEL ?? 'qwen3.7-plus').trim()
 const HASHWATCH_MEDIA_MODEL_CANDIDATES = String(
   process.env.ZEROSCOUT_HASHWATCH_MEDIA_MODEL_CANDIDATES
@@ -168,6 +169,26 @@ function normalizedMediaUrl(value: string) {
   return trimmed
 }
 
+function numberValue(value: unknown) {
+  const num = typeof value === 'number' ? value : Number(String(value ?? '').trim())
+  return Number.isFinite(num) && num > 0 ? num : 0
+}
+
+function inferredDurationSeconds(...values: unknown[]) {
+  for (const value of values) {
+    const direct = numberValue(value)
+    if (direct) return direct
+  }
+  const text = values.map(value => String(value ?? '')).join(' ')
+  const hourMatch = /\b(\d+(?:\.\d+)?)\s*(?:hours?|hrs?|hr|h)\b/i.exec(text)
+  if (hourMatch) return Math.round(Number(hourMatch[1]) * 3600)
+  const minuteMatch = /\b(\d+(?:\.\d+)?)\s*(?:minutes?|mins?|min|m)\b/i.exec(text)
+  if (minuteMatch) return Math.round(Number(minuteMatch[1]) * 60)
+  const secondMatch = /\b(\d+(?:\.\d+)?)\s*(?:seconds?|secs?|sec|s)\b/i.exec(text)
+  if (secondMatch) return Math.round(Number(secondMatch[1]))
+  return 0
+}
+
 function hashpayStreamMediaInspectionRequest(input: ZeroScoutHelperGuidanceInput) {
   if (!input.request.hashpayStreamVideoInspectionRequested) return undefined
   const context = recordValue(input.request.hashpayStreamContext)
@@ -176,6 +197,15 @@ function hashpayStreamMediaInspectionRequest(input: ZeroScoutHelperGuidanceInput
   const metadata = recordValue(activeContent.metadata)
   const status = stringValue(activeContent.status)
   const mediaUrl = normalizedMediaUrl(stringValue(unlockedContent.videoUrl))
+  const durationSeconds = inferredDurationSeconds(
+    unlockedContent.durationSeconds,
+    metadata.durationSeconds,
+    metadata.duration,
+    activeContent.durationSeconds,
+    unlockedContent.summary,
+    metadata.description,
+    metadata.title,
+  )
   if (status !== 'unlocked' || !mediaUrl) {
     return {
       requested: true,
@@ -185,6 +215,19 @@ function hashpayStreamMediaInspectionRequest(input: ZeroScoutHelperGuidanceInput
         : 'activeContent is not verified unlocked',
       contentId: stringValue(activeContent.contentId),
       title: stringValue(metadata.title),
+    }
+  }
+  if (durationSeconds > HASHWATCH_MAX_LIVE_MEDIA_SECONDS) {
+    return {
+      requested: true,
+      allowed: false,
+      blocked: true,
+      reason: `HashWatch live media inspection is capped at ${Math.round(HASHWATCH_MAX_LIVE_MEDIA_SECONDS / 60)} minutes; this video is about ${Math.round(durationSeconds / 60)} minutes. Use background analysis or a shorter demo clip.`,
+      contentId: stringValue(activeContent.contentId),
+      title: stringValue(metadata.title),
+      description: stringValue(metadata.description),
+      durationSeconds,
+      maxLiveDurationSeconds: HASHWATCH_MAX_LIVE_MEDIA_SECONDS,
     }
   }
   return {
@@ -202,6 +245,8 @@ function hashpayStreamMediaInspectionRequest(input: ZeroScoutHelperGuidanceInput
     contentId: stringValue(activeContent.contentId),
     title: stringValue(metadata.title),
     description: stringValue(metadata.description),
+    durationSeconds,
+    maxLiveDurationSeconds: HASHWATCH_MAX_LIVE_MEDIA_SECONDS,
     creator: stringValue(metadata.creator),
     policy: [
       'This mediaUrl is private HashpayStream content and is supplied only because activeContent.status is unlocked.',
@@ -338,6 +383,9 @@ export async function getZeroScoutHelperGuidance(input: ZeroScoutHelperGuidanceI
   const refinementLane = helperRefinementLane(input)
   const reviewFlags = helperReviewFlags(refinementLane)
   const mediaInspection = hashpayStreamMediaInspectionRequest(input)
+  const mediaInspectionForZeroScout = mediaInspection && mediaInspection.allowed === false
+    ? { ...mediaInspection, requested: false }
+    : mediaInspection
   const request = {
     eventId: input.request.eventId,
     question: sanitizeHelperContext(input.request.question),
@@ -349,7 +397,7 @@ export async function getZeroScoutHelperGuidance(input: ZeroScoutHelperGuidanceI
     memorySummary: sanitizedMemorySummary || undefined,
     memorySummaryHash: input.request.memorySummaryHash,
     hashpayStreamContext: input.request.hashpayStreamContext,
-    mediaInspection,
+    mediaInspection: mediaInspectionForZeroScout,
   }
   const hash = requestHash({
     service: input.service,
@@ -372,20 +420,20 @@ export async function getZeroScoutHelperGuidance(input: ZeroScoutHelperGuidanceI
         user: cleanUser(input.user),
         requestHash: hash,
         request,
-        mediaInspection,
+        mediaInspection: mediaInspectionForZeroScout,
         mediaUrl: mediaInspection?.allowed ? mediaInspection.mediaUrl : undefined,
         videoUrl: mediaInspection?.allowed ? mediaInspection.mediaUrl : undefined,
         url: mediaInspection?.allowed ? mediaInspection.mediaUrl : undefined,
-        mediaTask: mediaInspection?.requested ? 'video-url-analysis' : undefined,
+        mediaTask: mediaInspection?.allowed ? 'video-url-analysis' : undefined,
         mediaType: mediaInspection?.allowed ? mediaInspection.mediaType : undefined,
-        forceMediaInspection: mediaInspection?.requested ? true : undefined,
-        requiredProvider: mediaInspection?.requested ? HASHWATCH_MEDIA_PROVIDER_HINT || undefined : undefined,
-        requiredModelFamily: mediaInspection?.requested ? 'qwen-vl' : undefined,
-        requiredModel: mediaInspection?.requested ? HASHWATCH_MEDIA_MODEL_HINT || undefined : undefined,
-        preferredModel: mediaInspection?.requested ? HASHWATCH_MEDIA_MODEL_HINT || undefined : undefined,
-        allowedModels: mediaInspection?.requested ? HASHWATCH_MEDIA_MODEL_CANDIDATES : undefined,
-        mediaModelPreference: mediaInspection?.requested ? HASHWATCH_MEDIA_MODEL_HINT || undefined : undefined,
-        mediaRouting: mediaInspection?.requested
+        forceMediaInspection: mediaInspection?.allowed ? true : undefined,
+        requiredProvider: mediaInspection?.allowed ? HASHWATCH_MEDIA_PROVIDER_HINT || undefined : undefined,
+        requiredModelFamily: mediaInspection?.allowed ? 'qwen-vl' : undefined,
+        requiredModel: mediaInspection?.allowed ? HASHWATCH_MEDIA_MODEL_HINT || undefined : undefined,
+        preferredModel: mediaInspection?.allowed ? HASHWATCH_MEDIA_MODEL_HINT || undefined : undefined,
+        allowedModels: mediaInspection?.allowed ? HASHWATCH_MEDIA_MODEL_CANDIDATES : undefined,
+        mediaModelPreference: mediaInspection?.allowed ? HASHWATCH_MEDIA_MODEL_HINT || undefined : undefined,
+        mediaRouting: mediaInspection?.allowed
           ? {
               task: 'video-url-analysis',
               forceMediaInspection: true,
@@ -407,7 +455,7 @@ export async function getZeroScoutHelperGuidance(input: ZeroScoutHelperGuidanceI
           : 'single-lane-short-refinement',
         requestedRefinementLane: refinementLane,
         fallbackOrder: helperFallbackOrder(refinementLane),
-        modelHints: mediaInspection?.requested && HASHWATCH_MEDIA_MODEL_HINT
+        modelHints: mediaInspection?.allowed && HASHWATCH_MEDIA_MODEL_HINT
           ? {
               preferredModel: HASHWATCH_MEDIA_MODEL_HINT,
               preferredProvider: HASHWATCH_MEDIA_MODEL_HINT,

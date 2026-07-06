@@ -53,6 +53,7 @@ const ERC1271_MAGIC_VALUE = '0x1626ba7e'
 type ContentEntry = {
   type: 'text' | 'url' | 'scores' | 'book' | 'video'
   content: string
+  durationSeconds?: number
   creator: string
   capRaw: number
   rateRaw: number
@@ -685,13 +686,14 @@ const OFFICIAL_CONTENT: Record<string, ContentEntry> = {
   },
   'hashwatch-video-demo': {
     type: 'video',
-    content: 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4',
+    content: '/hashwatch-pay-as-you-watch-demo.mp4',
+    durationSeconds: 30,
     creator: SAFE_OFFICIAL_CREATOR,
     capRaw: Number(process.env.CREATOR_HASHWATCH_VIDEO_PRICE_RAW ?? '100000'),
     rateRaw: 1000,
     mode: 'unlock',
     title: 'HashWatch: Pay-As-You-Watch Demo',
-    description: 'A short in-platform video drop for testing watch checkpoints and refundable unread balance.',
+    description: 'A 30 second in-platform walkthrough for testing HashWatch checkpoints, receipts, and refundable unwatched balance.',
     authorName: 'HashpayStream Studio',
     xHandle: 'Hash_PayLink',
     coverImage: 'https://images.unsplash.com/photo-1492724441997-5dc865305da7?auto=format&fit=crop&w=1200&q=80',
@@ -1536,6 +1538,7 @@ function entryToPost(contentId: string, entry: ContentEntry) {
     reviewNote: entry.reviewNote,
     type: entry.type,
     mode: entry.mode,
+    durationSeconds: entry.durationSeconds,
     capRaw: entry.capRaw,
     rateRaw: entry.rateRaw,
     createdAt: entry.ts,
@@ -1550,6 +1553,13 @@ function entryToPost(contentId: string, entry: ContentEntry) {
       category: entry.category,
     }),
   }
+}
+
+function absoluteMediaUrl(value: string) {
+  const trimmed = value.trim()
+  if (!trimmed) return ''
+  if (/^https?:\/\//i.test(trimmed)) return trimmed
+  return `${baseUrl()}${trimmed.startsWith('/') ? '' : '/'}${trimmed}`
 }
 
 function requireCreatorAdmin(req: Request, res: Response) {
@@ -1862,7 +1872,8 @@ function unlockedContentContext(entry: ContentEntry) {
     return {
       kind: 'hashwatch-video',
       summary: entry.description || 'Unlocked HashWatch video.',
-      videoUrl: content.slice(0, 1_000),
+      videoUrl: absoluteMediaUrl(content).slice(0, 1_000),
+      durationSeconds: entry.durationSeconds,
       note: 'Use supplied metadata and URL context. Do not claim frame-level video analysis unless ZeroScout can inspect the media URL.',
     }
   }
