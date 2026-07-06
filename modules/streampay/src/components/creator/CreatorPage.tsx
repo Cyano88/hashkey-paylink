@@ -250,7 +250,7 @@ const OFFICIAL_CREATOR_ADDRESS = (
 )
 const OFFICIAL_WORLD_CUP_SCORES_GATE = `/gate?app=streampay&id=worldcup-scores&cr=${OFFICIAL_CREATOR_ADDRESS}&r=1000&cap=100000&mode=unlock&pay=x402&ct=scores&cat=live-scores&t=Live%20Scores%20Pulse`
 const OFFICIAL_DEVELOPER_GUIDE_GATE = `/gate?app=streampay&id=developer-terminal-setup&cr=${OFFICIAL_CREATOR_ADDRESS}&r=1000&cap=100000&mode=unlock&pay=choice&ct=text&cat=developers&t=${encodeURIComponent('Before You Build: AI Terminal Setup')}`
-const OFFICIAL_HASHWATCH_VIDEO_GATE = `/gate?app=streampay&id=hashwatch-video-demo&cr=${OFFICIAL_CREATOR_ADDRESS}&r=1000&cap=100000&mode=unlock&pay=choice&ct=video&cat=hashwatch&t=${encodeURIComponent('HashWatch: Pay-As-You-Watch Demo')}`
+const OFFICIAL_HASHWATCH_VIDEO_GATE = `/gate?app=streampay&id=hashwatch-video-demo&cr=${OFFICIAL_CREATOR_ADDRESS}&r=1000&cap=0&mode=unlock&pay=demo&demo=1&ct=video&cat=hashwatch&t=${encodeURIComponent('HashWatch: Pay-As-You-Watch Demo')}`
 
 const OFFICIAL_DISCOVER_CONTENT: PublishedContent[] = [
   {
@@ -275,7 +275,7 @@ const OFFICIAL_DISCOVER_CONTENT: PublishedContent[] = [
     title: 'HashWatch: Pay-As-You-Watch Demo',
     description: 'Watch a 30 second in-platform walkthrough while USDC releases only as the viewer reaches playback checkpoints.',
     category: 'hashwatch',
-    price: '0.10',
+    price: 'Free',
     tag: 'HashWatch',
     source: 'HashpayStream Studio',
     image: 'https://images.unsplash.com/photo-1492724441997-5dc865305da7?auto=format&fit=crop&w=1200&q=80',
@@ -2080,7 +2080,7 @@ function SettlementDashboard({
                           ].join(' ')}>
                             {post.reviewStatus || 'pending'}
                           </span>
-                          <span className="text-[10px] font-semibold text-gray-400 dark:text-gray-500">{post.price} USDC</span>
+                          <span className="text-[10px] font-semibold text-gray-400 dark:text-gray-500">{post.price === 'Free' ? 'Free' : `${post.price} USDC`}</span>
                         </div>
                         <p className="mt-1 truncate text-[13px] font-black text-gray-950 dark:text-gray-100">{post.title}</p>
                         <p className="mt-0.5 truncate text-[11px] text-gray-400 dark:text-gray-500">{post.source}</p>
@@ -2332,7 +2332,7 @@ export function CreatorAdminPage() {
                         {post.tag}
                       </span>
                       <span className="rounded-full bg-gray-950 px-2 py-1 text-[9px] font-bold text-white dark:bg-white dark:text-gray-950">
-                        {post.price} USDC
+                        {post.price === 'Free' ? 'Free' : `${post.price} USDC`}
                       </span>
                     </div>
                     <h2 className="mt-2 text-[15px] font-black leading-tight text-gray-950 dark:text-gray-100">{post.title}</h2>

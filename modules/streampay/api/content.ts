@@ -689,7 +689,7 @@ const OFFICIAL_CONTENT: Record<string, ContentEntry> = {
     content: '/hashwatch-pay-as-you-watch-demo.mp4',
     durationSeconds: 30,
     creator: SAFE_OFFICIAL_CREATOR,
-    capRaw: Number(process.env.CREATOR_HASHWATCH_VIDEO_PRICE_RAW ?? '100000'),
+    capRaw: 0,
     rateRaw: 1000,
     mode: 'unlock',
     title: 'HashWatch: Pay-As-You-Watch Demo',
@@ -1458,8 +1458,19 @@ async function findLegacyCreatorUnlock(contentId: string, agentSlug: string, wal
 }
 
 function creatorPrice(entry: ContentEntry) {
+  if (isPublicDemoContentEntry(entry)) return '$0'
   const raw = Math.max(1, Math.round(Number(entry.capRaw) || 0))
   return `$${(raw / 1_000_000).toFixed(6).replace(/0+$/, '').replace(/\.$/, '')}`
+}
+
+function isPublicDemoContentId(contentId: string) {
+  return contentId === 'hashwatch-video-demo'
+}
+
+function isPublicDemoContentEntry(entry: Pick<ContentEntry, 'type' | 'content' | 'capRaw'>) {
+  return entry.type === 'video'
+    && Number(entry.capRaw) <= 0
+    && String(entry.content ?? '').includes('hashwatch-pay-as-you-watch-demo.mp4')
 }
 
 function isHexSignature(value: unknown): value is Hex {
@@ -1897,7 +1908,8 @@ async function buildAccessAwareContentContext(contentId: string, walletAddress: 
   if (!safeContentId || safeContentId.length > MAX_CONTENT_ID_LENGTH) return null
   const entry = await readContentEntry(safeContentId)
   if (!entry) return { contentId: safeContentId, status: 'not-found' as const }
-  const unlocked = await hasWalletUnlockedContent(safeContentId, walletAddress)
+  const publicDemo = isPublicDemoContentId(safeContentId) && isPublicDemoContentEntry(entry)
+  const unlocked = publicDemo || await hasWalletUnlockedContent(safeContentId, walletAddress)
   return {
     status: unlocked ? 'unlocked' as const : 'locked' as const,
     contentId: safeContentId,
@@ -1905,7 +1917,9 @@ async function buildAccessAwareContentContext(contentId: string, walletAddress: 
     priceUsdc: priceUsdc(entry),
     preview: safeContentPreview(entry),
     unlockedContent: unlocked ? unlockedContentContext(entry) : null,
-    accessRule: unlocked
+    accessRule: publicDemo
+      ? 'This is a public HashWatch demo. Do not ask for payment or another unlock; answer from unlockedContent and metadata.'
+      : unlocked
       ? 'This wallet has already unlocked this content. Do not ask for another unlock; answer from unlockedContent and metadata.'
       : 'This wallet is not verified as unlocked for this content. Give public metadata/preview only and say full private summary requires unlocking or reconnecting the original reader wallet.',
   }
@@ -1953,6 +1967,7 @@ function contentInsights(entry: ContentEntry) {
 }
 
 function priceUsdc(entry: Pick<ContentEntry, 'capRaw'>) {
+  if (Number(entry.capRaw) <= 0) return 0
   return Math.max(0.000001, Math.ceil(Math.max(1, Number(entry.capRaw) || 0)) / 1_000_000)
 }
 
@@ -2280,19 +2295,28 @@ export async function reviewCreatorContent(req: Request, res: Response) {
 }
 
 export async function getContent(req: Request, res: Response) {
-  const { id, viewer } = req.query as { id?: string; viewer?: string }
+  const { id, viewer, demo } = req.query as { id?: string; viewer?: string; demo?: string }
 
   if (!id) return res.status(400).json({ ok: false, error: 'id is required' })
-  if (!viewer || !isAddress(viewer)) {
-    return res.status(400).json({ ok: false, error: 'viewer must be a valid EVM address' })
-  }
-
   const entry = await readContentEntry(id)
   if (!entry) {
     return res.status(404).json({
       ok: false,
       error: 'Content not found. Ask the creator to re-generate the link.',
     })
+  }
+  if (demo === '1' && isPublicDemoContentId(id) && isPublicDemoContentEntry(entry)) {
+    return res.status(200).json({
+      ok: true,
+      publicDemo: true,
+      type: entry.type,
+      content: entry.content,
+      coverImage: entry.coverImage,
+    })
+  }
+
+  if (!viewer || !isAddress(viewer)) {
+    return res.status(400).json({ ok: false, error: 'viewer must be a valid EVM address' })
   }
 
   const poaContract = process.env.ARC_POA_CONTRACT

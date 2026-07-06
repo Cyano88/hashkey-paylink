@@ -567,6 +567,7 @@ export function StreamGate() {
     'unknown'
   const contentCategory = (params.get('cat') ?? '').trim().toLowerCase()
   const isVideoContent = contentKind === 'video' || contentCategory === 'hashwatch'
+  const isPublicHashWatchDemo = contentId === 'hashwatch-video-demo' && params.get('demo') === '1'
   const streamContentAvailable = contentKind === 'scores' || contentCategory === 'live-scores'
   const checkpointContentAvailable = contentKind === 'text' || contentKind === 'book' || contentKind === 'video' || contentKind === 'unknown' || isVideoContent
   const shouldChoosePayment = params.get('pay') === 'choice' || params.get('choose') === '1'
@@ -865,7 +866,9 @@ export function StreamGate() {
       : 'Archiving to 0G...'
 
   const legacyFullyAuthorised = isConnected && isOnArc && passkey.registered && isApproved
-  const fullyAuthorised = paymentMode === 'x402' || paymentMode === 'escrow' || paymentMode === 'checkpoint'
+  const fullyAuthorised = isPublicHashWatchDemo
+    ? contentState === 'loading' || contentState === 'ready'
+    : paymentMode === 'x402' || paymentMode === 'escrow' || paymentMode === 'checkpoint'
     ? contentState === 'ready'
     : paymentMode === 'choice'
       ? false
@@ -1680,6 +1683,24 @@ export function StreamGate() {
   }
 
   useEffect(() => {
+    if (!isPublicHashWatchDemo || !contentId || contentState !== 'idle') return
+    setContentState('loading')
+    fetch(`/api/get-content?id=${encodeURIComponent(contentId)}&demo=1`)
+      .then(r => r.json())
+      .then((data: { ok: boolean; type?: string; content?: string; coverImage?: string; error?: string }) => {
+        if (data.ok && data.type && data.content) {
+          setFetchedContent({ type: data.type as FetchedContent['type'], content: data.content, coverImage: data.coverImage })
+          setContentState('ready')
+          setCircleNotice('Public HashWatch demo ready.')
+        } else {
+          setContentError(data.error ?? 'Could not load public demo')
+          setContentState('error')
+        }
+      })
+      .catch(() => { setContentError('Server error - please try again'); setContentState('error') })
+  }, [isPublicHashWatchDemo, contentId, contentState])
+
+  useEffect(() => {
     if (paymentMode !== 'poa' || !legacyFullyAuthorised || !address || !contentId || contentState !== 'idle') return
     setContentState('loading')
     fetch(`/api/get-content?id=${encodeURIComponent(contentId)}&viewer=${address}`)
@@ -2429,7 +2450,7 @@ export function StreamGate() {
         {fullyAuthorised && contentState === 'loading' && (
           <div className="flex items-center justify-center gap-3 py-16 text-gray-400">
             <Spinner />
-            <span className="text-[13px]">Unlocking content…</span>
+            <span className="text-[13px]">{isPublicHashWatchDemo ? 'Loading demo...' : 'Unlocking content...'}</span>
           </div>
         )}
 
