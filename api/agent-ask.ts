@@ -233,6 +233,14 @@ function stringValue(value: unknown) {
   return typeof value === 'string' ? value.trim() : ''
 }
 
+function normalizedHashpayStreamMediaUrl(value: string) {
+  const trimmed = value.trim()
+  if (!trimmed) return ''
+  if (/^https?:\/\//i.test(trimmed)) return trimmed
+  if (/^(youtu\.be|youtube\.com|www\.youtube\.com|m\.youtube\.com)\//i.test(trimmed)) return `https://${trimmed}`
+  return trimmed
+}
+
 function clientHashpayStreamHint(rawContext: unknown) {
   const context = recordValue(rawContext)
   const activeContent = recordValue(context.activeContent)
@@ -387,13 +395,13 @@ function hashpayStreamContextAnswer(question: string, hashpayStreamContext?: unk
   const activeStatus = stringValue(activeContent.status)
   const unlockedContent = recordValue(activeContent.unlockedContent)
   const unlockedSummary = stringValue(unlockedContent.summary)
-  const unlockedUrl = stringValue(unlockedContent.videoUrl) || stringValue(unlockedContent.privateUrl)
+  const unlockedUrl = normalizedHashpayStreamMediaUrl(stringValue(unlockedContent.videoUrl) || stringValue(unlockedContent.privateUrl))
   const activeGateLink = stringValue(activeMetadata.gateLink)
   const wantsCurrentContent = Boolean(activeStatus) && /\b(this|recent|recently|unlocked|video|book|post|context|about|summar|explain)\b/i.test(question)
 
   if (Boolean(activeStatus) && isZeroScoutVideoInspectionRequest(question)) {
     if (activeStatus === 'unlocked' && unlockedUrl) {
-      return `Your unlock is verified for "${activeTitle}". I can forward the unlocked video URL to ZeroScout/0G compute for analysis. If the compute layer is available, it should inspect this media URL and return a breakdown: ${unlockedUrl}`
+      return `Your unlock is verified for "${activeTitle}". I tried to route the unlocked video URL to ZeroScout/0G compute, but the compute layer did not return a usable analysis in this request. Media URL attempted: ${unlockedUrl}`
     }
     return activeStatus === 'unlocked'
       ? `Your unlock is verified for "${activeTitle}", but I do not have a direct video URL in this chat context to forward to ZeroScout/0G compute.`

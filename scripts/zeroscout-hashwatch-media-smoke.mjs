@@ -38,7 +38,8 @@ try {
   }
 
   const { getZeroScoutHelperGuidance } = await import('../api/zeroscout-sponsored-action.ts')
-  const videoUrl = 'https://cdn.example.com/private/hashwatch-digital-art.mp4'
+  const videoUrl = 'youtu.be/mYSVSs33ZgE?si=5eumS_SNzXDnzZYK'
+  const normalizedVideoUrl = 'https://youtu.be/mYSVSs33ZgE?si=5eumS_SNzXDnzZYK'
   const guidance = await getZeroScoutHelperGuidance({
     service: 'Hash PayLink Helper',
     action: 'helper-chat-preflight',
@@ -74,9 +75,9 @@ try {
   assert.equal(seenPayload?.analysisType, 'zeroscout-helper-context-guidance')
   assert.equal(seenPayload?.data?.requestedRefinementLane, 'og-compute')
   assert.equal(seenPayload?.data?.mediaInspection?.allowed, true)
-  assert.equal(seenPayload?.data?.mediaInspection?.mediaUrl, videoUrl)
+  assert.equal(seenPayload?.data?.mediaInspection?.mediaUrl, normalizedVideoUrl)
   assert.equal(seenPayload?.data?.request?.mediaInspection?.allowed, true)
-  assert.equal(seenPayload?.data?.request?.mediaInspection?.mediaUrl, videoUrl)
+  assert.equal(seenPayload?.data?.request?.mediaInspection?.mediaUrl, normalizedVideoUrl)
 
   console.log('zeroscout hashwatch media smoke ok')
 } finally {

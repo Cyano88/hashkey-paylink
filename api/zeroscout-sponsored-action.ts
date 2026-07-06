@@ -149,6 +149,16 @@ function stringValue(value: unknown) {
   return typeof value === 'string' ? value.trim() : ''
 }
 
+function normalizedMediaUrl(value: string) {
+  const trimmed = value.trim()
+  if (!trimmed) return ''
+  if (/^https?:\/\//i.test(trimmed)) return trimmed
+  if (/^(youtu\.be|youtube\.com|www\.youtube\.com|m\.youtube\.com)\//i.test(trimmed)) {
+    return `https://${trimmed}`
+  }
+  return trimmed
+}
+
 function hashpayStreamMediaInspectionRequest(input: ZeroScoutHelperGuidanceInput) {
   if (!input.request.hashpayStreamVideoInspectionRequested) return undefined
   const context = recordValue(input.request.hashpayStreamContext)
@@ -156,7 +166,7 @@ function hashpayStreamMediaInspectionRequest(input: ZeroScoutHelperGuidanceInput
   const unlockedContent = recordValue(activeContent.unlockedContent)
   const metadata = recordValue(activeContent.metadata)
   const status = stringValue(activeContent.status)
-  const mediaUrl = stringValue(unlockedContent.videoUrl)
+  const mediaUrl = normalizedMediaUrl(stringValue(unlockedContent.videoUrl))
   if (status !== 'unlocked' || !mediaUrl) {
     return {
       requested: true,
