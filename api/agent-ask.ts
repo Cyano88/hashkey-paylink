@@ -178,6 +178,14 @@ function extractActiveContentIdFromMemory(memorySummary: string) {
   return match?.[1] ?? ''
 }
 
+function extractActiveContentTitleFromMemory(memorySummary: string) {
+  const match = /"([^"]{4,180}?(?:Digital Art|HashWatch|video|tutorial|guide)[^"]{0,180})"/i.exec(memorySummary)
+    || /unlocked\s+'([^']{4,180})'/i.exec(memorySummary)
+    || /unlocked\s+"([^"]{4,180})"/i.exec(memorySummary)
+    || /video\s+([^.\n]{4,180}?(?:Digital Art|tutorial|guide)[^.\n]{0,80})/i.exec(memorySummary)
+  return match?.[1]?.replace(/\s+/g, ' ').trim() ?? ''
+}
+
 function extractReaderWalletFromMemory(memorySummary: string) {
   const match = /"walletAddress"\s*:\s*"(0x[a-fA-F0-9]{40})"/i.exec(memorySummary)
     || /reader wallet:?\s*(0x[a-fA-F0-9]{40})/i.exec(memorySummary)
@@ -223,6 +231,26 @@ function recordValue(value: unknown): Record<string, unknown> {
 
 function stringValue(value: unknown) {
   return typeof value === 'string' ? value.trim() : ''
+}
+
+function clientHashpayStreamHint(rawContext: unknown) {
+  const context = recordValue(rawContext)
+  const activeContent = recordValue(context.activeContent)
+  const activeMetadata = recordValue(activeContent.metadata)
+  const activeHint = recordValue(context.activeContentHint)
+  return {
+    creator: stringValue(context.creator)
+      || stringValue(activeMetadata.creator)
+      || stringValue(activeHint.creator),
+    wallet: stringValue(context.wallet)
+      || stringValue(context.readerWallet)
+      || stringValue(activeHint.walletAddress),
+    contentId: stringValue(activeContent.contentId)
+      || stringValue(activeHint.contentId)
+      || stringValue(activeHint.accessHintContentId),
+    contentTitle: stringValue(activeMetadata.title)
+      || stringValue(activeHint.title),
+  }
 }
 
 function firstCard(value: unknown): Record<string, unknown> {
@@ -321,8 +349,14 @@ function isHashpayStreamLinkRequest(question: string) {
 
 function isZeroScoutVideoInspectionRequest(question: string) {
   const asksNamedCompute = /\b(zeroscout|zero\s*scout|0g|og compute|compute)\b/i.test(question)
-    && /\b(inspect|analy[sz]e|scan|break\s*down|watch|read|review)\b/i.test(question)
-    && /\b(url|link|video|media|content|it|this|that)\b/i.test(question)
+    && (
+      /\b(inspect|analy[sz]e|scan|break\s*down|watch|read|review|use|run|send|forward)\b/i.test(question)
+      || question.trim().split(/\s+/).length <= 5
+    )
+    && (
+      /\b(url|link|video|media|content|it|this|that|analysis|tutorial|guide)\b/i.test(question)
+      || question.trim().split(/\s+/).length <= 5
+    )
   const asksForDeepVideoAnalysis = /\b(deep|deeper|frame[-\s]*by[-\s]*frame|break\s*down|inspect|analy[sz]e|scan|review)\b/i.test(question)
     && /\b(video|media|content|it|this|that|tutorial|guide|analysis)\b/i.test(question)
   return asksNamedCompute || asksForDeepVideoAnalysis
@@ -721,9 +755,13 @@ function answerFromZeroScoutGuidance(question: string, zeroScoutGuidance?: ZeroS
 }
 
 function isBadHashpayStreamMediaInspectionDenial(answer: string) {
-  return /\b(hashpaystream|streaming access|payments)\b/i.test(answer)
+  const deniesMediaInspection = /\b(hashpaystream|streaming access|payments)\b/i.test(answer)
     && /\b(doesn'?t|does not|isn'?t|is not|currently offers?|not something)\b/i.test(answer)
     && /\b(video analysis|frame[-\s]*by[-\s]*frame|deeper analysis|ai vision|dedicated video analysis)\b/i.test(answer)
+  const genericCapabilityAnswer = /\b(i'?m Agent Hash|I can help|What would you like)\b/i.test(answer)
+    && /\b(HashpayStream|ZeroScout|content|creator tools|access status)\b/i.test(answer)
+    && !/\b(inspect|analysis|analy[sz]ed|breakdown|frame|media URL|video URL|unlocked|verified)\b/i.test(answer)
+  return deniesMediaInspection || genericCapabilityAnswer
 }
 
 function safeZeroScoutGuidanceError(error: unknown) {
@@ -804,7 +842,7 @@ export default async function handler(req: Request, res: Response) {
   if (req.method !== 'POST')
     return res.status(405).json({ error: 'Method not allowed' })
 
-  const { eventId: rawEventId, payer: rawPayer, question: rawQuestion, memorySummary: rawMemorySummary, accessMode: rawAccessMode, helperMode: rawHelperMode } = (req.body ?? {}) as Record<string, unknown>
+  const { eventId: rawEventId, payer: rawPayer, question: rawQuestion, memorySummary: rawMemorySummary, accessMode: rawAccessMode, helperMode: rawHelperMode, hashpayStreamContext: rawHashpayStreamContext } = (req.body ?? {}) as Record<string, unknown>
   let eventId: string
   let payer: string
   let question: string
@@ -876,11 +914,15 @@ export default async function handler(req: Request, res: Response) {
     const memorySummaryHash = memorySummary
       ? crypto.createHash('sha256').update(memorySummary).digest('hex')
       : undefined
+    const streamClientHint = helperMode === 'streampay' ? clientHashpayStreamHint(rawHashpayStreamContext) : undefined
     const hashpayStreamContext = helperMode === 'streampay'
       ? compactHashpayStreamContext(await buildHashpayStreamAgentContext({
-          creator: extractCreatorFromMemory(memorySummary),
-          wallet: extractReaderWalletFromMemory(memorySummary) || (/^0x[a-fA-F0-9]{40}$/.test(access.payment.payer) ? access.payment.payer : ''),
-          contentId: extractActiveContentIdFromMemory(memorySummary),
+          creator: extractCreatorFromMemory(memorySummary) || streamClientHint?.creator,
+          wallet: extractReaderWalletFromMemory(memorySummary)
+            || streamClientHint?.wallet
+            || (/^0x[a-fA-F0-9]{40}$/.test(access.payment.payer) ? access.payment.payer : ''),
+          contentId: extractActiveContentIdFromMemory(memorySummary) || streamClientHint?.contentId,
+          contentTitle: extractActiveContentTitleFromMemory(memorySummary) || streamClientHint?.contentTitle,
         }))
       : undefined
     let zeroScoutGuidance: ZeroScoutHelperGuidance | undefined

@@ -2031,10 +2031,11 @@ async function approvedContentEntries() {
     .slice(0, 60)
 }
 
-export async function buildHashpayStreamAgentContext(params: { creator?: unknown; wallet?: unknown; date?: unknown; contentId?: unknown } = {}) {
+export async function buildHashpayStreamAgentContext(params: { creator?: unknown; wallet?: unknown; date?: unknown; contentId?: unknown; contentTitle?: unknown } = {}) {
   const creator = String(params.creator ?? '').trim()
   const wallet = cleanWalletAddress(params.wallet)
-  const activeContentId = String(params.contentId ?? '').trim()
+  let activeContentId = String(params.contentId ?? '').trim()
+  const activeContentTitle = cleanMetaText(String(params.contentTitle ?? ''), 220).toLowerCase()
   const selectedDate = String(params.date ?? new Date().toISOString().slice(0, 10)).trim().slice(0, 10)
   const [newsFeed, scoreFeed, approvedEntries] = await Promise.all([
     getPolyWorldcupNewsFeed().catch(() => null),
@@ -2071,6 +2072,16 @@ export async function buildHashpayStreamAgentContext(params: { creator?: unknown
     ...approvedEntries,
   ] as Array<[string, ContentEntry]>) {
     if (!deduped.has(contentId)) deduped.set(contentId, entry)
+  }
+
+  if (!activeContentId && activeContentTitle) {
+    const normalizedNeedle = activeContentTitle.replace(/[^a-z0-9]+/g, ' ').trim()
+    const match = Array.from(deduped.entries()).find(([, entry]) => {
+      const normalizedTitle = cleanMetaText(entry.title || '', 220).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+      return normalizedTitle
+        && (normalizedTitle === normalizedNeedle || normalizedTitle.includes(normalizedNeedle) || normalizedNeedle.includes(normalizedTitle))
+    })
+    if (match) activeContentId = match[0]
   }
 
   const cards = (await Promise.all(

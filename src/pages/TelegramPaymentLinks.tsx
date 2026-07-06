@@ -1770,13 +1770,21 @@ export function TelegramHelperPanel({
     const profileName = helperName || profile?.displayName || helperNameDraft || nameFromMemorySummary(memoryDraft || profile?.memorySummary || '')
     const activeMode = helperModes.find(mode => mode.id === helperMode)
     const activePolyDeskSubMode = polyDeskSubModes.find(mode => mode.id === polyDeskSubMode)
+    const recentThread = messages
+      .slice(-8)
+      .map(message => [
+        `User: ${message.question.replace(/\s+/g, ' ').slice(0, 220)}`,
+        `Agent Hash: ${message.answer.replace(/\s+/g, ' ').slice(0, 320)}`,
+      ].join('\n'))
+      .join('\n')
     return [
       activeMode ? `Agent Hash mode is ${activeMode.label}. Route the answer for this mode.` : '',
       activePolyDeskSubMode ? `PolyDesk submode is ${activePolyDeskSubMode.label}. Only answer tasks for this PolyDesk lane.` : '',
       profileName ? `User is known as ${friendlyName(profileName)}.` : '',
       cleanTelegramName ? `Telegram context is ${cleanTelegramName}. Do not use it as the user's name if a known name is provided.` : '',
+      recentThread ? `Recent Agent Hash thread:\n${recentThread}` : '',
       memoryDraft.trim() || profile?.memorySummary || '',
-    ].filter(Boolean).join('\n').slice(0, 1600)
+    ].filter(Boolean).join('\n').slice(0, 2400)
   }
 
   function paymentQuotaStorageKey() {

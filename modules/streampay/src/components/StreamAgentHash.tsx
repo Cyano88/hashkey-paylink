@@ -7,6 +7,13 @@ type AgentHashMessage = {
   link?: { label: string; href: string }
 }
 
+type StreamAgentAccessHint = {
+  contentId?: string
+  walletAddress?: string
+  mode?: 'x402' | 'checkpoint'
+  unlockedAt?: number
+}
+
 const STREAM_AGENT_WELCOME: AgentHashMessage = {
   from: 'bot',
   text: 'Agent Hash is ready for HashpayStream, a Hash PayLink creator product powered by ZeroScout intelligence. I can help publish paid content, price a drop, explain pay-as-you-read, explain HashWatch videos, summarize unlocked content, or read creator earnings.',
@@ -96,8 +103,8 @@ function streamAgentAccessContext() {
   const creator = params.get('cr') || ''
   let saved = ''
   try {
-    const raw = window.localStorage.getItem('hashpaystream:agent-access')
-    if (raw) saved = JSON.stringify(JSON.parse(raw)).slice(0, 900)
+    const hint = readStreamAgentAccessHint()
+    if (hint) saved = JSON.stringify(hint).slice(0, 900)
   } catch {
     // Access hints are best-effort and verified again on the server.
   }
@@ -106,6 +113,49 @@ function streamAgentAccessContext() {
     creator ? `Active creator wallet: ${creator}` : '',
     saved ? `Verified access hints from this browser: ${saved}` : '',
   ].filter(Boolean).join(' | ')
+}
+
+function readStreamAgentAccessHint(): StreamAgentAccessHint | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = window.localStorage.getItem('hashpaystream:agent-access')
+    const parsed = raw ? JSON.parse(raw) as StreamAgentAccessHint : null
+    if (!parsed || typeof parsed !== 'object') return null
+    return {
+      contentId: typeof parsed.contentId === 'string' ? parsed.contentId.slice(0, 128) : '',
+      walletAddress: typeof parsed.walletAddress === 'string' ? parsed.walletAddress.slice(0, 64) : '',
+      mode: parsed.mode === 'x402' || parsed.mode === 'checkpoint' ? parsed.mode : undefined,
+      unlockedAt: typeof parsed.unlockedAt === 'number' ? parsed.unlockedAt : undefined,
+    }
+  } catch {
+    return null
+  }
+}
+
+function streamStructuredHashpayContext() {
+  if (typeof window === 'undefined') return undefined
+  const params = new URLSearchParams(window.location.search)
+  const hint = readStreamAgentAccessHint()
+  const contentId = params.get('id') || hint?.contentId || ''
+  const title = params.get('t') || ''
+  const creator = params.get('cr') || ''
+  const contentType = params.get('ct') || ''
+  const category = params.get('cat') || ''
+  return {
+    product: 'HashpayStream',
+    activeContentHint: {
+      contentId,
+      title,
+      creator,
+      contentType,
+      category,
+      walletAddress: hint?.walletAddress || '',
+      accessHintContentId: hint?.contentId || '',
+      accessHintMode: hint?.mode || '',
+      accessHintUnlockedAt: hint?.unlockedAt || 0,
+      pagePath: window.location.pathname,
+    },
+  }
 }
 
 function streamVisibleContentContext() {
@@ -223,10 +273,11 @@ export function StreamAgentHash() {
 
     const recent = messages
       .slice(-8)
-      .map(message => `${message.from === 'user' ? 'User' : 'Agent Hash'}: ${message.text.replace(/\s+/g, ' ').slice(0, 180)}`)
+      .map(message => `${message.from === 'user' ? 'User' : 'Agent Hash'}: ${message.text.replace(/\s+/g, ' ').slice(0, message.from === 'user' ? 260 : 360)}`)
       .join(' | ')
 
     try {
+      const hashpayStreamContext = streamStructuredHashpayContext()
       const res = await fetch('/api/agent-ask', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -236,6 +287,7 @@ export function StreamAgentHash() {
           question,
           accessMode: 'helper-free',
           helperMode: 'streampay',
+          hashpayStreamContext,
           memorySummary: `${streamPageContext()} ${streamAgentAccessContext()} ${streamVisibleContentContext()} Agent Hash mode: HashpayStream Creator. Recent context: ${recent || 'new session'}. Current message: ${question}`.slice(0, 2600),
         }),
       })
