@@ -74,8 +74,13 @@ try {
   assert.equal(guidance?.zeroscout.id, 'zs_hashwatch_media_smoke')
   assert.equal(seenPayload?.analysisType, 'zeroscout-helper-context-guidance')
   assert.equal(seenPayload?.data?.requestedRefinementLane, 'og-compute')
+  assert.equal(seenPayload?.data?.mediaModelPreference, 'Qwen/Qwen2.5-VL-72B-Instruct')
+  assert.equal(seenPayload?.data?.modelHints?.preferredModel, 'Qwen/Qwen2.5-VL-72B-Instruct')
+  assert.equal(seenPayload?.data?.modelHints?.requiredCapabilities?.includes('video-understanding'), true)
   assert.equal(seenPayload?.data?.mediaInspection?.allowed, true)
   assert.equal(seenPayload?.data?.mediaInspection?.mediaUrl, normalizedVideoUrl)
+  assert.equal(seenPayload?.data?.mediaInspection?.preferredModel, 'Qwen/Qwen2.5-VL-72B-Instruct')
+  assert.equal(seenPayload?.data?.mediaInspection?.modelCandidates?.includes('qwen-vl-max-latest'), true)
   assert.equal(seenPayload?.data?.request?.mediaInspection?.allowed, true)
   assert.equal(seenPayload?.data?.request?.mediaInspection?.mediaUrl, normalizedVideoUrl)
 

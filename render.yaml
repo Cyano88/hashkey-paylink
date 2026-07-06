@@ -138,6 +138,12 @@ services:
         value: "https://zeroscout.app"
       - key: ZEROSCOUT_INTEGRATION_SECRET
         sync: false                   # Server-only ZeroScout API key for LP operator signals
+      - key: ZEROSCOUT_HASHWATCH_MEDIA_MODEL
+        value: "Qwen/Qwen2.5-VL-72B-Instruct"
+      - key: ZEROSCOUT_HASHWATCH_MEDIA_MODEL_CANDIDATES
+        value: "Qwen/Qwen2.5-VL-72B-Instruct,qwen2.5-vl-72b-instruct,qwen-vl-max-latest,Qwen/Qwen2.5-Omni-7B"
+      - key: ZEROSCOUT_HASHWATCH_MEDIA_GUIDANCE_TIMEOUT_MS
+        value: "90000"
       - key: OG_RPC_URL
         sync: false                   # Preferred private 0G EVM RPC endpoint; app falls back to public 0G RPC when unset
       - key: OG_INDEXER_RPC_URL

@@ -61,6 +61,14 @@ const SPONSOR_TIMEOUT_MS = Math.max(1000, Number(process.env.ZEROSCOUT_SPONSOR_T
 const FAST_SPONSOR_TIMEOUT_MS = Math.max(1000, Number(process.env.ZEROSCOUT_FAST_SPONSOR_TIMEOUT_MS ?? 1_500))
 const HELPER_GUIDANCE_TIMEOUT_MS = Math.max(1000, Number(process.env.ZEROSCOUT_HELPER_GUIDANCE_TIMEOUT_MS ?? 10_000))
 const HASHWATCH_MEDIA_GUIDANCE_TIMEOUT_MS = Math.max(1000, Number(process.env.ZEROSCOUT_HASHWATCH_MEDIA_GUIDANCE_TIMEOUT_MS ?? 60_000))
+const HASHWATCH_MEDIA_MODEL_HINT = String(process.env.ZEROSCOUT_HASHWATCH_MEDIA_MODEL ?? 'Qwen/Qwen2.5-VL-72B-Instruct').trim()
+const HASHWATCH_MEDIA_MODEL_CANDIDATES = String(
+  process.env.ZEROSCOUT_HASHWATCH_MEDIA_MODEL_CANDIDATES
+    ?? 'Qwen/Qwen2.5-VL-72B-Instruct,qwen2.5-vl-72b-instruct,qwen-vl-max-latest,Qwen/Qwen2.5-Omni-7B',
+)
+  .split(',')
+  .map(item => item.trim())
+  .filter(Boolean)
 const MAX_GUIDANCE_CONTEXT_LENGTH = 900
 
 function stableStringify(value: unknown): string {
@@ -183,6 +191,9 @@ function hashpayStreamMediaInspectionRequest(input: ZeroScoutHelperGuidanceInput
     allowed: true,
     mediaType: 'hashwatch-video',
     mediaUrl,
+    preferredModel: HASHWATCH_MEDIA_MODEL_HINT || undefined,
+    modelPreference: HASHWATCH_MEDIA_MODEL_HINT || undefined,
+    modelCandidates: HASHWATCH_MEDIA_MODEL_CANDIDATES.length ? HASHWATCH_MEDIA_MODEL_CANDIDATES : undefined,
     contentId: stringValue(activeContent.contentId),
     title: stringValue(metadata.title),
     description: stringValue(metadata.description),
@@ -357,6 +368,7 @@ export async function getZeroScoutHelperGuidance(input: ZeroScoutHelperGuidanceI
         requestHash: hash,
         request,
         mediaInspection,
+        mediaModelPreference: mediaInspection?.requested ? HASHWATCH_MEDIA_MODEL_HINT || undefined : undefined,
         sourceProof: input.sourceProof,
         helperIntent: input.request.helperIntent,
         helperMode: input.request.helperMode,
@@ -366,6 +378,15 @@ export async function getZeroScoutHelperGuidance(input: ZeroScoutHelperGuidanceI
           : 'single-lane-short-refinement',
         requestedRefinementLane: refinementLane,
         fallbackOrder: helperFallbackOrder(refinementLane),
+        modelHints: mediaInspection?.requested && HASHWATCH_MEDIA_MODEL_HINT
+          ? {
+              preferredModel: HASHWATCH_MEDIA_MODEL_HINT,
+              preferredProvider: HASHWATCH_MEDIA_MODEL_HINT,
+              candidateModels: HASHWATCH_MEDIA_MODEL_CANDIDATES,
+              requiredCapabilities: ['video-understanding', 'temporal-grounding', 'media-url-inspection'],
+              reason: 'HashWatch video/media breakdown requests need a media-capable model path.',
+            }
+          : undefined,
         latencyTargetMs: mediaInspection?.requested ? HASHWATCH_MEDIA_GUIDANCE_TIMEOUT_MS : input.request.qualityMode === 'deep' ? 20_000 : input.request.qualityMode === 'fast' ? 4_000 : 8_000,
         maxAnswerChars: mediaInspection?.requested ? 1_600 : input.request.qualityMode === 'deep' ? 1_200 : 420,
         helperModeInstructions: helperModeInstructions(input),
