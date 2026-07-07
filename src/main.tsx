@@ -60,6 +60,9 @@ function AppProviders() {
   const { theme } = useTheme()
   const privyConfig = useMemo<PrivyClientConfig>(() => ({
     loginMethods: ['email', 'wallet'],
+    loginMethodsAndOrder: {
+      primary: ['email', 'wallet'],
+    },
     allowOAuthInEmbeddedBrowsers: true,
     defaultChain: baseMainnet,
     supportedChains: [baseMainnet, arcChain, arbitrum],
