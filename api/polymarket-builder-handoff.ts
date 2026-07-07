@@ -54,7 +54,6 @@ function signedOrderValidationError(order: unknown, tokenId: string, signer: str
     'expiration',
     'nonce',
     'feeRateBps',
-    'side',
     'signature',
   ]
   const missing = required.filter(key => !requiredString(order, key))
