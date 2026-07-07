@@ -4496,7 +4496,11 @@ function polymarketTickSize(value?: number): '0.1' | '0.01' | '0.001' | '0.0001'
 }
 
 function friendlyTradeError(err: unknown) {
-  const rawMessage = err instanceof Error ? err.message : String(err ?? '')
+  const rawMessage = err instanceof Error
+    ? err.message
+    : typeof err === 'object' && err
+      ? JSON.stringify(err)
+      : String(err ?? '')
   const cleanMessage = rawMessage.replace(/\s+/g, ' ').trim()
   const message = cleanMessage.toLowerCase()
   if (!cleanMessage) return 'We could not complete the order. Please try again.'
@@ -4515,7 +4519,7 @@ function friendlyTradeError(err: unknown) {
   if (/\b(price|fillable|liquidity|minimum|min size|too small|market)\b/.test(message)) {
     return 'This market moved before the order finished. Refresh and try again.'
   }
-  return 'We could not complete the order. Please try again.'
+  return cleanMessage
 }
 
 function EventMark({ kind }: { kind: MatchEventDetail['kind'] }) {
