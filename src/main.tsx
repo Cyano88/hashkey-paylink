@@ -11,7 +11,7 @@ import App from './App'
 import { privyWagmiConfig } from './lib/privyWagmi'
 import { ThemeProvider, useTheme } from './lib/ThemeContext'
 import { arcChain, baseMainnet } from './lib/chains'
-import { arbitrum } from 'viem/chains'
+import { arbitrum, polygon } from 'viem/chains'
 import { PRIVY_APP_ID, PRIVY_AUTH_ENABLED } from './lib/authMode'
 import { PrivyLoginProvider } from './lib/PrivyLoginProvider'
 
@@ -65,7 +65,7 @@ function AppProviders() {
     },
     allowOAuthInEmbeddedBrowsers: true,
     defaultChain: baseMainnet,
-    supportedChains: [baseMainnet, arcChain, arbitrum],
+    supportedChains: [baseMainnet, arcChain, arbitrum, polygon],
     embeddedWallets: {
       ethereum: {
         createOnLogin: 'off',
