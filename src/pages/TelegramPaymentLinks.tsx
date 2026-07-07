@@ -5181,27 +5181,13 @@ export function PolyStreamPanel({
         requestPath: '/order',
         body: orderBody,
       })
-      const submitResponse = await fetch('/api/polymarket-submit-order', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          source: 'world-cup-moneyline',
-          marketTitle: match.polymarketTitle || match.title,
-          marketUrl: match.polymarketUrl,
-          outcome: option.label,
-          tokenId: option.tokenId,
-          signer: savedTradingAddress,
-          orderType: OrderType.FOK,
-          order: signedOrder,
-          orderPayload: finalOrderPayload,
-          userHeaders: l2Headers,
-        }),
+      setTradeNotice('Sending your order from this browser...')
+      await submitPolymarketOrderFromBrowser({
+        orderBody,
+        userHeaders: l2Headers,
+        remoteBuilderSigner: handoff.remoteBuilderSigner,
+        fallbackMessage: 'Polymarket rejected the submitted order.',
       })
-      const submitResult = await submitResponse.json().catch(() => ({}))
-      if (!submitResponse.ok || (submitResult && typeof submitResult === 'object' && 'error' in submitResult)) {
-        const errorMessage = submitResult && typeof submitResult === 'object' && 'error' in submitResult ? String(submitResult.error) : 'Polymarket rejected the submitted order.'
-        throw new Error(errorMessage)
-      }
       setTradeSuccess({ matchKey: matchKey(match), label: option.label, amount })
       setTradeNotice('')
     } catch (err) {
@@ -6233,6 +6219,76 @@ async function readPolyDeskJson<T>(res: Response, fallbackMessage: string): Prom
   throw new Error(fallbackMessage)
 }
 
+function polyDeskStringRecord(value: unknown): Record<string, string> {
+  if (!value || typeof value !== 'object') return {}
+  const headers: Record<string, string> = {}
+  for (const [key, raw] of Object.entries(value)) {
+    if (typeof raw === 'string' && key.trim()) headers[key] = raw
+  }
+  return headers
+}
+
+function polyDeskResponseError(value: unknown, fallbackMessage: string) {
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>
+    const message = record.error ?? record.errorMsg ?? record.message
+    if (typeof message === 'string' && message.trim()) return message.trim()
+  }
+  return fallbackMessage
+}
+
+async function loadPolymarketBuilderHeaders(remoteBuilderSigner: { url?: string; token?: string } | undefined, orderBody: string) {
+  if (!remoteBuilderSigner?.url || !remoteBuilderSigner.token) return {}
+  const response = await fetch(remoteBuilderSigner.url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${remoteBuilderSigner.token}`,
+    },
+    body: JSON.stringify({
+      method: 'POST',
+      path: '/order',
+      body: orderBody,
+    }),
+  })
+  const data = await response.json().catch(() => ({}))
+  if (!response.ok) {
+    throw new Error(polyDeskResponseError(data, 'Could not prepare Polymarket builder headers.'))
+  }
+  return polyDeskStringRecord(data)
+}
+
+async function submitPolymarketOrderFromBrowser({
+  orderBody,
+  userHeaders,
+  remoteBuilderSigner,
+  fallbackMessage,
+}: {
+  orderBody: string
+  userHeaders: Record<string, string>
+  remoteBuilderSigner?: { url?: string; token?: string }
+  fallbackMessage: string
+}) {
+  const builderHeaders = await loadPolymarketBuilderHeaders(remoteBuilderSigner, orderBody)
+  const response = await fetch('https://clob.polymarket.com/order', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...polyDeskStringRecord(userHeaders),
+      ...builderHeaders,
+    },
+    body: orderBody,
+  })
+  const data = await response.json().catch(() => ({}))
+  if (!response.ok || (data && typeof data === 'object' && 'error' in data)) {
+    throw new Error(polyDeskResponseError(data, fallbackMessage))
+  }
+  if (data && typeof data === 'object' && 'success' in data && data.success === false) {
+    throw new Error(polyDeskResponseError(data, fallbackMessage))
+  }
+  return data
+}
+
 export function PolyPortfolioPanel({
   onBack,
   onOpenLpScout,
@@ -7032,6 +7088,7 @@ export function PolyPortfolioPanel({
       const handoff = await readPolyDeskJson<{
         ok?: boolean
         error?: string
+        remoteBuilderSigner?: { url?: string; token?: string }
         handoff?: { orderPayload?: typeof builderAttributedPayload }
       }>(handoffResponse, 'Could not prepare sell submission.')
       if (!handoffResponse.ok || !handoff.ok) throw new Error(handoff.error || 'Sell handoff failed.')
@@ -7042,27 +7099,13 @@ export function PolyPortfolioPanel({
         requestPath: '/order',
         body: orderBody,
       })
-      const submitResponse = await fetch('/api/polymarket-submit-order', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          source: 'portfolio-position-sell',
-          marketTitle: title,
-          marketUrl,
-          outcome: position.outcome ?? 'Position',
-          tokenId,
-          signer: savedTradingAddress,
-          orderType: OrderType.FAK,
-          order: signedOrder,
-          orderPayload: finalOrderPayload,
-          userHeaders: l2Headers,
-        }),
+      setSellNotice('Sending sell order from this browser...')
+      await submitPolymarketOrderFromBrowser({
+        orderBody,
+        userHeaders: l2Headers,
+        remoteBuilderSigner: handoff.remoteBuilderSigner,
+        fallbackMessage: 'Polymarket rejected the sell order.',
       })
-      const submitResult = await submitResponse.json().catch(() => ({}))
-      if (!submitResponse.ok || (submitResult && typeof submitResult === 'object' && 'error' in submitResult)) {
-        const errorMessage = submitResult && typeof submitResult === 'object' && 'error' in submitResult ? String(submitResult.error) : 'Polymarket rejected the sell order.'
-        throw new Error(errorMessage)
-      }
       setSellSuccess(`Sell order sent for ${position.outcome ?? 'position'}.`)
       setSellNotice('')
       if (tradingPortfolioAddress) void fetchLiveData(tradingPortfolioAddress)
