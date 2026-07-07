@@ -27,6 +27,13 @@ function requiredString(order: SignedOrderRecord, key: string) {
   return typeof order[key] === 'string' && (order[key] as string).trim().length > 0
 }
 
+function validOrderSignature(value: unknown) {
+  const signature = String(value ?? '')
+  // EOA signatures are 65 bytes (130 hex chars after 0x). POLY_1271
+  // deposit-wallet signatures are ERC-7739 wrapped and longer.
+  return /^0x[a-fA-F0-9]{130,}$/.test(signature) && signature.length % 2 === 0
+}
+
 function validSignedOrder(order: unknown, tokenId: string, signer: string) {
   if (!isRecord(order)) return false
   const required = [
@@ -46,7 +53,7 @@ function validSignedOrder(order: unknown, tokenId: string, signer: string) {
   if (!required.every(key => requiredString(order, key))) return false
   if (String(order.tokenId) !== tokenId) return false
   if (String(order.signer).toLowerCase() !== signer.toLowerCase()) return false
-  if (!/^0x[a-fA-F0-9]{130}$/.test(String(order.signature))) return false
+  if (!validOrderSignature(order.signature)) return false
   return true
 }
 
