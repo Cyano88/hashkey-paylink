@@ -153,15 +153,20 @@ export default async function handler(req: Request, res: Response) {
     body: orderBody,
   })
   const result = await response.json().catch(() => ({}))
+  const polymarketError = isRecord(result)
+    ? cleanText(result.error ?? result.errorMsg ?? '', 360)
+    : ''
+  const polymarketSuccess = isRecord(result) && typeof result.success === 'boolean' ? result.success : undefined
 
-  if (!response.ok || (isRecord(result) && 'error' in result)) {
+  if (!response.ok || polymarketError || polymarketSuccess === false) {
     return res.status(response.ok ? 502 : response.status).json({
       ok: false,
       ready: false,
       builderCodeConfigured: true,
       builderCodePreview: builderCodePreview(builderCode as string),
-      error: isRecord(result) && 'error' in result ? String(result.error) : 'Polymarket rejected the submitted order.',
+      error: polymarketError || 'Polymarket rejected the submitted order.',
       polymarketStatus: response.status,
+      polymarket: result,
     })
   }
 

@@ -4934,6 +4934,7 @@ export function PolyStreamPanel({
   onBack: () => void
   onOpenNews: () => void
 }) {
+  const { authenticated, getAccessToken } = usePrivy()
   const { wallets: privyWallets } = useWallets()
   const [feed, setFeed] = useState<PolyStreamFeed | null>(null)
   const [loading, setLoading] = useState(true)
@@ -4942,9 +4943,14 @@ export function PolyStreamPanel({
   const [tradeBusyKey, setTradeBusyKey] = useState('')
   const [tradeNotice, setTradeNotice] = useState('')
   const [tradeSuccess, setTradeSuccess] = useState<{ matchKey: string; label: string; amount: string } | null>(null)
+  const [profile, setProfile] = useState<PolymarketProfile | null>(null)
+  const [profileLoading, setProfileLoading] = useState(false)
   const mountedRef = useRef(true)
   const matches = feed?.matches ?? []
   const signingWalletAddress = privyWallets.find(wallet => /^0x[a-fA-F0-9]{40}$/.test(wallet.address ?? ''))?.address ?? ''
+  const savedTradingAddress = profile?.tradingAddress || ''
+  const polymarketDepositWallet = profile?.depositWalletAddress || ''
+  const polymarketWalletReady = Boolean(polymarketDepositWallet && String(profile?.depositWalletStatus || '').toLowerCase() === 'ready')
   const providerReady = Boolean(feed?.providerConfigured && feed.providerStatus === 'connected' && !error)
   const statusText = loading
     ? 'Refreshing'
@@ -4972,16 +4978,49 @@ export function PolyStreamPanel({
     }
   }, [])
 
+  const loadTradingProfile = useCallback(async () => {
+    if (!authenticated) {
+      setProfile(null)
+      return
+    }
+    setProfileLoading(true)
+    try {
+      const token = await getAccessToken()
+      if (!token) {
+        setProfile(null)
+        return
+      }
+      const response = await fetch('/api/polymarket-portfolio?action=profile', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await readPolyDeskJson<{ ok?: boolean; profile?: PolymarketProfile | null; error?: string }>(response, 'Could not load PolyDesk trading profile.')
+      if (!response.ok || !data.ok) throw new Error(data.error || 'Could not load PolyDesk trading profile.')
+      if (mountedRef.current) setProfile(data.profile ?? null)
+    } catch {
+      if (mountedRef.current) setProfile(null)
+    } finally {
+      if (mountedRef.current) setProfileLoading(false)
+    }
+  }, [authenticated, getAccessToken])
+
   const signWorldCupTrade = useCallback(async (match: PolyStreamMatch, option: PolyStreamTradeOption) => {
     setTradeNotice('')
     setTradeSuccess(null)
-    if (!signingWalletAddress) {
-      setTradeNotice('Connect your wallet to continue.')
+    if (!authenticated) {
+      setTradeNotice('Sign in with Privy, then open Main Wallet to activate your Polymarket wallet.')
       return
     }
-    const signingWallet = privyWallets.find(wallet => wallet.address?.toLowerCase() === signingWalletAddress.toLowerCase())
+    if (profileLoading) {
+      setTradeNotice('Loading your PolyDesk trading wallet. Try again in a moment.')
+      return
+    }
+    if (!savedTradingAddress || !polymarketDepositWallet || !polymarketWalletReady) {
+      setTradeNotice('Open Portfolio > Main Wallet and activate your Polymarket wallet before trading.')
+      return
+    }
+    const signingWallet = privyWallets.find(wallet => wallet.address?.toLowerCase() === savedTradingAddress.toLowerCase())
     if (!signingWallet || typeof signingWallet.getEthereumProvider !== 'function') {
-      setTradeNotice('This wallet cannot approve the order here. Try another wallet.')
+      setTradeNotice('Connect the Privy wallet that controls your PolyDesk Polymarket wallet.')
       return
     }
     const amount = tradeAmount.trim()
@@ -5039,17 +5078,18 @@ export function PolyStreamPanel({
         import('viem/chains'),
       ])
       const walletClient = createWalletClient({
-        account: signingWalletAddress as `0x${string}`,
+        account: savedTradingAddress as `0x${string}`,
         chain: polygon,
         transport: custom(provider),
       })
+      const signatureType = 3 as never
       const signingClient = new ClobClient(
         'https://clob.polymarket.com',
         137,
         walletClient,
         undefined,
-        0,
-        signingWalletAddress,
+        signatureType,
+        polymarketDepositWallet,
       )
       setTradeNotice('Confirm the order in your wallet. Signing is free.')
       const signedOrder = await signingClient.createMarketOrder(
@@ -5080,7 +5120,7 @@ export function PolyStreamPanel({
           marketUrl: match.polymarketUrl,
           outcome: option.label,
           tokenId: option.tokenId,
-          signer: signingWalletAddress,
+          signer: savedTradingAddress,
           orderType: OrderType.FOK,
           order: signedOrder,
           orderPayload: builderAttributedPayload,
@@ -5114,7 +5154,7 @@ export function PolyStreamPanel({
           marketUrl: match.polymarketUrl,
           outcome: option.label,
           tokenId: option.tokenId,
-          signer: signingWalletAddress,
+          signer: savedTradingAddress,
           orderType: OrderType.FOK,
           order: signedOrder,
           orderPayload: finalOrderPayload,
@@ -5133,7 +5173,7 @@ export function PolyStreamPanel({
     } finally {
       setTradeBusyKey('')
     }
-  }, [privyWallets, signingWalletAddress, tradeAmount])
+  }, [authenticated, profileLoading, privyWallets, savedTradingAddress, polymarketDepositWallet, polymarketWalletReady, tradeAmount])
 
   useEffect(() => {
     mountedRef.current = true
@@ -5146,6 +5186,10 @@ export function PolyStreamPanel({
       window.clearInterval(timer)
     }
   }, [loadStream])
+
+  useEffect(() => {
+    void loadTradingProfile()
+  }, [loadTradingProfile])
 
   return (
     <div className="mt-4 space-y-3">
@@ -5212,7 +5256,7 @@ export function PolyStreamPanel({
           tradeBusyKey={tradeBusyKey}
           tradeNotice={tradeNotice}
           tradeSuccess={tradeSuccess}
-          signingWalletAddress={signingWalletAddress}
+          signingWalletAddress={savedTradingAddress || signingWalletAddress}
         />
         <p className="px-1 pb-1 text-[10px] font-medium leading-relaxed text-gray-400 dark:text-gray-500">
           Live markets move fast. Confirm the latest score and odds on Polymarket before trading.
