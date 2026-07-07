@@ -4495,6 +4495,23 @@ function polymarketTickSize(value?: number): '0.1' | '0.01' | '0.001' | '0.0001'
   return text === '0.1' || text === '0.01' || text === '0.001' || text === '0.0001' ? text : ''
 }
 
+function polymarketRestrictionNotice(country?: string, region?: string) {
+  const location = country ? ` from ${[country, region].filter(Boolean).join('-')}` : ' from your current region or network'
+  return `Polymarket trading is not available${location}. PolyDesk can still show live scores, market context, portfolio state, funding requests, and LP Scout, but order placement is only available from Polymarket-supported regions.`
+}
+
+async function checkPolymarketTradingRestriction() {
+  try {
+    const response = await fetch('https://polymarket.com/api/geoblock', { cache: 'no-store' })
+    const data = await response.json().catch(() => null) as { blocked?: boolean; country?: string; region?: string } | null
+    if (response.ok && data?.blocked) return polymarketRestrictionNotice(data.country, data.region)
+  } catch {
+    // If the availability probe cannot be reached, continue and let CLOB return
+    // the authoritative execution error.
+  }
+  return ''
+}
+
 function friendlyTradeError(err: unknown) {
   const rawMessage = err instanceof Error
     ? err.message
@@ -4504,6 +4521,9 @@ function friendlyTradeError(err: unknown) {
   const cleanMessage = rawMessage.replace(/\s+/g, ' ').trim()
   const message = cleanMessage.toLowerCase()
   if (!cleanMessage) return 'We could not complete the order. Please try again.'
+  if (/\b(trading restricted|restricted in your region|geoblock|geo-block|available regions)\b/.test(message)) {
+    return polymarketRestrictionNotice()
+  }
   if (/^(signed order|polydesk|polymarket|user polymarket|world cup|this polymarket|unsupported|buying is temporarily|this market is not ready)/i.test(cleanMessage)) {
     return cleanMessage
   }
@@ -5045,6 +5065,12 @@ export function PolyStreamPanel({
     const tickSize = polymarketTickSize(option.tickSize)
     if (!tickSize) {
       setTradeNotice('This market is not ready for in-app buying yet.')
+      return
+    }
+    setTradeNotice('Checking Polymarket availability...')
+    const restrictionNotice = await checkPolymarketTradingRestriction()
+    if (restrictionNotice) {
+      setTradeNotice(restrictionNotice)
       return
     }
     const busyKey = `${matchKey(match)}:${option.outcome}`
@@ -6888,8 +6914,15 @@ export function PolyPortfolioPanel({
       setSellNotice('Connect the owner wallet that controls this Polymarket wallet.')
       return
     }
+    setSellNotice('Checking Polymarket availability...')
+    const restrictionNotice = await checkPolymarketTradingRestriction()
+    if (restrictionNotice) {
+      setSellNotice(restrictionNotice)
+      return
+    }
     const title = position.title ?? 'Polymarket position'
     const marketUrl = polymarketEventUrl(position)
+    setSellNotice('')
     const confirmed = window.confirm(`Sell up to ${size.toLocaleString(undefined, { maximumFractionDigits: 6 })} shares of "${title}" at market?`)
     if (!confirmed) return
     const busyKey = polymarketPositionKey(position)
