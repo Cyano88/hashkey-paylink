@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { usePrivy, useWallets } from '@privy-io/react-auth'
+import { usePrivy, useWallets, type LoginModalOptions } from '@privy-io/react-auth'
 import {
   ArrowLeft,
   ArrowRight,
@@ -47,6 +47,7 @@ const TELEGRAM_BOT_URL = import.meta.env.VITE_TELEGRAM_AGENT_URL || 'https://t.m
 const PUBLIC_PAYLINK_ORIGIN = (import.meta.env.VITE_PUBLIC_PAYLINK_ORIGIN || 'https://hashpaylink.com').replace(/\/+$/, '')
 const POLYMARKET_LOGO = '/brand/polymarket-logo.png'
 const HELPER_PAYMENT_REQUEST_DAILY_LIMIT = 20
+const POLYDESK_LOGIN_OPTIONS: LoginModalOptions = { loginMethods: ['email', 'wallet'] }
 
 function TelegramServicesIcon({ className = '' }: { className?: string }) {
   return (
@@ -4800,7 +4801,7 @@ function HashLiveScoreWidget({
                 ) : (
                   <PrivyConnectButton
                     debugLabel="polydesk-trade-login"
-                    loginOptions={{ loginMethods: ['email', 'wallet'] }}
+                    loginOptions={POLYDESK_LOGIN_OPTIONS}
                     logoutOnAuthenticated={false}
                     className="inline-flex items-center justify-center gap-1 rounded-md border border-white/10 bg-white px-2 py-1 text-[10px] font-black text-gray-950 transition hover:bg-gray-100"
                   >
@@ -7248,7 +7249,7 @@ export function PolyPortfolioPanel({
                     type="button"
                     onClick={() => {
                       setAddressInput(unsignedWatchAddress.trim())
-                      void login()
+                      void login(POLYDESK_LOGIN_OPTIONS)
                     }}
                     disabled={!/^0x[a-fA-F0-9]{40}$/.test(unsignedWatchAddress.trim())}
                     className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
@@ -7270,12 +7271,12 @@ export function PolyPortfolioPanel({
                   </div>
                   <button
                     type="button"
-                    onClick={() => login()}
+                    onClick={() => login(POLYDESK_LOGIN_OPTIONS)}
                     className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-4 py-3 text-sm font-bold text-white transition hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
                   >
-                    <Mail className="h-4 w-4" /> Sign in to continue
+                    <Wallet className="h-4 w-4" /> Connect wallet
                   </button>
-                  <p className="text-center text-xs font-medium text-gray-400 dark:text-gray-500">Start with email</p>
+                  <p className="text-center text-xs font-medium text-gray-400 dark:text-gray-500">Email or wallet</p>
                 </div>
               )}
 
@@ -7654,11 +7655,14 @@ export function PolyPortfolioPanel({
           <div className="mt-3">
             {!authenticated ? (
               <>
-                <PrivyConnectButton className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200">
-                  <Mail className="h-4 w-4" />
-                  Sign in to continue
+                <PrivyConnectButton
+                  loginOptions={POLYDESK_LOGIN_OPTIONS}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+                >
+                  <Wallet className="h-4 w-4" />
+                  Connect wallet
                 </PrivyConnectButton>
-                <p className="mt-2 text-center text-xs font-medium text-gray-400 dark:text-gray-500">Start with email</p>
+                <p className="mt-2 text-center text-xs font-medium text-gray-400 dark:text-gray-500">Email or wallet</p>
               </>
             ) : signingWalletAddress ? (
               <button
@@ -7824,9 +7828,12 @@ export function PolyPortfolioPanel({
             </p>
             <div className="mt-3">
               {!authenticated ? (
-                <PrivyConnectButton className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200">
-                  <Mail className="h-4 w-4" />
-                  Sign in to continue
+                <PrivyConnectButton
+                  loginOptions={POLYDESK_LOGIN_OPTIONS}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+                >
+                  <Wallet className="h-4 w-4" />
+                  Connect wallet
                 </PrivyConnectButton>
               ) : signingWalletAddress ? (
                 <button
@@ -8234,11 +8241,14 @@ export function PolyPortfolioPanel({
 
         {!authenticated ? (
           <div className="mt-3 overflow-hidden rounded-2xl border border-gray-100 bg-gradient-to-br from-white to-gray-50 p-4 shadow-sm dark:border-white/10 dark:from-[#111216] dark:to-white/[0.04]">
-            <PrivyConnectButton className="group flex w-full items-center justify-center gap-2 rounded-xl bg-gray-950 px-4 py-3 text-sm font-bold text-white shadow-sm transition-all hover:bg-black active:scale-[0.98] disabled:opacity-60 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-100">
-              <Mail className="h-4 w-4" />
-              Sign in to continue
+            <PrivyConnectButton
+              loginOptions={POLYDESK_LOGIN_OPTIONS}
+              className="group flex w-full items-center justify-center gap-2 rounded-xl bg-gray-950 px-4 py-3 text-sm font-bold text-white shadow-sm transition-all hover:bg-black active:scale-[0.98] disabled:opacity-60 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-100"
+            >
+              <Wallet className="h-4 w-4" />
+              Connect wallet
             </PrivyConnectButton>
-            <p className="mt-2 text-center text-xs font-medium text-gray-400 dark:text-gray-500">Start with email</p>
+            <p className="mt-2 text-center text-xs font-medium text-gray-400 dark:text-gray-500">Email or wallet</p>
           </div>
         ) : !signingWalletAddress ? (
           <PrivyWalletConnectButton className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-gray-950 px-4 py-3 text-sm font-bold text-white shadow-sm transition-all hover:bg-black active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-100">
