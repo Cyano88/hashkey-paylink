@@ -5134,7 +5134,7 @@ export function PolyStreamPanel({
         handoff?: { orderPayload?: typeof builderAttributedPayload }
       }
       if (!handoffResponse.ok || !handoff.ok) {
-        setTradeNotice(handoff.error || 'Your approval was received, but the order could not be sent. Please try again.')
+        setTradeNotice(handoff.error || `PolyDesk handoff failed without a server reason. HTTP ${handoffResponse.status}.`)
         return
       }
       setTradeNotice('Sending your order...')

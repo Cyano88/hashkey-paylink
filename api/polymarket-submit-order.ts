@@ -34,8 +34,8 @@ function validOrderSignature(value: unknown) {
   return /^0x[a-fA-F0-9]{130,}$/.test(signature) && signature.length % 2 === 0
 }
 
-function validSignedOrder(order: unknown, tokenId: string, signer: string) {
-  if (!isRecord(order)) return false
+function signedOrderValidationError(order: unknown, tokenId: string, signer: string) {
+  if (!isRecord(order)) return 'Signed order is not an object.'
   const required = [
     'salt',
     'maker',
@@ -50,11 +50,16 @@ function validSignedOrder(order: unknown, tokenId: string, signer: string) {
     'side',
     'signature',
   ]
-  if (!required.every(key => requiredString(order, key))) return false
-  if (String(order.tokenId) !== tokenId) return false
-  if (String(order.signer).toLowerCase() !== signer.toLowerCase()) return false
-  if (!validOrderSignature(order.signature)) return false
-  return true
+  const missing = required.filter(key => !requiredString(order, key))
+  if (missing.length) return `Signed order is missing ${missing.join(', ')}.`
+  if (String(order.tokenId) !== tokenId) return 'Signed order token does not match the selected market token.'
+  if (String(order.signer).toLowerCase() !== signer.toLowerCase()) {
+    return `Signed order signer ${cleanText(order.signer, 80)} does not match connected signer ${signer}.`
+  }
+  if (!validOrderSignature(order.signature)) {
+    return `Signed order signature has unsupported shape: length ${String(order.signature ?? '').length}, signatureType ${cleanText(order.signatureType, 16) || 'unknown'}.`
+  }
+  return ''
 }
 
 function validOrderPayload(value: unknown, signedOrder: unknown, orderType: string, builderCode: string) {
@@ -135,8 +140,9 @@ export default async function handler(req: Request, res: Response) {
   if (orderType !== 'FOK' && orderType !== 'FAK' && orderType !== 'GTC' && orderType !== 'GTD') {
     return res.status(400).json({ ok: false, ready: false, error: 'Unsupported Polymarket order type.' })
   }
-  if (!validSignedOrder(signedOrder, tokenId, signer)) {
-    return res.status(400).json({ ok: false, ready: false, error: 'Signed Polymarket order payload is invalid or does not match the selected World Cup token.' })
+  const signedOrderError = signedOrderValidationError(signedOrder, tokenId, signer)
+  if (signedOrderError) {
+    return res.status(400).json({ ok: false, ready: false, error: signedOrderError })
   }
   if (!validOrderPayload(orderPayload, signedOrder, orderType, builderCode as string)) {
     return res.status(400).json({ ok: false, ready: false, error: 'Polymarket order payload is missing the configured builder code or does not match the signed order.' })
