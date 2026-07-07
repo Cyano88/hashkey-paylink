@@ -7678,10 +7678,13 @@ export function PolyPortfolioPanel({
                 Open Main Wallet
               </button>
             ) : (
-              <PrivyWalletConnectButton className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200">
-                <Wallet className="h-4 w-4" />
-                Connect wallet
-              </PrivyWalletConnectButton>
+              <>
+                <PrivyWalletConnectButton className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200">
+                  <Wallet className="h-4 w-4" />
+                  Attach wallet
+                </PrivyWalletConnectButton>
+                <p className="mt-2 text-center text-xs font-medium text-gray-400 dark:text-gray-500">Email session active</p>
+              </>
             )}
           </div>
         </div>
@@ -7849,10 +7852,13 @@ export function PolyPortfolioPanel({
                   Open Main Wallet
                 </button>
               ) : (
-                <PrivyWalletConnectButton className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200">
-                  <Wallet className="h-4 w-4" />
-                  Connect wallet
-                </PrivyWalletConnectButton>
+                <>
+                  <PrivyWalletConnectButton className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200">
+                    <Wallet className="h-4 w-4" />
+                    Attach wallet
+                  </PrivyWalletConnectButton>
+                  <p className="mt-2 text-center text-xs font-medium text-gray-400 dark:text-gray-500">Email session active</p>
+                </>
               )}
             </div>
             {profileError && <p className="mt-2 text-xs text-red-500 dark:text-red-300">{profileError}</p>}
@@ -8251,10 +8257,13 @@ export function PolyPortfolioPanel({
             <p className="mt-2 text-center text-xs font-medium text-gray-400 dark:text-gray-500">Email or wallet</p>
           </div>
         ) : !signingWalletAddress ? (
-          <PrivyWalletConnectButton className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-gray-950 px-4 py-3 text-sm font-bold text-white shadow-sm transition-all hover:bg-black active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-100">
-            <Wallet className="h-4 w-4" />
-            Connect wallet
-          </PrivyWalletConnectButton>
+          <div className="mt-3">
+            <PrivyWalletConnectButton className="flex w-full items-center justify-center gap-2 rounded-xl bg-gray-950 px-4 py-3 text-sm font-bold text-white shadow-sm transition-all hover:bg-black active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-100">
+              <Wallet className="h-4 w-4" />
+              Attach wallet
+            </PrivyWalletConnectButton>
+            <p className="mt-2 text-center text-xs font-medium text-gray-400 dark:text-gray-500">Email session active</p>
+          </div>
         ) : null}
 
       </div>
