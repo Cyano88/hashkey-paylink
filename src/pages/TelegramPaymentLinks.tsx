@@ -4496,7 +4496,13 @@ function polymarketTickSize(value?: number): '0.1' | '0.01' | '0.001' | '0.0001'
 }
 
 function friendlyTradeError(err: unknown) {
-  const message = err instanceof Error ? err.message.toLowerCase() : String(err ?? '').toLowerCase()
+  const rawMessage = err instanceof Error ? err.message : String(err ?? '')
+  const cleanMessage = rawMessage.replace(/\s+/g, ' ').trim()
+  const message = cleanMessage.toLowerCase()
+  if (!cleanMessage) return 'We could not complete the order. Please try again.'
+  if (/^(signed order|polydesk|polymarket|user polymarket|world cup|this polymarket|unsupported|buying is temporarily|this market is not ready)/i.test(cleanMessage)) {
+    return cleanMessage
+  }
   if (/\b(reject|rejected|denied|cancel|cancelled|user rejected)\b/.test(message)) {
     return 'Order approval was cancelled.'
   }
