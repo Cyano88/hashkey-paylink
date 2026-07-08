@@ -1975,6 +1975,7 @@ export default function AgentWorkspace({ embedded = false, forceProfile = false 
                 <>
                   <PrivyConnectButton
                     debugLabel="x402-wallet-email"
+                    loginOptions={{ loginMethods: ['email'] }}
                     logoutOnAuthenticated={false}
                     onBeforeLogin={() => {
                       try { window.sessionStorage.setItem(AGENT_WALLET_LOGIN_INTENT_KEY, 'login') } catch {}
@@ -1986,7 +1987,7 @@ export default function AgentWorkspace({ embedded = false, forceProfile = false 
                     Sign in to continue
                   </PrivyConnectButton>
                   <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
-                    Continue with email or wallet. Email may still be required for Circle wallet setup.
+                    Email sign-in is required before wallet setup.
                   </p>
                 </>
               ) : walletMode === 'choose' ? (
