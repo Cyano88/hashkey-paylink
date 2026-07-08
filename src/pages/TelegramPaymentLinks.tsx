@@ -6348,7 +6348,7 @@ async function signPolymarketDepositWalletOrder({
   if (!ownerAddress) throw new Error('Connected wallet is missing an owner address.')
   const bytes32Zero = '0x0000000000000000000000000000000000000000000000000000000000000000'
   const exchangeDomainName = 'Polymarket CTF Exchange'
-  const exchangeDomainVersion = '3'
+  const exchangeDomainVersion = '2'
   const orderTypeString = 'Order(uint256 salt,address maker,address signer,uint256 tokenId,uint256 makerAmount,uint256 takerAmount,uint8 side,uint8 signatureType,uint256 timestamp,bytes32 metadata,bytes32 builder)'
   const orderStruct = [
     { name: 'salt', type: 'uint256' },
@@ -6420,10 +6420,10 @@ async function signPolymarketDepositWalletOrder({
   const innerSignature = await walletClient.signTypedData({
     account: ownerAddress,
     domain: {
-      name: 'DepositWallet',
-      version: '1',
+      name: exchangeDomainName,
+      version: exchangeDomainVersion,
       chainId,
-      verifyingContract: depositWalletAddress,
+      verifyingContract: exchangeAddress,
     },
     types: {
       TypedDataSign: [
@@ -6439,10 +6439,10 @@ async function signPolymarketDepositWalletOrder({
     primaryType: 'TypedDataSign',
     message: {
       contents: typedOrder,
-      name: exchangeDomainName,
-      version: exchangeDomainVersion,
+      name: 'DepositWallet',
+      version: '1',
       chainId,
-      verifyingContract: exchangeAddress,
+      verifyingContract: depositWalletAddress,
       salt: bytes32Zero,
     },
   })
