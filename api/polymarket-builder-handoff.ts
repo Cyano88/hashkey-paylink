@@ -36,8 +36,8 @@ function requiredString(order: SignedOrderRecord, key: string) {
 
 function validOrderSignature(value: unknown) {
   const signature = String(value ?? '')
-  // EOA signatures are 65 bytes (130 hex chars after 0x). POLY_1271
-  // deposit-wallet signatures are ERC-7739 wrapped and longer.
+  // EOA/proxy signatures are 65 bytes (130 hex chars after 0x). Direct
+  // POLY_1271 contract-wallet signatures are ERC-7739 wrapped and longer.
   return /^0x[a-fA-F0-9]{130,}$/.test(signature) && signature.length % 2 === 0
 }
 
@@ -75,7 +75,7 @@ function signedOrderValidationError(order: unknown, tokenId: string, signer: str
   if (missing.length) return `Signed order is missing ${missing.join(', ')}.`
   if (String(order.tokenId) !== tokenId) return 'Signed order token does not match the selected market token.'
   if (String(order.signer).toLowerCase() !== signer.toLowerCase()) {
-    return `Signed order signer ${cleanText(order.signer, 80)} does not match connected signer ${signer}.`
+    return `Signed order signer ${cleanText(order.signer, 80)} does not match connected owner signer ${signer}.`
   }
   if (!validOrderSignature(order.signature)) {
     return `Signed order signature has unsupported shape: length ${String(order.signature ?? '').length}, signatureType ${cleanText(order.signatureType, 16) || 'unknown'}.`

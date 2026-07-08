@@ -5133,7 +5133,7 @@ export function PolyStreamPanel({
         if (walletCheckData.profile) setProfile(walletCheckData.profile)
         throw new Error(walletCheckData.error || 'Connected owner wallet does not control this Polymarket wallet.')
       }
-      const signatureType = SignatureTypeV2.POLY_1271
+      const signatureType = SignatureTypeV2.POLY_PROXY
       const signingClient = new ClobClient({
         host: 'https://clob.polymarket.com',
         chain: 137,
@@ -5177,7 +5177,7 @@ export function PolyStreamPanel({
           marketUrl: match.polymarketUrl,
           outcome: option.label,
           tokenId: option.tokenId,
-          signer: polymarketDepositWallet,
+          signer: savedTradingAddress,
           orderType: OrderType.FOK,
           order: signedOrder,
           orderPayload,
@@ -7055,7 +7055,7 @@ export function PolyPortfolioPanel({
         }
         throw new Error(walletCheckData.error || 'Connected owner wallet does not control this Polymarket wallet.')
       }
-      const signatureType = SignatureTypeV2.POLY_1271
+      const signatureType = SignatureTypeV2.POLY_PROXY
       const baseClient = new ClobClient({
         host: 'https://clob.polymarket.com',
         chain: 137,
@@ -7110,7 +7110,7 @@ export function PolyPortfolioPanel({
           marketUrl,
           outcome: position.outcome ?? 'Position',
           tokenId,
-          signer: polymarketDepositWallet,
+          signer: savedTradingAddress,
           orderType: OrderType.FAK,
           order: signedOrder,
           orderPayload,
