@@ -5107,7 +5107,7 @@ export function PolyStreamPanel({
         await signingWallet.switchChain(137)
       }
       const provider = await signingWallet.getEthereumProvider()
-      const [{ ClobClient, Side, OrderType, SignatureTypeV2, createL2Headers, getContractConfig, orderToJsonV2 }, { createWalletClient, custom, encodeFunctionData, maxUint256, parseUnits }, { polygon }, { RelayClient }] = await Promise.all([
+      const [{ ClobClient, Side, OrderType, SignatureTypeV2, createL1Headers, createL2Headers, getContractConfig, orderToJsonV2 }, { createWalletClient, custom, encodeFunctionData, maxUint256, parseUnits }, { polygon }, { RelayClient }] = await Promise.all([
         import('@polymarket/clob-client-v2'),
         import('viem'),
         import('viem/chains'),
@@ -5258,7 +5258,7 @@ export function PolyStreamPanel({
         { tickSize: liveTickSize, negRisk: liveNegRisk, version: 2 },
       )
       setTradeNotice('Approved. Sending your order...')
-      const userCreds = await signingClient.createOrDeriveApiKey()
+      const userCreds = await polyDeskCreateDepositWalletApiKey(createL1Headers, walletClient, polymarketDepositWallet)
       if (!polyDeskValidClobCreds(userCreds)) {
         throw new Error('Polymarket API authorization failed. Reconnect the owner wallet, then try again.')
       }
@@ -5297,10 +5297,14 @@ export function PolyStreamPanel({
         requestPath: '/order',
         body: orderBody,
       })
+      const submitHeaders = {
+        ...polyDeskStringRecord(l2Headers),
+        POLY_ADDRESS: polymarketDepositWallet,
+      }
       setTradeNotice('Sending your order from this browser...')
       await submitPolymarketOrderFromBrowser({
         orderBody,
-        userHeaders: l2Headers,
+        userHeaders: submitHeaders,
         remoteBuilderSigner: handoff.remoteBuilderSigner,
         fallbackMessage: 'Polymarket rejected the submitted order.',
       })
@@ -6362,6 +6366,48 @@ function polyDeskValidClobCreds(value: unknown): value is { key: string; secret:
     && typeof record.passphrase === 'string' && record.passphrase.trim().length > 0
 }
 
+function polyDeskNormalizeClobCreds(value: unknown) {
+  if (!value || typeof value !== 'object') return null
+  const record = value as Record<string, unknown>
+  const key = typeof record.key === 'string' ? record.key : typeof record.apiKey === 'string' ? record.apiKey : ''
+  const secret = typeof record.secret === 'string' ? record.secret : ''
+  const passphrase = typeof record.passphrase === 'string' ? record.passphrase : ''
+  const creds = { key, secret, passphrase }
+  return polyDeskValidClobCreds(creds) ? creds : null
+}
+
+function polyDeskAuthError(value: unknown) {
+  if (!value || typeof value !== 'object') return ''
+  const record = value as Record<string, unknown>
+  const nested = record.data && typeof record.data === 'object' ? record.data as Record<string, unknown> : null
+  const message = record.error ?? record.errorMsg ?? record.message ?? nested?.error ?? nested?.message
+  return typeof message === 'string' ? message.replace(/\s+/g, ' ').trim() : ''
+}
+
+async function polyDeskCreateDepositWalletApiKey(
+  createL1Headers: (...args: any[]) => Promise<Record<string, string | number | boolean>>,
+  walletClient: unknown,
+  polymarketDepositWallet: string,
+) {
+  async function authRequest(method: 'POST' | 'GET', path: '/auth/api-key' | '/auth/derive-api-key') {
+    const l1Headers = await createL1Headers(walletClient, 137, undefined, undefined, polymarketDepositWallet)
+    const response = await fetch(`https://clob.polymarket.com${path}`, {
+      method,
+      headers: polyDeskStringRecord(l1Headers),
+    })
+    const data = await response.json().catch(() => ({}))
+    const creds = polyDeskNormalizeClobCreds(data)
+    if (response.ok && creds) return creds
+    return { error: polyDeskAuthError(data) || `Polymarket auth HTTP ${response.status}` }
+  }
+
+  const created = await authRequest('POST', '/auth/api-key')
+  if (polyDeskValidClobCreds(created)) return created
+  const derived = await authRequest('GET', '/auth/derive-api-key')
+  if (polyDeskValidClobCreds(derived)) return derived
+  throw new Error(polyDeskAuthError(derived) || polyDeskAuthError(created) || 'Polymarket API authorization failed. Reconnect the owner wallet, then try again.')
+}
+
 function polyDeskResponseError(value: unknown, fallbackMessage: string) {
   if (value && typeof value === 'object') {
     const record = value as Record<string, unknown>
@@ -7195,7 +7241,7 @@ export function PolyPortfolioPanel({
         await signingWallet.switchChain(137)
       }
       const provider = await signingWallet.getEthereumProvider()
-      const [{ ClobClient, Side, OrderType, AssetType, SignatureTypeV2, createL2Headers, orderToJsonV2 }, { createWalletClient, custom }, { polygon }] = await Promise.all([
+      const [{ ClobClient, Side, OrderType, AssetType, SignatureTypeV2, createL1Headers, createL2Headers, orderToJsonV2 }, { createWalletClient, custom }, { polygon }] = await Promise.all([
         import('@polymarket/clob-client-v2'),
         import('viem'),
         import('viem/chains'),
@@ -7232,7 +7278,10 @@ export function PolyPortfolioPanel({
         funderAddress: polymarketDepositWallet,
       })
       setSellNotice('Checking sell balance and market settings...')
-      const userCreds = await baseClient.createOrDeriveApiKey()
+      const userCreds = await polyDeskCreateDepositWalletApiKey(createL1Headers, walletClient, polymarketDepositWallet)
+      if (!polyDeskValidClobCreds(userCreds)) {
+        throw new Error('Polymarket API authorization failed. Reconnect the owner wallet, then try again.')
+      }
       const clobClient = new ClobClient({
         host: 'https://clob.polymarket.com',
         chain: 137,
@@ -7298,10 +7347,14 @@ export function PolyPortfolioPanel({
         requestPath: '/order',
         body: orderBody,
       })
+      const submitHeaders = {
+        ...polyDeskStringRecord(l2Headers),
+        POLY_ADDRESS: polymarketDepositWallet,
+      }
       setSellNotice('Sending sell order from this browser...')
       await submitPolymarketOrderFromBrowser({
         orderBody,
-        userHeaders: l2Headers,
+        userHeaders: submitHeaders,
         remoteBuilderSigner: handoff.remoteBuilderSigner,
         fallbackMessage: 'Polymarket rejected the sell order.',
       })
