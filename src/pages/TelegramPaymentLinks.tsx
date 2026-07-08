@@ -7480,13 +7480,19 @@ export function PolyPortfolioPanel({
       await polyDeskEnsurePolygonProvider(provider)
       const activeTradingAddress = await polyDeskProviderAccount(provider)
       sellStage = 'load-polymarket-sdk'
-      const [{ ClobClient, Side, OrderType, AssetType, SignatureTypeV2, createL1Headers, createL2Headers, orderToJsonV2 }, { createWalletClient, custom }, { polygon }] = await Promise.all([
+      const [{ ClobClient, Side, OrderType, AssetType, SignatureTypeV2, createL1Headers, createL2Headers, getContractConfig, orderToJsonV2 }, { createPublicClient, createWalletClient, custom, encodeFunctionData }, { polygon }, { RelayClient }, { BuilderConfig }] = await Promise.all([
         import('@polymarket/clob-client-v2'),
         import('viem'),
         import('viem/chains'),
+        import('@polymarket/builder-relayer-client'),
+        import('@polymarket/builder-signing-sdk'),
       ])
       const walletClient = createWalletClient({
         account: activeTradingAddress as `0x${string}`,
+        chain: polygon,
+        transport: custom(provider),
+      })
+      const publicClient = createPublicClient({
         chain: polygon,
         transport: custom(provider),
       })
@@ -7544,12 +7550,92 @@ export function PolyPortfolioPanel({
       const tickText = String(rawTickSize ?? '')
       const tickSize = polymarketTickSize(Number(tickText)) || (tickText === '0.1' || tickText === '0.01' || tickText === '0.005' || tickText === '0.0025' || tickText === '0.001' || tickText === '0.0001' ? tickText : '')
       if (!tickSize) throw new Error('This market is missing CLOB tick size metadata.')
+      const contractConfig = getContractConfig(137)
+      const sellExchangeAddress = negRisk === true ? contractConfig.negRiskExchangeV2 : contractConfig.exchangeV2
       if (balanceAllowance) {
         const rawBalance = Number(balanceAllowance.balance)
         const normalizedBalance = Number.isFinite(rawBalance) && rawBalance > 100_000 ? rawBalance / 1_000_000 : rawBalance
         if (Number.isFinite(normalizedBalance) && normalizedBalance <= 0) {
           throw new Error('No sellable conditional token balance was found for this position.')
         }
+      }
+      sellStage = 'conditional-token-approval'
+      const conditionalTokenAbi = [{
+        type: 'function',
+        name: 'isApprovedForAll',
+        stateMutability: 'view',
+        inputs: [
+          { name: 'account', type: 'address' },
+          { name: 'operator', type: 'address' },
+        ],
+        outputs: [{ name: '', type: 'bool' }],
+      }, {
+        type: 'function',
+        name: 'setApprovalForAll',
+        stateMutability: 'nonpayable',
+        inputs: [
+          { name: 'operator', type: 'address' },
+          { name: 'approved', type: 'bool' },
+        ],
+        outputs: [],
+      }] as const
+      let conditionalTokensApproved = await publicClient.readContract({
+        address: contractConfig.conditionalTokens as `0x${string}`,
+        abi: conditionalTokenAbi,
+        functionName: 'isApprovedForAll',
+        args: [polymarketDepositWallet as `0x${string}`, sellExchangeAddress as `0x${string}`],
+      }).catch(() => false)
+      if (!conditionalTokensApproved) {
+        sellStage = 'load-approval-config'
+        const configResponse = await fetch('/api/polymarket-bridge', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'config' }),
+        })
+        const configData = await readPolyDeskJson<{ ok?: boolean; relayerReady?: boolean; relayerUrl?: string | null; error?: string }>(configResponse, 'Could not load Polymarket relayer configuration.')
+        if (!configResponse.ok || !configData.ok || !configData.relayerReady || !configData.relayerUrl) {
+          throw new Error('Conditional-token approval is missing and the Polymarket relayer is not configured.')
+        }
+        sellStage = 'derive-deposit-wallet'
+        const relayerClient = new RelayClient(configData.relayerUrl, 137, walletClient, polyDeskRelayerBuilderConfig(BuilderConfig), undefined, { chain: polygon })
+        const derivedWallet = await relayerClient.deriveDepositWalletAddress()
+        if (derivedWallet.toLowerCase() !== polymarketDepositWallet.toLowerCase()) {
+          throw new Error('Connected owner wallet does not control this Polymarket wallet.')
+        }
+        const deployed = await relayerClient.getDeployed(polymarketDepositWallet, 'WALLET')
+        if (!deployed) {
+          throw new Error('Polymarket wallet is not deployed yet. Activate it, wait for confirmation, then retry.')
+        }
+        setSellNotice('Confirm position approval for Polymarket selling. Approval does not move funds.')
+        sellStage = 'approve-conditional-tokens'
+        const approvalData = encodeFunctionData({
+          abi: conditionalTokenAbi,
+          functionName: 'setApprovalForAll',
+          args: [sellExchangeAddress as `0x${string}`, true],
+        })
+        const deadline = Math.floor(Date.now() / 1000 + 1800).toString()
+        const approvalResponse = await relayerClient.executeDepositWalletBatch([{
+          target: contractConfig.conditionalTokens,
+          value: '0',
+          data: approvalData,
+        }], polymarketDepositWallet, deadline)
+        await approvalResponse.wait().catch(() => undefined)
+        setSellNotice('Waiting for position approval confirmation...')
+        sellStage = 'refresh-conditional-token-approval'
+        for (let attempt = 0; attempt < 30; attempt += 1) {
+          if (attempt > 0) await polyDeskWait(3_000)
+          conditionalTokensApproved = await publicClient.readContract({
+            address: contractConfig.conditionalTokens as `0x${string}`,
+            abi: conditionalTokenAbi,
+            functionName: 'isApprovedForAll',
+            args: [polymarketDepositWallet as `0x${string}`, sellExchangeAddress as `0x${string}`],
+          }).catch(() => false)
+          if (conditionalTokensApproved) break
+        }
+        if (!conditionalTokensApproved) {
+          throw new Error('Position approval is still pending. Wait for confirmation, then try again.')
+        }
+        await clobClient.updateBalanceAllowance({ asset_type: AssetType.CONDITIONAL, token_id: tokenId }).catch(() => undefined)
       }
       setSellNotice('Confirm the sell order in your wallet. Signing is free.')
       sellStage = 'create-market-order'
