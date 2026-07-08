@@ -1248,43 +1248,46 @@ function matchTimeValue(match: ScoreMatch) {
 }
 
 function selectMatchday(matches: ScoreMatch[], selectedDate: string) {
-  const dated = matches.filter(match => matchDateKey(match))
+  const allMatches = dedupeMatches(matches)
+  const dated = allMatches.filter(match => matchDateKey(match))
+  const undatedFixtures = allMatches.filter(match => !matchDateKey(match) && match.tag !== 'Result')
+  const recentResults = dated
+    .filter(match => match.tag === 'Result')
+    .sort((a, b) => matchTimeValue(b) - matchTimeValue(a))
+    .slice(0, 3)
   const exact = dated.filter(match => matchDateKey(match) === selectedDate)
   if (exact.length) {
     const selectedTs = Date.parse(`${selectedDate}T00:00:00Z`)
-    const previousResults = dated
-      .filter(match => match.tag === 'Result' && matchDateKey(match) < selectedDate)
+    const previousResults = recentResults
+      .filter(match => matchDateKey(match) < selectedDate)
       .sort((a, b) => matchTimeValue(b) - matchTimeValue(a))
       .slice(0, 3)
     const nextFixtures = dated
       .filter(match => match.tag !== 'Result' && matchDateKey(match) > selectedDate)
       .sort((a, b) => matchTimeValue(a) - matchTimeValue(b))
-      .slice(0, 5)
     const nearSelected = Number.isFinite(selectedTs)
       ? dated.filter(match => {
           const ts = matchTimeValue(match)
           return ts >= selectedTs - 6 * 60 * 60 * 1000 && ts < selectedTs
         }).slice(0, 2)
       : []
-    return dedupeMatches([...exact, ...nearSelected, ...previousResults, ...nextFixtures])
+    return dedupeMatches([...exact, ...nearSelected, ...nextFixtures, ...undatedFixtures, ...previousResults])
   }
 
   const live = dated.filter(match => match.tag === 'Live')
-  if (live.length) return live
-
-  const nextDate = dated
-    .map(matchDateKey)
-    .filter(date => date >= selectedDate)
-    .sort()[0]
-  if (nextDate) return dated.filter(match => matchDateKey(match) === nextDate)
+  const upcomingFromSelectedDate = dated
+    .filter(match => match.tag !== 'Result' && matchDateKey(match) >= selectedDate)
+    .sort((a, b) => matchTimeValue(a) - matchTimeValue(b))
+  if (live.length || upcomingFromSelectedDate.length || undatedFixtures.length) {
+    return dedupeMatches([...live, ...upcomingFromSelectedDate, ...undatedFixtures, ...recentResults])
+  }
 
   const today = todayKey()
-  const upcomingDate = dated
+  const upcoming = dated
     .filter(match => match.tag === 'Today' || match.tag === 'Fixture')
-    .map(matchDateKey)
-    .filter(date => date >= today)
-    .sort()[0]
-  if (upcomingDate) return dated.filter(match => matchDateKey(match) === upcomingDate)
+    .filter(match => matchDateKey(match) >= today)
+    .sort((a, b) => matchTimeValue(a) - matchTimeValue(b))
+  if (upcoming.length || undatedFixtures.length) return dedupeMatches([...upcoming, ...undatedFixtures, ...recentResults])
 
   const latestResultDate = dated
     .map(matchDateKey)
