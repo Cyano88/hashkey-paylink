@@ -4490,9 +4490,9 @@ function MarketPricePill({ value }: { value?: string }) {
   )
 }
 
-function polymarketTickSize(value?: number): '0.1' | '0.01' | '0.001' | '0.0001' | '' {
+function polymarketTickSize(value?: number): '0.1' | '0.01' | '0.005' | '0.0025' | '0.001' | '0.0001' | '' {
   const text = String(value ?? '')
-  return text === '0.1' || text === '0.01' || text === '0.001' || text === '0.0001' ? text : ''
+  return text === '0.1' || text === '0.01' || text === '0.005' || text === '0.0025' || text === '0.001' || text === '0.0001' ? text : ''
 }
 
 function polymarketRestrictionNotice(country?: string, region?: string) {
@@ -5107,9 +5107,8 @@ export function PolyStreamPanel({
         await signingWallet.switchChain(137)
       }
       const provider = await signingWallet.getEthereumProvider()
-      const [{ ClobClient, Side, OrderType, SignatureType, createL2Headers }, { orderToJson }, { createWalletClient, custom }, { polygon }] = await Promise.all([
-        import('@polymarket/clob-client'),
-        import('@polymarket/clob-client/dist/utilities.js'),
+      const [{ ClobClient, Side, OrderType, SignatureTypeV2, createL2Headers, orderToJsonV2 }, { createWalletClient, custom }, { polygon }] = await Promise.all([
+        import('@polymarket/clob-client-v2'),
         import('viem'),
         import('viem/chains'),
       ])
@@ -5118,15 +5117,14 @@ export function PolyStreamPanel({
         chain: polygon,
         transport: custom(provider),
       })
-      const signatureType = SignatureType.EOA
-      const signingClient = new ClobClient(
-        'https://clob.polymarket.com',
-        137,
-        walletClient,
-        undefined,
+      const signatureType = SignatureTypeV2.POLY_1271
+      const signingClient = new ClobClient({
+        host: 'https://clob.polymarket.com',
+        chain: 137,
+        signer: walletClient,
         signatureType,
-        polymarketDepositWallet,
-      )
+        funderAddress: polymarketDepositWallet,
+      })
       setTradeNotice('Checking live Polymarket market settings...')
       const [rawLiveTickSize, rawLiveNegRisk] = await Promise.all([
         signingClient.getTickSize(option.tokenId).catch(() => option.tickSize),
@@ -5134,7 +5132,7 @@ export function PolyStreamPanel({
       ])
       const liveTickText = String(rawLiveTickSize ?? '')
       const liveTickSize = polymarketTickSize(Number(liveTickText)) || (
-        liveTickText === '0.1' || liveTickText === '0.01' || liveTickText === '0.001' || liveTickText === '0.0001'
+        liveTickText === '0.1' || liveTickText === '0.01' || liveTickText === '0.005' || liveTickText === '0.0025' || liveTickText === '0.001' || liveTickText === '0.0001'
           ? liveTickText
           : tickSize
       )
@@ -5144,14 +5142,16 @@ export function PolyStreamPanel({
         {
           tokenID: option.tokenId,
           amount: Number(amount),
+          price: Number(option.price ? Number.parseFloat(option.price) / 100 : 1),
           side: Side.BUY,
           orderType: OrderType.FOK,
+          builderCode: data.builderCode,
         },
-        { tickSize: liveTickSize, negRisk: liveNegRisk },
+        { tickSize: liveTickSize, negRisk: liveNegRisk, version: 3 },
       )
       setTradeNotice('Approved. Sending your order...')
       const userCreds = await signingClient.createOrDeriveApiKey()
-      const orderPayload = orderToJson(signedOrder, userCreds.key, OrderType.FOK, false)
+      const orderPayload = orderToJsonV2(signedOrder, userCreds.key, OrderType.FOK, false, false)
       const handoffResponse = await fetch('/api/polymarket-builder-handoff', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -5161,7 +5161,7 @@ export function PolyStreamPanel({
           marketUrl: match.polymarketUrl,
           outcome: option.label,
           tokenId: option.tokenId,
-          signer: savedTradingAddress,
+          signer: polymarketDepositWallet,
           orderType: OrderType.FOK,
           order: signedOrder,
           orderPayload,
@@ -7011,9 +7011,8 @@ export function PolyPortfolioPanel({
         await signingWallet.switchChain(137)
       }
       const provider = await signingWallet.getEthereumProvider()
-      const [{ ClobClient, Side, OrderType, AssetType, SignatureType, createL2Headers }, { orderToJson }, { createWalletClient, custom }, { polygon }] = await Promise.all([
-        import('@polymarket/clob-client'),
-        import('@polymarket/clob-client/dist/utilities.js'),
+      const [{ ClobClient, Side, OrderType, AssetType, SignatureTypeV2, createL2Headers, orderToJsonV2 }, { createWalletClient, custom }, { polygon }] = await Promise.all([
+        import('@polymarket/clob-client-v2'),
         import('viem'),
         import('viem/chains'),
       ])
@@ -7022,32 +7021,31 @@ export function PolyPortfolioPanel({
         chain: polygon,
         transport: custom(provider),
       })
-      const signatureType = SignatureType.EOA
-      const baseClient = new ClobClient(
-        'https://clob.polymarket.com',
-        137,
-        walletClient,
-        undefined,
+      const signatureType = SignatureTypeV2.POLY_1271
+      const baseClient = new ClobClient({
+        host: 'https://clob.polymarket.com',
+        chain: 137,
+        signer: walletClient,
         signatureType,
-        polymarketDepositWallet,
-      )
+        funderAddress: polymarketDepositWallet,
+      })
       setSellNotice('Checking sell balance and market settings...')
       const userCreds = await baseClient.createOrDeriveApiKey()
-      const clobClient = new ClobClient(
-        'https://clob.polymarket.com',
-        137,
-        walletClient,
-        userCreds,
+      const clobClient = new ClobClient({
+        host: 'https://clob.polymarket.com',
+        chain: 137,
+        signer: walletClient,
+        creds: userCreds,
         signatureType,
-        polymarketDepositWallet,
-      )
+        funderAddress: polymarketDepositWallet,
+      })
       const [rawTickSize, negRisk, balanceAllowance] = await Promise.all([
         clobClient.getTickSize(tokenId),
         clobClient.getNegRisk(tokenId),
         clobClient.getBalanceAllowance({ asset_type: AssetType.CONDITIONAL, token_id: tokenId }).catch(() => null),
       ])
       const tickText = String(rawTickSize ?? '')
-      const tickSize = polymarketTickSize(Number(tickText)) || (tickText === '0.1' || tickText === '0.01' || tickText === '0.001' || tickText === '0.0001' ? tickText : '')
+      const tickSize = polymarketTickSize(Number(tickText)) || (tickText === '0.1' || tickText === '0.01' || tickText === '0.005' || tickText === '0.0025' || tickText === '0.001' || tickText === '0.0001' ? tickText : '')
       if (!tickSize) throw new Error('This market is missing CLOB tick size metadata.')
       if (balanceAllowance) {
         const rawBalance = Number(balanceAllowance.balance)
@@ -7063,11 +7061,12 @@ export function PolyPortfolioPanel({
           amount: size,
           side: Side.SELL,
           orderType: OrderType.FAK,
+          builderCode: prepareData.builderCode,
         },
-        { tickSize, negRisk: negRisk === true },
+        { tickSize, negRisk: negRisk === true, version: 3 },
       )
       setSellNotice('Approved. Sending sell order...')
-      const orderPayload = orderToJson(signedOrder, userCreds.key, OrderType.FAK, false)
+      const orderPayload = orderToJsonV2(signedOrder, userCreds.key, OrderType.FAK, false, false)
       const handoffResponse = await fetch('/api/polymarket-builder-handoff', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -7077,7 +7076,7 @@ export function PolyPortfolioPanel({
           marketUrl,
           outcome: position.outcome ?? 'Position',
           tokenId,
-          signer: savedTradingAddress,
+          signer: polymarketDepositWallet,
           orderType: OrderType.FAK,
           order: signedOrder,
           orderPayload,

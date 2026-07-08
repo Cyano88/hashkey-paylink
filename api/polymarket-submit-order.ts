@@ -36,19 +36,34 @@ function validOrderSignature(value: unknown) {
 
 function signedOrderValidationError(order: unknown, tokenId: string, signer: string) {
   if (!isRecord(order)) return 'Signed order is not an object.'
-  const required = [
-    'salt',
-    'maker',
-    'signer',
-    'taker',
-    'tokenId',
-    'makerAmount',
-    'takerAmount',
-    'expiration',
-    'nonce',
-    'feeRateBps',
-    'signature',
-  ]
+  const isV2Order = 'timestamp' in order && 'metadata' in order && 'builder' in order
+  const required = isV2Order
+    ? [
+        'salt',
+        'maker',
+        'signer',
+        'tokenId',
+        'makerAmount',
+        'takerAmount',
+        'timestamp',
+        'expiration',
+        'metadata',
+        'builder',
+        'signature',
+      ]
+    : [
+        'salt',
+        'maker',
+        'signer',
+        'taker',
+        'tokenId',
+        'makerAmount',
+        'takerAmount',
+        'expiration',
+        'nonce',
+        'feeRateBps',
+        'signature',
+      ]
   const missing = required.filter(key => !requiredString(order, key))
   if (missing.length) return `Signed order is missing ${missing.join(', ')}.`
   if (String(order.tokenId) !== tokenId) return 'Signed order token does not match the selected market token.'
@@ -69,7 +84,8 @@ function validOrderPayload(value: unknown, signedOrder: unknown, orderType: stri
   return (
     String(order.tokenId) === String(signedOrder.tokenId) &&
     String(order.signer).toLowerCase() === String(signedOrder.signer).toLowerCase() &&
-    String(order.signature) === String(signedOrder.signature)
+    String(order.signature) === String(signedOrder.signature) &&
+    String(order.signatureType) === String(signedOrder.signatureType)
   )
 }
 
