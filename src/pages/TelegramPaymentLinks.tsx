@@ -4550,6 +4550,16 @@ function stagedTradeError(stage: string, err: unknown) {
   return `PolyDesk trade failed at ${stage}: ${message}`
 }
 
+function polyDeskRelayerBuilderConfig(BuilderConfig: new (config: { remoteBuilderConfig: { url: string } }) => any) {
+  const origin = typeof window !== 'undefined' ? window.location.origin : ''
+  if (!origin) return undefined
+  return new BuilderConfig({
+    remoteBuilderConfig: {
+      url: `${origin}/api/polymarket-relayer-builder-signer`,
+    },
+  })
+}
+
 function EventMark({ kind }: { kind: MatchEventDetail['kind'] }) {
   if (kind === 'yellow') {
     return <span className="h-2.5 w-2 rounded-[2px] bg-yellow-300 shadow-sm ring-1 ring-black/20" aria-label="yellow card" />
@@ -5122,11 +5132,12 @@ export function PolyStreamPanel({
       await polyDeskEnsurePolygonProvider(provider)
       const activeTradingAddress = await polyDeskProviderAccount(provider)
       tradeStage = 'load-polymarket-sdk'
-      const [{ ClobClient, Side, OrderType, SignatureTypeV2, createL1Headers, createL2Headers, getContractConfig, orderToJsonV2 }, { createWalletClient, custom, encodeFunctionData, maxUint256, parseUnits }, { polygon }, { RelayClient }] = await Promise.all([
+      const [{ ClobClient, Side, OrderType, SignatureTypeV2, createL1Headers, createL2Headers, getContractConfig, orderToJsonV2 }, { createWalletClient, custom, encodeFunctionData, maxUint256, parseUnits }, { polygon }, { RelayClient }, { BuilderConfig }] = await Promise.all([
         import('@polymarket/clob-client-v2'),
         import('viem'),
         import('viem/chains'),
         import('@polymarket/builder-relayer-client'),
+        import('@polymarket/builder-signing-sdk'),
       ])
       const walletClient = createWalletClient({
         account: activeTradingAddress as `0x${string}`,
@@ -5211,7 +5222,7 @@ export function PolyStreamPanel({
           throw new Error('pUSD is funded, but exchange approval is missing and the Polymarket relayer is not configured.')
         }
         tradeStage = 'derive-deposit-wallet'
-        const relayerClient = new RelayClient(configData.relayerUrl, 137, walletClient, undefined, undefined, { chain: polygon })
+        const relayerClient = new RelayClient(configData.relayerUrl, 137, walletClient, polyDeskRelayerBuilderConfig(BuilderConfig), undefined, { chain: polygon })
         const derivedWallet = await relayerClient.deriveDepositWalletAddress()
         if (derivedWallet.toLowerCase() !== polymarketDepositWallet.toLowerCase()) {
           throw new Error('Connected owner wallet does not control this Polymarket wallet.')
@@ -7308,10 +7319,11 @@ export function PolyPortfolioPanel({
       }
       const sourceToken = data.sourceTokenAddress || '0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB'
       const decimals = data.sourceTokenDecimals ?? 6
-      const [{ RelayClient }, { encodeFunctionData, parseUnits, createWalletClient, custom }, { polygon }] = await Promise.all([
+      const [{ RelayClient }, { encodeFunctionData, parseUnits, createWalletClient, custom }, { polygon }, { BuilderConfig }] = await Promise.all([
         import('@polymarket/builder-relayer-client'),
         import('viem'),
         import('viem/chains'),
+        import('@polymarket/builder-signing-sdk'),
       ])
       const amountUnits = parseUnits(amount, decimals)
       const balanceRaw = data.balance?.raw ? BigInt(data.balance.raw) : null
@@ -7327,7 +7339,7 @@ export function PolyPortfolioPanel({
         chain: polygon,
         transport: custom(provider),
       })
-      const relayerClient = new RelayClient(data.relayerUrl, 137, walletClient, undefined, undefined, { chain: polygon })
+      const relayerClient = new RelayClient(data.relayerUrl, 137, walletClient, polyDeskRelayerBuilderConfig(BuilderConfig), undefined, { chain: polygon })
       const derivedWallet = await relayerClient.deriveDepositWalletAddress()
       if (derivedWallet.toLowerCase() !== polymarketDepositWallet.toLowerCase()) {
         throw new Error('Connected owner wallet does not control this Polymarket wallet.')
