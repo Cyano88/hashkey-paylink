@@ -81,11 +81,6 @@ function validOrderPayload(value: unknown, signedOrder: unknown, orderType: stri
   )
 }
 
-function validBuilderAttributedOrderPayload(value: unknown, builderCode: string) {
-  if (!isRecord(value) || !isRecord(value.order)) return false
-  return String(value.order.builderCode) === builderCode
-}
-
 function isAllowedSourceMarket(source: string, marketUrl: string) {
   if (source === 'world-cup-moneyline') return marketUrl.startsWith('https://polymarket.com/sports/world-cup/')
   if (source === 'portfolio-position-sell') return marketUrl.startsWith('https://polymarket.com/')
@@ -128,10 +123,6 @@ export default async function handler(req: Request, res: Response) {
   if (!validOrderPayload(orderPayload, signedOrder, orderType)) {
     return res.status(400).json({ ok: false, ready: false, error: 'Polymarket order payload is missing or does not match the signed order.' })
   }
-  if (!validBuilderAttributedOrderPayload(orderPayload, builderCode as string)) {
-    return res.status(400).json({ ok: false, ready: false, error: 'Polymarket order payload is missing the configured builder code.' })
-  }
-
   const credentialMode = builderCredentialMode()
   const orderBody = JSON.stringify(orderPayload)
   const session = credentialMode !== 'unconfigured' ? createBuilderSession(orderBody) : null
@@ -169,8 +160,7 @@ export default async function handler(req: Request, res: Response) {
     },
     submissionRequirements: [
       'Submit this exact signed order payload to Polymarket CLOB /order from the user browser after wallet signing.',
-      'Keep the configured builderCode on order.builderCode so Polymarket can attribute PolyDesk builder volume.',
-      'Use the one-time remote builder signer only when present for backwards-compatible builder-header auth.',
+      'Use the one-time remote builder signer when present so Polymarket can attribute PolyDesk builder volume through builder headers.',
       'Do not alter the signed order fields after user signature.',
       'PolyDesk does not custody user funds, private keys, or reusable user CLOB secrets.',
     ],

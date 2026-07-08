@@ -5127,6 +5127,18 @@ export function PolyStreamPanel({
         signatureType,
         polymarketDepositWallet,
       )
+      setTradeNotice('Checking live Polymarket market settings...')
+      const [rawLiveTickSize, rawLiveNegRisk] = await Promise.all([
+        signingClient.getTickSize(option.tokenId).catch(() => option.tickSize),
+        signingClient.getNegRisk(option.tokenId).catch(() => option.negRisk === true),
+      ])
+      const liveTickText = String(rawLiveTickSize ?? '')
+      const liveTickSize = polymarketTickSize(Number(liveTickText)) || (
+        liveTickText === '0.1' || liveTickText === '0.01' || liveTickText === '0.001' || liveTickText === '0.0001'
+          ? liveTickText
+          : tickSize
+      )
+      const liveNegRisk = rawLiveNegRisk === true || String(rawLiveNegRisk).toLowerCase() === 'true'
       setTradeNotice('Confirm the order in your wallet. Signing is free.')
       const signedOrder = await signingClient.createMarketOrder(
         {
@@ -5135,18 +5147,11 @@ export function PolyStreamPanel({
           side: Side.BUY,
           orderType: OrderType.FOK,
         },
-        { tickSize, negRisk: option.negRisk === true },
+        { tickSize: liveTickSize, negRisk: liveNegRisk },
       )
       setTradeNotice('Approved. Sending your order...')
       const userCreds = await signingClient.createOrDeriveApiKey()
       const orderPayload = orderToJson(signedOrder, userCreds.key, OrderType.FOK, false)
-      const builderAttributedPayload = {
-        ...orderPayload,
-        order: {
-          ...orderPayload.order,
-          builderCode: data.builderCode,
-        },
-      }
       const handoffResponse = await fetch('/api/polymarket-builder-handoff', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -5159,7 +5164,7 @@ export function PolyStreamPanel({
           signer: savedTradingAddress,
           orderType: OrderType.FOK,
           order: signedOrder,
-          orderPayload: builderAttributedPayload,
+          orderPayload,
         }),
       })
       const handoff = await handoffResponse.json() as Record<string, unknown> & {
@@ -5167,14 +5172,14 @@ export function PolyStreamPanel({
         error?: string
         builderCredentialMode?: string
         remoteBuilderSigner?: { url?: string; token?: string }
-        handoff?: { orderPayload?: typeof builderAttributedPayload }
+        handoff?: { orderPayload?: typeof orderPayload }
       }
       if (!handoffResponse.ok || !handoff.ok) {
         setTradeNotice(handoff.error || `PolyDesk handoff failed without a server reason. HTTP ${handoffResponse.status}.`)
         return
       }
       setTradeNotice('Sending your order...')
-      const finalOrderPayload = handoff.handoff?.orderPayload ?? builderAttributedPayload
+      const finalOrderPayload = handoff.handoff?.orderPayload ?? orderPayload
       const orderBody = JSON.stringify(finalOrderPayload)
       const l2Headers = await createL2Headers(walletClient, userCreds, {
         method: 'POST',
@@ -7063,13 +7068,6 @@ export function PolyPortfolioPanel({
       )
       setSellNotice('Approved. Sending sell order...')
       const orderPayload = orderToJson(signedOrder, userCreds.key, OrderType.FAK, false)
-      const builderAttributedPayload = {
-        ...orderPayload,
-        order: {
-          ...orderPayload.order,
-          builderCode: prepareData.builderCode,
-        },
-      }
       const handoffResponse = await fetch('/api/polymarket-builder-handoff', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -7082,17 +7080,17 @@ export function PolyPortfolioPanel({
           signer: savedTradingAddress,
           orderType: OrderType.FAK,
           order: signedOrder,
-          orderPayload: builderAttributedPayload,
+          orderPayload,
         }),
       })
       const handoff = await readPolyDeskJson<{
         ok?: boolean
         error?: string
         remoteBuilderSigner?: { url?: string; token?: string }
-        handoff?: { orderPayload?: typeof builderAttributedPayload }
+        handoff?: { orderPayload?: typeof orderPayload }
       }>(handoffResponse, 'Could not prepare sell submission.')
       if (!handoffResponse.ok || !handoff.ok) throw new Error(handoff.error || 'Sell handoff failed.')
-      const finalOrderPayload = handoff.handoff?.orderPayload ?? builderAttributedPayload
+      const finalOrderPayload = handoff.handoff?.orderPayload ?? orderPayload
       const orderBody = JSON.stringify(finalOrderPayload)
       const l2Headers = await createL2Headers(walletClient, userCreds, {
         method: 'POST',

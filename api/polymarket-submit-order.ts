@@ -61,7 +61,7 @@ function signedOrderValidationError(order: unknown, tokenId: string, signer: str
   return ''
 }
 
-function validOrderPayload(value: unknown, signedOrder: unknown, orderType: string, builderCode: string) {
+function validOrderPayload(value: unknown, signedOrder: unknown, orderType: string) {
   if (!isRecord(value) || !isRecord(signedOrder) || !isRecord(value.order)) return false
   if (value.orderType !== orderType) return false
   if (value.deferExec !== false) return false
@@ -69,8 +69,7 @@ function validOrderPayload(value: unknown, signedOrder: unknown, orderType: stri
   return (
     String(order.tokenId) === String(signedOrder.tokenId) &&
     String(order.signer).toLowerCase() === String(signedOrder.signer).toLowerCase() &&
-    String(order.signature) === String(signedOrder.signature) &&
-    String(order.builderCode) === builderCode
+    String(order.signature) === String(signedOrder.signature)
   )
 }
 
@@ -143,8 +142,8 @@ export default async function handler(req: Request, res: Response) {
   if (signedOrderError) {
     return res.status(400).json({ ok: false, ready: false, error: signedOrderError })
   }
-  if (!validOrderPayload(orderPayload, signedOrder, orderType, builderCode as string)) {
-    return res.status(400).json({ ok: false, ready: false, error: 'Polymarket order payload is missing the configured builder code or does not match the signed order.' })
+  if (!validOrderPayload(orderPayload, signedOrder, orderType)) {
+    return res.status(400).json({ ok: false, ready: false, error: 'Polymarket order payload is missing or does not match the signed order.' })
   }
   if (!userHeaders) {
     return res.status(400).json({ ok: false, ready: false, error: 'User Polymarket submit headers are missing or do not match the signer.' })
