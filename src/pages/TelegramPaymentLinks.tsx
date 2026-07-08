@@ -4542,6 +4542,14 @@ function friendlyTradeError(err: unknown) {
   return cleanMessage
 }
 
+function stagedTradeError(stage: string, err: unknown) {
+  const message = friendlyTradeError(err)
+  if (!stage || /^(Order approval was cancelled\.|Not enough balance or allowance|Connection issue|This market moved)/.test(message)) {
+    return message
+  }
+  return `PolyDesk trade failed at ${stage}: ${message}`
+}
+
 function EventMark({ kind }: { kind: MatchEventDetail['kind'] }) {
   if (kind === 'yellow') {
     return <span className="h-2.5 w-2 rounded-[2px] bg-yellow-300 shadow-sm ring-1 ring-black/20" aria-label="yellow card" />
@@ -5075,7 +5083,9 @@ export function PolyStreamPanel({
     }
     const busyKey = `${matchKey(match)}:${option.outcome}`
     setTradeBusyKey(busyKey)
+    let tradeStage = 'starting'
     try {
+      tradeStage = 'prepare-builder-code'
       const response = await fetch('/api/polymarket-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -5104,11 +5114,14 @@ export function PolyStreamPanel({
         return
       }
       if (typeof signingWallet.switchChain === 'function') {
+        tradeStage = 'wallet-switch-polygon'
         await signingWallet.switchChain(137)
       }
+      tradeStage = 'wallet-provider'
       const provider = await signingWallet.getEthereumProvider()
       await polyDeskEnsurePolygonProvider(provider)
       const activeTradingAddress = await polyDeskProviderAccount(provider)
+      tradeStage = 'load-polymarket-sdk'
       const [{ ClobClient, Side, OrderType, SignatureTypeV2, createL1Headers, createL2Headers, getContractConfig, orderToJsonV2 }, { createWalletClient, custom, encodeFunctionData, maxUint256, parseUnits }, { polygon }, { RelayClient }] = await Promise.all([
         import('@polymarket/clob-client-v2'),
         import('viem'),
@@ -5122,6 +5135,7 @@ export function PolyStreamPanel({
       })
       const token = await getAccessToken()
       if (!token) throw new Error('Sign in required.')
+      tradeStage = 'verify-deposit-wallet'
       const walletCheck = await fetch('/api/polymarket-portfolio', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -5145,6 +5159,7 @@ export function PolyStreamPanel({
         funderAddress: polymarketDepositWallet,
       })
       setTradeNotice('Checking live Polymarket market settings...')
+      tradeStage = 'live-market-settings'
       const [rawLiveTickSize, rawLiveNegRisk] = await Promise.all([
         signingClient.getTickSize(option.tokenId).catch(() => option.tickSize),
         signingClient.getNegRisk(option.tokenId).catch(() => option.negRisk === true),
@@ -5160,6 +5175,7 @@ export function PolyStreamPanel({
       const exchangeAddress = liveNegRisk ? contractConfig.negRiskExchangeV2 : contractConfig.exchangeV2
       const amountUnits = parseUnits(amount, 6)
       setTradeNotice('Checking pUSD balance and exchange approval...')
+      tradeStage = 'balance-allowance'
       const allowanceResponse = await fetch('/api/polymarket-bridge', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -5184,6 +5200,7 @@ export function PolyStreamPanel({
       }
       const collateralAllowanceRaw = polyDeskRawUnits(allowanceData.allowance?.raw)
       if (collateralAllowanceRaw === null || collateralAllowanceRaw < amountUnits) {
+        tradeStage = 'load-approval-config'
         const configResponse = await fetch('/api/polymarket-bridge', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -5193,6 +5210,7 @@ export function PolyStreamPanel({
         if (!configResponse.ok || !configData.ok || !configData.relayerReady || !configData.relayerUrl) {
           throw new Error('pUSD is funded, but exchange approval is missing and the Polymarket relayer is not configured.')
         }
+        tradeStage = 'derive-deposit-wallet'
         const relayerClient = new RelayClient(configData.relayerUrl, 137, walletClient, undefined, undefined, { chain: polygon })
         const derivedWallet = await relayerClient.deriveDepositWalletAddress()
         if (derivedWallet.toLowerCase() !== polymarketDepositWallet.toLowerCase()) {
@@ -5203,6 +5221,7 @@ export function PolyStreamPanel({
           throw new Error('Polymarket wallet is not deployed yet. Activate it, wait for confirmation, then retry.')
         }
         setTradeNotice('Confirm pUSD approval for Polymarket trading. Approval does not move funds.')
+        tradeStage = 'approve-collateral'
         const approveData = encodeFunctionData({
           abi: [{
             type: 'function',
@@ -5225,6 +5244,7 @@ export function PolyStreamPanel({
         }], polymarketDepositWallet, deadline)
         await approvalResponse.wait().catch(() => undefined)
         setTradeNotice('Refreshing Polymarket balance and allowance...')
+        tradeStage = 'refresh-allowance'
         const refreshedAllowanceResponse = await fetch('/api/polymarket-bridge', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -5248,6 +5268,7 @@ export function PolyStreamPanel({
         }
       }
       setTradeNotice('Confirm the order in your wallet. Signing is free.')
+      tradeStage = 'create-market-order'
       const signedOrder = await signingClient.createMarketOrder(
         {
           tokenID: option.tokenId,
@@ -5260,6 +5281,7 @@ export function PolyStreamPanel({
         { tickSize: liveTickSize, negRisk: liveNegRisk, version: 2 },
       )
       setTradeNotice('Approved. Sending your order...')
+      tradeStage = 'clob-l1-auth'
       const userCreds = await polyDeskCreateOwnerApiKey(createL1Headers, walletClient, {
         providerChainId: await polyDeskProviderChainId(provider),
         ownerAddress: activeTradingAddress,
@@ -5269,6 +5291,7 @@ export function PolyStreamPanel({
         throw new Error('Polymarket API authorization failed. Reconnect the owner wallet, then try again.')
       }
       const orderPayload = orderToJsonV2(signedOrder, userCreds.key, OrderType.FOK, false, false)
+      tradeStage = 'builder-handoff'
       const handoffResponse = await fetch('/api/polymarket-builder-handoff', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -5298,6 +5321,7 @@ export function PolyStreamPanel({
       setTradeNotice('Sending your order...')
       const finalOrderPayload = handoff.handoff?.orderPayload ?? orderPayload
       const orderBody = JSON.stringify(finalOrderPayload)
+      tradeStage = 'clob-l2-headers'
       const l2Headers = await createL2Headers(walletClient, userCreds, {
         method: 'POST',
         requestPath: '/order',
@@ -5305,6 +5329,7 @@ export function PolyStreamPanel({
       })
       const submitHeaders = polyDeskStringRecord(l2Headers)
       setTradeNotice('Sending your order from this browser...')
+      tradeStage = 'clob-submit-order'
       await submitPolymarketOrderFromBrowser({
         orderBody,
         userHeaders: submitHeaders,
@@ -5322,7 +5347,7 @@ export function PolyStreamPanel({
       setTradeSuccess({ matchKey: matchKey(match), label: option.label, amount })
       setTradeNotice('')
     } catch (err) {
-      setTradeNotice(friendlyTradeError(err))
+      setTradeNotice(stagedTradeError(tradeStage, err))
     } finally {
       setTradeBusyKey('')
     }
@@ -7384,7 +7409,9 @@ export function PolyPortfolioPanel({
     if (!confirmed) return
     const busyKey = polymarketPositionKey(position)
     setSellBusyKey(busyKey)
+    let sellStage = 'starting'
     try {
+      sellStage = 'prepare-builder-code'
       const prepareResponse = await fetch('/api/polymarket-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -7404,11 +7431,14 @@ export function PolyPortfolioPanel({
         throw new Error(prepareData.error || 'Selling is temporarily unavailable.')
       }
       if (typeof signingWallet.switchChain === 'function') {
+        sellStage = 'wallet-switch-polygon'
         await signingWallet.switchChain(137)
       }
+      sellStage = 'wallet-provider'
       const provider = await signingWallet.getEthereumProvider()
       await polyDeskEnsurePolygonProvider(provider)
       const activeTradingAddress = await polyDeskProviderAccount(provider)
+      sellStage = 'load-polymarket-sdk'
       const [{ ClobClient, Side, OrderType, AssetType, SignatureTypeV2, createL1Headers, createL2Headers, orderToJsonV2 }, { createWalletClient, custom }, { polygon }] = await Promise.all([
         import('@polymarket/clob-client-v2'),
         import('viem'),
@@ -7421,6 +7451,7 @@ export function PolyPortfolioPanel({
       })
       const token = await getAccessToken()
       if (!token) throw new Error('Sign in required.')
+      sellStage = 'verify-deposit-wallet'
       const walletCheck = await fetch('/api/polymarket-portfolio', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -7446,6 +7477,7 @@ export function PolyPortfolioPanel({
         funderAddress: polymarketDepositWallet,
       })
       setSellNotice('Checking sell balance and market settings...')
+      sellStage = 'clob-l1-auth'
       const userCreds = await polyDeskCreateOwnerApiKey(createL1Headers, walletClient, {
         providerChainId: await polyDeskProviderChainId(provider),
         ownerAddress: activeTradingAddress,
@@ -7462,6 +7494,7 @@ export function PolyPortfolioPanel({
         signatureType,
         funderAddress: polymarketDepositWallet,
       })
+      sellStage = 'live-market-settings'
       const [rawTickSize, negRisk, balanceAllowance] = await Promise.all([
         clobClient.getTickSize(tokenId),
         clobClient.getNegRisk(tokenId),
@@ -7478,6 +7511,7 @@ export function PolyPortfolioPanel({
         }
       }
       setSellNotice('Confirm the sell order in your wallet. Signing is free.')
+      sellStage = 'create-market-order'
       const signedOrder = await clobClient.createMarketOrder(
         {
           tokenID: tokenId,
@@ -7490,6 +7524,7 @@ export function PolyPortfolioPanel({
       )
       setSellNotice('Approved. Sending sell order...')
       const orderPayload = orderToJsonV2(signedOrder, userCreds.key, OrderType.FAK, false, false)
+      sellStage = 'builder-handoff'
       const handoffResponse = await fetch('/api/polymarket-builder-handoff', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -7514,6 +7549,7 @@ export function PolyPortfolioPanel({
       if (!handoffResponse.ok || !handoff.ok) throw new Error(handoff.error || 'Sell handoff failed.')
       const finalOrderPayload = handoff.handoff?.orderPayload ?? orderPayload
       const orderBody = JSON.stringify(finalOrderPayload)
+      sellStage = 'clob-l2-headers'
       const l2Headers = await createL2Headers(walletClient, userCreds, {
         method: 'POST',
         requestPath: '/order',
@@ -7521,6 +7557,7 @@ export function PolyPortfolioPanel({
       })
       const submitHeaders = polyDeskStringRecord(l2Headers)
       setSellNotice('Sending sell order from this browser...')
+      sellStage = 'clob-submit-order'
       await submitPolymarketOrderFromBrowser({
         orderBody,
         userHeaders: submitHeaders,
@@ -7539,7 +7576,7 @@ export function PolyPortfolioPanel({
       setSellNotice('')
       if (tradingPortfolioAddress) void fetchLiveData(tradingPortfolioAddress)
     } catch (err) {
-      setSellNotice(friendlyTradeError(err))
+      setSellNotice(stagedTradeError(sellStage, err))
     } finally {
       setSellBusyKey('')
     }
