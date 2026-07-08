@@ -625,11 +625,6 @@ export default async function handler(req: Request, res: Response) {
       if (profileRow?.trading_address && String(profileRow.trading_address).toLowerCase() !== ownerAddress.toLowerCase()) {
         return res.status(409).json({ ok: false, error: 'Connect the saved Main Wallet before activating Polymarket wallet.' })
       }
-      if (profileRow?.deposit_wallet_address && String(profileRow.deposit_wallet_status || '').toLowerCase() === 'ready') {
-        const bundle = await loadProfileBundle(privyUserId)
-        return res.json({ ok: true, ...bundle })
-      }
-
       const wallet = await ensurePolymarketDepositWallet(ownerAddress)
       await requirePool().query(
         `insert into polymarket_profiles
@@ -657,6 +652,50 @@ export default async function handler(req: Request, res: Response) {
          on conflict (privy_user_id) do nothing`,
         [privyUserId],
       )
+      const bundle = await loadProfileBundle(privyUserId)
+      return res.json({ ok: true, ...bundle })
+    }
+
+    if (action === 'verify-deposit-wallet') {
+      const ownerAddress = cleanString(body.ownerAddress, 64)
+      const depositWalletAddress = cleanString(body.depositWalletAddress, 64)
+      if (!isAddress(ownerAddress) || !isAddress(depositWalletAddress)) {
+        return res.status(400).json({ ok: false, error: 'Provide valid owner and Polymarket wallet addresses.' })
+      }
+      const profileRow = (await requirePool().query(
+        'select trading_address, deposit_wallet_address, deposit_wallet_status from polymarket_profiles where privy_user_id = $1',
+        [privyUserId],
+      )).rows[0]
+      if (!profileRow?.trading_address || String(profileRow.trading_address).toLowerCase() !== ownerAddress.toLowerCase()) {
+        return res.status(409).json({ ok: false, error: 'Connect the saved Main Wallet before trading.' })
+      }
+      const wallet = await ensurePolymarketDepositWallet(ownerAddress)
+      await requirePool().query(
+        `update polymarket_profiles
+            set deposit_wallet_address = $2,
+                deposit_wallet_status = $3,
+                deposit_wallet_tx_id = $4,
+                deposit_wallet_tx_hash = $5,
+                updated_at = now()
+          where privy_user_id = $1`,
+        [
+          privyUserId,
+          wallet.depositWalletAddress,
+          wallet.depositWalletStatus,
+          wallet.depositWalletTxId,
+          wallet.depositWalletTxHash,
+        ],
+      )
+      if (wallet.depositWalletAddress.toLowerCase() !== depositWalletAddress.toLowerCase()) {
+        return res.status(409).json({
+          ok: false,
+          error: 'Your saved Polymarket wallet was stale and has been refreshed. Try the trade again.',
+          profile: (await loadProfileBundle(privyUserId)).profile,
+        })
+      }
+      if (String(wallet.depositWalletStatus || '').toLowerCase() !== 'ready') {
+        return res.status(409).json({ ok: false, error: 'Polymarket wallet is not deployed yet. Wait for activation, then retry.' })
+      }
       const bundle = await loadProfileBundle(privyUserId)
       return res.json({ ok: true, ...bundle })
     }

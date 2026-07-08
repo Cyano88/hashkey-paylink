@@ -5117,6 +5117,22 @@ export function PolyStreamPanel({
         chain: polygon,
         transport: custom(provider),
       })
+      const token = await getAccessToken()
+      if (!token) throw new Error('Sign in required.')
+      const walletCheck = await fetch('/api/polymarket-portfolio', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          action: 'verify-deposit-wallet',
+          ownerAddress: savedTradingAddress,
+          depositWalletAddress: polymarketDepositWallet,
+        }),
+      })
+      const walletCheckData = await readPolyDeskJson<{ ok?: boolean; error?: string; profile?: PolymarketProfile | null }>(walletCheck, 'Could not verify Polymarket wallet ownership.')
+      if (!walletCheck.ok || !walletCheckData.ok) {
+        if (walletCheckData.profile) setProfile(walletCheckData.profile)
+        throw new Error(walletCheckData.error || 'Connected owner wallet does not control this Polymarket wallet.')
+      }
       const signatureType = SignatureTypeV2.POLY_1271
       const signingClient = new ClobClient({
         host: 'https://clob.polymarket.com',
@@ -5200,7 +5216,7 @@ export function PolyStreamPanel({
     } finally {
       setTradeBusyKey('')
     }
-  }, [authenticated, profileLoading, privyWallets, savedTradingAddress, polymarketDepositWallet, polymarketWalletReady, tradeAmount])
+  }, [authenticated, getAccessToken, profileLoading, privyWallets, savedTradingAddress, polymarketDepositWallet, polymarketWalletReady, tradeAmount])
 
   useEffect(() => {
     mountedRef.current = true
@@ -7021,6 +7037,24 @@ export function PolyPortfolioPanel({
         chain: polygon,
         transport: custom(provider),
       })
+      const token = await getAccessToken()
+      if (!token) throw new Error('Sign in required.')
+      const walletCheck = await fetch('/api/polymarket-portfolio', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          action: 'verify-deposit-wallet',
+          ownerAddress: savedTradingAddress,
+          depositWalletAddress: polymarketDepositWallet,
+        }),
+      })
+      const walletCheckData = await readPolyDeskJson<{ ok?: boolean; error?: string; profile?: PolymarketProfile | null }>(walletCheck, 'Could not verify Polymarket wallet ownership.')
+      if (!walletCheck.ok || !walletCheckData.ok) {
+        if (walletCheckData.profile) {
+          setBundle(current => current ? { ...current, profile: walletCheckData.profile ?? current.profile } : current)
+        }
+        throw new Error(walletCheckData.error || 'Connected owner wallet does not control this Polymarket wallet.')
+      }
       const signatureType = SignatureTypeV2.POLY_1271
       const baseClient = new ClobClient({
         host: 'https://clob.polymarket.com',
