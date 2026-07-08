@@ -5247,7 +5247,7 @@ export function PolyStreamPanel({
           functionName: 'approve',
           args: [exchangeAddress as `0x${string}`, maxUint256],
         })
-        const deadline = Math.floor(Date.now() / 1000 + 240).toString()
+        const deadline = Math.floor(Date.now() / 1000 + 600).toString()
         const approvalResponse = await relayerClient.executeDepositWalletBatch([{
           target: contractConfig.collateral,
           value: '0',
@@ -7362,7 +7362,7 @@ export function PolyPortfolioPanel({
         functionName: 'transfer',
         args: [data.bridgeAddress as `0x${string}`, amountUnits],
       })
-      const deadline = Math.floor(Date.now() / 1000 + 240).toString()
+      const deadline = Math.floor(Date.now() / 1000 + 600).toString()
       const response = await relayerClient.executeDepositWalletBatch([
         {
           target: sourceToken,
