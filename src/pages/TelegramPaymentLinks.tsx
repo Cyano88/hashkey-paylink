@@ -5260,7 +5260,11 @@ export function PolyStreamPanel({
         { tickSize: liveTickSize, negRisk: liveNegRisk, version: 2 },
       )
       setTradeNotice('Approved. Sending your order...')
-      const userCreds = await polyDeskCreateOwnerApiKey(createL1Headers, walletClient)
+      const userCreds = await polyDeskCreateOwnerApiKey(createL1Headers, walletClient, {
+        providerChainId: await polyDeskProviderChainId(provider),
+        ownerAddress: activeTradingAddress,
+        funderAddress: polymarketDepositWallet,
+      })
       if (!polyDeskValidClobCreds(userCreds)) {
         throw new Error('Polymarket API authorization failed. Reconnect the owner wallet, then try again.')
       }
@@ -6431,9 +6435,22 @@ function polyDeskAuthError(value: unknown) {
 async function polyDeskCreateOwnerApiKey(
   createL1Headers: (...args: any[]) => Promise<Record<string, string | number | boolean>>,
   walletClient: unknown,
+  debug?: { providerChainId?: string; ownerAddress?: string; funderAddress?: string },
 ) {
+  async function serverTime() {
+    const response = await fetch('https://clob.polymarket.com/time', { cache: 'no-store' }).catch(() => null)
+    if (!response?.ok) return undefined
+    const data = await response.json().catch(() => null) as unknown
+    const value = typeof data === 'number'
+      ? data
+      : data && typeof data === 'object' && typeof (data as Record<string, unknown>).time === 'number'
+        ? (data as Record<string, number>).time
+        : undefined
+    return typeof value === 'number' && Number.isFinite(value) ? Math.floor(value) : undefined
+  }
+  const authTimestamp = await serverTime()
   async function authRequest(method: 'POST' | 'GET', path: '/auth/api-key' | '/auth/derive-api-key') {
-    const l1Headers = await createL1Headers(walletClient, 137)
+    const l1Headers = await createL1Headers(walletClient, 137, undefined, authTimestamp)
     const response = await fetch(`https://clob.polymarket.com${path}`, {
       method,
       headers: polyDeskStringRecord(l1Headers),
@@ -6441,14 +6458,41 @@ async function polyDeskCreateOwnerApiKey(
     const data = await response.json().catch(() => ({}))
     const creds = polyDeskNormalizeClobCreds(data)
     if (response.ok && creds) return creds
-    return { error: polyDeskAuthError(data) || `Polymarket auth HTTP ${response.status}` }
+    return {
+      error: polyDeskAuthError(data) || `Polymarket auth HTTP ${response.status}`,
+      status: response.status,
+      path,
+      l1PolyAddress: String(l1Headers.POLY_ADDRESS ?? ''),
+      l1Timestamp: String(l1Headers.POLY_TIMESTAMP ?? ''),
+      l1Nonce: String(l1Headers.POLY_NONCE ?? ''),
+      l1SignatureLen: String(l1Headers.POLY_SIGNATURE ?? '').length,
+    }
   }
 
   const created = await authRequest('POST', '/auth/api-key')
   if (polyDeskValidClobCreds(created)) return created
   const derived = await authRequest('GET', '/auth/derive-api-key')
   if (polyDeskValidClobCreds(derived)) return derived
-  throw new Error(polyDeskAuthError(derived) || polyDeskAuthError(created) || 'Polymarket API authorization failed. Reconnect the owner wallet, then try again.')
+  const createdRecord = created as Record<string, unknown>
+  const derivedRecord = derived as Record<string, unknown>
+  const message = polyDeskAuthError(derived) || polyDeskAuthError(created) || 'Polymarket API authorization failed. Reconnect the owner wallet, then try again.'
+  const suffix = polyDeskSubmitDebugSuffix({
+    stage: 'l1-auth',
+    chain: debug?.providerChainId ?? '',
+    owner: polyDeskShortHex(debug?.ownerAddress),
+    funder: polyDeskShortHex(debug?.funderAddress),
+    l1Poly: polyDeskShortHex(derivedRecord.l1PolyAddress || createdRecord.l1PolyAddress),
+    serverTime: Boolean(authTimestamp),
+  }, {
+    authPostStatus: typeof createdRecord.status === 'number' ? createdRecord.status : '',
+    authPostError: typeof createdRecord.error === 'string' ? createdRecord.error : '',
+    authDeriveStatus: typeof derivedRecord.status === 'number' ? derivedRecord.status : '',
+    authDeriveError: typeof derivedRecord.error === 'string' ? derivedRecord.error : '',
+    l1Timestamp: typeof derivedRecord.l1Timestamp === 'string' ? derivedRecord.l1Timestamp : typeof createdRecord.l1Timestamp === 'string' ? createdRecord.l1Timestamp : '',
+    l1Nonce: typeof derivedRecord.l1Nonce === 'string' ? derivedRecord.l1Nonce : typeof createdRecord.l1Nonce === 'string' ? createdRecord.l1Nonce : '',
+    l1SignatureLen: typeof derivedRecord.l1SignatureLen === 'number' ? derivedRecord.l1SignatureLen : typeof createdRecord.l1SignatureLen === 'number' ? createdRecord.l1SignatureLen : '',
+  })
+  throw new Error(`${message}${suffix}`)
 }
 
 function polyDeskResponseError(value: unknown, fallbackMessage: string) {
@@ -7402,7 +7446,11 @@ export function PolyPortfolioPanel({
         funderAddress: polymarketDepositWallet,
       })
       setSellNotice('Checking sell balance and market settings...')
-      const userCreds = await polyDeskCreateOwnerApiKey(createL1Headers, walletClient)
+      const userCreds = await polyDeskCreateOwnerApiKey(createL1Headers, walletClient, {
+        providerChainId: await polyDeskProviderChainId(provider),
+        ownerAddress: activeTradingAddress,
+        funderAddress: polymarketDepositWallet,
+      })
       if (!polyDeskValidClobCreds(userCreds)) {
         throw new Error('Polymarket API authorization failed. Reconnect the owner wallet, then try again.')
       }
