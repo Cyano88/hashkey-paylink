@@ -1975,7 +1975,7 @@ export default function AgentWorkspace({ embedded = false, forceProfile = false 
                 <>
                   <PrivyConnectButton
                     debugLabel="x402-wallet-email"
-                    loginOptions={{ loginMethods: ['email'] }}
+                    loginOptions={{ loginMethods: ['email', 'wallet'] }}
                     logoutOnAuthenticated={false}
                     onBeforeLogin={() => {
                       try { window.sessionStorage.setItem(AGENT_WALLET_LOGIN_INTENT_KEY, 'login') } catch {}
@@ -1984,10 +1984,10 @@ export default function AgentWorkspace({ embedded = false, forceProfile = false 
                     className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-6 py-3.5 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-60 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
                   >
                     <Mail className="h-4 w-4" />
-                    Sign in to continue
+                    Sign in or connect wallet
                   </PrivyConnectButton>
                   <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
-                    Email sign-in is required before wallet setup.
+                    Use email or the wallet that controls this agent session.
                   </p>
                 </>
               ) : walletMode === 'choose' ? (

@@ -3205,14 +3205,13 @@ export default function PaymentPage() {
 
   useEffect(() => {
     if (!isConfirmed || !isPolymarketBridge || !polymarketReturnToAgentHash || polymarketReturnRedirected.current) return
-    const proofReady = Boolean(paymentReceipt?.proof?.ogTxHash || paymentReceipt?.proof?.ogRootHash)
-    if (!proofReady) return
+    if (polymarketBridgeStatus === 'idle' || polymarketBridgeStatus === 'checking') return
     polymarketReturnRedirected.current = true
     const timer = window.setTimeout(() => {
       window.location.assign(polymarketAgentHashUrl)
     }, 3800)
     return () => window.clearTimeout(timer)
-  }, [isConfirmed, isPolymarketBridge, polymarketReturnToAgentHash, polymarketAgentHashUrl, paymentReceipt?.proof?.ogTxHash, paymentReceipt?.proof?.ogRootHash])
+  }, [isConfirmed, isPolymarketBridge, polymarketReturnToAgentHash, polymarketBridgeStatus, polymarketAgentHashUrl])
 
   useEffect(() => {
     if (!isConfirmed || !isPolymarketBridge || polymarketReturnToAgentHash || polymarketReturnRedirected.current) return
