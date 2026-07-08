@@ -5258,7 +5258,7 @@ export function PolyStreamPanel({
         { tickSize: liveTickSize, negRisk: liveNegRisk, version: 2 },
       )
       setTradeNotice('Approved. Sending your order...')
-      const userCreds = await polyDeskCreateDepositWalletApiKey(createL1Headers, walletClient, polymarketDepositWallet)
+      const userCreds = await polyDeskCreateOwnerApiKey(createL1Headers, walletClient)
       if (!polyDeskValidClobCreds(userCreds)) {
         throw new Error('Polymarket API authorization failed. Reconnect the owner wallet, then try again.')
       }
@@ -5297,10 +5297,7 @@ export function PolyStreamPanel({
         requestPath: '/order',
         body: orderBody,
       })
-      const submitHeaders = {
-        ...polyDeskStringRecord(l2Headers),
-        POLY_ADDRESS: polymarketDepositWallet,
-      }
+      const submitHeaders = polyDeskStringRecord(l2Headers)
       setTradeNotice('Sending your order from this browser...')
       await submitPolymarketOrderFromBrowser({
         orderBody,
@@ -6384,13 +6381,12 @@ function polyDeskAuthError(value: unknown) {
   return typeof message === 'string' ? message.replace(/\s+/g, ' ').trim() : ''
 }
 
-async function polyDeskCreateDepositWalletApiKey(
+async function polyDeskCreateOwnerApiKey(
   createL1Headers: (...args: any[]) => Promise<Record<string, string | number | boolean>>,
   walletClient: unknown,
-  polymarketDepositWallet: string,
 ) {
   async function authRequest(method: 'POST' | 'GET', path: '/auth/api-key' | '/auth/derive-api-key') {
-    const l1Headers = await createL1Headers(walletClient, 137, undefined, undefined, polymarketDepositWallet)
+    const l1Headers = await createL1Headers(walletClient, 137)
     const response = await fetch(`https://clob.polymarket.com${path}`, {
       method,
       headers: polyDeskStringRecord(l1Headers),
@@ -7278,7 +7274,7 @@ export function PolyPortfolioPanel({
         funderAddress: polymarketDepositWallet,
       })
       setSellNotice('Checking sell balance and market settings...')
-      const userCreds = await polyDeskCreateDepositWalletApiKey(createL1Headers, walletClient, polymarketDepositWallet)
+      const userCreds = await polyDeskCreateOwnerApiKey(createL1Headers, walletClient)
       if (!polyDeskValidClobCreds(userCreds)) {
         throw new Error('Polymarket API authorization failed. Reconnect the owner wallet, then try again.')
       }
@@ -7347,10 +7343,7 @@ export function PolyPortfolioPanel({
         requestPath: '/order',
         body: orderBody,
       })
-      const submitHeaders = {
-        ...polyDeskStringRecord(l2Headers),
-        POLY_ADDRESS: polymarketDepositWallet,
-      }
+      const submitHeaders = polyDeskStringRecord(l2Headers)
       setSellNotice('Sending sell order from this browser...')
       await submitPolymarketOrderFromBrowser({
         orderBody,
