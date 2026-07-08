@@ -4545,9 +4545,24 @@ function friendlyTradeError(err: unknown) {
   return cleanMessage
 }
 
+function rawTradeErrorMessage(err: unknown) {
+  const rawMessage = err instanceof Error
+    ? err.message
+    : typeof err === 'object' && err
+      ? JSON.stringify(err)
+      : String(err ?? '')
+  return rawMessage.replace(/\s+/g, ' ').trim()
+}
+
 function stagedTradeError(stage: string, err: unknown) {
   const message = friendlyTradeError(err)
-  if (!stage || /^(Order approval was cancelled\.|Not enough balance or allowance|Connection issue|This market moved)/.test(message)) {
+  if (stage && message === 'Not enough balance or allowance for this order. Refresh the wallet and try again.') {
+    const rawMessage = rawTradeErrorMessage(err)
+    return rawMessage && rawMessage !== message
+      ? `PolyDesk trade failed at ${stage}: ${message} Upstream: ${rawMessage}`
+      : `PolyDesk trade failed at ${stage}: ${message}`
+  }
+  if (!stage || /^(Order approval was cancelled\.|Connection issue|This market moved)/.test(message)) {
     return message
   }
   return `PolyDesk trade failed at ${stage}: ${message}`
