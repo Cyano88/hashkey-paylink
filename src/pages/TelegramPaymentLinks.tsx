@@ -4524,6 +4524,9 @@ function friendlyTradeError(err: unknown) {
   if (/\b(trading restricted|restricted in your region|geoblock|geo-block|available regions)\b/.test(message)) {
     return polymarketRestrictionNotice()
   }
+  if (/^(available pusd is|pusd approval is still pending|pusd is funded|polymarket wallet is not deployed|connected owner wallet does not control)/i.test(cleanMessage)) {
+    return cleanMessage
+  }
   if (/^(signed order|polydesk|polymarket|user polymarket|world cup|this polymarket|unsupported|buying is temporarily|this market is not ready)/i.test(cleanMessage)) {
     return cleanMessage
   }
@@ -4558,6 +4561,10 @@ function polyDeskRelayerBuilderConfig(BuilderConfig: new (config: { remoteBuilde
       url: `${origin}/api/polymarket-relayer-builder-signer`,
     },
   })
+}
+
+function polyDeskWait(ms: number) {
+  return new Promise(resolve => window.setTimeout(resolve, ms))
 }
 
 function EventMark({ kind }: { kind: MatchEventDetail['kind'] }) {
@@ -5254,27 +5261,35 @@ export function PolyStreamPanel({
           data: approveData,
         }], polymarketDepositWallet, deadline)
         await approvalResponse.wait().catch(() => undefined)
-        setTradeNotice('Refreshing Polymarket balance and allowance...')
+        setTradeNotice('Waiting for pUSD approval confirmation...')
         tradeStage = 'refresh-allowance'
-        const refreshedAllowanceResponse = await fetch('/api/polymarket-bridge', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'allowance',
-            polymarketWallet: polymarketDepositWallet,
-            spender: exchangeAddress,
-          }),
-        })
-        const refreshedAllowanceData = await readPolyDeskJson<{
-          ok?: boolean
-          error?: string
-          allowance?: { raw?: string }
-        }>(refreshedAllowanceResponse, 'Could not refresh pUSD exchange approval.')
-        if (!refreshedAllowanceResponse.ok || !refreshedAllowanceData.ok) {
-          throw new Error(refreshedAllowanceData.error || 'Could not refresh pUSD exchange approval.')
+        let refreshedAllowanceRaw: bigint | null = null
+        let refreshError = ''
+        for (let attempt = 0; attempt < 30; attempt += 1) {
+          if (attempt > 0) await polyDeskWait(3_000)
+          const refreshedAllowanceResponse = await fetch('/api/polymarket-bridge', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'allowance',
+              polymarketWallet: polymarketDepositWallet,
+              spender: exchangeAddress,
+            }),
+          })
+          const refreshedAllowanceData = await readPolyDeskJson<{
+            ok?: boolean
+            error?: string
+            allowance?: { raw?: string }
+          }>(refreshedAllowanceResponse, 'Could not refresh pUSD exchange approval.')
+          if (!refreshedAllowanceResponse.ok || !refreshedAllowanceData.ok) {
+            refreshError = refreshedAllowanceData.error || 'Could not refresh pUSD exchange approval.'
+            continue
+          }
+          refreshedAllowanceRaw = polyDeskRawUnits(refreshedAllowanceData.allowance?.raw)
+          if (refreshedAllowanceRaw !== null && refreshedAllowanceRaw >= amountUnits) break
         }
-        const refreshedAllowanceRaw = polyDeskRawUnits(refreshedAllowanceData.allowance?.raw)
         if (refreshedAllowanceRaw === null || refreshedAllowanceRaw < amountUnits) {
+          if (refreshError) throw new Error(refreshError)
           throw new Error('pUSD approval is still pending. Wait for confirmation, then try again.')
         }
       }
