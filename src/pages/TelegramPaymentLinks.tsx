@@ -5306,6 +5306,14 @@ export function PolyStreamPanel({
         userHeaders: submitHeaders,
         remoteBuilderSigner: handoff.remoteBuilderSigner,
         fallbackMessage: 'Polymarket rejected the submitted order.',
+        debug: polyDeskOrderSubmitDebug({
+          providerChainId: await polyDeskProviderChainId(provider),
+          ownerAddress: activeTradingAddress,
+          l2PolyAddress: submitHeaders.POLY_ADDRESS,
+          signedOrder,
+          funderAddress: polymarketDepositWallet,
+          remoteBuilderSigner: handoff.remoteBuilderSigner,
+        }),
       })
       setTradeSuccess({ matchKey: matchKey(match), label: option.label, amount })
       setTradeNotice('')
@@ -6373,6 +6381,12 @@ async function polyDeskProviderAccount(provider: unknown) {
   return account
 }
 
+async function polyDeskProviderChainId(provider: unknown) {
+  const request = polyDeskProviderRequest(provider)
+  const value = await request({ method: 'eth_chainId' }).catch(() => '')
+  return typeof value === 'string' ? value.toLowerCase() : ''
+}
+
 async function polyDeskEnsurePolygonProvider(provider: unknown) {
   const request = polyDeskProviderRequest(provider)
   async function chainId() {
@@ -6446,6 +6460,57 @@ function polyDeskResponseError(value: unknown, fallbackMessage: string) {
   return fallbackMessage
 }
 
+type PolyDeskSubmitDebug = Record<string, string | number | boolean>
+
+function polyDeskShortHex(value: unknown) {
+  const text = typeof value === 'string' ? value.trim() : ''
+  return /^0x[a-fA-F0-9]{40}$/.test(text) ? `${text.slice(0, 6)}...${text.slice(-4)}` : ''
+}
+
+function polyDeskBundleHash() {
+  if (typeof document === 'undefined') return ''
+  const scripts = Array.from(document.querySelectorAll<HTMLScriptElement>('script[src*="/assets/index-"]'))
+  const src = scripts.map((script) => script.src).find(Boolean) || ''
+  const match = src.match(/index-([A-Za-z0-9_-]+)\.js/)
+  return match?.[1] || ''
+}
+
+function polyDeskOrderSubmitDebug({
+  providerChainId,
+  ownerAddress,
+  l2PolyAddress,
+  signedOrder,
+  funderAddress,
+  remoteBuilderSigner,
+}: {
+  providerChainId: string
+  ownerAddress: string
+  l2PolyAddress?: string
+  signedOrder: unknown
+  funderAddress: string
+  remoteBuilderSigner?: { url?: string; token?: string }
+}): PolyDeskSubmitDebug {
+  const order = signedOrder && typeof signedOrder === 'object' ? signedOrder as Record<string, unknown> : {}
+  const signature = typeof order.signature === 'string' ? order.signature : ''
+  return {
+    bundle: polyDeskBundleHash(),
+    chain: providerChainId,
+    owner: polyDeskShortHex(ownerAddress),
+    l2Poly: polyDeskShortHex(l2PolyAddress),
+    orderSigner: polyDeskShortHex(order.signer),
+    orderMaker: polyDeskShortHex(order.maker),
+    funder: polyDeskShortHex(funderAddress),
+    signatureType: typeof order.signatureType === 'number' || typeof order.signatureType === 'string' ? order.signatureType : '',
+    signatureLen: signature.length,
+    builderSigner: Boolean(remoteBuilderSigner?.url && remoteBuilderSigner.token),
+  }
+}
+
+function polyDeskSubmitDebugSuffix(debug: PolyDeskSubmitDebug | undefined, extra: PolyDeskSubmitDebug) {
+  const safe = { ...(debug ?? {}), ...extra }
+  return ` [debug ${JSON.stringify(safe)}]`
+}
+
 async function loadPolymarketBuilderHeaders(remoteBuilderSigner: { url?: string; token?: string } | undefined, orderBody: string) {
   if (!remoteBuilderSigner?.url || !remoteBuilderSigner.token) return {}
   const response = await fetch(remoteBuilderSigner.url, {
@@ -6472,25 +6537,53 @@ async function submitPolymarketOrderFromBrowser({
   userHeaders,
   remoteBuilderSigner,
   fallbackMessage,
+  debug,
 }: {
   orderBody: string
   userHeaders: Record<string, string>
   remoteBuilderSigner?: { url?: string; token?: string }
   fallbackMessage: string
+  debug?: PolyDeskSubmitDebug
 }) {
   const builderHeaders = await loadPolymarketBuilderHeaders(remoteBuilderSigner, orderBody)
-  const response = await fetch('https://clob.polymarket.com/order', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...polyDeskStringRecord(userHeaders),
-      ...builderHeaders,
-    },
-    body: orderBody,
-  })
-  const data = await response.json().catch(() => ({}))
+  const postOrder = async (headers: Record<string, string>) => {
+    const response = await fetch('https://clob.polymarket.com/order', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...polyDeskStringRecord(userHeaders),
+        ...headers,
+      },
+      body: orderBody,
+    })
+    const data = await response.json().catch(() => ({}))
+    return { response, data }
+  }
+  const builderHeaderCount = Object.keys(builderHeaders).filter((key) => key.startsWith('POLY_BUILDER_')).length
+  let { response, data } = await postOrder(builderHeaders)
+  const firstStatus = response.status
+  const firstError = polyDeskResponseError(data, '')
+  let retryStatus = ''
+  let retryError = ''
+  if (!response.ok && response.status === 401 && builderHeaderCount > 0) {
+    const retry = await postOrder({})
+    retryStatus = String(retry.response.status)
+    retryError = polyDeskResponseError(retry.data, '')
+    response = retry.response
+    data = retry.data
+  }
   if (!response.ok || (data && typeof data === 'object' && 'error' in data)) {
-    throw new Error(polyDeskResponseError(data, fallbackMessage))
+    const message = polyDeskResponseError(data, fallbackMessage)
+    const extra: PolyDeskSubmitDebug = {
+      builderHeaders: builderHeaderCount,
+      firstStatus,
+      firstError,
+      clobStatus: response.status,
+      retryStatus,
+      clobError: polyDeskResponseError(data, ''),
+      retryError,
+    }
+    throw new Error(`${message}${firstStatus === 401 || response.status === 401 ? polyDeskSubmitDebugSuffix(debug, extra) : ''}`)
   }
   if (data && typeof data === 'object' && 'success' in data && data.success === false) {
     throw new Error(polyDeskResponseError(data, fallbackMessage))
@@ -7385,6 +7478,14 @@ export function PolyPortfolioPanel({
         userHeaders: submitHeaders,
         remoteBuilderSigner: handoff.remoteBuilderSigner,
         fallbackMessage: 'Polymarket rejected the sell order.',
+        debug: polyDeskOrderSubmitDebug({
+          providerChainId: await polyDeskProviderChainId(provider),
+          ownerAddress: activeTradingAddress,
+          l2PolyAddress: submitHeaders.POLY_ADDRESS,
+          signedOrder,
+          funderAddress: polymarketDepositWallet,
+          remoteBuilderSigner: handoff.remoteBuilderSigner,
+        }),
       })
       setSellSuccess(`Sell order sent for ${position.outcome ?? 'position'}.`)
       setSellNotice('')
