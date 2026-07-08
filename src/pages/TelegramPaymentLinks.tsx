@@ -5107,7 +5107,7 @@ export function PolyStreamPanel({
         await signingWallet.switchChain(137)
       }
       const provider = await signingWallet.getEthereumProvider()
-      const [{ ClobClient, Side, OrderType, AssetType, SignatureTypeV2, createL2Headers, getContractConfig, orderToJsonV2 }, { createWalletClient, custom, encodeFunctionData, maxUint256, parseUnits }, { polygon }, { RelayClient }] = await Promise.all([
+      const [{ ClobClient, Side, OrderType, SignatureTypeV2, createL2Headers, getContractConfig, orderToJsonV2 }, { createWalletClient, custom, encodeFunctionData, maxUint256, parseUnits }, { polygon }, { RelayClient }] = await Promise.all([
         import('@polymarket/clob-client-v2'),
         import('viem'),
         import('viem/chains'),
@@ -5142,19 +5142,10 @@ export function PolyStreamPanel({
         signatureType,
         funderAddress: polymarketDepositWallet,
       })
-      const userCreds = await signingClient.createOrDeriveApiKey()
-      const clobClient = new ClobClient({
-        host: 'https://clob.polymarket.com',
-        chain: 137,
-        signer: walletClient,
-        creds: userCreds,
-        signatureType,
-        funderAddress: polymarketDepositWallet,
-      })
       setTradeNotice('Checking live Polymarket market settings...')
       const [rawLiveTickSize, rawLiveNegRisk] = await Promise.all([
-        clobClient.getTickSize(option.tokenId).catch(() => option.tickSize),
-        clobClient.getNegRisk(option.tokenId).catch(() => option.negRisk === true),
+        signingClient.getTickSize(option.tokenId).catch(() => option.tickSize),
+        signingClient.getNegRisk(option.tokenId).catch(() => option.negRisk === true),
       ])
       const liveTickText = String(rawLiveTickSize ?? '')
       const liveTickSize = polymarketTickSize(Number(liveTickText)) || (
@@ -5167,12 +5158,29 @@ export function PolyStreamPanel({
       const exchangeAddress = liveNegRisk ? contractConfig.negRiskExchangeV2 : contractConfig.exchangeV2
       const amountUnits = parseUnits(amount, 6)
       setTradeNotice('Checking pUSD balance and exchange approval...')
-      const collateralAllowance = await clobClient.getBalanceAllowance({ asset_type: AssetType.COLLATERAL }).catch(() => null)
-      const collateralBalance = polyDeskRawUnits(collateralAllowance?.balance)
+      const allowanceResponse = await fetch('/api/polymarket-bridge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'allowance',
+          polymarketWallet: polymarketDepositWallet,
+          spender: exchangeAddress,
+        }),
+      })
+      const allowanceData = await readPolyDeskJson<{
+        ok?: boolean
+        error?: string
+        balance?: { raw?: string; formatted?: string }
+        allowance?: { raw?: string; formatted?: string; spender?: string }
+      }>(allowanceResponse, 'Could not verify pUSD balance and exchange approval.')
+      if (!allowanceResponse.ok || !allowanceData.ok) {
+        throw new Error(allowanceData.error || 'Could not verify pUSD balance and exchange approval.')
+      }
+      const collateralBalance = polyDeskRawUnits(allowanceData.balance?.raw)
       if (collateralBalance !== null && collateralBalance < amountUnits) {
         throw new Error(`Available pUSD is ${formatUsd(Number(collateralBalance) / 1_000_000)}. Lower the order amount or fund your Polymarket wallet.`)
       }
-      const collateralAllowanceRaw = polyDeskAllowanceUnits(collateralAllowance?.allowances, exchangeAddress)
+      const collateralAllowanceRaw = polyDeskRawUnits(allowanceData.allowance?.raw)
       if (collateralAllowanceRaw === null || collateralAllowanceRaw < amountUnits) {
         const configResponse = await fetch('/api/polymarket-bridge', {
           method: 'POST',
@@ -5215,10 +5223,30 @@ export function PolyStreamPanel({
         }], polymarketDepositWallet, deadline)
         await approvalResponse.wait().catch(() => undefined)
         setTradeNotice('Refreshing Polymarket balance and allowance...')
-        await clobClient.updateBalanceAllowance({ asset_type: AssetType.COLLATERAL }).catch(() => undefined)
+        const refreshedAllowanceResponse = await fetch('/api/polymarket-bridge', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'allowance',
+            polymarketWallet: polymarketDepositWallet,
+            spender: exchangeAddress,
+          }),
+        })
+        const refreshedAllowanceData = await readPolyDeskJson<{
+          ok?: boolean
+          error?: string
+          allowance?: { raw?: string }
+        }>(refreshedAllowanceResponse, 'Could not refresh pUSD exchange approval.')
+        if (!refreshedAllowanceResponse.ok || !refreshedAllowanceData.ok) {
+          throw new Error(refreshedAllowanceData.error || 'Could not refresh pUSD exchange approval.')
+        }
+        const refreshedAllowanceRaw = polyDeskRawUnits(refreshedAllowanceData.allowance?.raw)
+        if (refreshedAllowanceRaw === null || refreshedAllowanceRaw < amountUnits) {
+          throw new Error('pUSD approval is still pending. Wait for confirmation, then try again.')
+        }
       }
       setTradeNotice('Confirm the order in your wallet. Signing is free.')
-      const signedOrder = await clobClient.createMarketOrder(
+      const signedOrder = await signingClient.createMarketOrder(
         {
           tokenID: option.tokenId,
           amount: Number(amount),
@@ -5230,6 +5258,10 @@ export function PolyStreamPanel({
         { tickSize: liveTickSize, negRisk: liveNegRisk, version: 2 },
       )
       setTradeNotice('Approved. Sending your order...')
+      const userCreds = await signingClient.createOrDeriveApiKey()
+      if (!polyDeskValidClobCreds(userCreds)) {
+        throw new Error('Polymarket API authorization failed. Reconnect the owner wallet, then try again.')
+      }
       const orderPayload = orderToJsonV2(signedOrder, userCreds.key, OrderType.FOK, false, false)
       const handoffResponse = await fetch('/api/polymarket-builder-handoff', {
         method: 'POST',
@@ -6322,13 +6354,12 @@ function polyDeskRawUnits(value: unknown) {
   }
 }
 
-function polyDeskAllowanceUnits(value: unknown, spender: string) {
-  if (!value || typeof value !== 'object') return null
-  const normalizedSpender = spender.toLowerCase()
-  for (const [key, raw] of Object.entries(value)) {
-    if (key.toLowerCase() === normalizedSpender) return polyDeskRawUnits(raw)
-  }
-  return null
+function polyDeskValidClobCreds(value: unknown): value is { key: string; secret: string; passphrase: string } {
+  if (!value || typeof value !== 'object') return false
+  const record = value as Record<string, unknown>
+  return typeof record.key === 'string' && record.key.trim().length > 0
+    && typeof record.secret === 'string' && record.secret.trim().length > 0
+    && typeof record.passphrase === 'string' && record.passphrase.trim().length > 0
 }
 
 function polyDeskResponseError(value: unknown, fallbackMessage: string) {

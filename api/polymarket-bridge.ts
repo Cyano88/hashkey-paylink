@@ -178,11 +178,26 @@ const erc20BalanceAbi = [{
   outputs: [{ name: '', type: 'uint256' }],
 }] as const
 
-async function getPusdBalance(polymarketWallet: string) {
-  const client = createPublicClient({
+const erc20AllowanceAbi = [{
+  type: 'function',
+  name: 'allowance',
+  stateMutability: 'view',
+  inputs: [
+    { name: 'owner', type: 'address' },
+    { name: 'spender', type: 'address' },
+  ],
+  outputs: [{ name: '', type: 'uint256' }],
+}] as const
+
+function polygonClient() {
+  return createPublicClient({
     chain: polygon,
     transport: http(POLYMARKET_RPC_URL || undefined),
   })
+}
+
+async function getPusdBalance(polymarketWallet: string) {
+  const client = polygonClient()
   const raw = await client.readContract({
     address: POLYMARKET_PUSD,
     abi: erc20BalanceAbi,
@@ -194,6 +209,37 @@ async function getPusdBalance(polymarketWallet: string) {
     decimals: PUSD_DECIMALS,
     raw: raw.toString(),
     formatted: formatUnits(raw, PUSD_DECIMALS),
+  }
+}
+
+async function getPusdAllowance(polymarketWallet: string, spender: string) {
+  const client = polygonClient()
+  const [balanceRaw, allowanceRaw] = await Promise.all([
+    client.readContract({
+      address: POLYMARKET_PUSD,
+      abi: erc20BalanceAbi,
+      functionName: 'balanceOf',
+      args: [polymarketWallet as `0x${string}`],
+    }),
+    client.readContract({
+      address: POLYMARKET_PUSD,
+      abi: erc20AllowanceAbi,
+      functionName: 'allowance',
+      args: [polymarketWallet as `0x${string}`, spender as `0x${string}`],
+    }),
+  ])
+  return {
+    tokenAddress: POLYMARKET_PUSD,
+    decimals: PUSD_DECIMALS,
+    balance: {
+      raw: balanceRaw.toString(),
+      formatted: formatUnits(balanceRaw, PUSD_DECIMALS),
+    },
+    allowance: {
+      spender,
+      raw: allowanceRaw.toString(),
+      formatted: formatUnits(allowanceRaw, PUSD_DECIMALS),
+    },
   }
 }
 
@@ -234,6 +280,15 @@ export default async function handler(req: Request, res: Response) {
     if (action === 'balance') {
       const balance = await getPusdBalance(polymarketWallet)
       return res.json({ ok: true, polymarketWallet, balance })
+    }
+
+    if (action === 'allowance') {
+      const spender = cleanText(req.body?.spender, 64)
+      if (!isAddress(spender)) {
+        return res.status(400).json({ ok: false, error: 'Enter a valid spender address.' })
+      }
+      const allowance = await getPusdAllowance(polymarketWallet, spender)
+      return res.json({ ok: true, polymarketWallet, ...allowance })
     }
 
     if (action === 'withdraw') {
