@@ -5107,7 +5107,7 @@ export function PolyStreamPanel({
         await signingWallet.switchChain(137)
       }
       const provider = await signingWallet.getEthereumProvider()
-      const [{ ClobClient, Side, OrderType, SignatureTypeV2, createL2Headers, getContractConfig, orderToJsonV2 }, { createWalletClient, custom, encodeAbiParameters, keccak256, toHex }, { polygon }] = await Promise.all([
+      const [{ ClobClient, Side, OrderType, SignatureTypeV2, createL2Headers, orderToJsonV2 }, { createWalletClient, custom }, { polygon }] = await Promise.all([
         import('@polymarket/clob-client-v2'),
         import('viem'),
         import('viem/chains'),
@@ -5153,8 +5153,6 @@ export function PolyStreamPanel({
           : tickSize
       )
       const liveNegRisk = rawLiveNegRisk === true || String(rawLiveNegRisk).toLowerCase() === 'true'
-      const contractConfig = getContractConfig(137)
-      const exchangeAddress = liveNegRisk ? contractConfig.negRiskExchangeV2 : contractConfig.exchangeV2
       setTradeNotice('Confirm the order in your wallet. Signing is free.')
       const signedOrder = await signingClient.createMarketOrder(
         {
@@ -5167,16 +5165,6 @@ export function PolyStreamPanel({
         },
         { tickSize: liveTickSize, negRisk: liveNegRisk, version: 2 },
       )
-      signedOrder.signature = await signPolymarketDepositWalletOrder({
-        walletClient,
-        order: signedOrder,
-        chainId: 137,
-        depositWalletAddress: polymarketDepositWallet,
-        exchangeAddress,
-        encodeAbiParameters,
-        keccak256,
-        toHex,
-      })
       setTradeNotice('Approved. Sending your order...')
       const userCreds = await signingClient.createOrDeriveApiKey()
       const orderPayload = orderToJsonV2(signedOrder, userCreds.key, OrderType.FOK, false, false)
@@ -6322,136 +6310,6 @@ async function submitPolymarketOrderFromBrowser({
   return data
 }
 
-type DepositWalletOrderSignerArgs = {
-  walletClient: {
-    account?: { address?: string } | string
-    signTypedData: (args: Record<string, unknown>) => Promise<string>
-  }
-  order: Record<string, unknown>
-  chainId: number
-  depositWalletAddress: string
-  exchangeAddress: string
-  encodeAbiParameters: (params: readonly { type: string }[], values: readonly unknown[]) => string
-  keccak256: (value: string) => string
-  toHex: (value: string) => string
-}
-
-async function signPolymarketDepositWalletOrder({
-  walletClient,
-  order,
-  chainId,
-  depositWalletAddress,
-  exchangeAddress,
-  encodeAbiParameters,
-  keccak256,
-  toHex,
-}: DepositWalletOrderSignerArgs) {
-  const ownerAddress = typeof walletClient.account === 'string' ? walletClient.account : walletClient.account?.address
-  if (!ownerAddress) throw new Error('Connected wallet is missing an owner address.')
-  const bytes32Zero = '0x0000000000000000000000000000000000000000000000000000000000000000'
-  const exchangeDomainName = 'Polymarket CTF Exchange'
-  const exchangeDomainVersion = '2'
-  const orderTypeString = 'Order(uint256 salt,address maker,address signer,uint256 tokenId,uint256 makerAmount,uint256 takerAmount,uint8 side,uint8 signatureType,uint256 timestamp,bytes32 metadata,bytes32 builder)'
-  const orderStruct = [
-    { name: 'salt', type: 'uint256' },
-    { name: 'maker', type: 'address' },
-    { name: 'signer', type: 'address' },
-    { name: 'tokenId', type: 'uint256' },
-    { name: 'makerAmount', type: 'uint256' },
-    { name: 'takerAmount', type: 'uint256' },
-    { name: 'side', type: 'uint8' },
-    { name: 'signatureType', type: 'uint8' },
-    { name: 'timestamp', type: 'uint256' },
-    { name: 'metadata', type: 'bytes32' },
-    { name: 'builder', type: 'bytes32' },
-  ] as const
-  const typedOrder = {
-    salt: String(order.salt),
-    maker: String(order.maker),
-    signer: String(order.signer),
-    tokenId: String(order.tokenId),
-    makerAmount: String(order.makerAmount),
-    takerAmount: String(order.takerAmount),
-    side: String(order.side).toUpperCase() === 'BUY' ? 0 : 1,
-    signatureType: Number(order.signatureType),
-    timestamp: String(order.timestamp),
-    metadata: String(order.metadata || bytes32Zero),
-    builder: String(order.builder || bytes32Zero),
-  }
-  const domainTypeHash = keccak256(toHex('EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)'))
-  const appDomainSeparator = keccak256(encodeAbiParameters([
-    { type: 'bytes32' },
-    { type: 'bytes32' },
-    { type: 'bytes32' },
-    { type: 'uint256' },
-    { type: 'address' },
-  ], [
-    domainTypeHash,
-    keccak256(toHex(exchangeDomainName)),
-    keccak256(toHex(exchangeDomainVersion)),
-    BigInt(chainId),
-    exchangeAddress,
-  ]))
-  const contentsHash = keccak256(encodeAbiParameters([
-    { type: 'bytes32' },
-    { type: 'uint256' },
-    { type: 'address' },
-    { type: 'address' },
-    { type: 'uint256' },
-    { type: 'uint256' },
-    { type: 'uint256' },
-    { type: 'uint8' },
-    { type: 'uint8' },
-    { type: 'uint256' },
-    { type: 'bytes32' },
-    { type: 'bytes32' },
-  ], [
-    keccak256(toHex(orderTypeString)),
-    BigInt(typedOrder.salt),
-    typedOrder.maker,
-    typedOrder.signer,
-    BigInt(typedOrder.tokenId),
-    BigInt(typedOrder.makerAmount),
-    BigInt(typedOrder.takerAmount),
-    typedOrder.side,
-    typedOrder.signatureType,
-    BigInt(typedOrder.timestamp),
-    typedOrder.metadata,
-    typedOrder.builder,
-  ]))
-  const innerSignature = await walletClient.signTypedData({
-    account: ownerAddress,
-    domain: {
-      name: exchangeDomainName,
-      version: exchangeDomainVersion,
-      chainId,
-      verifyingContract: exchangeAddress,
-    },
-    types: {
-      TypedDataSign: [
-        { name: 'contents', type: 'Order' },
-        { name: 'name', type: 'string' },
-        { name: 'version', type: 'string' },
-        { name: 'chainId', type: 'uint256' },
-        { name: 'verifyingContract', type: 'address' },
-        { name: 'salt', type: 'bytes32' },
-      ],
-      Order: orderStruct,
-    },
-    primaryType: 'TypedDataSign',
-    message: {
-      contents: typedOrder,
-      name: 'DepositWallet',
-      version: '1',
-      chainId,
-      verifyingContract: depositWalletAddress,
-      salt: bytes32Zero,
-    },
-  })
-  const lenHex = orderTypeString.length.toString(16).padStart(4, '0')
-  return `0x${innerSignature.slice(2)}${appDomainSeparator.slice(2)}${contentsHash.slice(2)}${toHex(orderTypeString).slice(2)}${lenHex}`
-}
-
 export function PolyPortfolioPanel({
   onBack,
   onOpenLpScout,
@@ -7224,7 +7082,7 @@ export function PolyPortfolioPanel({
         await signingWallet.switchChain(137)
       }
       const provider = await signingWallet.getEthereumProvider()
-      const [{ ClobClient, Side, OrderType, AssetType, SignatureTypeV2, createL2Headers, getContractConfig, orderToJsonV2 }, { createWalletClient, custom, encodeAbiParameters, keccak256, toHex }, { polygon }] = await Promise.all([
+      const [{ ClobClient, Side, OrderType, AssetType, SignatureTypeV2, createL2Headers, orderToJsonV2 }, { createWalletClient, custom }, { polygon }] = await Promise.all([
         import('@polymarket/clob-client-v2'),
         import('viem'),
         import('viem/chains'),
@@ -7278,8 +7136,6 @@ export function PolyPortfolioPanel({
       const tickText = String(rawTickSize ?? '')
       const tickSize = polymarketTickSize(Number(tickText)) || (tickText === '0.1' || tickText === '0.01' || tickText === '0.005' || tickText === '0.0025' || tickText === '0.001' || tickText === '0.0001' ? tickText : '')
       if (!tickSize) throw new Error('This market is missing CLOB tick size metadata.')
-      const contractConfig = getContractConfig(137)
-      const exchangeAddress = negRisk === true ? contractConfig.negRiskExchangeV2 : contractConfig.exchangeV2
       if (balanceAllowance) {
         const rawBalance = Number(balanceAllowance.balance)
         const normalizedBalance = Number.isFinite(rawBalance) && rawBalance > 100_000 ? rawBalance / 1_000_000 : rawBalance
@@ -7298,16 +7154,6 @@ export function PolyPortfolioPanel({
         },
         { tickSize, negRisk: negRisk === true, version: 2 },
       )
-      signedOrder.signature = await signPolymarketDepositWalletOrder({
-        walletClient,
-        order: signedOrder,
-        chainId: 137,
-        depositWalletAddress: polymarketDepositWallet,
-        exchangeAddress,
-        encodeAbiParameters,
-        keccak256,
-        toHex,
-      })
       setSellNotice('Approved. Sending sell order...')
       const orderPayload = orderToJsonV2(signedOrder, userCreds.key, OrderType.FAK, false, false)
       const handoffResponse = await fetch('/api/polymarket-builder-handoff', {
