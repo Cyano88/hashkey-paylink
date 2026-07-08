@@ -63,6 +63,7 @@ import polymarketBuilderHandoffHandler from './api/polymarket-builder-handoff.js
 import polymarketBuilderSignerHandler from './api/polymarket-builder-signer.js'
 import polymarketOrderHandler from './api/polymarket-order.js'
 import polymarketPortfolioHandler from './api/polymarket-portfolio.js'
+import polymarketRelayerBuilderSignerHandler from './api/polymarket-relayer-builder-signer.js'
 import polymarketSubmitOrderHandler from './api/polymarket-submit-order.js'
 import ngPosHandler from './api/ng-pos.js'
 import localCurrencyProfileHandler from './api/local-currency-profile.js'
@@ -214,6 +215,7 @@ app.post('/api/polymarket-builder-handoff', strictLimiter, polymarketBuilderHand
 app.post('/api/polymarket-builder-signer', strictLimiter, polymarketBuilderSignerHandler)
 app.post('/api/polymarket-order',       strictLimiter, polymarketOrderHandler)
 app.all('/api/polymarket-portfolio',    readLimiter,   polymarketPortfolioHandler)
+app.post('/api/polymarket-relayer-builder-signer', strictLimiter, polymarketRelayerBuilderSignerHandler)
 app.post('/api/polymarket-submit-order', strictLimiter, polymarketSubmitOrderHandler)
 app.all('/api/ng-pos',                  strictLimiter, ngPosHandler)
 app.all('/api/local-currency-profile',  strictLimiter, localCurrencyProfileHandler)
