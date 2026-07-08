@@ -7551,7 +7551,7 @@ export function PolyPortfolioPanel({
       const tickSize = polymarketTickSize(Number(tickText)) || (tickText === '0.1' || tickText === '0.01' || tickText === '0.005' || tickText === '0.0025' || tickText === '0.001' || tickText === '0.0001' ? tickText : '')
       if (!tickSize) throw new Error('This market is missing CLOB tick size metadata.')
       const contractConfig = getContractConfig(137)
-      const sellExchangeAddress = negRisk === true ? contractConfig.negRiskExchangeV2 : contractConfig.exchangeV2
+      const sellExchangeAddress = negRisk === true ? contractConfig.negRiskAdapter : contractConfig.exchangeV2
       if (balanceAllowance) {
         const rawBalance = Number(balanceAllowance.balance)
         const normalizedBalance = Number.isFinite(rawBalance) && rawBalance > 100_000 ? rawBalance / 1_000_000 : rawBalance
