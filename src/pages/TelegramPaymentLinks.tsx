@@ -5107,7 +5107,7 @@ export function PolyStreamPanel({
         await signingWallet.switchChain(137)
       }
       const provider = await signingWallet.getEthereumProvider()
-      const [{ ClobClient, Side, OrderType, SignatureTypeV2, createL1Headers, createL2Headers, orderToJsonV2 }, { createWalletClient, custom }, { polygon }] = await Promise.all([
+      const [{ ClobClient, Side, OrderType, SignatureTypeV2, createL2Headers, orderToJsonV2 }, { createWalletClient, custom }, { polygon }] = await Promise.all([
         import('@polymarket/clob-client-v2'),
         import('viem'),
         import('viem/chains'),
@@ -5133,7 +5133,7 @@ export function PolyStreamPanel({
         if (walletCheckData.profile) setProfile(walletCheckData.profile)
         throw new Error(walletCheckData.error || 'Connected owner wallet does not control this Polymarket wallet.')
       }
-      const signatureType = SignatureTypeV2.POLY_PROXY
+      const signatureType = SignatureTypeV2.POLY_1271
       const signingClient = new ClobClient({
         host: 'https://clob.polymarket.com',
         chain: 137,
@@ -5166,12 +5166,7 @@ export function PolyStreamPanel({
         { tickSize: liveTickSize, negRisk: liveNegRisk, version: 3 },
       )
       setTradeNotice('Approved. Sending your order...')
-      const userCreds = await createPolymarketDepositWalletApiKey({
-        createL1Headers,
-        signer: walletClient,
-        chainId: 137,
-        depositWalletAddress: polymarketDepositWallet,
-      })
+      const userCreds = await signingClient.createOrDeriveApiKey()
       const orderPayload = orderToJsonV2(signedOrder, userCreds.key, OrderType.FOK, false, false)
       const handoffResponse = await fetch('/api/polymarket-builder-handoff', {
         method: 'POST',
@@ -5182,7 +5177,7 @@ export function PolyStreamPanel({
           marketUrl: match.polymarketUrl,
           outcome: option.label,
           tokenId: option.tokenId,
-          signer: savedTradingAddress,
+          signer: polymarketDepositWallet,
           orderType: OrderType.FOK,
           order: signedOrder,
           orderPayload,
@@ -5202,14 +5197,11 @@ export function PolyStreamPanel({
       setTradeNotice('Sending your order...')
       const finalOrderPayload = handoff.handoff?.orderPayload ?? orderPayload
       const orderBody = JSON.stringify(finalOrderPayload)
-      const l2Headers = withPolymarketDepositWalletAddress(
-        await createL2Headers(walletClient, userCreds, {
-          method: 'POST',
-          requestPath: '/order',
-          body: orderBody,
-        }),
-        polymarketDepositWallet,
-      )
+      const l2Headers = await createL2Headers(walletClient, userCreds, {
+        method: 'POST',
+        requestPath: '/order',
+        body: orderBody,
+      })
       setTradeNotice('Sending your order from this browser...')
       await submitPolymarketOrderFromBrowser({
         orderBody,
@@ -6318,64 +6310,6 @@ async function submitPolymarketOrderFromBrowser({
   return data
 }
 
-type PolymarketApiCreds = {
-  key: string
-  secret: string
-  passphrase: string
-}
-
-function normalizePolymarketApiCreds(value: unknown): PolymarketApiCreds | null {
-  if (!value || typeof value !== 'object') return null
-  const record = value as Record<string, unknown>
-  const key = typeof record.key === 'string' ? record.key : typeof record.apiKey === 'string' ? record.apiKey : ''
-  const secret = typeof record.secret === 'string' ? record.secret : ''
-  const passphrase = typeof record.passphrase === 'string' ? record.passphrase : ''
-  return key && secret && passphrase ? { key, secret, passphrase } : null
-}
-
-async function requestPolymarketApiCreds(
-  endpoint: '/auth/api-key' | '/auth/derive-api-key',
-  method: 'GET' | 'POST',
-  headers: Record<string, string>,
-) {
-  const response = await fetch(`https://clob.polymarket.com${endpoint}`, { method, headers })
-  const data = await response.json().catch(() => ({}))
-  if (!response.ok) throw new Error(polyDeskResponseError(data, 'Could not prepare Polymarket deposit wallet session.'))
-  return normalizePolymarketApiCreds(data)
-}
-
-async function createPolymarketDepositWalletApiKey({
-  createL1Headers,
-  signer,
-  chainId,
-  depositWalletAddress,
-}: {
-  createL1Headers: (
-    signer: unknown,
-    chainId: number,
-    nonce?: number,
-    timestamp?: number,
-    address?: string,
-  ) => Promise<Record<string, string>>
-  signer: unknown
-  chainId: number
-  depositWalletAddress: string
-}) {
-  const headers = await createL1Headers(signer, chainId, undefined, undefined, depositWalletAddress)
-  const created = await requestPolymarketApiCreds('/auth/api-key', 'POST', headers).catch(() => null)
-  if (created) return created
-  const derived = await requestPolymarketApiCreds('/auth/derive-api-key', 'GET', headers)
-  if (!derived) throw new Error('Could not prepare Polymarket deposit wallet session.')
-  return derived
-}
-
-function withPolymarketDepositWalletAddress(headers: Record<string, string>, depositWalletAddress: string) {
-  return {
-    ...headers,
-    POLY_ADDRESS: depositWalletAddress,
-  }
-}
-
 export function PolyPortfolioPanel({
   onBack,
   onOpenLpScout,
@@ -7148,7 +7082,7 @@ export function PolyPortfolioPanel({
         await signingWallet.switchChain(137)
       }
       const provider = await signingWallet.getEthereumProvider()
-      const [{ ClobClient, Side, OrderType, AssetType, SignatureTypeV2, createL1Headers, createL2Headers, orderToJsonV2 }, { createWalletClient, custom }, { polygon }] = await Promise.all([
+      const [{ ClobClient, Side, OrderType, AssetType, SignatureTypeV2, createL2Headers, orderToJsonV2 }, { createWalletClient, custom }, { polygon }] = await Promise.all([
         import('@polymarket/clob-client-v2'),
         import('viem'),
         import('viem/chains'),
@@ -7176,7 +7110,7 @@ export function PolyPortfolioPanel({
         }
         throw new Error(walletCheckData.error || 'Connected owner wallet does not control this Polymarket wallet.')
       }
-      const signatureType = SignatureTypeV2.POLY_PROXY
+      const signatureType = SignatureTypeV2.POLY_1271
       const baseClient = new ClobClient({
         host: 'https://clob.polymarket.com',
         chain: 137,
@@ -7185,12 +7119,7 @@ export function PolyPortfolioPanel({
         funderAddress: polymarketDepositWallet,
       })
       setSellNotice('Checking sell balance and market settings...')
-      const userCreds = await createPolymarketDepositWalletApiKey({
-        createL1Headers,
-        signer: walletClient,
-        chainId: 137,
-        depositWalletAddress: polymarketDepositWallet,
-      })
+      const userCreds = await baseClient.createOrDeriveApiKey()
       const clobClient = new ClobClient({
         host: 'https://clob.polymarket.com',
         chain: 137,
@@ -7236,7 +7165,7 @@ export function PolyPortfolioPanel({
           marketUrl,
           outcome: position.outcome ?? 'Position',
           tokenId,
-          signer: savedTradingAddress,
+          signer: polymarketDepositWallet,
           orderType: OrderType.FAK,
           order: signedOrder,
           orderPayload,
@@ -7251,14 +7180,11 @@ export function PolyPortfolioPanel({
       if (!handoffResponse.ok || !handoff.ok) throw new Error(handoff.error || 'Sell handoff failed.')
       const finalOrderPayload = handoff.handoff?.orderPayload ?? orderPayload
       const orderBody = JSON.stringify(finalOrderPayload)
-      const l2Headers = withPolymarketDepositWalletAddress(
-        await createL2Headers(walletClient, userCreds, {
-          method: 'POST',
-          requestPath: '/order',
-          body: orderBody,
-        }),
-        polymarketDepositWallet,
-      )
+      const l2Headers = await createL2Headers(walletClient, userCreds, {
+        method: 'POST',
+        requestPath: '/order',
+        body: orderBody,
+      })
       setSellNotice('Sending sell order from this browser...')
       await submitPolymarketOrderFromBrowser({
         orderBody,
