@@ -5153,6 +5153,8 @@ export function PolyStreamPanel({
           : tickSize
       )
       const liveNegRisk = rawLiveNegRisk === true || String(rawLiveNegRisk).toLowerCase() === 'true'
+      const contractConfig = getContractConfig(137)
+      const exchangeAddress = liveNegRisk ? contractConfig.negRiskExchangeV2 : contractConfig.exchangeV2
       setTradeNotice('Confirm the order in your wallet. Signing is free.')
       const signedOrder = await signingClient.createMarketOrder(
         {
@@ -5163,14 +5165,14 @@ export function PolyStreamPanel({
           orderType: OrderType.FOK,
           builderCode: data.builderCode,
         },
-        { tickSize: liveTickSize, negRisk: liveNegRisk, version: 3 },
+        { tickSize: liveTickSize, negRisk: liveNegRisk, version: 2 },
       )
       signedOrder.signature = await signPolymarketDepositWalletOrder({
         walletClient,
         order: signedOrder,
         chainId: 137,
         depositWalletAddress: polymarketDepositWallet,
-        exchangeAddress: getContractConfig(137).exchangeV3,
+        exchangeAddress,
         encodeAbiParameters,
         keccak256,
         toHex,
@@ -7276,6 +7278,8 @@ export function PolyPortfolioPanel({
       const tickText = String(rawTickSize ?? '')
       const tickSize = polymarketTickSize(Number(tickText)) || (tickText === '0.1' || tickText === '0.01' || tickText === '0.005' || tickText === '0.0025' || tickText === '0.001' || tickText === '0.0001' ? tickText : '')
       if (!tickSize) throw new Error('This market is missing CLOB tick size metadata.')
+      const contractConfig = getContractConfig(137)
+      const exchangeAddress = negRisk === true ? contractConfig.negRiskExchangeV2 : contractConfig.exchangeV2
       if (balanceAllowance) {
         const rawBalance = Number(balanceAllowance.balance)
         const normalizedBalance = Number.isFinite(rawBalance) && rawBalance > 100_000 ? rawBalance / 1_000_000 : rawBalance
@@ -7292,14 +7296,14 @@ export function PolyPortfolioPanel({
           orderType: OrderType.FAK,
           builderCode: prepareData.builderCode,
         },
-        { tickSize, negRisk: negRisk === true, version: 3 },
+        { tickSize, negRisk: negRisk === true, version: 2 },
       )
       signedOrder.signature = await signPolymarketDepositWalletOrder({
         walletClient,
         order: signedOrder,
         chainId: 137,
         depositWalletAddress: polymarketDepositWallet,
-        exchangeAddress: getContractConfig(137).exchangeV3,
+        exchangeAddress,
         encodeAbiParameters,
         keccak256,
         toHex,
