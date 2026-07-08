@@ -328,6 +328,11 @@ export default function PaymentPage() {
     params.set('back', `${window.location.pathname}${window.location.search}${window.location.hash}`)
     return `/telegram/payment-links?${params.toString()}`
   })()
+  const polymarketBridgeReturnUrl = polymarketReturnToAgentHash
+    ? polymarketAgentHashUrl
+    : polymarketReturnToStandalonePortfolio
+    ? polymarketStandalonePortfolioTradingUrl
+    : polymarketPortfolioTradingUrl
 
   const resolvedEvm    = evmParam
   const resolvedSolana = getPaylinkParam(searchParams, 'sol', 's').trim()
@@ -336,13 +341,7 @@ export default function PaymentPage() {
 
   function goBackFromCheckout() {
     if (isPolymarketBridge) {
-      window.location.assign(
-        polymarketReturnToAgentHash
-          ? polymarketAgentHashUrl
-          : polymarketReturnToStandalonePortfolio
-          ? polymarketStandalonePortfolioTradingUrl
-          : polymarketPortfolioTradingUrl,
-      )
+      window.location.assign(polymarketBridgeReturnUrl)
       return
     }
     if (window.history.length > 1) {
@@ -3216,6 +3215,16 @@ export default function PaymentPage() {
   }, [isConfirmed, isPolymarketBridge, polymarketReturnToAgentHash, polymarketAgentHashUrl, paymentReceipt?.proof?.ogTxHash, paymentReceipt?.proof?.ogRootHash])
 
   useEffect(() => {
+    if (!isConfirmed || !isPolymarketBridge || polymarketReturnToAgentHash || polymarketReturnRedirected.current) return
+    if (polymarketBridgeStatus === 'idle' || polymarketBridgeStatus === 'checking') return
+    polymarketReturnRedirected.current = true
+    const timer = window.setTimeout(() => {
+      window.location.assign(polymarketBridgeReturnUrl)
+    }, 3800)
+    return () => window.clearTimeout(timer)
+  }, [isConfirmed, isPolymarketBridge, polymarketReturnToAgentHash, polymarketBridgeStatus, polymarketBridgeReturnUrl])
+
+  useEffect(() => {
     if (!isConfirmed || !isPolymarketBridge || !polymarketReturnToAgentHash || !polymarketHelperOwner || polymarketAgentNoticeStored.current) return
     const proofReady = Boolean(paymentReceipt?.proof?.ogTxHash || paymentReceipt?.proof?.ogRootHash)
     if (!proofReady) return
@@ -3507,7 +3516,7 @@ export default function PaymentPage() {
                 )}
                 {isPolymarketBridge && (
                   <a
-                    href={polymarketReturnToStandalonePortfolio ? polymarketStandalonePortfolioTradingUrl : polymarketPortfolioTradingUrl}
+                    href={polymarketBridgeReturnUrl}
                     className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98]"
                   >
                     <PolyDeskVectorIcon className="h-4 w-4" />
@@ -3579,7 +3588,7 @@ export default function PaymentPage() {
               </p>
             ) : isPolymarketBridge ? (
               <p className="flex items-center justify-center gap-1.5 text-center text-[11px] font-medium text-gray-400">
-                {ogProofValue ? 'Funding complete.' : 'Confirming your payment...'}
+                {isConfirmed ? 'Redirecting back to PolyDesk...' : 'Confirming your payment...'}
                 {!ogProofValue && <Loader2 className="h-3 w-3 animate-spin" />}
               </p>
             ) : isPolymarketFunding ? (

@@ -6770,6 +6770,7 @@ export function PolyPortfolioPanel({
   const [sellBusyKey, setSellBusyKey] = useState('')
   const [sellNotice, setSellNotice] = useState('')
   const [sellSuccess, setSellSuccess] = useState('')
+  const [pendingSellPosition, setPendingSellPosition] = useState<PolymarketPosition | null>(null)
 
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsDraft, setSettingsDraft] = useState<PolymarketAlertSettings | null>(null)
@@ -7447,8 +7448,6 @@ export function PolyPortfolioPanel({
     const title = position.title ?? 'Polymarket position'
     const marketUrl = polymarketEventUrl(position)
     setSellNotice('')
-    const confirmed = window.confirm(`Sell up to ${size.toLocaleString(undefined, { maximumFractionDigits: 6 })} shares of "${title}" at market?`)
-    if (!confirmed) return
     const busyKey = polymarketPositionKey(position)
     setSellBusyKey(busyKey)
     let sellStage = 'starting'
@@ -8862,7 +8861,11 @@ export function PolyPortfolioPanel({
                         {active && (
                           <button
                             type="button"
-                            onClick={() => void sellPosition(position)}
+                            onClick={() => {
+                              setSellNotice('')
+                              setSellSuccess('')
+                              setPendingSellPosition(position)
+                            }}
                             disabled={Boolean(sellBusyKey) || !polymarketPositionTokenId(position)}
                             className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-gray-600 hover:border-gray-300 hover:text-gray-900 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-300 dark:hover:border-white/20 dark:hover:text-white"
                           >
@@ -9135,6 +9138,47 @@ export function PolyPortfolioPanel({
           </ul>
         )}
       </div>
+      )}
+      {pendingSellPosition && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 px-4 py-5 backdrop-blur-sm sm:items-center">
+          <div className="w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-4 shadow-2xl dark:border-white/10 dark:bg-[#111216]">
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Confirm sell</p>
+            <h3 className="mt-2 text-base font-semibold tracking-tight text-gray-950 dark:text-white">
+              Sell this position at market?
+            </h3>
+            <div className="mt-3 rounded-xl bg-gray-50 px-3 py-2 dark:bg-white/[0.04]">
+              <p className="line-clamp-2 text-sm font-semibold text-gray-900 dark:text-white">
+                {pendingSellPosition.title ?? 'Polymarket position'}
+              </p>
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                Up to {numberOrNull(pendingSellPosition.size)?.toLocaleString(undefined, { maximumFractionDigits: 6 }) ?? '0'} shares of {pendingSellPosition.outcome ?? 'position'}.
+              </p>
+            </div>
+            <p className="mt-3 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+              PolyDesk will prepare a market sell order. Your wallet signature is free and does not move funds by itself.
+            </p>
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setPendingSellPosition(null)}
+                className="flex min-h-[42px] items-center justify-center rounded-xl border border-gray-200 px-4 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 dark:border-white/10 dark:text-gray-200 dark:hover:bg-white/[0.04]"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const position = pendingSellPosition
+                  setPendingSellPosition(null)
+                  void sellPosition(position)
+                }}
+                className="flex min-h-[42px] items-center justify-center rounded-xl bg-black px-4 text-sm font-semibold text-white transition hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+              >
+                Continue
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
