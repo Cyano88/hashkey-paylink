@@ -5107,6 +5107,8 @@ export function PolyStreamPanel({
         await signingWallet.switchChain(137)
       }
       const provider = await signingWallet.getEthereumProvider()
+      await polyDeskEnsurePolygonProvider(provider)
+      const activeTradingAddress = await polyDeskProviderAccount(provider)
       const [{ ClobClient, Side, OrderType, SignatureTypeV2, createL1Headers, createL2Headers, getContractConfig, orderToJsonV2 }, { createWalletClient, custom, encodeFunctionData, maxUint256, parseUnits }, { polygon }, { RelayClient }] = await Promise.all([
         import('@polymarket/clob-client-v2'),
         import('viem'),
@@ -5114,7 +5116,7 @@ export function PolyStreamPanel({
         import('@polymarket/builder-relayer-client'),
       ])
       const walletClient = createWalletClient({
-        account: savedTradingAddress as `0x${string}`,
+        account: activeTradingAddress as `0x${string}`,
         chain: polygon,
         transport: custom(provider),
       })
@@ -5125,7 +5127,7 @@ export function PolyStreamPanel({
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           action: 'verify-deposit-wallet',
-          ownerAddress: savedTradingAddress,
+          ownerAddress: activeTradingAddress,
           depositWalletAddress: polymarketDepositWallet,
         }),
       })
@@ -6355,6 +6357,37 @@ function polyDeskRawUnits(value: unknown) {
   }
 }
 
+function polyDeskProviderRequest(provider: unknown) {
+  const request = (provider as { request?: unknown } | null)?.request
+  if (typeof request !== 'function') throw new Error('Wallet provider is not ready. Reconnect your wallet, then try again.')
+  return request.bind(provider) as (args: { method: string; params?: unknown[] }) => Promise<unknown>
+}
+
+async function polyDeskProviderAccount(provider: unknown) {
+  const request = polyDeskProviderRequest(provider)
+  const accounts = await request({ method: 'eth_accounts' }).catch(() => [])
+  const account = Array.isArray(accounts) && typeof accounts[0] === 'string' ? accounts[0].trim() : ''
+  if (!/^0x[a-fA-F0-9]{40}$/.test(account)) {
+    throw new Error('No active wallet account was found. Reconnect the wallet that controls your Polymarket wallet.')
+  }
+  return account
+}
+
+async function polyDeskEnsurePolygonProvider(provider: unknown) {
+  const request = polyDeskProviderRequest(provider)
+  async function chainId() {
+    const value = await request({ method: 'eth_chainId' }).catch(() => '')
+    return typeof value === 'string' ? value.toLowerCase() : ''
+  }
+  let current = await chainId()
+  if (current === '0x89') return
+  await request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x89' }] }).catch(() => undefined)
+  current = await chainId()
+  if (current !== '0x89') {
+    throw new Error('Switch your wallet to Polygon, then try the Polymarket order again.')
+  }
+}
+
 function polyDeskValidClobCreds(value: unknown): value is { key: string; secret: string; passphrase: string } {
   if (!value || typeof value !== 'object') return false
   const record = value as Record<string, unknown>
@@ -7237,13 +7270,15 @@ export function PolyPortfolioPanel({
         await signingWallet.switchChain(137)
       }
       const provider = await signingWallet.getEthereumProvider()
+      await polyDeskEnsurePolygonProvider(provider)
+      const activeTradingAddress = await polyDeskProviderAccount(provider)
       const [{ ClobClient, Side, OrderType, AssetType, SignatureTypeV2, createL1Headers, createL2Headers, orderToJsonV2 }, { createWalletClient, custom }, { polygon }] = await Promise.all([
         import('@polymarket/clob-client-v2'),
         import('viem'),
         import('viem/chains'),
       ])
       const walletClient = createWalletClient({
-        account: savedTradingAddress as `0x${string}`,
+        account: activeTradingAddress as `0x${string}`,
         chain: polygon,
         transport: custom(provider),
       })
@@ -7254,7 +7289,7 @@ export function PolyPortfolioPanel({
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           action: 'verify-deposit-wallet',
-          ownerAddress: savedTradingAddress,
+          ownerAddress: activeTradingAddress,
           depositWalletAddress: polymarketDepositWallet,
         }),
       })
