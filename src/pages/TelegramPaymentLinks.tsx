@@ -5107,7 +5107,7 @@ export function PolyStreamPanel({
         await signingWallet.switchChain(137)
       }
       const provider = await signingWallet.getEthereumProvider()
-      const [{ ClobClient, Side, OrderType, createL2Headers }, { orderToJson }, { createWalletClient, custom }, { polygon }] = await Promise.all([
+      const [{ ClobClient, Side, OrderType, SignatureType, createL2Headers }, { orderToJson }, { createWalletClient, custom }, { polygon }] = await Promise.all([
         import('@polymarket/clob-client'),
         import('@polymarket/clob-client/dist/utilities.js'),
         import('viem'),
@@ -5118,7 +5118,7 @@ export function PolyStreamPanel({
         chain: polygon,
         transport: custom(provider),
       })
-      const signatureType = 3 as never
+      const signatureType = SignatureType.POLY_PROXY
       const signingClient = new ClobClient(
         'https://clob.polymarket.com',
         137,
@@ -7006,7 +7006,7 @@ export function PolyPortfolioPanel({
         await signingWallet.switchChain(137)
       }
       const provider = await signingWallet.getEthereumProvider()
-      const [{ ClobClient, Side, OrderType, AssetType, createL2Headers }, { orderToJson }, { createWalletClient, custom }, { polygon }] = await Promise.all([
+      const [{ ClobClient, Side, OrderType, AssetType, SignatureType, createL2Headers }, { orderToJson }, { createWalletClient, custom }, { polygon }] = await Promise.all([
         import('@polymarket/clob-client'),
         import('@polymarket/clob-client/dist/utilities.js'),
         import('viem'),
@@ -7017,7 +7017,7 @@ export function PolyPortfolioPanel({
         chain: polygon,
         transport: custom(provider),
       })
-      const signatureType = 3 as never
+      const signatureType = SignatureType.POLY_PROXY
       const baseClient = new ClobClient(
         'https://clob.polymarket.com',
         137,
