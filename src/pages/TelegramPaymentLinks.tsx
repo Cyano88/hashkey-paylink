@@ -5118,7 +5118,7 @@ export function PolyStreamPanel({
         chain: polygon,
         transport: custom(provider),
       })
-      const signatureType = SignatureType.POLY_PROXY
+      const signatureType = SignatureType.EOA
       const signingClient = new ClobClient(
         'https://clob.polymarket.com',
         137,
@@ -7022,7 +7022,7 @@ export function PolyPortfolioPanel({
         chain: polygon,
         transport: custom(provider),
       })
-      const signatureType = SignatureType.POLY_PROXY
+      const signatureType = SignatureType.EOA
       const baseClient = new ClobClient(
         'https://clob.polymarket.com',
         137,
