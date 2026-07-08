@@ -5107,10 +5107,11 @@ export function PolyStreamPanel({
         await signingWallet.switchChain(137)
       }
       const provider = await signingWallet.getEthereumProvider()
-      const [{ ClobClient, Side, OrderType, SignatureTypeV2, createL2Headers, orderToJsonV2 }, { createWalletClient, custom }, { polygon }] = await Promise.all([
+      const [{ ClobClient, Side, OrderType, AssetType, SignatureTypeV2, createL2Headers, getContractConfig, orderToJsonV2 }, { createWalletClient, custom, encodeFunctionData, maxUint256, parseUnits }, { polygon }, { RelayClient }] = await Promise.all([
         import('@polymarket/clob-client-v2'),
         import('viem'),
         import('viem/chains'),
+        import('@polymarket/builder-relayer-client'),
       ])
       const walletClient = createWalletClient({
         account: savedTradingAddress as `0x${string}`,
@@ -5141,10 +5142,19 @@ export function PolyStreamPanel({
         signatureType,
         funderAddress: polymarketDepositWallet,
       })
+      const userCreds = await signingClient.createOrDeriveApiKey()
+      const clobClient = new ClobClient({
+        host: 'https://clob.polymarket.com',
+        chain: 137,
+        signer: walletClient,
+        creds: userCreds,
+        signatureType,
+        funderAddress: polymarketDepositWallet,
+      })
       setTradeNotice('Checking live Polymarket market settings...')
       const [rawLiveTickSize, rawLiveNegRisk] = await Promise.all([
-        signingClient.getTickSize(option.tokenId).catch(() => option.tickSize),
-        signingClient.getNegRisk(option.tokenId).catch(() => option.negRisk === true),
+        clobClient.getTickSize(option.tokenId).catch(() => option.tickSize),
+        clobClient.getNegRisk(option.tokenId).catch(() => option.negRisk === true),
       ])
       const liveTickText = String(rawLiveTickSize ?? '')
       const liveTickSize = polymarketTickSize(Number(liveTickText)) || (
@@ -5153,8 +5163,62 @@ export function PolyStreamPanel({
           : tickSize
       )
       const liveNegRisk = rawLiveNegRisk === true || String(rawLiveNegRisk).toLowerCase() === 'true'
+      const contractConfig = getContractConfig(137)
+      const exchangeAddress = liveNegRisk ? contractConfig.negRiskExchangeV2 : contractConfig.exchangeV2
+      const amountUnits = parseUnits(amount, 6)
+      setTradeNotice('Checking pUSD balance and exchange approval...')
+      const collateralAllowance = await clobClient.getBalanceAllowance({ asset_type: AssetType.COLLATERAL }).catch(() => null)
+      const collateralBalance = polyDeskRawUnits(collateralAllowance?.balance)
+      if (collateralBalance !== null && collateralBalance < amountUnits) {
+        throw new Error(`Available pUSD is ${formatUsd(Number(collateralBalance) / 1_000_000)}. Lower the order amount or fund your Polymarket wallet.`)
+      }
+      const collateralAllowanceRaw = polyDeskAllowanceUnits(collateralAllowance?.allowances, exchangeAddress)
+      if (collateralAllowanceRaw === null || collateralAllowanceRaw < amountUnits) {
+        const configResponse = await fetch('/api/polymarket-bridge', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'config' }),
+        })
+        const configData = await readPolyDeskJson<{ ok?: boolean; relayerReady?: boolean; relayerUrl?: string | null; error?: string }>(configResponse, 'Could not load Polymarket relayer configuration.')
+        if (!configResponse.ok || !configData.ok || !configData.relayerReady || !configData.relayerUrl) {
+          throw new Error('pUSD is funded, but exchange approval is missing and the Polymarket relayer is not configured.')
+        }
+        const relayerClient = new RelayClient(configData.relayerUrl, 137, walletClient, undefined, undefined, { chain: polygon })
+        const derivedWallet = await relayerClient.deriveDepositWalletAddress()
+        if (derivedWallet.toLowerCase() !== polymarketDepositWallet.toLowerCase()) {
+          throw new Error('Connected owner wallet does not control this Polymarket wallet.')
+        }
+        const deployed = await relayerClient.getDeployed(polymarketDepositWallet, 'WALLET')
+        if (!deployed) {
+          throw new Error('Polymarket wallet is not deployed yet. Activate it, wait for confirmation, then retry.')
+        }
+        setTradeNotice('Confirm pUSD approval for Polymarket trading. Approval does not move funds.')
+        const approveData = encodeFunctionData({
+          abi: [{
+            type: 'function',
+            name: 'approve',
+            stateMutability: 'nonpayable',
+            inputs: [
+              { name: 'spender', type: 'address' },
+              { name: 'amount', type: 'uint256' },
+            ],
+            outputs: [{ name: '', type: 'bool' }],
+          }] as const,
+          functionName: 'approve',
+          args: [exchangeAddress as `0x${string}`, maxUint256],
+        })
+        const deadline = Math.floor(Date.now() / 1000 + 240).toString()
+        const approvalResponse = await relayerClient.executeDepositWalletBatch([{
+          target: contractConfig.collateral,
+          value: '0',
+          data: approveData,
+        }], polymarketDepositWallet, deadline)
+        await approvalResponse.wait().catch(() => undefined)
+        setTradeNotice('Refreshing Polymarket balance and allowance...')
+        await clobClient.updateBalanceAllowance({ asset_type: AssetType.COLLATERAL }).catch(() => undefined)
+      }
       setTradeNotice('Confirm the order in your wallet. Signing is free.')
-      const signedOrder = await signingClient.createMarketOrder(
+      const signedOrder = await clobClient.createMarketOrder(
         {
           tokenID: option.tokenId,
           amount: Number(amount),
@@ -5166,7 +5230,6 @@ export function PolyStreamPanel({
         { tickSize: liveTickSize, negRisk: liveNegRisk, version: 2 },
       )
       setTradeNotice('Approved. Sending your order...')
-      const userCreds = await signingClient.createOrDeriveApiKey()
       const orderPayload = orderToJsonV2(signedOrder, userCreds.key, OrderType.FOK, false, false)
       const handoffResponse = await fetch('/api/polymarket-builder-handoff', {
         method: 'POST',
@@ -6247,6 +6310,25 @@ function polyDeskStringRecord(value: unknown): Record<string, string> {
     if (typeof raw === 'string' && key.trim()) headers[key] = raw
   }
   return headers
+}
+
+function polyDeskRawUnits(value: unknown) {
+  const text = String(value ?? '').trim()
+  if (!/^\d+$/.test(text)) return null
+  try {
+    return BigInt(text)
+  } catch {
+    return null
+  }
+}
+
+function polyDeskAllowanceUnits(value: unknown, spender: string) {
+  if (!value || typeof value !== 'object') return null
+  const normalizedSpender = spender.toLowerCase()
+  for (const [key, raw] of Object.entries(value)) {
+    if (key.toLowerCase() === normalizedSpender) return polyDeskRawUnits(raw)
+  }
+  return null
 }
 
 function polyDeskResponseError(value: unknown, fallbackMessage: string) {
