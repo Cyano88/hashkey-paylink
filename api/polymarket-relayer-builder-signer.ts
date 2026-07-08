@@ -49,7 +49,7 @@ function isDepositWalletSubmitBody(body: string) {
   if (typeof params.deadline !== 'string' || !/^\d+$/.test(params.deadline)) return false
   const deadline = Number(params.deadline)
   const now = Math.floor(Date.now() / 1000)
-  if (!Number.isFinite(deadline) || deadline < now - 60 || deadline > now + 900) return false
+  if (!Number.isFinite(deadline) || deadline < now - 60 || deadline > now + 1800) return false
   if (!Array.isArray(params.calls) || params.calls.length < 1 || params.calls.length > 8) return false
   return params.calls.every((call) => {
     if (!isRecord(call)) return false

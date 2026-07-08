@@ -7613,7 +7613,7 @@ export function PolyPortfolioPanel({
           functionName: 'setApprovalForAll',
           args: [sellExchangeAddress as `0x${string}`, true],
         })
-        const deadline = Math.floor(Date.now() / 1000 + 1800).toString()
+        const deadline = Math.floor(Date.now() / 1000 + 600).toString()
         const approvalResponse = await relayerClient.executeDepositWalletBatch([{
           target: contractConfig.conditionalTokens,
           value: '0',
