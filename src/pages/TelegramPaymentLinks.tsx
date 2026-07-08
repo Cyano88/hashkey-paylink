@@ -5050,7 +5050,7 @@ export function PolyStreamPanel({
     }
     const signingWallet = privyWallets.find(wallet => wallet.address?.toLowerCase() === savedTradingAddress.toLowerCase())
     if (!signingWallet || typeof signingWallet.getEthereumProvider !== 'function') {
-      setTradeNotice('Connect the Privy wallet that controls your PolyDesk Polymarket wallet.')
+      setTradeNotice('Your connected Privy wallet does not match the saved Main Wallet. Open Portfolio > Main Wallet and choose Change or Use connected wallet.')
       return
     }
     const amount = tradeAmount.trim()
@@ -6422,6 +6422,11 @@ export function PolyPortfolioPanel({
   const polymarketWalletPending = Boolean(polymarketDepositWallet && !polymarketWalletReady)
   const tradingAddress = savedTradingAddress || signingWalletAddress || ''
   const tradingPortfolioAddress = polymarketDepositWallet || tradingAddress
+  const connectedTradingWalletMismatch = Boolean(
+    savedTradingAddress &&
+    signingWalletAddress &&
+    savedTradingAddress.toLowerCase() !== signingWalletAddress.toLowerCase(),
+  )
   const liveDataAddress = unsignedPortfolioAction === 'trading' ? tradingPortfolioAddress : watchedAddress
   const tradingPusdValue = tradingPusdBalance?.formatted ? Number(tradingPusdBalance.formatted) : null
   const tradingPusdDisplay = tradingPusdLoading
@@ -6725,6 +6730,56 @@ export function PolyPortfolioPanel({
     } finally {
       setSavingProfile(false)
     }
+  }
+
+  async function disconnectTradingProfile(): Promise<PolymarketPortfolioBundle | null> {
+    setSavingProfile(true)
+    setProfileError('')
+    setDepositWalletError('')
+    try {
+      const token = await getAccessToken()
+      if (!token) throw new Error('Sign in required.')
+      const res = await fetch('/api/polymarket-portfolio', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: 'disconnect-trading' }),
+      })
+      const data = await readPolyDeskJson<{ ok?: boolean; error?: string } & PolymarketPortfolioBundle>(res, 'Could not change Main Wallet.')
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Could not change Main Wallet.')
+      const nextBundle = {
+        profile: data.profile,
+        settings: data.settings,
+        watchlist: data.watchlist ?? [],
+        fundingAttempts: data.fundingAttempts ?? [],
+        alerts: data.alerts ?? [],
+      }
+      setBundle(nextBundle)
+      setTradingPusdBalance(null)
+      setTradingPusdError('')
+      setFundResult(null)
+      setFundAmount('')
+      setFundError('')
+      setWithdrawResult(null)
+      setWithdrawAmount('')
+      setWithdrawError('')
+      return nextBundle
+    } catch (err) {
+      setProfileError(err instanceof Error ? err.message : 'Could not change Main Wallet.')
+      return null
+    } finally {
+      setSavingProfile(false)
+    }
+  }
+
+  async function useConnectedTradingWallet() {
+    if (!signingWalletAddress) {
+      setProfileError('Attach a Privy wallet before changing Main Wallet.')
+      return
+    }
+    const cleared = savedTradingAddress ? await disconnectTradingProfile() : true
+    if (cleared === null) return
+    const saved = await saveProfile(signingWalletAddress)
+    if (saved?.profile?.tradingAddress) void activatePolymarketWallet(saved.profile.tradingAddress)
   }
 
   async function startFund(marketUrlForCta = '') {
@@ -8028,8 +8083,34 @@ export function PolyPortfolioPanel({
                 <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">Owner wallet</p>
                 <p className="mt-1 font-mono text-xs font-semibold text-gray-800 dark:text-gray-100">{shortHex(savedTradingAddress)}</p>
               </div>
-              <span className="rounded-full bg-white px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-gray-500 dark:bg-white/[0.06] dark:text-gray-300">Signer</span>
+              <div className="flex shrink-0 items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => void disconnectTradingProfile()}
+                  disabled={savingProfile}
+                  className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-gray-700 transition hover:bg-gray-50 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:bg-white/[0.08]"
+                >
+                  {savingProfile ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                  Change
+                </button>
+                <span className="rounded-full bg-white px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-gray-500 dark:bg-white/[0.06] dark:text-gray-300">Signer</span>
+              </div>
             </div>
+            {connectedTradingWalletMismatch && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-100">
+                <p className="font-semibold">Connected Privy wallet does not match this saved Main Wallet.</p>
+                <p className="mt-1 font-mono">{shortHex(signingWalletAddress)} connected</p>
+                <button
+                  type="button"
+                  onClick={() => void useConnectedTradingWallet()}
+                  disabled={savingProfile || depositWalletBusy}
+                  className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-amber-950 px-3 py-1.5 text-[11px] font-semibold text-white transition hover:bg-amber-900 disabled:opacity-50 dark:bg-amber-200 dark:text-amber-950 dark:hover:bg-amber-100"
+                >
+                  {savingProfile || depositWalletBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                  Use connected wallet
+                </button>
+              </div>
+            )}
             <div className="flex items-center justify-between gap-3 border-t border-gray-200 pt-2 dark:border-white/10">
               <div className="min-w-0">
                 <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">Polymarket wallet</p>
