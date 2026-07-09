@@ -754,6 +754,8 @@ function LocalCurrencyProfileCard({
   body = 'Used for receipts, payout support, and matching bank payment records.',
   savedFallback = 'Payout profile',
   saveLabel = 'Save payout profile',
+  savedBadgeLabel = 'Circle Pocket',
+  identityBadgeLabel = 'Circle Pocket',
   onDraftChange,
   onSave,
   onEdit,
@@ -770,6 +772,8 @@ function LocalCurrencyProfileCard({
   body?: string
   savedFallback?: string
   saveLabel?: string
+  savedBadgeLabel?: string
+  identityBadgeLabel?: string
   onDraftChange: (next: LocalCurrencyProfile) => void
   onSave: () => void
   onEdit: () => void
@@ -794,7 +798,7 @@ function LocalCurrencyProfileCard({
             <div className="flex items-center gap-2">
               <p className="truncate text-sm font-bold text-gray-950 dark:text-white">{savedName || savedFallback}</p>
               <span className="shrink-0 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-300">
-                Saved
+                {savedBadgeLabel}
               </span>
             </div>
             <p className="mt-0.5 truncate text-xs font-medium text-gray-500 dark:text-gray-400">{profile?.email}</p>
@@ -839,7 +843,7 @@ function LocalCurrencyProfileCard({
             <span className="block truncate text-xs font-semibold text-blue-900 dark:text-blue-100">{identityEmail}</span>
           </span>
           <span className="shrink-0 rounded-full border border-blue-200 bg-white px-2 py-0.5 text-[10px] font-bold text-blue-700 dark:border-blue-400/20 dark:bg-white/10 dark:text-blue-200">
-            Circle identity
+            {identityBadgeLabel}
           </span>
         </div>
       )}
@@ -2680,16 +2684,25 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                 )}
               </div>
 
-              {privyAuthenticated && privyEmail && (
-                <div className="flex items-center justify-between gap-3 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 dark:border-blue-400/20 dark:bg-blue-400/10">
-                  <span className="min-w-0">
-                    <span className="block text-[10px] font-bold uppercase tracking-widest text-blue-500 dark:text-blue-300">Circle identity</span>
-                    <span className="block truncate text-xs font-semibold text-blue-900 dark:text-blue-100">{privyEmail}</span>
-                  </span>
-                  <span className="shrink-0 rounded-full border border-blue-200 bg-white px-2 py-0.5 text-[10px] font-bold text-blue-700 dark:border-blue-400/20 dark:bg-white/10 dark:text-blue-200">
-                    Synced
-                  </span>
-                </div>
+              {privyAuthenticated && (
+                <LocalCurrencyProfileCard
+                  profile={localCurrencyProfile}
+                  draft={localCurrencyProfileDraft}
+                  email={privyEmail}
+                  busy={localCurrencyProfileBusy}
+                  error={localCurrencyProfileError}
+                  editing={localCurrencyProfileEditing}
+                  title="Circle Pocket profile"
+                  body="Your verified email, name, receipts, refunds, and local-currency records stay attached to one Circle Pocket identity."
+                  savedFallback="Circle Pocket profile"
+                  saveLabel="Save Circle Pocket profile"
+                  savedBadgeLabel="Verified"
+                  identityBadgeLabel="Verified"
+                  onDraftChange={setLocalCurrencyProfileDraft}
+                  onSave={saveLocalCurrencyProfile}
+                  onEdit={editLocalCurrencyProfile}
+                  onCancel={cancelLocalCurrencyProfileEdit}
+                />
               )}
 
               {circlePocketView === 'chooser' ? (
