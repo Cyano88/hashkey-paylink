@@ -215,6 +215,17 @@ export async function getPaycrestOfframpRate(input: { network?: string; token?: 
   return rate
 }
 
+export async function getPaycrestOnrampRate(input: { network?: string; token?: string; fiat?: string; amount?: string } = {}) {
+  const network = (input.network ?? 'base').trim().toLowerCase()
+  const token = (input.token ?? 'USDC').trim().toUpperCase()
+  const fiat = (input.fiat ?? 'NGN').trim().toUpperCase()
+  const amount = decimalText(input.amount) || '1'
+  const data = await paycrestFetch<any>(`/v2/rates/${encodeURIComponent(network)}/${encodeURIComponent(token)}/${encodeURIComponent(amount)}/${encodeURIComponent(fiat)}?side=buy`, { method: 'GET' })
+  const rate = Number(firstText(data?.buy?.rate, data?.rate, data?.buyRate, data?.buy_rate))
+  if (!Number.isFinite(rate) || rate <= 0) throw new Error('Paycrest did not return a valid NGN onramp rate.')
+  return rate
+}
+
 export async function createPaycrestOfframpOrder(input: {
   intentId: string
   merchantId: string

@@ -95,6 +95,13 @@ type PaycrestInstitution = {
   name: string
   type?: string
 }
+type BankSendQuote = {
+  amount_ngn: string
+  amount_usdc: string
+  fx_rate_ngn_per_usdc: string
+  fx_source?: string
+  destination_network?: string
+}
 const CHAINS: ChainKey[] = ['base', 'solana', 'arbitrum']
 const POLYMARKET_SIGNUP_URL = 'https://polymarket.com'
 const POLYMARKET_LOGO = '/brand/polymarket-logo.png'
@@ -500,6 +507,8 @@ export default function PaymentPage() {
   const [bankSendBankBusy, setBankSendBankBusy] = useState(false)
   const [bankSendError, setBankSendError] = useState('')
   const [bankSendStatus, setBankSendStatus] = useState<'idle' | 'waiting' | 'pending' | 'settled' | 'expired' | 'refunding' | 'error'>('idle')
+  const [bankSendQuote, setBankSendQuote] = useState<BankSendQuote | null>(null)
+  const [bankSendQuoteBusy, setBankSendQuoteBusy] = useState(false)
   const requiresAttendeeName = (isEventMode || isNgPosPayment) && !isPolymarketFunding && !isAgentOrWalletFunding && !isHelperAccess
 
   useEffect(() => {
@@ -908,6 +917,7 @@ export default function PaymentPage() {
     showCircleSolanaEmailBridgePay
   const showPolymarketFundingChoice =
     isPolymarketFunding &&
+    !isBankSendPayment &&
     payMode === 'wallet' &&
     canStartPolymarketCircleFunding &&
     !manualPayDetected &&
@@ -1004,12 +1014,59 @@ export default function PaymentPage() {
     (isFlex || (!Number.isNaN(Number.parseFloat(ngPosAmountNgn)) && Number.parseFloat(ngPosAmountNgn) > 0))
   const bankSendRequestedNgn = isBankSendPayment ? (isFlex ? localAmt.trim() : ngPosAmountNgn.trim()) : ''
   const bankSendRequestedNgnLabel = formatNgnAmount(bankSendRequestedNgn)
+  const bankSendDisplayUsdc = paycrestOrder?.amount_usdc || bankSendQuote?.amount_usdc || ''
+  const bankSendDisplayRate = bankSendQuote?.fx_rate_ngn_per_usdc || (
+    paycrestOrder?.amount_usdc && Number.parseFloat(paycrestOrder.amount_usdc) > 0
+      ? (Number.parseFloat(paycrestOrder.provider_amount_to_transfer || paycrestOrder.amount_ngn || bankSendRequestedNgn || '0') / Number.parseFloat(paycrestOrder.amount_usdc)).toFixed(2)
+      : ''
+  )
   const isValidParams =
     hasBankSendRecipient ||
     (
       (isFlex || (!isNaN(parseFloat(amt)) && parseFloat(amt) > 0)) &&
       (isAddress(resolvedEvm) || !!resolvedSolana || hasPaycrestMerchantRecipient)
     )
+
+  useEffect(() => {
+    if (!isBankSendPayment || paycrestOrder || !bankSendLinkId) {
+      setBankSendQuote(null)
+      setBankSendQuoteBusy(false)
+      return
+    }
+    const amount = Number.parseFloat(bankSendRequestedNgn)
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setBankSendQuote(null)
+      setBankSendQuoteBusy(false)
+      return
+    }
+
+    let cancelled = false
+    const timer = window.setTimeout(async () => {
+      setBankSendQuoteBusy(true)
+      try {
+        const response = await fetch('/api/ng-pos', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            action: 'bankSendQuote',
+            link_id: bankSendLinkId,
+            amount: amount.toFixed(2),
+          }),
+        })
+        const data = await response.json().catch(() => ({})) as { ok?: boolean; quote?: BankSendQuote }
+        if (!cancelled) setBankSendQuote(response.ok && data.ok && data.quote ? data.quote : null)
+      } catch {
+        if (!cancelled) setBankSendQuote(null)
+      } finally {
+        if (!cancelled) setBankSendQuoteBusy(false)
+      }
+    }, 450)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [bankSendLinkId, bankSendRequestedNgn, isBankSendPayment, paycrestOrder])
 
   // Whether the secondary direct-pay option should be shown for normal Hash PayLink payments.
   const canDirectSend =
@@ -4003,6 +4060,21 @@ export default function PaymentPage() {
                 <span className="text-[2.75rem] font-bold leading-none tracking-tight text-gray-900 dark:text-white">{isBankSendPayment ? (bankSendRequestedNgnLabel || 'Enter amount') : formatAmount(payableAmt, meta.decimals)}</span>
                 <span className="text-xl font-semibold text-gray-400">{isBankSendPayment ? 'NGN' : meta.asset}</span>
               </div>
+              {isBankSendPayment && (
+                <div className="mt-2 flex items-center justify-center gap-1.5">
+                  {bankSendQuoteBusy && !bankSendDisplayUsdc ? (
+                    <>
+                      <RefreshCw className="h-2.5 w-2.5 animate-spin text-gray-300" />
+                      <span className="text-[11px] text-gray-400">Fetching Paycrest USDC quote...</span>
+                    </>
+                  ) : bankSendDisplayUsdc ? (
+                    <span className="text-[11px] text-gray-400">
+                      ≈ {formatAmount(bankSendDisplayUsdc, 6)} USDC
+                      {bankSendDisplayRate ? ` · 1 USDC = ${formatAmount(bankSendDisplayRate, 2)} NGN via Paycrest` : ' via Paycrest'}
+                    </span>
+                  ) : null}
+                </div>
+              )}
               {memo && !isAgentOrWalletFunding && (
                 <p className="mt-1 text-sm font-medium text-gray-500 dark:text-gray-300">
                   {isHelperAccess ? (
@@ -5140,6 +5212,10 @@ export default function PaymentPage() {
             { n: '1', title: 'Ask Hash', body: 'Open helper access from Telegram or the agent page' },
             { n: '2', title: 'Verify access', body: 'Hash PayLink confirms the payment receipt' },
             { n: '3', title: 'Open helper', body: 'Return to Telegram with access unlocked' },
+          ] : isPolymarketFunding && isBankSendPayment ? [
+            { n: '1', title: 'Verify refund bank', body: 'Add the bank account Paycrest can use if a transfer is refunded' },
+            { n: '2', title: 'Send Naira', body: 'Use the generated bank transfer details before the deadline' },
+            { n: '3', title: 'Settle to PolyDesk', body: 'Paycrest sends USDC to the Polymarket funding route' },
           ] : isPolymarketFunding ? [
             { n: '1', title: 'Review wallet', body: 'Confirm the funding wallet and amount' },
             { n: '2', title: 'Fund with USDC', body: 'Pay from your gasless wallet or another wallet' },

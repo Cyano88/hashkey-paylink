@@ -12,6 +12,7 @@ import {
   createPaycrestOnrampOrder,
   getPaycrestPosOrder,
   getPaycrestOfframpRate,
+  getPaycrestOnrampRate,
   isPaycrestConfigured,
   listPaycrestInstitutions,
   listPaycrestPosOrdersForMerchants,
@@ -223,7 +224,7 @@ async function readStore(): Promise<Store> {
   try {
     const remote = await readDurableJson<Partial<Store>>(NG_POS_STORE_KEY)
     if (remote) {
-      return { merchants: remote.merchants ?? {}, intents: remote.intents ?? {} }
+      return { merchants: remote.merchants ?? {}, intents: remote.intents ?? {}, bank_send_links: remote.bank_send_links ?? {} }
     }
   } catch (error) {
     console.warn('[ng-pos] durable load failed; using file fallback.', error instanceof Error ? error.message : String(error))
@@ -232,14 +233,14 @@ async function readStore(): Promise<Store> {
   try {
     const raw = await readFile(resolve(STORE_PATH), 'utf8')
     const parsed = JSON.parse(raw) as Partial<Store>
-    return { merchants: parsed.merchants ?? {}, intents: parsed.intents ?? {} }
+    return { merchants: parsed.merchants ?? {}, intents: parsed.intents ?? {}, bank_send_links: parsed.bank_send_links ?? {} }
   } catch {
-    return { merchants: {}, intents: {} }
+    return { merchants: {}, intents: {}, bank_send_links: {} }
   }
 }
 
 async function writeStore(store: Store) {
-  const normalized = { merchants: store.merchants ?? {}, intents: store.intents ?? {} }
+  const normalized = { merchants: store.merchants ?? {}, intents: store.intents ?? {}, bank_send_links: store.bank_send_links ?? {} }
   const path = resolve(STORE_PATH)
   await mkdir(dirname(path), { recursive: true })
   await writeFile(path, `${JSON.stringify(normalized, null, 2)}\n`, 'utf8')
@@ -869,6 +870,44 @@ export default async function handler(req: Request, res: Response) {
           bank_name: settlementType === 'INSTANT_FIAT' ? merchant.bank_name : undefined,
           bank_last4: settlementType === 'INSTANT_FIAT' ? merchant.bank_last4 : undefined,
           bank_account_name: settlementType === 'INSTANT_FIAT' ? merchant.bank_account_name : undefined,
+        },
+      })
+    }
+
+    if (action === 'bankSendQuote') {
+      const linkId = cleanText(body.link_id, '').replace(/[^a-zA-Z0-9_-]/g, '')
+      const amount = cleanAmount(body.amount)
+      if (!linkId) return res.status(400).json({ ok: false, error: 'Missing bank-to-USDC link.' })
+      if (!amount) return res.status(400).json({ ok: false, error: 'Enter a valid Naira amount.' })
+      if (!isPaycrestConfigured()) return res.status(400).json({ ok: false, error: 'Paycrest is not configured for bank-to-USDC quotes yet.' })
+
+      const store = await readStore()
+      const link = store.bank_send_links?.[linkId]
+      if (!link) return res.status(404).json({ ok: false, error: 'Bank-to-USDC link was not found.' })
+      if (!link.flexible_amount && link.amount_ngn && Math.abs(Number(link.amount_ngn) - amount) > 0.01) {
+        return res.status(400).json({ ok: false, error: 'This payment link requires the exact Naira amount.' })
+      }
+
+      const rate = await getPaycrestOnrampRate({
+        network: link.destination_network,
+        token: 'USDC',
+        fiat: 'NGN',
+        amount: '1',
+      })
+      const amountUsdc = amount / rate
+      if (!Number.isFinite(amountUsdc) || amountUsdc <= 0) {
+        return res.status(400).json({ ok: false, error: 'Paycrest did not return a usable bank-to-USDC quote.' })
+      }
+      return res.json({
+        ok: true,
+        quote: {
+          link_id: link.link_id,
+          amount_ngn: amount.toFixed(2),
+          amount_usdc: amountUsdc.toFixed(6).replace(/\.?0+$/, ''),
+          fx_rate_ngn_per_usdc: rate.toFixed(2),
+          fx_source: 'paycrest',
+          destination_network: link.destination_network,
+          expires_at: new Date(Date.now() + 60_000).toISOString(),
         },
       })
     }
