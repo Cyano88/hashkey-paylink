@@ -1015,11 +1015,20 @@ export default function PaymentPage() {
   const bankSendRequestedNgn = isBankSendPayment ? (isFlex ? localAmt.trim() : ngPosAmountNgn.trim()) : ''
   const bankSendRequestedNgnLabel = formatNgnAmount(bankSendRequestedNgn)
   const bankSendDisplayUsdc = paycrestOrder?.amount_usdc || bankSendQuote?.amount_usdc || ''
-  const bankSendDisplayRate = bankSendQuote?.fx_rate_ngn_per_usdc || (
-    paycrestOrder?.amount_usdc && Number.parseFloat(paycrestOrder.amount_usdc) > 0
-      ? (Number.parseFloat(paycrestOrder.provider_amount_to_transfer || paycrestOrder.amount_ngn || bankSendRequestedNgn || '0') / Number.parseFloat(paycrestOrder.amount_usdc)).toFixed(2)
-      : ''
-  )
+  const bankSendProviderStatus = String(paycrestOrder?.status || '').trim().toLowerCase()
+  const bankSendPaymentDetected =
+    Boolean(paycrestOrder?.tx_hash) ||
+    ['deposited', 'fulfilling', 'fulfilled', 'settling', 'settled', 'validated'].includes(bankSendProviderStatus)
+  const bankSendStatusLabel =
+    bankSendStatus === 'idle'
+      ? 'ready'
+      : bankSendStatus === 'waiting'
+      ? 'waiting'
+      : bankSendStatus === 'pending' && bankSendPaymentDetected
+      ? 'settling'
+      : bankSendStatus === 'pending'
+      ? 'verifying'
+      : bankSendStatus
   const isValidParams =
     hasBankSendRecipient ||
     (
@@ -1764,7 +1773,7 @@ export default function PaymentPage() {
       if (status === 'settled' || status === 'validated') return 'settled'
       if (status === 'expired') return 'expired'
       if (status === 'refunding' || status === 'refunded') return 'refunding'
-      if (status === 'pending' || status === 'settling' || status === 'deposited') return 'pending'
+      if (['pending', 'deposited', 'fulfilling', 'fulfilled', 'settling'].includes(status)) return 'pending'
       return 'waiting'
     }
 
@@ -1803,10 +1812,18 @@ export default function PaymentPage() {
           return
         }
         if (nextStatus === 'refunding') {
-          setPaycrestStatusText('Refund is in progress or completed.')
+          setPaycrestStatusText('Refund is in progress or completed. Paycrest will use the refund account you verified.')
           return
         }
-        setPaycrestStatusText(nextStatus === 'pending' ? 'Transfer detected. Paycrest is settling USDC.' : 'Waiting for bank transfer confirmation.')
+        const providerStatus = String(data.order.status || '').trim().toLowerCase()
+        const detected =
+          Boolean(data.order.tx_hash) ||
+          ['deposited', 'fulfilling', 'fulfilled', 'settling'].includes(providerStatus)
+        setPaycrestStatusText(
+          detected
+            ? 'Bank transfer detected. Paycrest is settling USDC.'
+            : 'Waiting for Paycrest to confirm the bank transfer. Keep this page open; settlement can take a few minutes after your bank sends the money.',
+        )
       } catch (error) {
         if (!cancelled) {
           setBankSendStatus('error')
@@ -4070,7 +4087,6 @@ export default function PaymentPage() {
                   ) : bankSendDisplayUsdc ? (
                     <span className="text-[11px] text-gray-400">
                       ≈ {formatAmount(bankSendDisplayUsdc, 6)} USDC
-                      {bankSendDisplayRate ? ` · 1 USDC = ${formatAmount(bankSendDisplayRate, 2)} NGN via Paycrest` : ' via Paycrest'}
                     </span>
                   ) : null}
                 </div>
@@ -4320,7 +4336,15 @@ export default function PaymentPage() {
                         ? 'text-red-700 dark:text-red-300'
                         : 'text-amber-700 dark:text-amber-300',
                     )}>
-                      {bankSendStatus === 'settled' ? 'USDC settled' : 'Transfer exactly'}
+                      {bankSendStatus === 'settled'
+                        ? 'USDC settled'
+                        : bankSendStatus === 'expired'
+                        ? 'Instruction expired'
+                        : bankSendStatus === 'refunding'
+                        ? 'Refund in progress'
+                        : bankSendPaymentDetected
+                        ? 'Settling USDC'
+                        : 'Transfer exactly'}
                     </p>
                     <span className={cn(
                       'inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-bold capitalize',
@@ -4331,7 +4355,7 @@ export default function PaymentPage() {
                         : 'bg-amber-100 text-amber-700 dark:bg-amber-400/15 dark:text-amber-200',
                     )}>
                       {bankSendStatus === 'waiting' || bankSendStatus === 'pending' ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
-                      {bankSendStatus === 'idle' ? 'ready' : bankSendStatus}
+                      {bankSendStatusLabel}
                     </span>
                   </div>
                   <div className={cn(
@@ -4342,16 +4366,35 @@ export default function PaymentPage() {
                       ? 'divide-y divide-red-200/70 border-red-200 dark:divide-red-400/10 dark:border-red-400/20'
                       : 'divide-y divide-amber-200/70 border-amber-200 dark:divide-amber-400/10 dark:border-amber-400/20',
                   )}>
-                    <Row label="Amount" value={`${formatAmount(paycrestOrder.provider_amount_to_transfer || paycrestOrder.amount_ngn, 2)} ${paycrestOrder.provider_currency || 'NGN'}`} />
-                    <Row label="Bank" value={paycrestOrder.provider_institution || 'Provider bank'} />
-                    <Row label="Account" value={paycrestOrder.provider_account_identifier || ''} mono />
-                    <Row label="Name" value={paycrestOrder.provider_account_name || ''} />
-                    <Row label="To" value={`${bankSendDestinationLabel} USDC`} />
+                    {bankSendPaymentDetected || bankSendStatus === 'settled' || bankSendStatus === 'refunding' ? (
+                      <>
+                        <Row label="USDC" value={paycrestOrder.amount_usdc ? `${formatAmount(paycrestOrder.amount_usdc, 6)} USDC` : 'Settlement in progress'} />
+                        <Row label="To" value={`${bankSendDestinationLabel} USDC`} />
+                        {paycrestOrder.tx_hash && <Row label="Tx" value={truncateAddress(paycrestOrder.tx_hash, 6)} mono />}
+                      </>
+                    ) : (
+                      <>
+                        <Row label="Amount" value={`${formatAmount(paycrestOrder.provider_amount_to_transfer || paycrestOrder.amount_ngn, 2)} ${paycrestOrder.provider_currency || 'NGN'}`} />
+                        <Row label="Bank" value={paycrestOrder.provider_institution || 'Provider bank'} />
+                        <Row label="Account" value={paycrestOrder.provider_account_identifier || ''} mono />
+                        <Row label="Name" value={paycrestOrder.provider_account_name || ''} />
+                        <Row label="To" value={`${bankSendDestinationLabel} USDC`} />
+                      </>
+                    )}
                   </div>
                   {paycrestOrder.valid_until && (
-                    <p className="text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
+                    <p className={cn(
+                      'text-[11px] font-medium',
+                      bankSendStatus === 'expired' || bankSendStatus === 'error'
+                        ? 'text-red-700 dark:text-red-300'
+                        : 'text-emerald-700 dark:text-emerald-300',
+                    )}>
                       {bankSendStatus === 'settled'
                         ? 'The recipient USDC settlement is confirmed.'
+                        : bankSendStatus === 'expired'
+                        ? 'Do not send money to this account. If you already paid before expiry, Paycrest will use your verified refund account.'
+                        : bankSendPaymentDetected
+                        ? 'Payment is confirmed by Paycrest. Waiting for USDC settlement.'
                         : `Complete before ${new Date(paycrestOrder.valid_until).toLocaleString()}.`}
                     </p>
                   )}
@@ -4373,7 +4416,14 @@ export default function PaymentPage() {
               )}
 
               {(bankSendError || paycrestStatusText) && (
-                <p className={cn('text-[11px] font-medium', bankSendError ? 'text-red-600 dark:text-red-300' : 'text-emerald-700 dark:text-emerald-300')}>
+                <p className={cn(
+                  'text-[11px] font-medium',
+                  bankSendError || bankSendStatus === 'expired' || bankSendStatus === 'error' || bankSendStatus === 'refunding'
+                    ? 'text-red-600 dark:text-red-300'
+                    : bankSendStatus === 'settled' || bankSendPaymentDetected
+                    ? 'text-emerald-700 dark:text-emerald-300'
+                    : 'text-amber-700 dark:text-amber-300',
+                )}>
                   {bankSendError || paycrestStatusText}
                 </p>
               )}
