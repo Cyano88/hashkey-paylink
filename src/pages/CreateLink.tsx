@@ -2697,8 +2697,8 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                   {[
                     {
                       icon: Wallet,
-                      title: 'Main Wallet',
-                      body: 'Balance, fund, withdraw, and track USDC.',
+                      title: 'Circle smart wallets',
+                      body: 'Manage the Circle wallet address created for each network.',
                       action: () => setCirclePocketView('main'),
                     },
                     {
@@ -2735,9 +2735,9 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                 <>
                   <div>
                     <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Balance</p>
-                    <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">Main Wallet</h2>
+                    <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">Circle smart wallets</h2>
                     <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-                      Add USDC, send it out, or use it across Hash PayLink.
+                      Each network has its own Circle smart wallet address.
                     </p>
                   </div>
 
@@ -2835,8 +2835,8 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                                   </div>
                                   <div className="text-right">
                                     <p className="text-sm font-black text-gray-950 dark:text-white">${formatAmount(row?.balance ?? 0, 6)}</p>
-                                    <p className={cn('mt-0.5 text-[10px] font-bold uppercase tracking-wider', row?.status === 'error' ? 'text-red-500' : 'text-emerald-500')}>
-                                      {row?.status === 'error' ? 'Retry' : wallet?.address ? 'Ready' : 'Setup'}
+                                    <p className={cn('mt-0.5 text-[10px] font-bold uppercase tracking-wider', row?.status === 'error' ? 'text-amber-500' : wallet?.address ? 'text-emerald-500' : 'text-gray-400')}>
+                                      {row?.status === 'error' ? 'Balance unavailable' : wallet?.address ? 'Ready' : 'Open wallet'}
                                     </p>
                                   </div>
                                 </div>
@@ -2849,7 +2849,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                       {circlePocketTab === 'fund' && (
                         <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#111216]">
                           <p className="text-sm font-bold text-gray-950 dark:text-white">Fund on {circlePocketNetworkLabel}</p>
-                          <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">Send USDC to this address on the selected network.</p>
+                          <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">Send USDC to this Circle smart wallet address on the selected network.</p>
                           {circlePocketSelectedAddress ? (
                             <div className="mt-3 rounded-xl border border-gray-100 bg-gray-50 p-3 dark:border-white/10 dark:bg-white/[0.04]">
                               <p className="break-all text-xs font-semibold text-gray-700 dark:text-gray-200">{circlePocketSelectedAddress}</p>
@@ -2870,7 +2870,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                               className="mt-3 inline-flex items-center gap-2 rounded-xl bg-gray-950 px-4 py-3 text-sm font-bold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950"
                             >
                               {circlePocketBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wallet className="h-4 w-4" />}
-                              Open {circlePocketNetworkLabel} wallet
+                              Open {circlePocketNetworkLabel} Circle wallet
                             </button>
                           )}
                         </div>

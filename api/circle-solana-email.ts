@@ -162,8 +162,16 @@ function solanaWallet(wallets: Array<{ id: string; address: string; blockchain: 
 }
 
 function evmWallet(wallets: Array<{ id: string; address: string; blockchain: string }>, chain: keyof typeof EVM_CHAINS) {
-  const blockchain = EVM_CHAINS[chain].blockchain
-  return wallets.find((wallet) => wallet.blockchain === blockchain && isAddress(wallet.address))
+  const expected = EVM_CHAINS[chain].blockchain
+  const aliases: Record<keyof typeof EVM_CHAINS, string[]> = {
+    base: ['BASE'],
+    arbitrum: ['ARB', 'ARBITRUM'],
+    arc: ['ARC-TESTNET', 'ARC_TESTNET', 'ARC'],
+  }
+  return wallets.find((wallet) => {
+    const blockchain = String(wallet.blockchain ?? '').trim().toUpperCase()
+    return (blockchain === expected || aliases[chain].includes(blockchain)) && isAddress(wallet.address)
+  })
 }
 
 function isBytes32(value: string | undefined): value is `0x${string}` {
