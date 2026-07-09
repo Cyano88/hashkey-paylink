@@ -34,6 +34,9 @@ export type PaycrestOrderRecord = {
   provider_account_identifier?: string
   provider_account_name?: string
   provider_amount_to_transfer?: string
+  provider_amount_paid?: string
+  provider_amount_returned?: string
+  provider_percent_settled?: string
   provider_currency?: string
   created_at: string
   updated_at: string
@@ -390,6 +393,9 @@ export async function createPaycrestOnrampOrder(input: {
     provider_account_identifier: accountIdentifier,
     provider_account_name: accountName,
     provider_amount_to_transfer: amountToTransfer,
+    provider_amount_paid: firstText(data?.amountPaid, data?.amount_paid),
+    provider_amount_returned: firstText(data?.amountReturned, data?.amount_returned),
+    provider_percent_settled: firstText(data?.percentSettled, data?.percent_settled),
     provider_currency: firstText(providerAccount.currency, 'NGN'),
     created_at: now,
     updated_at: now,
@@ -461,7 +467,16 @@ export async function refreshPaycrestOrderStatus(id: string) {
     record.tx_hash,
   )
   const store = await readStore()
-  const updated = { ...record, status, tx_hash: txHash, raw: data, updated_at: new Date().toISOString() }
+  const updated = {
+    ...record,
+    status,
+    tx_hash: txHash,
+    provider_amount_paid: firstText(data?.amountPaid, data?.amount_paid, record.provider_amount_paid),
+    provider_amount_returned: firstText(data?.amountReturned, data?.amount_returned, record.provider_amount_returned),
+    provider_percent_settled: firstText(data?.percentSettled, data?.percent_settled, record.provider_percent_settled),
+    raw: data,
+    updated_at: new Date().toISOString(),
+  }
   store.orders[updated.intent_id] = updated
   store.orders[updated.paycrest_order_id] = updated
   await writeStore(store)

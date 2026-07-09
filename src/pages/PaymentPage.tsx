@@ -88,6 +88,9 @@ type PaycrestCheckoutOrder = {
   provider_account_identifier?: string
   provider_account_name?: string
   provider_amount_to_transfer?: string
+  provider_amount_paid?: string
+  provider_amount_returned?: string
+  provider_percent_settled?: string
   provider_currency?: string
 }
 type PaycrestInstitution = {
@@ -1019,6 +1022,19 @@ export default function PaymentPage() {
   const bankSendPaymentDetected =
     Boolean(paycrestOrder?.tx_hash) ||
     ['deposited', 'fulfilling', 'fulfilled', 'settling', 'settled', 'validated'].includes(bankSendProviderStatus)
+  const bankSendExpectedTransfer = Number.parseFloat(paycrestOrder?.provider_amount_to_transfer || paycrestOrder?.amount_ngn || '')
+  const bankSendAmountPaid = Number.parseFloat(paycrestOrder?.provider_amount_paid || '')
+  const bankSendAmountReturned = Number.parseFloat(paycrestOrder?.provider_amount_returned || '')
+  const bankSendAmountDelta =
+    Number.isFinite(bankSendExpectedTransfer) && Number.isFinite(bankSendAmountPaid)
+      ? bankSendAmountPaid - bankSendExpectedTransfer
+      : 0
+  const bankSendHasAmountMismatch =
+    Number.isFinite(bankSendExpectedTransfer) &&
+    Number.isFinite(bankSendAmountPaid) &&
+    bankSendAmountPaid > 0 &&
+    Math.abs(bankSendAmountDelta) >= 0.01
+  const bankSendMismatchLabel = bankSendAmountDelta > 0 ? 'Overpaid' : 'Underpaid'
   const bankSendStatusLabel =
     bankSendStatus === 'idle'
       ? 'ready'
@@ -1819,8 +1835,21 @@ export default function PaymentPage() {
         const detected =
           Boolean(data.order.tx_hash) ||
           ['deposited', 'fulfilling', 'fulfilled', 'settling'].includes(providerStatus)
+        const expectedTransfer = Number.parseFloat(data.order.provider_amount_to_transfer || data.order.amount_ngn || '')
+        const amountPaid = Number.parseFloat(data.order.provider_amount_paid || '')
+        const amountDelta =
+          Number.isFinite(expectedTransfer) && Number.isFinite(amountPaid)
+            ? amountPaid - expectedTransfer
+            : 0
+        const hasAmountMismatch =
+          Number.isFinite(expectedTransfer) &&
+          Number.isFinite(amountPaid) &&
+          amountPaid > 0 &&
+          Math.abs(amountDelta) >= 0.01
         setPaycrestStatusText(
-          detected
+          hasAmountMismatch
+            ? `${amountDelta > 0 ? 'Overpayment' : 'Underpayment'} detected: Paycrest expected ${formatAmount(expectedTransfer, 2)} NGN and received ${formatAmount(amountPaid, 2)} NGN. Waiting for settlement or refund update.`
+            : detected
             ? 'Bank transfer detected. Paycrest is settling USDC.'
             : 'Waiting for Paycrest to confirm the bank transfer. Keep this page open; settlement can take a few minutes after your bank sends the money.',
         )
@@ -4369,12 +4398,30 @@ export default function PaymentPage() {
                     {bankSendPaymentDetected || bankSendStatus === 'settled' || bankSendStatus === 'refunding' ? (
                       <>
                         <Row label="USDC" value={paycrestOrder.amount_usdc ? `${formatAmount(paycrestOrder.amount_usdc, 6)} USDC` : 'Settlement in progress'} />
+                        {Number.isFinite(bankSendAmountPaid) && bankSendAmountPaid > 0 && (
+                          <Row label="Paid" value={`${formatAmount(bankSendAmountPaid, 2)} NGN`} />
+                        )}
+                        {bankSendHasAmountMismatch && (
+                          <Row label={bankSendMismatchLabel} value={`${formatAmount(Math.abs(bankSendAmountDelta), 2)} NGN`} />
+                        )}
+                        {Number.isFinite(bankSendAmountReturned) && bankSendAmountReturned > 0 && (
+                          <Row label="Returned" value={`${formatAmount(bankSendAmountReturned, 2)} NGN`} />
+                        )}
                         <Row label="To" value={`${bankSendDestinationLabel} USDC`} />
                         {paycrestOrder.tx_hash && <Row label="Tx" value={truncateAddress(paycrestOrder.tx_hash, 6)} mono />}
                       </>
                     ) : (
                       <>
                         <Row label="Amount" value={`${formatAmount(paycrestOrder.provider_amount_to_transfer || paycrestOrder.amount_ngn, 2)} ${paycrestOrder.provider_currency || 'NGN'}`} />
+                        {Number.isFinite(bankSendAmountPaid) && bankSendAmountPaid > 0 && (
+                          <Row label="Paid" value={`${formatAmount(bankSendAmountPaid, 2)} NGN`} />
+                        )}
+                        {bankSendHasAmountMismatch && (
+                          <Row label={bankSendMismatchLabel} value={`${formatAmount(Math.abs(bankSendAmountDelta), 2)} NGN`} />
+                        )}
+                        {Number.isFinite(bankSendAmountReturned) && bankSendAmountReturned > 0 && (
+                          <Row label="Returned" value={`${formatAmount(bankSendAmountReturned, 2)} NGN`} />
+                        )}
                         <Row label="Bank" value={paycrestOrder.provider_institution || 'Provider bank'} />
                         <Row label="Account" value={paycrestOrder.provider_account_identifier || ''} mono />
                         <Row label="Name" value={paycrestOrder.provider_account_name || ''} />
@@ -4393,6 +4440,8 @@ export default function PaymentPage() {
                         ? 'The recipient USDC settlement is confirmed.'
                         : bankSendStatus === 'expired'
                         ? 'Do not send money to this account. If you already paid before expiry, Paycrest will use your verified refund account.'
+                        : bankSendHasAmountMismatch
+                        ? `${bankSendMismatchLabel} detected. Do not send another transfer to this account; wait for Paycrest to settle or refund, then contact support if this stays pending for more than 10 minutes.`
                         : bankSendPaymentDetected
                         ? 'Payment is confirmed by Paycrest. Waiting for USDC settlement.'
                         : `Complete before ${new Date(paycrestOrder.valid_until).toLocaleString()}.`}
