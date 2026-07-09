@@ -120,6 +120,8 @@ services:
         sync: false                   # server-side Privy app id; can match VITE_PRIVY_APP_ID
       - key: PRIVY_APP_SECRET
         sync: false                   # server-side Privy secret for authenticated PolyDesk APIs
+      - key: HASH_PAYLINK_POLYDESK_SERVICE_TOKEN
+        sync: false                   # scoped server token for PolyDesk funding checkout creation
       - key: CIRCLE_RECIPIENT_WALLET_KEY_PREFIX
         value: "circle-recipient-wallet"
       - key: RESEND_API_KEY

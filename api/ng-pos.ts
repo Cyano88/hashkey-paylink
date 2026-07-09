@@ -117,6 +117,12 @@ function getBearerToken(req: Request) {
   return auth.match(/^Bearer\s+(.+)$/i)?.[1]
 }
 
+function isPolydeskServiceRequest(req: Request) {
+  const expected = process.env.HASH_PAYLINK_POLYDESK_SERVICE_TOKEN?.trim()
+  const supplied = getBearerToken(req)?.trim()
+  return Boolean(expected && supplied && supplied === expected)
+}
+
 function linkedEmail(user: User) {
   for (const account of user.linkedAccounts ?? []) {
     if (account.type === 'email' && 'address' in account && typeof account.address === 'string') {
@@ -723,13 +729,14 @@ export default async function handler(req: Request, res: Response) {
     }
 
     if (action === 'createBankSend') {
-      const session = await verifiedPrivyUser(req)
-      const ownerId = session.userId
+      const serviceRequest = isPolydeskServiceRequest(req)
+      const session = serviceRequest ? null : await verifiedPrivyUser(req)
+      const ownerId = session?.userId || cleanText(body.owner_id, 'polydesk-service')
       const suppliedOwnerEmail = cleanText(body.owner_email, '').toLowerCase()
-      if (session.email && suppliedOwnerEmail && session.email !== suppliedOwnerEmail) {
+      if (session?.email && suppliedOwnerEmail && session.email !== suppliedOwnerEmail) {
         return res.status(403).json({ ok: false, error: 'Signed-in email does not match this funding profile.' })
       }
-      const ownerEmail = session.email || suppliedOwnerEmail
+      const ownerEmail = session?.email || suppliedOwnerEmail
       const ownerFirstName = cleanText(body.owner_first_name, '')
       const ownerLastName = cleanText(body.owner_last_name, '')
       const displayName = cleanText(body.display_name || body.memo, 'Bank to USDC')
