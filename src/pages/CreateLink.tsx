@@ -272,6 +272,9 @@ function CircleReceiveSelector({
   bankVerifyBusy,
   bankError,
   verifyBankAccount,
+  selectorLabel,
+  addressOptionLabel,
+  addressOptionBody,
 }: {
   selectedNet: ChainKey
   isEvmNet: boolean
@@ -300,6 +303,9 @@ function CircleReceiveSelector({
   bankVerifyBusy: boolean
   bankError: string
   verifyBankAccount: () => void
+  selectorLabel?: string
+  addressOptionLabel?: string
+  addressOptionBody?: string
 }) {
   const circleEmailReceiveIntentKey = 'hashpaylink-circle-email-receive-intent'
   const { authenticated: privyAuthenticated, user: privyUser, logout: logoutPrivy, getAccessToken } = usePrivy()
@@ -313,7 +319,7 @@ function CircleReceiveSelector({
     if (!canReceiveWithEmail) {
       setReceiveMode('email')
       setGeneratedLink('')
-      setCircleRecipientError('Email receiving is not configured for this network. Paste a wallet address instead.')
+      setCircleRecipientError('Circle Pocket receiving is not configured for this network. Paste a wallet address instead.')
       return
     }
 
@@ -327,7 +333,7 @@ function CircleReceiveSelector({
     setCircleRecipientError(null)
 
     if (!privyEmail) {
-      setCircleRecipientError('Sign in with email to receive with the Circle wallet for this network.')
+      setCircleRecipientError('Sign in with email to receive with Circle Pocket for this network.')
       return
     }
 
@@ -473,7 +479,7 @@ function CircleReceiveSelector({
   return (
     <div className="space-y-1.5">
       <label className="text-sm font-medium text-gray-700 dark:text-gray-200">
-        {receiveMode === 'bank' ? 'Bank payout' : 'Receive to'}
+        {selectorLabel ?? (receiveMode === 'bank' ? 'Bank payout' : 'Receive to')}
       </label>
       {receiveMode === 'bank' && !privyAuthenticated && (
         <PrivyConnectButton
@@ -506,9 +512,9 @@ function CircleReceiveSelector({
         >
           <span className="flex items-center gap-2 text-sm font-semibold">
             <Wallet className="h-4 w-4 text-gray-500" />
-            Paste wallet address
+            {addressOptionLabel ?? 'Paste wallet address'}
           </span>
-          <span className="mt-1 block text-[11px] text-gray-400">Any wallet or exchange</span>
+          <span className="mt-1 block text-[11px] text-gray-400">{addressOptionBody ?? 'Any wallet or exchange'}</span>
         </button>
         {canReceiveWithEmail && !privyAuthenticated ? (
           <PrivyConnectButton
@@ -522,10 +528,10 @@ function CircleReceiveSelector({
           >
             <span className="flex items-center gap-2 text-sm font-semibold">
               <Mail className="h-4 w-4 text-blue-500" />
-              Receive with email
+              Receive with Circle Pocket
             </span>
             <span className="mt-1 block text-[11px] text-gray-400">
-              Single-network Circle wallet
+              Email-backed Circle wallet
             </span>
           </PrivyConnectButton>
         ) : canReceiveWithEmail && (
@@ -543,10 +549,10 @@ function CircleReceiveSelector({
           >
             <span className="flex items-center gap-2 text-sm font-semibold">
               {circleRecipientPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4 text-blue-500" />}
-              Receive with email
+              Receive with Circle Pocket
             </span>
             <span className="mt-1 block text-[11px] text-gray-400">
-              Single-network Circle wallet
+              Email-backed Circle wallet
             </span>
           </button>
         )}
@@ -663,7 +669,7 @@ function CircleReceiveSelector({
                   ? truncateAddress(solanaAddr, 8)
                   : isEvmNet && evmValid
                   ? truncateAddress(evmAddr, 8)
-                  : privyEmail || 'Sign in with email to continue'}
+                  : privyEmail || 'Sign in to open Circle Pocket'}
               </p>
               {(selectedNet === 'solana' ? solanaValid : isEvmNet && evmValid) && (
                 <p className="mt-1 text-[11px] font-medium text-gray-400 dark:text-gray-500">
@@ -696,7 +702,7 @@ function CircleReceiveSelector({
       )}
       {!canReceiveWithEmail && selectedNet === 'solana' && (
         <p className="text-xs text-gray-400 dark:text-gray-500">
-          Email receiving for Solana is not enabled here yet.
+          Circle Pocket receiving for Solana is not enabled here yet.
         </p>
       )}
     </div>
@@ -1200,6 +1206,8 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     setPaymentFlow('bank-send')
     setReceiveMode('paste')
     setPaymentMode('personal')
+    onNetworkSelect('base')
+    setBankSendNetwork('base')
     setMultiChainMode(false)
     setAccessMode(false)
     setPaymentMenuOpen(false)
@@ -3416,7 +3424,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                 Back
               </button>
 
-          {!accessMode && !multiChainMode && !isBankSend && (
+          {!accessMode && !multiChainMode && !isBankReceive && (
             <CircleReceiveSelector
               selectedNet={selectedNet}
               isEvmNet={isEvmNet}
@@ -3445,6 +3453,9 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               bankVerifyBusy={posBankVerifyBusy}
               bankError={posError}
               verifyBankAccount={verifyPosBankAccount}
+              selectorLabel={isBankSend ? 'USDC destination' : undefined}
+              addressOptionLabel={isBankSend ? 'Receive with address' : undefined}
+              addressOptionBody={isBankSend ? 'Send USDC to any EVM wallet you control.' : undefined}
             />
           )}
 
@@ -3472,9 +3483,9 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
           {isBankSend && (
             <div className="space-y-3 rounded-xl border border-gray-100 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
               <div>
-                <p className="text-[11px] font-bold uppercase tracking-widest text-gray-400">USDC destination</p>
+                <p className="text-[11px] font-bold uppercase tracking-widest text-gray-400">Settlement network</p>
                 <p className="mt-0.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                  Payer sends Naira by bank transfer. Paycrest settles USDC to this wallet after confirmation.
+                  Payer sends Naira by bank transfer. Paycrest settles USDC to the selected destination after confirmation.
                 </p>
               </div>
 
@@ -3503,48 +3514,6 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                   </div>
                 </div>
               </div>
-
-              <fieldset className="space-y-1.5">
-                <label className="flex items-center justify-between">
-                  <span className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
-                    Recipient wallet address
-                  </span>
-                  <span className="hidden text-[11px] font-medium text-gray-400 sm:inline">Starts with 0x</span>
-                </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    placeholder="0x... USDC recipient"
-                    value={evmAddr}
-                    onChange={(e) => { setEvmAddr(e.target.value.trim()); setGeneratedLink('') }}
-                    spellCheck={false}
-                    autoComplete="off"
-                    className={cn(
-                      'w-full rounded-xl border bg-gray-50/60 px-3.5 py-2.5 font-mono text-sm',
-                      'placeholder:text-gray-400 transition-all focus:bg-white focus:outline-none focus:ring-2 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-100 dark:placeholder:text-gray-600 dark:focus:bg-white/[0.06]',
-                      evmDirty && !evmValid
-                        ? 'border-red-300 pr-10 text-red-600 focus:ring-red-100 dark:border-red-400/40 dark:text-red-300 dark:focus:ring-red-400/10'
-                        : evmValid
-                        ? 'border-emerald-300 text-gray-900 focus:ring-emerald-100 dark:border-emerald-400/40 dark:text-gray-100 dark:focus:ring-emerald-400/10'
-                        : 'border-gray-200 text-gray-900 focus:border-[#0071E3]/40 focus:ring-[#0071E3]/15 dark:border-white/10 dark:text-gray-100 dark:focus:border-blue-400/40 dark:focus:ring-blue-400/10',
-                    )}
-                  />
-                  {evmDirty && !evmValid && (
-                    <XCircle className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-red-400" />
-                  )}
-                </div>
-                {evmDirty && !evmValid && (
-                  <p className="flex items-center gap-1 text-xs text-red-500">
-                    <Info className="h-3 w-3" /> Enter a valid EVM wallet address that starts with 0x
-                  </p>
-                )}
-                {evmValid && (
-                  <p className="flex min-w-0 items-center gap-1.5 text-xs text-emerald-600">
-                    <CheckCheck className="h-3 w-3 shrink-0" />
-                    <span className="truncate">{truncateAddress(evmAddr, 8)}</span>
-                  </p>
-                )}
-              </fieldset>
             </div>
           )}
 
@@ -3602,7 +3571,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                   <span className="block text-sm font-semibold text-gray-800 dark:text-gray-100">Let payer choose network</span>
                   <span className="block text-[11px] font-medium text-gray-400 dark:text-gray-500">
                     {receiveMode === 'email'
-                      ? 'Email receive uses the selected network.'
+                      ? 'Circle Pocket uses the selected network.'
                       : multiChainMode
                       ? 'Add addresses per network.'
                       : 'Use one selected network.'}
@@ -3628,10 +3597,10 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
             </div>
           )}
 
-          {(isEvmNet || multiChainMode) && !isBankReceive && !isBankSend && (multiChainMode || receiveMode === 'paste') && <fieldset className="space-y-1.5">
+          {(isEvmNet || multiChainMode) && !isBankReceive && (multiChainMode || receiveMode === 'paste') && <fieldset className="space-y-1.5">
             <label className="flex items-center justify-between">
               <span className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
-                {multiChainMode ? 'EVM wallet address' : 'Wallet address'}
+                {isBankSend ? 'Recipient wallet address' : multiChainMode ? 'EVM wallet address' : 'Wallet address'}
               </span>
               <span className="hidden text-[11px] font-medium text-gray-400 sm:inline">
                 {multiChainMode ? 'Base · Arc Testnet · Arbitrum' : 'Starts with 0x'}

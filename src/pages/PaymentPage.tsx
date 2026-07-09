@@ -4126,7 +4126,7 @@ export default function PaymentPage() {
               <div className="mt-3 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-[11px] font-medium text-gray-500 dark:border-white/10 dark:bg-white/[0.05] dark:text-gray-300">
                 {paycrestOrder
                   ? <>Ready: pay {formatAmount(paycrestOrder.amount_usdc, meta.decimals)} Base USDC from your Circle wallet.</>
-                  : <>Sign in with email, enter your name, then pay from your Circle wallet.</>}
+                  : <>Open Circle Pocket, enter your name, then pay from your Circle wallet.</>}
               </div>
               {paycrestStatusText && (
                 <p className="mt-2 text-[11px] font-medium text-emerald-700 dark:text-emerald-300">{paycrestStatusText}</p>
