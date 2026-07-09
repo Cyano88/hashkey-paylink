@@ -48,7 +48,7 @@ import {
 import { QRCodeCanvas } from 'qrcode.react'
 import { FX_CURRENCIES, getFxMeta, formatLocalAmt, fetchFxRate } from '../lib/fx'
 import { isAddress, parseUnits, type Address } from 'viem'
-import { cn, truncateAddress, formatAmount, copyToClipboard } from '../lib/utils'
+import { cn, truncateAddress, formatAmount, formatNgnAmount, copyToClipboard } from '../lib/utils'
 import { useSolana }   from '../lib/SolanaContext'
 import { CHAIN_META, type ChainKey } from '../lib/chains'
 import { isValidSolanaAddress } from '../lib/solanaAddress'
@@ -4316,8 +4316,8 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Preview</p>
                   <div className="flex items-baseline gap-1.5">
                     {flexAmount
-                      ? <span className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1 text-sm font-semibold text-gray-800 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-100"><Sliders className="h-3.5 w-3.5" />Flexible</span>
-                      : <><span className="text-2xl font-bold text-gray-900 dark:text-white">{formatAmount(amt, 6)}</span><span className="text-sm font-medium text-gray-500 dark:text-gray-400">USDC</span></>
+                      ? <span className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1 text-sm font-semibold text-gray-800 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-100"><Sliders className="h-3.5 w-3.5" />{isBankReceive || isBankSend ? 'Flexible NGN' : 'Flexible'}</span>
+                      : <><span className="text-2xl font-bold text-gray-900 dark:text-white">{isBankReceive || isBankSend ? formatNgnAmount(amt) : formatAmount(amt, 6)}</span><span className="text-sm font-medium text-gray-500 dark:text-gray-400">{isBankReceive || isBankSend ? 'NGN' : 'USDC'}</span></>
                     }
                   </div>
                   <div className="space-y-1">

@@ -30,6 +30,16 @@ export function formatAmount(amount: string | number, decimals = 18): string {
   })
 }
 
+/** Format Naira amounts shown to bank-transfer payers. */
+export function formatNgnAmount(amount: string | number): string {
+  const num = typeof amount === 'string' ? parseFloat(amount) : amount
+  if (!Number.isFinite(num) || num <= 0) return ''
+  return num.toLocaleString('en-NG', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  })
+}
+
 /** Encode an ERC-20 transfer call with optional memo appended to calldata.
  *  The memo bytes are appended AFTER the standard ABI-encoded transfer args —
  *  they are stored on-chain in the transaction input data but ignored by the

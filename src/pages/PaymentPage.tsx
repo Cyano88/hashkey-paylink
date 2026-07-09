@@ -44,7 +44,7 @@ import {
   FACTORY_V2_ADDRESSES,
 } from '../lib/router'
 import { useSolana }   from '../lib/SolanaContext'
-import { cn, truncateAddress, formatAmount, memoToHex, copyToClipboard } from '../lib/utils'
+import { cn, truncateAddress, formatAmount, formatNgnAmount, memoToHex, copyToClipboard } from '../lib/utils'
 import { getFxMeta, formatLocalAmt, fetchFxRate } from '../lib/fx'
 import { getCirclePaymasterConfig } from '../lib/circlePaymaster'
 import { sendCirclePaymasterPayment } from '../lib/circlePaymasterPayment'
@@ -1002,6 +1002,8 @@ export default function PaymentPage() {
     !!bankSendLinkId &&
     isAddress(resolvedEvm) &&
     (isFlex || (!Number.isNaN(Number.parseFloat(ngPosAmountNgn)) && Number.parseFloat(ngPosAmountNgn) > 0))
+  const bankSendRequestedNgn = isBankSendPayment ? (isFlex ? localAmt.trim() : ngPosAmountNgn.trim()) : ''
+  const bankSendRequestedNgnLabel = formatNgnAmount(bankSendRequestedNgn)
   const isValidParams =
     hasBankSendRecipient ||
     (
@@ -3611,7 +3613,7 @@ export default function PaymentPage() {
 
           <div className="p-6 space-y-4">
             <div className="divide-y divide-gray-100 rounded-xl border border-gray-100 bg-gray-50/60 overflow-hidden">
-              <Row label="Amount"    value={`${formatAmount(payableAmt, meta.decimals)} ${meta.asset}`} mono={false} />
+              <Row label="Amount"    value={isBankSendPayment ? `${bankSendRequestedNgnLabel || 'Enter amount'} NGN` : `${formatAmount(payableAmt, meta.decimals)} ${meta.asset}`} mono={false} />
               {isNgPosPaycrestOfframp && (
                 <Row label="Payout" value={payoutBankLabel ? `${payoutLabel} - ${payoutBankLabel}` : payoutLabel} mono={false} />
               )}
@@ -3995,11 +3997,11 @@ export default function PaymentPage() {
           ) : (
             <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-widest text-gray-400">Payment Request</p>
           )}
-          {!isFlex && (
+          {(!isFlex || isBankSendPayment) && (
             <>
               <div className="flex items-baseline justify-center gap-2">
-                <span className="text-[2.75rem] font-bold leading-none tracking-tight text-gray-900 dark:text-white">{formatAmount(payableAmt, meta.decimals)}</span>
-                <span className="text-xl font-semibold text-gray-400">{meta.asset}</span>
+                <span className="text-[2.75rem] font-bold leading-none tracking-tight text-gray-900 dark:text-white">{isBankSendPayment ? (bankSendRequestedNgnLabel || 'Enter amount') : formatAmount(payableAmt, meta.decimals)}</span>
+                <span className="text-xl font-semibold text-gray-400">{isBankSendPayment ? 'NGN' : meta.asset}</span>
               </div>
               {memo && !isAgentOrWalletFunding && (
                 <p className="mt-1 text-sm font-medium text-gray-500 dark:text-gray-300">
