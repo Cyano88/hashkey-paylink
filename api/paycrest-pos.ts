@@ -21,13 +21,20 @@ export type PaycrestOrderRecord = {
   payer_email?: string
   payer_wallet?: string
   payer_name?: string
-  source?: 'ngpos' | 'bank-receive'
+  source?: 'ngpos' | 'bank-receive' | 'bank-send'
   tx_hash?: string
   status: string
   valid_until?: string
   bank_name?: string
   bank_last4?: string
   bank_account_name?: string
+  destination_network?: string
+  destination_address?: string
+  provider_institution?: string
+  provider_account_identifier?: string
+  provider_account_name?: string
+  provider_amount_to_transfer?: string
+  provider_currency?: string
   created_at: string
   updated_at: string
   raw?: unknown
@@ -281,6 +288,98 @@ export async function createPaycrestOfframpOrder(input: {
     bank_name: input.bankName,
     bank_last4: input.accountNumber.slice(-4),
     bank_account_name: input.accountName,
+    created_at: now,
+    updated_at: now,
+    raw: data,
+  }
+  if (!record.paycrest_order_id) throw new Error('Paycrest did not return an order id.')
+
+  const store = await readStore()
+  store.orders[record.intent_id] = record
+  store.orders[record.paycrest_order_id] = record
+  await writeStore(store)
+  return record
+}
+
+export async function createPaycrestOnrampOrder(input: {
+  intentId: string
+  merchantId: string
+  amountNgn: string
+  destinationNetwork: string
+  destinationAddress: string
+  refundBankCode: string
+  refundAccountNumber: string
+  refundAccountName: string
+  refundBankName?: string
+  payerEmail?: string
+  payerName?: string
+}) {
+  if (!isAddress(input.destinationAddress)) throw new Error('A valid USDC recipient wallet is required.')
+  const network = input.destinationNetwork.trim().toLowerCase()
+  if (network !== 'base' && network !== 'polygon') throw new Error('Bank-to-USDC currently supports Base and Polygon USDC.')
+  const reference = `banksend-${input.intentId}`.slice(0, 90)
+  const senderFeePercent = process.env.PAYCREST_SENDER_FEE_PERCENT?.trim()
+  const payload: Record<string, unknown> = {
+    amount: input.amountNgn,
+    amountIn: 'fiat',
+    source: {
+      type: 'fiat',
+      currency: 'NGN',
+      refundAccount: {
+        institution: input.refundBankCode,
+        accountIdentifier: input.refundAccountNumber,
+        accountName: input.refundAccountName,
+      },
+    },
+    destination: {
+      type: 'crypto',
+      currency: 'USDC',
+      recipient: {
+        address: input.destinationAddress,
+        network,
+      },
+    },
+    reference,
+  }
+  if (senderFeePercent) payload.senderFeePercent = senderFeePercent
+
+  const data = await paycrestFetch<any>('/v2/sender/orders', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+  const providerAccount = data?.providerAccount ?? data?.provider_account ?? {}
+  const institution = firstText(providerAccount.institution, providerAccount.bankName, providerAccount.bank_name)
+  const accountIdentifier = firstText(providerAccount.accountIdentifier, providerAccount.account_identifier, providerAccount.accountNumber, providerAccount.account_number)
+  const accountName = firstText(providerAccount.accountName, providerAccount.account_name)
+  const amountToTransfer = decimalText(providerAccount.amountToTransfer ?? providerAccount.amount_to_transfer) || decimalText(input.amountNgn)
+  if (!institution || !accountIdentifier || !accountName || !amountToTransfer) {
+    throw new Error('Paycrest did not return complete bank transfer instructions.')
+  }
+
+  const now = new Date().toISOString()
+  const record: PaycrestOrderRecord = {
+    intent_id: input.intentId,
+    paycrest_order_id: firstText(data?.id, data?.orderId, data?.order_id),
+    merchant_id: input.merchantId,
+    amount_ngn: input.amountNgn,
+    amount_usdc: firstText(data?.amount, data?.amountOut, data?.amount_out),
+    receive_address: input.destinationAddress,
+    refund_address: '',
+    payer_email: input.payerEmail,
+    payer_name: input.payerName,
+    source: 'bank-send',
+    status: firstText(data?.status, 'initiated'),
+    valid_until: firstText(providerAccount.validUntil, providerAccount.valid_until),
+    bank_name: input.refundBankName,
+    bank_last4: input.refundAccountNumber.slice(-4),
+    bank_account_name: input.refundAccountName,
+    destination_network: network,
+    destination_address: input.destinationAddress,
+    provider_institution: institution,
+    provider_account_identifier: accountIdentifier,
+    provider_account_name: accountName,
+    provider_amount_to_transfer: amountToTransfer,
+    provider_currency: firstText(providerAccount.currency, 'NGN'),
     created_at: now,
     updated_at: now,
     raw: data,

@@ -251,9 +251,9 @@ function archiveKey(entry: PaymentEntry) {
 }
 
 function archiveMetadata(entry: PaymentEntry, customerWallet: string) {
-  if (entry.source !== 'ngpos' && entry.source !== 'bank-receive') return undefined
+  if (entry.source !== 'ngpos' && entry.source !== 'bank-receive' && entry.source !== 'bank-send') return undefined
   return {
-    type: entry.source === 'bank-receive' ? 'nigerian_bank_receive_payment' : 'nigerian_retail_pos_payment',
+    type: entry.source === 'bank-send' ? 'nigerian_bank_send_onramp' : entry.source === 'bank-receive' ? 'nigerian_bank_receive_payment' : 'nigerian_retail_pos_payment',
     merchantId: entry.merchantId,
     amountNgn: entry.amountNgn,
     amountUsdc: entry.amount,
@@ -263,13 +263,13 @@ function archiveMetadata(entry: PaymentEntry, customerWallet: string) {
 }
 
 function archiveRecordFor(entry: PaymentEntry, payerWallet: string): PaymentEntry {
-  if (entry.source !== 'ngpos' && entry.source !== 'bank-receive') return entry
+  if (entry.source !== 'ngpos' && entry.source !== 'bank-receive' && entry.source !== 'bank-send') return entry
   return {
     eventId: entry.eventId,
     txHash: entry.txHash,
     chain: entry.chain,
     payer: payerWallet || entry.payer,
-    memo: entry.source === 'bank-receive' ? 'Bank receive payment' : 'Retail POS payment',
+    memo: entry.source === 'bank-send' ? 'Bank send funding' : entry.source === 'bank-receive' ? 'Bank receive payment' : 'Retail POS payment',
     amount: entry.amount,
     requestedAmount: entry.requestedAmount,
     ts: entry.ts,

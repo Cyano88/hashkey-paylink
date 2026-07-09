@@ -43,6 +43,7 @@ import {
   UserRound,
   Briefcase,
   Landmark,
+  Banknote,
   Pencil,
 } from 'lucide-react'
 import { QRCodeCanvas } from 'qrcode.react'
@@ -139,9 +140,10 @@ function PaymentHubMark({ className }: { className?: string }) {
 type VaultStep = 'idle' | 'ready'
 type ReceiveMode = 'email' | 'paste' | 'bank'
 type PaymentMode = 'personal' | 'business'
-type PaymentFlow = 'usdc' | 'bank'
+type PaymentFlow = 'usdc' | 'bank' | 'bank-send'
 type PaymentTab = PaymentMode | PaymentFlow | 'pos' | 'bills'
 type PosNetwork = 'base' | 'arbitrum' | 'arc' | 'solana'
+type BankSendNetwork = 'polygon' | 'base'
 type CirclePocketView = 'chooser' | 'main' | 'x402'
 type CirclePocketTab = 'balance' | 'fund' | 'withdraw' | 'activity'
 type PosCountry = 'NG' | 'KE' | 'GH'
@@ -211,6 +213,10 @@ const POS_NETWORK_OPTIONS: Array<{ key: PosNetwork; label: string; badge?: strin
 ]
 
 const PAYCREST_POS_NETWORK_OPTIONS = POS_NETWORK_OPTIONS.filter((network) => network.key === 'base')
+
+const PAYCREST_ONRAMP_NETWORK_OPTIONS: Array<{ key: BankSendNetwork; label: string }> = [
+  { key: 'base', label: 'Base' },
+]
 
 const POS_COUNTRIES: Array<{ key: PosCountry; name: string; label: string; status: 'live' | 'soon'; copy: string }> = [
   { key: 'NG', name: 'Nigeria', label: 'Live', status: 'live', copy: 'Payers use Base USDC. You receive Naira to a verified bank account.' },
@@ -738,6 +744,10 @@ function LocalCurrencyProfileCard({
   error,
   editing,
   bankAccountName,
+  title = 'Your payout profile',
+  body = 'Used for receipts, payout support, and matching bank payment records.',
+  savedFallback = 'Payout profile',
+  saveLabel = 'Save payout profile',
   onDraftChange,
   onSave,
   onEdit,
@@ -750,6 +760,10 @@ function LocalCurrencyProfileCard({
   error: string
   editing: boolean
   bankAccountName?: string
+  title?: string
+  body?: string
+  savedFallback?: string
+  saveLabel?: string
   onDraftChange: (next: LocalCurrencyProfile) => void
   onSave: () => void
   onEdit: () => void
@@ -771,7 +785,7 @@ function LocalCurrencyProfileCard({
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <p className="truncate text-sm font-bold text-gray-950 dark:text-white">{savedName || 'Payout profile'}</p>
+              <p className="truncate text-sm font-bold text-gray-950 dark:text-white">{savedName || savedFallback}</p>
               <span className="shrink-0 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-300">
                 Saved
               </span>
@@ -781,7 +795,7 @@ function LocalCurrencyProfileCard({
           <button
             type="button"
             onClick={onEdit}
-            aria-label="Edit payout profile"
+            aria-label={`Edit ${savedFallback.toLowerCase()}`}
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-gray-600 transition-all hover:bg-gray-100 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300 dark:hover:bg-white/[0.1]"
           >
             <Pencil className="h-4 w-4" />
@@ -795,9 +809,9 @@ function LocalCurrencyProfileCard({
     <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-sm font-bold text-gray-950 dark:text-white">Your payout profile</p>
+          <p className="text-sm font-bold text-gray-950 dark:text-white">{title}</p>
           <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-            Used for receipts, payout support, and matching bank payment records.
+            {body}
           </p>
         </div>
         {complete && editing && (
@@ -862,7 +876,7 @@ function LocalCurrencyProfileCard({
           className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-gray-950 px-4 py-3 text-sm font-bold text-white transition-all hover:bg-black active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-100"
         >
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCheck className="h-4 w-4" />}
-          {dirty ? 'Save changes' : 'Save payout profile'}
+          {dirty ? 'Save changes' : saveLabel}
         </button>
       )}
     </div>
@@ -877,6 +891,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   const initialProductTarget = (productParam ?? '').toLowerCase()
   const initialPaymentTab = (paymentTabParam ?? '').toLowerCase()
   const startsInBankPayment = initialProductTarget === 'payment' && initialPaymentTab === 'bank'
+  const startsInBankSendPayment = initialProductTarget === 'payment' && initialPaymentTab === 'bank-send'
   const startsInPosPayment = initialProductTarget === 'payment' && initialPaymentTab === 'pos'
   const startsInBillsPayment = initialProductTarget === 'payment' && initialPaymentTab === 'bills'
   const startsInProduct = Boolean(initialProductTarget) || initialProduct === 'polymarket' || window.location.pathname === '/polymarket'
@@ -904,8 +919,9 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   const [accessView,     setAccessView]     = useState<AccessView>('overview')
   const [agentUrl,       setAgentUrl]       = useState('')
   const [agentUrlStatus, setAgentUrlStatus] = useState<'idle' | 'checking' | 'ok' | 'incompatible'>('idle')
-  const [paymentFlow,    setPaymentFlow]    = useState<PaymentFlow>(startsInBankPayment ? 'bank' : 'usdc')
+  const [paymentFlow,    setPaymentFlow]    = useState<PaymentFlow>(startsInBankPayment ? 'bank' : startsInBankSendPayment ? 'bank-send' : 'usdc')
   const [receiveMode,    setReceiveMode]    = useState<ReceiveMode>(startsInBankPayment ? 'bank' : 'paste')
+  const [bankSendNetwork, setBankSendNetwork] = useState<BankSendNetwork>('base')
   const [circlePocketMode, setCirclePocketMode] = useState(false)
   const [circlePocketView, setCirclePocketView] = useState<CirclePocketView>('chooser')
   const [circlePocketTab, setCirclePocketTab] = useState<CirclePocketTab>('balance')
@@ -1077,15 +1093,21 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   const effectiveEventMode = accessMode || eventMode
 
   const isBankReceive = paymentFlow === 'bank' || receiveMode === 'bank'
+  const isBankSend = paymentFlow === 'bank-send'
   const hasAddress = isBankReceive
     ? Boolean(posBankVerified && posBankCode && posBankAccountName)
+    : isBankSend
+    ? evmValid
     : multiChainMode
     ? (evmValid || solanaValid)
     : (selectedNet === 'solana' ? solanaValid : evmValid)
 
   const canGenerateBankReceive = isBankReceive && (flexAmount || isValidAmt) && hasAddress && privyAuthenticated && localCurrencyProfileReady
+  const canGenerateBankSend = isBankSend && (flexAmount || isValidAmt) && hasAddress && privyAuthenticated && localCurrencyProfileReady
   const canGenerate = isBankReceive
     ? canGenerateBankReceive
+    : isBankSend
+    ? canGenerateBankSend
     : (flexAmount || isValidAmt) && hasAddress && (!accessMode || agentUrlStatus === 'ok')
 
   const canReceiveWithEmail =
@@ -1172,6 +1194,25 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     setCopied(false)
     setVaultStep('idle')
     if (!posCountry) setPosCountry('NG')
+  }
+
+  function activateBankSend() {
+    setPaymentFlow('bank-send')
+    setReceiveMode('paste')
+    setPaymentMode('personal')
+    setMultiChainMode(false)
+    setAccessMode(false)
+    setPaymentMenuOpen(false)
+    setCirclePocketMode(false)
+    setPosMode(false)
+    setBillsMode(false)
+    setStreamMode(false)
+    setPolymarketMode(false)
+    setProductHubOpen(false)
+    setGeneratedLink('')
+    setCopied(false)
+    setVaultStep('idle')
+    setPosError('')
   }
 
   function openHubMode(push = true) {
@@ -1413,6 +1454,8 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
       }
       if (tab === 'bank') {
         activateBankReceive()
+      } else if (tab === 'bank-send') {
+        activateBankSend()
       } else {
         setPaymentFlow('usdc')
         setReceiveMode('paste')
@@ -1464,6 +1507,8 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
             openPaymentMode(false)
             if (tab === 'bank') {
               activateBankReceive()
+            } else if (tab === 'bank-send') {
+              activateBankSend()
             } else {
               setPaymentFlow('usdc')
               setReceiveMode('paste')
@@ -2146,10 +2191,68 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     }
   }
 
+  async function createBankSendLink() {
+    if (!canGenerateBankSend) return
+    setPosBusy(true)
+    setPosError('')
+    try {
+      const token = await getAccessToken()
+      if (!token) throw new Error('Sign in again to create bank-to-USDC links.')
+      const response = await fetch('/api/ng-pos', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          action: 'createBankSend',
+          owner_id: String(privyUser?.id ?? ''),
+          owner_email: privyEmail,
+          owner_first_name: localCurrencyProfile?.firstName || localCurrencyProfileDraft.firstName,
+          owner_last_name: localCurrencyProfile?.lastName || localCurrencyProfileDraft.lastName,
+          display_name: memo.trim() || 'Bank to USDC',
+          amount: flexAmount ? '' : amt,
+          flexible_amount: flexAmount,
+          network: bankSendNetwork,
+          destination_address: evmAddr.trim(),
+          client_origin: window.location.origin,
+        }),
+      })
+      const data = await response.json().catch(() => undefined) as {
+        ok?: boolean
+        error?: string
+        link?: {
+          payment_url?: string
+          dashboard_url?: string
+        }
+      } | undefined
+      if (!response.ok || !data?.ok || !data.link?.payment_url) throw new Error(data?.error || 'Could not create bank-to-USDC link.')
+      const link = data.link.payment_url
+      setGeneratedLink(link)
+      setVaultStep('ready')
+      const entry: SavedEvent = {
+        dashboardUrl: data.link.dashboard_url || `${window.location.origin}/dashboard?src=ngpos`,
+        paymentUrl: link,
+        eventName: memo.trim() || 'Bank to USDC',
+        ts: Date.now(),
+      }
+      localStorage.setItem('hp_last_event', JSON.stringify(entry))
+      setSavedEvent(entry)
+    } catch (error) {
+      setPosError(error instanceof Error ? error.message : 'Could not create bank-to-USDC link.')
+    } finally {
+      setPosBusy(false)
+    }
+  }
+
   function handleGenerate() {
     if (!canGenerate) return
     if (isBankReceive) {
       void createBankReceiveLink()
+      return
+    }
+    if (isBankSend) {
+      void createBankSendLink()
       return
     }
     const link = buildLink()
@@ -2221,6 +2324,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   const paymentTabs: Array<{ key: PaymentTab; title: string; body: string; icon: typeof UserRound; badge?: string }> = [
     { key: 'usdc', title: 'Receive USDC', body: 'Anyone pays USDC. You receive USDC in your wallet.', icon: Wallet, badge: 'No account' },
     { key: 'bank', title: 'Receive to Bank', body: 'Anyone pays Base USDC. You receive Naira in your bank account.', icon: Landmark, badge: 'Sign-in required' },
+    { key: 'bank-send', title: 'Send from Bank', body: 'Payer sends Naira from their bank. Recipient receives USDC.', icon: Banknote, badge: 'Sign-in required' },
     { key: 'pos', title: 'POS', body: 'Create a static checkout QR for in-store payments.', icon: Store, badge: 'Sign-in required' },
     { key: 'bills', title: 'Bills', body: 'Pay bills and keep receipts in local currency history.', icon: Landmark, badge: 'Sign-in required' },
   ] as const
@@ -2274,6 +2378,11 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
       url.searchParams.set('product', 'payment')
       url.searchParams.set('tab', 'bank')
       window.location.assign(`${url.pathname}${url.search}${url.hash}`)
+      return
+    }
+    if (tab === 'bank-send') {
+      pushPaymentTabHistory('bank-send')
+      activateBankSend()
       return
     }
     if (tab === 'pos') {
@@ -2334,7 +2443,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
           </span>
         )}
         <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-[2.25rem]">
-          {productHubOpen ? 'What do you want to do?' : paymentMenuOpen ? 'Choose payment flow' : circlePocketMode ? 'Circle Pocket' : polymarketMode ? 'PolyDesk' : posMode ? 'Retail POS' : billsMode ? 'Bills' : streamMode ? 'HashpayStream' : accessMode ? accessView === 'wallet' ? 'x402 Wallet Manager' : 'x402 Wallet Manager' : paymentFlow === 'bank' ? 'Receive to Bank' : 'Receive USDC'}
+          {productHubOpen ? 'What do you want to do?' : paymentMenuOpen ? 'Choose payment flow' : circlePocketMode ? 'Circle Pocket' : polymarketMode ? 'PolyDesk' : posMode ? 'Retail POS' : billsMode ? 'Bills' : streamMode ? 'HashpayStream' : accessMode ? accessView === 'wallet' ? 'x402 Wallet Manager' : 'x402 Wallet Manager' : paymentFlow === 'bank' ? 'Receive to Bank' : paymentFlow === 'bank-send' ? 'Send from Bank' : 'Receive USDC'}
         </h1>
         <p className="mt-2 text-[15px] text-gray-500 text-balance dark:text-gray-400">
           {productHubOpen
@@ -2357,7 +2466,9 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                   : 'Fund your Circle wallet, activate x402 service balance, then use paid services.'
                 : paymentFlow === 'bank'
                   ? 'Create a Naira payout link. Payer pays Base USDC.'
-                  : 'Create a secure USDC PayLink in seconds.'}
+                  : paymentFlow === 'bank-send'
+                    ? 'Create a bank-to-USDC funding link. Payer sends Naira, recipient receives USDC.'
+                    : 'Create a secure USDC PayLink in seconds.'}
         </p>
 
         {/* ── Chain preview toggle — hidden in multi-chain mode (all chains active) */}
@@ -3305,7 +3416,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                 Back
               </button>
 
-          {!accessMode && !multiChainMode && (
+          {!accessMode && !multiChainMode && !isBankSend && (
             <CircleReceiveSelector
               selectedNet={selectedNet}
               isEvmNet={isEvmNet}
@@ -3337,7 +3448,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
             />
           )}
 
-          {isBankReceive && privyAuthenticated && (
+          {(isBankReceive || isBankSend) && privyAuthenticated && (
             <LocalCurrencyProfileCard
               profile={localCurrencyProfile}
               draft={localCurrencyProfileDraft}
@@ -3345,7 +3456,11 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               busy={localCurrencyProfileBusy}
               error={localCurrencyProfileError}
               editing={localCurrencyProfileEditing}
-              bankAccountName={posBankAccountName}
+              bankAccountName={isBankReceive ? posBankAccountName : undefined}
+              title={isBankSend ? 'Your funding profile' : undefined}
+              body={isBankSend ? 'Used for bank transfer receipts, refund context, and support records.' : undefined}
+              savedFallback={isBankSend ? 'Funding profile' : undefined}
+              saveLabel={isBankSend ? 'Save funding profile' : undefined}
               onDraftChange={setLocalCurrencyProfileDraft}
               onSave={saveLocalCurrencyProfile}
               onEdit={editLocalCurrencyProfile}
@@ -3354,7 +3469,93 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
           )}
 
           {/* ── EVM Address — Base / HashKey / Arc ───────────────────── */}
-          {!accessMode && !isBankReceive && (
+          {isBankSend && (
+            <div className="space-y-3 rounded-xl border border-gray-100 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-widest text-gray-400">USDC destination</p>
+                <p className="mt-0.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                  Payer sends Naira by bank transfer. Paycrest settles USDC to this wallet after confirmation.
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-gray-200 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.04]">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">Recipient network</p>
+                    <p className="mt-0.5 text-[11px] text-gray-400 dark:text-gray-500">Bank send supports Base USDC first. Polygon is reserved for the PolyDesk bridge rollout.</p>
+                  </div>
+                  <div className="relative shrink-0">
+                    <select
+                      value={bankSendNetwork}
+                      onChange={(event) => {
+                        setBankSendNetwork(event.target.value as BankSendNetwork)
+                        setGeneratedLink('')
+                      }}
+                      className="min-w-[118px] appearance-none rounded-xl border border-gray-900 bg-gray-950 px-3 py-2 pr-8 text-xs font-bold text-white outline-none transition-all dark:border-white dark:bg-white dark:text-gray-950"
+                    >
+                      {PAYCREST_ONRAMP_NETWORK_OPTIONS.map((network) => (
+                        <option key={network.key} value={network.key}>
+                          {network.label}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/70 dark:text-gray-500" />
+                  </div>
+                </div>
+              </div>
+
+              <fieldset className="space-y-1.5">
+                <label className="flex items-center justify-between">
+                  <span className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
+                    Recipient wallet address
+                  </span>
+                  <span className="hidden text-[11px] font-medium text-gray-400 sm:inline">Starts with 0x</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="0x... USDC recipient"
+                    value={evmAddr}
+                    onChange={(e) => { setEvmAddr(e.target.value.trim()); setGeneratedLink('') }}
+                    spellCheck={false}
+                    autoComplete="off"
+                    className={cn(
+                      'w-full rounded-xl border bg-gray-50/60 px-3.5 py-2.5 font-mono text-sm',
+                      'placeholder:text-gray-400 transition-all focus:bg-white focus:outline-none focus:ring-2 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-100 dark:placeholder:text-gray-600 dark:focus:bg-white/[0.06]',
+                      evmDirty && !evmValid
+                        ? 'border-red-300 pr-10 text-red-600 focus:ring-red-100 dark:border-red-400/40 dark:text-red-300 dark:focus:ring-red-400/10'
+                        : evmValid
+                        ? 'border-emerald-300 text-gray-900 focus:ring-emerald-100 dark:border-emerald-400/40 dark:text-gray-100 dark:focus:ring-emerald-400/10'
+                        : 'border-gray-200 text-gray-900 focus:border-[#0071E3]/40 focus:ring-[#0071E3]/15 dark:border-white/10 dark:text-gray-100 dark:focus:border-blue-400/40 dark:focus:ring-blue-400/10',
+                    )}
+                  />
+                  {evmDirty && !evmValid && (
+                    <XCircle className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-red-400" />
+                  )}
+                </div>
+                {evmDirty && !evmValid && (
+                  <p className="flex items-center gap-1 text-xs text-red-500">
+                    <Info className="h-3 w-3" /> Enter a valid EVM wallet address that starts with 0x
+                  </p>
+                )}
+                {evmValid && (
+                  <p className="flex min-w-0 items-center gap-1.5 text-xs text-emerald-600">
+                    <CheckCheck className="h-3 w-3 shrink-0" />
+                    <span className="truncate">{truncateAddress(evmAddr, 8)}</span>
+                  </p>
+                )}
+              </fieldset>
+            </div>
+          )}
+
+          {isBankSend && !privyAuthenticated && (
+            <LocalCurrencySignInGate
+              title="Sign in for bank-to-USDC links"
+              body="Bank transfer funding needs an account before setup so receipts, refunds, and support records stay attached."
+            />
+          )}
+
+          {!accessMode && !isBankReceive && !isBankSend && (
             <div className="space-y-2.5 rounded-xl border border-gray-100 bg-white p-2.5 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
@@ -3427,7 +3628,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
             </div>
           )}
 
-          {(isEvmNet || multiChainMode) && !isBankReceive && (multiChainMode || receiveMode === 'paste') && <fieldset className="space-y-1.5">
+          {(isEvmNet || multiChainMode) && !isBankReceive && !isBankSend && (multiChainMode || receiveMode === 'paste') && <fieldset className="space-y-1.5">
             <label className="flex items-center justify-between">
               <span className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
                 {multiChainMode ? 'EVM wallet address' : 'Wallet address'}
@@ -3489,7 +3690,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               {multiChainMode ? 'EVM address for Base, Arc, or Arbitrum.' : 'Paste EVM address.'}
             </p>
           </fieldset>}
-          {(selectedNet === 'solana' || multiChainMode) && !isBankReceive && (multiChainMode || receiveMode === 'paste') && <fieldset className="space-y-1.5">
+          {(selectedNet === 'solana' || multiChainMode) && !isBankReceive && !isBankSend && (multiChainMode || receiveMode === 'paste') && <fieldset className="space-y-1.5">
             <label className="flex items-center justify-between">
               <span className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
                 Solana wallet address
@@ -3563,15 +3764,15 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               <div className="min-w-0">
                 <p className="text-xs font-semibold leading-tight text-gray-800 dark:text-gray-100">Flexible amount enabled</p>
                 <p className="mt-0.5 text-[11px] font-medium leading-snug text-gray-400 dark:text-gray-500">
-                  {isBankReceive ? 'Payer enters the Naira amount.' : 'Payer enters the amount.'}
+                  {isBankReceive || isBankSend ? 'Payer enters the Naira amount.' : 'Payer enters the amount.'}
                 </p>
               </div>
             </div>
           )}
           {!flexAmount && <fieldset className="space-y-1.5">
             <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
-              {isBankReceive ? <Landmark className="h-3.5 w-3.5 text-gray-400" /> : <Coins className="h-3.5 w-3.5 text-gray-400" />}
-              {isBankReceive ? 'Naira amount' : 'Amount'}
+              {isBankReceive || isBankSend ? <Landmark className="h-3.5 w-3.5 text-gray-400" /> : <Coins className="h-3.5 w-3.5 text-gray-400" />}
+              {isBankReceive || isBankSend ? 'Naira amount' : 'Amount'}
             </label>
             <div className="relative">
               <input
@@ -3590,7 +3791,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                 )}
               />
               <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-semibold text-gray-400 whitespace-nowrap">
-                {isBankReceive ? 'NGN' : 'USDC'}
+                {isBankReceive || isBankSend ? 'NGN' : 'USDC'}
               </span>
             </div>
             {amtDirty && !isValidAmt && (
@@ -3602,6 +3803,8 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               <p className="text-[11px] text-gray-400 dark:text-gray-500">
                 {isBankReceive
                   ? 'Enter the Naira amount the payer should pay.'
+                  : isBankSend
+                  ? 'Enter the Naira amount the payer will send from their bank.'
                   : multiChainMode
                   ? 'USDC on Base, Arc Testnet, Solana, or Arbitrum — payer chooses the chain'
                   : `USDC on ${selectedNet === 'arc' ? 'Arc Testnet' : CHAIN_META[selectedNet].label}`}
@@ -3623,6 +3826,26 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                   aria-label="Selected payer network"
                 >
                   Base
+                </button>
+              </div>
+            </div>
+          )}
+
+          {isBankSend && (
+            <div className="rounded-xl border border-gray-200 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.04]">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">Payer method</p>
+                  <p className="mt-0.5 text-[11px] text-gray-400 dark:text-gray-500">
+                    Checkout will show Paycrest Nigerian bank transfer instructions.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="inline-flex shrink-0 cursor-default items-center gap-1.5 rounded-xl border border-gray-900 bg-gray-950 px-3 py-2 text-xs font-bold text-white dark:border-white dark:bg-white dark:text-gray-950"
+                  aria-label="Selected payer method"
+                >
+                  NGN Bank
                 </button>
               </div>
             </div>
@@ -3906,7 +4129,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                 <span className="min-w-0">
                   <span className="block text-sm font-semibold leading-tight text-gray-800 dark:text-gray-100">Let payer enter amount</span>
                   <span className="block text-[11px] font-medium leading-snug text-gray-400 dark:text-gray-500">
-                    {isBankReceive ? 'Payer enters the Naira amount.' : 'Payer enters the amount.'}
+                    {isBankReceive || isBankSend ? 'Payer enters the Naira amount.' : 'Payer enters the amount.'}
                   </span>
                 </span>
               </div>
@@ -3937,9 +4160,9 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                   : 'cursor-not-allowed bg-gray-100 text-gray-400 dark:bg-white/[0.06] dark:text-gray-500',
               )}
             >
-              {isBankReceive && posBusy ? <Loader2 className="h-4 w-4 shrink-0 animate-spin" /> : <Link2 className="h-4 w-4 shrink-0" />}
-              <span>{isBankReceive ? 'Create Bank PayLink' : 'Generate Payment Link'}</span>
-              {canGenerate && !(isBankReceive && posBusy) && <ArrowRight className="h-4 w-4 shrink-0" />}
+              {(isBankReceive || isBankSend) && posBusy ? <Loader2 className="h-4 w-4 shrink-0 animate-spin" /> : <Link2 className="h-4 w-4 shrink-0" />}
+              <span>{isBankReceive ? 'Create Bank PayLink' : isBankSend ? 'Create Bank-to-USDC PayLink' : 'Generate Payment Link'}</span>
+              {canGenerate && !((isBankReceive || isBankSend) && posBusy) && <ArrowRight className="h-4 w-4 shrink-0" />}
             </button>
           )}
 
@@ -3954,7 +4177,15 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
             </div>
           )}
 
-          {!isBankReceive && !canGenerate && vaultStep === 'idle' && (
+          {isBankSend && vaultStep === 'idle' && (
+            <div className="space-y-1 px-2 text-center text-xs leading-snug">
+              <p className="text-gray-400 dark:text-gray-500">
+                Payer checkout will collect refund bank details before creating the Paycrest on-ramp order.
+              </p>
+            </div>
+          )}
+
+          {!isBankReceive && !isBankSend && !canGenerate && vaultStep === 'idle' && (
             multiChainMode
               ? (!evmDirty && !solanaDirty)
               : (selectedNet === 'solana' ? !solanaDirty : !evmDirty)

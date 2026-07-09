@@ -32,6 +32,11 @@ function receiptSource(order: PaycrestOrderRecord) {
   return order.source === 'ngpos' ? 'ngpos' : 'bank-receive'
 }
 
+function isSettledPaycrestStatus(value: string | undefined) {
+  const status = String(value || '').trim().toLowerCase()
+  return status === 'settled' || status === 'validated'
+}
+
 async function registerOrderReceipt(order: PaycrestOrderRecord, txHash: string) {
   const source = receiptSource(order)
   return registerVerifiedPayment({
@@ -47,6 +52,27 @@ async function registerOrderReceipt(order: PaycrestOrderRecord, txHash: string) 
     contextLabel: order.bank_name ? `${order.bank_name} ****${order.bank_last4 || ''}`.trim() : 'Naira payout',
     settlementType: 'INSTANT_FIAT',
     amountNgn: order.amount_ngn,
+    intentId: order.intent_id,
+  })
+}
+
+export async function registerPaycrestBankSendReceipt(order: PaycrestOrderRecord) {
+  if (order.source !== 'bank-send') return null
+  if (!isSettledPaycrestStatus(order.status)) return null
+  const reference = `paycrest_${order.intent_id || order.paycrest_order_id}`
+  return registerVerifiedPayment({
+    eventId: `bank-send-${order.merchant_id || order.intent_id}`,
+    txHash: reference,
+    payer: order.payer_name || order.payer_email || 'Bank transfer payer',
+    memo: order.payer_name || 'Bank transfer funding',
+    chain: order.destination_network || 'polygon',
+    amount: order.amount_usdc,
+    requestedAmount: order.amount_usdc,
+    source: 'bank-send',
+    merchantId: order.merchant_id,
+    contextLabel: order.destination_address ? `${order.destination_network || 'polygon'} ${order.destination_address}` : 'USDC destination',
+    settlementType: 'PAYCREST_ONRAMP',
+    amountNgn: order.provider_amount_to_transfer || order.amount_ngn,
     intentId: order.intent_id,
   })
 }

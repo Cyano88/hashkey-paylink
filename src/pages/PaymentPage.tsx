@@ -82,6 +82,18 @@ type PaycrestCheckoutOrder = {
   bank_name?: string
   bank_last4?: string
   bank_account_name?: string
+  destination_network?: string
+  destination_address?: string
+  provider_institution?: string
+  provider_account_identifier?: string
+  provider_account_name?: string
+  provider_amount_to_transfer?: string
+  provider_currency?: string
+}
+type PaycrestInstitution = {
+  code: string
+  name: string
+  type?: string
 }
 const CHAINS: ChainKey[] = ['base', 'solana', 'arbitrum']
 const POLYMARKET_SIGNUP_URL = 'https://polymarket.com'
@@ -297,7 +309,7 @@ export default function PaymentPage() {
   const netParam    = (getPaylinkParam(searchParams, 'net', 'n') || null) as ChainKey | null
   const modeParam   = searchParams.get('mode')
   const isTelegramSource = isTelegramSourceParam(searchParams)
-  const isNgPosSource = searchParams.get('src') === 'ngpos' || searchParams.get('src') === 'bank-receive'
+  const isNgPosSource = searchParams.get('src') === 'ngpos' || searchParams.get('src') === 'bank-receive' || searchParams.get('src') === 'bank-send'
   const ngPosBackMerchantId = searchParams.get('merchant') ?? ''
   const ngPosBackUrl = ngPosBackMerchantId ? `/pos/ng?merchant_id=${encodeURIComponent(ngPosBackMerchantId)}` : '/'
   const isPolymarketFunding = searchParams.get('brand') === 'polymarket' || searchParams.get('pm') === '1'
@@ -447,6 +459,9 @@ export default function PaymentPage() {
   const paySource        = getPaylinkParam(initParams, 'src', 'src')
   const isNgPosPayment   = paySource === 'ngpos' || paySource === 'bank-receive'
   const isBankReceivePayment = paySource === 'bank-receive'
+  const isBankSendPayment = paySource === 'bank-send'
+  const bankSendLinkId = (initParams.get('bankSend') ?? '').trim().replace(/[^a-zA-Z0-9_-]/g, '')
+  const bankSendDestinationNetwork = (initParams.get('destNet') ?? initParams.get('n') ?? 'base').trim().toLowerCase()
   const ngPosMerchantId  = (initParams.get('merchant') ?? '').trim().replace(/[^a-zA-Z0-9_-]/g, '')
   const ngPosEventId     = ngPosMerchantId ? `ngpos-${ngPosMerchantId}` : ''
   const ngPosSettlement  = (initParams.get('settlement') ?? '').trim()
@@ -457,7 +472,7 @@ export default function PaymentPage() {
   const ngPosBankAccount = (initParams.get('acct') ?? '').trim()
   const ngPosBankAccountName = (initParams.get('acctName') ?? '').trim()
   const isNgPosPaycrestOfframp = isNgPosPayment && ngPosSettlement === 'instant_fiat' && ngPosOfframpProvider === 'paycrest'
-  const smartWalletOnlyFunding = isPolymarketFunding || isAgentOrWalletFunding || isHelperAccess || isNgPosPaycrestOfframp
+  const smartWalletOnlyFunding = isPolymarketFunding || isAgentOrWalletFunding || isHelperAccess || isNgPosPaycrestOfframp || isBankSendPayment
   const isMainHashPaylinkPayment = !isTelegramSource && !smartWalletOnlyFunding
   const [attendeeName,   setAttendeeName]   = useState(() => initParams.get('payer') ?? '')
   const [eventRegStatus, setEventRegStatus] = useState<'idle' | 'pending' | 'ok' | 'error'>('idle')
@@ -475,11 +490,41 @@ export default function PaymentPage() {
   const [paycrestOrder, setPaycrestOrder] = useState<PaycrestCheckoutOrder | null>(null)
   const [paycrestPreparing, setPaycrestPreparing] = useState(false)
   const [paycrestStatusText, setPaycrestStatusText] = useState('')
+  const [bankSendInstitutions, setBankSendInstitutions] = useState<PaycrestInstitution[]>([])
+  const [bankSendBanksBusy, setBankSendBanksBusy] = useState(false)
+  const [bankSendBankCode, setBankSendBankCode] = useState('')
+  const [bankSendBankName, setBankSendBankName] = useState('')
+  const [bankSendAccount, setBankSendAccount] = useState('')
+  const [bankSendAccountName, setBankSendAccountName] = useState('')
+  const [bankSendBankVerified, setBankSendBankVerified] = useState(false)
+  const [bankSendBankBusy, setBankSendBankBusy] = useState(false)
+  const [bankSendError, setBankSendError] = useState('')
+  const [bankSendStatus, setBankSendStatus] = useState<'idle' | 'waiting' | 'pending' | 'settled' | 'expired' | 'refunding' | 'error'>('idle')
   const requiresAttendeeName = (isEventMode || isNgPosPayment) && !isPolymarketFunding && !isAgentOrWalletFunding && !isHelperAccess
 
   useEffect(() => {
     if (isFlex && isBankReceivePayment && isNgPosPaycrestOfframp) setFxInputMode('local')
   }, [isFlex, isBankReceivePayment, isNgPosPaycrestOfframp])
+
+  useEffect(() => {
+    if (!isBankSendPayment) return
+    setBankSendBanksBusy(true)
+    fetch('/api/ng-pos', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'institutions', currency: 'NGN' }),
+    })
+      .then((response) => response.json().then((data) => ({ response, data })))
+      .then(({ response, data }) => {
+        if (!response.ok || !data.ok) throw new Error(data.error ?? 'Could not load Paycrest banks.')
+        setBankSendInstitutions(Array.isArray(data.institutions) ? data.institutions : [])
+      })
+      .catch((error) => {
+        setBankSendInstitutions([])
+        setBankSendError(error instanceof Error ? error.message : 'Could not load Paycrest banks.')
+      })
+      .finally(() => setBankSendBanksBusy(false))
+  }, [isBankSendPayment])
 
   // ── FX display (event mode only — reads params baked into the URL at link creation) ──
   const fxCurrency  = isEventMode ? getPaylinkParam(initParams, 'fx', 'fx') : ''
@@ -782,7 +827,7 @@ export default function PaymentPage() {
     chain === 'arbitrum' ? CHAIN_META.arbitrum.chainId :
     CHAIN_META.base.chainId
   const isCorrectNetwork = isEvmChain ? chainId === targetChainId : true
-  const hashPaylinkFeeBps = isNgPosPaycrestOfframp ? 0 : PLATFORM_FEE_BPS
+  const hashPaylinkFeeBps = isNgPosPaycrestOfframp || isBankSendPayment ? 0 : PLATFORM_FEE_BPS
   const feeAmount        = (parseFloat(payableAmt) || 0) * (hashPaylinkFeeBps / 10_000)
 
   const activeRecipient = isNgPosPaycrestOfframp && paycrestOrder?.receive_address
@@ -796,6 +841,7 @@ export default function PaymentPage() {
     chain === 'solana' ? 'Solana' :
     chain === 'arc' ? 'Arc' :
     meta.label
+  const bankSendDestinationLabel = bankSendDestinationNetwork === 'base' ? 'Base' : 'Polygon'
   const circlePaymasterConfig = getCirclePaymasterConfig(chain)
   const showCirclePaymasterButton = !!circlePaymasterConfig && (chain === 'base' || chain === 'arbitrum')
   const showCircleEvmEmailPay = canUseCircleEvmEmailWallet(chain)
@@ -1642,6 +1688,78 @@ export default function PaymentPage() {
   }, [isNgPosPaycrestOfframp, manualPayDetected, manualTxHash, paycrestOrder?.intent_id, paycrestOrder?.paycrest_order_id])
 
   useEffect(() => {
+    if (!isBankSendPayment || !paycrestOrder?.intent_id) return
+    let cancelled = false
+    let attempts = 0
+
+    function classifyStatus(value: string | undefined): typeof bankSendStatus {
+      const status = String(value || '').trim().toLowerCase()
+      if (status === 'settled' || status === 'validated') return 'settled'
+      if (status === 'expired') return 'expired'
+      if (status === 'refunding' || status === 'refunded') return 'refunding'
+      if (status === 'pending' || status === 'settling' || status === 'deposited') return 'pending'
+      return 'waiting'
+    }
+
+    async function syncBankSendOrderStatus() {
+      attempts += 1
+      try {
+        const res = await fetch('/api/ng-pos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'offrampStatus',
+            intent_id: paycrestOrder.intent_id,
+            order_id: paycrestOrder.paycrest_order_id,
+            refresh: true,
+          }),
+        })
+        const data = await res.json().catch(() => undefined) as {
+          ok?: boolean
+          order?: PaycrestCheckoutOrder
+          receipt?: { receiptId?: string; receiptUrl?: string }
+          error?: string
+        } | undefined
+        if (cancelled) return
+        if (!res.ok || !data?.ok || !data.order) throw new Error(data?.error || 'Could not refresh bank transfer status.')
+        setPaycrestOrder(data.order)
+        if (data.receipt?.receiptId) setPaymentReceiptId(data.receipt.receiptId)
+        const nextStatus = classifyStatus(data.order.status)
+        setBankSendStatus(nextStatus)
+        if (nextStatus === 'settled') {
+          setPaycrestStatusText('USDC settlement confirmed.')
+          return
+        }
+        if (nextStatus === 'expired') {
+          setPaycrestStatusText('')
+          setBankSendError('This bank transfer instruction expired. Create a new transfer instruction before paying.')
+          return
+        }
+        if (nextStatus === 'refunding') {
+          setPaycrestStatusText('Refund is in progress or completed.')
+          return
+        }
+        setPaycrestStatusText(nextStatus === 'pending' ? 'Transfer detected. Paycrest is settling USDC.' : 'Waiting for bank transfer confirmation.')
+      } catch (error) {
+        if (!cancelled) {
+          setBankSendStatus('error')
+          setBankSendError(readableErrorMsg(error, 'Could not refresh bank transfer status.'))
+        }
+      }
+      if (!cancelled && attempts < 120) {
+        window.setTimeout(syncBankSendOrderStatus, attempts < 30 ? 5_000 : 15_000)
+      }
+    }
+
+    setBankSendStatus(classifyStatus(paycrestOrder.status))
+    void syncBankSendOrderStatus()
+    return () => {
+      cancelled = true
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isBankSendPayment, paycrestOrder?.intent_id])
+
+  useEffect(() => {
     if (manualTxHash || !manualPayDetected || chain === 'solana') return
     const timer = setInterval(() => setTxSyncTick(tick => tick + 1), 1_000)
     return () => clearInterval(timer)
@@ -2389,6 +2507,81 @@ export default function PaymentPage() {
     }
   }
 
+  async function verifyBankSendRefundAccount() {
+    setBankSendBankBusy(true)
+    setBankSendError('')
+    setBankSendBankVerified(false)
+    setBankSendAccountName('')
+    try {
+      const response = await fetch('/api/ng-pos', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          action: 'verifyAccount',
+          bank_code: bankSendBankCode,
+          bank_name: bankSendBankName,
+          account_number: bankSendAccount,
+        }),
+      })
+      const data = await response.json().catch(() => ({})) as { ok?: boolean; account_name?: string; bank_code?: string; error?: string }
+      if (!response.ok || !data.ok) throw new Error(data.error || 'Account verification failed.')
+      if (data.bank_code) setBankSendBankCode(String(data.bank_code).trim())
+      setBankSendAccountName(String(data.account_name || '').trim())
+      setBankSendBankVerified(true)
+    } catch (error) {
+      setBankSendError(readableErrorMsg(error, 'Account verification failed.'))
+    } finally {
+      setBankSendBankBusy(false)
+    }
+  }
+
+  async function prepareBankSendPaycrestOrder() {
+    if (!isBankSendPayment || paycrestOrder) return
+    const amountNgn = isFlex ? localAmt.trim() : ngPosAmountNgn.trim()
+    if (!bankSendLinkId) {
+      setBankSendError('This bank-to-USDC link is missing its reference.')
+      return
+    }
+    if (!amountNgn || Number.parseFloat(amountNgn) <= 0) {
+      setBankSendError('Enter the Naira amount before continuing.')
+      return
+    }
+    if (!bankSendBankVerified || !bankSendAccountName) {
+      setBankSendError('Verify your refund bank account first.')
+      return
+    }
+    setPaycrestPreparing(true)
+    setBankSendError('')
+    setPaycrestStatusText('Preparing bank transfer details...')
+    try {
+      const response = await fetch('/api/ng-pos', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          action: 'createBankSendOrder',
+          link_id: bankSendLinkId,
+          amount: amountNgn,
+          refund_bank_name: bankSendBankName,
+          refund_bank_code: bankSendBankCode,
+          refund_account_number: bankSendAccount,
+          refund_account_name: bankSendAccountName,
+          payer_email: circleEmail.trim(),
+          payer_name: attendeeName.trim(),
+        }),
+      })
+      const data = await response.json().catch(() => ({})) as { ok?: boolean; order?: PaycrestCheckoutOrder; error?: string }
+      if (!response.ok || !data.ok || !data.order) throw new Error(data.error || 'Could not prepare bank transfer.')
+      setPaycrestOrder(data.order)
+      setBankSendStatus('waiting')
+      setPaycrestStatusText('Bank transfer details ready. Send the exact amount before the deadline.')
+    } catch (error) {
+      setPaycrestStatusText('')
+      setBankSendError(readableErrorMsg(error, 'Could not prepare bank transfer.'))
+    } finally {
+      setPaycrestPreparing(false)
+    }
+  }
+
   async function handleCirclePasskeyPay() {
     if (!showCircleEmailPay) return
     if (!paycrestNeedsPreparation && (!activeRecipient || !isAddress(activeRecipient))) return
@@ -2839,11 +3032,12 @@ export default function PaymentPage() {
   }, [isConfirmed, onPaySuccessVisibleChange])
 
   useEffect(() => {
-    if (!isConfirmed || !isPolymarketBridge) return
+    const bankSendSettled = isBankSendPayment && bankSendStatus === 'settled'
+    if ((!isConfirmed && !bankSendSettled) || !isPolymarketBridge) return
     void refreshPolymarketBridgeStatus()
     const timer = window.setTimeout(() => void refreshPolymarketBridgeStatus(), 15_000)
     return () => window.clearTimeout(timer)
-  }, [isConfirmed, isPolymarketBridge, refreshPolymarketBridgeStatus])
+  }, [bankSendStatus, isBankSendPayment, isConfirmed, isPolymarketBridge, refreshPolymarketBridgeStatus])
 
   // ── Direct Send display address ───────────────────────────────────────────
   const directDisplayAddr = directVault
@@ -3204,24 +3398,26 @@ export default function PaymentPage() {
   }, [autoAccessRedirect, isEventMode, agentUrl, eventRegStatus, eventId, attendeeName, isAgentOrWalletFunding, isWalletManagerFunding, memo])
 
   useEffect(() => {
-    if (!isConfirmed || !isPolymarketBridge || !polymarketReturnToAgentHash || polymarketReturnRedirected.current) return
+    const bankSendSettled = isBankSendPayment && bankSendStatus === 'settled'
+    if ((!isConfirmed && !bankSendSettled) || !isPolymarketBridge || !polymarketReturnToAgentHash || polymarketReturnRedirected.current) return
     if (polymarketBridgeStatus === 'idle' || polymarketBridgeStatus === 'checking') return
     polymarketReturnRedirected.current = true
     const timer = window.setTimeout(() => {
       window.location.assign(polymarketAgentHashUrl)
     }, 3800)
     return () => window.clearTimeout(timer)
-  }, [isConfirmed, isPolymarketBridge, polymarketReturnToAgentHash, polymarketBridgeStatus, polymarketAgentHashUrl])
+  }, [bankSendStatus, isBankSendPayment, isConfirmed, isPolymarketBridge, polymarketReturnToAgentHash, polymarketBridgeStatus, polymarketAgentHashUrl])
 
   useEffect(() => {
-    if (!isConfirmed || !isPolymarketBridge || polymarketReturnToAgentHash || polymarketReturnRedirected.current) return
+    const bankSendSettled = isBankSendPayment && bankSendStatus === 'settled'
+    if ((!isConfirmed && !bankSendSettled) || !isPolymarketBridge || polymarketReturnToAgentHash || polymarketReturnRedirected.current) return
     if (polymarketBridgeStatus === 'idle' || polymarketBridgeStatus === 'checking') return
     polymarketReturnRedirected.current = true
     const timer = window.setTimeout(() => {
       window.location.assign(polymarketBridgeReturnUrl)
     }, 3800)
     return () => window.clearTimeout(timer)
-  }, [isConfirmed, isPolymarketBridge, polymarketReturnToAgentHash, polymarketBridgeStatus, polymarketBridgeReturnUrl])
+  }, [bankSendStatus, isBankSendPayment, isConfirmed, isPolymarketBridge, polymarketReturnToAgentHash, polymarketBridgeStatus, polymarketBridgeReturnUrl])
 
   useEffect(() => {
     if (!isConfirmed || !isPolymarketBridge || !polymarketReturnToAgentHash || !polymarketHelperOwner || polymarketAgentNoticeStored.current) return
@@ -3633,7 +3829,7 @@ export default function PaymentPage() {
         style={{ boxShadow: `0 4px 24px -4px rgba(0,0,0,0.08), ${meta.glowStyle}`, borderColor: meta.accentColor + '26' }}
       >
         {/* ── Chain toggle ─────────────────────────────────────────────── */}
-        <div className="flex justify-center pt-5 pb-0 px-4">
+        {!isBankSendPayment && <div className="flex justify-center pt-5 pb-0 px-4">
           <div className="flex items-center justify-center gap-0.5 sm:gap-1 rounded-xl border border-gray-200 bg-gray-100/80 p-1 overflow-x-auto w-full sm:w-auto">
             {availableChains.map((c) => {
               const m          = CHAIN_META[c]
@@ -3664,7 +3860,7 @@ export default function PaymentPage() {
               )
             })}
           </div>
-        </div>
+        </div>}
 
         {/* ── Pay mode toggle (Base, Arc, and Arbitrum USDC) ────────────── */}
         {canDirectSend && !isNgPosPaycrestOfframp && (
@@ -3893,10 +4089,12 @@ export default function PaymentPage() {
           {/* Payment details */}
           <div className="space-y-1.5 text-center">
             <div className="flex items-center justify-center gap-1.5 text-sm font-semibold text-gray-800 dark:text-gray-100">
-              <span>Paying on {consumerNetworkName}</span>
+              <span>{isBankSendPayment ? 'Paying by NGN bank transfer' : `Paying on ${consumerNetworkName}`}</span>
             </div>
             <p className="text-[11px] text-slate-400">
-              Platform fee: {feeAmount > 0 && effectiveAmt ? `${feeAmount.toFixed(meta.decimals <= 6 ? 4 : 6)} ${meta.asset}` : '—'}
+              {isBankSendPayment
+                ? `Recipient receives ${bankSendDestinationLabel} USDC after Paycrest confirms the transfer.`
+                : <>Platform fee: {feeAmount > 0 && effectiveAmt ? `${feeAmount.toFixed(meta.decimals <= 6 ? 4 : 6)} ${meta.asset}` : 'not applied'}</>}
             </p>
             {showArbitrumRelayCost && (
               <div className="flex items-center justify-between bg-gray-50/60 px-4 py-2 border-t border-dashed border-gray-100">
@@ -3932,6 +4130,170 @@ export default function PaymentPage() {
               </div>
               {paycrestStatusText && (
                 <p className="mt-2 text-[11px] font-medium text-emerald-700 dark:text-emerald-300">{paycrestStatusText}</p>
+              )}
+            </div>
+          )}
+
+          {isBankSendPayment && (
+            <div className="space-y-3 rounded-xl border border-gray-200 bg-white p-3.5 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">Bank transfer funding</p>
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    Send Naira from your bank. Paycrest settles USDC to the recipient on {bankSendDestinationLabel}.
+                  </p>
+                </div>
+                <Banknote className="h-4 w-4 shrink-0 text-gray-400" />
+              </div>
+
+              {isFlex && !paycrestOrder && (
+                <div className="space-y-1.5">
+                  <label className="text-sm font-semibold text-gray-700 dark:text-gray-200">Naira amount</label>
+                  <input
+                    value={localAmt}
+                    onChange={(event) => setLocalAmt(event.target.value.replace(/[^\d.]/g, ''))}
+                    inputMode="decimal"
+                    placeholder="Enter amount"
+                    className="w-full rounded-xl border border-gray-200 bg-gray-50/60 px-4 py-3 text-sm text-gray-900 placeholder:text-gray-400 outline-none transition-all focus:border-blue-300 focus:bg-white focus:ring-2 focus:ring-blue-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:bg-white/[0.06]"
+                  />
+                </div>
+              )}
+
+              {!paycrestOrder && (
+                <div className="space-y-2">
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr]">
+                    <label className="space-y-1.5">
+                      <span className="text-xs font-semibold text-gray-600 dark:text-gray-300">Refund bank</span>
+                      <select
+                        value={bankSendBankCode}
+                        onChange={(event) => {
+                          const code = event.target.value
+                          const selected = bankSendInstitutions.find((institution) => institution.code === code)
+                          setBankSendBankCode(code)
+                          setBankSendBankName(selected?.name || '')
+                          setBankSendBankVerified(false)
+                          setBankSendAccountName('')
+                        }}
+                        className="w-full rounded-xl border border-gray-200 bg-gray-50/60 px-3 py-2.5 text-sm text-gray-900 outline-none transition-all focus:border-blue-300 focus:bg-white focus:ring-2 focus:ring-blue-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-white"
+                      >
+                        <option value="">{bankSendBanksBusy ? 'Loading banks...' : 'Select bank'}</option>
+                        {bankSendInstitutions.map((institution) => (
+                          <option key={institution.code} value={institution.code}>{institution.name}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="space-y-1.5">
+                      <span className="text-xs font-semibold text-gray-600 dark:text-gray-300">Account number</span>
+                      <input
+                        value={bankSendAccount}
+                        onChange={(event) => {
+                          setBankSendAccount(event.target.value.replace(/\D/g, '').slice(0, 10))
+                          setBankSendBankVerified(false)
+                          setBankSendAccountName('')
+                        }}
+                        inputMode="numeric"
+                        placeholder="10 digits"
+                        className="w-full rounded-xl border border-gray-200 bg-gray-50/60 px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 outline-none transition-all focus:border-blue-300 focus:bg-white focus:ring-2 focus:ring-blue-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-white"
+                      />
+                    </label>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={verifyBankSendRefundAccount}
+                    disabled={bankSendBankBusy || !bankSendBankCode || bankSendAccount.length !== 10}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-800 transition-all hover:bg-gray-50 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-white/[0.06] dark:text-white dark:hover:bg-white/[0.1]"
+                  >
+                    {bankSendBankBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : bankSendBankVerified ? <CheckCircle2 className="h-4 w-4 text-emerald-500" /> : <Banknote className="h-4 w-4" />}
+                    {bankSendBankVerified ? bankSendAccountName : 'Verify refund account'}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={prepareBankSendPaycrestOrder}
+                    disabled={paycrestPreparing || !bankSendBankVerified || (isFlex ? !localAmt || Number.parseFloat(localAmt) <= 0 : !ngPosAmountNgn)}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-4 py-3 text-sm font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-500 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200 dark:disabled:bg-white/10 dark:disabled:text-gray-400"
+                  >
+                    {paycrestPreparing ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
+                    Prepare bank transfer
+                  </button>
+                </div>
+              )}
+
+              {paycrestOrder && (
+                <div className={cn(
+                  'space-y-3 rounded-xl border p-3',
+                  bankSendStatus === 'settled'
+                    ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-400/20 dark:bg-emerald-400/10'
+                    : bankSendStatus === 'expired' || bankSendStatus === 'error'
+                    ? 'border-red-200 bg-red-50 dark:border-red-400/20 dark:bg-red-400/10'
+                    : 'border-amber-200 bg-amber-50 dark:border-amber-400/20 dark:bg-amber-400/10',
+                )}>
+                  <div className="flex items-center justify-between gap-3">
+                    <p className={cn(
+                      'text-xs font-bold uppercase tracking-widest',
+                      bankSendStatus === 'settled'
+                        ? 'text-emerald-700 dark:text-emerald-300'
+                        : bankSendStatus === 'expired' || bankSendStatus === 'error'
+                        ? 'text-red-700 dark:text-red-300'
+                        : 'text-amber-700 dark:text-amber-300',
+                    )}>
+                      {bankSendStatus === 'settled' ? 'USDC settled' : 'Transfer exactly'}
+                    </p>
+                    <span className={cn(
+                      'inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-bold capitalize',
+                      bankSendStatus === 'settled'
+                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-400/15 dark:text-emerald-200'
+                        : bankSendStatus === 'expired' || bankSendStatus === 'error'
+                        ? 'bg-red-100 text-red-700 dark:bg-red-400/15 dark:text-red-200'
+                        : 'bg-amber-100 text-amber-700 dark:bg-amber-400/15 dark:text-amber-200',
+                    )}>
+                      {bankSendStatus === 'waiting' || bankSendStatus === 'pending' ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                      {bankSendStatus === 'idle' ? 'ready' : bankSendStatus}
+                    </span>
+                  </div>
+                  <div className={cn(
+                    'overflow-hidden rounded-xl border bg-white dark:bg-white/[0.06]',
+                    bankSendStatus === 'settled'
+                      ? 'divide-y divide-emerald-200/70 border-emerald-200 dark:divide-emerald-400/10 dark:border-emerald-400/20'
+                      : bankSendStatus === 'expired' || bankSendStatus === 'error'
+                      ? 'divide-y divide-red-200/70 border-red-200 dark:divide-red-400/10 dark:border-red-400/20'
+                      : 'divide-y divide-amber-200/70 border-amber-200 dark:divide-amber-400/10 dark:border-amber-400/20',
+                  )}>
+                    <Row label="Amount" value={`${formatAmount(paycrestOrder.provider_amount_to_transfer || paycrestOrder.amount_ngn, 2)} ${paycrestOrder.provider_currency || 'NGN'}`} />
+                    <Row label="Bank" value={paycrestOrder.provider_institution || 'Provider bank'} />
+                    <Row label="Account" value={paycrestOrder.provider_account_identifier || ''} mono />
+                    <Row label="Name" value={paycrestOrder.provider_account_name || ''} />
+                    <Row label="To" value={`${bankSendDestinationLabel} USDC`} />
+                  </div>
+                  {paycrestOrder.valid_until && (
+                    <p className="text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
+                      {bankSendStatus === 'settled'
+                        ? 'The recipient USDC settlement is confirmed.'
+                        : `Complete before ${new Date(paycrestOrder.valid_until).toLocaleString()}.`}
+                    </p>
+                  )}
+                  {isPolymarketBridge && polymarketBridgeStatusText && (
+                    <p className="text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
+                      {polymarketBridgeStatusText}
+                    </p>
+                  )}
+                  {bankSendStatus === 'settled' && paymentReceiptId && (
+                    <Link
+                      to={`/receipt/${encodeURIComponent(paymentReceiptId)}`}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-white px-3 py-2 text-xs font-bold text-emerald-700 shadow-sm ring-1 ring-emerald-200 transition hover:bg-emerald-50 dark:bg-white/[0.08] dark:text-emerald-200 dark:ring-emerald-400/20 dark:hover:bg-white/[0.12]"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                      View receipt
+                    </Link>
+                  )}
+                </div>
+              )}
+
+              {(bankSendError || paycrestStatusText) && (
+                <p className={cn('text-[11px] font-medium', bankSendError ? 'text-red-600 dark:text-red-300' : 'text-emerald-700 dark:text-emerald-300')}>
+                  {bankSendError || paycrestStatusText}
+                </p>
               )}
             </div>
           )}
@@ -4254,7 +4616,7 @@ export default function PaymentPage() {
             </div>
           )}
 
-          {payMode === 'wallet' && showCircleEmailBridgePay && chain !== 'solana' && !manualPayDetected && (!isPolymarketFunding || polymarketFundingStep === 'fund' || !!circleSmartAccount) && (
+          {payMode === 'wallet' && !isBankSendPayment && showCircleEmailBridgePay && chain !== 'solana' && !manualPayDetected && (!isPolymarketFunding || polymarketFundingStep === 'fund' || !!circleSmartAccount) && (
             <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
               {!circleSmartAccount && !showPrivyCircleEmailPay && (
                 <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.06]">
@@ -4433,12 +4795,12 @@ export default function PaymentPage() {
           )}
 
           {/* ── Primary CTA (wallet mode only) ────────────────────────── */}
-          {payMode === 'wallet' && missingSolana ? (
+          {payMode === 'wallet' && !isBankSendPayment && missingSolana ? (
             <button disabled className="flex w-full cursor-not-allowed items-center justify-center gap-2 rounded-xl bg-gray-100 px-6 py-4 text-sm font-semibold text-gray-400">
               <AlertTriangle className="h-4 w-4" />
               No Solana Address Available
             </button>
-          ) : payMode === 'wallet' && chain === 'solana' && (!usePrivyCircleSolanaCheckout || privyAuthenticated) && (!isPolymarketFunding || polymarketFundingStep === 'fund' || !!circleSolanaSession || !!circleSolanaAddress) ? (
+          ) : payMode === 'wallet' && !isBankSendPayment && chain === 'solana' && (!usePrivyCircleSolanaCheckout || privyAuthenticated) && (!isPolymarketFunding || polymarketFundingStep === 'fund' || !!circleSolanaSession || !!circleSolanaAddress) ? (
               <div className="space-y-2">
                 {showCircleSolanaEmailBridgePay && !manualPayDetected && (
                   <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
@@ -4660,7 +5022,7 @@ export default function PaymentPage() {
               </button>
                 ) : null}
               </div>
-          ) : payMode === 'wallet' && (usePrivyCircleCheckout || usePrivyCircleSolanaCheckout) && !privyAuthenticated && !manualPayDetected && !showPolymarketFundingChoice ? (
+          ) : payMode === 'wallet' && !isBankSendPayment && (usePrivyCircleCheckout || usePrivyCircleSolanaCheckout) && !privyAuthenticated && !manualPayDetected && !showPolymarketFundingChoice ? (
             <div className={cn(
               'flex flex-col items-center gap-1.5',
               requiresAttendeeName && !attendeeName.trim() && 'pointer-events-none opacity-50 select-none',
@@ -4670,7 +5032,7 @@ export default function PaymentPage() {
                 Sign in to pay
               </PrivyConnectButton>
             </div>
-          ) : payMode === 'wallet' && (!usePrivyCircleCheckout || hasExternalPrivyEvmWallet) && !walletConnectBlocked && !isTelegramSource && !isConnected ? (
+          ) : payMode === 'wallet' && !isBankSendPayment && (!usePrivyCircleCheckout || hasExternalPrivyEvmWallet) && !walletConnectBlocked && !isTelegramSource && !isConnected ? (
             <div className={cn(
               'flex flex-col items-center gap-1.5',
               requiresAttendeeName && !attendeeName.trim() && 'pointer-events-none opacity-50 select-none',
@@ -4686,7 +5048,7 @@ export default function PaymentPage() {
                 <p className="text-center text-xs text-gray-400">Gas in ETH</p>
               )}
             </div>
-          ) : payMode === 'wallet' && (!usePrivyCircleCheckout || hasExternalPrivyEvmWallet) && !walletConnectBlocked && !isTelegramSource && isConnected && !isPrivyEmbeddedWalletConnected && !isCorrectNetwork ? (
+          ) : payMode === 'wallet' && !isBankSendPayment && (!usePrivyCircleCheckout || hasExternalPrivyEvmWallet) && !walletConnectBlocked && !isTelegramSource && isConnected && !isPrivyEmbeddedWalletConnected && !isCorrectNetwork ? (
             <button onClick={() => switchChain({ chainId: targetChainId })} disabled={isSwitching}
               className="flex w-full items-center justify-center gap-2 rounded-xl px-6 py-4 text-sm font-semibold text-white transition-all active:scale-[0.98] disabled:opacity-70"
               style={{ backgroundColor: meta.accentColor }}>
@@ -4694,7 +5056,7 @@ export default function PaymentPage() {
                 ? <><Loader2 className="h-4 w-4 animate-spin" /> Switching…</>
                 : <><RefreshCw className="h-4 w-4" /> Switch to {meta.label}</>}
             </button>
-          ) : payMode === 'wallet' && (!usePrivyCircleCheckout || hasExternalPrivyEvmWallet) && !walletConnectBlocked && !isTelegramSource && isConnected && !isPrivyEmbeddedWalletConnected ? (
+          ) : payMode === 'wallet' && !isBankSendPayment && (!usePrivyCircleCheckout || hasExternalPrivyEvmWallet) && !walletConnectBlocked && !isTelegramSource && isConnected && !isPrivyEmbeddedWalletConnected ? (
             <div className="space-y-2">
               <button onClick={handlePay} disabled={isWalletPending || isConfirming || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
               className={cn(
@@ -4710,7 +5072,7 @@ export default function PaymentPage() {
                 : <><Zap className="h-4 w-4" /> Pay {formatAmount(effectiveAmt, meta.decimals)} {meta.asset} on {meta.label}</>}
               </button>
             </div>
-          ) : payMode === 'wallet' && !walletConnectBlocked && !isTelegramSource && isPrivyEmbeddedWalletConnected && !showCircleEmailBridgePay ? (
+          ) : payMode === 'wallet' && !isBankSendPayment && !walletConnectBlocked && !isTelegramSource && isPrivyEmbeddedWalletConnected && !showCircleEmailBridgePay ? (
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-center text-xs font-medium text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
               Privy email is signed in, but its embedded wallet is not your Circle Smart Wallet. Add the Circle wallet app id to enable Circle Smart Wallet payments, or connect an external wallet.
             </div>
@@ -4744,7 +5106,7 @@ export default function PaymentPage() {
       )}
 
       {/* Manual check button */}
-      {showCheckButton && !manualPayDetected && chain !== 'solana' && payMode === 'wallet' && (
+      {showCheckButton && !isBankSendPayment && !manualPayDetected && chain !== 'solana' && payMode === 'wallet' && (
         <div className="mt-4 flex justify-center">
           <button
             onClick={handleManualCheck}

@@ -133,6 +133,7 @@ export function compactReceiptAmount(value?: string) {
 export function paymentReceiptFileName(receipt?: PaylinkReceipt) {
   const prefix = receipt?.source === 'streampay' ? 'hashpaystream'
     : receipt?.source === 'bank-receive' ? 'bank-receive'
+    : receipt?.source === 'bank-send' ? 'bank-send'
     : receipt?.source === 'ngpos' ? 'pos'
     : receipt?.source === 'polymarket-funding' ? 'polymarket-funding'
     : receipt?.source === 'x402' ? 'hashpaystream'
@@ -162,17 +163,20 @@ function receiptLabels(receipt: PaylinkReceipt) {
   const isCheckpoint = receipt.settlementType === 'checkpoint-escrow'
   const isPos = receipt.source === 'ngpos'
   const isBank = receipt.source === 'bank-receive'
+  const isBankSend = receipt.source === 'bank-send'
   const isPolymarket = receipt.source === 'polymarket-funding' || receipt.settlementType === 'polymarket_bridge'
   const isX402 = receipt.source === 'x402' || receipt.settlementType === 'circle-gateway-x402'
-  const heading = isStream ? 'HashpayStream receipt' : isBank ? 'Bank receive receipt' : isPos ? 'Retail POS receipt' : isPolymarket ? 'Polymarket funding receipt' : isX402 ? 'HashpayStream receipt' : 'Request payment receipt'
-  const title = isCheckpoint ? 'Checkpoint release confirmed' : isStream ? 'Stream created' : isBank ? 'Bank payout confirmed' : isPos ? 'Retail payment confirmed' : isPolymarket ? 'Polymarket funded' : isX402 ? 'Creator content unlocked' : 'Payment confirmed'
-  const amountLabel = isCheckpoint ? 'Released amount' : isStream ? 'Stream amount' : isBank ? 'Amount paid' : isPolymarket ? 'Amount funded' : isX402 ? 'Access price' : 'Amount paid'
-  const payer = isCheckpoint ? 'Reader wallet' : isStream ? 'Sender' : isBank ? 'Payer wallet' : isPos ? 'Payer wallet' : isPolymarket ? 'Funder' : isX402 ? 'Reader wallet' : 'Payer'
-  const context = isCheckpoint ? 'Content' : isStream ? 'Stream memo' : isBank ? 'Payer' : isPos ? 'Payer' : isPolymarket ? 'For' : isX402 ? 'Access' : 'Memo'
+  const heading = isStream ? 'HashpayStream receipt' : isBankSend ? 'Bank send receipt' : isBank ? 'Bank receive receipt' : isPos ? 'Retail POS receipt' : isPolymarket ? 'Polymarket funding receipt' : isX402 ? 'HashpayStream receipt' : 'Request payment receipt'
+  const title = isCheckpoint ? 'Checkpoint release confirmed' : isStream ? 'Stream created' : isBankSend ? 'USDC funding confirmed' : isBank ? 'Bank payout confirmed' : isPos ? 'Retail payment confirmed' : isPolymarket ? 'Polymarket funded' : isX402 ? 'Creator content unlocked' : 'Payment confirmed'
+  const amountLabel = isCheckpoint ? 'Released amount' : isStream ? 'Stream amount' : isBankSend ? 'USDC settled' : isBank ? 'Amount paid' : isPolymarket ? 'Amount funded' : isX402 ? 'Access price' : 'Amount paid'
+  const payer = isCheckpoint ? 'Reader wallet' : isStream ? 'Sender' : isBankSend ? 'Bank payer' : isBank ? 'Payer wallet' : isPos ? 'Payer wallet' : isPolymarket ? 'Funder' : isX402 ? 'Reader wallet' : 'Payer'
+  const context = isCheckpoint ? 'Content' : isStream ? 'Stream memo' : isBankSend ? 'Funding memo' : isBank ? 'Payer' : isPos ? 'Payer' : isPolymarket ? 'For' : isX402 ? 'Access' : 'Memo'
   const contextValue = isCheckpoint
     ? (receipt.memo || receipt.eventId || 'Creator content')
     : isStream
     ? (receipt.memo || receipt.merchantId || receipt.eventId || '-')
+    : isBankSend
+    ? (receipt.memo || receipt.eventId || '-')
     : isBank
     ? (receipt.memo || receipt.eventId || '-')
     : isPos
@@ -182,7 +186,7 @@ function receiptLabels(receipt: PaylinkReceipt) {
     : isX402
     ? (receipt.memo || receipt.eventId || 'Creator content')
     : (receipt.memo || receipt.merchantId || receipt.eventId || '-')
-  const merchantLabel = isCheckpoint ? 'Creator' : isStream ? 'Stream vault' : isBank ? 'Bank receive link' : isPos ? 'Merchant' : isPolymarket ? 'Polymarket profile' : isX402 ? 'Creator' : 'Recipient'
+  const merchantLabel = isCheckpoint ? 'Creator' : isStream ? 'Stream vault' : isBankSend ? 'USDC destination' : isBank ? 'Bank receive link' : isPos ? 'Merchant' : isPolymarket ? 'Polymarket profile' : isX402 ? 'Creator' : 'Recipient'
   const merchantValue = receipt.merchantId || ''
   return { heading, title, amountLabel, payer, context, contextValue, merchantLabel, merchantValue }
 }
@@ -237,11 +241,12 @@ function drawReceiptCanvas(
 ) {
   const labels = receiptLabels(receipt)
   const meta = CHAIN_META[receiptChainKey(receipt.chain)]
+  const networkLabel = String(receipt.chain || '').toLowerCase() === 'polygon' ? 'Polygon' : meta.label
   const archived = Boolean(receipt.proof?.ogExplorer || receipt.proof?.ogTxHash)
   const amount = compactReceiptAmount(receipt.amount)
   const isPos = receipt.source === 'ngpos'
   const settlement = String(receipt.settlementType || '').toLowerCase()
-  const isLocalCurrency = isPos || receipt.source === 'bank-receive' || receipt.source === 'bills' || settlement === 'instant_fiat' || settlement === 'bill_payment'
+  const isLocalCurrency = isPos || receipt.source === 'bank-receive' || receipt.source === 'bank-send' || receipt.source === 'bills' || settlement === 'instant_fiat' || settlement === 'paycrest_onramp' || settlement === 'bill_payment'
   const amountNgn = isLocalCurrency ? formatNgn(receipt.amountNgn) : ''
 
   ctx.fillStyle = '#f4f7fb'
@@ -272,7 +277,7 @@ function drawReceiptCanvas(
   drawText(ctx, labels.title, 64, 152, 470, 30)
   ctx.fillStyle = '#475467'
   ctx.font = '600 14px Arial'
-  drawText(ctx, `${amount} ${receipt.asset} confirmed on ${meta.label}`, 64, 184, 470, 20)
+  drawText(ctx, `${amount} ${receipt.asset} confirmed on ${networkLabel}`, 64, 184, 470, 20)
 
   roundRect(ctx, 64, 216, width - 128, 88, 18, '#f8fafc')
   ctx.fillStyle = '#667085'
@@ -287,13 +292,15 @@ function drawReceiptCanvas(
     ctx.fillText(amountNgn, 84, 294)
   }
 
-  const typeLabel = settlement === 'instant_fiat'
+  const typeLabel = receipt.source === 'bank-send' || settlement === 'paycrest_onramp'
+    ? 'Naira to USDC'
+    : settlement === 'instant_fiat'
     ? 'Base USDC to Naira'
     : receipt.source === 'bills' || settlement === 'bill_payment'
     ? 'Local bill payment'
     : receipt.settlementType?.replace(/[-_]/g, ' ') || receipt.source || 'payment'
   const rows: Array<[string, string]> = [
-    ['Network', meta.label],
+    ['Network', networkLabel],
     [labels.payer, receipt.payer],
     [labels.context, labels.contextValue],
     ...(labels.merchantValue ? [[labels.merchantLabel, labels.merchantValue] as [string, string]] : []),

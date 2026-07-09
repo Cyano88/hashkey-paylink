@@ -6720,8 +6720,20 @@ export function PolyPortfolioPanel({
   initialPortfolioAction?: 'watch' | 'trading' | 'external' | null
   initialTradingWalletTab?: 'balance' | 'fund' | 'withdraw' | 'positions'
 }) {
-  const { ready: privyReady, authenticated, login, getAccessToken } = usePrivy()
+  const { ready: privyReady, authenticated, login, getAccessToken, user: privyUser } = usePrivy()
   const { wallets: privyWallets } = useWallets()
+  const privyUserEmail = (() => {
+    const direct = (privyUser as { email?: { address?: string } | string } | null | undefined)?.email
+    if (typeof direct === 'string') return direct
+    if (direct?.address) return direct.address
+    const accounts = (privyUser as { linkedAccounts?: Array<Record<string, unknown>> } | null | undefined)?.linkedAccounts
+    if (!Array.isArray(accounts)) return ''
+    for (const account of accounts) {
+      if (typeof account.email === 'string') return account.email
+      if (typeof account.address === 'string' && account.type === 'email') return account.address
+    }
+    return ''
+  })()
 
   const [privyWaitExpired, setPrivyWaitExpired] = useState(false)
   const [bundle, setBundle] = useState<PolymarketPortfolioBundle | null>(null)
@@ -6743,6 +6755,8 @@ export function PolyPortfolioPanel({
   const [liveLoadedAddress, setLiveLoadedAddress] = useState('')
 
   const [fundAmount, setFundAmount] = useState('')
+  const [fundMethod, setFundMethod] = useState<'usdc' | 'naira'>('usdc')
+  const [fundNairaAmount, setFundNairaAmount] = useState('')
   const [fundBusy, setFundBusy] = useState(false)
   const [fundError, setFundError] = useState('')
   const [fundResult, setFundResult] = useState<{
@@ -6751,6 +6765,8 @@ export function PolyPortfolioPanel({
     minimumUsdc: number
     payUrl: string
     marketUrl: string
+    method: 'usdc' | 'naira'
+    amountLabel: string
   } | null>(null)
   const [withdrawAmount, setWithdrawAmount] = useState('')
   const [withdrawRecipient, setWithdrawRecipient] = useState('')
@@ -7248,11 +7264,146 @@ export function PolyPortfolioPanel({
         minimumUsdc: bridgeData.minimumUsdc ?? 3,
         payUrl,
         marketUrl: marketUrlForCta || 'https://polymarket.com',
+        method: 'usdc',
+        amountLabel: `${amt} USDC`,
       })
       void fetchBundle()
       void loadTradingPusdBalance(polymarketDepositWallet)
     } catch (err) {
       setFundError(err instanceof Error ? err.message : 'Could not prepare funding.')
+    } finally {
+      setFundBusy(false)
+    }
+  }
+
+  function withPolymarketBankSendParams(payUrl: string, input: {
+    requestId: string
+    polymarketWallet: string
+    funding: string
+  }) {
+    const url = new URL(payUrl, window.location.origin)
+    url.searchParams.set('brand', 'polymarket')
+    url.searchParams.set('pm', '1')
+    url.searchParams.set('bridge', 'polymarket')
+    url.searchParams.set('pmw', input.polymarketWallet)
+    url.searchParams.set('pmr', input.requestId)
+    url.searchParams.set('funding', input.funding)
+    if (surface === 'standalone') url.searchParams.set('return', 'polydesk-portfolio')
+    else url.searchParams.set('return', 'poly-portfolio')
+    url.searchParams.set('portfolio', 'trading')
+    url.searchParams.set('wallet', 'balance')
+    return url.toString()
+  }
+
+  async function startNairaFund() {
+    if (!savedTradingAddress) {
+      setFundError('Open Main Wallet before funding.')
+      return
+    }
+    if (!polymarketDepositWallet) {
+      setFundError('Activate Polymarket Wallet before funding.')
+      return
+    }
+    if (!polymarketWalletReady) {
+      setFundError('Polymarket Wallet is still activating. Funding will unlock automatically once it is ready.')
+      return
+    }
+    const amountNgn = fundNairaAmount.trim()
+    if (!/^\d+(?:\.\d{1,2})?$/.test(amountNgn) || Number(amountNgn) <= 0) {
+      setFundError('Enter the Naira amount to fund.')
+      return
+    }
+    if (!privyUserEmail) {
+      setFundError('Sign in with email before creating a Naira funding checkout.')
+      return
+    }
+    setFundError('')
+    setFundBusy(true)
+    try {
+      const bridgeNetwork: PolymarketBridgeNetwork = 'base'
+      const bridgeRes = await fetch('/api/polymarket-bridge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          polymarketWallet: polymarketDepositWallet,
+          network: bridgeNetwork,
+        }),
+      })
+      const bridgeData = await bridgeRes.json() as {
+        ok?: boolean
+        depositAddress?: string
+        network?: PolymarketBridgeNetwork
+        minimumUsdc?: number
+        error?: string
+      }
+      if (!bridgeRes.ok || !bridgeData.ok || !bridgeData.depositAddress) {
+        throw new Error(bridgeData.error || 'Could not prepare bridge address.')
+      }
+
+      const token = await getAccessToken()
+      if (!token) throw new Error('Sign in again to create a Naira funding checkout.')
+      const requestId = polymarketFundingRequestId()
+      const linkRes = await fetch('/api/ng-pos', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          action: 'createBankSend',
+          owner_id: String(privyUser?.id ?? ''),
+          owner_email: privyUserEmail,
+          owner_first_name: '',
+          owner_last_name: '',
+          display_name: 'PolyDesk funding',
+          amount: amountNgn,
+          flexible_amount: false,
+          network: 'base',
+          destination_address: bridgeData.depositAddress,
+          client_origin: window.location.origin,
+        }),
+      })
+      const linkData = await linkRes.json().catch(() => undefined) as {
+        ok?: boolean
+        error?: string
+        link?: { payment_url?: string }
+      } | undefined
+      if (!linkRes.ok || !linkData?.ok || !linkData.link?.payment_url) {
+        throw new Error(linkData?.error || 'Could not create Naira funding checkout.')
+      }
+
+      await fetch('/api/polymarket-portfolio', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          action: 'log-funding',
+          polymarketWallet: polymarketDepositWallet,
+          network: bridgeData.network ?? bridgeNetwork,
+          amount: amountNgn,
+          status: 'pending',
+          requestId,
+          depositAddress: bridgeData.depositAddress,
+        }),
+      }).catch(() => undefined)
+
+      const payUrl = withPolymarketBankSendParams(linkData.link.payment_url, {
+        requestId,
+        polymarketWallet: polymarketDepositWallet,
+        funding: 'PolyDesk Naira funding',
+      })
+      setFundResult({
+        depositAddress: bridgeData.depositAddress,
+        network: (bridgeData.network ?? bridgeNetwork) as PolymarketBridgeNetwork,
+        minimumUsdc: bridgeData.minimumUsdc ?? 3,
+        payUrl,
+        marketUrl: 'https://polymarket.com',
+        method: 'naira',
+        amountLabel: `NGN ${Number(amountNgn).toLocaleString('en-NG', { maximumFractionDigits: 2 })}`,
+      })
+      void fetchBundle()
+      void loadTradingPusdBalance(polymarketDepositWallet)
+    } catch (err) {
+      setFundError(err instanceof Error ? err.message : 'Could not prepare Naira funding.')
     } finally {
       setFundBusy(false)
     }
@@ -8761,15 +8912,50 @@ export function PolyPortfolioPanel({
           <div className="mt-3 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#111216]">
             {!fundResult ? (
               <div className="space-y-3">
-                <InputBlock
-                  label="Amount USDC"
-                  value={fundAmount}
-                  onChange={setFundAmount}
-                  placeholder="0.00"
-                  inputMode="decimal"
-                />
+                <div className="grid grid-cols-2 gap-2 rounded-xl bg-gray-100 p-1 dark:bg-white/[0.06]">
+                  {([
+                    ['usdc', 'USDC'],
+                    ['naira', 'Naira'],
+                  ] as const).map(([key, label]) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => {
+                        setFundMethod(key)
+                        setFundError('')
+                      }}
+                      className={cn(
+                        'rounded-lg px-3 py-2 text-xs font-bold transition',
+                        fundMethod === key
+                          ? 'bg-white text-gray-950 shadow-sm dark:bg-gray-950 dark:text-white'
+                          : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white',
+                      )}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {fundMethod === 'usdc' ? (
+                  <InputBlock
+                    label="Amount USDC"
+                    value={fundAmount}
+                    onChange={setFundAmount}
+                    placeholder="0.00"
+                    inputMode="decimal"
+                  />
+                ) : (
+                  <InputBlock
+                    label="Amount NGN"
+                    value={fundNairaAmount}
+                    onChange={setFundNairaAmount}
+                    placeholder="0.00"
+                    inputMode="decimal"
+                  />
+                )}
                 <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                  Funds are routed to your Polymarket wallet on {requestNetworkLabels[tradingWalletNetwork]}. Minimum bridge amount is 3 USDC.
+                  {fundMethod === 'naira'
+                    ? 'Pay from a Nigerian bank. PolyDesk creates a Base bridge address, then Paycrest sends USDC to fund your Polymarket wallet. Bridge minimum is 3 USDC.'
+                    : `Funds are routed to your Polymarket wallet on ${requestNetworkLabels[tradingWalletNetwork]}. Minimum bridge amount is 3 USDC.`}
                 </p>
                 {!polymarketWalletReady && (
                   <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 dark:border-amber-300/20 dark:bg-amber-300/10 dark:text-amber-100">
@@ -8779,19 +8965,23 @@ export function PolyPortfolioPanel({
                 {fundError && <p className="text-xs text-red-500 dark:text-red-300">{fundError}</p>}
                 <button
                   type="button"
-                  onClick={() => startFund()}
+                  onClick={() => fundMethod === 'naira' ? startNairaFund() : startFund()}
                   disabled={fundBusy || !polymarketWalletReady}
                   className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-2.5 text-sm font-semibold text-white hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
                 >
                   {fundBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
-                  Open bridge checkout
+                  {fundMethod === 'naira' ? 'Open Naira funding checkout' : 'Open bridge checkout'}
                 </button>
               </div>
             ) : (
               <div className="space-y-3">
-                <p className="text-[11px] font-semibold uppercase tracking-widest text-emerald-600 dark:text-emerald-300">Bridge prepared</p>
+                <p className="text-[11px] font-semibold uppercase tracking-widest text-emerald-600 dark:text-emerald-300">
+                  {fundResult.method === 'naira' ? 'Naira checkout prepared' : 'Bridge prepared'}
+                </p>
                 <p className="text-sm text-gray-700 dark:text-gray-200">
-                  Send <span className="font-semibold tabular-nums">{fundAmount} USDC</span> via {requestNetworkLabels[fundResult.network]} to the bridge address.
+                  {fundResult.method === 'naira'
+                    ? <>Pay <span className="font-semibold tabular-nums">{fundResult.amountLabel}</span> from a Nigerian bank. Paycrest sends Base USDC to the bridge address.</>
+                    : <>Send <span className="font-semibold tabular-nums">{fundResult.amountLabel}</span> via {requestNetworkLabels[fundResult.network]} to the bridge address.</>}
                 </p>
                 <a
                   href={fundResult.payUrl}
@@ -8804,7 +8994,7 @@ export function PolyPortfolioPanel({
                   href={fundResult.payUrl}
                   className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-2.5 text-sm font-semibold text-white hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
                 >
-                  <ExternalLink className="h-4 w-4" /> Open Hash PayLink checkout
+                  <ExternalLink className="h-4 w-4" /> {fundResult.method === 'naira' ? 'Open bank transfer checkout' : 'Open Hash PayLink checkout'}
                 </a>
               </div>
             )}

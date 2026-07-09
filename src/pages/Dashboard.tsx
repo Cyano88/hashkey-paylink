@@ -53,6 +53,7 @@ interface PaymentRow {
   amountNgn?:       string
   ogRootHash?:      string
   ogTxHash?:        string
+  paycrestStatus?:  string
 }
 
 interface ApiPaymentRow {
@@ -137,6 +138,7 @@ function eventPaymentToRow(row: EventPaymentRow, index: number): PaymentRow {
     amountNgn: row.amountNgn,
     ogRootHash: row.ogRootHash,
     ogTxHash: row.ogTxHash,
+    paycrestStatus: row.paycrestStatus,
     contextLabel: row.contextLabel || (row.bankName ? `${row.bankName} ****${row.bankLast4 || ''}`.trim() : undefined),
   }
 }
@@ -151,7 +153,7 @@ type DateFilter = 'today' | 'yesterday' | 'last7' | 'custom' | 'all'
 type ReceiptFilter = 'all' | 'paylink' | 'pos' | 'streampay' | 'direct'
 type ContextFilter = 'all' | string
 type PosNetwork = 'base' | 'arbitrum' | 'arc' | 'solana'
-type LocalHistoryFilter = 'all' | 'pos' | 'bank' | 'bills'
+type LocalHistoryFilter = 'all' | 'pos' | 'bank' | 'send' | 'bills'
 
 const POS_NETWORK_LABELS: Record<PosNetwork, string> = {
   base: 'Base',
@@ -171,6 +173,7 @@ const LOCAL_HISTORY_TABS: Array<{ key: LocalHistoryFilter; label: string; descri
   { key: 'all', label: 'All', description: 'Local currency receipts' },
   { key: 'pos', label: 'POS', description: 'In-store QR payments' },
   { key: 'bank', label: 'Bank receive', description: 'Payment links to bank' },
+  { key: 'send', label: 'Send from bank', description: 'Bank-funded USDC' },
   { key: 'bills', label: 'Bills', description: 'Bill payment receipts' },
 ]
 
@@ -578,6 +581,7 @@ export default function Dashboard() {
   function localHistoryKind(row: PaymentRow): Exclude<LocalHistoryFilter, 'all'> {
     const settlement = normalizedSettlement(row)
     if (row.source === 'bills' || settlement === 'bill_payment') return 'bills'
+    if (row.source === 'bank-send' || row.source === 'bank_send' || settlement === 'paycrest_onramp') return 'send'
     if (row.source === 'bank-receive' || row.source === 'bank_receive') return 'bank'
     if (row.source === 'ngpos') return 'pos'
     if (settlement === 'instant_fiat') return 'bank'
@@ -586,7 +590,7 @@ export default function Dashboard() {
   function localHistoryLabel(row?: PaymentRow | null) {
     if (!row) return 'Local receipt'
     const kind = localHistoryKind(row)
-    return kind === 'bills' ? 'Bill payment' : kind === 'bank' ? 'Bank receive' : 'POS'
+    return kind === 'bills' ? 'Bill payment' : kind === 'send' ? 'Send from Bank' : kind === 'bank' ? 'Bank receive' : 'POS'
   }
   const totalReceived = payments.reduce((s, p) => s + receivedUsdc(p), 0)
   const totalNgnReceived = payments.reduce((s, p) => s + receivedNgn(p), 0)
@@ -613,12 +617,12 @@ export default function Dashboard() {
     return payments.filter(row => row.timestamp != null && row.timestamp >= from && row.timestamp < to)
   }, [customDate, dateFilter, dayStart, isNgPosDashboard, payments])
   const localCategoryCounts = useMemo(() => {
-    const counts: Record<LocalHistoryFilter, number> = { all: dateFilteredPayments.length, pos: 0, bank: 0, bills: 0 }
+    const counts: Record<LocalHistoryFilter, number> = { all: dateFilteredPayments.length, pos: 0, bank: 0, send: 0, bills: 0 }
     for (const row of dateFilteredPayments) counts[localHistoryKind(row)] += 1
     return counts
   }, [dateFilteredPayments])
   const localCategoryTotals = useMemo(() => {
-    const totals: Record<LocalHistoryFilter, number> = { all: 0, pos: 0, bank: 0, bills: 0 }
+    const totals: Record<LocalHistoryFilter, number> = { all: 0, pos: 0, bank: 0, send: 0, bills: 0 }
     for (const row of dateFilteredPayments) {
       const amount = receivedNgn(row)
       totals.all += amount
@@ -658,6 +662,11 @@ export default function Dashboard() {
         title: 'No bank receive receipts yet',
         body: 'Receive-to-bank payments will appear here after a payer completes checkout.',
       }
+    : localHistoryFilter === 'send'
+      ? {
+          title: 'No send-from-bank receipts yet',
+          body: 'Bank-funded USDC orders will appear here after Paycrest creates or settles them.',
+        }
     : localHistoryFilter === 'bills'
       ? {
           title: 'No bill receipts yet',
@@ -702,6 +711,9 @@ export default function Dashboard() {
   }
   function localSecondaryAmount(row?: PaymentRow | null) {
     if (!row) return ''
+    if (row.source === 'bank-send' || row.source === 'bank_send') {
+      return `${fmtUsdc(receivedUsdc(row))} settled to ${row.contextLabel || 'USDC destination'}`
+    }
     return `${fmtUsdc(receivedUsdc(row))} paid on ${rowMeta(row).label}`
   }
   function fmtTime(ts: number | null) {
@@ -712,6 +724,7 @@ export default function Dashboard() {
     if (!row) return 'USDC wallet'
     const settlement = normalizedSettlement(row)
     if (row.source === 'bills' || settlement === 'bill_payment') return 'Bill payment'
+    if (row.source === 'bank-send' || row.source === 'bank_send' || settlement === 'paycrest_onramp') return 'USDC onramp'
     if (row.source === 'bank-receive' || row.source === 'bank_receive' || settlement === 'instant_fiat') return 'Naira payout'
     return 'USDC wallet'
   }
@@ -728,6 +741,13 @@ export default function Dashboard() {
         key: 'bank' as const,
         label: 'Bank receive',
         className: 'border-blue-100 bg-blue-50 text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-300',
+      }
+    }
+    if (row.source === 'bank-send' || row.source === 'bank_send') {
+      return {
+        key: 'bank-send' as const,
+        label: 'Send from Bank',
+        className: 'border-amber-100 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300',
       }
     }
     if (row.source === 'streampay' || row.settlementType === 'stream-created') {
@@ -754,6 +774,7 @@ export default function Dashboard() {
     const explicit = row.contextLabel?.trim()
     if (explicit) return { key: `label:${explicit.toLowerCase()}`, label: explicit }
     if (row.source === 'ngpos' && row.merchantId) return { key: `pos:${row.merchantId}`, label: row.merchantId }
+    if ((row.source === 'bank-send' || row.source === 'bank_send') && row.merchantId) return { key: `bank-send:${row.merchantId}`, label: row.label || row.merchantId }
     if (row.source === 'paylink' && row.label) return { key: `paylink:${row.label.toLowerCase()}`, label: row.label }
     if (row.flow === 'registry' && row.label) return { key: `collection:${row.label.toLowerCase()}`, label: row.label }
     if (row.flow === 'direct') return { key: `direct:${row.sender.toLowerCase()}`, label: 'Direct transfers' }
@@ -776,6 +797,10 @@ export default function Dashboard() {
     return row.ogTxHash ? `https://chainscan.0g.ai/tx/${row.ogTxHash}` : ''
   }
   function rowReceiptId(row: PaymentRow) {
+    if (row.flow === 'registry' && (row.source === 'bank-send' || row.source === 'bank_send') && row.merchantId && row.txHash?.startsWith('paycrest_')) {
+      const status = String(row.paycrestStatus || '').toLowerCase()
+      return !status || status === 'settled' || status === 'validated' ? paymentReceiptId(`bank-send-${row.merchantId}`, row.txHash) : ''
+    }
     return row.flow === 'registry' && row.merchantId && row.txHash && !row.txHash.startsWith('manual_') && !row.txHash.startsWith('paycrest_')
       ? paymentReceiptId(`ngpos-${row.merchantId}`, row.txHash)
       : ''
@@ -837,8 +862,8 @@ export default function Dashboard() {
       const file = new File([result.blob], paymentReceiptFileName(result.receipt), { type: 'application/pdf' })
       if (navigator.canShare?.({ files: [file] })) {
         await navigator.share({
-          title: 'Hash PayLink POS receipt',
-          text: `${result.receipt.amount} USDC POS receipt`,
+          title: `${result.receipt.title || 'Hash PayLink receipt'}`,
+          text: `${result.receipt.amount} USDC ${result.receipt.title || 'receipt'}`,
           files: [file],
         })
       } else {
@@ -862,13 +887,13 @@ export default function Dashboard() {
     setPosReceiptError('')
     const printWindow = window.open('', '_blank', 'width=420,height=720')
     if (printWindow) {
-      printWindow.document.write('<!doctype html><title>Loading receipt</title><body style="font-family:Arial,sans-serif;padding:24px;color:#111827">Preparing POS receipt...</body>')
+      printWindow.document.write('<!doctype html><title>Loading receipt</title><body style="font-family:Arial,sans-serif;padding:24px;color:#111827">Preparing receipt...</body>')
       printWindow.document.close()
     }
     try {
       const receipt = await loadPosReceipt(row)
       if (!receipt) throw new Error('Receipt is not ready yet.')
-      if (!printWindow) throw new Error('Popup blocked. Allow popups to print the POS receipt.')
+      if (!printWindow) throw new Error('Popup blocked. Allow popups to print the receipt.')
       const chainLabel = CHAIN_META[chainKey(receipt.chain)]?.label ?? receipt.chain
       const amountNgn = receipt.amountNgn ? `NGN ${Number(receipt.amountNgn).toLocaleString('en-NG', { maximumFractionDigits: 2 })}` : ''
       const short = (value = '') => value.length > 18 ? `${value.slice(0, 8)}...${value.slice(-6)}` : value
@@ -881,7 +906,7 @@ export default function Dashboard() {
       printWindow.document.write(`<!doctype html>
 <html>
 <head>
-  <title>Hash PayLink POS receipt</title>
+  <title>Hash PayLink receipt</title>
   <style>
     @page { size: 80mm auto; margin: 4mm; }
     * { box-sizing: border-box; }
@@ -906,7 +931,7 @@ export default function Dashboard() {
   <main class="receipt">
     <div class="center">
       <div class="brand">Hash <span>PayLink</span></div>
-      <div class="sub">Retail POS receipt</div>
+      <div class="sub">${escapeHtml(receipt.title || 'Hash PayLink receipt')}</div>
       <div class="amount">${escapeHtml(receipt.amount)} ${escapeHtml(receipt.asset)}</div>
       ${amountNgn ? `<div class="ngn">${escapeHtml(amountNgn)}</div>` : ''}
     </div>
@@ -914,7 +939,7 @@ export default function Dashboard() {
     <div class="row"><span class="label">Status</span><span class="value">Confirmed</span></div>
     <div class="row"><span class="label">Payer</span><span class="value">${escapeHtml(short(receipt.payer))}</span></div>
     <div class="row"><span class="label">Network</span><span class="value">${escapeHtml(chainLabel)}</span></div>
-    <div class="row"><span class="label">Payout</span><span class="value">${escapeHtml(String(receipt.settlementType || '').toLowerCase() === 'instant_fiat' || receipt.source === 'bank-receive' ? 'Naira payout' : receipt.source === 'bills' ? 'Bill payment' : 'USDC wallet')}</span></div>
+    <div class="row"><span class="label">Settlement</span><span class="value">${escapeHtml(receipt.source === 'bank-send' || String(receipt.settlementType || '').toLowerCase() === 'paycrest_onramp' ? 'USDC onramp' : String(receipt.settlementType || '').toLowerCase() === 'instant_fiat' || receipt.source === 'bank-receive' ? 'Naira payout' : receipt.source === 'bills' ? 'Bill payment' : 'USDC wallet')}</span></div>
     <div class="row"><span class="label">Time</span><span class="value">${escapeHtml(new Date(receipt.createdAt).toLocaleString())}</span></div>
     <div class="row"><span class="label">Tx</span><span class="value">${escapeHtml(short(receipt.txHash))}</span></div>
     <div class="row"><span class="label">Receipt</span><span class="value">${escapeHtml(short(receipt.receiptHash))}</span></div>
@@ -1070,8 +1095,8 @@ export default function Dashboard() {
                 {!privyReady
                   ? 'Checking your saved Hash PayLink profile.'
                   : privyAuthenticated
-                    ? 'Your bank payouts, POS payments, and bill receipts appear here as they settle.'
-                    : 'Use the same email you used for bank receive, POS, or bills.'}
+                    ? 'Your bank payouts, bank-funded USDC, POS payments, and bill receipts appear here as they settle.'
+                    : 'Use the same email you used for bank receive, send from bank, POS, or bills.'}
               </p>
             </div>
             {privyReady && !privyAuthenticated && (
@@ -1347,7 +1372,7 @@ export default function Dashboard() {
               {isNgPosDashboard ? 'No local currency payments yet' : 'No payments received yet'}
             </p>
             <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
-              {isNgPosDashboard ? 'Bank receive, POS, and bill receipts will appear here after settlement.' : 'Share your PayLink to get started'}
+              {isNgPosDashboard ? 'Bank receive, send-from-bank, POS, and bill receipts will appear here after settlement.' : 'Share your PayLink to get started'}
             </p>
             {isNgPosDashboard ? null : telegramUrl ? (
               <OgArchiveLink className="mt-6" />
@@ -1437,8 +1462,8 @@ export default function Dashboard() {
                             void handlePrintPosReceipt(row)
                           }}
                           disabled={posReceiptBusy}
-                          title="Print POS receipt"
-                          aria-label="Print POS receipt"
+                          title="Print receipt"
+                          aria-label="Print receipt"
                           className="inline-flex items-center rounded border border-gray-100 bg-white px-1.5 py-0.5 text-gray-500 transition-colors hover:border-gray-200 hover:bg-gray-50 hover:text-gray-800 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.03] dark:text-gray-400 dark:hover:border-white/15 dark:hover:bg-white/[0.07] dark:hover:text-gray-100"
                         >
                           <Printer className="h-3 w-3" />
@@ -1616,7 +1641,7 @@ export default function Dashboard() {
           >
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">POS receipt</p>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">{localHistoryLabel(activeReceipt)} receipt</p>
                 <h3 className="mt-1 text-base font-semibold text-gray-950 dark:text-white">{customerLabel(activeReceipt)}</h3>
               </div>
               <div className="flex items-center gap-2">
@@ -1625,8 +1650,8 @@ export default function Dashboard() {
                   onClick={() => handlePrintPosReceipt(activeReceipt)}
                   disabled={posReceiptBusy || !rowReceiptId(activeReceipt)}
                   className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-100 text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-800 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:text-gray-400 dark:hover:bg-white/10 dark:hover:text-gray-100"
-                  aria-label="Print POS receipt"
-                  title="Print POS receipt"
+                  aria-label="Print receipt"
+                  title="Print receipt"
                 >
                   {posReceiptBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
                 </button>
