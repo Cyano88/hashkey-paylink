@@ -783,6 +783,7 @@ function LocalCurrencyProfileCard({
   ))
   const fullName = `${draft.firstName} ${draft.lastName}`.trim()
   const bankMismatch = Boolean(bankAccountName && fullName && !bankAccountName.toLowerCase().includes(draft.lastName.trim().toLowerCase()))
+  const identityEmail = email || draft.email || profile?.email || ''
 
   if (complete && !editing) {
     const savedName = `${profile?.firstName ?? ''} ${profile?.lastName ?? ''}`.trim()
@@ -831,6 +832,18 @@ function LocalCurrencyProfileCard({
         )}
       </div>
 
+      {identityEmail && (
+        <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 dark:border-blue-400/20 dark:bg-blue-400/10">
+          <span className="min-w-0">
+            <span className="block text-[10px] font-bold uppercase tracking-widest text-blue-500 dark:text-blue-300">Signed in as</span>
+            <span className="block truncate text-xs font-semibold text-blue-900 dark:text-blue-100">{identityEmail}</span>
+          </span>
+          <span className="shrink-0 rounded-full border border-blue-200 bg-white px-2 py-0.5 text-[10px] font-bold text-blue-700 dark:border-blue-400/20 dark:bg-white/10 dark:text-blue-200">
+            Circle identity
+          </span>
+        </div>
+      )}
+
       <div className="mt-3 grid gap-2 sm:grid-cols-2">
         <label className="block">
           <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">First name</span>
@@ -855,7 +868,7 @@ function LocalCurrencyProfileCard({
       <label className="mt-2 block">
         <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Email</span>
         <input
-          value={email || draft.email}
+          value={identityEmail}
           readOnly
           placeholder="Signed-in email"
           className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-100 px-3 py-2 text-sm font-medium text-gray-500 outline-none dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-400"
@@ -1654,6 +1667,65 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
       setCirclePocketBalanceBusy(false)
     }
   }
+
+  useEffect(() => {
+    if (!privyAuthenticated || !privyEmail) {
+      setCirclePocketWallets({})
+      setCirclePocketRows([])
+      setCirclePocketGlobalBalance(0)
+      return
+    }
+
+    let cancelled = false
+    async function hydrateLinkedCirclePocketWallets() {
+      try {
+        const token = await getAccessToken()
+        if (!token || cancelled) return
+
+        const entries = await Promise.all(
+          POS_NETWORK_OPTIONS.map(async ({ key }) => {
+            try {
+              const existing = await resolvePrivyCircleLink({ accessToken: token, chain: key })
+              const link = existing.link
+              if (!link?.circleWalletAddress) return null
+              return [key, {
+                address: link.circleWalletAddress,
+                walletId: link.circleWalletId,
+                blockchain: link.circleBlockchain,
+              }] as const
+            } catch {
+              return null
+            }
+          }),
+        )
+        if (cancelled) return
+
+        const nextWallets = entries.reduce<CirclePocketWallets>((acc, entry) => {
+          if (!entry) return acc
+          acc[entry[0]] = entry[1]
+          return acc
+        }, {})
+        setCirclePocketWallets(nextWallets)
+        if (Object.keys(nextWallets).length) {
+          await refreshCirclePocketBalances(nextWallets)
+        } else {
+          setCirclePocketRows([])
+          setCirclePocketGlobalBalance(0)
+        }
+      } catch {
+        if (!cancelled) {
+          setCirclePocketWallets({})
+          setCirclePocketRows([])
+          setCirclePocketGlobalBalance(0)
+        }
+      }
+    }
+
+    void hydrateLinkedCirclePocketWallets()
+    return () => {
+      cancelled = true
+    }
+  }, [privyAuthenticated, privyEmail]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleCirclePocketSetup(network = circlePocketNetwork) {
     setCirclePocketBusy(true)
@@ -2607,6 +2679,18 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                   </button>
                 )}
               </div>
+
+              {privyAuthenticated && privyEmail && (
+                <div className="flex items-center justify-between gap-3 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 dark:border-blue-400/20 dark:bg-blue-400/10">
+                  <span className="min-w-0">
+                    <span className="block text-[10px] font-bold uppercase tracking-widest text-blue-500 dark:text-blue-300">Circle identity</span>
+                    <span className="block truncate text-xs font-semibold text-blue-900 dark:text-blue-100">{privyEmail}</span>
+                  </span>
+                  <span className="shrink-0 rounded-full border border-blue-200 bg-white px-2 py-0.5 text-[10px] font-bold text-blue-700 dark:border-blue-400/20 dark:bg-white/10 dark:text-blue-200">
+                    Synced
+                  </span>
+                </div>
+              )}
 
               {circlePocketView === 'chooser' ? (
                 <div className="space-y-3">
