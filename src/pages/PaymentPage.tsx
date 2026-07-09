@@ -997,9 +997,17 @@ export default function PaymentPage() {
   const effectiveMemo  = requiresAttendeeName ? attendeeName : (isFlex ? (flexMemo || memo) : memo)
 
   const hasPaycrestMerchantRecipient = isNgPosPaycrestOfframp && !!ngPosMerchantId
+  const hasBankSendRecipient =
+    isBankSendPayment &&
+    !!bankSendLinkId &&
+    isAddress(resolvedEvm) &&
+    (isFlex || (!Number.isNaN(Number.parseFloat(ngPosAmountNgn)) && Number.parseFloat(ngPosAmountNgn) > 0))
   const isValidParams =
-    (isFlex || (!isNaN(parseFloat(amt)) && parseFloat(amt) > 0)) &&
-    (isAddress(resolvedEvm) || !!resolvedSolana || hasPaycrestMerchantRecipient)
+    hasBankSendRecipient ||
+    (
+      (isFlex || (!isNaN(parseFloat(amt)) && parseFloat(amt) > 0)) &&
+      (isAddress(resolvedEvm) || !!resolvedSolana || hasPaycrestMerchantRecipient)
+    )
 
   // Whether the secondary direct-pay option should be shown for normal Hash PayLink payments.
   const canDirectSend =

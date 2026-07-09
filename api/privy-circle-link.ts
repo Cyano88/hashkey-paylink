@@ -152,6 +152,17 @@ async function writeLink(key: string, record: CircleLinkRecord): Promise<void> {
   await writeStore(store)
 }
 
+async function deleteLink(key: string): Promise<void> {
+  if (pool) {
+    await ensureSchema()
+    await pool.query('delete from privy_circle_links where link_key = $1', [key])
+    return
+  }
+  const store = await readStore()
+  delete store.links[key]
+  await writeStore(store)
+}
+
 async function verifiedPrivyUser(req: Request) {
   const privyAppId = process.env.PRIVY_APP_ID ?? process.env.VITE_PRIVY_APP_ID
   const privyAppSecret = process.env.PRIVY_APP_SECRET
@@ -197,6 +208,11 @@ export default async function handler(req: Request, res: Response) {
     if (action === 'resolve') {
       const link = await readLink(key)
       return res.json({ ok: true, email: verifiedEmail, link })
+    }
+
+    if (action === 'unlink') {
+      await deleteLink(key)
+      return res.json({ ok: true, email: verifiedEmail, link: null })
     }
 
     if (action === 'link') {

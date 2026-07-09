@@ -58,7 +58,7 @@ import { EVM_CLIENTS, ERC20_BALANCE_OF_ABI } from '../lib/router'
 import { canUseCircleEvmEmailWallet, connectCircleEvmEmailWallet, sendCircleEvmEmailWithdraw } from '../lib/circleEvmEmailWallet'
 import { canUseCircleSolanaEmailWallet, connectCircleSolanaEmailWallet, signCircleSolanaTransaction } from '../lib/circleSolanaEmailWallet'
 import { PrivyConnectButton } from '../lib/PrivyConnectButton'
-import { resolvePrivyCircleLink, savePrivyCircleLink } from '../lib/privyCircleLink'
+import { resolvePrivyCircleLink, savePrivyCircleLink, unlinkPrivyCircleLink } from '../lib/privyCircleLink'
 import { queryBalances, type UnifiedBalanceBreakdown } from '../lib/unifiedBalance'
 import AgentWorkspace from './AgentWorkspace'
 import PayLinkShareSheet from '../components/PayLinkShareSheet'
@@ -307,7 +307,7 @@ function CircleReceiveSelector({
   addressOptionBody?: string
 }) {
   const circleEmailReceiveIntentKey = 'hashpaylink-circle-email-receive-intent'
-  const { authenticated: privyAuthenticated, user: privyUser, logout: logoutPrivy, getAccessToken } = usePrivy()
+  const { authenticated: privyAuthenticated, user: privyUser, getAccessToken } = usePrivy()
   const privyEmail = emailFromPrivyUser(privyUser).trim().toLowerCase()
   const [circleRecipientPending, setCircleRecipientPending] = useState(false)
   const [circleRecipientError, setCircleRecipientError] = useState<string | null>(null)
@@ -401,6 +401,26 @@ function CircleReceiveSelector({
       setCircleRecipientError(receiveMessage)
     } finally {
       if (circleRecipientRunKey.current === runKey) setCircleRecipientPending(false)
+    }
+  }
+
+  async function disconnectCircleRecipient() {
+    setCircleRecipientError(null)
+    setGeneratedLink('')
+    try {
+      const token = await getAccessToken()
+      if (token) {
+        await unlinkPrivyCircleLink({
+          accessToken: token,
+          chain: selectedNet as Extract<ChainKey, 'base' | 'arbitrum' | 'arc' | 'solana'>,
+        })
+      }
+    } catch (err) {
+      setCircleRecipientError(err instanceof Error ? err.message : 'Could not disconnect Circle wallet.')
+    } finally {
+      setReceiveMode('paste')
+      if (selectedNet === 'solana') setSolanaAddr('')
+      else setEvmAddr('')
     }
   }
 
@@ -681,13 +701,7 @@ function CircleReceiveSelector({
                 <CheckCheck className="h-4 w-4 text-emerald-500" />
                 <button
                   type="button"
-                  onClick={() => {
-                    void logoutPrivy()
-                    setReceiveMode('paste')
-                    setGeneratedLink('')
-                    if (selectedNet === 'solana') setSolanaAddr('')
-                    else setEvmAddr('')
-                  }}
+                  onClick={() => void disconnectCircleRecipient()}
                   className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/80 text-gray-500 transition-colors hover:bg-white hover:text-gray-900 dark:bg-white/10 dark:text-gray-300 dark:hover:bg-white/15 dark:hover:text-white"
                   aria-label="Disconnect email wallet"
                 >
@@ -1211,6 +1225,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   }
 
   function activateBankSend() {
+    try { window.sessionStorage.removeItem('hashpaylink-circle-email-receive-intent') } catch {}
     setPaymentFlow('bank-send')
     setReceiveMode('paste')
     setPaymentMode('personal')

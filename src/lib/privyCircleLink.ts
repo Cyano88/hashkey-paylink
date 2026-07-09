@@ -23,7 +23,7 @@ type LinkResponse = {
 
 async function privyCircleLinkApi(params: {
   accessToken: string
-  action: 'resolve' | 'link'
+  action: 'resolve' | 'link' | 'unlink'
   chain: CircleLinkChain
   purpose?: 'payment' | 'agent'
   email?: string
@@ -64,4 +64,12 @@ export async function savePrivyCircleLink(params: {
   wallet: { id: string; address: string; blockchain: string }
 }) {
   return privyCircleLinkApi({ ...params, action: 'link' })
+}
+
+export async function unlinkPrivyCircleLink(params: {
+  accessToken: string
+  chain: CircleLinkChain
+  purpose?: 'payment' | 'agent'
+}) {
+  return privyCircleLinkApi({ ...params, action: 'unlink' })
 }
