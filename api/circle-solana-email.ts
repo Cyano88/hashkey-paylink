@@ -711,6 +711,12 @@ export default async function handler(req: Request, res: Response) {
 
     return res.status(400).json({ ok: false, error: `Unknown action: ${action}` })
   } catch (err) {
+    console.error('[circle-solana-email] Action failed', {
+      action,
+      chain: params.chain,
+      blockchain: params.blockchain,
+      message: err instanceof Error ? err.message : String(err),
+    })
     return circleError(res, err)
   }
 }

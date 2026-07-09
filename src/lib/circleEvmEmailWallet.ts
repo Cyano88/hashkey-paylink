@@ -227,13 +227,25 @@ function transactionState(value: unknown) {
 }
 
 async function circleWalletApi<T>(payload: Record<string, unknown>): Promise<T> {
-  const res = await fetch('/api/circle-solana-email', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
+  const action = typeof payload.action === 'string' ? payload.action : 'request'
+  const scope = typeof payload.chain === 'string'
+    ? payload.chain
+    : typeof payload.blockchain === 'string'
+      ? payload.blockchain
+      : ''
+  const label = scope ? `${action}/${scope}` : action
+  let res: Response
+  try {
+    res = await fetch('/api/circle-solana-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+  } catch (err) {
+    throw new Error(`Circle email wallet request could not reach Hash PayLink (${label}). ${readableError(err)}`)
+  }
   const data = await res.json().catch(() => ({})) as { ok?: boolean; error?: string; message?: string; code?: number; detail?: string }
-  if (!res.ok || data.ok === false) throw new Error(apiError(data, res.status, payload.action))
+  if (!res.ok || data.ok === false) throw new Error(`Circle email wallet ${label} failed: ${apiError(data, res.status, action)}`)
   return data as T
 }
 
@@ -413,10 +425,15 @@ async function ensureEvmWallet(
   chain: Extract<ChainKey, 'base' | 'arbitrum' | 'arc'>,
 ) {
   sdk.setAuthentication({ userToken, encryptionKey })
-  let wallet = await getWallet(userToken, chain)
+  const config = CHAIN_CONFIG[chain]
+  let wallet: CircleEvmWallet | null
+  try {
+    wallet = await getWallet(userToken, chain)
+  } catch (err) {
+    throw new Error(`${config.label} Circle wallet lookup failed. ${readableError(err)}`)
+  }
   if (wallet) return wallet
 
-  const config = CHAIN_CONFIG[chain]
   try {
     const init = await circleWalletApi<{ challengeId?: string }>({
       action: 'initializeUser',
@@ -426,23 +443,36 @@ async function ensureEvmWallet(
     })
     if (init.challengeId) await executeChallenge(sdk, init.challengeId)
   } catch (err) {
-    if (readableError(err) !== 'already_initialized') throw err
+    if (!readableError(err).includes('already_initialized')) throw err
   }
 
-  wallet = await getWallet(userToken, chain)
+  try {
+    wallet = await getWallet(userToken, chain)
+  } catch (err) {
+    throw new Error(`${config.label} Circle wallet lookup failed after initialization. ${readableError(err)}`)
+  }
   if (wallet) return wallet
 
-  const created = await circleWalletApi<{ challengeId?: string }>({
-    action: 'createWallet',
-    userToken,
-    blockchain: config.blockchain,
-    accountType: 'SCA',
-    name: `Hash PayLink ${config.label}`,
-  })
+  let created: { challengeId?: string }
+  try {
+    created = await circleWalletApi<{ challengeId?: string }>({
+      action: 'createWallet',
+      userToken,
+      blockchain: config.blockchain,
+      accountType: 'SCA',
+      name: `Hash PayLink ${config.label}`,
+    })
+  } catch (err) {
+    throw new Error(`${config.label} Circle wallet creation failed. ${readableError(err)}`)
+  }
   if (!created.challengeId) throw new Error('Circle did not return an EVM wallet challenge.')
   await executeChallenge(sdk, created.challengeId)
 
-  wallet = await getWallet(userToken, chain)
+  try {
+    wallet = await getWallet(userToken, chain)
+  } catch (err) {
+    throw new Error(`${config.label} Circle wallet lookup failed after creation. ${readableError(err)}`)
+  }
   if (!wallet) throw new Error('Circle EVM smart wallet is not ready yet.')
   return wallet
 }
@@ -469,16 +499,25 @@ export async function connectCircleEvmEmailWallet(
   } catch (err) {
     throw new Error(deviceIdError(err))
   }
-  const otp = await circleWalletApi<{
+  let otp: {
     deviceToken: string
     deviceEncryptionKey: string
     otpToken: string
-  }>({
-    action: 'requestEmailOtp',
-    chain,
-    deviceId,
-    email,
-  })
+  }
+  try {
+    otp = await circleWalletApi<{
+      deviceToken: string
+      deviceEncryptionKey: string
+      otpToken: string
+    }>({
+      action: 'requestEmailOtp',
+      chain,
+      deviceId,
+      email,
+    })
+  } catch (err) {
+    throw new Error(emailVerificationError(err))
+  }
   let currentOtp = otp
 
   const login = await withTimeout(new Promise<CircleEmailLoginResult>((resolve, reject) => {
