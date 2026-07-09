@@ -165,12 +165,12 @@ function evmWallet(wallets: Array<{ id: string; address: string; blockchain: str
   const expected = EVM_CHAINS[chain].blockchain
   const aliases: Record<keyof typeof EVM_CHAINS, string[]> = {
     base: ['BASE'],
-    arbitrum: ['ARB', 'ARBITRUM'],
+    arbitrum: ['ARB', 'ARBITRUM', 'ARBITRUM-ONE', 'ARBITRUM_ONE', 'ARBITRUMONE'],
     arc: ['ARC-TESTNET', 'ARC_TESTNET', 'ARC'],
   }
   return wallets.find((wallet) => {
     const blockchain = String(wallet.blockchain ?? '').trim().toUpperCase()
-    return (blockchain === expected || aliases[chain].includes(blockchain)) && isAddress(wallet.address)
+    return (blockchain === expected || aliases[chain].includes(blockchain) || (chain === 'arbitrum' && blockchain.includes('ARB'))) && isAddress(wallet.address)
   })
 }
 

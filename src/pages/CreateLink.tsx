@@ -44,7 +44,6 @@ import {
   Briefcase,
   Landmark,
   Banknote,
-  Pencil,
 } from 'lucide-react'
 import { QRCodeCanvas } from 'qrcode.react'
 import { FX_CURRENCIES, getFxMeta, formatLocalAmt, fetchFxRate } from '../lib/fx'
@@ -790,29 +789,21 @@ function LocalCurrencyProfileCard({
   const identityEmail = email || draft.email || profile?.email || ''
 
   if (complete && !editing) {
-    const savedName = `${profile?.firstName ?? ''} ${profile?.lastName ?? ''}`.trim()
     return (
-      <div className="rounded-2xl border border-gray-100 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
-        <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <p className="truncate text-sm font-bold text-gray-950 dark:text-white">{savedName || savedFallback}</p>
-              <span className="shrink-0 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-300">
-                {savedBadgeLabel}
-              </span>
-            </div>
-            <p className="mt-0.5 truncate text-xs font-medium text-gray-500 dark:text-gray-400">{profile?.email}</p>
-          </div>
-          <button
-            type="button"
-            onClick={onEdit}
-            aria-label={`Edit ${savedFallback.toLowerCase()}`}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-gray-600 transition-all hover:bg-gray-100 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300 dark:hover:bg-white/[0.1]"
-          >
-            <Pencil className="h-4 w-4" />
-          </button>
-        </div>
-      </div>
+      <button
+        type="button"
+        onClick={onEdit}
+        aria-label={`Open ${savedFallback.toLowerCase()}`}
+        className="flex w-full items-center justify-between gap-3 rounded-2xl border border-blue-100 bg-blue-50 px-3 py-2 text-left shadow-sm transition-all hover:border-blue-200 hover:bg-blue-100/70 active:scale-[0.99] dark:border-blue-400/20 dark:bg-blue-400/10 dark:hover:bg-blue-400/15"
+      >
+        <span className="min-w-0">
+          <span className="block text-[10px] font-bold uppercase tracking-widest text-blue-500 dark:text-blue-300">Signed in as</span>
+          <span className="block truncate text-xs font-semibold text-blue-900 dark:text-blue-100">{profile?.email}</span>
+        </span>
+        <span className="shrink-0 rounded-full border border-blue-200 bg-white px-2 py-0.5 text-[10px] font-bold text-blue-700 dark:border-blue-400/20 dark:bg-white/10 dark:text-blue-200">
+          {savedBadgeLabel}
+        </span>
+      </button>
     )
   }
 
@@ -2840,19 +2831,39 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                             {POS_NETWORK_OPTIONS.map(network => {
                               const row = circlePocketRows.find(item => item.key === network.key)
                               const wallet = circlePocketWallets[network.key]
+                              const canOpenWallet = !wallet?.address && privyAuthenticated && !circlePocketBusy
+                              const statusLabel = row?.status === 'error' && wallet?.address
+                                ? 'Balance unavailable'
+                                : wallet?.address
+                                  ? 'Ready'
+                                  : 'Open wallet'
                               return (
-                                <div key={network.key} className="flex items-center justify-between gap-3 rounded-xl p-3">
+                                <button
+                                  key={network.key}
+                                  type="button"
+                                  onClick={() => {
+                                    setCirclePocketNetwork(network.key)
+                                    if (canOpenWallet) void handleCirclePocketSetup(network.key)
+                                  }}
+                                  disabled={!canOpenWallet && !wallet?.address}
+                                  className={cn(
+                                    'flex w-full items-center justify-between gap-3 rounded-xl p-3 text-left transition-all',
+                                    canOpenWallet
+                                      ? 'hover:bg-gray-50 active:scale-[0.99] dark:hover:bg-white/[0.04]'
+                                      : 'disabled:cursor-default',
+                                  )}
+                                >
                                   <div className="min-w-0">
                                     <p className="text-sm font-bold text-gray-950 dark:text-white">{network.label}</p>
                                     <p className="mt-0.5 text-[11px] text-gray-400">{wallet?.address ? truncateAddress(wallet.address) : 'Wallet not opened'}</p>
                                   </div>
                                   <div className="text-right">
                                     <p className="text-sm font-black text-gray-950 dark:text-white">${formatAmount(row?.balance ?? 0, 6)}</p>
-                                    <p className={cn('mt-0.5 text-[10px] font-bold uppercase tracking-wider', row?.status === 'error' ? 'text-amber-500' : wallet?.address ? 'text-emerald-500' : 'text-gray-400')}>
-                                      {row?.status === 'error' ? 'Balance unavailable' : wallet?.address ? 'Ready' : 'Open wallet'}
+                                    <p className={cn('mt-0.5 text-[10px] font-bold uppercase tracking-wider', row?.status === 'error' && wallet?.address ? 'text-amber-500' : wallet?.address ? 'text-emerald-500' : 'text-blue-500')}>
+                                      {circlePocketBusy && circlePocketNetwork === network.key ? 'Opening' : statusLabel}
                                     </p>
                                   </div>
-                                </div>
+                                </button>
                               )
                             })}
                           </div>
