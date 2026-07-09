@@ -3424,7 +3424,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                 Back
               </button>
 
-          {!accessMode && !multiChainMode && !isBankReceive && (
+          {!accessMode && !multiChainMode && (
             <CircleReceiveSelector
               selectedNet={selectedNet}
               isEvmNet={isEvmNet}
