@@ -4826,8 +4826,8 @@ export default function PaymentPage() {
                   : privyCircleLinkLoading
                   ? <><Loader2 className="h-4 w-4 animate-spin" /> Checking Smart wallet</>
                   : circleSmartAccount
-                    ? <><img src="/hash-logo.png" alt="" className="h-5 w-5 object-contain dark:invert dark:mix-blend-screen" /> {isNgPosPaycrestOfframp && !paycrestOrder ? 'Prepare naira payout' : 'Pay'}</>
-                    : <><img src="/hash-logo.png" alt="" className="h-5 w-5 object-contain dark:invert dark:mix-blend-screen" /> Continue</>}
+                    ? <><img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert dark:invert-0" /> {isNgPosPaycrestOfframp && !paycrestOrder ? 'Prepare naira payout' : 'Pay'}</>
+                    : <><img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert dark:invert-0" /> Continue</>}
               </button>
               {!circleSmartAccount && (
                 <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
@@ -5008,8 +5008,8 @@ export default function PaymentPage() {
                         : privyCircleLinkLoading
                           ? <><Loader2 className="h-4 w-4 animate-spin" /> Checking Smart wallet</>
                         : circleSolanaSession
-                          ? <><img src="/hash-logo.png" alt="" className="h-5 w-5 object-contain dark:invert dark:mix-blend-screen" /> Pay</>
-                          : <><img src="/hash-logo.png" alt="" className="h-5 w-5 object-contain dark:invert dark:mix-blend-screen" /> Continue</>}
+                          ? <><img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert dark:invert-0" /> Pay</>
+                          : <><img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert dark:invert-0" /> Continue</>}
                     </button>
                     {!circleSolanaSession && (
                       <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
