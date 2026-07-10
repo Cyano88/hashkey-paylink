@@ -3943,7 +3943,12 @@ export default function PaymentPage() {
       >
         {/* ── Chain toggle ─────────────────────────────────────────────── */}
         {!isBankSendPayment && <div className="flex justify-center pt-5 pb-0 px-4">
-          <div className="flex items-center justify-center gap-0.5 sm:gap-1 rounded-xl border border-gray-200 bg-gray-100/80 p-1 overflow-x-auto w-full sm:w-auto">
+          <div className={cn(
+            'flex items-center justify-center overflow-x-auto',
+            availableChains.length === 1
+              ? 'w-fit gap-0 rounded-lg border-0 bg-transparent p-0'
+              : 'w-full gap-0.5 rounded-xl border border-gray-200 bg-gray-100/80 p-1 sm:w-auto sm:gap-1',
+          )}>
             {availableChains.map((c) => {
               const m          = CHAIN_META[c]
               const isActive   = chain === c
@@ -4809,7 +4814,7 @@ export default function PaymentPage() {
                   'flex w-full items-center justify-center gap-2 rounded-xl px-6 py-3.5 text-sm font-semibold transition-all',
                   circlePasskeyPending || circleEvmPaymentProcessing || circleEvmAcceptedPending || privyCircleLinkLoading || paycrestPreparing || circleWalletNeedsFunds || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked
                     ? 'cursor-not-allowed bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400'
-                    : 'bg-black text-white shadow-button hover:bg-gray-800 active:scale-[0.98] dark:bg-[#111113] dark:text-white dark:ring-1 dark:ring-white/10 dark:hover:bg-[#1c1c20]',
+                    : 'bg-black text-white shadow-button hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200',
                 )}
               >
                 {circleEvmPaymentProcessing || circleEvmAcceptedPending
@@ -4821,8 +4826,8 @@ export default function PaymentPage() {
                   : privyCircleLinkLoading
                   ? <><Loader2 className="h-4 w-4 animate-spin" /> Checking Smart wallet</>
                   : circleSmartAccount
-                    ? <><img src="/hash-logo.png" alt="" className="h-5 w-5 object-contain dark:invert dark:mix-blend-screen" /> {isNgPosPaycrestOfframp && !paycrestOrder ? 'Prepare naira payout' : `Pay ${formatAmount(payableAmt, meta.decimals)} ${meta.asset}`}</>
-                    : <><img src="/hash-logo.png" alt="" className="h-5 w-5 object-contain dark:invert dark:mix-blend-screen" /> Continue</>}
+                    ? <><img src="/hash-logo.png" alt="" className="h-5 w-5 object-contain" /> {isNgPosPaycrestOfframp && !paycrestOrder ? 'Prepare naira payout' : `Pay ${formatAmount(payableAmt, meta.decimals)} ${meta.asset}`}</>
+                    : <><img src="/hash-logo.png" alt="" className="h-5 w-5 object-contain" /> Continue</>}
               </button>
               {!circleSmartAccount && (
                 <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
@@ -4995,7 +5000,7 @@ export default function PaymentPage() {
                         'flex w-full items-center justify-center gap-2 rounded-xl px-6 py-3.5 text-sm font-semibold transition-all',
                         circleSolanaPending || isSolanaConfirming || privyCircleLinkLoading || circleSolanaNeedsFunds
                           ? 'cursor-not-allowed bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400'
-                          : 'bg-black text-white shadow-button hover:bg-gray-800 active:scale-[0.98] dark:bg-[#111113] dark:text-white dark:ring-1 dark:ring-white/10 dark:hover:bg-[#1c1c20]',
+                          : 'bg-black text-white shadow-button hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200',
                       )}
                     >
                       {circleSolanaPending
@@ -5003,8 +5008,8 @@ export default function PaymentPage() {
                         : privyCircleLinkLoading
                           ? <><Loader2 className="h-4 w-4 animate-spin" /> Checking Smart wallet</>
                         : circleSolanaSession
-                          ? <><img src="/hash-logo.png" alt="" className="h-5 w-5 object-contain dark:invert dark:mix-blend-screen" /> Pay {formatAmount(effectiveAmt, 6)} USDC</>
-                          : <><img src="/hash-logo.png" alt="" className="h-5 w-5 object-contain dark:invert dark:mix-blend-screen" /> Continue</>}
+                          ? <><img src="/hash-logo.png" alt="" className="h-5 w-5 object-contain" /> Pay {formatAmount(effectiveAmt, 6)} USDC</>
+                          : <><img src="/hash-logo.png" alt="" className="h-5 w-5 object-contain" /> Continue</>}
                     </button>
                     {!circleSolanaSession && (
                       <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
@@ -5161,10 +5166,10 @@ export default function PaymentPage() {
                   onClick={() => connectSolana()}
                   disabled={isSolanaConnecting || (requiresAttendeeName && !attendeeName.trim())}
                   className={cn(
-                    'flex w-full items-center justify-center gap-2 rounded-xl px-6 py-3.5 text-sm font-semibold transition-all active:scale-[0.98] disabled:opacity-60',
+                    'flex w-full items-center justify-center gap-2 rounded-xl px-6 py-3.5 text-sm font-semibold shadow-button transition-all active:scale-[0.98] disabled:opacity-60',
                     showCircleSolanaEmailBridgePay && !manualPayDetected
-                      ? 'border border-gray-200 bg-white text-gray-800 hover:bg-gray-50'
-                      : 'bg-[#14F195] text-gray-900 hover:bg-[#00E589]',
+                      ? 'border border-gray-200 bg-white text-gray-800 hover:bg-gray-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-white dark:hover:bg-white/[0.1]'
+                      : 'bg-black text-white hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200',
                   )}
                 >
                   {isSolanaConnecting
@@ -5184,8 +5189,8 @@ export default function PaymentPage() {
                 className={cn(
                   'flex w-full items-center justify-center gap-2 rounded-xl px-6 py-4 text-sm font-semibold transition-all',
                   isSolanaPending || isSolanaConfirming
-                    ? 'cursor-not-allowed bg-gray-100 text-gray-500'
-                    : 'bg-[#14F195] text-gray-900 hover:bg-[#00E589] shadow-button active:scale-[0.98]',
+                    ? 'cursor-not-allowed bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400'
+                    : 'bg-black text-white shadow-button hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200',
                 )}
               >
                 {isSolanaPending     ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirm in Wallet…</>
@@ -5211,7 +5216,7 @@ export default function PaymentPage() {
             )}>
               <PrivyWalletConnectButton
                 options={{ walletChainType: 'ethereum-only' }}
-                className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-6 py-3.5 text-sm font-semibold text-gray-800 transition-all hover:bg-gray-50 active:scale-[0.98]"
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-6 py-3.5 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
               >
                 <Wallet className="h-4 w-4" />
                 {showCircleEmailPay ? 'Connect EOA Wallet' : 'Connect Wallet to Pay'}
@@ -5222,8 +5227,7 @@ export default function PaymentPage() {
             </div>
           ) : payMode === 'wallet' && !isBankSendPayment && (!usePrivyCircleCheckout || hasExternalPrivyEvmWallet) && !walletConnectBlocked && !isTelegramSource && isConnected && !isPrivyEmbeddedWalletConnected && !isCorrectNetwork ? (
             <button onClick={() => switchChain({ chainId: targetChainId })} disabled={isSwitching}
-              className="flex w-full items-center justify-center gap-2 rounded-xl px-6 py-4 text-sm font-semibold text-white transition-all active:scale-[0.98] disabled:opacity-70"
-              style={{ backgroundColor: meta.accentColor }}>
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-6 py-4 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-500 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200 dark:disabled:bg-white/10 dark:disabled:text-gray-400">
               {isSwitching
                 ? <><Loader2 className="h-4 w-4 animate-spin" /> Switching…</>
                 : <><RefreshCw className="h-4 w-4" /> Switch to {meta.label}</>}
@@ -5233,8 +5237,8 @@ export default function PaymentPage() {
               <button onClick={handlePay} disabled={isWalletPending || isConfirming || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
               className={cn(
                 'flex w-full items-center justify-center gap-2 rounded-xl px-6 py-4 text-sm font-semibold transition-all',
-                isWalletPending || isConfirming ? 'cursor-not-allowed bg-gray-100 text-gray-500'
-                  : 'bg-black text-white shadow-button hover:bg-gray-800 hover:shadow-md active:scale-[0.98]',
+                isWalletPending || isConfirming ? 'cursor-not-allowed bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400'
+                  : 'bg-black text-white shadow-button hover:bg-gray-800 hover:shadow-md active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200',
               )}>
               {isSignPending        ? <><Loader2 className="h-4 w-4 animate-spin" /> Sign Permit in Wallet…</>
               : arbitrumRelayPending     ? <><Loader2 className="h-4 w-4 animate-spin" /> Relaying via HashPayLink…</>
@@ -5335,10 +5339,10 @@ export default function PaymentPage() {
           </>
         )}
 
-        <div className="mt-6 border-t border-gray-100 pt-5 flex items-center justify-center gap-8">
+        <nav className="mt-6 flex items-center justify-center gap-5 sm:gap-6" aria-label="Payment checkout support">
           <a
             href="mailto:support@hashpaylink.com"
-            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-900 transition-colors"
+            className="flex items-center gap-1.5 text-xs font-medium text-gray-400 transition-colors hover:text-gray-900 dark:hover:text-gray-100"
           >
             <Mail className="h-3.5 w-3.5" />
             Support
@@ -5347,54 +5351,26 @@ export default function PaymentPage() {
             href="https://x.com/Hash_PayLink"
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-900 transition-colors"
+            className="flex items-center gap-1.5 text-xs font-medium text-gray-400 transition-colors hover:text-gray-900 dark:hover:text-gray-100"
           >
             <X className="h-3.5 w-3.5" />
             DM us
           </a>
           <Link
             to="/docs"
-            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-900 transition-colors"
+            className="flex items-center gap-1.5 text-xs font-medium text-gray-400 transition-colors hover:text-gray-900 dark:hover:text-gray-100"
           >
             <ExternalLink className="h-3.5 w-3.5" />
             Docs
           </Link>
-        </div>
+        </nav>
 
-        <p className="mt-6 text-center text-xs text-gray-400">
-          {isHelperAccess ? 'Helper access on ' : isPolymarketFunding ? 'Polymarket Funding on ' : isWalletManagerFunding ? 'x402 wallet funding on ' : isAgentFunding ? 'Agent payments on ' : (
-            <span className="polydesk-powered-footer">
-              <span>Powered by</span>
-              <strong>Circle USDC</strong>
-            </span>
-          )}
-          {(isHelperAccess || isPolymarketFunding || isWalletManagerFunding || isAgentFunding) && (isPolymarketFunding ? [
-            { label: 'Base',      href: 'https://basescan.org' },
-            { label: 'Solana',   href: 'https://solscan.io' },
-            { label: 'Arbitrum', href: 'https://arbiscan.io' },
-          ] : isAgentOrWalletFunding || isHelperAccess ? [
-            { label: 'Base',      href: 'https://basescan.org' },
-            { label: 'Arbitrum', href: 'https://arbiscan.io' },
-            { label: 'Arc Testnet', href: 'https://testnet.arcscan.app' },
-          ] : [
-            { label: 'Base',      href: 'https://basescan.org' },
-            { label: 'Arbitrum', href: 'https://arbiscan.io' },
-            { label: 'Arc Testnet', href: 'https://testnet.arcscan.app' },
-            { label: 'Solana',   href: 'https://solscan.io' },
-          ]).map((item, i, arr) => (
-            <span key={item.label}>
-              <a
-                href={item.href}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="font-medium text-gray-500 underline-offset-2 hover:underline transition-colors"
-              >
-                {item.label}
-              </a>
-              {i < arr.length - 1 && ' · '}
-            </span>
-          ))}
-        </p>
+        <footer className="mt-4 flex min-h-[60px] items-center justify-center border-t border-gray-100 bg-white/50 px-3 py-0 dark:border-white/10 dark:bg-[#111113]/50">
+          <span className="polydesk-powered-footer">
+            <span>Powered by</span>
+            <strong>Circle</strong>
+          </span>
+        </footer>
       </div>
 
     </div>
